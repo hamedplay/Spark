@@ -44,7 +44,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'archived'>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activePage, setActivePage] = useState<'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'groups' | 'channels'>('meetings');
+  const [activePage, setActivePage] = useState<'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'groups' | 'channels'>('calendar');
   const [loading, setLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
