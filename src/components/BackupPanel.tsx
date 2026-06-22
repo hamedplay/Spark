@@ -1,0 +1,656 @@
+import React, { useState, useRef } from 'react';
+import { Download, Upload, Database, Loader2, CheckCircle, AlertTriangle, Shield, FileText, Calendar, ClipboardList, MessageSquare, BookOpen, FolderOpen, Table2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+
+interface TableConfig {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  description: string;
+}
+
+const TABLES: TableConfig[] = [
+  { key: 'meetings', label: 'جلسات', icon: Calendar, color: 'text-teal-500', description: 'تمام جلسات ثبت‌شده' },
+  { key: 'tasks', label: 'اقدامات', icon: ClipboardList, color: 'text-green-500', description: 'اقدامات و وظایف' },
+  { key: 'notes', label: 'یادداشت‌ها', icon: BookOpen, color: 'text-amber-500', description: 'یادداشت‌های کاربران' },
+  { key: 'contacts_email', label: 'مخاطبین', icon: FolderOpen, color: 'text-orange-500', description: 'مخاطبین خارج از سازمان' },
+  { key: 'chat_conversations', label: 'مکالمات چت', icon: MessageSquare, color: 'text-rose-400', description: 'لیست مکالمات چت سازمانی' },
+  { key: 'chat_messages', label: 'پیام‌های چت', icon: MessageSquare, color: 'text-rose-500', description: 'پیام‌های داخلی سازمان' },
+  { key: 'notifications', label: 'اعلان‌ها', icon: FileText, color: 'text-gray-500', description: 'تاریخچه اعلان‌ها' },
+  { key: 'user_groups', label: 'گروه‌های کاربری', icon: Shield, color: 'text-red-500', description: 'گروه‌ها و دسترسی‌ها' },
+  { key: 'user_group_members', label: 'اعضای گروه‌ها', icon: Shield, color: 'text-red-400', description: 'عضویت در گروه‌های کاربری' },
+  { key: 'org_units', label: 'واحدهای سازمانی', icon: Table2, color: 'text-cyan-500', description: 'ساختار واحدهای سازمان' },
+  { key: 'org_positions', label: 'سمت‌های سازمانی', icon: Table2, color: 'text-cyan-600', description: 'سمت‌ها در چارت سازمانی' },
+  { key: 'audit_log', label: 'لاگ رخدادها', icon: Shield, color: 'text-slate-500', description: 'تاریخچه تمام رخدادها' },
+  { key: 'system_config', label: 'تنظیمات سیستم', icon: Database, color: 'text-blue-400', description: 'پیکربندی و تنظیمات' },
+  { key: 'notification_templates', label: 'قالب‌های اعلان', icon: FileText, color: 'text-blue-400', description: 'قالب‌های متن اعلان' },
+  { key: 'social_channel_configs', label: 'تنظیمات شبکه اجتماعی', icon: Shield, color: 'text-teal-600', description: 'پیکربندی بات‌های پیام‌رسان' },
+  { key: 'sms_providers', label: 'تنظیمات پیامک', icon: FileText, color: 'text-green-600', description: 'پیکربندی ارائه‌دهنده SMS' },
+];
+
+const TABLE_LABEL: Record<string, string> = Object.fromEntries(TABLES.map(t => [t.key, t.label]));
+const TABLE_ICON: Record<string, React.ElementType> = Object.fromEntries(TABLES.map(t => [t.key, t.icon]));
+const TABLE_COLOR: Record<string, string> = Object.fromEntries(TABLES.map(t => [t.key, t.color]));
+
+function TableRow({ cfg, selected, onToggle, status }: {
+  cfg: TableConfig;
+  selected: boolean;
+  onToggle: () => void;
+  status: 'idle' | 'loading' | 'done' | 'error';
+}) {
+  const Icon = cfg.icon;
+  return (
+    <div
+      onClick={onToggle}
+      className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${selected ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'}`}
+    >
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${selected ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
+        <Icon className={`w-4 h-4 ${selected ? 'text-blue-500' : cfg.color}`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium ${selected ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-white'}`}>{cfg.label}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{cfg.description}</p>
+      </div>
+      <div className="flex-shrink-0">
+        {status === 'loading' && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
+        {status === 'done' && <CheckCircle className="w-4 h-4 text-green-500" />}
+        {status === 'error' && <AlertTriangle className="w-4 h-4 text-red-400" />}
+        {status === 'idle' && (
+          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selected ? 'border-blue-500 bg-blue-500' : 'border-gray-300 dark:border-gray-600'}`}>
+            {selected && <div className="w-2 h-2 rounded-full bg-white" />}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Restore table row ────────────────────────────────────────────────────────
+function RestoreTableRow({ tableKey, rowCount, selected, onToggle, status }: {
+  tableKey: string;
+  rowCount: number;
+  selected: boolean;
+  onToggle: () => void;
+  status: 'idle' | 'loading' | 'done' | 'error';
+}) {
+  const Icon = TABLE_ICON[tableKey] ?? Database;
+  const color = TABLE_COLOR[tableKey] ?? 'text-gray-400';
+  const label = TABLE_LABEL[tableKey] ?? tableKey;
+
+  return (
+    <div
+      onClick={onToggle}
+      className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${selected ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'}`}
+    >
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${selected ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
+        <Icon className={`w-4 h-4 ${selected ? 'text-emerald-600' : color}`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium ${selected ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-800 dark:text-white'}`}>{label}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">{rowCount.toLocaleString('fa-IR')} ردیف</p>
+      </div>
+      <div className="flex-shrink-0">
+        {status === 'loading' && <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />}
+        {status === 'done' && <CheckCircle className="w-4 h-4 text-green-500" />}
+        {status === 'error' && <AlertTriangle className="w-4 h-4 text-red-400" />}
+        {status === 'idle' && (
+          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300 dark:border-gray-600'}`}>
+            {selected && <div className="w-2 h-2 rounded-full bg-white" />}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Restore panel ────────────────────────────────────────────────────────────
+function RestorePanel() {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [parsedData, setParsedData] = useState<Record<string, any[]> | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [parseError, setParseError] = useState('');
+  const [parsing, setParsing] = useState(false);
+  const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
+  const [strategy, setStrategy] = useState<'upsert' | 'replace'>('upsert');
+  const [running, setRunning] = useState(false);
+  const [tableStatus, setTableStatus] = useState<Record<string, 'idle' | 'loading' | 'done' | 'error'>>({});
+  const [restoreReport, setRestoreReport] = useState<Record<string, any> | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [expandedReportTable, setExpandedReportTable] = useState<string | null>(null);
+
+  const toggleTable = (key: string) => setSelectedTables(s => {
+    const n = new Set(s);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
+
+  const selectAll = () => {
+    if (!parsedData) return;
+    setSelectedTables(new Set(Object.keys(parsedData)));
+  };
+  const selectNone = () => setSelectedTables(new Set());
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setParseError('');
+    setParsedData(null);
+    setSelectedTables(new Set());
+    setTableStatus({});
+    setConfirmed(false);
+    setParsing(true);
+
+    try {
+      // Silently drop the profiles key — user accounts are managed separately
+      const stripProfiles = (obj: Record<string, any[]>) => {
+        const { profiles: _p, ...rest } = obj;
+        return rest;
+      };
+
+      if (file.name.endsWith('.json')) {
+        const text = await file.text();
+        const obj = JSON.parse(text);
+        if (typeof obj !== 'object' || Array.isArray(obj)) throw new Error('فرمت JSON نامعتبر است');
+        for (const [k, v] of Object.entries(obj)) {
+          if (!Array.isArray(v)) throw new Error(`جدول "${k}" آرایه نیست`);
+        }
+        const data = stripProfiles(obj as Record<string, any[]>);
+        setParsedData(data);
+        setSelectedTables(new Set(Object.keys(data)));
+      } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const result: Record<string, any[]> = {};
+        const labelToKey = Object.fromEntries(TABLES.map(t => [t.label.slice(0, 31), t.key]));
+        for (const sheetName of wb.SheetNames) {
+          const tableKey = labelToKey[sheetName] ?? sheetName;
+          if (tableKey === 'profiles') continue; // skip user data
+          const ws = wb.Sheets[sheetName];
+          result[tableKey] = XLSX.utils.sheet_to_json(ws);
+        }
+        setParsedData(result);
+        setSelectedTables(new Set(Object.keys(result)));
+      } else {
+        throw new Error('فقط فایل‌های JSON و XLSX پشتیبانی می‌شوند');
+      }
+    } catch (err: any) {
+      setParseError(err.message || 'خطا در خواندن فایل');
+    } finally {
+      setParsing(false);
+      // Reset input so same file can be re-selected
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const runRestore = async () => {
+    if (!parsedData || selectedTables.size === 0) return;
+    setRunning(true);
+
+    const init: Record<string, 'idle' | 'loading' | 'done' | 'error'> = {};
+    for (const k of selectedTables) init[k] = 'loading';
+    setTableStatus(init);
+
+    // Build payload with only selected tables
+    const tables: Record<string, any[]> = {};
+    for (const k of selectedTables) tables[k] = parsedData[k] ?? [];
+
+    try {
+      const { data, error } = await supabase.functions.invoke('restore-backup', {
+        body: { tables, strategy },
+      });
+
+      if (error) throw error;
+
+      const results = (data as any)?.results ?? {};
+      const newStatus: Record<string, 'idle' | 'loading' | 'done' | 'error'> = {};
+      for (const k of selectedTables) {
+        const r = results[k];
+        if (!r) { newStatus[k] = 'error'; continue; }
+        newStatus[k] = r.success ? 'done' : 'error';
+        if (!r.success && r.errors?.length) {
+          toast.error(`خطا در بازیابی ${TABLE_LABEL[k] ?? k}: ${r.errors[0]}`);
+        }
+      }
+      setTableStatus(newStatus);
+      setRestoreReport(results);
+
+      const doneCount = Object.values(newStatus).filter(s => s === 'done').length;
+      const totalInserted = Object.values(results).reduce((s: number, r: any) => s + (r?.inserted ?? 0), 0);
+      const totalUpdated = Object.values(results).reduce((s: number, r: any) => s + (r?.updated ?? 0), 0);
+      const totalFailed = Object.values(results).reduce((s: number, r: any) => s + (r?.failed ?? 0), 0);
+      if (doneCount > 0) {
+        const parts = [`بازیابی ${doneCount} جدول`];
+        if (totalInserted > 0) parts.push(`${totalInserted.toLocaleString('fa-IR')} ردیف جدید`);
+        if (totalUpdated > 0) parts.push(`${totalUpdated.toLocaleString('fa-IR')} به‌روزرسانی`);
+        if (totalFailed > 0) parts.push(`${totalFailed.toLocaleString('fa-IR')} ناموفق`);
+        toast[totalFailed > 0 ? 'error' : 'success'](parts.join(' — '));
+      }
+    } catch (err: any) {
+      toast.error(`خطا در بازیابی: ${err.message}`);
+      const errStatus: Record<string, 'idle' | 'loading' | 'done' | 'error'> = {};
+      for (const k of selectedTables) errStatus[k] = 'error';
+      setTableStatus(errStatus);
+    }
+
+    setRunning(false);
+    setConfirmed(false);
+  };
+
+  const doneCount = Object.values(tableStatus).filter(s => s === 'done').length;
+  const totalSelected = selectedTables.size;
+
+  return (
+    <div className="space-y-4">
+      {/* File picker */}
+      <div
+        onClick={() => fileRef.current?.click()}
+        className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-2xl cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500 transition-colors bg-gray-50 dark:bg-gray-800/50 group"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+          <Upload className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+        </div>
+        {parsing ? (
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <Loader2 className="w-4 h-4 animate-spin" /> در حال خواندن فایل...
+          </div>
+        ) : fileName && parsedData ? (
+          <div className="text-center">
+            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{fileName}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{Object.keys(parsedData).length} جدول شناسایی شد</p>
+          </div>
+        ) : (
+          <div className="text-center">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">فایل پشتیبان را انتخاب کنید</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">JSON یا Excel (.xlsx)</p>
+          </div>
+        )}
+        <input ref={fileRef} type="file" accept=".json,.xlsx,.xls" className="hidden" onChange={handleFileChange} />
+      </div>
+
+      {parseError && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl">
+          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+          <p className="text-xs text-red-700 dark:text-red-300">{parseError}</p>
+        </div>
+      )}
+
+      {parsedData && (
+        <>
+          {/* Strategy */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">روش بازیابی</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setStrategy('upsert')}
+                className={`p-3 rounded-xl border transition-all text-right ${strategy === 'upsert' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}
+              >
+                <p className={`text-sm font-semibold ${strategy === 'upsert' ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-300'}`}>ادغام (Upsert)</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 leading-relaxed">ردیف‌های موجود به‌روز و ردیف‌های جدید اضافه می‌شوند. داده‌های فعلی حذف نمی‌شوند.</p>
+              </button>
+              <button
+                onClick={() => setStrategy('replace')}
+                className={`p-3 rounded-xl border transition-all text-right ${strategy === 'replace' ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}
+              >
+                <p className={`text-sm font-semibold ${strategy === 'replace' ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'}`}>جایگزینی کامل</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 leading-relaxed">تمام داده‌های فعلی حذف و از فایل پشتیبان بازنویسی می‌شوند.</p>
+              </button>
+            </div>
+          </div>
+
+          {/* Table selection */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                جداول ({selectedTables.size} از {Object.keys(parsedData).length} انتخاب‌شده)
+              </p>
+              <div className="flex gap-2">
+                <button onClick={selectAll} className="text-xs px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 transition-colors">همه</button>
+                <button onClick={selectNone} className="text-xs px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">هیچ‌کدام</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-y-auto">
+              {Object.entries(parsedData).map(([key, rows]) => (
+                <RestoreTableRow
+                  key={key}
+                  tableKey={key}
+                  rowCount={rows.length}
+                  selected={selectedTables.has(key)}
+                  onToggle={() => toggleTable(key)}
+                  status={tableStatus[key] || 'idle'}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Progress */}
+          {running && totalSelected > 0 && (
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">در حال بازیابی...</span>
+                <span className="text-sm text-emerald-600 dark:text-emerald-400">{doneCount} / {totalSelected}</span>
+              </div>
+              <div className="w-full bg-emerald-100 dark:bg-emerald-900/50 rounded-full h-2">
+                <div
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${totalSelected > 0 ? (doneCount / totalSelected) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Restore report */}
+          {restoreReport && !running && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-1">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">گزارش بازیابی</p>
+                <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />وارد شد</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />به‌روز شد</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />رد شد</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />ناموفق</span>
+                </div>
+              </div>
+              {Object.entries(restoreReport).map(([key, r]: [string, any]) => (
+                <div key={key} className="rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                  <button
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-right"
+                    onClick={() => setExpandedReportTable(expandedReportTable === key ? null : key)}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{TABLE_LABEL[key] ?? key}</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">کل: {(r.total ?? 0).toLocaleString('fa-IR')}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                      {(r.inserted ?? 0) > 0 && (
+                        <span className="font-medium text-green-600 dark:text-green-400">+{(r.inserted).toLocaleString('fa-IR')}</span>
+                      )}
+                      {(r.updated ?? 0) > 0 && (
+                        <span className="font-medium text-blue-600 dark:text-blue-400">↑{(r.updated).toLocaleString('fa-IR')}</span>
+                      )}
+                      {(r.skipped ?? 0) > 0 && (
+                        <span className="font-medium text-amber-600 dark:text-amber-400">○{(r.skipped).toLocaleString('fa-IR')}</span>
+                      )}
+                      {(r.failed ?? 0) > 0 && (
+                        <span className="font-medium text-red-600 dark:text-red-400">✗{(r.failed).toLocaleString('fa-IR')}</span>
+                      )}
+                      {r.errors?.length > 0
+                        ? expandedReportTable === key
+                          ? <ChevronUp className="w-3 h-3 text-gray-400" />
+                          : <ChevronDown className="w-3 h-3 text-gray-400" />
+                        : null
+                      }
+                    </div>
+                  </button>
+
+                  {expandedReportTable === key && r.errors?.length > 0 && (
+                    <div className="border-t border-gray-100 dark:border-gray-700 max-h-52 overflow-y-auto">
+                      {r.errors.slice(0, 100).map((e: any, ei: number) => (
+                        <div key={ei} className="flex items-start gap-2 px-3 py-2 border-b border-gray-50 dark:border-gray-700/50 last:border-0 bg-gray-50/50 dark:bg-gray-800/50">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                            {e.row || '—'}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed">{e.reason || '(علت نامشخص)'}</p>
+                            {e.dependency && (
+                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono truncate">{e.dependency}</p>
+                            )}
+                            {e.id && (
+                              <p className="text-xs text-gray-300 dark:text-gray-600 font-mono truncate">{e.id}</p>
+                            )}
+                          </div>
+                          {e.code && (
+                            <span className="flex-shrink-0 text-xs text-gray-300 dark:text-gray-600 font-mono">{e.code}</span>
+                          )}
+                        </div>
+                      ))}
+                      {r.errors.length > 100 && (
+                        <p className="px-3 py-2 text-center text-xs text-gray-400 dark:text-gray-500">
+                          ... و {(r.errors.length - 100).toLocaleString('fa-IR')} مورد دیگر
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {r.deleteError && (
+                    <p className="px-3 py-2 text-xs text-red-500 dark:text-red-400 border-t border-gray-100 dark:border-gray-700">
+                      حذف ناموفق: {r.deleteError}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Replace warning */}
+          {strategy === 'replace' && (
+            <div className="flex items-start gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl">
+              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed font-medium mb-2">
+                  حالت جایگزینی: تمام داده‌های فعلی جداول انتخاب‌شده حذف خواهند شد. این عملیات برگشت‌پذیر نیست.
+                </p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={confirmed}
+                    onChange={e => setConfirmed(e.target.checked)}
+                    className="w-4 h-4 accent-red-500"
+                  />
+                  <span className="text-xs text-red-700 dark:text-red-300 font-medium">تأیید می‌کنم که داده‌های فعلی حذف شوند</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Restore button */}
+          <button
+            onClick={runRestore}
+            disabled={running || selectedTables.size === 0 || (strategy === 'replace' && !confirmed)}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white rounded-2xl font-medium transition-colors shadow-sm"
+          >
+            {running
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> در حال بازیابی...</>
+              : <><RefreshCw className="w-4 h-4" /> بازیابی ({selectedTables.size} جدول)</>
+            }
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Main BackupPanel ─────────────────────────────────────────────────────────
+export function BackupPanel() {
+  const [selected, setSelected] = useState<Set<string>>(new Set(TABLES.map(t => t.key)));
+  const [format, setFormat] = useState<'json' | 'xlsx'>('xlsx');
+  const [running, setRunning] = useState(false);
+  const [tableStatus, setTableStatus] = useState<Record<string, 'idle' | 'loading' | 'done' | 'error'>>({});
+  const [showRestore, setShowRestore] = useState(false);
+
+  const toggle = (key: string) => setSelected(s => {
+    const n = new Set(s);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
+
+  const selectAll = () => setSelected(new Set(TABLES.map(t => t.key)));
+  const selectNone = () => setSelected(new Set());
+
+  const runBackup = async () => {
+    if (selected.size === 0) { toast.error('حداقل یک جدول انتخاب کنید'); return; }
+    setRunning(true);
+
+    const init: Record<string, 'idle' | 'loading' | 'done' | 'error'> = {};
+    TABLES.forEach(t => { init[t.key] = selected.has(t.key) ? 'loading' : 'idle'; });
+    setTableStatus(init);
+
+    const result: Record<string, any[]> = {};
+
+    for (const cfg of TABLES) {
+      if (!selected.has(cfg.key)) continue;
+      try {
+        const { data, error } = await supabase.from(cfg.key as any).select('*').limit(50000);
+        if (error) throw error;
+        result[cfg.key] = data || [];
+        setTableStatus(s => ({ ...s, [cfg.key]: 'done' }));
+      } catch {
+        result[cfg.key] = [];
+        setTableStatus(s => ({ ...s, [cfg.key]: 'error' }));
+        toast.error(`خطا در خواندن ${cfg.label}`);
+      }
+    }
+
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+    if (format === 'json') {
+      const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_${ts}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const wb = XLSX.utils.book_new();
+      for (const cfg of TABLES) {
+        if (!selected.has(cfg.key) || !result[cfg.key]?.length) continue;
+        const ws = XLSX.utils.json_to_sheet(result[cfg.key]);
+        XLSX.utils.book_append_sheet(wb, ws, cfg.label.slice(0, 31));
+      }
+      XLSX.writeFile(wb, `backup_${ts}.xlsx`);
+    }
+
+    toast.success(`پشتیبان‌گیری از ${Object.values(result).filter(r => r.length > 0).length} جدول انجام شد`);
+    setRunning(false);
+  };
+
+  const doneCount = Object.values(tableStatus).filter(s => s === 'done').length;
+  const totalSelected = selected.size;
+
+  return (
+    <div className="space-y-5" dir="rtl">
+
+      {/* ── Export / Backup section ─────────────────────────────────────── */}
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+          <Database className="w-5 h-5 text-blue-500" />
+        </div>
+        <div>
+          <h3 className="font-bold text-gray-800 dark:text-white">پشتیبان‌گیری از دیتابیس</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            خروجی از جداول انتخاب‌شده به فرمت JSON یا Excel
+          </p>
+        </div>
+      </div>
+
+      {/* Format selector */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">فرمت خروجی</p>
+        <div className="flex gap-3">
+          {(['xlsx', 'json'] as const).map(f => (
+            <button key={f} onClick={() => setFormat(f)}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all ${format === f ? 'bg-blue-500 text-white border-blue-500' : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}>
+              {f === 'xlsx' ? 'Excel (.xlsx)' : 'JSON'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table selection */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            جداول ({selected.size} از {TABLES.length} انتخاب‌شده)
+          </p>
+          <div className="flex gap-2">
+            <button onClick={selectAll} className="text-xs px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
+              همه
+            </button>
+            <button onClick={selectNone} className="text-xs px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+              هیچ‌کدام
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto">
+          {TABLES.map(cfg => (
+            <TableRow
+              key={cfg.key}
+              cfg={cfg}
+              selected={selected.has(cfg.key)}
+              onToggle={() => toggle(cfg.key)}
+              status={tableStatus[cfg.key] || 'idle'}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Progress */}
+      {running && totalSelected > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">در حال پشتیبان‌گیری...</span>
+            <span className="text-sm text-blue-600 dark:text-blue-400">{doneCount} / {totalSelected}</span>
+          </div>
+          <div className="w-full bg-blue-100 dark:bg-blue-900/50 rounded-full h-2">
+            <div
+              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${totalSelected > 0 ? (doneCount / totalSelected) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Warning */}
+      <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
+        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+          فایل پشتیبان شامل داده‌های واقعی است. آن را در مکان امن ذخیره کنید و به اشخاص غیرمجاز دسترسی ندهید.
+        </p>
+      </div>
+
+      {/* Export button */}
+      <button
+        onClick={runBackup}
+        disabled={running || selected.size === 0}
+        className="w-full flex items-center justify-center gap-2 py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white rounded-2xl font-medium transition-colors shadow-sm"
+      >
+        {running
+          ? <><Loader2 className="w-4 h-4 animate-spin" /> در حال پشتیبان‌گیری...</>
+          : <><Download className="w-4 h-4" /> دریافت پشتیبان ({selected.size} جدول)</>
+        }
+      </button>
+
+      {/* ── Restore / Import section ────────────────────────────────────── */}
+      <div className="border-t border-gray-100 dark:border-gray-700 pt-5">
+        <button
+          onClick={() => setShowRestore(v => !v)}
+          className="w-full flex items-center gap-3 text-right"
+        >
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+            <Upload className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-gray-800 dark:text-white">بازیابی / وارد کردن پشتیبان</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              بارگذاری فایل پشتیبان و اعمال مجدد داده‌ها
+            </p>
+          </div>
+          {showRestore
+            ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          }
+        </button>
+
+        {showRestore && (
+          <div className="mt-4">
+            <RestorePanel />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
