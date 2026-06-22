@@ -383,7 +383,7 @@ export function NotificationBell({ onNavigate }: NotificationBellProps) {
     fetchNotifications(currentUserId);
 
     const channel = supabase
-      .channel(`notifications-bell-${currentUserId}`)
+      .channel(`notifications-bell-${currentUserId}-${Date.now()}`)
       .on(
         'postgres_changes',
         {

@@ -77,7 +77,7 @@ export function ChatSidebar({
     loadPresence();
 
     const channel = supabase
-      .channel('sidebar-presence')
+      .channel(`sidebar-presence-${Date.now()}`)
       .on(
         'postgres_changes',
         {

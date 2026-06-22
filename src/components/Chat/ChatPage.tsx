@@ -136,9 +136,12 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
 
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
+    let cancelled = false;
+    const channelName = `convs-${Date.now()}`;
+
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user || cancelled) return;
       setCurrentUserId(user.id);
 
       const { data: profile } = await supabase
@@ -146,21 +149,23 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
         .select('user_id, full_name, email, avatar_url')
         .eq('user_id', user.id)
         .maybeSingle();
+      if (cancelled) return;
       setCurrentUserProfile(profile || { user_id: user.id, full_name: null, email: user.email || null });
 
       await fetchConversations(user.id);
+      if (cancelled) return;
 
       convChannelRef.current = supabase
-        .channel(`convs-${user.id}`)
+        .channel(channelName)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' },
           () => fetchConversations(user.id))
-        // Refresh unread counts when any message's read_by array changes (seen eye fix)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' },
           () => fetchConversations(user.id))
         .subscribe();
 
     })();
     return () => {
+      cancelled = true;
       if (convChannelRef.current) {
         supabase.removeChannel(convChannelRef.current);
         convChannelRef.current = null;

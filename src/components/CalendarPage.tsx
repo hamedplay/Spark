@@ -479,7 +479,7 @@ export function CalendarPage({
     fetchAllProfiles();
 
     const channel = supabase
-      .channel('calendar-realtime')
+      .channel(`calendar-realtime-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => fetchMeetingsRef.current())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => fetchMeetingsRef.current())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendars' }, () => fetchCalendars())

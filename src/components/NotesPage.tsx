@@ -315,7 +315,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     fetchNotes();
 
     const channel = supabase
-      .channel('notes-realtime')
+      .channel(`notes-realtime-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => fetchNotes())
       .subscribe();
 

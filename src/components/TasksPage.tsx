@@ -596,7 +596,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     fetchTasks();
 
     const channel = supabase
-      .channel('tasks-realtime')
+      .channel(`tasks-realtime-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchTasks())
       .subscribe();
 

@@ -616,7 +616,7 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
     fetchGroupTasks();
     if (currentUserId) fetchMentionBar();
 
-    const sub = supabase.channel(`ch-rt-${channel.id}`)
+    const sub = supabase.channel(`ch-rt-${channel.id}-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_messages', filter: `channel_id=eq.${channel.id}` }, () => { fetchMessages(); fetchPinned(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_message_reactions' }, fetchMessages)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_message_stars' }, fetchMessages)

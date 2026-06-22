@@ -93,7 +93,7 @@ function App() {
     window.addEventListener('spark-visible-changed', handleSparkVisibleEvent);
 
     const channel = supabase
-      .channel('spark-config-rt')
+      .channel(`spark-config-rt-${Date.now()}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -371,7 +371,7 @@ function App() {
     fetchMeetings();
 
     const channel = supabase
-      .channel('app-meetings-realtime')
+      .channel(`app-meetings-realtime-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => fetchMeetings())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => fetchMeetings())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'actions' }, () => fetchMeetings())

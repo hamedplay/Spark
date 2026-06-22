@@ -230,7 +230,7 @@ export function GlobalCallProvider({
     if (!currentUserId) return;
 
     callChannelRef.current = supabase
-      .channel(`incoming-calls-${currentUserId}`)
+      .channel(`incoming-calls-${currentUserId}-${Date.now()}`)
       .on('broadcast', { event: 'incoming_call' }, async ({ payload }: any) => {
         if (!payload?.session_id) return;
         const { data: session } = await supabase
@@ -280,7 +280,7 @@ export function GlobalCallProvider({
     if (!currentUserId) return;
 
     urgentChannelRef.current = supabase
-      .channel(`urgent-msgs-${currentUserId}`)
+      .channel(`urgent-msgs-${currentUserId}-${Date.now()}`)
       // Direct chat messages
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, async (payload) => {
         const msg = payload.new as any;

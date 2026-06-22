@@ -121,7 +121,7 @@ export function MeetingInboxButton() {
   // Auto-refresh when meeting_inbox changes (new invites from organizers)
   useEffect(() => {
     const channel = supabase
-      .channel('meeting-inbox-realtime')
+      .channel(`meeting-inbox-realtime-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };

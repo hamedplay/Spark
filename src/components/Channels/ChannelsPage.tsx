@@ -80,7 +80,7 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
     fetchProfiles();
     fetchChannels();
     if (!currentUserId) return;
-    const sub = supabase.channel('channels-list-rt')
+    const sub = supabase.channel(`channels-list-rt-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, () => fetchChannels())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_members' }, () => fetchChannels())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_messages' }, () => fetchChannels())
