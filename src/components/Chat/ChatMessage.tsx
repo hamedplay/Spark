@@ -427,11 +427,15 @@ export function ChatMessage({
 
                 <div className="flex-1" />
 
-                {/* Read ticks — only for own messages */}
+                {/* Eye icon — clickable for own messages to show viewers */}
                 {isOwn && (
-                  seenByOther
-                    ? <CheckCheck className="w-3.5 h-3.5 flex-shrink-0 text-teal-400" title="دیده شده" />
-                    : <CheckCheck className="w-3.5 h-3.5 flex-shrink-0 text-gray-300 dark:text-gray-600" title="ارسال شد" />
+                  <button
+                    onClick={() => setShowViewersModal(true)}
+                    className="flex-shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                    title={seenByOther ? 'دیده شده — کلیک برای جزئیات' : 'دیده نشده'}
+                  >
+                    <Eye className={`w-3.5 h-3.5 ${seenByOther ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-600'}`} />
+                  </button>
                 )}
 
                 {/* Three-dot menu */}
@@ -557,11 +561,6 @@ export function ChatMessage({
               <MI icon={<span className="text-teal-500 text-xs font-bold">📅</span>} label="تنظیم جلسه با منشن‌ها"
                 labelClass="text-teal-600 dark:text-teal-400 font-medium"
                 onClick={() => { onScheduleMeeting(mentionIds, message.body || ''); setShowMenu(false); }} />
-            )}
-            {isOwn && (
-              <MI icon={<CheckCheck className="w-4 h-4 text-teal-500" />} label="مشاهده‌کنندگان"
-                labelClass="text-teal-600 dark:text-teal-400 font-medium"
-                onClick={() => { setShowViewersModal(true); setShowMenu(false); }} />
             )}
             <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
             <MI icon={<Trash2 className="w-4 h-4 text-red-500" />} label="حذف برای من" labelClass="text-red-500"
