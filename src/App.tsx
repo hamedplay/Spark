@@ -85,6 +85,11 @@ function App() {
 
     loadSparkVisible();
 
+    const handleSparkVisibleEvent = (e: Event) => {
+      setSparkVisible((e as CustomEvent).detail.visible);
+    };
+    window.addEventListener('spark-visible-changed', handleSparkVisibleEvent);
+
     const channel = supabase
       .channel('spark-config-rt')
       .on('postgres_changes', {
@@ -92,13 +97,21 @@ function App() {
         schema: 'public',
         table: 'system_config',
       }, (payload: any) => {
-        if (payload.new?.section === 'spark' && payload.new?.key === 'spark_visible') {
-          setSparkVisible(payload.new.value !== 'false');
+        if (
+          (payload.new?.section === 'spark' && payload.new?.key === 'spark_visible') ||
+          (payload.old?.section === 'spark' && payload.old?.key === 'spark_visible')
+        ) {
+          loadSparkVisible();
+        } else if (!payload.new?.section && !payload.old?.section) {
+          loadSparkVisible();
         }
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      window.removeEventListener('spark-visible-changed', handleSparkVisibleEvent);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {

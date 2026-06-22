@@ -819,6 +819,7 @@ function SparkVisibilityToggle() {
           .insert([{ section: 'spark', key: 'spark_visible', value: newVal ? 'true' : 'false' }]);
       }
       setVisible(newVal);
+      window.dispatchEvent(new CustomEvent('spark-visible-changed', { detail: { visible: newVal } }));
       toast.success(newVal ? 'دستیار اسپارک نمایش داده می‌شود' : 'دستیار اسپارک پنهان شد');
       logAudit({ module: 'spark', action: newVal ? 'spark_enabled' : 'spark_disabled', entity_name: 'spark_visible', details: `نمایش دستیار اسپارک ${newVal ? 'فعال' : 'غیرفعال'} شد`, severity: 'warning' });
     } catch {
