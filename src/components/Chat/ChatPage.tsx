@@ -137,7 +137,8 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    const channelName = `convs-${Date.now()}`;
+    const channelName = `convs-${crypto.randomUUID()}`;
+    console.log('[ChatPage] Subscribing conversations realtime channel:', channelName);
 
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
