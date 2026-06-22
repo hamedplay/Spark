@@ -325,6 +325,24 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   const handlePermanentDelete = async () => {
     setLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      // Notify participants before deleting
+      const pIds = (meeting.participant_user_ids || []) as string[];
+      const notifyIds = [...pIds, ...((meeting.notify_users || []) as string[])].filter(uid => uid !== user?.id);
+      if (notifyIds.length) {
+        await Promise.all(notifyIds.map(uid =>
+          insertNotification({
+            userId: uid,
+            category: 'meeting',
+            eventType: 'cancel',
+            audience: pIds.includes(uid) ? 'participants' : 'observers',
+            fallbackTitle: 'جلسه لغو شد',
+            fallbackMessage: `جلسه «${meeting.subject}» لغو شده است`,
+            senderId: user?.id ?? null,
+            actionUrl: 'meetings',
+          })
+        ));
+      }
       await supabase.from('meeting_inbox').delete().eq('meeting_id', meeting.id);
       const { error } = await supabase.from('meetings').delete().eq('id', meeting.id);
       if (error) throw error;
@@ -405,6 +423,24 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
         await supabase.from('actions').insert(
           (oldActions!).map(a => ({ meeting_id: newId, title: a.title, status: a.status, assignee: a.assignee }))
         );
+      }
+
+      // Notify participants that the scheduled meeting was cancelled (new unscheduled request will be created)
+      const pIds = (fullMtg.participant_user_ids || []) as string[];
+      const notifyIds = [...pIds, ...((fullMtg.notify_users || []) as string[])].filter(uid => uid !== user.id);
+      if (notifyIds.length) {
+        await Promise.all(notifyIds.map(uid =>
+          insertNotification({
+            userId: uid,
+            category: 'meeting',
+            eventType: 'cancel',
+            audience: pIds.includes(uid) ? 'participants' : 'observers',
+            fallbackTitle: 'جلسه لغو شد',
+            fallbackMessage: `جلسه «${fullMtg.subject}» لغو شده است`,
+            senderId: user.id,
+            actionUrl: 'meetings',
+          })
+        ));
       }
 
       // Delete old meeting_inbox entries then the meeting itself

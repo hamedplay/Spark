@@ -775,6 +775,28 @@ export function CalendarPage({
       if (!meeting) return;
       const isOwner = meeting.user_id === user.id;
 
+      // Helper: send cancel notification to all participants/observers of a given meeting object
+      const sendCancelNotifications = async (m: MeetingData) => {
+        try {
+          const pIds = (m.participant_user_ids || []) as string[];
+          const notifyIds = [...pIds, ...((m.notify_users || []) as string[])].filter(uid => uid !== user.id);
+          if (!notifyIds.length) return;
+          await Promise.all(notifyIds.map(uid =>
+            insertNotificationFromTemplate({
+              userId: uid,
+              category: 'meeting',
+              eventType: 'cancel',
+              audience: pIds.includes(uid) ? 'participants' : 'observers',
+              fallbackTitle: 'جلسه لغو شد',
+              fallbackMessage: `جلسه «${m.subject}» لغو شده است`,
+              placeholders: buildMeetingPlaceholders(m, uid),
+              senderId: user.id,
+              actionUrl: 'calendar',
+            })
+          ));
+        } catch {}
+      };
+
       if (isOwner) {
         if (mode === 'revert') {
           const { data: fullMtg } = await supabase
@@ -824,6 +846,9 @@ export function CalendarPage({
             await supabase.from('actions').insert((oldActions!).map(a => ({ meeting_id: newId, title: a.title, status: a.status, assignee: a.assignee })));
           }
 
+          // Notify participants that the scheduled meeting was cancelled (new unscheduled request created)
+          await sendCancelNotifications({ ...meeting, ...fullMtg } as MeetingData);
+
           await supabase.from('meeting_inbox').delete().eq('meeting_id', id);
           const { error: delErr } = await supabase.from('meetings').delete().eq('id', id);
           if (delErr) throw delErr;
@@ -835,9 +860,20 @@ export function CalendarPage({
         }
 
         if (deleteRepeating) {
+          // Notify participants of each repeating meeting before bulk delete
+          const { data: repeatingMeetings } = await supabase
+            .from('meetings')
+            .select('id,subject,participant_user_ids,notify_users,request_date,start_time,end_time')
+            .eq('user_id', user.id)
+            .eq('subject', meeting.subject)
+            .neq('repeat_type', 'none');
+          if (repeatingMeetings?.length) {
+            await Promise.all(repeatingMeetings.map(m => sendCancelNotifications(m as MeetingData)));
+          }
           const { error } = await supabase.from('meetings').delete().eq('user_id', user.id).eq('subject', meeting.subject).neq('repeat_type', 'none');
           if (error) throw error;
         } else {
+          await sendCancelNotifications(meeting);
           await supabase.from('meeting_inbox').delete().eq('meeting_id', id);
           const { error } = await supabase.from('meetings').delete().eq('id', id).eq('user_id', user.id);
           if (error) throw error;
