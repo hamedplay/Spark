@@ -55,7 +55,6 @@ function buildMeta(
   const starredIds = new Set(stars.map(s => s.message_id));
 
   return msgs
-    .filter(m => !m.deleted_for_all)
     .map(m => {
       const raw = reactionsByMsg.get(m.id) || [];
       const emojiMap = new Map<string, { count: number; reactedByMe: boolean }>();
@@ -454,7 +453,7 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
   const fetchMessages = useCallback(async () => {
     const { data: msgs } = await supabase
       .from('channel_messages').select('*')
-      .eq('channel_id', channel.id).eq('deleted_for_all', false)
+      .eq('channel_id', channel.id)
       .order('created_at', { ascending: true });
 
     const msgIds = (msgs || []).map(m => m.id);
@@ -473,12 +472,12 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
     setMessages(buildMeta(raw, reacts || [], starsData || [], allProfiles, currentUserId));
 
     if (currentUserId) {
-      const hasUnread = raw.some(m => m.sender_id !== currentUserId && !(m.read_by || []).includes(currentUserId));
+      const hasUnread = raw.some(m => !m.deleted_for_all && m.sender_id !== currentUserId && !(m.read_by || []).includes(currentUserId));
       if (hasUnread) {
         supabase.rpc('mark_channel_messages_read', { p_channel_id: channel.id })
           .then(() => {
             supabase.from('channel_messages').select('*')
-              .eq('channel_id', channel.id).eq('deleted_for_all', false)
+              .eq('channel_id', channel.id)
               .order('created_at', { ascending: true })
               .then(({ data: fresh }) => {
                 if (fresh) setMessages(buildMeta(fresh, reacts || [], starsData || [], allProfiles, currentUserId));

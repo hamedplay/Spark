@@ -319,6 +319,17 @@ export function ChannelMessageItem({
     );
   }
 
+  if (msg.deleted_for_all) {
+    return (
+      <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-3 px-2 sm:px-3`} dir="rtl">
+        <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 italic bg-gray-100 dark:bg-gray-700/50 px-3 py-2 rounded-xl">
+          <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>این پیام حذف شده است</span>
+        </div>
+      </div>
+    );
+  }
+
   // Status square cycling: null → pending → in_progress → done → null
   const cycleStatus = () => {
     const cycle: MessageStatus[] = [null, 'pending', 'in_progress', 'done'];
@@ -659,12 +670,8 @@ export function ChannelMessageItem({
               <MI icon={<Star className={`w-4 h-4 ${msg.isStarred ? 'fill-yellow-400 text-yellow-500' : ''}`} />}
                 label={msg.isStarred ? 'برداشتن نشانه' : 'نشانه‌دار کردن'}
                 onClick={() => { onStar(msg.id, !msg.isStarred); setShowMenu(false); }} />
-              {isOwn && (
-                <MI icon={<CheckCheck className="w-4 h-4 text-teal-500" />} label="نمایش دیده‌شده‌ها"
-                  onClick={() => { setShowReadReceipts(true); setShowMenu(false); }} />
-              )}
               <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
-              {isAdminOrOwn && (
+              {isOwn && (
                 <MI icon={<Trash2 className="w-4 h-4 text-red-500" />} label="حذف برای همه" labelClass="text-red-500"
                   onClick={() => { onDelete(msg.id); setShowMenu(false); }} />
               )}
