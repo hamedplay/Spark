@@ -891,9 +891,24 @@ export function ChatConversationView({
                 <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
                 <h3 className="font-bold text-gray-900 dark:text-white text-base">پیام‌های نشانه‌دار ({globalStarred.length})</h3>
               </div>
-              <button onClick={() => setShowStarredModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {globalStarred.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm('تمام پیام‌های نشانه‌دار پاک شوند؟')) return;
+                      await supabase.from('chat_message_stars').delete().eq('user_id', currentUserId);
+                      fetchGlobalStarred();
+                      fetchMessages();
+                    }}
+                    className="text-xs text-red-400 hover:text-red-600 dark:hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    پاک کردن همه
+                  </button>
+                )}
+                <button onClick={() => setShowStarredModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="overflow-y-auto flex-1">
               {globalStarred.length === 0 ? (
@@ -904,16 +919,18 @@ export function ChatConversationView({
               ) : globalStarred.map(item => (
                 <div
                   key={item.message.id}
-                  onClick={() => {
-                    setShowStarredModal(false);
-                    if (item.conversationId === conversation.id) {
-                      setTimeout(() => scrollToMessage(item.message.id), 100);
-                    }
-                  }}
-                  className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-b border-gray-50 dark:border-gray-800 cursor-pointer group transition-colors"
+                  className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-b border-gray-50 dark:border-gray-800 group transition-colors"
                 >
                   <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 flex-shrink-0 mt-1" />
-                  <div className="flex-1 min-w-0">
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => {
+                      setShowStarredModal(false);
+                      if (item.conversationId === conversation.id) {
+                        setTimeout(() => scrollToMessage(item.message.id), 100);
+                      }
+                    }}
+                  >
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{item.otherUserName}</span>
                       <span className="text-[10px] text-gray-400">{moment(item.message.created_at).format('HH:mm jYYYY/jMM/jDD')}</span>
@@ -927,6 +944,18 @@ export function ChatConversationView({
                       )}
                     </div>
                   </div>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await supabase.from('chat_message_stars').delete().eq('message_id', item.message.id).eq('user_id', currentUserId);
+                      fetchGlobalStarred();
+                      fetchMessages();
+                    }}
+                    className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-gray-300 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all mt-0.5"
+                    title="حذف از نشانه‌دارها"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               ))}
             </div>
