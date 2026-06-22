@@ -116,18 +116,18 @@ export function ChatConversationView({
   }, [conversation.id]);
 
   useEffect(() => {
-  if (!currentUserId) return;
-  const updatePresence = async () => {
-    await supabase
-      .from('user_presence')
-      .upsert({
-        user_id: currentUserId,
-        last_seen: new Date().toISOString()
-      });
-  };
-  updatePresence();
-  const interval = setInterval(updatePresence, 20000);
-  return () => clearInterval(interval);
+    if (!currentUserId) return;
+    const updatePresence = async () => {
+      await supabase
+        .from('user_presence')
+        .upsert({
+          user_id: currentUserId,
+          last_seen: new Date().toISOString()
+        });
+    };
+    updatePresence();
+    const interval = setInterval(updatePresence, 20000);
+    return () => clearInterval(interval);
   }, [currentUserId]);
   
   useEffect(() => {
@@ -192,7 +192,10 @@ export function ChatConversationView({
   }, []);
 
   const fetchAllUsers = async () => {
-    const { data } = await supabase.from('profiles').select('user_id, full_name, email, avatar_url');
+    const { data } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, email, avatar_url')
+      .limit(500);
     setAllUsers(data || []);
   };
 
@@ -514,31 +517,6 @@ export function ChatConversationView({
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   };
 
-  // Scroll to message from actions panel navigation
-  useEffect(() => {
-
-  fetchMessages();
-  subscribeToMessages();
-  markAsRead();
-  fetchAllUsers();
-  fetchReminders();
-  fetchMentionBar();
-
-  return () => {
-
-    if (channelRef.current) {
-      console.log('Cleaning realtime channel...');
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    if (reminderCheckRef.current) {
-      clearInterval(reminderCheckRef.current);
-    }
-
-  };
-
-}, [conversation.id]);
 
   const scrollToMessage = (messageId: string) => {
     const el = messageRefs.current.get(messageId);

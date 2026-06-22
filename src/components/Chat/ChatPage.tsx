@@ -63,17 +63,29 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
       visibleData.map(c => c.participant_a === uid ? c.participant_b : c.participant_a).filter(Boolean)
     )] as string[];
 
-    const profilesRes = await supabase
-      .from('profiles')
-      .select('user_id, full_name, email, avatar_url')
-      .in('user_id', otherIds);
-
-    // Fetch presence for all other users in one query (3-min threshold for online)
+    const convIds = visibleData.map(c => c.id);
     const threshold = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-    const presenceRes = await supabase
-      .from('user_presence')
-      .select('user_id, is_online, status, last_seen')
-      .in('user_id', otherIds);
+
+    // Fetch profiles, presence, bulk unread counts, and mentions all in parallel
+    const [profilesRes, presenceRes, unreadRes, mentionRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('user_id, full_name, email, avatar_url')
+        .in('user_id', otherIds),
+      supabase
+        .from('user_presence')
+        .select('user_id, is_online, status, last_seen')
+        .in('user_id', otherIds),
+      supabase.rpc('get_unread_counts', { p_user_id: uid }),
+      supabase
+        .from('chat_messages')
+        .select('id, conversation_id')
+        .in('conversation_id', convIds)
+        .neq('sender_id', uid)
+        .not('read_by', 'cs', `{${uid}}`)
+        .contains('mentioned_user_ids', [uid])
+        .order('created_at', { ascending: false }),
+    ]);
 
     const presenceMap = new Map<string, { is_online: boolean; status: string; last_seen: string }>(
       (presenceRes.data || []).map((p: any) => [p.user_id, {
@@ -95,31 +107,13 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
       })
     );
 
-    const counts = await Promise.all(visibleData.map(async c => {
-      const { count } = await supabase
-        .from('chat_messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('conversation_id', c.id)
-        .neq('sender_id', uid)
-        .not('read_by', 'cs', `{${uid}}`);
-      return { id: c.id, count: count || 0 };
-    }));
-    const countMap = new Map(counts.map(c => [c.id, c.count]));
-
-    // Fetch unread mention messages per conversation in a single query
-    const convIds = visibleData.map(c => c.id);
-    const { data: mentionMsgs } = await supabase
-      .from('chat_messages')
-      .select('id, conversation_id')
-      .in('conversation_id', convIds)
-      .neq('sender_id', uid)
-      .not('read_by', 'cs', `{${uid}}`)
-      .contains('mentioned_user_ids', [uid])
-      .order('created_at', { ascending: false });
+    const countMap = new Map<string, number>(
+      (unreadRes.data || []).map((r: any) => [r.conversation_id, Number(r.unread_count)])
+    );
 
     // First unread mention per conversation
     const mentionMap = new Map<string, string>();
-    for (const m of (mentionMsgs || [])) {
+    for (const m of (mentionRes.data || [])) {
       if (!mentionMap.has(m.conversation_id)) mentionMap.set(m.conversation_id, m.id);
     }
 
