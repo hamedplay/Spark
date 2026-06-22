@@ -159,13 +159,18 @@ export function CalendarPage({
   }, [meetings, searchQuery]);
 
   const visibleMeetings = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    return meetings.filter(m => {
+    // Use Tehran-adjusted today so comparison is consistent with parseRequestDateToDateStr
+    const IST_OFFSET_MS = 210 * 60 * 1000;
+    const tehranNow = new Date(Date.now() + IST_OFFSET_MS);
+    const todayStr = `${tehranNow.getUTCFullYear()}-${String(tehranNow.getUTCMonth()+1).padStart(2,'0')}-${String(tehranNow.getUTCDate()).padStart(2,'0')}`;
+    const result = meetings.filter(m => {
       const dateStr = parseRequestDateToDateStr(m.request_date);
       if (dateStr && dateStr < todayStr && !prefs.show_past_meetings) return false;
       if (m.status === 'archived' && !prefs.show_cancelled_meetings) return false;
       return true;
     });
+    console.log('[CalendarPage] visibleMeetings: total=' + meetings.length + ' visible=' + result.length + ' show_past=' + prefs.show_past_meetings + ' show_cancelled=' + prefs.show_cancelled_meetings + ' todayStr(Tehran)=' + todayStr);
+    return result;
   }, [meetings, prefs.show_past_meetings, prefs.show_cancelled_meetings]);
 
   const navigateToMeeting = (m: MeetingData) => {
@@ -387,7 +392,9 @@ export function CalendarPage({
     const checkReminders = () => {
       if (!currentUserId || !meetings.length) return;
       const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const IST_OFFSET_MS = 210 * 60 * 1000;
+      const tehranNow = new Date(now.getTime() + IST_OFFSET_MS);
+      const todayStr = `${tehranNow.getUTCFullYear()}-${String(tehranNow.getUTCMonth()+1).padStart(2,'0')}-${String(tehranNow.getUTCDate()).padStart(2,'0')}`;
       meetings.forEach(m => {
         if (!m.reminder_minutes || m.reminder_minutes === 0) return;
         if (!m.start_time) return;
@@ -585,14 +592,23 @@ export function CalendarPage({
       const daysInEndMonth = getJalaaliMonthDays(endJy, normalEndJm);
       const rangeEnd = jalaaliToDate(endJy, normalEndJm, daysInEndMonth);
 
+      // request_date is stored as Tehran midnight expressed in UTC (UTC = Tehran date - 1 day + 20:30).
+      // Example: Tehran June 22 midnight = 2026-06-21T20:30:00Z.
+      // To capture all Tehran-day meetings we subtract 1 day from range start and add 1 day to range end,
+      // then use plain YYYY-MM-DD string comparison (which sorts correctly for ISO strings).
       const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dayBefore = new Date(rangeStart.getTime() - 86400000);
+      const dayAfter  = new Date(rangeEnd.getTime()  + 86400000);
+      const queryFrom = fmt(dayBefore);
+      const queryTo   = fmt(dayAfter);
+      console.log('[CalendarPage] fetchMeetings query range:', queryFrom, '→', queryTo, '(jy/jm:', baseJy, baseJm + ')');
 
       const [{ data, error }, { data: inboxRows }] = await Promise.all([
         supabase.from('meetings')
           .select('id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
           .neq('status', 'closed')
-          .gte('request_date', fmt(rangeStart))
-          .lte('request_date', fmt(rangeEnd))
+          .gte('request_date', queryFrom)
+          .lte('request_date', queryTo)
           .order('start_time', { ascending: true }),
         supabase.from('meeting_inbox')
           .select('meeting_id, status')
@@ -624,6 +640,13 @@ export function CalendarPage({
         return s !== 'pending' && s !== 'declined';
       });
       console.log('[CalendarPage] fetchMeetings → setMeetings count:', filtered.length, 'userId:', user.id, 'jy/jm:', baseJy, baseJm);
+      // Sample the first 5 meetings to debug date grouping
+      filtered.slice(0, 5).forEach((m: any) => {
+        const groupKey = parseRequestDateToDateStr(m.request_date);
+        const rawDate = new Date(m.request_date);
+        const jalKey = groupKey ? (() => { const jk = toJalaali(new Date(groupKey + 'T00:00:00')); return `${jk.jy}/${jk.jm}/${jk.jd}`; })() : 'null';
+        console.log('[CalendarPage] sample meeting:', m.subject, '| request_date raw:', m.request_date, '| parsedGreg:', groupKey, '| jalali:', jalKey, '| rawDateUTC:', rawDate.toISOString(), '| start_time:', m.start_time);
+      });
       setMeetings(filtered);
     } catch { toast.error('خطا در دریافت جلسات'); }
   }, [currentJy, currentJm]);
@@ -1118,9 +1141,14 @@ export function CalendarPage({
       map[s].push(m);
     });
     const shown = Object.values(map).reduce((a, arr) => a + arr.length, 0);
+    // Log a sample of what keys are in the map vs what the grid would look up
+    const mapKeys = Object.keys(map).slice(0, 5);
+    const sampleGridKey1 = jalaaliToYYYYMMDD(currentJy || 1405, currentJm || 4, 1);
+    const sampleGridKey2 = jalaaliToYYYYMMDD(currentJy || 1405, currentJm || 4, 15);
     console.log('[CalendarPage] meetingsByDate recomputed: visibleMeetings=' + visibleMeetings.length + ' shown=' + shown + ' hiddenCalId=' + hiddenCalId + ' hiddenNoCalNoSub=' + hiddenNoCalNoSub + ' hiddenPublicCalOff=' + hiddenPublicCalOff + ' currentUserId=' + currentUserId + ' enabledCalendarIds.size=' + enabledCalendarIds.size + ' calendarsLoaded=' + calendarsLoaded + ' myPublicCalendar=' + myPublicCalendar?.id);
+    console.log('[CalendarPage] meetingsByDate keys (sample):', mapKeys, '| grid lookup key for day 1:', sampleGridKey1, '| day 15:', sampleGridKey2, '| currentJy/Jm:', currentJy, currentJm);
     return map;
-  }, [visibleMeetings, enabledCalendarIds, calendars, currentUserId, isAnyParticipantSubscribed, myPublicCalendar]);
+  }, [visibleMeetings, enabledCalendarIds, calendars, currentUserId, isAnyParticipantSubscribed, myPublicCalendar, currentJy, currentJm]);
 
   const getMeetings = useCallback((jy: number, jm: number, jd: number): MeetingData[] => {
     return meetingsByDate[jalaaliToYYYYMMDD(jy, jm, jd)] || [];
