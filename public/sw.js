@@ -1,5 +1,5 @@
-const STATIC_CACHE = 'spark-static-v5';
-const RUNTIME_CACHE = 'spark-runtime-v5';
+const STATIC_CACHE = 'spark-static-v6';
+const RUNTIME_CACHE = 'spark-runtime-v6';
 
 const STATIC_ASSETS = [
   '/',
