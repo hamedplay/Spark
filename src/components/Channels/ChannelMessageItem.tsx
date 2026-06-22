@@ -1,0 +1,798 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, AlertCircle, AlertTriangle, Lock, Play, Pause, Eye, Check, Reply, X, Smile, ClipboardList, BellRing, Pin, Download, FileText, CheckCheck, Star, Users, Clock, Loader, AtSign, MessageSquare } from 'lucide-react';
+import { EmojiPicker } from '../Chat/EmojiPicker';
+import { supabase } from '../../lib/supabase';
+import { insertNotification } from '../../lib/notifications';
+import toast from 'react-hot-toast';
+import type { MessageWithMeta, ChannelProfile, MemberRole, ChannelMessage } from './types';
+import { loadChatTheme } from '../Chat/ChatSettingsPage';
+import type { ChatThemeSettings } from '../Chat/ChatSettingsPage';
+
+function useDarkMode() {
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  useEffect(() => {
+    const obs = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    obs.observe(document.documentElement, { attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+  return isDark;
+}
+
+function useChatTheme(): ChatThemeSettings {
+  const [theme, setTheme] = useState<ChatThemeSettings>(loadChatTheme);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setTheme(detail ? (detail as ChatThemeSettings) : loadChatTheme());
+    };
+    window.addEventListener('chatThemeChanged', handler);
+    return () => window.removeEventListener('chatThemeChanged', handler);
+  }, []);
+  return theme;
+}
+
+export type MessageStatus = 'pending' | 'in_progress' | 'done' | null;
+
+interface Props {
+  msg: MessageWithMeta;
+  currentUserId: string | null;
+  myRole: MemberRole | null;
+  allMembers: ChannelProfile[];
+  allProfiles: ChannelProfile[];
+  isChannelType: boolean;
+  isPrivatelyPinned?: boolean;
+  onReply: (msg: ChannelMessage) => void;
+  onReact: (msgId: string, emoji: string) => void;
+  onPin: (msgId: string, pinned: boolean) => void;
+  onDelete: (msgId: string) => void;
+  onEdit: (msg: MessageWithMeta) => void;
+  onStar: (msgId: string, starred: boolean) => void;
+  onScrollToMessage?: (messageId: string) => void;
+  onRegisterAsTask?: (messageBody: string, messageId: string) => void;
+  onGroupTask?: (msg: MessageWithMeta, mentionedUsers: ChannelProfile[]) => void;
+  onScheduleMeeting?: (mentionedIds: string[], body: string) => void;
+  onMentionClick?: (user: ChannelProfile) => void;
+  onOpenDirectChat?: (userId: string) => void;
+}
+
+const TYPE_BORDER_CLASS: Record<string, string> = {
+  normal: '',
+  important: 'border-r-4 border-amber-400',
+  urgent: 'border-r-4 border-red-500',
+  confidential: 'border-r-4 border-gray-400',
+};
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDuration(s: number) {
+  return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function extractMentionedUsers(text: string | null, allProfiles: ChannelProfile[]): ChannelProfile[] {
+  if (!text) return [];
+  return allProfiles.filter(p => {
+    const name = p.full_name || p.email;
+    return name && text.includes(`@${name}`);
+  });
+}
+
+function renderBodyWithMentions(
+  body: string,
+  currentUserId: string | null,
+  allProfiles: ChannelProfile[],
+  onMentionClick: (user: ChannelProfile) => void
+): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let remaining = body;
+  let key = 0;
+  while (remaining.length > 0) {
+    const atIdx = remaining.indexOf('@');
+    if (atIdx === -1) { parts.push(remaining); break; }
+    if (atIdx > 0) parts.push(remaining.slice(0, atIdx));
+    const afterAt = remaining.slice(atIdx + 1);
+    const matched = allProfiles
+      .filter(u => u.full_name || u.email)
+      .sort((a, b) => ((b.full_name || b.email || '').length) - ((a.full_name || a.email || '').length))
+      .find(u => { const name = u.full_name || u.email || ''; return afterAt.startsWith(name); });
+    if (matched) {
+      const name = matched.full_name || matched.email || '';
+      const isMe = matched.user_id === currentUserId;
+      parts.push(
+        <span
+          key={key++}
+          onClick={(e) => { e.stopPropagation(); onMentionClick(matched); }}
+          className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded font-semibold text-xs cursor-pointer hover:opacity-80 transition-opacity ${
+            isMe ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+          }`}
+        >@{name}</span>
+      );
+      remaining = afterAt.slice(name.length);
+    } else {
+      parts.push('@');
+      remaining = afterAt;
+    }
+  }
+  return <>{parts}</>;
+}
+
+// Read receipts modal
+function ReadReceiptsModal({ readBy, allMembers, memberCount, onClose }: {
+  readBy: string[];
+  allMembers: ChannelProfile[];
+  memberCount: number;
+  onClose: () => void;
+}) {
+  const seenProfiles = readBy
+    .map(id => allMembers.find(m => m.user_id === id))
+    .filter(Boolean) as ChannelProfile[];
+
+  const unseenCount = Math.max(0, memberCount - seenProfiles.length);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[400] flex items-end sm:items-center justify-center p-4" dir="rtl" onClick={onClose}>
+      <div className="w-full sm:w-80 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2">
+            <CheckCheck className="w-4 h-4 text-teal-500" />
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">وضعیت پیام</h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="max-h-72 overflow-y-auto">
+          {/* Seen section */}
+          {seenProfiles.length > 0 && (
+            <div className="px-4 pt-3 pb-1">
+              <p className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1 mb-2">
+                <CheckCheck className="w-3.5 h-3.5" /> مشاهده شده ({seenProfiles.length})
+              </p>
+              {seenProfiles.map(p => (
+                <div key={p.user_id} className="flex items-center gap-3 py-1.5">
+                  {p.avatar_url ? (
+                    <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                      {(p.full_name || p.email || '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-800 dark:text-white">{p.full_name || p.email || 'کاربر'}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Delivered but not seen */}
+          {unseenCount > 0 && (
+            <div className="px-4 pt-2 pb-3 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] font-semibold text-gray-400 flex items-center gap-1 mb-1">
+                <Check className="w-3.5 h-3.5" /><Check className="w-3.5 h-3.5 -mr-2" /> رسیده، دیده نشده ({unseenCount})
+              </p>
+            </div>
+          )}
+          {seenProfiles.length === 0 && unseenCount === 0 && (
+            <p className="text-sm text-gray-400 text-center py-6">هنوز کسی این پیام را ندیده</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ChannelMessageItem({
+  msg, currentUserId, myRole, allMembers, allProfiles, isChannelType, isPrivatelyPinned,
+  onReply, onReact, onPin, onDelete, onEdit, onStar,
+  onScrollToMessage, onRegisterAsTask, onGroupTask, onScheduleMeeting, onMentionClick, onOpenDirectChat,
+}: Props) {
+  const theme = useChatTheme();
+  const isDark = useDarkMode();
+  const [showMenu, setShowMenu] = useState(false);
+  const [showReactPicker, setShowReactPicker] = useState(false);
+  const [emojiPickerStyle, setEmojiPickerStyle] = useState<React.CSSProperties>({});
+  const [confidentialRevealed, setConfidentialRevealed] = useState(false);
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const [voiceProgress, setVoiceProgress] = useState(0);
+  const [msgStatus, setMsgStatus] = useState<MessageStatus>(null);
+  const [showReadReceipts, setShowReadReceipts] = useState(false);
+  const [mentionPopupUser, setMentionPopupUser] = useState<ChannelProfile | null>(null);
+  const reactRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const openEmojiPicker = () => {
+    if (reactRef.current) {
+      const rect = reactRef.current.getBoundingClientRect();
+      const pickerW = Math.min(288, window.innerWidth - 16);
+      let left = rect.left;
+      if (left + pickerW > window.innerWidth - 8) left = window.innerWidth - pickerW - 8;
+      if (left < 8) left = 8;
+      const style: React.CSSProperties = { position: 'fixed', left, zIndex: 9999 };
+      if (rect.top >= 348) {
+        style.bottom = window.innerHeight - rect.top + 4;
+      } else {
+        style.top = rect.bottom + 4;
+      }
+      setEmojiPickerStyle(style);
+    }
+    setShowReactPicker(v => !v);
+  };
+
+  const isOwn = msg.sender_id === currentUserId;
+  const isAdminOrOwn = isOwn || myRole === 'admin';
+  const isConfidential = msg.message_type === 'confidential';
+  const shouldBlur = isConfidential && !isOwn && !confidentialRevealed;
+
+  // Read receipt logic:
+  // read_by excludes sender; seenBy = members who have read
+  const readByExcludingSelf = (msg.read_by || []).filter(id => id !== msg.sender_id);
+  const seenCount = readByExcludingSelf.length;
+  const memberCountExcludingSelf = Math.max(0, allMembers.length - 1);
+  const allDelivered = memberCountExcludingSelf > 0; // assume delivered once sent
+  const anySeenByOther = isOwn && seenCount > 0;
+
+  const mentionedUsers = extractMentionedUsers(msg.body, allProfiles);
+  const hasMentions = mentionedUsers.length > 0;
+  const myProfile = allProfiles.find(p => p.user_id === currentUserId);
+  const mentionsMe = myProfile ? (msg.body?.includes(`@${myProfile.full_name || myProfile.email}`) ?? false) : false;
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (reactRef.current && !reactRef.current.contains(e.target as Node)) setShowReactPicker(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggleVoice = () => {
+    if (!msg.voice_url) return;
+    if (!audioRef.current) {
+      audioRef.current = new Audio(msg.voice_url);
+      audioRef.current.ontimeupdate = () => {
+        if (audioRef.current) setVoiceProgress(audioRef.current.currentTime / (audioRef.current.duration || 1));
+      };
+      audioRef.current.onended = () => { setIsPlayingVoice(false); setVoiceProgress(0); };
+    }
+    if (isPlayingVoice) { audioRef.current.pause(); setIsPlayingVoice(false); }
+    else { audioRef.current.play(); setIsPlayingVoice(true); }
+  };
+
+  const typeLabel = msg.message_type !== 'normal' && msg.message_type !== 'system' ? ({
+    important: { text: 'پیام مهم!', icon: <AlertCircle className="w-3.5 h-3.5" />, cls: 'text-amber-600 dark:text-amber-400' },
+    urgent: { text: 'پیام اورژانسی!', icon: <AlertTriangle className="w-3.5 h-3.5" />, cls: 'text-red-600 dark:text-red-400' },
+    confidential: { text: 'محرمانه', icon: <Lock className="w-3.5 h-3.5" />, cls: 'text-gray-600 dark:text-gray-400' },
+  } as Record<string, { text: string; icon: React.ReactNode; cls: string }>)[msg.message_type] : null;
+
+  if (msg.message_type === 'system') {
+    return (
+      <div className="flex justify-center my-2 px-4">
+        <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700/60 px-3 py-1 rounded-full">{msg.body}</span>
+      </div>
+    );
+  }
+
+  // Status square cycling: null → pending → in_progress → done → null
+  const cycleStatus = () => {
+    const cycle: MessageStatus[] = [null, 'pending', 'in_progress', 'done'];
+    const idx = cycle.indexOf(msgStatus);
+    setMsgStatus(cycle[(idx + 1) % cycle.length]);
+  };
+
+  const StatusSquare = () => {
+    if (!msgStatus || msgStatus === null) return (
+      <button onClick={cycleStatus} title="وضعیت — کلیک برای تغییر"
+        className={`w-5 h-5 rounded border-2 flex-shrink-0 transition-colors ${isOwn ? 'border-teal-300 hover:border-teal-500' : 'border-gray-300 dark:border-gray-500 hover:border-gray-500'}`} />
+    );
+    if (msgStatus === 'pending') return (
+      <button onClick={cycleStatus} title="در انتظار — کلیک"
+        className="w-5 h-5 rounded border-2 border-amber-400 bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center flex-shrink-0 transition-all" />
+    );
+    if (msgStatus === 'in_progress') return (
+      <button onClick={cycleStatus} title="در حال رسیدگی — کلیک"
+        className="w-5 h-5 rounded border-2 border-amber-400 bg-amber-400 flex items-center justify-center flex-shrink-0">
+        <Loader className="w-3 h-3 text-white animate-spin" />
+      </button>
+    );
+    return (
+      <button onClick={cycleStatus} title="رسیدگی شده — کلیک"
+        className="w-5 h-5 rounded border-2 border-teal-500 bg-teal-500 flex items-center justify-center flex-shrink-0">
+        <Check className="w-3 h-3 text-white" strokeWidth={3} />
+      </button>
+    );
+  };
+
+  // Read receipt indicator for own messages
+  const ReadTick = () => {
+    if (!isOwn) return null;
+    // anySeenByOther = double tick lit (seen)
+    // allDelivered but not seen = double tick dim
+    // neither = single tick
+    if (anySeenByOther) {
+      return (
+        <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title="مشاهده شده">
+          <CheckCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-500" />
+          {seenCount > 1 && <span className="text-[10px] text-teal-500 font-medium">{seenCount}</span>}
+        </button>
+      );
+    }
+    if (allDelivered) {
+      return (
+        <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title="رسیده، دیده نشده">
+          <CheckCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-300 dark:text-gray-600" />
+        </button>
+      );
+    }
+    return <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-300 dark:text-gray-600 flex-shrink-0" />;
+  };
+
+  return (
+    <>
+      <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-3 px-2 sm:px-3`} dir="rtl">
+        <div className={`relative flex items-end gap-1.5 sm:gap-2 w-full sm:w-[75%] md:w-[65%] sm:min-w-[240px] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+          {/* Urgent bell */}
+          {msg.message_type === 'urgent' && (
+            <span className="absolute -top-3 z-10 pointer-events-none" style={{ [isOwn ? 'left' : 'right']: '2.5rem' }}>
+              <BellRing className="w-5 h-5 text-red-500 drop-shadow-lg animate-bounce" />
+            </span>
+          )}
+
+          {/* Mention indicator */}
+          {mentionsMe && (
+            <span className="absolute -top-2 z-10 pointer-events-none" style={{ [isOwn ? 'right' : 'left']: '2.5rem' }}>
+              <AtSign className="w-3.5 h-3.5 text-blue-500" />
+            </span>
+          )}
+
+          {/* Avatar */}
+          <div className="flex-shrink-0 mb-1">
+            {msg.senderProfile?.avatar_url ? (
+              <img src={msg.senderProfile.avatar_url} alt="" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-white dark:ring-gray-800" />
+            ) : (
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold text-white ring-2 ring-white dark:ring-gray-800 ${isOwn ? 'bg-teal-500' : 'bg-indigo-500'}`}>
+                {(msg.senderProfile?.full_name || msg.senderProfile?.email || '?').charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Reply preview */}
+            {msg.replyTarget && (
+              <div
+                className="text-xs px-3 py-1.5 rounded-t-xl border-r-2 border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-gray-600 dark:text-gray-300 truncate cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                onClick={() => onScrollToMessage?.(msg.replyTarget!.id)}
+              >
+                <span className="font-medium text-blue-600 dark:text-blue-400 block text-[10px] mb-0.5">پاسخ به</span>
+                {msg.replyTarget.body || '📎 فایل'}
+              </div>
+            )}
+
+            {/* Card */}
+            <div
+              className={`relative rounded-xl ${msg.replyTarget ? 'rounded-tr-none' : ''} border border-gray-200 dark:border-gray-600 shadow-sm ${TYPE_BORDER_CLASS[msg.message_type] || ''}`}
+              style={{ backgroundColor: isOwn ? (isDark ? '#2a453d' : theme.sentBubbleColor) : (isDark ? '#4d5049' : theme.receivedBubbleColor) }}
+            >
+              {/* Header */}
+              <div className={`flex items-center justify-between px-3 pt-2.5 pb-1 gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-1.5 min-w-0 flex-wrap ${isOwn ? 'flex-row-reverse' : ''}`}>
+                  {!isOwn && (
+                    <span className="text-xs font-bold text-teal-600 dark:text-teal-400 truncate">
+                      {msg.senderProfile?.full_name || msg.senderProfile?.email || 'کاربر'}
+                    </span>
+                  )}
+                  {typeLabel && (
+                    <span className={`flex items-center gap-1 text-[11px] font-semibold flex-shrink-0 ${typeLabel.cls}`}>
+                      {typeLabel.icon} {typeLabel.text}
+                    </span>
+                  )}
+                  {/* Starred indicator */}
+                  {msg.isStarred && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 flex-shrink-0" />}
+                  {/* Pinned indicator */}
+                  {msg.is_pinned && <Pin className="w-3 h-3 text-amber-500 flex-shrink-0" />}
+                  {!msg.is_pinned && isPrivatelyPinned && <Pin className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+                </div>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0">{formatTime(msg.created_at)}</span>
+              </div>
+
+              {/* Body */}
+              <div className="px-3 pb-2.5">
+                {/* Voice */}
+                {msg.voice_url && (
+                  <div className="flex items-center gap-2.5 min-w-[140px] sm:min-w-[160px] py-1.5">
+                    <button onClick={toggleVoice}
+                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 transition-colors">
+                      {isPlayingVoice ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    </button>
+                    <div className="flex-1 flex flex-col gap-1.5">
+                      <div className="relative h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden cursor-pointer">
+                        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${voiceProgress * 100}%` }} />
+                      </div>
+                      <span className="text-[10px] text-gray-400">{msg.voice_duration ? formatDuration(msg.voice_duration) : '0:00'}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Confidential blur */}
+                {shouldBlur ? (
+                  <div className="relative py-1">
+                    <p className="text-sm blur-sm select-none pointer-events-none">{msg.body}</p>
+                    <button onClick={() => setConfidentialRevealed(true)}
+                      className="absolute inset-0 flex items-center justify-center gap-1.5 text-xs text-gray-700 dark:text-gray-200 bg-white/80 dark:bg-gray-700/80 rounded-lg backdrop-blur-sm hover:bg-white/95 transition-colors">
+                      <Eye className="w-3.5 h-3.5" /> نمایش پیام محرمانه
+                    </button>
+                  </div>
+                ) : msg.body && (
+                  <p
+                    className="whitespace-pre-wrap break-words leading-relaxed py-0.5 text-gray-800 dark:text-white"
+                    style={{ fontSize: theme.fontSize === 'sm' ? 12 : theme.fontSize === 'lg' ? 16 : 14 }}
+                  >{renderBodyWithMentions(msg.body, currentUserId, allProfiles, (user) => {
+                    if (onMentionClick) onMentionClick(user);
+                    else setMentionPopupUser(user);
+                  })}</p>
+                )}
+
+                {/* File attachment */}
+                {msg.file_url && !msg.voice_url && (
+                  msg.file_type?.startsWith('image/') ? (
+                    <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="block mt-1.5">
+                      <img src={msg.file_url} alt={msg.file_name || 'تصویر'} className="max-w-full rounded-lg max-h-48 object-cover" />
+                    </a>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-1.5 px-2.5 py-2 bg-gray-100 dark:bg-gray-600 rounded-lg">
+                      <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate text-gray-700 dark:text-gray-200">{msg.file_name}</p>
+                        {msg.file_size && <p className="text-[10px] text-gray-400">{formatFileSize(msg.file_size)}</p>}
+                      </div>
+                      <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-500">
+                        <Download className="w-4 h-4 text-gray-500" />
+                      </a>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Bottom action bar */}
+              {isChannelType ? (
+                /* Channel messages: emoji + star only */
+                <div className="flex items-center gap-0 sm:gap-0.5 px-1.5 sm:px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-gray-600">
+                  {/* React picker */}
+                  <div ref={reactRef}>
+                    <ActionBtn onClick={openEmojiPicker} title="واکنش">
+                      <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </ActionBtn>
+                    {showReactPicker && (
+                      <div style={emojiPickerStyle}>
+                        <EmojiPicker onSelect={emoji => { onReact(msg.id, emoji); setShowReactPicker(false); }} onClose={() => setShowReactPicker(false)} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Star/bookmark */}
+                  <ActionBtn onClick={() => onStar(msg.id, !msg.isStarred)} title={msg.isStarred ? 'برداشتن نشانه' : 'نشانه‌دار کردن'} active={msg.isStarred} activeColor="text-yellow-500">
+                    <Star className={`w-4 h-4 sm:w-5 sm:h-5 ${msg.isStarred ? 'fill-yellow-400' : ''}`} />
+                  </ActionBtn>
+
+                  {msg.is_edited && <span className="text-[10px] text-gray-400 dark:text-gray-500 mx-0.5 sm:mx-1 hidden sm:inline">ویرایش شده</span>}
+                  <div className="flex-1" />
+                  <ReadTick />
+                </div>
+              ) : (
+                /* Group messages: full action bar */
+                <div className="flex items-center gap-0 sm:gap-0.5 px-1.5 sm:px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-gray-600">
+                  {/* Status square FIRST */}
+                  <StatusSquare />
+
+                  {/* React picker */}
+                  <div ref={reactRef}>
+                    <ActionBtn onClick={openEmojiPicker} title="واکنش">
+                      <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </ActionBtn>
+                    {showReactPicker && (
+                      <div style={emojiPickerStyle}>
+                        <EmojiPicker onSelect={emoji => { onReact(msg.id, emoji); setShowReactPicker(false); }} onClose={() => setShowReactPicker(false)} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Star/bookmark */}
+                  <ActionBtn onClick={() => onStar(msg.id, !msg.isStarred)} title={msg.isStarred ? 'برداشتن نشانه' : 'نشانه‌دار کردن'} active={msg.isStarred} activeColor="text-yellow-500">
+                    <Star className={`w-4 h-4 sm:w-5 sm:h-5 ${msg.isStarred ? 'fill-yellow-400' : ''}`} />
+                  </ActionBtn>
+
+                  {/* Pin */}
+                  {(() => {
+                    const isPinned = myRole === 'admin' ? msg.is_pinned : !!isPrivatelyPinned;
+                    return (
+                      <ActionBtn onClick={() => onPin(msg.id, !isPinned)} title={isPinned ? 'برداشتن پین' : 'پین کردن'} active={isPinned} activeColor={myRole === 'admin' ? 'text-amber-500' : 'text-blue-400'}>
+                        <Pin className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </ActionBtn>
+                    );
+                  })()}
+
+                  {/* Reply */}
+                  <ActionBtn onClick={() => onReply(msg)} title="پاسخ">
+                    <Reply className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </ActionBtn>
+
+                  {msg.is_edited && <span className="text-[10px] text-gray-400 dark:text-gray-500 mx-0.5 sm:mx-1 hidden sm:inline">ویرایش شده</span>}
+
+                  <div className="flex-1" />
+
+                  <ReadTick />
+
+                  {/* Three-dot menu */}
+                  <ActionBtn onClick={() => setShowMenu(v => !v)} title="بیشتر">
+                    <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </ActionBtn>
+                </div>
+              )}
+            </div>
+
+            {/* Reactions below card */}
+            {msg.reactions.length > 0 && (
+              <div className={`flex flex-wrap gap-1 mt-1.5 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                {msg.reactions.map(r => (
+                  <button key={r.emoji} onClick={() => onReact(msg.id, r.emoji)}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${r.reactedByMe ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}>
+                    {r.emoji} <span className="text-gray-600 dark:text-gray-300">{r.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Three-dot action menu — bottom sheet on mobile (groups only) */}
+      {showMenu && !isChannelType && (
+        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px]"
+          onClick={() => setShowMenu(false)} dir="rtl">
+          <div className="w-full sm:w-72 bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 py-2 overflow-hidden max-h-[80vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center mb-1 sm:hidden">
+              <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
+            </div>
+            {msg.body && (
+              <div className="px-4 py-2 mb-1 border-b border-gray-100 dark:border-gray-800">
+                <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{msg.body}</p>
+              </div>
+            )}
+
+            {/* Create individual task */}
+            {onRegisterAsTask && (
+              <MI icon={<ClipboardList className="w-4 h-4 text-teal-600 dark:text-teal-400" />}
+                label="ایجاد اقدام" labelClass="text-teal-600 dark:text-teal-400 font-medium"
+                onClick={() => { onRegisterAsTask(msg.body || '', msg.id); setShowMenu(false); }} />
+            )}
+
+            {/* Create group task — only when message has @mentions */}
+            {hasMentions && onGroupTask && (
+              <MI icon={<Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                label={`ایجاد اقدام گروهی (${mentionedUsers.length} نفر)`}
+                labelClass="text-blue-600 dark:text-blue-400 font-medium"
+                onClick={() => { onGroupTask(msg, mentionedUsers); setShowMenu(false); }} />
+            )}
+
+            {/* Schedule meeting with mentions */}
+            {hasMentions && onScheduleMeeting && (
+              <MI icon={<span className="text-teal-500 text-sm">📅</span>}
+                label="تنظیم جلسه با منشن‌ها"
+                labelClass="text-teal-600 dark:text-teal-400 font-medium"
+                onClick={() => { onScheduleMeeting(mentionedUsers.map(u => u.user_id), msg.body || ''); setShowMenu(false); }} />
+            )}
+
+            <div className="border-t border-gray-100 dark:border-gray-800 mt-1 pt-1">
+              <MI icon={<Bell className="w-4 h-4" />} label="ارسال اعلان پیگیری"
+                onClick={() => { sendFollowUp(); setShowMenu(false); }} />
+              <MI icon={<Reply className="w-4 h-4" />} label="پاسخ"
+                onClick={() => { onReply(msg); setShowMenu(false); }} />
+              {msg.body && (
+                <MI icon={<Copy className="w-4 h-4" />} label="کپی متن"
+                  onClick={() => { navigator.clipboard.writeText(msg.body!); toast.success('کپی شد'); setShowMenu(false); }} />
+              )}
+              {isOwn && msg.body && (
+                <MI icon={<Edit2 className="w-4 h-4" />} label="ویرایش"
+                  onClick={() => { onEdit(msg); setShowMenu(false); }} />
+              )}
+              {(() => {
+                const isPinned = myRole === 'admin' ? msg.is_pinned : !!isPrivatelyPinned;
+                return (
+                  <MI icon={<Pin className="w-4 h-4" />} label={isPinned ? 'برداشتن پین' : 'پین کردن'}
+                    onClick={() => { onPin(msg.id, !isPinned); setShowMenu(false); }} />
+                );
+              })()}
+              <MI icon={<Star className={`w-4 h-4 ${msg.isStarred ? 'fill-yellow-400 text-yellow-500' : ''}`} />}
+                label={msg.isStarred ? 'برداشتن نشانه' : 'نشانه‌دار کردن'}
+                onClick={() => { onStar(msg.id, !msg.isStarred); setShowMenu(false); }} />
+              {isOwn && (
+                <MI icon={<CheckCheck className="w-4 h-4 text-teal-500" />} label="نمایش دیده‌شده‌ها"
+                  onClick={() => { setShowReadReceipts(true); setShowMenu(false); }} />
+              )}
+              <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
+              {isAdminOrOwn && (
+                <MI icon={<Trash2 className="w-4 h-4 text-red-500" />} label="حذف برای همه" labelClass="text-red-500"
+                  onClick={() => { onDelete(msg.id); setShowMenu(false); }} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Read receipts modal */}
+      {showReadReceipts && (
+        <ReadReceiptsModal
+          readBy={readByExcludingSelf}
+          allMembers={allMembers}
+          memberCount={memberCountExcludingSelf}
+          onClose={() => setShowReadReceipts(false)}
+        />
+      )}
+      {mentionPopupUser && (
+        <ChannelMentionPopup
+          user={mentionPopupUser}
+          currentUserId={currentUserId}
+          onClose={() => setMentionPopupUser(null)}
+          onOpenDirectChat={onOpenDirectChat}
+        />
+      )}
+    </>
+  );
+
+  async function sendFollowUp() {
+    if (!currentUserId) return;
+    const senderProfile = allMembers.find(p => p.user_id === currentUserId);
+    const senderName = senderProfile?.full_name || senderProfile?.email || 'کاربر';
+    for (const m of allMembers) {
+      if (m.user_id === currentUserId) continue;
+      await insertNotification({
+        userId: m.user_id,
+        category: 'channel',
+        eventType: 'new_message',
+        fallbackTitle: `پیگیری از ${senderName}`,
+        fallbackMessage: `پیگیری: "${(msg.body || '').slice(0, 80)}"`,
+        placeholders: { sender_name: senderName, message_preview: (msg.body || '').slice(0, 80) },
+        senderId: currentUserId,
+        senderName,
+        senderAvatarUrl: senderProfile?.avatar_url ?? null,
+      }).catch(() => {});
+    }
+    toast.success('اعلان پیگیری ارسال شد');
+  }
+}
+
+function ActionBtn({ children, title, onClick, active, activeColor }: {
+  children: React.ReactNode; title: string; onClick: () => void; active?: boolean; activeColor?: string;
+}) {
+  return (
+    <button onClick={onClick} title={title}
+      className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0 ${
+        active
+          ? `bg-gray-100 dark:bg-gray-600 ${activeColor || 'text-teal-500'}`
+          : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200'
+      }`}>
+      {children}
+    </button>
+  );
+}
+
+function MI({ icon, label, labelClass, onClick }: { icon: React.ReactNode; label: string; labelClass?: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-right">
+      <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{icon}</span>
+      <span className={labelClass || 'text-gray-700 dark:text-gray-300'}>{label}</span>
+    </button>
+  );
+}
+
+// ─── Channel Mention Profile Popup ───────────────────────────────────────────
+function ChannelMentionPopup({ user, currentUserId, onClose, onOpenDirectChat }: {
+  user: ChannelProfile;
+  currentUserId: string | null;
+  onClose: () => void;
+  onOpenDirectChat?: (userId: string) => void;
+}) {
+  const [positionTitle, setPositionTitle] = useState<string | null>(null);
+  const [unitName, setUnitName] = useState<string | null>(null);
+  const [loadingPosition, setLoadingPosition] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('org_position_members')
+          .select('org_positions(title, org_units(name))')
+          .eq('user_id', user.user_id)
+          .eq('is_primary', true)
+          .maybeSingle();
+        const pos = (data as any)?.org_positions;
+        setPositionTitle(pos?.title || null);
+        setUnitName(pos?.org_units?.name || null);
+      } catch { /* ignore */ } finally {
+        setLoadingPosition(false);
+      }
+    })();
+  }, [user.user_id]);
+
+  const name = user.full_name || user.email || 'کاربر';
+  const initial = name.charAt(0).toUpperCase();
+  const isSelf = user.user_id === currentUserId;
+
+  const handleDM = () => {
+    if (onOpenDirectChat) {
+      onOpenDirectChat(user.user_id);
+      onClose();
+    } else {
+      toast('برای چت خصوصی به بخش چت سازمانی بروید', { icon: '💬' });
+      onClose();
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-[500] flex items-center justify-center p-4"
+      onClick={onClose}
+      dir="rtl"
+    >
+      <div
+        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white">پروفایل کاربر</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Profile info */}
+        <div className="px-5 py-4 flex items-center gap-4">
+          {user.avatar_url ? (
+            <img src={user.avatar_url} alt={name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
+              {initial}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-bold text-gray-900 dark:text-white truncate">{name}</p>
+            {loadingPosition ? (
+              <div className="w-24 h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mt-1.5" />
+            ) : positionTitle ? (
+              <p className="text-sm text-teal-600 dark:text-teal-400 font-medium mt-0.5 truncate">{positionTitle}</p>
+            ) : (
+              <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">بدون سمت سازمانی</p>
+            )}
+            {!loadingPosition && unitName && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{unitName}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="px-5 pb-5 pt-1 space-y-2">
+          {!isSelf && (
+            <button
+              onClick={handleDM}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-xl transition-colors font-medium"
+            >
+              <MessageSquare className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm">پیام خصوصی</span>
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="w-full flex items-center justify-center px-4 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm"
+          >
+            بستن
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
