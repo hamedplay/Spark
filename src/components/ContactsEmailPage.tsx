@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Edit2, Save, X, Plus, Loader2, Search } from 'lucide-react';
+import { Mail, CreditCard as Edit2, Save, X, Plus, Loader2, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ContactEmail } from '../types';
 import toast from 'react-hot-toast';
@@ -16,13 +16,13 @@ export function ContactsEmailPage() {
   });
   const [editingContact, setEditingContact] = useState<ContactEmail | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [userIdLoading, setUserIdLoading] = useState(true);
 
   useEffect(() => {
     const getCurrentUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-      }
+      if (user) setUserId(user.id);
+      setUserIdLoading(false);
     };
     getCurrentUser();
   }, []);
@@ -126,6 +126,10 @@ export function ContactsEmailPage() {
     contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     contact.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (userIdLoading) {
+    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
+  }
 
   if (!userId) {
     return (

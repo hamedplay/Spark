@@ -40,6 +40,7 @@ export function NotesPage() {
   const [isFormRecording, setIsFormRecording] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
+  const [userIdLoading, setUserIdLoading] = useState(true);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [formVoiceTranscript, setFormVoiceTranscript] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -125,9 +126,8 @@ export function NotesPage() {
   useEffect(() => {
     const getCurrentUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-      }
+      if (user) setUserId(user.id);
+      setUserIdLoading(false);
     };
     getCurrentUser();
   }, []);
@@ -503,6 +503,10 @@ export function NotesPage() {
      note.content.toLowerCase().includes(searchTerm.toLowerCase())) &&
     (statusFilter === 'all' || note.status === statusFilter)
   );
+
+  if (userIdLoading) {
+    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
+  }
 
   if (!userId) {
     return (

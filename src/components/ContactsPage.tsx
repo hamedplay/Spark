@@ -148,6 +148,7 @@ export function ContactsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [userIdLoading, setUserIdLoading] = useState(true);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [addMode, setAddMode] = useState<AddMode>('single');
   const [newContact, setNewContact] = useState({ name: '', email: '', phone: '', company: '' });
@@ -159,6 +160,7 @@ export function ContactsPage() {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) { setUserId(user.id); fetchContacts(); }
+      setUserIdLoading(false);
     };
     init();
   }, []);
@@ -270,6 +272,10 @@ export function ContactsPage() {
     (c.phone || '').includes(searchTerm) ||
     (c.company || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (userIdLoading) {
+    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
+  }
 
   if (!userId) {
     return (
