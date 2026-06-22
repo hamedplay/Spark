@@ -473,11 +473,10 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
     setMessages(buildMeta(raw, reacts || [], starsData || [], allProfiles, currentUserId));
 
     if (currentUserId) {
-      const unread = raw.filter(m => m.sender_id !== currentUserId && !(m.read_by || []).includes(currentUserId));
-      if (unread.length > 0) {
-        Promise.all(unread.map(m => supabase.rpc('mark_channel_message_read', { p_message_id: m.id })))
+      const hasUnread = raw.some(m => m.sender_id !== currentUserId && !(m.read_by || []).includes(currentUserId));
+      if (hasUnread) {
+        supabase.rpc('mark_channel_messages_read', { p_channel_id: channel.id })
           .then(() => {
-            // Refetch to get updated read_by arrays so sender sees the ticks
             supabase.from('channel_messages').select('*')
               .eq('channel_id', channel.id).eq('deleted_for_all', false)
               .order('created_at', { ascending: true })

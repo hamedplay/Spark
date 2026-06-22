@@ -55,15 +55,9 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
 
       const unreadMap = new Map<string, number>();
       try {
-        const { data: msgs } = await supabase
-          .from('channel_messages').select('channel_id, read_by, sender_id')
-          .in('channel_id', channelIds).eq('deleted_for_all', false);
-        for (const m of (msgs || [])) {
-          if (m.sender_id === currentUserId) continue;
-          const readBy: string[] = m.read_by || [];
-          if (!readBy.includes(currentUserId)) {
-            unreadMap.set(m.channel_id, (unreadMap.get(m.channel_id) || 0) + 1);
-          }
+        const { data: unreadData } = await supabase.rpc('get_channel_unread_counts', { p_user_id: currentUserId });
+        for (const row of (unreadData || [])) {
+          unreadMap.set(row.channel_id, Number(row.unread_count));
         }
       } catch { /* unread count is non-critical */ }
 
