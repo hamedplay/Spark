@@ -1,0 +1,741 @@
+import React, { useState, useRef } from 'react';
+import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Plus, Loader2, Send, Share2, UserPlus, CalendarPlus, RotateCcw, X, Download, ChevronRight, ChevronLeft, RefreshCw, AlertTriangle, Trash2 } from 'lucide-react';
+import { Meeting } from '../../types';
+import { supabase } from '../../lib/supabase';
+import { sendMeetingToTelegram } from '../../lib/telegram';
+import { insertNotification } from '../../lib/notifications';
+import toast from 'react-hot-toast';
+import { toPng } from 'html-to-image';
+import { ActionsSection } from './ActionsSection';
+import { UserSelectorModal } from './UserSelectorModal';
+import { CreateMeetingForm } from '../CreateMeetingForm';
+import moment from 'moment-jalaali';
+
+interface MeetingCardMainProps {
+  meeting: Meeting;
+  onUpdate: () => void;
+  onScheduleInCalendar?: (meeting: Meeting) => void;
+}
+
+const JALAALI_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+
+// ─── Delete Modal ─────────────────────────────────────────────────────────────
+interface DeleteModalProps {
+  meeting: Meeting;
+  onClose: () => void;
+  onPermanentDelete: () => void;
+  onDeleteAndRevert: () => void;
+  loading: boolean;
+}
+
+function DeleteModal({ meeting, onClose, onPermanentDelete, onDeleteAndRevert, loading }: DeleteModalProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        onClick={e => e.stopPropagation()}
+        dir="rtl"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h3 className="font-semibold text-gray-800 dark:text-white text-base flex items-center gap-2">
+            <Trash2 className="w-4 h-4 text-red-500" />
+            حذف جلسه
+          </h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {!confirmDelete ? (
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center pb-1">
+              نوع حذف جلسه «{meeting.subject}» را انتخاب کنید
+            </p>
+
+            {/* Option 1: Delete and revert to request */}
+            <button
+              onClick={() => { onDeleteAndRevert(); onClose(); }}
+              disabled={loading}
+              className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group disabled:opacity-50"
+            >
+              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 transition-colors">
+                <RotateCcw className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-white">حذف و برگشت به درخواست جلسه</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  جلسه حذف شده و یک درخواست جدید بدون زمان‌بندی برای شما ایجاد می‌شود
+                </p>
+              </div>
+            </button>
+
+            {/* Option 2: Permanent delete */}
+            <button
+              onClick={() => setConfirmDelete(true)}
+              disabled={loading}
+              className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-400 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group disabled:opacity-50"
+            >
+              <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
+                <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-white">حذف کامل برای همه</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  جلسه به طور دائمی حذف می‌شود و هیچ رکوردی باقی نمی‌ماند
+                </p>
+              </div>
+            </button>
+          </div>
+        ) : (
+          <div className="p-5 space-y-4">
+            <div className="flex flex-col items-center gap-3 py-2">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-500" />
+              </div>
+              <p className="text-sm font-semibold text-gray-800 dark:text-white text-center">آیا مطمئن هستید؟</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                این عمل غیرقابل بازگشت است. جلسه «{meeting.subject}» برای همیشه حذف خواهد شد.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={() => { onPermanentDelete(); onClose(); }}
+                disabled={loading}
+                className="py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                حذف کامل
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── MeetingCardMain ──────────────────────────────────────────────────────────
+export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: MeetingCardMainProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editPrefill, setEditPrefill] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [showActions, setShowActions] = useState(false);
+  const [showUserSelector, setShowUserSelector] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const shareCardRef = useRef<HTMLDivElement>(null);
+
+  // Participant inbox statuses (for creator view)
+  const [participantStatuses, setParticipantStatuses] = useState<
+    Record<string, { status: 'pending' | 'accepted' | 'declined' | 'delegated'; delegate_to?: string | null }>
+  >({});
+  const [delegateNames, setDelegateNames] = useState<Record<string, string>>({});
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setCurrentUserId(user.id);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    const isCreator = meeting.user_id && currentUserId && meeting.user_id === currentUserId;
+    if (!isCreator || !meeting.id) return;
+    const participantIds: string[] = (meeting as any).participant_user_ids ?? [];
+    if (participantIds.length === 0) return;
+
+    supabase
+      .from('meeting_inbox')
+      .select('user_id, status, delegate_to')
+      .eq('meeting_id', meeting.id)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, { status: any; delegate_to?: string | null }> = {};
+        const delegateIds: string[] = [];
+        for (const row of data) {
+          map[row.user_id] = { status: row.status, delegate_to: row.delegate_to };
+          if (row.delegate_to) delegateIds.push(row.delegate_to);
+        }
+        setParticipantStatuses(map);
+
+        if (delegateIds.length > 0) {
+          supabase.from('profiles').select('user_id, full_name, email').in('user_id', delegateIds).then(({ data: profiles }) => {
+            if (!profiles) return;
+            const names: Record<string, string> = {};
+            for (const p of profiles) names[p.user_id] = p.full_name || p.email || p.user_id;
+            setDelegateNames(names);
+          });
+        }
+      });
+  }, [meeting.id, currentUserId, meeting.user_id, (meeting as any).participant_user_ids?.join(',')]);
+
+
+  const priorityColors = {
+    high: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    medium: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+    low: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  };
+
+  const statusTypeColors = {
+    requested: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+    approved: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  };
+
+  const handleResend = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Reset declined inbox entries to pending and clear the rejected flag (via SECURITY DEFINER)
+      const { error } = await supabase.rpc('resend_meeting_invitations', { p_meeting_id: meeting.id });
+      if (error) throw error;
+
+      // Notify participants who had declined
+      const { data: declinedRows } = await supabase
+        .from('meeting_inbox')
+        .select('user_id')
+        .eq('meeting_id', meeting.id)
+        .eq('status', 'pending'); // freshly reset to pending
+
+      const notifyIds = (declinedRows || []).map((r: any) => r.user_id);
+      if (notifyIds.length > 0) {
+        await Promise.all(notifyIds.map((uid: string) =>
+          insertNotification({
+            userId: uid,
+            category: 'meeting',
+            eventType: 'invite',
+            audience: 'participants',
+            fallbackTitle: `دعوت مجدد به جلسه: ${meeting.subject}`,
+            fallbackMessage: `شما مجدداً به جلسه «${meeting.subject}» دعوت شده‌اید`,
+            senderId: user.id,
+            actionUrl: 'meetings',
+          })
+        ));
+      }
+
+      toast.success('دعوت‌نامه مجدداً برای شرکت‌کنندگان ارسال شد');
+      onUpdate();
+    } catch {
+      toast.error('خطا در ارسال مجدد دعوت‌نامه');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!shareCardRef.current) { toast.error('خطا در ایجاد تصویر'); return; }
+    try {
+      setLoading(true);
+      toast.loading('در حال تولید تصویر...');
+      const dataUrl = await toPng(shareCardRef.current, { quality: 0.95, pixelRatio: 2 });
+      toast.dismiss();
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], 'meeting.png', { type: 'image/png' });
+      if (navigator.share && (navigator.canShare?.({ files: [file] }) ?? false)) {
+        await navigator.share({ title: meeting.subject, files: [file] });
+      } else {
+        setShareImageUrl(dataUrl);
+        setShowShareDialog(true);
+      }
+    } catch {
+      toast.dismiss();
+      toast.error('خطا در اشتراک‌گذاری');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendToTelegram = async () => {
+    if (meeting.status_type !== 'requested') {
+      toast.error('فقط جلسات در وضعیت درخواست شده قابل ارسال به مدیر هستند');
+      return;
+    }
+    try {
+      setLoading(true);
+      const imageData = await toPng(cardRef.current, { quality: 0.95, backgroundColor: 'white' });
+      await sendMeetingToTelegram(meeting.id, imageData);
+      toast.success('جلسه با موفقیت به مدیر ارسال شد');
+    } catch (error: any) {
+      toast.error('خطا در ارسال به مدیر');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    setLoading(true);
+    try {
+      await supabase.from('meeting_inbox').delete().eq('meeting_id', meeting.id);
+      const { error } = await supabase.from('meetings').delete().eq('id', meeting.id);
+      if (error) throw error;
+      toast.success('جلسه به طور کامل حذف شد');
+      onUpdate();
+    } catch {
+      toast.error('خطا در حذف جلسه');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAndRevert = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('unauthenticated');
+
+      // Fetch the full meeting data before deleting
+      const { data: fullMtg } = await supabase
+        .from('meetings')
+        .select('subject, location, representative, phone, notes, priority, participant_user_ids, notify_users, external_participants, meeting_manager')
+        .eq('id', meeting.id)
+        .maybeSingle();
+      if (!fullMtg) throw new Error('جلسه یافت نشد');
+
+      // Fetch participants and actions to copy
+      const { data: oldParticipants } = await supabase
+        .from('participants')
+        .select('name')
+        .eq('meeting_id', meeting.id);
+      const { data: oldActions } = await supabase
+        .from('actions')
+        .select('title, status, assignee')
+        .eq('meeting_id', meeting.id);
+
+      // Create new meeting record with scheduling fields nulled out
+      const { data: newMtg, error: insertErr } = await supabase
+        .from('meetings')
+        .insert([{
+          subject: fullMtg.subject,
+          location: fullMtg.location ?? null,
+          representative: fullMtg.representative ?? null,
+          phone: fullMtg.phone ?? null,
+          notes: fullMtg.notes ?? null,
+          priority: fullMtg.priority,
+          participant_user_ids: fullMtg.participant_user_ids ?? [],
+          notify_users: fullMtg.notify_users ?? [],
+          external_participants: fullMtg.external_participants ?? [],
+          meeting_manager: fullMtg.meeting_manager ?? null,
+          user_id: user.id,
+          status: 'open',
+          status_type: 'approved',
+          request_date: null,
+          start_time: null,
+          end_time: null,
+          duration: null,
+          repeat_type: null,
+          repeat_interval: null,
+          repeat_end_date: null,
+          repeat_weekday: null,
+        }])
+        .select('id')
+        .single();
+      if (insertErr) throw insertErr;
+
+      const newId = newMtg.id;
+
+      // Copy participants table rows
+      if ((oldParticipants ?? []).length > 0) {
+        await supabase.from('participants').insert(
+          (oldParticipants!).map(p => ({ meeting_id: newId, name: p.name }))
+        );
+      }
+
+      // Copy actions table rows
+      if ((oldActions ?? []).length > 0) {
+        await supabase.from('actions').insert(
+          (oldActions!).map(a => ({ meeting_id: newId, title: a.title, status: a.status, assignee: a.assignee }))
+        );
+      }
+
+      // Delete old meeting_inbox entries then the meeting itself
+      await supabase.from('meeting_inbox').delete().eq('meeting_id', meeting.id);
+      const { error: delErr } = await supabase.from('meetings').delete().eq('id', meeting.id);
+      if (delErr) throw delErr;
+
+      toast.success('جلسه حذف شد و درخواست جدید ایجاد گردید');
+      onUpdate();
+    } catch (err: any) {
+      toast.error(err?.message || 'خطا در حذف و بازگشت جلسه');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddToGoogleCalendar = () => {
+    try {
+      const startDate = new Date(meeting.requestDate);
+      const durationInMinutes = parseInt(meeting.duration) || 60;
+      const endDate = new Date(startDate.getTime() + durationInMinutes * 60000);
+      const details = [
+        `نماینده: ${meeting.representative}`,
+        `شماره تماس: ${meeting.phone}`,
+        `شرکت‌کنندگان: ${meeting.participants.join('، ')}`,
+        meeting.notes ? `یادداشت‌ها: ${meeting.notes}` : ''
+      ].filter(Boolean).join('\n');
+      const params = new URLSearchParams({
+        action: 'TEMPLATE', text: meeting.subject, details, location: meeting.location,
+        dates: `${startDate.toISOString().replace(/[-:.]/g, '')}/${endDate.toISOString().replace(/[-:.]/g, '')}`,
+        ctz: 'Asia/Tehran', add: (meeting.guest_emails || []).join(',')
+      });
+      window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+    } catch {
+      toast.error('خطا در ایجاد رویداد تقویم');
+    }
+  };
+
+  if (isEditing) {
+    const meetingJalaaliDate = (() => {
+      if (!editPrefill) {
+        const src = (meeting as any).request_jalaali_date;
+        if (src) return src;
+        if (meeting.requestDate) {
+          const m = moment(meeting.requestDate);
+          if (m.isValid()) return `${m.jYear()}/${String(m.jMonth() + 1).padStart(2, '0')}/${String(m.jDate()).padStart(2, '0')}`;
+        }
+      }
+      return '';
+    })();
+    const prefill = editPrefill || {
+      subject: meeting.subject,
+      location: meeting.location,
+      representative: meeting.representative,
+      phone: meeting.phone,
+      notes: meeting.notes || '',
+      priority: meeting.priority,
+      meetingId: meeting.id,
+      startTime: meeting.start_time || '',
+      endTime: meeting.end_time || '',
+      requestJalaaliDate: meetingJalaaliDate,
+    };
+
+    const handleEditFormSuccess = async () => {
+      if (meeting.status_type === 'rejected') {
+        // Edit from a rejected-meeting state: reset declined entries and resend
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.rpc('resend_meeting_invitations', { p_meeting_id: meeting.id });
+            const { data: savedMtg } = await supabase
+              .from('meetings')
+              .select('participant_user_ids')
+              .eq('id', meeting.id)
+              .maybeSingle();
+            const participantIds: string[] = (savedMtg?.participant_user_ids ?? []).filter((uid: string) => uid !== user.id);
+            if (participantIds.length > 0) {
+              await Promise.all(participantIds.map(uid =>
+                insertNotification({
+                  userId: uid,
+                  category: 'meeting',
+                  eventType: 'invite',
+                  audience: 'participants',
+                  fallbackTitle: `دعوت مجدد به جلسه: ${meeting.subject}`,
+                  fallbackMessage: `جلسه «${meeting.subject}» ویرایش شد و مجدداً برای شما ارسال گردید`,
+                  senderId: user.id,
+                  actionUrl: 'meetings',
+                })
+              ));
+            }
+            toast.success('جلسه ویرایش شد و مجدداً برای شرکت‌کنندگان ارسال گردید');
+          }
+        } catch {
+          toast.error('خطا در ارسال مجدد');
+        }
+      }
+      setIsEditing(false);
+      setEditPrefill(null);
+      onUpdate();
+    };
+
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-2">
+        <CreateMeetingForm
+          onSuccess={handleEditFormSuccess}
+          prefillData={prefill}
+          onCancel={() => { setIsEditing(false); setEditPrefill(null); }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div ref={cardRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow flex flex-col min-h-[500px]">
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${priorityColors[meeting.priority]}`}>
+            {meeting.priority === 'high' ? 'اولویت بالا' : meeting.priority === 'medium' ? 'اولویت متوسط' : 'اولویت پایین'}
+          </span>
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusTypeColors[meeting.status_type] ?? 'bg-gray-100 text-gray-800'}`}>
+            {meeting.status_type === 'requested' ? 'درخواست شده' : meeting.status_type === 'rejected' ? 'رد شده توسط شرکت‌کننده' : 'تایید شده'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1 action-buttons">
+          {meeting.status === 'open' && (
+            <>
+              {meeting.status_type === 'rejected' && (
+                <>
+                  <button
+                    onClick={handleResend}
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors disabled:opacity-50"
+                    title="ارسال مجدد دعوت‌نامه"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    ارسال مجدد
+                  </button>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 rounded-lg transition-colors disabled:opacity-50"
+                    title="ویرایش و ارسال مجدد"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    ویرایش و ارسال
+                  </button>
+                </>
+              )}
+              <button onClick={() => setShowUserSelector(true)} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="ارسال به کاربران">
+                <UserPlus className="w-5 h-5" />
+              </button>
+              <button onClick={handleShare} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="اشتراک‌گذاری">
+                <Share2 className="w-5 h-5" />
+              </button>
+              <button onClick={handleSendToTelegram} disabled={loading || meeting.status_type !== 'requested'} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 disabled:opacity-50 transition-colors" title="ارسال به مدیر">
+                <Send className="w-5 h-5" />
+              </button>
+              {meeting.status_type !== 'rejected' && (
+                <button onClick={() => setIsEditing(true)} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="ویرایش">
+                  <Edit2 className="w-5 h-5" />
+                </button>
+              )}
+              {onScheduleInCalendar && (
+                <button onClick={handleAddToGoogleCalendar} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="افزودن به تقویم گوگل">
+                  <CalendarPlus className="w-5 h-5" />
+                </button>
+              )}
+              <button onClick={() => setShowDeleteModal(true)} disabled={loading} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="حذف جلسه">
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <h3 className="text-xl font-semibold mb-4 dark:text-white">{meeting.subject}</h3>
+
+      {meeting.status_type === 'rejected' && (
+        <div className="mb-4 flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 dark:text-red-400">
+            یک یا چند شرکت‌کننده این دعوت را رد کرده‌اند. می‌توانید دعوت‌نامه را مجدداً ارسال کنید یا ابتدا جلسه را ویرایش نمایید.
+          </p>
+        </div>
+      )}
+
+      <div className="flex-1">
+        <div className="space-y-3">
+          <div className="flex items-center text-gray-600 dark:text-gray-300">
+            <CalendarIcon className="w-5 h-5 ml-2 flex-shrink-0" />
+            <span>{new Date(meeting.requestDate).toLocaleDateString('fa-IR')}</span>
+          </div>
+          <div className="flex items-center text-gray-600 dark:text-gray-300">
+            <Clock className="w-5 h-5 ml-2 flex-shrink-0" />
+            {meeting.start_time && meeting.end_time
+              ? <span>{meeting.start_time} - {meeting.end_time}</span>
+              : <span>{meeting.duration}</span>}
+          </div>
+          <div className="flex items-center text-gray-600 dark:text-gray-300">
+            <MapPin className="w-5 h-5 ml-2 flex-shrink-0" />
+            <span>{meeting.location}</span>
+          </div>
+          <div className="flex items-center text-gray-600 dark:text-gray-300">
+            <User className="w-5 h-5 ml-2 flex-shrink-0" />
+            <span>{meeting.representative}</span>
+          </div>
+          <div className="flex items-center text-gray-600 dark:text-gray-300">
+            <Phone className="w-5 h-5 ml-2 flex-shrink-0" />
+            <span>{meeting.phone}</span>
+          </div>
+          {meeting.notes && (
+            <div className="mt-4 text-gray-600 dark:text-gray-300">
+              <p className="whitespace-pre-wrap">{meeting.notes}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4">
+          {/* Participant status panel (visible to meeting creator) */}
+          {meeting.user_id && currentUserId && meeting.user_id === currentUserId && Object.keys(participantStatuses).length > 0 ? (
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">وضعیت شرکت‌کنندگان</p>
+              <div className="flex flex-wrap gap-2">
+                {(meeting as any).participant_user_ids?.map((uid: string) => {
+                  const entry = participantStatuses[uid];
+                  const statusColor = !entry || entry.status === 'pending'
+                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800'
+                    : entry.status === 'accepted'
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800'
+                    : entry.status === 'delegated'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800';
+                  const statusLabel = !entry || entry.status === 'pending' ? 'در انتظار'
+                    : entry.status === 'accepted' ? 'پذیرفته'
+                    : entry.status === 'delegated' ? `واگذار شد${entry.delegate_to && delegateNames[entry.delegate_to] ? ` → ${delegateNames[entry.delegate_to]}` : ''}`
+                    : 'رد کرده';
+                  // Find display name from meeting.participants array (index-based fallback)
+                  const participantIdx = ((meeting as any).participant_user_ids as string[]).indexOf(uid);
+                  const displayName = meeting.participants[participantIdx] || uid;
+                  return (
+                    <span key={uid} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${statusColor}`}>
+                      <User className="w-3 h-3 shrink-0" />
+                      <span>{displayName}</span>
+                      <span className="opacity-70">|</span>
+                      <span>{statusLabel}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {meeting.participants.map((participant, index) => (
+                <span key={index} className="inline-flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-sm">
+                  <User className="w-4 h-4 ml-1 flex-shrink-0" />
+                  {participant}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {meeting.status === 'open' && (
+        <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between items-center">
+            <button
+              onClick={() => setShowActions(!showActions)}
+              className="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 text-sm font-medium"
+            >
+              {showActions ? 'پنهان کردن اقدامات' : 'نمایش/افزودن اقدامات'}
+            </button>
+            {meeting.status_type === 'approved' && onScheduleInCalendar && (
+              <button
+                onClick={() => onScheduleInCalendar(meeting)}
+                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors"
+                title="برنامه‌ریزی در تقویم"
+              >
+                <CalendarIcon className="w-5 h-5" />
+                <span className="text-sm">برنامه‌ریزی در تقویم</span>
+              </button>
+            )}
+          </div>
+          {showActions && (
+            <ActionsSection meetingId={meeting.id} actions={meeting.actions} onUpdate={onUpdate} />
+          )}
+        </div>
+      )}
+
+      {/* Modals */}
+      {showDeleteModal && (
+        <DeleteModal
+          meeting={meeting}
+          onClose={() => setShowDeleteModal(false)}
+          onPermanentDelete={handlePermanentDelete}
+          onDeleteAndRevert={handleDeleteAndRevert}
+          loading={loading}
+        />
+      )}
+
+      {showUserSelector && (
+        <UserSelectorModal
+          meetingId={meeting.id}
+          onClose={() => setShowUserSelector(false)}
+          onSuccess={() => {
+            setShowUserSelector(false);
+            toast.success('درخواست جلسه با موفقیت ارسال شد');
+          }}
+        />
+      )}
+
+      {showShareDialog && shareImageUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowShareDialog(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-800 dark:text-white text-base">اشتراک‌گذاری جلسه</h3>
+              <button onClick={() => setShowShareDialog(false)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4">
+              <img src={shareImageUrl} alt="تصویر جلسه" className="w-full rounded-xl shadow-md mb-4" />
+              <button
+                onClick={() => {
+                  const a = document.createElement('a');
+                  a.href = shareImageUrl;
+                  a.download = `meeting-${meeting.id.slice(0, 8)}.png`;
+                  a.click();
+                  toast.success('تصویر دانلود شد');
+                  setShowShareDialog(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl text-sm font-medium transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                دانلود تصویر
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden share card for image generation */}
+      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -1 }}>
+        <div ref={shareCardRef} style={{ width: 360, backgroundColor: '#fff', fontFamily: 'Vazirmatn, system-ui, sans-serif', direction: 'rtl', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.12)' }}>
+          <div style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ color: '#fff', fontWeight: 700, fontSize: 15, margin: 0, lineHeight: 1.4 }}>{meeting.subject}</p>
+              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, margin: '2px 0 0', letterSpacing: 0.5 }}>Spark Meeting Manager</p>
+            </div>
+          </div>
+          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[
+              { label: 'تاریخ', value: new Date(meeting.requestDate).toLocaleDateString('fa-IR') },
+              { label: 'زمان', value: meeting.start_time && meeting.end_time ? `${meeting.start_time} — ${meeting.end_time}` : meeting.duration },
+              { label: 'محل برگزاری', value: meeting.location },
+              { label: 'نماینده', value: meeting.representative },
+              { label: 'تلفن تماس', value: meeting.phone },
+              { label: 'یادداشت', value: meeting.notes },
+            ].filter(r => r.value).map(r => (
+              <div key={r.label} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ color: '#6b7280', fontSize: 12, minWidth: 90, flexShrink: 0 }}>{r.label}:</span>
+                <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word' }}>{r.value}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '10px 20px', backgroundColor: '#f0f9ff', borderTop: '1px solid #e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            <p style={{ color: '#0ea5e9', fontSize: 11, margin: 0 }}>سیستم مدیریت جلسات اسپارک</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
