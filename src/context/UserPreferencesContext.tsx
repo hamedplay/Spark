@@ -9,6 +9,8 @@ export interface UserPreferences {
   show_cancelled_meetings: boolean;
   compact_cards: boolean;
   notifications_enabled: boolean;
+  theme: 'light' | 'dark';
+  accent_color: string;
 }
 
 const DEFAULTS: UserPreferences = {
@@ -19,6 +21,8 @@ const DEFAULTS: UserPreferences = {
   show_cancelled_meetings: false,
   compact_cards: false,
   notifications_enabled: true,
+  theme: 'light',
+  accent_color: 'teal',
 };
 
 interface UserPreferencesContextValue {
@@ -32,6 +36,20 @@ const UserPreferencesContext = createContext<UserPreferencesContextValue>({
   loading: true,
   updatePrefs: async () => {},
 });
+
+function mapRow(data: Record<string, unknown>): UserPreferences {
+  return {
+    default_calendar_view: (data.default_calendar_view as UserPreferences['default_calendar_view']) ?? DEFAULTS.default_calendar_view,
+    default_landing_page: (data.default_landing_page as UserPreferences['default_landing_page']) ?? DEFAULTS.default_landing_page,
+    reminder_minutes: (data.reminder_minutes as number) ?? DEFAULTS.reminder_minutes,
+    show_past_meetings: (data.show_past_meetings as boolean) ?? DEFAULTS.show_past_meetings,
+    show_cancelled_meetings: (data.show_cancelled_meetings as boolean) ?? DEFAULTS.show_cancelled_meetings,
+    compact_cards: (data.compact_cards as boolean) ?? DEFAULTS.compact_cards,
+    notifications_enabled: (data.notifications_enabled as boolean) ?? DEFAULTS.notifications_enabled,
+    theme: (data.theme as 'light' | 'dark') ?? DEFAULTS.theme,
+    accent_color: (data.accent_color as string) ?? DEFAULTS.accent_color,
+  };
+}
 
 export function UserPreferencesProvider({ children }: { children: React.ReactNode }) {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULTS);
@@ -51,15 +69,11 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
         .maybeSingle();
 
       if (data) {
-        setPrefs({
-          default_calendar_view: data.default_calendar_view ?? DEFAULTS.default_calendar_view,
-          default_landing_page: data.default_landing_page ?? DEFAULTS.default_landing_page,
-          reminder_minutes: data.reminder_minutes ?? DEFAULTS.reminder_minutes,
-          show_past_meetings: data.show_past_meetings ?? DEFAULTS.show_past_meetings,
-          show_cancelled_meetings: data.show_cancelled_meetings ?? DEFAULTS.show_cancelled_meetings,
-          compact_cards: data.compact_cards ?? DEFAULTS.compact_cards,
-          notifications_enabled: data.notifications_enabled ?? DEFAULTS.notifications_enabled,
-        });
+        const mapped = mapRow(data);
+        setPrefs(mapped);
+        // Seed localStorage so ThemeContext initializes with correct values on next render
+        localStorage.setItem('theme', mapped.theme);
+        localStorage.setItem('accent_color', mapped.accent_color);
       }
       setLoading(false);
     })();
@@ -78,15 +92,10 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
             .eq('user_id', session.user.id)
             .maybeSingle();
           if (data) {
-            setPrefs({
-              default_calendar_view: data.default_calendar_view ?? DEFAULTS.default_calendar_view,
-              default_landing_page: data.default_landing_page ?? DEFAULTS.default_landing_page,
-              reminder_minutes: data.reminder_minutes ?? DEFAULTS.reminder_minutes,
-              show_past_meetings: data.show_past_meetings ?? DEFAULTS.show_past_meetings,
-              show_cancelled_meetings: data.show_cancelled_meetings ?? DEFAULTS.show_cancelled_meetings,
-              compact_cards: data.compact_cards ?? DEFAULTS.compact_cards,
-              notifications_enabled: data.notifications_enabled ?? DEFAULTS.notifications_enabled,
-            });
+            const mapped = mapRow(data);
+            setPrefs(mapped);
+            localStorage.setItem('theme', mapped.theme);
+            localStorage.setItem('accent_color', mapped.accent_color);
           }
           setLoading(false);
         })();

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useUserPreferences } from './UserPreferencesContext';
 
 type Theme = 'light' | 'dark';
 
@@ -26,40 +27,69 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+function applyThemeToDom(theme: Theme) {
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+}
+
+function applyAccentToDom(accent: AccentKey) {
+  const color = ACCENT_COLORS.find(c => c.key === accent);
+  if (color) {
+    document.documentElement.style.setProperty('--accent', color.hex);
+  }
+}
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { prefs, loading: prefsLoading, updatePrefs } = useUserPreferences();
+
   const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = localStorage.getItem('theme') as Theme;
+    const saved = localStorage.getItem('theme') as Theme;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    return savedTheme || (prefersDark ? 'dark' : 'light');
+    return saved || (prefersDark ? 'dark' : 'light');
   });
 
   const [accent, setAccentState] = useState<AccentKey>(() => {
     return (localStorage.getItem('accent_color') as AccentKey) || 'teal';
   });
 
-  useEffect(() => {
-    localStorage.setItem('theme', theme);
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
+  // Apply initial values to DOM
+  useEffect(() => { applyThemeToDom(theme); }, []);
+  useEffect(() => { applyAccentToDom(accent); }, []);
 
+  // Sync from Supabase once prefs have loaded
   useEffect(() => {
-    const color = ACCENT_COLORS.find(c => c.key === accent);
-    if (color) {
-      document.documentElement.style.setProperty('--accent', color.hex);
+    if (prefsLoading) return;
+    if (prefs.theme && prefs.theme !== theme) {
+      setTheme(prefs.theme);
+      localStorage.setItem('theme', prefs.theme);
+      applyThemeToDom(prefs.theme);
     }
-  }, [accent]);
+    const validAccent = ACCENT_COLORS.some(c => c.key === prefs.accent_color);
+    if (prefs.accent_color && validAccent && prefs.accent_color !== accent) {
+      setAccentState(prefs.accent_color as AccentKey);
+      localStorage.setItem('accent_color', prefs.accent_color);
+      applyAccentToDom(prefs.accent_color as AccentKey);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoading]);
+
+  useEffect(() => { applyThemeToDom(theme); }, [theme]);
+  useEffect(() => { applyAccentToDom(accent); }, [accent]);
 
   const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    localStorage.setItem('theme', next);
+    updatePrefs({ theme: next });
   };
 
   const setAccent = (a: AccentKey) => {
     setAccentState(a);
     localStorage.setItem('accent_color', a);
+    updatePrefs({ accent_color: a });
   };
 
   return (
