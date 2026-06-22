@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- iOS WebRTC: camera/mic permissions must be requested over HTTPS -->
+    <meta http-equiv="Feature-Policy" content="camera *; microphone *" />
+    <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*" />
+    <meta name="theme-color" content="#3b82f6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1e293b" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="سیستم مدیریت حرفه‌ای جلسات، پیگیری تصمیمات و همکاری تیمی" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="اسپارک" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Android Chrome PWA -->
+    <meta name="application-name" content="اسپارک" />
+
+    <!-- Windows / Edge -->
+    <meta name="msapplication-TileColor" content="#3b82f6" />
+    <meta name="msapplication-TileImage" content="/icons/icon-192x192.png" />
+    <meta name="msapplication-config" content="none" />
+
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png" />
+
+    <title>اسپارک - سامانه هوشمند مدیریت سازمانی</title>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // PWA install prompt — capture and expose on window for React to consume
+      window.deferredInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        window.deferredInstallPrompt = e;
+        window.dispatchEvent(new Event('pwa-installable'));
+      });
+      window.addEventListener('appinstalled', () => {
+        window.deferredInstallPrompt = null;
+        window.dispatchEvent(new Event('pwa-installed'));
+      });
+
+      // Register Service Worker (skip StackBlitz / WebContainer environments)
+      if ('serviceWorker' in navigator &&
+          !window.location.hostname.includes('stackblitz') &&
+          !window.location.hostname.includes('webcontainer')) {
+        window.addEventListener('load', async () => {
+          try {
+            const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            console.log('SW registered:', registration.scope);
+            // Check for updates periodically
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New content available — notify app
+                    window.dispatchEvent(new Event('sw-updated'));
+                  }
+                });
+              }
+            });
+          } catch (err) {
+            if (!window.location.hostname.includes('localhost')) {
+              console.error('SW registration failed:', err);
+            }
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
