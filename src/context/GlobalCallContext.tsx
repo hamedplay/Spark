@@ -268,7 +268,10 @@ export function GlobalCallProvider({
       .subscribe();
 
     return () => {
-      callChannelRef.current?.unsubscribe();
+      if (callChannelRef.current) {
+        supabase.removeChannel(callChannelRef.current);
+        callChannelRef.current = null;
+      }
     };
   }, [currentUserId]);
 
@@ -334,9 +337,11 @@ export function GlobalCallProvider({
       .subscribe();
 
     return () => {
-      urgentChannelRef.current?.unsubscribe();
+      if (urgentChannelRef.current) {
+        supabase.removeChannel(urgentChannelRef.current);
+        urgentChannelRef.current = null;
+      }
     };
-  // triggerUrgentAlarm is stable (no deps); currentUserId is the only real dep
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
 

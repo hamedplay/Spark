@@ -161,7 +161,10 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
 
     })();
     return () => {
-      convChannelRef.current?.unsubscribe();
+      if (convChannelRef.current) {
+        supabase.removeChannel(convChannelRef.current);
+        convChannelRef.current = null;
+      }
     };
   }, []);
 
