@@ -878,16 +878,31 @@ function ChatViewersModal({ messageId, conversationId, messageCreatedAt, current
   onClose: () => void;
 }) {
   const [seenLog, setSeenLog] = useState<Array<{ user_id: string; seen_at: string }>>([]);
+  const [logLoading, setLogLoading] = useState(true);
 
   useEffect(() => {
+    // First try the precise per-message log
     supabase
-      .from('chat_message_read_receipts')
-      .select('user_id, last_read_at')
-      .eq('conversation_id', conversationId)
-      .neq('user_id', currentUserId)
-      .gte('last_read_at', messageCreatedAt)
+      .from('chat_message_read_log')
+      .select('user_id, seen_at')
+      .eq('message_id', messageId)
       .then(({ data }) => {
-        setSeenLog((data || []).map((r: any) => ({ user_id: r.user_id, seen_at: r.last_read_at })));
+        if (data && data.length > 0) {
+          setSeenLog(data.map((r: any) => ({ user_id: r.user_id, seen_at: r.seen_at })));
+          setLogLoading(false);
+        } else {
+          // Fallback: use conversation-level receipts (older messages)
+          supabase
+            .from('chat_message_read_receipts')
+            .select('user_id, last_read_at')
+            .eq('conversation_id', conversationId)
+            .neq('user_id', currentUserId)
+            .gte('last_read_at', messageCreatedAt)
+            .then(({ data: fallback }) => {
+              setSeenLog((fallback || []).map((r: any) => ({ user_id: r.user_id, seen_at: r.last_read_at })));
+              setLogLoading(false);
+            });
+        }
       });
   }, [messageId]);
 
@@ -934,8 +949,12 @@ function ChatViewersModal({ messageId, conversationId, messageCreatedAt, current
                     <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
                       {profile?.full_name || profile?.email || 'کاربر'}
                     </p>
-                    {seen_at && (
+                    {logLoading ? (
+                      <p className="text-[11px] text-gray-400 mt-0.5">در حال بارگذاری...</p>
+                    ) : seen_at ? (
                       <p className="text-[11px] text-teal-500 dark:text-teal-400 mt-0.5">{formatTime(seen_at)}</p>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">زمان نامشخص</p>
                     )}
                   </div>
                   <CheckCheck className="w-4 h-4 text-teal-400 flex-shrink-0" />

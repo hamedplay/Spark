@@ -135,13 +135,17 @@ function ReadReceiptsModal({ messageId, readBy, allMembers, memberCount, onClose
   onClose: () => void;
 }) {
   const [seenLog, setSeenLog] = useState<Array<{ user_id: string; seen_at: string }>>([]);
+  const [logLoading, setLogLoading] = useState(true);
 
   useEffect(() => {
     supabase
       .from('channel_message_read_log')
       .select('user_id, seen_at')
       .eq('message_id', messageId)
-      .then(({ data }) => setSeenLog(data || []));
+      .then(({ data }) => {
+        setSeenLog(data || []);
+        setLogLoading(false);
+      });
   }, [messageId]);
 
   const seenProfiles = readBy
@@ -150,7 +154,7 @@ function ReadReceiptsModal({ messageId, readBy, allMembers, memberCount, onClose
 
   const unseenCount = Math.max(0, memberCount - seenProfiles.length);
 
-  const formatTime = (uid: string) => {
+  const getSeenAt = (uid: string) => {
     const entry = seenLog.find(l => l.user_id === uid);
     if (!entry) return null;
     return moment(entry.seen_at).format('jYYYY/jMM/jDD - HH:mm');
@@ -173,23 +177,30 @@ function ReadReceiptsModal({ messageId, readBy, allMembers, memberCount, onClose
               <p className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1 mb-2">
                 <CheckCheck className="w-3.5 h-3.5" /> مشاهده شده ({seenProfiles.length})
               </p>
-              {seenProfiles.map(p => (
-                <div key={p.user_id} className="flex items-center gap-3 py-1.5">
-                  {p.avatar_url ? (
-                    <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
-                  ) : (
-                    <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                      {(p.full_name || p.email || '?').charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800 dark:text-white">{p.full_name || p.email || 'کاربر'}</p>
-                    {formatTime(p.user_id) && (
-                      <p className="text-[11px] text-teal-500 dark:text-teal-400 mt-0.5">{formatTime(p.user_id)}</p>
+              {seenProfiles.map(p => {
+                const seenAt = getSeenAt(p.user_id);
+                return (
+                  <div key={p.user_id} className="flex items-center gap-3 py-1.5">
+                    {p.avatar_url ? (
+                      <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                        {(p.full_name || p.email || '?').charAt(0).toUpperCase()}
+                      </div>
                     )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800 dark:text-white">{p.full_name || p.email || 'کاربر'}</p>
+                      {logLoading ? (
+                        <p className="text-[11px] text-gray-400 mt-0.5">در حال بارگذاری...</p>
+                      ) : seenAt ? (
+                        <p className="text-[11px] text-teal-500 dark:text-teal-400 mt-0.5">{seenAt}</p>
+                      ) : (
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">زمان نامشخص</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {/* Delivered but not seen */}
