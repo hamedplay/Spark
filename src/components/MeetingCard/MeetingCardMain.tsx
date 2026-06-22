@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Plus, Loader2, Send, Share2, UserPlus, CalendarPlus, RotateCcw, X, Download, ChevronRight, ChevronLeft, RefreshCw, AlertTriangle, Trash2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Plus, Loader2, Send, Share2, UserPlus, CalendarPlus, RotateCcw, X, Download, ChevronRight, ChevronLeft, RefreshCw, AlertTriangle, Trash2, Image, FileText } from 'lucide-react';
 import { Meeting } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { sendMeetingToTelegram } from '../../lib/telegram';
@@ -129,11 +129,23 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   const [loading, setLoading] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [showUserSelector, setShowUserSelector] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) {
+        setShowShareMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Participant inbox statuses (for creator view)
   const [participantStatuses, setParticipantStatuses] = useState<
@@ -234,7 +246,8 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
     }
   };
 
-  const handleShare = async () => {
+  const handleShareImage = async () => {
+    setShowShareMenu(false);
     if (!shareCardRef.current) { toast.error('خطا در ایجاد تصویر'); return; }
     try {
       setLoading(true);
@@ -254,6 +267,41 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       toast.error('خطا در اشتراک‌گذاری');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleShareText = async () => {
+    setShowShareMenu(false);
+    const dateStr = new Date(meeting.requestDate).toLocaleDateString('fa-IR');
+    const timeStr = meeting.start_time && meeting.end_time
+      ? `${meeting.start_time} - ${meeting.end_time}`
+      : meeting.duration;
+    const lines = [
+      `📋 جلسه: ${meeting.subject}`,
+      `📅 تاریخ: ${dateStr}`,
+      `⏰ زمان: ${timeStr}`,
+      `📍 محل: ${meeting.location}`,
+      `👤 نماینده: ${meeting.representative}`,
+      `📞 تلفن: ${meeting.phone}`,
+      meeting.participants.length > 0 ? `👥 شرکت‌کنندگان: ${meeting.participants.join('، ')}` : '',
+      meeting.notes ? `📝 یادداشت: ${meeting.notes}` : '',
+      `\nسیستم مدیریت جلسات اسپارک`,
+    ].filter(Boolean).join('\n');
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: meeting.subject, text: lines });
+      } else {
+        await navigator.clipboard.writeText(lines);
+        toast.success('متن جلسه در کلیپ‌بورد کپی شد');
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(lines);
+        toast.success('متن جلسه در کلیپ‌بورد کپی شد');
+      } catch {
+        toast.error('خطا در اشتراک‌گذاری متن');
+      }
     }
   };
 
@@ -509,9 +557,38 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
               <button onClick={() => setShowUserSelector(true)} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="ارسال به کاربران">
                 <UserPlus className="w-5 h-5" />
               </button>
-              <button onClick={handleShare} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="اشتراک‌گذاری">
-                <Share2 className="w-5 h-5" />
-              </button>
+              <div ref={shareMenuRef} className="relative">
+                <button
+                  onClick={() => setShowShareMenu(v => !v)}
+                  className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+                  title="اشتراک‌گذاری"
+                >
+                  <Share2 className="w-5 h-5" />
+                </button>
+                {showShareMenu && (
+                  <div className="absolute left-0 top-full mt-1.5 w-44 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden" dir="rtl">
+                    <button
+                      onClick={handleShareImage}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                        <Image className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">اشتراک‌گذاری تصویر</span>
+                    </button>
+                    <div className="mx-3 border-t border-gray-100 dark:border-gray-700" />
+                    <button
+                      onClick={handleShareText}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">اشتراک‌گذاری متن</span>
+                    </button>
+                  </div>
+                )}
+              </div>
               <button onClick={handleSendToTelegram} disabled={loading || meeting.status_type !== 'requested'} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 disabled:opacity-50 transition-colors" title="ارسال به مدیر">
                 <Send className="w-5 h-5" />
               </button>
