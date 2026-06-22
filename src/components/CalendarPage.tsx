@@ -447,14 +447,13 @@ export function CalendarPage({
     setSelectedJy(now.jy); setSelectedJm(now.jm); setSelectedJd(now.jd);
     setSidebarJy(now.jy); setSidebarJm(now.jm);
     fetchCurrentUser();
-    fetchMeetings();
     fetchCalendars();
     fetchAllProfiles();
 
     const channel = supabase
       .channel('calendar-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => fetchMeetings())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => fetchMeetings())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => fetchMeetingsRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => fetchMeetingsRef.current())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendars' }, () => fetchCalendars())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_subscriptions' }, () => fetchCalendars())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'all_day_events' }, () => fetchAllDayEvents())
@@ -528,24 +527,47 @@ export function CalendarPage({
   }, [hideOffHours]);
 
   // ---- Fetch ----
+  // Ref so real-time callback always calls the latest version (avoids stale closure)
+  const fetchMeetingsRef = useRef<() => void>(() => {});
+
   const fetchCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) setCurrentUserId(user.id);
   };
 
-  const fetchMeetings = async () => {
+  const fetchMeetings = useCallback(async (jy?: number, jm?: number) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      // Exclude archived meetings from calendar; they live only in the archive section
-      const { data, error } = await supabase.from('meetings').select('*').neq('status', 'closed').order('start_time', { ascending: true });
+
+      // Build ±2-month Gregorian date range around the viewed month
+      const baseJy = jy ?? currentJy;
+      const baseJm = jm ?? currentJm;
+      if (!baseJy || !baseJm) return;
+
+      const rangeStart = jalaaliToDate(baseJy, Math.max(1, baseJm - 2), 1);
+      const endJm = baseJm + 2;
+      const endJy = endJm > 12 ? baseJy + 1 : baseJy;
+      const normalEndJm = endJm > 12 ? endJm - 12 : endJm;
+      const daysInEndMonth = getJalaaliMonthDays(endJy, normalEndJm);
+      const rangeEnd = jalaaliToDate(endJy, normalEndJm, daysInEndMonth);
+
+      const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      const [{ data, error }, { data: inboxRows }] = await Promise.all([
+        supabase.from('meetings')
+          .select('id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
+          .neq('status', 'closed')
+          .gte('request_date', fmt(rangeStart))
+          .lte('request_date', fmt(rangeEnd))
+          .order('start_time', { ascending: true }),
+        supabase.from('meeting_inbox')
+          .select('meeting_id, status')
+          .eq('user_id', user.id),
+      ]);
+
       if (error) throw error;
 
-      // Build a map of this user's inbox status per meeting.
-      const { data: inboxRows } = await supabase
-        .from('meeting_inbox')
-        .select('meeting_id, status')
-        .eq('user_id', user.id);
       const inboxStatus = new Map<string, string>(
         (inboxRows || []).map((r: any) => [r.meeting_id, r.status])
       );
@@ -572,7 +594,15 @@ export function CalendarPage({
         return s !== 'pending' && s !== 'declined';
       }));
     } catch { toast.error('خطا در دریافت جلسات'); }
-  };
+  }, [currentJy, currentJm]);
+
+  // Keep ref in sync so real-time callbacks always call latest version
+  useEffect(() => { fetchMeetingsRef.current = () => fetchMeetings(); }, [fetchMeetings]);
+
+  // Re-fetch when visible month changes
+  useEffect(() => {
+    if (currentJy && currentJm) fetchMeetings(currentJy, currentJm);
+  }, [currentJy, currentJm]);
 
   const fetchAllDayEvents = useCallback(async () => {
     const { data } = await supabase.from('all_day_events').select('*');
