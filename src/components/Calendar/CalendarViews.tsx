@@ -328,11 +328,11 @@ export function CalendarViews(p: CalendarViewProps) {
     const isCompact = visualHeight < 48;
     const isTiny = visualHeight < 28;
 
-    // Percentage-based positioning — Google Calendar style
+    // Percentage-based positioning — RTL: anchor from right (start side)
     const GUTTER = 4; // px gap from column edge
     const insetStyle: React.CSSProperties = {
-      left: `calc(${leftPct}% + ${GUTTER}px)`,
-      right: `calc(${100 - leftPct - widthPct}% + ${GUTTER}px)`,
+      right: `calc(${leftPct}% + ${GUTTER}px)`,
+      left: `calc(${100 - leftPct - widthPct}% + ${GUTTER}px)`,
     };
 
     const onBlockDown = (e: React.MouseEvent) => {
