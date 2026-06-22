@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, CreditCard as Edit2, Save, X, Mic, Share2, Archive, Download, FileText, Image, Video, File, Copy, Check, Trash2, Send, User, Loader2 } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit2, Save, X, Mic, Share2, Archive, Download, FileText, Image, Video, File, Trash2, Send, User, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../context/PermissionsContext';
@@ -50,7 +50,7 @@ export function NotesPage() {
   const [loading, setLoading] = useState(false);
   const [shareNote, setShareNote] = useState<Note | null>(null);
   const [shareImageData, setShareImageData] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [shareMenuNoteId, setShareMenuNoteId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [assignNote, setAssignNote] = useState<Note | null>(null);
   const [assignSearch, setAssignSearch] = useState('');
@@ -68,8 +68,19 @@ export function NotesPage() {
   const formLastResultRef = useRef<string>('');
   const formFinalTranscriptRef = useRef<string>('');
   const brandedCardRef = useRef<HTMLDivElement>(null);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  // Close share dropdown on outside click
+  useEffect(() => {
+    if (!shareMenuNoteId) return;
+    const handler = (e: MouseEvent) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) {
+        setShareMenuNoteId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [shareMenuNoteId]);
 
   const getFileIcon = (fileType: string) => {
     switch (fileType) {
@@ -135,37 +146,51 @@ export function NotesPage() {
     }
   };
 
-  const handleShare = async (note: Note) => {
+  const handleShareImage = async (note: Note) => {
+    setShareMenuNoteId(null);
     try {
       setLoading(true);
       setShareNote(note);
       setShareImageData(null);
-      // Wait a tick for branded card to render
       await new Promise(r => setTimeout(r, 80));
       if (!brandedCardRef.current) { toast.error('خطا در ایجاد تصویر یادداشت'); return; }
       const imageData = await toPng(brandedCardRef.current, { quality: 1, pixelRatio: 2, backgroundColor: '#1e3a5f' });
 
-      if (isMobile && navigator.share) {
-        const file = await dataURLtoFile(imageData, 'note.png');
-        try {
-          await navigator.share({ title: 'اشتراک‌گذاری یادداشت', text: `${note.title}\n\n${note.content}`, files: [file] });
-          toast.success('یادداشت با موفقیت به اشتراک گذاشته شد');
-          setShareNote(null);
-        } catch { toast.error('خطا در اشتراک‌گذاری'); }
+      if (navigator.share && navigator.canShare?.({ files: [new File([], 'note.png', { type: 'image/png' })] })) {
+        const blob = await (await fetch(imageData)).blob();
+        const file = new File([blob], 'note.png', { type: 'image/png' });
+        await navigator.share({ title: note.title, files: [file] });
+        toast.success('یادداشت با موفقیت به اشتراک گذاشته شد');
+        setShareNote(null);
       } else {
         setShareImageData(imageData);
       }
-    } catch {
-      toast.error('خطا در اشتراک‌گذاری یادداشت');
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') toast.error('خطا در اشتراک‌گذاری تصویر');
+      if (!shareImageData) setShareNote(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const dataURLtoFile = async (dataURL: string, filename: string): Promise<File> => {
-    const res = await fetch(dataURL);
-    const blob = await res.blob();
-    return new File([blob], filename, { type: 'image/png' });
+  const handleShareText = async (note: Note) => {
+    setShareMenuNoteId(null);
+    const text = `${note.title}\n\n${note.content}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: note.title, text });
+        toast.success('یادداشت با موفقیت به اشتراک گذاشته شد');
+      } else {
+        await navigator.clipboard.writeText(text);
+        toast.success('متن یادداشت در کلیپ‌بورد کپی شد');
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success('متن یادداشت در کلیپ‌بورد کپی شد');
+      } catch { toast.error('خطا در اشتراک‌گذاری متن'); }
+    }
   };
 
   const setupSpeechRecognition = (isForm: boolean = false) => {
@@ -535,24 +560,22 @@ export function NotesPage() {
         </div>
       )}
 
-      {/* Share Modal */}
+      {/* Share Image Modal — shown when native share is unavailable */}
       {shareNote && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" dir="rtl">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            {/* Header */}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" dir="rtl" onClick={() => { setShareNote(null); setShareImageData(null); }}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                  <Share2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <Image className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                <h3 className="font-bold text-gray-900 dark:text-white">اشتراک‌گذاری یادداشت</h3>
+                <h3 className="font-bold text-gray-900 dark:text-white">اشتراک‌گذاری تصویر</h3>
               </div>
-              <button onClick={() => { setShareNote(null); setShareImageData(null); setCopied(false); }}
+              <button onClick={() => { setShareNote(null); setShareImageData(null); }}
                 className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            {/* Note preview */}
             <div className="p-4">
               {shareImageData ? (
                 <div className="rounded-xl overflow-hidden shadow-lg mb-4">
@@ -563,37 +586,23 @@ export function NotesPage() {
                   <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
                 </div>
               )}
-              {/* Actions */}
-              <div className="flex gap-2">
-                <button
-                  disabled={!shareImageData}
-                  onClick={() => {
-                    if (!shareImageData) return;
-                    const link = document.createElement('a');
-                    link.href = shareImageData;
-                    link.download = `note-${shareNote.id}.png`;
-                    link.click();
-                    toast.success('تصویر با موفقیت دانلود شد');
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  دانلود تصویر
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(`${shareNote.title}\n\n${shareNote.content}`);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    } catch { toast.error('خطا در کپی'); }
-                  }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-xl transition-colors border ${copied ? 'bg-green-50 dark:bg-green-900/20 border-green-300 text-green-600' : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'}`}
-                >
-                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copied ? 'کپی شد' : 'کپی متن'}
-                </button>
-              </div>
+              <button
+                disabled={!shareImageData}
+                onClick={() => {
+                  if (!shareImageData) return;
+                  const link = document.createElement('a');
+                  link.href = shareImageData;
+                  link.download = `note-${shareNote.id}.png`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  toast.success('تصویر با موفقیت دانلود شد');
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                دانلود تصویر
+              </button>
             </div>
           </div>
         </div>
@@ -743,9 +752,38 @@ export function NotesPage() {
                     <h3 className="text-sm font-semibold text-gray-800 dark:text-white leading-tight flex-1 min-w-0 truncate ml-2">{note.title}</h3>
                     <div className="flex items-center gap-0.5 flex-shrink-0">
                       {note.note_type === 'voice' && <Mic className="w-3.5 h-3.5 text-gray-400 ml-1" />}
-                      <button onClick={() => handleShare(note)} className="p-1 rounded-lg text-gray-400 hover:text-blue-500 transition-colors" title="اشتراک‌گذاری">
-                        <Share2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="relative" ref={shareMenuNoteId === note.id ? shareMenuRef : undefined}>
+                        <button
+                          onClick={() => setShareMenuNoteId(v => v === note.id ? null : note.id)}
+                          className="p-1 rounded-lg text-gray-400 hover:text-blue-500 transition-colors"
+                          title="اشتراک‌گذاری"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
+                        {shareMenuNoteId === note.id && (
+                          <div className="absolute left-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden" dir="rtl">
+                            <button
+                              onClick={() => handleShareImage(note)}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
+                            >
+                              <div className="w-7 h-7 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                                <Image className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <span className="text-sm text-gray-700 dark:text-gray-200">اشتراک تصویر</span>
+                            </button>
+                            <div className="h-px bg-gray-100 dark:bg-gray-700 mx-3" />
+                            <button
+                              onClick={() => handleShareText(note)}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
+                            >
+                              <div className="w-7 h-7 rounded-xl bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center flex-shrink-0">
+                                <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                              </div>
+                              <span className="text-sm text-gray-700 dark:text-gray-200">اشتراک متن</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <button onClick={() => { setAssignNote(note); setAssignSearch(''); }} className="p-1 rounded-lg text-gray-400 hover:text-teal-500 transition-colors" title="ارجاع">
                         <Send className="w-3.5 h-3.5" />
                       </button>
