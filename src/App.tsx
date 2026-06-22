@@ -31,6 +31,7 @@ import { PendingMeetingsModal } from './components/MeetingCard/PendingMeetingsMo
 import { useTheme } from './context/ThemeContext';
 import { PermissionsProvider } from './context/PermissionsContext';
 import { GlobalCallProvider } from './context/GlobalCallContext';
+import { useUserPreferences } from './context/UserPreferencesContext';
 
 function App() {
   // Check for ?conference=CODE guest join link before anything else
@@ -66,6 +67,7 @@ function App() {
   const [sparkCalendarMeetingPrefill, setSparkCalendarMeetingPrefill] = useState<any | null>(null);
   const [chatInitUserId, setChatInitUserId] = useState<string | null>(null);
   const { theme } = useTheme();
+  const { prefs, loading: prefsLoading } = useUserPreferences();
 
   const [sparkVisible, setSparkVisible] = useState(true);
 
@@ -147,6 +149,15 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Apply default landing page once both auth and prefs are resolved
+  const [landingApplied, setLandingApplied] = useState(false);
+  useEffect(() => {
+    if (!isAuthenticated || prefsLoading || landingApplied) return;
+    setLandingApplied(true);
+    const page = prefs.default_landing_page as typeof activePage;
+    setActivePage(page);
+  }, [isAuthenticated, prefsLoading, landingApplied]);
 
   const loadUserPermissions = async (userId: string) => {
     try {

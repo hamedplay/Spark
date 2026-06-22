@@ -7,6 +7,7 @@ import { insertNotification as insertNotificationFromTemplate } from '../lib/not
 import toast from 'react-hot-toast';
 import { CalendarMeetingForm } from './CalendarMeetingForm';
 import { MeetingInboxButton } from './MeetingInboxButton';
+import { useUserPreferences } from '../context/UserPreferencesContext';
 
 import { MeetingData, CalendarEntry, CalendarSubscription, ProfileEntry, PendingSchedule } from './Calendar/types';
 import {
@@ -57,10 +58,13 @@ export function CalendarPage({
   sparkNavigateDate, onSparkNavigateDateConsumed,
   sparkCalendarMeetingPrefill, onSparkCalendarMeetingPrefillConsumed,
 }: CalendarPageProps) {
+  const { prefs } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    // Mobile (< 768px): default to day view; desktop: week view
-    return window.innerWidth < 768 ? 'day' : 'week';
+    // Mobile (< 768px): default to day view; desktop: use user preference
+    if (window.innerWidth < 768) return 'day';
+    const p = localStorage.getItem('user_prefs_calendar_view') as ViewMode | null;
+    return p ?? 'week';
   });
   const [showViewDropdown, setShowViewDropdown] = useState(false);
   const [currentJy, setCurrentJy] = useState(0);
@@ -154,6 +158,16 @@ export function CalendarPage({
     );
   }, [meetings, searchQuery]);
 
+  const visibleMeetings = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    return meetings.filter(m => {
+      const dateStr = parseRequestDateToDateStr(m.request_date);
+      if (dateStr && dateStr < todayStr && !prefs.show_past_meetings) return false;
+      if (m.status === 'archived' && !prefs.show_cancelled_meetings) return false;
+      return true;
+    });
+  }, [meetings, prefs.show_past_meetings, prefs.show_cancelled_meetings]);
+
   const navigateToMeeting = (m: MeetingData) => {
     const dateStr = parseRequestDateToDateStr(m.request_date);
     if (!dateStr) return;
@@ -171,6 +185,20 @@ export function CalendarPage({
   useEffect(() => {
     if (showSearch && searchInputRef.current) searchInputRef.current.focus();
   }, [showSearch]);
+
+  // Apply user's default calendar view preference (desktop only, once)
+  const prefViewApplied = useRef(false);
+  useEffect(() => {
+    if (prefViewApplied.current || window.innerWidth < 768) return;
+    if (!prefs.default_calendar_view) return;
+    prefViewApplied.current = true;
+    const map: Record<string, ViewMode> = { month: 'month', week: 'week', day: 'day', list: 'list-month' };
+    const mapped = map[prefs.default_calendar_view];
+    if (mapped) {
+      setViewMode(mapped);
+      localStorage.setItem('user_prefs_calendar_view', mapped);
+    }
+  }, [prefs.default_calendar_view]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -1028,7 +1056,7 @@ export function CalendarPage({
 
   const meetingsByDate = useMemo(() => {
     const map: Record<string, MeetingData[]> = {};
-    meetings.forEach(m => {
+    visibleMeetings.forEach(m => {
       const isCreator = !!currentUserId && m.user_id === currentUserId;
       const isAssigned = !!currentUserId && !isCreator && (
         (m.participant_user_ids || []).includes(currentUserId) ||
@@ -1070,7 +1098,7 @@ export function CalendarPage({
       map[s].push(m);
     });
     return map;
-  }, [meetings, enabledCalendarIds, currentUserId, isAnyParticipantSubscribed, myPublicCalendar]);
+  }, [visibleMeetings, enabledCalendarIds, currentUserId, isAnyParticipantSubscribed, myPublicCalendar]);
 
   const getMeetings = useCallback((jy: number, jm: number, jd: number): MeetingData[] => {
     return meetingsByDate[jalaaliToYYYYMMDD(jy, jm, jd)] || [];
