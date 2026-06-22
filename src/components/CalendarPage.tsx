@@ -470,6 +470,7 @@ export function CalendarPage({
 
   // ---- Init ----
   useEffect(() => {
+    console.log('[CalendarPage] MOUNT');
     const now = toJalaali(new Date());
     setCurrentJy(now.jy); setCurrentJm(now.jm);
     setSelectedJy(now.jy); setSelectedJm(now.jm); setSelectedJd(now.jd);
@@ -480,14 +481,17 @@ export function CalendarPage({
 
     const channel = supabase
       .channel(`calendar-realtime-${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => fetchMeetingsRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => { console.log('[CalendarPage] realtime: meetings change'); fetchMeetingsRef.current(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => fetchMeetingsRef.current())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendars' }, () => fetchCalendars())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendars' }, () => { console.log('[CalendarPage] realtime: calendars change'); fetchCalendars(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_subscriptions' }, () => fetchCalendars())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'all_day_events' }, () => fetchAllDayEvents())
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      console.log('[CalendarPage] UNMOUNT');
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -560,18 +564,19 @@ export function CalendarPage({
 
   const fetchCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
+    console.log('[CalendarPage] fetchCurrentUser → userId:', user?.id ?? 'null');
     if (user) setCurrentUserId(user.id);
   };
 
   const fetchMeetings = useCallback(async (jy?: number, jm?: number) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) { console.log('[CalendarPage] fetchMeetings: no user, returning'); return; }
 
       // Build ±2-month Gregorian date range around the viewed month
       const baseJy = jy ?? currentJy;
       const baseJm = jm ?? currentJm;
-      if (!baseJy || !baseJm) return;
+      if (!baseJy || !baseJm) { console.log('[CalendarPage] fetchMeetings: no jy/jm, returning (jy=' + baseJy + ' jm=' + baseJm + ')'); return; }
 
       const rangeStart = jalaaliToDate(baseJy, Math.max(1, baseJm - 2), 1);
       const endJm = baseJm + 2;
@@ -606,21 +611,20 @@ export function CalendarPage({
       //                  (accepted ✓, no-entry = directly added/delegated ✓, delegated ✓)
       //   Observer /
       //   Subscribed   → visible unless explicitly pending or declined
-      setMeetings((data || []).filter((m: any) => {
+      const filtered = (data || []).filter((m: any) => {
         if (m.user_id === user.id) return true; // creator
 
         const isParticipant = (m.participant_user_ids || []).includes(user.id);
         if (isParticipant) {
           const s = inboxStatus.get(m.id);
-          // Only hide if the user explicitly hasn't responded yet, or declined.
-          // No inbox entry means they were directly added (e.g. delegation) → show.
           return s !== 'pending' && s !== 'declined';
         }
 
-        // Observer / subscribed-calendar viewer: hide only if pending or declined
         const s = inboxStatus.get(m.id);
         return s !== 'pending' && s !== 'declined';
-      }));
+      });
+      console.log('[CalendarPage] fetchMeetings → setMeetings count:', filtered.length, 'userId:', user.id, 'jy/jm:', baseJy, baseJm);
+      setMeetings(filtered);
     } catch { toast.error('خطا در دریافت جلسات'); }
   }, [currentJy, currentJm]);
 
@@ -684,7 +688,9 @@ export function CalendarPage({
       const { data: subs } = await supabase.from('calendar_subscriptions').select('calendar_id, calendars(*)').eq('user_id', user.id);
       const subCals = subs ? (subs.map((s: any) => s.calendars).filter(Boolean) as CalendarEntry[]) : [];
       setSubscribedCalendars(subCals);
-      setEnabledCalendarIds(new Set([...ownCals.map(c => c.id), ...subCals.map(c => c.id)]));
+      const newEnabledIds = new Set([...ownCals.map(c => c.id), ...subCals.map(c => c.id)]);
+      console.log('[CalendarPage] fetchCalendars → enabledCalendarIds:', [...newEnabledIds], 'ownCals:', ownCals.length, 'subCals:', subCals.length);
+      setEnabledCalendarIds(newEnabledIds);
     } catch {}
   };
 
@@ -1056,6 +1062,11 @@ export function CalendarPage({
 
   const meetingsByDate = useMemo(() => {
     const map: Record<string, MeetingData[]> = {};
+    // Don't filter by calendar/owner until both user ID and calendars have loaded.
+    // This prevents a race where meetings appear then vanish when the two async fetches
+    // resolve in the wrong order.
+    const calendarsLoaded = enabledCalendarIds.size > 0 || calendars.length > 0;
+    let hiddenCalId = 0, hiddenNoCalNoSub = 0, hiddenPublicCalOff = 0;
     visibleMeetings.forEach(m => {
       const isCreator = !!currentUserId && m.user_id === currentUserId;
       const isAssigned = !!currentUserId && !isCreator && (
@@ -1063,10 +1074,19 @@ export function CalendarPage({
         ((m.notify_users || []) as string[]).includes(currentUserId)
       );
 
+      // If calendars haven't loaded yet or userId is unknown, show all meetings
+      if (!currentUserId || !calendarsLoaded) {
+        const s = parseRequestDateToDateStr(m.request_date);
+        if (!s) return;
+        if (!map[s]) map[s] = [];
+        map[s].push(m);
+        return;
+      }
+
       // Meetings assigned to me → always use my personal public calendar toggle
       if (isAssigned) {
         // If I have a public calendar and it's disabled → hide the meeting
-        if (myPublicCalendar && !enabledCalendarIds.has(myPublicCalendar.id)) return;
+        if (myPublicCalendar && !enabledCalendarIds.has(myPublicCalendar.id)) { hiddenPublicCalOff++; return; }
         // If I have NO public calendar at all → still show (no toggle to apply)
         const s = parseRequestDateToDateStr(m.request_date);
         if (!s) return;
@@ -1081,13 +1101,13 @@ export function CalendarPage({
 
       if (m.calendar_id) {
         // Creator's own meetings: respect the calendar toggle strictly
-        if (!enabledCalendarIds.has(m.calendar_id) && !isViaSubscription) return;
+        if (!enabledCalendarIds.has(m.calendar_id) && !isViaSubscription) { hiddenCalId++; return; }
       } else {
         // Creator's meeting without a calendar: respect myPublicCalendar toggle
         if (isCreator) {
-          if (myPublicCalendar && !enabledCalendarIds.has(myPublicCalendar.id)) return;
+          if (myPublicCalendar && !enabledCalendarIds.has(myPublicCalendar.id)) { hiddenPublicCalOff++; return; }
         } else {
-          if (!isViaSubscription) return;
+          if (!isViaSubscription) { hiddenNoCalNoSub++; return; }
           if (m.members_only) return;
         }
       }
@@ -1097,8 +1117,10 @@ export function CalendarPage({
       if (!map[s]) map[s] = [];
       map[s].push(m);
     });
+    const shown = Object.values(map).reduce((a, arr) => a + arr.length, 0);
+    console.log('[CalendarPage] meetingsByDate recomputed: visibleMeetings=' + visibleMeetings.length + ' shown=' + shown + ' hiddenCalId=' + hiddenCalId + ' hiddenNoCalNoSub=' + hiddenNoCalNoSub + ' hiddenPublicCalOff=' + hiddenPublicCalOff + ' currentUserId=' + currentUserId + ' enabledCalendarIds.size=' + enabledCalendarIds.size + ' calendarsLoaded=' + calendarsLoaded + ' myPublicCalendar=' + myPublicCalendar?.id);
     return map;
-  }, [visibleMeetings, enabledCalendarIds, currentUserId, isAnyParticipantSubscribed, myPublicCalendar]);
+  }, [visibleMeetings, enabledCalendarIds, calendars, currentUserId, isAnyParticipantSubscribed, myPublicCalendar]);
 
   const getMeetings = useCallback((jy: number, jm: number, jd: number): MeetingData[] => {
     return meetingsByDate[jalaaliToYYYYMMDD(jy, jm, jd)] || [];
