@@ -28,6 +28,7 @@ interface TasksPageProps {
   prefillDescription?: string;
   prefillSourceMessageId?: string;
   onPrefillConsumed?: () => void;
+  currentUserId?: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -544,7 +545,7 @@ function ReferModal({ task, users, groups, currentUserId, actorName, actorAvatar
 }
 
 // ── Main TasksPage ─────────────────────────────────────────────────────────────
-export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefillConsumed }: TasksPageProps) {
+export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefillConsumed, currentUserId: propUserId }: TasksPageProps) {
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('tasks_create');
   const canEdit = hasPermission('tasks_edit');
@@ -557,8 +558,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [taskTab, setTaskTab] = useState<'assigned_to_me' | 'created_by_me' | 'all'>('assigned_to_me');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userIdLoading, setUserIdLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [users, setUsers] = useState<UserProfile[]>([]);
 
   const { groups: orgGroups, allUsers: finalAllUsers } = useOrgUsers(userId);
@@ -586,11 +586,12 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [editAssigneeId, setEditAssigneeId] = useState('');
 
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserId(user.id);
-      setUserIdLoading(false);
-    })();
+    if (!propUserId) {
+      // Fallback: fetch from auth if prop wasn't provided
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) setUserId(user.id);
+      });
+    }
     fetchUsers();
     fetchTasks();
 
@@ -813,12 +814,8 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   };
   const statusLabel: Record<string, string> = { pending: 'در انتظار', in_progress: 'در حال انجام', completed: 'تکمیل شده' };
 
-  if (userIdLoading) {
-    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
-  }
-
   if (!userId) {
-    return <div className="flex items-center justify-center h-96"><p className="text-gray-500 dark:text-gray-400">لطفاً ابتدا وارد حساب کاربری شوید</p></div>;
+    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
   }
 
   return (

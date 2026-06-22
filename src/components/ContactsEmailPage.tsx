@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { ContactEmail } from '../types';
 import toast from 'react-hot-toast';
 
-export function ContactsEmailPage() {
+export function ContactsEmailPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
   const [contacts, setContacts] = useState<ContactEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -15,16 +15,14 @@ export function ContactsEmailPage() {
     email: ''
   });
   const [editingContact, setEditingContact] = useState<ContactEmail | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userIdLoading, setUserIdLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(propUserId ?? null);
 
   useEffect(() => {
-    const getCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserId(user.id);
-      setUserIdLoading(false);
-    };
-    getCurrentUser();
+    if (!propUserId) {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) setUserId(user.id);
+      });
+    }
   }, []);
 
   const fetchContacts = async () => {
@@ -127,16 +125,8 @@ export function ContactsEmailPage() {
     contact.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (userIdLoading) {
-    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
-  }
-
   if (!userId) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <p className="text-gray-500 dark:text-gray-400">لطفا ابتدا وارد حساب کاربری خود شوید</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
   }
 
   return (

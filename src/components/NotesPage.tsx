@@ -30,7 +30,7 @@ interface Note {
   file_size?: number;
 }
 
-export function NotesPage() {
+export function NotesPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('notes_create');
   const canEdit = hasPermission('notes_edit');
@@ -39,8 +39,7 @@ export function NotesPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isFormRecording, setIsFormRecording] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userIdLoading, setUserIdLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [formVoiceTranscript, setFormVoiceTranscript] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -124,12 +123,11 @@ export function NotesPage() {
   };
 
   useEffect(() => {
-    const getCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserId(user.id);
-      setUserIdLoading(false);
-    };
-    getCurrentUser();
+    if (!propUserId) {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) setUserId(user.id);
+      });
+    }
   }, []);
 
   const requestRecordingPermission = async () => {
@@ -504,16 +502,8 @@ export function NotesPage() {
     (statusFilter === 'all' || note.status === statusFilter)
   );
 
-  if (userIdLoading) {
-    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
-  }
-
   if (!userId) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <p className="text-gray-500 dark:text-gray-400">لطفا ابتدا وارد حساب کاربری خود شوید</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
   }
 
   return (

@@ -572,17 +572,18 @@ function App() {
           prefillDescription={taskPrefillDescription || undefined}
           prefillSourceMessageId={taskPrefillMessageId || undefined}
           onPrefillConsumed={() => { setTaskPrefillDescription(''); setTaskPrefillMessageId(''); }}
+          currentUserId={currentUserId}
         />;
       case 'reports':
         return <ReportsPage />;
       case 'notes':
-        return <NotesPage />;
+        return <NotesPage currentUserId={currentUserId} />;
       case 'profile':
         return <ProfilePage />;
       case 'contacts':
-        return <ContactsPage />;
+        return <ContactsPage currentUserId={currentUserId} />;
       case 'contacts_email':
-        return <ContactsPage />;
+        return <ContactsEmailPage currentUserId={currentUserId} />;
       case 'tutorial':
         return <TutorialPage onAskSpark={(cmd) => { setSparkExternalCommand(cmd); }} />;
       case 'spark':

@@ -137,7 +137,7 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export function ContactsPage() {
+export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('contacts_create');
   const canEdit = hasPermission('contacts_edit');
@@ -147,8 +147,7 @@ export function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userIdLoading, setUserIdLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [addMode, setAddMode] = useState<AddMode>('single');
   const [newContact, setNewContact] = useState({ name: '', email: '', phone: '', company: '' });
@@ -157,12 +156,15 @@ export function ContactsPage() {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) { setUserId(user.id); fetchContacts(); }
-      setUserIdLoading(false);
-    };
-    init();
+    if (propUserId) {
+      fetchContacts();
+    } else {
+      const init = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) { setUserId(user.id); fetchContacts(); }
+      };
+      init();
+    }
   }, []);
 
   const fetchContacts = async () => {
@@ -273,16 +275,8 @@ export function ContactsPage() {
     (c.company || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (userIdLoading) {
-    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
-  }
-
   if (!userId) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <p className="text-gray-500 dark:text-gray-400">لطفا ابتدا وارد شوید</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" /></div>;
   }
 
   return (
