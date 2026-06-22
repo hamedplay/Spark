@@ -166,7 +166,9 @@ export function CalendarPage({
     const result = meetings.filter(m => {
       const dateStr = parseRequestDateToDateStr(m.request_date);
       if (dateStr && dateStr < todayStr && !prefs.show_past_meetings) return false;
-      if (m.status === 'archived' && !prefs.show_cancelled_meetings) return false;
+      // Only treat archived meetings as "cancelled" when they are NOT scheduled calendar
+      // appointments. status='archived' + status_type='scheduled' means a real meeting.
+      if (m.status === 'archived' && m.status_type !== 'scheduled' && !prefs.show_cancelled_meetings) return false;
       return true;
     });
     console.log('[CalendarPage] visibleMeetings: total=' + meetings.length + ' visible=' + result.length + ' show_past=' + prefs.show_past_meetings + ' show_cancelled=' + prefs.show_cancelled_meetings + ' todayStr(Tehran)=' + todayStr);
