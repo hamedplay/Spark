@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import moment from 'moment-jalaali';
-import { Star, MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, AlertCircle, AlertTriangle, Lock, Play, Pause, Eye, Tag, Send, Check, Clock, Loader, Reply, X, Smile, ClipboardList, BellRing, ChevronDown, ChevronRight, Building2, Users as UsersIcon, Phone, Video, MessageSquare, Forward } from 'lucide-react';
+import { Star, MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, AlertCircle, AlertTriangle, Lock, Play, Pause, Eye, Tag, Send, Check, CheckCheck, Clock, Loader, Reply, X, Smile, ClipboardList, BellRing, ChevronDown, ChevronRight, Building2, Users as UsersIcon, Phone, Video, MessageSquare, Forward } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
 import type { MessageWithMeta, ChatTag, MessageStatus, UserProfile } from './types';
 import { UserAvatar } from './ChatConversationItem';
@@ -136,6 +136,7 @@ export function ChatMessage({
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
+  const [showViewersModal, setShowViewersModal] = useState(false);
   const [mentionPopupUser, setMentionPopupUser] = useState<UserProfile | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const reactRef = useRef<HTMLDivElement>(null);
@@ -426,9 +427,11 @@ export function ChatMessage({
 
                 <div className="flex-1" />
 
-                {/* Eye icon (seen by other) — only for own messages */}
+                {/* Read ticks — only for own messages */}
                 {isOwn && (
-                  <Eye className={`w-3.5 h-3.5 flex-shrink-0 ${seenByOther ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-600'}`} title={seenByOther ? 'دیده شده' : 'دیده نشده'} />
+                  seenByOther
+                    ? <CheckCheck className="w-3.5 h-3.5 flex-shrink-0 text-teal-400" title="دیده شده" />
+                    : <CheckCheck className="w-3.5 h-3.5 flex-shrink-0 text-gray-300 dark:text-gray-600" title="ارسال شد" />
                 )}
 
                 {/* Three-dot menu */}
@@ -496,6 +499,17 @@ export function ChatMessage({
           onClose={() => setShowForwardModal(false)}
         />
       )}
+      {showViewersModal && (
+        <ChatViewersModal
+          messageId={message.id}
+          conversationId={message.conversation_id}
+          messageCreatedAt={message.created_at}
+          currentUserId={currentUserId}
+          allUsers={allUsers}
+          readBy={message.read_by || []}
+          onClose={() => setShowViewersModal(false)}
+        />
+      )}
 
       {/* Three-dot menu — centered modal on mobile, fixed overlay */}
       {showMenu && (
@@ -543,6 +557,11 @@ export function ChatMessage({
               <MI icon={<span className="text-teal-500 text-xs font-bold">📅</span>} label="تنظیم جلسه با منشن‌ها"
                 labelClass="text-teal-600 dark:text-teal-400 font-medium"
                 onClick={() => { onScheduleMeeting(mentionIds, message.body || ''); setShowMenu(false); }} />
+            )}
+            {isOwn && (
+              <MI icon={<CheckCheck className="w-4 h-4 text-teal-500" />} label="مشاهده‌کنندگان"
+                labelClass="text-teal-600 dark:text-teal-400 font-medium"
+                onClick={() => { setShowViewersModal(true); setShowMenu(false); }} />
             )}
             <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
             <MI icon={<Trash2 className="w-4 h-4 text-red-500" />} label="حذف برای من" labelClass="text-red-500"
@@ -847,5 +866,88 @@ function MI({ icon, label, labelClass, onClick }: { icon: React.ReactNode; label
       <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{icon}</span>
       <span className={labelClass || 'text-gray-700 dark:text-gray-300'}>{label}</span>
     </button>
+  );
+}
+
+function ChatViewersModal({ messageId, conversationId, messageCreatedAt, currentUserId, allUsers, readBy, onClose }: {
+  messageId: string;
+  conversationId: string;
+  messageCreatedAt: string;
+  currentUserId: string;
+  allUsers: UserProfile[];
+  readBy: string[];
+  onClose: () => void;
+}) {
+  const [seenLog, setSeenLog] = useState<Array<{ user_id: string; seen_at: string }>>([]);
+
+  useEffect(() => {
+    supabase
+      .from('chat_message_read_receipts')
+      .select('user_id, last_read_at')
+      .eq('conversation_id', conversationId)
+      .neq('user_id', currentUserId)
+      .gte('last_read_at', messageCreatedAt)
+      .then(({ data }) => {
+        setSeenLog((data || []).map((r: any) => ({ user_id: r.user_id, seen_at: r.last_read_at })));
+      });
+  }, [messageId]);
+
+  const seenIds = new Set(readBy.filter(id => id !== currentUserId));
+  const viewers = [...seenIds].map(uid => {
+    const profile = allUsers.find(u => u.user_id === uid);
+    const logEntry = seenLog.find(l => l.user_id === uid);
+    return { uid, profile, seen_at: logEntry?.seen_at ?? null };
+  });
+
+  const formatTime = (iso: string | null) => {
+    if (!iso) return null;
+    return moment(iso).format('jYYYY/jMM/jDD - HH:mm');
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[400] flex items-end sm:items-center justify-center p-4" dir="rtl" onClick={onClose}>
+      <div className="w-full sm:w-80 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2">
+            <CheckCheck className="w-4 h-4 text-teal-500" />
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">مشاهده‌کنندگان پیام</h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="max-h-72 overflow-y-auto">
+          {viewers.length > 0 ? (
+            <div className="px-4 py-3">
+              <p className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1 mb-3">
+                <CheckCheck className="w-3.5 h-3.5" /> دیده شده توسط ({viewers.length})
+              </p>
+              {viewers.map(({ uid, profile, seen_at }) => (
+                <div key={uid} className="flex items-center gap-3 py-2">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                      {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
+                      {profile?.full_name || profile?.email || 'کاربر'}
+                    </p>
+                    {seen_at && (
+                      <p className="text-[11px] text-teal-500 dark:text-teal-400 mt-0.5">{formatTime(seen_at)}</p>
+                    )}
+                  </div>
+                  <CheckCheck className="w-4 h-4 text-teal-400 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-8">هنوز کسی این پیام را ندیده</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

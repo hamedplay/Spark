@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import moment from 'moment-jalaali';
 import { MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, AlertCircle, AlertTriangle, Lock, Play, Pause, Eye, Check, Reply, X, Smile, ClipboardList, BellRing, Pin, Download, FileText, CheckCheck, Star, Users, Clock, Loader, AtSign, MessageSquare } from 'lucide-react';
 import { EmojiPicker } from '../Chat/EmojiPicker';
 import { supabase } from '../../lib/supabase';
@@ -126,17 +127,34 @@ function renderBodyWithMentions(
 }
 
 // Read receipts modal
-function ReadReceiptsModal({ readBy, allMembers, memberCount, onClose }: {
+function ReadReceiptsModal({ messageId, readBy, allMembers, memberCount, onClose }: {
+  messageId: string;
   readBy: string[];
   allMembers: ChannelProfile[];
   memberCount: number;
   onClose: () => void;
 }) {
+  const [seenLog, setSeenLog] = useState<Array<{ user_id: string; seen_at: string }>>([]);
+
+  useEffect(() => {
+    supabase
+      .from('channel_message_read_log')
+      .select('user_id, seen_at')
+      .eq('message_id', messageId)
+      .then(({ data }) => setSeenLog(data || []));
+  }, [messageId]);
+
   const seenProfiles = readBy
     .map(id => allMembers.find(m => m.user_id === id))
     .filter(Boolean) as ChannelProfile[];
 
   const unseenCount = Math.max(0, memberCount - seenProfiles.length);
+
+  const formatTime = (uid: string) => {
+    const entry = seenLog.find(l => l.user_id === uid);
+    if (!entry) return null;
+    return moment(entry.seen_at).format('jYYYY/jMM/jDD - HH:mm');
+  };
 
   return (
     <div className="fixed inset-0 bg-black/40 z-[400] flex items-end sm:items-center justify-center p-4" dir="rtl" onClick={onClose}>
@@ -164,7 +182,12 @@ function ReadReceiptsModal({ readBy, allMembers, memberCount, onClose }: {
                       {(p.full_name || p.email || '?').charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <p className="text-sm text-gray-800 dark:text-white">{p.full_name || p.email || 'کاربر'}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800 dark:text-white">{p.full_name || p.email || 'کاربر'}</p>
+                    {formatTime(p.user_id) && (
+                      <p className="text-[11px] text-teal-500 dark:text-teal-400 mt-0.5">{formatTime(p.user_id)}</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -626,6 +649,7 @@ export function ChannelMessageItem({
       {/* Read receipts modal */}
       {showReadReceipts && (
         <ReadReceiptsModal
+          messageId={msg.id}
           readBy={readByExcludingSelf}
           allMembers={allMembers}
           memberCount={memberCountExcludingSelf}
