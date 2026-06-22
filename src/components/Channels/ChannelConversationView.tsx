@@ -13,8 +13,33 @@ import { ChannelInputBar } from './ChannelInputBar';
 import { ChannelMembersModal } from './ChannelMembersModal';
 import { WorkTopicsPanel } from './WorkTopicsPanel';
 import { ChannelSettingsModal } from './ChannelSettingsModal';
+import { loadChatTheme } from '../Chat/ChatSettingsPage';
+import type { ChatThemeSettings } from '../Chat/ChatSettingsPage';
 
 moment.loadPersian({ dialect: 'persian-modern', usePersianDigits: false });
+
+function useDarkMode() {
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  useEffect(() => {
+    const obs = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
+    obs.observe(document.documentElement, { attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+  return isDark;
+}
+
+function useChatTheme(): ChatThemeSettings {
+  const [theme, setTheme] = useState<ChatThemeSettings>(loadChatTheme);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setTheme(detail ? (detail as ChatThemeSettings) : loadChatTheme());
+    };
+    window.addEventListener('chatThemeChanged', handler);
+    return () => window.removeEventListener('chatThemeChanged', handler);
+  }, []);
+  return theme;
+}
 
 interface Props {
   channel: Channel;
@@ -411,6 +436,8 @@ function StarredPanel({ starredMsgs, onScrollTo, onClose }: {
 }
 
 export function ChannelConversationView({ channel, currentUserId, allProfiles, onBack, isMobile, scrollToMessageId, onScrollHandled, onNavigateToTasks, onOpenDirectChat }: Props) {
+  const theme = useChatTheme();
+  const isDark = useDarkMode();
   const [messages, setMessages] = useState<MessageWithMeta[]>([]);
   const [reactions, setReactions] = useState<{ message_id: string; user_id: string; emoji: string }[]>([]);
   const [stars, setStars] = useState<{ message_id: string }[]>([]);
@@ -430,6 +457,7 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
   const [showSearch, setShowSearch] = useState(false);
   const [groupTaskTarget, setGroupTaskTarget] = useState<{ msg: MessageWithMeta; mentionedUsers: ChannelProfile[] } | null>(null);
   const [mentionBarItems, setMentionBarItems] = useState<{ id: string; body: string | null; senderName: string }[]>([]);
+  const [readLogMap, setReadLogMap] = useState<Record<string, Array<{ user_id: string; seen_at: string }>>>({});
   const [dismissedMentionIds, setDismissedMentionIds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(`dismissed_mentions_ch_${channel.id}`);
@@ -485,6 +513,9 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
           })
           .catch(() => {});
       }
+
+      const ownMsgIds = raw.filter(m => m.sender_id === currentUserId).map(m => m.id);
+      if (ownMsgIds.length) fetchReadLog(ownMsgIds);
     }
   }, [channel.id, allProfiles, currentUserId]);
 
@@ -554,7 +585,6 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
       .order('created_at', { ascending: false })
       .limit(20);
     if (!data || data.length === 0) return;
-    const senderIds = [...new Set(data.map((m: any) => m.sender_id).filter(Boolean))];
     const senderMap = new Map(allProfiles.map(p => [p.user_id, p]));
     setMentionBarItems(data.map((m: any) => ({
       id: m.id,
@@ -562,6 +592,22 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
       senderName: senderMap.get(m.sender_id)?.full_name || senderMap.get(m.sender_id)?.email || 'کاربر',
     })));
   };
+
+  const fetchReadLog = useCallback(async (msgIds: string[]) => {
+    if (!msgIds.length) return;
+    try {
+      const { data } = await supabase
+        .from('channel_message_read_log')
+        .select('message_id, user_id, seen_at')
+        .in('message_id', msgIds);
+      if (!data) return;
+      const grouped: Record<string, Array<{ user_id: string; seen_at: string }>> = {};
+      for (const row of data) {
+        (grouped[row.message_id] ??= []).push({ user_id: row.user_id, seen_at: row.seen_at });
+      }
+      setReadLogMap(grouped);
+    } catch { /* non-critical */ }
+  }, []);
 
   useEffect(() => {
     fetchMessages();
@@ -818,6 +864,9 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
                       allProfiles={allProfiles}
                       isChannelType={channel.type === 'channel'}
                       isPrivatelyPinned={privatePins.some(p => p.id === msg.id)}
+                      theme={theme}
+                      isDark={isDark}
+                      readLogData={readLogMap[msg.id]}
                       onReply={m => { setReplyTarget(m); setEditTarget(null); }}
                       onReact={handleReact}
                       onPin={handlePin}

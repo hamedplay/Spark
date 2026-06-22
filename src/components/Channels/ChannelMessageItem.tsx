@@ -1,69 +1,33 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import moment from 'moment-jalaali';
-import { MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, AlertCircle, AlertTriangle, Lock, Play, Pause, Eye, Check, Reply, X, Smile, ClipboardList, BellRing, Pin, Download, FileText, CheckCheck, Star, Users, Clock, Loader, AtSign, MessageSquare } from 'lucide-react';
+import {
+  MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy,
+  AlertCircle, AlertTriangle, Lock, Play, Pause, Eye, Check,
+  Reply, X, Smile, ClipboardList, BellRing, Pin, Download,
+  FileText, CheckCheck, Star, Users, Clock, Loader, AtSign, MessageSquare,
+} from 'lucide-react';
 import { EmojiPicker } from '../Chat/EmojiPicker';
 import { supabase } from '../../lib/supabase';
 import { insertNotification } from '../../lib/notifications';
 import toast from 'react-hot-toast';
 import type { MessageWithMeta, ChannelProfile, MemberRole, ChannelMessage } from './types';
-import { loadChatTheme } from '../Chat/ChatSettingsPage';
 import type { ChatThemeSettings } from '../Chat/ChatSettingsPage';
-
-function useDarkMode() {
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
-  useEffect(() => {
-    const obs = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    obs.observe(document.documentElement, { attributeFilter: ['class'] });
-    return () => obs.disconnect();
-  }, []);
-  return isDark;
-}
-
-function useChatTheme(): ChatThemeSettings {
-  const [theme, setTheme] = useState<ChatThemeSettings>(loadChatTheme);
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      setTheme(detail ? (detail as ChatThemeSettings) : loadChatTheme());
-    };
-    window.addEventListener('chatThemeChanged', handler);
-    return () => window.removeEventListener('chatThemeChanged', handler);
-  }, []);
-  return theme;
-}
 
 export type MessageStatus = 'pending' | 'in_progress' | 'done' | null;
 
-interface Props {
-  msg: MessageWithMeta;
-  currentUserId: string | null;
-  myRole: MemberRole | null;
-  allMembers: ChannelProfile[];
-  allProfiles: ChannelProfile[];
-  isChannelType: boolean;
-  isPrivatelyPinned?: boolean;
-  onReply: (msg: ChannelMessage) => void;
-  onReact: (msgId: string, emoji: string) => void;
-  onPin: (msgId: string, pinned: boolean) => void;
-  onDelete: (msgId: string) => void;
-  onEdit: (msg: MessageWithMeta) => void;
-  onStar: (msgId: string, starred: boolean) => void;
-  onScrollToMessage?: (messageId: string) => void;
-  onRegisterAsTask?: (messageBody: string, messageId: string) => void;
-  onGroupTask?: (msg: MessageWithMeta, mentionedUsers: ChannelProfile[]) => void;
-  onScheduleMeeting?: (mentionedIds: string[], body: string) => void;
-  onMentionClick?: (user: ChannelProfile) => void;
-  onOpenDirectChat?: (userId: string) => void;
+// Allowed image MIME prefixes for safe rendering
+const SAFE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+
+function isSafeImageType(type: string | null): boolean {
+  return SAFE_IMAGE_TYPES.some(t => type?.startsWith(t));
 }
 
-const TYPE_BORDER_CLASS: Record<string, string> = {
-  normal: '',
-  important: 'border-r-4 border-amber-400',
-  urgent: 'border-r-4 border-red-500',
-  confidential: 'border-r-4 border-gray-400',
-};
+// URL safety: reject data: and javascript: schemes
+function isSafeUrl(url: string | null): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase().trimStart();
+  return !lower.startsWith('javascript:') && !lower.startsWith('data:');
+}
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
@@ -79,41 +43,42 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-function extractMentionedUsers(text: string | null, allProfiles: ChannelProfile[]): ChannelProfile[] {
-  if (!text) return [];
-  return allProfiles.filter(p => {
-    const name = p.full_name || p.email;
-    return name && text.includes(`@${name}`);
-  });
-}
+// Boundary-aware mention matching — character after name must be whitespace, punctuation, or EOL
+const MENTION_BOUNDARY_RE = /^[\s,،.!?;:()[\]{}'"؟«»\-]|^$/;
 
 function renderBodyWithMentions(
   body: string,
   currentUserId: string | null,
-  allProfiles: ChannelProfile[],
+  sortedProfiles: Array<{ profile: ChannelProfile; name: string }>,
   onMentionClick: (user: ChannelProfile) => void
 ): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let remaining = body;
   let key = 0;
+
   while (remaining.length > 0) {
     const atIdx = remaining.indexOf('@');
     if (atIdx === -1) { parts.push(remaining); break; }
     if (atIdx > 0) parts.push(remaining.slice(0, atIdx));
+
     const afterAt = remaining.slice(atIdx + 1);
-    const matched = allProfiles
-      .filter(u => u.full_name || u.email)
-      .sort((a, b) => ((b.full_name || b.email || '').length) - ((a.full_name || a.email || '').length))
-      .find(u => { const name = u.full_name || u.email || ''; return afterAt.startsWith(name); });
+    const matched = sortedProfiles.find(({ name }) => {
+      if (!afterAt.startsWith(name)) return false;
+      const next = afterAt[name.length] ?? '';
+      return MENTION_BOUNDARY_RE.test(next);
+    });
+
     if (matched) {
-      const name = matched.full_name || matched.email || '';
-      const isMe = matched.user_id === currentUserId;
+      const { profile, name } = matched;
+      const isMe = profile.user_id === currentUserId;
       parts.push(
         <span
           key={key++}
-          onClick={(e) => { e.stopPropagation(); onMentionClick(matched); }}
+          onClick={(e) => { e.stopPropagation(); onMentionClick(profile); }}
           className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded font-semibold text-xs cursor-pointer hover:opacity-80 transition-opacity ${
-            isMe ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+            isMe
+              ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300'
+              : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
           }`}
         >@{name}</span>
       );
@@ -126,27 +91,18 @@ function renderBodyWithMentions(
   return <>{parts}</>;
 }
 
-// Read receipts modal — matches ChatViewersModal style with eye icon and timestamps
-function ReadReceiptsModal({ messageId, readBy, allMembers, onClose }: {
-  messageId: string;
+// Purely presentational — data comes from parent via readLogData prop
+function ReadReceiptsModal({
+  readBy,
+  allMembers,
+  seenLog,
+  onClose,
+}: {
   readBy: string[];
   allMembers: ChannelProfile[];
+  seenLog: Array<{ user_id: string; seen_at: string }>;
   onClose: () => void;
 }) {
-  const [seenLog, setSeenLog] = useState<Array<{ user_id: string; seen_at: string }>>([]);
-  const [logLoading, setLogLoading] = useState(true);
-
-  useEffect(() => {
-    supabase
-      .from('channel_message_read_log')
-      .select('user_id, seen_at')
-      .eq('message_id', messageId)
-      .then(({ data }) => {
-        setSeenLog(data || []);
-        setLogLoading(false);
-      });
-  }, [messageId]);
-
   const seenProfiles = readBy
     .map(id => allMembers.find(m => m.user_id === id))
     .filter(Boolean) as ChannelProfile[];
@@ -188,9 +144,7 @@ function ReadReceiptsModal({ messageId, readBy, allMembers, onClose }: {
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{p.full_name || p.email || 'کاربر'}</p>
-                      {logLoading ? (
-                        <p className="text-[11px] text-gray-400 mt-0.5">در حال بارگذاری...</p>
-                      ) : seenAt ? (
+                      {seenAt ? (
                         <p className="text-[11px] text-teal-500 dark:text-teal-400 mt-0.5">{seenAt}</p>
                       ) : (
                         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">زمان نامشخص</p>
@@ -229,13 +183,44 @@ function ReadReceiptsModal({ messageId, readBy, allMembers, onClose }: {
   );
 }
 
-export function ChannelMessageItem({
+const TYPE_BORDER_CLASS: Record<string, string> = {
+  normal: '',
+  important: 'border-r-4 border-amber-400',
+  urgent: 'border-r-4 border-red-500',
+  confidential: 'border-r-4 border-gray-400',
+};
+
+interface Props {
+  msg: MessageWithMeta;
+  currentUserId: string | null;
+  myRole: MemberRole | null;
+  allMembers: ChannelProfile[];
+  allProfiles: ChannelProfile[];
+  isChannelType: boolean;
+  isPrivatelyPinned?: boolean;
+  theme: ChatThemeSettings;
+  isDark: boolean;
+  readLogData?: Array<{ user_id: string; seen_at: string }>;
+  onReply: (msg: ChannelMessage) => void;
+  onReact: (msgId: string, emoji: string) => void;
+  onPin: (msgId: string, pinned: boolean) => void;
+  onDelete: (msgId: string) => void;
+  onEdit: (msg: MessageWithMeta) => void;
+  onStar: (msgId: string, starred: boolean) => void;
+  onScrollToMessage?: (messageId: string) => void;
+  onRegisterAsTask?: (messageBody: string, messageId: string) => void;
+  onGroupTask?: (msg: MessageWithMeta, mentionedUsers: ChannelProfile[]) => void;
+  onScheduleMeeting?: (mentionedIds: string[], body: string) => void;
+  onMentionClick?: (user: ChannelProfile) => void;
+  onOpenDirectChat?: (userId: string) => void;
+}
+
+function ChannelMessageItemInner({
   msg, currentUserId, myRole, allMembers, allProfiles, isChannelType, isPrivatelyPinned,
+  theme, isDark, readLogData,
   onReply, onReact, onPin, onDelete, onEdit, onStar,
   onScrollToMessage, onRegisterAsTask, onGroupTask, onScheduleMeeting, onMentionClick, onOpenDirectChat,
 }: Props) {
-  const theme = useChatTheme();
-  const isDark = useDarkMode();
   const [showMenu, setShowMenu] = useState(false);
   const [showReactPicker, setShowReactPicker] = useState(false);
   const [emojiPickerStyle, setEmojiPickerStyle] = useState<React.CSSProperties>({});
@@ -248,7 +233,38 @@ export function ChannelMessageItem({
   const reactRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const openEmojiPicker = () => {
+  // Cleanup audio on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.ontimeupdate = null;
+        audioRef.current.onended = null;
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (reactRef.current && !reactRef.current.contains(e.target as Node)) setShowReactPicker(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Memoize sorted profiles for mention parsing — avoid sorting on every render
+  const sortedProfiles = useMemo(
+    () =>
+      allProfiles
+        .map(p => ({ profile: p, name: p.full_name || p.email || '' }))
+        .filter(x => x.name)
+        .sort((a, b) => b.name.length - a.name.length),
+    [allProfiles]
+  );
+
+  const openEmojiPicker = useCallback(() => {
     if (reactRef.current) {
       const rect = reactRef.current.getBoundingClientRect();
       const pickerW = Math.min(288, window.innerWidth - 16);
@@ -264,46 +280,70 @@ export function ChannelMessageItem({
       setEmojiPickerStyle(style);
     }
     setShowReactPicker(v => !v);
-  };
-
-  const isOwn = msg.sender_id === currentUserId;
-  const isAdminOrOwn = isOwn || myRole === 'admin';
-  const isConfidential = msg.message_type === 'confidential';
-  const shouldBlur = isConfidential && !isOwn && !confidentialRevealed;
-
-  // Read receipt logic:
-  // read_by excludes sender; seenBy = members who have read
-  const readByExcludingSelf = (msg.read_by || []).filter(id => id !== msg.sender_id);
-  const seenCount = readByExcludingSelf.length;
-  const memberCountExcludingSelf = Math.max(0, allMembers.length - 1);
-  const allDelivered = memberCountExcludingSelf > 0; // assume delivered once sent
-  const anySeenByOther = isOwn && seenCount > 0;
-
-  const mentionedUsers = extractMentionedUsers(msg.body, allProfiles);
-  const hasMentions = mentionedUsers.length > 0;
-  const myProfile = allProfiles.find(p => p.user_id === currentUserId);
-  const mentionsMe = myProfile ? (msg.body?.includes(`@${myProfile.full_name || myProfile.email}`) ?? false) : false;
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (reactRef.current && !reactRef.current.contains(e.target as Node)) setShowReactPicker(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const toggleVoice = () => {
+  const isOwn = msg.sender_id === currentUserId;
+  const isConfidential = msg.message_type === 'confidential';
+  // When confidential and not own and not revealed: show placeholder only — do NOT put body in DOM
+  const shouldHideBody = isConfidential && !isOwn && !confidentialRevealed;
+
+  const reactions = msg.reactions ?? [];
+  const readByExcludingSelf = (msg.read_by ?? []).filter(id => id !== msg.sender_id);
+  const seenCount = readByExcludingSelf.length;
+  const memberCountExcludingSelf = Math.max(0, allMembers.length - 1);
+  const anySeenByOther = isOwn && seenCount > 0;
+
+  // Memoize mention extraction — only recompute when body or profiles change
+  const mentionedUsers = useMemo(
+    () => sortedProfiles
+      .filter(({ name }) => {
+        if (!msg.body || !name) return false;
+        const idx = msg.body.indexOf(`@${name}`);
+        if (idx === -1) return false;
+        const next = msg.body[idx + name.length + 1] ?? '';
+        return MENTION_BOUNDARY_RE.test(next);
+      })
+      .map(({ profile }) => profile),
+    [msg.body, sortedProfiles]
+  );
+  const hasMentions = mentionedUsers.length > 0;
+
+  const myProfile = useMemo(
+    () => allProfiles.find(p => p.user_id === currentUserId),
+    [allProfiles, currentUserId]
+  );
+  const mentionsMe = useMemo(() => {
+    if (!myProfile || !msg.body) return false;
+    const name = myProfile.full_name || myProfile.email || '';
+    if (!name) return false;
+    const idx = msg.body.indexOf(`@${name}`);
+    if (idx === -1) return false;
+    const next = msg.body[idx + name.length + 1] ?? '';
+    return MENTION_BOUNDARY_RE.test(next);
+  }, [myProfile, msg.body]);
+
+  // Memoize rendered body to avoid re-parsing on every render
+  const renderedBody = useMemo(() => {
+    if (!msg.body || shouldHideBody) return null;
+    return renderBodyWithMentions(msg.body, currentUserId, sortedProfiles, (user) => {
+      if (onMentionClick) onMentionClick(user);
+      else setMentionPopupUser(user);
+    });
+  }, [msg.body, currentUserId, sortedProfiles, shouldHideBody, onMentionClick]);
+
+  const toggleVoice = useCallback(() => {
     if (!msg.voice_url) return;
     if (!audioRef.current) {
-      audioRef.current = new Audio(msg.voice_url);
-      audioRef.current.ontimeupdate = () => {
-        if (audioRef.current) setVoiceProgress(audioRef.current.currentTime / (audioRef.current.duration || 1));
+      const audio = new Audio(msg.voice_url);
+      audio.ontimeupdate = () => {
+        if (audioRef.current) setVoiceProgress(audio.currentTime / (audio.duration || 1));
       };
-      audioRef.current.onended = () => { setIsPlayingVoice(false); setVoiceProgress(0); };
+      audio.onended = () => { setIsPlayingVoice(false); setVoiceProgress(0); };
+      audioRef.current = audio;
     }
     if (isPlayingVoice) { audioRef.current.pause(); setIsPlayingVoice(false); }
     else { audioRef.current.play(); setIsPlayingVoice(true); }
-  };
+  }, [msg.voice_url, isPlayingVoice]);
 
   const typeLabel = msg.message_type !== 'normal' && msg.message_type !== 'system' ? ({
     important: { text: 'پیام مهم!', icon: <AlertCircle className="w-3.5 h-3.5" />, cls: 'text-amber-600 dark:text-amber-400' },
@@ -330,15 +370,14 @@ export function ChannelMessageItem({
     );
   }
 
-  // Status square cycling: null → pending → in_progress → done → null
+  // Status square cycling
   const cycleStatus = () => {
     const cycle: MessageStatus[] = [null, 'pending', 'in_progress', 'done'];
-    const idx = cycle.indexOf(msgStatus);
-    setMsgStatus(cycle[(idx + 1) % cycle.length]);
+    setMsgStatus(cycle[(cycle.indexOf(msgStatus) + 1) % cycle.length]);
   };
 
   const StatusSquare = () => {
-    if (!msgStatus || msgStatus === null) return (
+    if (!msgStatus) return (
       <button onClick={cycleStatus} title="وضعیت — کلیک برای تغییر"
         className={`w-5 h-5 rounded border-2 flex-shrink-0 transition-colors ${isOwn ? 'border-teal-300 hover:border-teal-500' : 'border-gray-300 dark:border-gray-500 hover:border-gray-500'}`} />
     );
@@ -360,26 +399,16 @@ export function ChannelMessageItem({
     );
   };
 
-  // Read receipt indicator for own messages
   const ReadTick = () => {
     if (!isOwn) return null;
     if (isChannelType) {
-      // Channels: keep double-tick style
-      if (anySeenByOther) {
-        return (
-          <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title="مشاهده شده">
-            <CheckCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-500" />
-            {seenCount > 1 && <span className="text-[10px] text-teal-500 font-medium">{seenCount}</span>}
-          </button>
-        );
-      }
       return (
-        <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title="رسیده، دیده نشده">
-          <CheckCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-300 dark:text-gray-600" />
+        <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title={anySeenByOther ? 'مشاهده شده' : 'رسیده، دیده نشده'}>
+          <CheckCheck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${anySeenByOther ? 'text-teal-500' : 'text-gray-300 dark:text-gray-600'}`} />
+          {anySeenByOther && seenCount > 1 && <span className="text-[10px] text-teal-500 font-medium">{seenCount}</span>}
         </button>
       );
     }
-    // Groups: eye icon like chat section
     return (
       <button
         onClick={() => setShowReadReceipts(true)}
@@ -414,7 +443,7 @@ export function ChannelMessageItem({
             {msg.senderProfile?.avatar_url ? (
               <img src={msg.senderProfile.avatar_url} alt="" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-white dark:ring-gray-800" />
             ) : (
-              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold text-white ring-2 ring-white dark:ring-gray-800 ${isOwn ? 'bg-teal-500' : 'bg-indigo-500'}`}>
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold text-white ring-2 ring-white dark:ring-gray-800 ${isOwn ? 'bg-teal-500' : 'bg-blue-500'}`}>
                 {(msg.senderProfile?.full_name || msg.senderProfile?.email || '?').charAt(0).toUpperCase()}
               </div>
             )}
@@ -450,9 +479,7 @@ export function ChannelMessageItem({
                       {typeLabel.icon} {typeLabel.text}
                     </span>
                   )}
-                  {/* Starred indicator */}
                   {msg.isStarred && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 flex-shrink-0" />}
-                  {/* Pinned indicator */}
                   {msg.is_pinned && <Pin className="w-3 h-3 text-amber-500 flex-shrink-0" />}
                   {!msg.is_pinned && isPrivatelyPinned && <Pin className="w-3 h-3 text-blue-400 flex-shrink-0" />}
                 </div>
@@ -462,7 +489,7 @@ export function ChannelMessageItem({
               {/* Body */}
               <div className="px-3 pb-2.5">
                 {/* Voice */}
-                {msg.voice_url && (
+                {msg.voice_url && isSafeUrl(msg.voice_url) && (
                   <div className="flex items-center gap-2.5 min-w-[140px] sm:min-w-[160px] py-1.5">
                     <button onClick={toggleVoice}
                       className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 transition-colors">
@@ -477,28 +504,29 @@ export function ChannelMessageItem({
                   </div>
                 )}
 
-                {/* Confidential blur */}
-                {shouldBlur ? (
+                {/* Confidential placeholder — body NOT rendered in DOM when hidden */}
+                {shouldHideBody ? (
                   <div className="relative py-1">
-                    <p className="text-sm blur-sm select-none pointer-events-none">{msg.body}</p>
-                    <button onClick={() => setConfidentialRevealed(true)}
-                      className="absolute inset-0 flex items-center justify-center gap-1.5 text-xs text-gray-700 dark:text-gray-200 bg-white/80 dark:bg-gray-700/80 rounded-lg backdrop-blur-sm hover:bg-white/95 transition-colors">
-                      <Eye className="w-3.5 h-3.5" /> نمایش پیام محرمانه
-                    </button>
+                    <div className="flex items-center justify-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/60 rounded-lg py-3 px-4">
+                      <Lock className="w-3.5 h-3.5 text-gray-400" />
+                      <button
+                        onClick={() => setConfidentialRevealed(true)}
+                        className="underline hover:no-underline transition-all"
+                      >
+                        نمایش پیام محرمانه
+                      </button>
+                    </div>
                   </div>
                 ) : msg.body && (
                   <p
                     className="whitespace-pre-wrap break-words leading-relaxed py-0.5 text-gray-800 dark:text-white"
                     style={{ fontSize: theme.fontSize === 'sm' ? 12 : theme.fontSize === 'lg' ? 16 : 14 }}
-                  >{renderBodyWithMentions(msg.body, currentUserId, allProfiles, (user) => {
-                    if (onMentionClick) onMentionClick(user);
-                    else setMentionPopupUser(user);
-                  })}</p>
+                  >{renderedBody}</p>
                 )}
 
                 {/* File attachment */}
-                {msg.file_url && !msg.voice_url && (
-                  msg.file_type?.startsWith('image/') ? (
+                {msg.file_url && !msg.voice_url && isSafeUrl(msg.file_url) && (
+                  isSafeImageType(msg.file_type) ? (
                     <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="block mt-1.5">
                       <img src={msg.file_url} alt={msg.file_name || 'تصویر'} className="max-w-full rounded-lg max-h-48 object-cover" />
                     </a>
@@ -519,9 +547,7 @@ export function ChannelMessageItem({
 
               {/* Bottom action bar */}
               {isChannelType ? (
-                /* Channel messages: emoji + star only */
                 <div className="flex items-center gap-0 sm:gap-0.5 px-1.5 sm:px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-gray-600">
-                  {/* React picker */}
                   <div ref={reactRef}>
                     <ActionBtn onClick={openEmojiPicker} title="واکنش">
                       <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -532,23 +558,16 @@ export function ChannelMessageItem({
                       </div>
                     )}
                   </div>
-
-                  {/* Star/bookmark */}
                   <ActionBtn onClick={() => onStar(msg.id, !msg.isStarred)} title={msg.isStarred ? 'برداشتن نشانه' : 'نشانه‌دار کردن'} active={msg.isStarred} activeColor="text-yellow-500">
                     <Star className={`w-4 h-4 sm:w-5 sm:h-5 ${msg.isStarred ? 'fill-yellow-400' : ''}`} />
                   </ActionBtn>
-
                   {msg.is_edited && <span className="text-[10px] text-gray-400 dark:text-gray-500 mx-0.5 sm:mx-1 hidden sm:inline">ویرایش شده</span>}
                   <div className="flex-1" />
                   <ReadTick />
                 </div>
               ) : (
-                /* Group messages: full action bar */
                 <div className="flex items-center gap-0 sm:gap-0.5 px-1.5 sm:px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-gray-600">
-                  {/* Status square FIRST */}
                   <StatusSquare />
-
-                  {/* React picker */}
                   <div ref={reactRef}>
                     <ActionBtn onClick={openEmojiPicker} title="واکنش">
                       <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -559,13 +578,9 @@ export function ChannelMessageItem({
                       </div>
                     )}
                   </div>
-
-                  {/* Star/bookmark */}
                   <ActionBtn onClick={() => onStar(msg.id, !msg.isStarred)} title={msg.isStarred ? 'برداشتن نشانه' : 'نشانه‌دار کردن'} active={msg.isStarred} activeColor="text-yellow-500">
                     <Star className={`w-4 h-4 sm:w-5 sm:h-5 ${msg.isStarred ? 'fill-yellow-400' : ''}`} />
                   </ActionBtn>
-
-                  {/* Pin */}
                   {(() => {
                     const isPinned = myRole === 'admin' ? msg.is_pinned : !!isPrivatelyPinned;
                     return (
@@ -574,19 +589,12 @@ export function ChannelMessageItem({
                       </ActionBtn>
                     );
                   })()}
-
-                  {/* Reply */}
                   <ActionBtn onClick={() => onReply(msg)} title="پاسخ">
                     <Reply className="w-4 h-4 sm:w-5 sm:h-5" />
                   </ActionBtn>
-
                   {msg.is_edited && <span className="text-[10px] text-gray-400 dark:text-gray-500 mx-0.5 sm:mx-1 hidden sm:inline">ویرایش شده</span>}
-
                   <div className="flex-1" />
-
                   <ReadTick />
-
-                  {/* Three-dot menu */}
                   <ActionBtn onClick={() => setShowMenu(v => !v)} title="بیشتر">
                     <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
                   </ActionBtn>
@@ -594,10 +602,10 @@ export function ChannelMessageItem({
               )}
             </div>
 
-            {/* Reactions below card */}
-            {msg.reactions.length > 0 && (
+            {/* Reactions */}
+            {reactions.length > 0 && (
               <div className={`flex flex-wrap gap-1 mt-1.5 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                {msg.reactions.map(r => (
+                {reactions.map(r => (
                   <button key={r.emoji} onClick={() => onReact(msg.id, r.emoji)}
                     className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${r.reactedByMe ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}>
                     {r.emoji} <span className="text-gray-600 dark:text-gray-300">{r.count}</span>
@@ -609,7 +617,7 @@ export function ChannelMessageItem({
         </div>
       </div>
 
-      {/* Three-dot action menu — bottom sheet on mobile (groups only) */}
+      {/* Three-dot action menu — groups only */}
       {showMenu && !isChannelType && (
         <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px]"
           onClick={() => setShowMenu(false)} dir="rtl">
@@ -624,14 +632,12 @@ export function ChannelMessageItem({
               </div>
             )}
 
-            {/* Create individual task */}
             {onRegisterAsTask && (
               <MI icon={<ClipboardList className="w-4 h-4 text-teal-600 dark:text-teal-400" />}
                 label="ایجاد اقدام" labelClass="text-teal-600 dark:text-teal-400 font-medium"
                 onClick={() => { onRegisterAsTask(msg.body || '', msg.id); setShowMenu(false); }} />
             )}
 
-            {/* Create group task — only when message has @mentions */}
             {hasMentions && onGroupTask && (
               <MI icon={<Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
                 label={`ایجاد اقدام گروهی (${mentionedUsers.length} نفر)`}
@@ -639,7 +645,6 @@ export function ChannelMessageItem({
                 onClick={() => { onGroupTask(msg, mentionedUsers); setShowMenu(false); }} />
             )}
 
-            {/* Schedule meeting with mentions */}
             {hasMentions && onScheduleMeeting && (
               <MI icon={<span className="text-teal-500 text-sm">📅</span>}
                 label="تنظیم جلسه با منشن‌ها"
@@ -680,15 +685,16 @@ export function ChannelMessageItem({
         </div>
       )}
 
-      {/* Read receipts modal */}
+      {/* Read receipts modal — purely presentational */}
       {showReadReceipts && (
         <ReadReceiptsModal
-          messageId={msg.id}
           readBy={readByExcludingSelf}
           allMembers={allMembers}
+          seenLog={readLogData ?? []}
           onClose={() => setShowReadReceipts(false)}
         />
       )}
+
       {mentionPopupUser && (
         <ChannelMentionPopup
           user={mentionPopupUser}
@@ -704,23 +710,28 @@ export function ChannelMessageItem({
     if (!currentUserId) return;
     const senderProfile = allMembers.find(p => p.user_id === currentUserId);
     const senderName = senderProfile?.full_name || senderProfile?.email || 'کاربر';
-    for (const m of allMembers) {
-      if (m.user_id === currentUserId) continue;
-      await insertNotification({
-        userId: m.user_id,
-        category: 'channel',
-        eventType: 'new_message',
-        fallbackTitle: `پیگیری از ${senderName}`,
-        fallbackMessage: `پیگیری: "${(msg.body || '').slice(0, 80)}"`,
-        placeholders: { sender_name: senderName, message_preview: (msg.body || '').slice(0, 80) },
-        senderId: currentUserId,
-        senderName,
-        senderAvatarUrl: senderProfile?.avatar_url ?? null,
-      }).catch(() => {});
-    }
+    const targets = allMembers.filter(m => m.user_id !== currentUserId);
+
+    await Promise.allSettled(
+      targets.map(m =>
+        insertNotification({
+          userId: m.user_id,
+          category: 'channel',
+          eventType: 'new_message',
+          fallbackTitle: `پیگیری از ${senderName}`,
+          fallbackMessage: `پیگیری: "${(msg.body || '').slice(0, 80)}"`,
+          placeholders: { sender_name: senderName, message_preview: (msg.body || '').slice(0, 80) },
+          senderId: currentUserId,
+          senderName,
+          senderAvatarUrl: senderProfile?.avatar_url ?? null,
+        }).catch(() => {})
+      )
+    );
     toast.success('اعلان پیگیری ارسال شد');
   }
 }
+
+export const ChannelMessageItem = memo(ChannelMessageItemInner);
 
 function ActionBtn({ children, title, onClick, active, activeColor }: {
   children: React.ReactNode; title: string; onClick: () => void; active?: boolean; activeColor?: string;
@@ -746,7 +757,6 @@ function MI({ icon, label, labelClass, onClick }: { icon: React.ReactNode; label
   );
 }
 
-// ─── Channel Mention Profile Popup ───────────────────────────────────────────
 function ChannelMentionPopup({ user, currentUserId, onClose, onOpenDirectChat }: {
   user: ChannelProfile;
   currentUserId: string | null;
@@ -758,6 +768,7 @@ function ChannelMentionPopup({ user, currentUserId, onClose, onOpenDirectChat }:
   const [loadingPosition, setLoadingPosition] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const { data } = await supabase
@@ -766,13 +777,15 @@ function ChannelMentionPopup({ user, currentUserId, onClose, onOpenDirectChat }:
           .eq('user_id', user.user_id)
           .eq('is_primary', true)
           .maybeSingle();
+        if (cancelled) return;
         const pos = (data as any)?.org_positions;
         setPositionTitle(pos?.title || null);
         setUnitName(pos?.org_units?.name || null);
       } catch { /* ignore */ } finally {
-        setLoadingPosition(false);
+        if (!cancelled) setLoadingPosition(false);
       }
     })();
+    return () => { cancelled = true; };
   }, [user.user_id]);
 
   const name = user.full_name || user.email || 'کاربر';
@@ -790,24 +803,14 @@ function ChannelMentionPopup({ user, currentUserId, onClose, onOpenDirectChat }:
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 z-[500] flex items-center justify-center p-4"
-      onClick={onClose}
-      dir="rtl"
-    >
-      <div
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
+    <div className="fixed inset-0 bg-black/50 z-[500] flex items-center justify-center p-4" onClick={onClose} dir="rtl">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white">پروفایل کاربر</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
             <X className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Profile info */}
         <div className="px-5 py-4 flex items-center gap-4">
           {user.avatar_url ? (
             <img src={user.avatar_url} alt={name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0" />
@@ -830,8 +833,6 @@ function ChannelMentionPopup({ user, currentUserId, onClose, onOpenDirectChat }:
             )}
           </div>
         </div>
-
-        {/* Actions */}
         <div className="px-5 pb-5 pt-1 space-y-2">
           {!isSelf && (
             <button
