@@ -87,12 +87,12 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
     fetchChannels();
     if (!currentUserId) return;
     const sub = supabase.channel('channels-list-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, fetchChannels)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_members' }, fetchChannels)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_messages' }, fetchChannels)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, () => fetchChannels())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_members' }, () => fetchChannels())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_messages' }, () => fetchChannels())
       .subscribe();
     return () => { supabase.removeChannel(sub); };
-  }, [currentUserId]);
+  }, [currentUserId, fetchChannels]);
 
   const handleCreate = async (data: { name: string; description: string; type: ChannelType; is_private: boolean }) => {
     if (!currentUserId) return;

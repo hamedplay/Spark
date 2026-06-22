@@ -126,12 +126,11 @@ function renderBodyWithMentions(
   return <>{parts}</>;
 }
 
-// Read receipts modal
-function ReadReceiptsModal({ messageId, readBy, allMembers, memberCount, onClose }: {
+// Read receipts modal — matches ChatViewersModal style with eye icon and timestamps
+function ReadReceiptsModal({ messageId, readBy, allMembers, onClose }: {
   messageId: string;
   readBy: string[];
   allMembers: ChannelProfile[];
-  memberCount: number;
   onClose: () => void;
 }) {
   const [seenLog, setSeenLog] = useState<Array<{ user_id: string; seen_at: string }>>([]);
@@ -152,7 +151,7 @@ function ReadReceiptsModal({ messageId, readBy, allMembers, memberCount, onClose
     .map(id => allMembers.find(m => m.user_id === id))
     .filter(Boolean) as ChannelProfile[];
 
-  const unseenCount = Math.max(0, memberCount - seenProfiles.length);
+  const unseenMembers = allMembers.filter(m => !readBy.includes(m.user_id));
 
   const getSeenAt = (uid: string) => {
     const entry = seenLog.find(l => l.user_id === uid);
@@ -165,31 +164,30 @@ function ReadReceiptsModal({ messageId, readBy, allMembers, memberCount, onClose
       <div className="w-full sm:w-80 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2">
-            <CheckCheck className="w-4 h-4 text-teal-500" />
-            <h3 className="text-sm font-bold text-gray-900 dark:text-white">وضعیت پیام</h3>
+            <Eye className="w-4 h-4 text-teal-500" />
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">مشاهده‌کنندگان پیام</h3>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
         </div>
-        <div className="max-h-72 overflow-y-auto">
-          {/* Seen section */}
-          {seenProfiles.length > 0 && (
-            <div className="px-4 pt-3 pb-1">
-              <p className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1 mb-2">
-                <CheckCheck className="w-3.5 h-3.5" /> مشاهده شده ({seenProfiles.length})
+        <div className="max-h-80 overflow-y-auto">
+          {seenProfiles.length > 0 ? (
+            <div className="px-4 py-3">
+              <p className="text-[11px] font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1 mb-3">
+                <CheckCheck className="w-3.5 h-3.5" /> دیده شده توسط ({seenProfiles.length})
               </p>
               {seenProfiles.map(p => {
                 const seenAt = getSeenAt(p.user_id);
                 return (
-                  <div key={p.user_id} className="flex items-center gap-3 py-1.5">
+                  <div key={p.user_id} className="flex items-center gap-3 py-2">
                     {p.avatar_url ? (
-                      <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                      <img src={p.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
                     ) : (
-                      <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                         {(p.full_name || p.email || '?').charAt(0).toUpperCase()}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-800 dark:text-white">{p.full_name || p.email || 'کاربر'}</p>
+                      <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{p.full_name || p.email || 'کاربر'}</p>
                       {logLoading ? (
                         <p className="text-[11px] text-gray-400 mt-0.5">در حال بارگذاری...</p>
                       ) : seenAt ? (
@@ -198,21 +196,32 @@ function ReadReceiptsModal({ messageId, readBy, allMembers, memberCount, onClose
                         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">زمان نامشخص</p>
                       )}
                     </div>
+                    <CheckCheck className="w-4 h-4 text-teal-400 flex-shrink-0" />
                   </div>
                 );
               })}
             </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-8">هنوز کسی این پیام را ندیده</p>
           )}
-          {/* Delivered but not seen */}
-          {unseenCount > 0 && (
-            <div className="px-4 pt-2 pb-3 border-t border-gray-100 dark:border-gray-800">
-              <p className="text-[11px] font-semibold text-gray-400 flex items-center gap-1 mb-1">
-                <Check className="w-3.5 h-3.5" /><Check className="w-3.5 h-3.5 -mr-2" /> رسیده، دیده نشده ({unseenCount})
+          {unseenMembers.length > 0 && (
+            <div className="px-4 pt-1 pb-3 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 flex items-center gap-1 mb-2 mt-2">
+                <Clock className="w-3.5 h-3.5" /> دیده نشده ({unseenMembers.length})
               </p>
+              {unseenMembers.map(p => (
+                <div key={p.user_id} className="flex items-center gap-3 py-1.5">
+                  {p.avatar_url ? (
+                    <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0 opacity-50" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                      {(p.full_name || p.email || '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-400 dark:text-gray-500 truncate">{p.full_name || p.email || 'کاربر'}</p>
+                </div>
+              ))}
             </div>
-          )}
-          {seenProfiles.length === 0 && unseenCount === 0 && (
-            <p className="text-sm text-gray-400 text-center py-6">هنوز کسی این پیام را ندیده</p>
           )}
         </div>
       </div>
@@ -343,25 +352,32 @@ export function ChannelMessageItem({
   // Read receipt indicator for own messages
   const ReadTick = () => {
     if (!isOwn) return null;
-    // anySeenByOther = double tick lit (seen)
-    // allDelivered but not seen = double tick dim
-    // neither = single tick
-    if (anySeenByOther) {
-      return (
-        <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title="مشاهده شده">
-          <CheckCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-500" />
-          {seenCount > 1 && <span className="text-[10px] text-teal-500 font-medium">{seenCount}</span>}
-        </button>
-      );
-    }
-    if (allDelivered) {
+    if (isChannelType) {
+      // Channels: keep double-tick style
+      if (anySeenByOther) {
+        return (
+          <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title="مشاهده شده">
+            <CheckCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-500" />
+            {seenCount > 1 && <span className="text-[10px] text-teal-500 font-medium">{seenCount}</span>}
+          </button>
+        );
+      }
       return (
         <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title="رسیده، دیده نشده">
           <CheckCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-300 dark:text-gray-600" />
         </button>
       );
     }
-    return <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-300 dark:text-gray-600 flex-shrink-0" />;
+    // Groups: eye icon like chat section
+    return (
+      <button
+        onClick={() => setShowReadReceipts(true)}
+        className="flex-shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+        title={anySeenByOther ? 'دیده شده — کلیک برای جزئیات' : 'دیده نشده'}
+      >
+        <Eye className={`w-3.5 h-3.5 ${anySeenByOther ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-600'}`} />
+      </button>
+    );
   };
 
   return (
@@ -663,7 +679,6 @@ export function ChannelMessageItem({
           messageId={msg.id}
           readBy={readByExcludingSelf}
           allMembers={allMembers}
-          memberCount={memberCountExcludingSelf}
           onClose={() => setShowReadReceipts(false)}
         />
       )}
