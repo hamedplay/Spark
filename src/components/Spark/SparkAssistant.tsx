@@ -419,7 +419,7 @@ function speak(text: string) {
   const doSpeak = () => {
     const u = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
-    const fa = voices.find(v => v.lang === 'fa-IR') || voices.find(v => v.lang.startsWith('fa')) || voices.find(v => v.lang.startsWith('ar'));
+    const fa = voices.find(v => v.lang === 'fa-IR') || voices.find(v => v.lang.startsWith('fa'));
     if (fa) u.voice = fa;
     u.lang = 'fa-IR'; u.rate = 0.95;
     window.speechSynthesis.speak(u);
@@ -1181,7 +1181,7 @@ export function SparkAssistant({
             <button type="button" onClick={toggleListening} disabled={processing} className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40 ${listening === 'recording' ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-blue-50 hover:text-blue-500'}`}>
               {listening === 'recording' ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
-            <input type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder={listening === 'recording' ? '🎙️ در حال ضبط...' : aiEnabled ? '🤖 هر دستوری بدید...' : '✏️ دستور متنی یا صوتی...'} disabled={processing} className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50" />
+            <input type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder={listening === 'recording' ? '🎙️ در حال ضبط...' : aiEnabled ? '🤖 هر دستوری بدید...' : '✏️ دستور متنی یا صوتی...'} disabled={processing} dir="rtl" className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50" />
             <button type="submit" disabled={!inputText.trim() || processing || listening === 'recording'} className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white flex items-center justify-center flex-shrink-0 transition-colors">
               {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>

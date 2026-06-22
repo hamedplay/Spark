@@ -562,6 +562,7 @@ function App() {
       case 'tutorial':
         return <TutorialPage onAskSpark={(cmd) => { setSparkExternalCommand(cmd); }} />;
       case 'spark':
+        if (!sparkVisible) { setActivePage('calendar'); return null; }
         return <SparkPage onSendToAssistant={(cmd) => { setSparkExternalCommand(cmd); setActivePage('spark'); }} />;
       case 'groups':
         return <GroupsPage currentUserId={currentUserId} isAdmin={isAdmin} />;
