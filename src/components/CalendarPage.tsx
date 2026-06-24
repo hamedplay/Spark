@@ -61,8 +61,6 @@ export function CalendarPage({
   const { prefs } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    // Mobile (< 768px): default to day view; desktop: use user preference
-    if (window.innerWidth < 768) return 'day';
     const p = localStorage.getItem('user_prefs_calendar_view') as ViewMode | null;
     return p ?? 'week';
   });
@@ -193,10 +191,10 @@ export function CalendarPage({
     if (showSearch && searchInputRef.current) searchInputRef.current.focus();
   }, [showSearch]);
 
-  // Apply user's default calendar view preference (desktop only, once)
+  // Apply user's default calendar view preference (once)
   const prefViewApplied = useRef(false);
   useEffect(() => {
-    if (prefViewApplied.current || window.innerWidth < 768) return;
+    if (prefViewApplied.current) return;
     if (!prefs.default_calendar_view) return;
     prefViewApplied.current = true;
     const map: Record<string, ViewMode> = { month: 'month', week: 'week', day: 'day', list: 'list-month' };
