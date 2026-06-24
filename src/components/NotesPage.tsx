@@ -31,6 +31,7 @@ interface Note {
 }
 
 export function NotesPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
+  const isMobile = window.innerWidth < 768;
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('notes_create');
   const canEdit = hasPermission('notes_edit');
@@ -497,8 +498,8 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   };
 
   const filteredNotes = notes.filter(note =>
-    (note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     note.content.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    ((note.title ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+     (note.content ?? '').toLowerCase().includes(searchTerm.toLowerCase())) &&
     (statusFilter === 'all' || note.status === statusFilter)
   );
 
