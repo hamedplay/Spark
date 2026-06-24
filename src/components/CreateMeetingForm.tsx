@@ -555,7 +555,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   // ---- Search filters ----
   const filteredContacts = contacts.filter(c =>
     c.name.toLowerCase().includes(externalSearch.toLowerCase()) ||
-    c.email.toLowerCase().includes(externalSearch.toLowerCase())
+    (c.email ?? '').toLowerCase().includes(externalSearch.toLowerCase())
   ).filter(c => !selectedExternal.includes(c.name));
 
   const systemUserOptions = systemUsers.map(u => ({ id: u.id, name: u.full_name, sub: u.email }));
