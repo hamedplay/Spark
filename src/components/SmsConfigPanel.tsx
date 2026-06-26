@@ -1344,13 +1344,14 @@ function TestTab() {
         ) : (
           <div className="relative">
             <select
+              dir="rtl"
               className={inp + ' appearance-none pl-8'}
               value={selectedProvider}
               onChange={e => { setSelectedProvider(e.target.value); setConnResult(null); setSendResult(null); setConnStatus('idle'); setSendStatus('idle'); }}
             >
               {providers.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.title} {p.is_default ? '(پیش‌فرض)' : ''} — خط: {p.line_number || 'ندارد'}
+                  {p.title}{p.is_default ? ' (پیش‌فرض)' : ''}{p.provider_type === 'rahyab' ? ' — SOAP' : p.line_number ? ` — ${p.line_number}` : ''}
                 </option>
               ))}
             </select>
