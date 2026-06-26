@@ -316,6 +316,32 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, count: messages.length, messages, nextRowId: maxRowId });
     }
 
+    // ── hello_world ───────────────────────────────────────────────────
+    if (action === "hello_world") {
+      const soap = await callSoap(soapUrl, "HelloWorld", {});
+      if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP" });
+      return json({ ok: true, result: soap.result });
+    }
+
+    // ── receive_by_flag ───────────────────────────────────────────────
+    if (action === "receive_by_flag") {
+      const soap = await callSoap(soapUrl, "doReceiveSMSByFlag", {
+        uUsername, uPassword,
+      });
+      if (!soap.ok) return json({ ok: false, error: soap.error });
+      const messages = parseReceiveXml(soap.result || soap.rawXml || "");
+      return json({ ok: true, count: messages.length, messages });
+    }
+
+    // ── get_info_xml ──────────────────────────────────────────────────
+    if (action === "get_info_xml") {
+      const soap = await callSoap(soapUrl, "getInfoXML", {
+        uUsername, uPassword,
+      });
+      if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP" });
+      return json({ ok: true, rawXml: soap.rawXml, result: soap.result });
+    }
+
     // ── get_delivery ──────────────────────────────────────────────────
     if (action === "get_delivery") {
       const returnIds: string[] = body.returnIds ?? [];
