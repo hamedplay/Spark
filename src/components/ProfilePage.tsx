@@ -4,12 +4,11 @@ import {
   Briefcase, Hash, Globe, Linkedin, Calendar, Users, CreditCard,
   ChevronDown, ChevronUp, CheckCircle2, Crown, Building2, Link2, MessageCircle,
   Smartphone, Monitor, Download, ExternalLink, Apple, Chrome, AtSign,
-  Unlink, RefreshCw, Clock,
+  Unlink, RefreshCw,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
-import { useUserPreferences } from '../context/UserPreferencesContext';
 
 const JALAALI_MONTHS_FA = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 
@@ -472,7 +471,6 @@ export function ProfilePage() {
   const [openSection, setOpenSection] = useState<'personal' | 'work' | 'social'>('personal');
   const [saved, setSaved] = useState(false);
   const [orgPositionInfo, setOrgPositionInfo] = useState<OrgPositionInfo | null>(null);
-  const { prefs, updatePrefs } = useUserPreferences();
 
   useEffect(() => { fetchProfile(); }, []);
 
@@ -832,39 +830,6 @@ export function ProfilePage() {
               <BaleConnectSection />
             </div>
           )}
-        </div>
-
-        {/* Calendar Settings */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-            <p className="font-semibold text-gray-800 dark:text-white text-sm">تنظیمات تقویم</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">شخصی‌سازی نمایش تقویم</p>
-          </div>
-          <div className="p-6 space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
-                  <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-800 dark:text-white">پنهان کردن ساعات غیرکاری</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">در نمایش روزانه و هفتگی، ساعات خارج از وقت کاری پنهان شود</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`text-xs font-medium ${prefs.hide_off_hours ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                  {prefs.hide_off_hours ? 'فعال' : 'غیرفعال'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => updatePrefs({ hide_off_hours: !prefs.hide_off_hours })}
-                  className={`w-11 h-6 rounded-full relative transition-colors ${prefs.hide_off_hours ? 'bg-amber-500' : 'bg-gray-200 dark:bg-gray-600'}`}
-                >
-                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${prefs.hide_off_hours ? 'translate-x-5' : 'translate-x-1'}`} />
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Save */}

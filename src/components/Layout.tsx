@@ -341,6 +341,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
               { key: 'show_cancelled_meetings', label: 'نمایش جلسات لغوشده',        icon: EyeOff },
               { key: 'compact_cards',           label: 'حالت فشرده کارت‌ها',        icon: LayoutCompact },
               { key: 'notifications_enabled',   label: 'فعال‌سازی اعلان‌ها',        icon: Bell },
+              { key: 'hide_off_hours',          label: 'پنهان کردن ساعات غیرکاری',  icon: Clock },
             ].map(item => {
               const Icon = item.icon;
               const val = prefs[item.key as keyof typeof prefs] as boolean;
