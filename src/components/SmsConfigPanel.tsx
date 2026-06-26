@@ -28,6 +28,7 @@ interface SmsGroupRule {
   sms_category: string;
   enabled: boolean;
   provider_id: string | null;
+  provider_key: string | null;
 }
 
 interface SmsTemplate {
@@ -369,7 +370,7 @@ function GroupsTab() {
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [providers, setProviders] = useState<SmsProvider[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-  const [rules, setRules] = useState<Record<string, { enabled: boolean; provider_id: string | null }>>({});
+  const [rules, setRules] = useState<Record<string, { enabled: boolean; provider_id: string | null; provider_key: string | null }>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -387,8 +388,8 @@ function GroupsTab() {
   const loadRules = useCallback(async (groupId: string) => {
     setLoading(true);
     const { data } = await supabase.from('sms_group_rules').select('*').eq('group_id', groupId);
-    const map: Record<string, { enabled: boolean; provider_id: string | null }> = {};
-    for (const r of (data || [])) map[r.sms_category] = { enabled: r.enabled, provider_id: r.provider_id };
+    const map: Record<string, { enabled: boolean; provider_id: string | null; provider_key: string | null }> = {};
+    for (const r of (data || [])) map[r.sms_category] = { enabled: r.enabled, provider_id: r.provider_id, provider_key: r.provider_key ?? null };
     setRules(map);
     setLoading(false);
   }, []);
@@ -400,7 +401,7 @@ function GroupsTab() {
     setSaving(true);
     for (const [cat, val] of Object.entries(rules)) {
       await supabase.from('sms_group_rules').upsert(
-        { group_id: selectedGroup, sms_category: cat, enabled: val.enabled, provider_id: val.provider_id || null },
+        { group_id: selectedGroup, sms_category: cat, enabled: val.enabled, provider_id: val.provider_id || null, provider_key: val.provider_key || null },
         { onConflict: 'group_id,sms_category' }
       );
     }
@@ -408,8 +409,8 @@ function GroupsTab() {
     setSaving(false);
   };
 
-  const getRuleFor = (cat: string) => rules[cat] ?? { enabled: false, provider_id: null };
-  const setRule = (cat: string, k: 'enabled' | 'provider_id', v: any) =>
+  const getRuleFor = (cat: string) => rules[cat] ?? { enabled: false, provider_id: null, provider_key: null };
+  const setRule = (cat: string, k: 'enabled' | 'provider_id' | 'provider_key', v: any) =>
     setRules(r => ({ ...r, [cat]: { ...getRuleFor(cat), [k]: v } }));
 
   return (
@@ -445,12 +446,22 @@ function GroupsTab() {
                       {rule.enabled ? (
                         <div className="relative">
                           <select
-                            value={rule.provider_id || ''}
-                            onChange={e => setRule(cat.key, 'provider_id', e.target.value || null)}
+                            value={rule.provider_key === 'rahyab' ? '__rahyab__' : (rule.provider_id || '')}
+                            onChange={e => {
+                              const v = e.target.value;
+                              if (v === '__rahyab__') {
+                                setRule(cat.key, 'provider_id', null);
+                                setRule(cat.key, 'provider_key', 'rahyab');
+                              } else {
+                                setRule(cat.key, 'provider_id', v || null);
+                                setRule(cat.key, 'provider_key', null);
+                              }
+                            }}
                             className="appearance-none text-xs pr-2 pl-6 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500 max-w-36"
                           >
                             <option value="">پیش‌فرض</option>
                             {providers.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                            <option value="__rahyab__">رهیاب رایان (SOAP)</option>
                           </select>
                           <ChevronDown className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
                         </div>
@@ -1602,6 +1613,65 @@ function ReportsTab() {
 }
 
 // ════════════════════════════════════════════════════════════════════
+//  Active Engine Banner
+// ════════════════════════════════════════════════════════════════════
+function ActiveEngineBanner() {
+  const [engine, setEngine]   = useState<'standard' | 'rahyab'>('standard');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
+
+  useEffect(() => {
+    supabase.from('system_config').select('value')
+      .eq('section', 'sms').eq('key', 'active_engine')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.value === 'rahyab') setEngine('rahyab');
+        setLoading(false);
+      });
+  }, []);
+
+  const save = async (val: 'standard' | 'rahyab') => {
+    setSaving(true);
+    setEngine(val);
+    await supabase.from('system_config')
+      .update({ value: val, updated_at: new Date().toISOString() })
+      .eq('section', 'sms').eq('key', 'active_engine');
+    toast.success(val === 'rahyab' ? 'وب‌سرویس رهیاب رایان فعال شد' : 'سرویس‌دهنده استاندارد فعال شد');
+    setSaving(false);
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Zap className="w-4 h-4 text-green-500" />
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">موتور ارسال پیامک فعال</p>
+        {saving && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => save('standard')}
+          className={`p-3 rounded-xl border transition-all text-right ${engine === 'standard' ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}
+        >
+          <p className={`text-sm font-semibold ${engine === 'standard' ? 'text-green-700 dark:text-green-300' : 'text-gray-600 dark:text-gray-300'}`}>سرویس‌دهنده استاندارد</p>
+          <p className="text-xs text-gray-400 mt-0.5">sms.ir و سایر ارائه‌دهندگان REST</p>
+          {engine === 'standard' && <span className="inline-block mt-1.5 text-xs text-green-600 dark:text-green-400 font-medium">● فعال</span>}
+        </button>
+        <button
+          onClick={() => save('rahyab')}
+          className={`p-3 rounded-xl border transition-all text-right ${engine === 'rahyab' ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}
+        >
+          <p className={`text-sm font-semibold ${engine === 'rahyab' ? 'text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-300'}`}>وب‌سرویس رهیاب رایان</p>
+          <p className="text-xs text-gray-400 mt-0.5">SOAP — RahyabBulk.ir</p>
+          {engine === 'rahyab' && <span className="inline-block mt-1.5 text-xs text-teal-600 dark:text-teal-400 font-medium">● فعال</span>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 //  Main SmsConfigPanel
 // ════════════════════════════════════════════════════════════════════
 export function SmsConfigPanel() {
@@ -1613,6 +1683,8 @@ export function SmsConfigPanel() {
       <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
         <MessageSquare className="w-5 h-5 text-green-500" />تنظیمات پیامک
       </h3>
+
+      <ActiveEngineBanner />
 
       {/* Tab bar */}
       <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 gap-1">

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   MessageSquare, Save, Loader2, RefreshCw, CheckCircle, AlertTriangle,
   Eye, EyeOff, Send, Inbox, CreditCard, Settings, Info, Wifi, WifiOff,
-  ChevronDown, Phone,
+  Phone,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -442,65 +442,6 @@ function InboxTab() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  Active Engine Selector
-// ════════════════════════════════════════════════════════════════════
-function EngineSelector() {
-  const [engine, setEngine]   = useState<'standard' | 'rahyab'>('standard');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
-
-  useEffect(() => {
-    supabase.from('system_config').select('value')
-      .eq('section', 'sms').eq('key', 'active_engine')
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.value === 'rahyab') setEngine('rahyab');
-        setLoading(false);
-      });
-  }, []);
-
-  const save = async (val: 'standard' | 'rahyab') => {
-    setSaving(true);
-    setEngine(val);
-    await supabase.from('system_config')
-      .update({ value: val, updated_at: new Date().toISOString() })
-      .eq('section', 'sms').eq('key', 'active_engine');
-    toast.success(val === 'rahyab' ? 'وب‌سرویس رهیاب رایان فعال شد' : 'سرویس‌دهنده استاندارد فعال شد');
-    setSaving(false);
-  };
-
-  if (loading) return null;
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 mb-5">
-      <div className="flex items-center gap-2 mb-3">
-        <MessageSquare className="w-4 h-4 text-teal-500" />
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">موتور ارسال پیامک فعال</p>
-        {saving && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => save('standard')}
-          className={`p-3 rounded-xl border transition-all text-right ${engine === 'standard' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}
-        >
-          <p className={`text-sm font-semibold ${engine === 'standard' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-300'}`}>سرویس‌دهنده استاندارد</p>
-          <p className="text-xs text-gray-400 mt-0.5">sms.ir و سایر ارائه‌دهندگان REST</p>
-          {engine === 'standard' && <span className="inline-block mt-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium">● فعال</span>}
-        </button>
-        <button
-          onClick={() => save('rahyab')}
-          className={`p-3 rounded-xl border transition-all text-right ${engine === 'rahyab' ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}
-        >
-          <p className={`text-sm font-semibold ${engine === 'rahyab' ? 'text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-300'}`}>وب‌سرویس رهیاب رایان</p>
-          <p className="text-xs text-gray-400 mt-0.5">SOAP — RahyabBulk.ir</p>
-          {engine === 'rahyab' && <span className="inline-block mt-1.5 text-xs text-teal-600 dark:text-teal-400 font-medium">● فعال</span>}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
 //  Main export
 // ════════════════════════════════════════════════════════════════════
 export function RahyabConfigPanel() {
@@ -519,8 +460,6 @@ export function RahyabConfigPanel() {
           </p>
         </div>
       </div>
-
-      <EngineSelector />
 
       {/* Tab bar */}
       <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 gap-1">
