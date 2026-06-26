@@ -151,12 +151,31 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       setLoading(true);
       setShareNote(note);
       setShareImageData(null);
-      await new Promise(r => setTimeout(r, 80));
+      // Wait for the branded card to render
+      await new Promise(r => setTimeout(r, 300));
       if (!brandedCardRef.current) { toast.error('خطا در ایجاد تصویر یادداشت'); return; }
-      const imageData = await toPng(brandedCardRef.current, { quality: 1, pixelRatio: 2, backgroundColor: '#ffffff' });
+
+      // Retry up to 3 times to handle slow font/resource loading
+      let imageData: string | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          imageData = await toPng(brandedCardRef.current, {
+            quality: 1,
+            pixelRatio: 2,
+            backgroundColor: '#ffffff',
+            skipFonts: false,
+            cacheBust: true,
+          });
+          break;
+        } catch {
+          if (attempt < 2) await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      if (!imageData) throw new Error('image_failed');
 
       if (navigator.share && navigator.canShare?.({ files: [new File([], 'note.png', { type: 'image/png' })] })) {
-        const blob = await (await fetch(imageData)).blob();
+        const res = await fetch(imageData);
+        const blob = await res.blob();
         const file = new File([blob], 'note.png', { type: 'image/png' });
         await navigator.share({ title: note.title, files: [file] });
         toast.success('یادداشت با موفقیت به اشتراک گذاشته شد');
