@@ -38,7 +38,41 @@ Deno.serve(async (req: Request) => {
     const mode: string = body.mode || "send";
     const providerId: string | undefined = body.providerId;
 
-    // ── Fetch provider ────────────────────────────────────────────────
+    // ── Check active SMS engine ───────────────────────────────────────
+    // If system is configured to use Rahyab Rayan, delegate to rahyab-sms function
+    if (!body._skipEngineCheck) {
+      const { data: engineCfg } = await supabase
+        .from("system_config")
+        .select("value")
+        .eq("section", "sms")
+        .eq("key", "active_engine")
+        .maybeSingle();
+
+      if (engineCfg?.value === "rahyab") {
+        // Forward to rahyab-sms edge function
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const rahyabUrl = `${supabaseUrl}/functions/v1/rahyab-sms`;
+        const rahyabBody = mode === "test_connection"
+          ? { action: "test" }
+          : { action: "send", mobiles: body.mobiles, message: body.message, isFarsi: true };
+        const resp = await fetch(rahyabUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ ...rahyabBody, _skipEngineCheck: true }),
+        });
+        const data = await resp.json();
+        return new Response(JSON.stringify(data), {
+          status: resp.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // ── Fetch provider (standard sms.ir-style) ────────────────────────
     let q = supabase.from("sms_providers").select("*").eq("is_active", true);
     if (providerId) q = q.eq("id", providerId);
     else q = q.eq("is_default", true);
