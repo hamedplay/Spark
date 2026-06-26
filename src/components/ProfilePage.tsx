@@ -4,12 +4,11 @@ import {
   Briefcase, Hash, Globe, Linkedin, Calendar, Users, CreditCard,
   ChevronDown, ChevronUp, CheckCircle2, Crown, Building2, Link2, MessageCircle,
   Smartphone, Monitor, Download, ExternalLink, Apple, Chrome, AtSign,
-  Unlink, RefreshCw, Clock,
+  Unlink, RefreshCw,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
-import { useUserPreferences } from '../context/UserPreferencesContext';
 
 const JALAALI_MONTHS_FA = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 
@@ -469,10 +468,9 @@ export function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [openSection, setOpenSection] = useState<'personal' | 'work' | 'social' | 'calendar'>('personal');
+  const [openSection, setOpenSection] = useState<'personal' | 'work' | 'social'>('personal');
   const [saved, setSaved] = useState(false);
   const [orgPositionInfo, setOrgPositionInfo] = useState<OrgPositionInfo | null>(null);
-  const { prefs, updatePrefs } = useUserPreferences();
 
   useEffect(() => { fetchProfile(); }, []);
 
@@ -580,7 +578,7 @@ export function ProfilePage() {
   const set = (field: keyof typeof empty, value: string) =>
     setProfile(p => p ? { ...p, [field]: value } : p);
 
-  const SectionHeader = ({ id, title, subtitle }: { id: 'personal' | 'work' | 'social' | 'calendar'; title: string; subtitle: string }) => (
+  const SectionHeader = ({ id, title, subtitle }: { id: 'personal' | 'work' | 'social'; title: string; subtitle: string }) => (
     <button
       type="button"
       onClick={() => setOpenSection(id)}
@@ -830,33 +828,6 @@ export function ProfilePage() {
 
               {/* Bale messenger */}
               <BaleConnectSection />
-            </div>
-          )}
-        </div>
-
-        {/* Calendar preferences */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <SectionHeader id="calendar" title="تنظیمات تقویم" subtitle="شخصی‌سازی نمایش تقویم و ساعات کاری" />
-          {openSection === 'calendar' && (
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800 dark:text-white">پنهان کردن ساعات غیرکاری</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">در نمای روز و هفته، ساعات خارج از ساعات کاری پنهان می‌شود</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => updatePrefs({ hide_offhours: !prefs.hide_offhours })}
-                  className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${prefs.hide_offhours ? 'bg-amber-500' : 'bg-gray-200 dark:bg-gray-600'}`}
-                >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${prefs.hide_offhours ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
             </div>
           )}
         </div>

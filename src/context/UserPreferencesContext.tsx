@@ -11,7 +11,6 @@ export interface UserPreferences {
   notifications_enabled: boolean;
   theme: 'light' | 'dark';
   accent_color: string;
-  hide_offhours: boolean;
 }
 
 const DEFAULTS: UserPreferences = {
@@ -24,7 +23,6 @@ const DEFAULTS: UserPreferences = {
   notifications_enabled: true,
   theme: 'light',
   accent_color: 'teal',
-  hide_offhours: false,
 };
 
 interface UserPreferencesContextValue {
@@ -50,7 +48,6 @@ function mapRow(data: Record<string, unknown>): UserPreferences {
     notifications_enabled: (data.notifications_enabled as boolean) ?? DEFAULTS.notifications_enabled,
     theme: (data.theme as 'light' | 'dark') ?? DEFAULTS.theme,
     accent_color: (data.accent_color as string) ?? DEFAULTS.accent_color,
-    hide_offhours: (data.hide_offhours as boolean) ?? DEFAULTS.hide_offhours,
   };
 }
 

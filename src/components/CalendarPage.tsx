@@ -58,7 +58,7 @@ export function CalendarPage({
   sparkNavigateDate, onSparkNavigateDateConsumed,
   sparkCalendarMeetingPrefill, onSparkCalendarMeetingPrefillConsumed,
 }: CalendarPageProps) {
-  const { prefs, updatePrefs } = useUserPreferences();
+  const { prefs } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const p = localStorage.getItem('user_prefs_calendar_view') as ViewMode | null;
@@ -308,20 +308,10 @@ export function CalendarPage({
   const [workStartMin, setWorkStartMin] = useState(420);  // 07:00
   const [workEndMin, setWorkEndMin] = useState(1170);     // 19:30
 
-  // Hide off-hours based on permission and user preference
+  // Hide off-hours based on permission
   const { hasPermission } = usePermissions();
   const [hideOffHours, setHideOffHours] = useState(false);
   const canHideOffHours = hasPermission('calendar_hide_offhours');
-
-  // Sync hideOffHours from user preferences (prefs loaded async)
-  const prefHideApplied = useRef(false);
-  useEffect(() => {
-    if (prefHideApplied.current) return;
-    if (prefs.hide_offhours) {
-      prefHideApplied.current = true;
-      setHideOffHours(true);
-    }
-  }, [prefs.hide_offhours]);
 
   // When hiding off-hours, clip visible range to work hours (with 1hr buffer)
   const visibleStartMin = hideOffHours ? Math.max(HOURS_START * 60, workStartMin - 60) : HOURS_START * 60;
@@ -1904,9 +1894,9 @@ export function CalendarPage({
                 </div>
               )}
             </div>
-            {(canHideOffHours || prefs.hide_offhours !== undefined) && (viewMode === 'day' || viewMode === 'week') && (
+            {canHideOffHours && (viewMode === 'day' || viewMode === 'week') && (
               <button
-                onClick={() => { const next = !hideOffHours; setHideOffHours(next); updatePrefs({ hide_offhours: next }); }}
+                onClick={() => setHideOffHours(h => !h)}
                 title={hideOffHours ? 'نمایش ساعات غیرکاری' : 'پنهان کردن ساعات غیرکاری'}
                 className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${hideOffHours ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
               >
