@@ -1184,17 +1184,55 @@ function TemplatesTab() {
 // ════════════════════════════════════════════════════════════════════
 //  TAB 4 — SMS Test Panel
 // ════════════════════════════════════════════════════════════════════
+
+type TestStatus = 'idle' | 'loading' | 'ok' | 'error';
+
+interface RahyabTestCard {
+  id: string;
+  title: string;
+  desc: string;
+  action: string;
+  needsPhone?: boolean;
+  needsMessage?: boolean;
+  needsReturnId?: boolean;
+}
+
+const RAHYAB_TESTS: RahyabTestCard[] = [
+  { id: 'hello_world',     title: '۱. HelloWorld',             desc: 'تست اتصال به وب‌سرویس — پاسخ «Hello World» را بررسی می‌کند.',           action: 'hello_world' },
+  { id: 'get_info',        title: '۲. doGetInfo',              desc: 'تست احراز هویت و اعتبار — نام کاربری، رمز، اعتبار و تاریخ انقضا.',       action: 'get_info' },
+  { id: 'send',            title: '۳. doSendSMS',              desc: 'ارسال پیامک آزمایشی — نیاز به شماره موبایل و متن پیام دارد.',              action: 'send', needsPhone: true, needsMessage: true },
+  { id: 'get_delivery',    title: '۴. doGetDelivery',          desc: 'وضعیت تحویل — شناسه بازگشتی مرحله ۳ را وارد کنید.',                       action: 'get_delivery', needsReturnId: true },
+  { id: 'receive_by_flag', title: '۵. doReceiveSMSByFlag',    desc: 'دریافت پیامک‌های ورودی با پرچم — پیام‌های جدید از خط اختصاصی را می‌خواند.',  action: 'receive_by_flag' },
+  { id: 'get_info_xml',    title: '۶. getInfoXML',             desc: 'اطلاعات کامل XML — اعتبار، قیمت‌ها و شماره‌های اختصاصی را برمی‌گرداند.',  action: 'get_info_xml' },
+];
+
+const DELIVERY_STATUS: Record<number, { label: string; color: string }> = {
+  0: { label: 'نامشخص',        color: 'text-gray-500' },
+  2: { label: 'تحویل داده شد', color: 'text-green-600' },
+  5: { label: 'تحویل نشد',     color: 'text-red-600' },
+  9: { label: 'بلاک شده',      color: 'text-orange-500' },
+};
+
 function TestTab() {
   const [providers, setProviders] = useState<SmsProvider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('این یک پیامک آزمایشی از سامانه است.');
+  const [returnIdInput, setReturnIdInput] = useState('');
 
-  const [connStatus, setConnStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
+  // REST provider state
+  const [connStatus, setConnStatus] = useState<TestStatus>('idle');
   const [connResult, setConnResult] = useState<any>(null);
-
-  const [sendStatus, setSendStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
+  const [sendStatus, setSendStatus] = useState<TestStatus>('idle');
   const [sendResult, setSendResult] = useState<any>(null);
+
+  // Rahyab per-card state
+  const [rahyabStatus, setRahyabStatus] = useState<Record<string, TestStatus>>({});
+  const [rahyabResult, setRahyabResult] = useState<Record<string, any>>({});
+  const [runningAll, setRunningAll] = useState(false);
+
+  const selectedProviderObj = providers.find(p => p.id === selectedProvider);
+  const isRahyabProvider = selectedProviderObj?.provider_type === 'rahyab';
 
   useEffect(() => {
     supabase.from('sms_providers').select('*').eq('is_active', true).order('created_at')
@@ -1205,6 +1243,12 @@ function TestTab() {
         if (def) setSelectedProvider(def.id);
       });
   }, []);
+
+  const resetAll = () => {
+    setConnResult(null); setSendResult(null);
+    setConnStatus('idle'); setSendStatus('idle');
+    setRahyabStatus({}); setRahyabResult({});
+  };
 
   const callEdge = async (body: object) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1222,10 +1266,10 @@ function TestTab() {
     return res.json();
   };
 
+  // ── REST tests ─────────────────────────────────────────────────────
   const testConnection = async () => {
     if (!selectedProvider) { toast.error('ابتدا یک سرویس‌دهنده انتخاب کنید'); return; }
-    setConnStatus('loading');
-    setConnResult(null);
+    setConnStatus('loading'); setConnResult(null);
     try {
       const result = await callEdge({ mode: 'test_connection', providerId: selectedProvider });
       setConnResult(result);
@@ -1233,8 +1277,7 @@ function TestTab() {
       if (result.ok) toast.success('اتصال به سرویس پیامک برقرار است');
       else toast.error('خطا در اتصال: ' + (result.error || ''));
     } catch (e: any) {
-      setConnResult({ error: e.message });
-      setConnStatus('error');
+      setConnResult({ error: e.message }); setConnStatus('error');
     }
   };
 
@@ -1242,75 +1285,124 @@ function TestTab() {
     if (!selectedProvider) { toast.error('ابتدا یک سرویس‌دهنده انتخاب کنید'); return; }
     if (!testPhone.trim()) { toast.error('شماره موبایل الزامی است'); return; }
     if (!testMessage.trim()) { toast.error('متن پیام الزامی است'); return; }
-    setSendStatus('loading');
-    setSendResult(null);
+    setSendStatus('loading'); setSendResult(null);
     try {
-      const result = await callEdge({
-        mode: 'send',
-        providerId: selectedProvider,
-        mobiles: [testPhone.trim()],
-        message: testMessage.trim(),
-      });
+      const result = await callEdge({ mode: 'send', providerId: selectedProvider, mobiles: [testPhone.trim()], message: testMessage.trim() });
       setSendResult(result);
       setSendStatus(result.ok ? 'ok' : 'error');
       if (result.ok) toast.success(`پیامک تست ارسال شد — شناسه بسته: ${result.packId || '—'}`);
       else toast.error('خطا در ارسال: ' + (result.error || ''));
     } catch (e: any) {
-      setSendResult({ error: e.message });
-      setSendStatus('error');
+      setSendResult({ error: e.message }); setSendStatus('error');
     }
   };
 
-  const StatusBadge = ({ status }: { status: 'idle' | 'loading' | 'ok' | 'error' }) => {
+  // ── Rahyab single test ─────────────────────────────────────────────
+  const runRahyabTest = async (card: RahyabTestCard) => {
+    if (!selectedProvider) { toast.error('ابتدا یک سرویس‌دهنده انتخاب کنید'); return; }
+    if (card.needsPhone && !testPhone.trim()) { toast.error('شماره موبایل الزامی است'); return; }
+    if (card.needsMessage && !testMessage.trim()) { toast.error('متن پیام الزامی است'); return; }
+
+    setRahyabStatus(s => ({ ...s, [card.id]: 'loading' }));
+    setRahyabResult(r => ({ ...r, [card.id]: null }));
+
+    try {
+      let payload: Record<string, unknown>;
+      if (card.action === 'send') {
+        payload = { action: 'send', mobiles: [testPhone.trim()], message: testMessage.trim(), isFarsi: true };
+      } else if (card.action === 'get_delivery') {
+        const ids = returnIdInput.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+        if (!ids.length) { toast.error('شناسه بازگشتی الزامی است'); setRahyabStatus(s => ({ ...s, [card.id]: 'idle' })); return; }
+        payload = { action: 'get_delivery', returnIds: ids };
+      } else {
+        payload = { action: card.action };
+      }
+
+      const result = await callEdge({ mode: 'rahyab_test', providerId: selectedProvider, rahyabPayload: payload });
+      setRahyabResult(r => ({ ...r, [card.id]: result }));
+      setRahyabStatus(s => ({ ...s, [card.id]: result.ok ? 'ok' : 'error' }));
+
+      // auto-populate returnId from send result
+      if (card.action === 'send' && result.ok && result.returnIds?.length) {
+        setReturnIdInput(result.returnIds.join(', '));
+      }
+    } catch (e: any) {
+      setRahyabResult(r => ({ ...r, [card.id]: { error: e.message } }));
+      setRahyabStatus(s => ({ ...s, [card.id]: 'error' }));
+    }
+  };
+
+  const runAllRahyabTests = async () => {
+    if (!selectedProvider) { toast.error('ابتدا یک سرویس‌دهنده انتخاب کنید'); return; }
+    setRunningAll(true);
+    for (const card of RAHYAB_TESTS) {
+      if (card.needsPhone && !testPhone.trim()) continue;
+      if (card.needsMessage && !testMessage.trim()) continue;
+      await runRahyabTest(card);
+      await new Promise(r => setTimeout(r, 400));
+    }
+    setRunningAll(false);
+    toast.success('همه تست‌های رهیاب رایان اجرا شدند');
+  };
+
+  // ── Shared UI components ───────────────────────────────────────────
+  const StatusBadge = ({ status }: { status: TestStatus }) => {
     if (status === 'idle') return null;
     if (status === 'loading') return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />;
     if (status === 'ok') return <Check className="w-4 h-4 text-green-500" />;
     return <AlertCircle className="w-4 h-4 text-red-500" />;
   };
 
-  const ResultBox = ({ result, status }: { result: any; status: 'idle' | 'loading' | 'ok' | 'error' }) => {
+  const RahyabResultBox = ({ cardId }: { cardId: string }) => {
+    const status = rahyabStatus[cardId];
+    const result = rahyabResult[cardId];
+    if (!result || status === 'idle' || status === 'loading') return null;
+    const isOk = status === 'ok';
+    return (
+      <div className={`mt-3 rounded-xl border p-3 text-xs font-mono leading-relaxed space-y-1 ${isOk ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'}`}>
+        <p className={`font-bold mb-1 ${isOk ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>{isOk ? 'موفق' : 'خطا'}</p>
+        {result.error && <p className="text-red-600 dark:text-red-400 break-all"><span className="font-semibold">خطا: </span>{result.error}</p>}
+        {result.result && <p className="text-gray-700 dark:text-gray-300 break-all"><span className="font-semibold">نتیجه: </span>{result.result}</p>}
+        {result.credit !== undefined && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">اعتبار: </span>{result.credit}</p>}
+        {result.expireDate !== undefined && result.expireDate !== '' && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">انقضا: </span>{result.expireDate}</p>}
+        {result.sent !== undefined && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">ارسال شد: </span>{result.sent} شماره</p>}
+        {result.returnIds?.length > 0 && <p className="text-gray-600 dark:text-gray-300 break-all"><span className="font-semibold">ReturnIDs: </span>{result.returnIds.join(', ')}</p>}
+        {result.count !== undefined && <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">تعداد پیام: </span>{result.count}</p>}
+        {result.delivery && (
+          <div className="mt-1 space-y-0.5">
+            <p className="font-semibold text-gray-700 dark:text-gray-300">وضعیت تحویل:</p>
+            {Object.entries(result.delivery as Record<string, number>).map(([id, code]) => {
+              const ds = DELIVERY_STATUS[code] || { label: `کد ${code}`, color: 'text-gray-500' };
+              return <p key={id} className={ds.color}><span className="text-gray-500 dark:text-gray-400">{id}: </span>{ds.label}</p>;
+            })}
+          </div>
+        )}
+        {(result.rawXml || result.messages) && (
+          <details className="mt-1">
+            <summary className="cursor-pointer text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">پاسخ کامل (کلیک)</summary>
+            <pre className="mt-2 overflow-x-auto text-[11px] text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-all max-h-48">
+              {result.rawXml || JSON.stringify(result.messages, null, 2)}
+            </pre>
+          </details>
+        )}
+      </div>
+    );
+  };
+
+  const RestResultBox = ({ result, status }: { result: any; status: TestStatus }) => {
     if (!result || status === 'idle' || status === 'loading') return null;
     const isOk = status === 'ok';
     return (
       <div className={`mt-3 rounded-xl border p-4 text-xs font-mono leading-relaxed space-y-1 ${isOk ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'}`}>
-        <p className={`font-bold mb-2 text-sm ${isOk ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
-          {isOk ? 'موفق' : 'خطا'}
-        </p>
-        {result.error && (
-          <p className="text-red-600 dark:text-red-400 break-all">
-            <span className="font-semibold">پیام خطا: </span>{result.error}
-          </p>
-        )}
-        {result.httpStatus && (
-          <p className="text-gray-600 dark:text-gray-300">
-            <span className="font-semibold">HTTP Status: </span>{result.httpStatus}
-          </p>
-        )}
-        {result.credit !== undefined && (
-          <p className="text-green-700 dark:text-green-300">
-            <span className="font-semibold">اعتبار حساب: </span>{result.credit} تومان
-          </p>
-        )}
-        {result.sent !== undefined && (
-          <p className="text-green-700 dark:text-green-300">
-            <span className="font-semibold">ارسال شده به: </span>{result.sent} شماره
-          </p>
-        )}
-        {result.packId && (
-          <p className="text-gray-600 dark:text-gray-300 break-all">
-            <span className="font-semibold">Pack ID: </span>{result.packId}
-          </p>
-        )}
-        {result.cost !== undefined && (
-          <p className="text-gray-600 dark:text-gray-300">
-            <span className="font-semibold">هزینه: </span>{result.cost}
-          </p>
-        )}
+        <p className={`font-bold mb-2 text-sm ${isOk ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>{isOk ? 'موفق' : 'خطا'}</p>
+        {result.error && <p className="text-red-600 dark:text-red-400 break-all"><span className="font-semibold">پیام خطا: </span>{result.error}</p>}
+        {result.credit !== undefined && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">اعتبار حساب: </span>{result.credit}</p>}
+        {result.sent !== undefined && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">ارسال شده به: </span>{result.sent} شماره</p>}
+        {result.packId && <p className="text-gray-600 dark:text-gray-300 break-all"><span className="font-semibold">Pack ID: </span>{result.packId}</p>}
+        {result.cost !== undefined && <p className="text-gray-600 dark:text-gray-300"><span className="font-semibold">هزینه: </span>{result.cost}</p>}
         {result.response && (
           <details className="mt-2">
-            <summary className="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-              پاسخ کامل سرور (کلیک برای نمایش)
-            </summary>
+            <summary className="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">پاسخ کامل سرور (کلیک برای نمایش)</summary>
             <pre className="mt-2 overflow-x-auto text-[11px] text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-all">
               {JSON.stringify(result.response, null, 2)}
             </pre>
@@ -1336,13 +1428,17 @@ function TestTab() {
         ) : (
           <div className="relative">
             <select
+              dir="rtl"
               className={inp + ' appearance-none pl-8'}
               value={selectedProvider}
-              onChange={e => { setSelectedProvider(e.target.value); setConnResult(null); setSendResult(null); setConnStatus('idle'); setSendStatus('idle'); }}
+              onChange={e => { setSelectedProvider(e.target.value); resetAll(); }}
             >
+              {!selectedProvider && (
+                <option value="" disabled>انتخاب سرویس‌دهنده...</option>
+              )}
               {providers.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.title} {p.is_default ? '(پیش‌فرض)' : ''} — خط: {p.line_number || 'ندارد'}
+                  {p.title}{p.is_default ? ' (پیش‌فرض)' : ''}{p.provider_type === 'rahyab' ? ' — SOAP' : p.line_number ? ` — ${p.line_number}` : ''}
                 </option>
               ))}
             </select>
@@ -1351,98 +1447,151 @@ function TestTab() {
         )}
       </div>
 
-      {/* Step 1: Connection test */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {connStatus === 'ok' ? (
-              <Wifi className="w-4 h-4 text-green-500" />
-            ) : connStatus === 'error' ? (
-              <WifiOff className="w-4 h-4 text-red-500" />
-            ) : (
-              <Wifi className="w-4 h-4 text-gray-400" />
-            )}
-            <h4 className="font-semibold text-gray-800 dark:text-white text-sm">مرحله ۱ — تست اتصال و اعتبار</h4>
+      {/* ── Rahyab 6-card test panel ──────────────────────────────────── */}
+      {isRahyabProvider && (
+        <>
+          {/* Shared inputs for tests that need phone/message */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Phone className="w-4 h-4 text-teal-500" />
+              <h4 className="font-semibold text-gray-800 dark:text-white text-sm">اطلاعات مورد نیاز تست‌ها</h4>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شماره موبایل (برای تست ۳)</label>
+                <input className={inp} value={testPhone} onChange={e => setTestPhone(e.target.value)} placeholder="09121234567" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شناسه بازگشتی (برای تست ۴)</label>
+                <input className={inp} value={returnIdInput} onChange={e => setReturnIdInput(e.target.value)} placeholder="خودکار از تست ۳ پر می‌شود" dir="ltr" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">متن پیامک (برای تست ۳)</label>
+                <input className={inp} value={testMessage} onChange={e => setTestMessage(e.target.value)} />
+              </div>
+            </div>
+            <button
+              onClick={runAllRahyabTests}
+              disabled={runningAll || providers.length === 0}
+              className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition"
+            >
+              {runningAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />}
+              {runningAll ? 'در حال اجرا...' : 'اجرای همه تست‌ها'}
+            </button>
           </div>
-          <StatusBadge status={connStatus} />
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          بررسی می‌کند که کلید API معتبر است و مقدار اعتبار حساب را نمایش می‌دهد.
-        </p>
-        <button
-          onClick={testConnection}
-          disabled={connStatus === 'loading' || providers.length === 0}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition"
-        >
-          {connStatus === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-          {connStatus === 'loading' ? 'در حال بررسی...' : 'بررسی اتصال'}
-        </button>
-        <ResultBox result={connResult} status={connStatus} />
-      </div>
 
-      {/* Step 2: Send test SMS */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Send className="w-4 h-4 text-green-500" />
-            <h4 className="font-semibold text-gray-800 dark:text-white text-sm">مرحله ۲ — ارسال پیامک آزمایشی</h4>
+          {/* 6 test cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {RAHYAB_TESTS.map(card => {
+              const st = rahyabStatus[card.id] || 'idle';
+              const borderCls = st === 'ok' ? 'border-green-200 dark:border-green-800' : st === 'error' ? 'border-red-200 dark:border-red-800' : 'border-gray-100 dark:border-gray-700';
+              return (
+                <div key={card.id} className={`bg-white dark:bg-gray-800 rounded-2xl border p-4 space-y-2 ${borderCls}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-gray-800 dark:text-white text-sm">{card.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{card.desc}</p>
+                    </div>
+                    <StatusBadge status={st} />
+                  </div>
+                  <button
+                    onClick={() => runRahyabTest(card)}
+                    disabled={st === 'loading' || runningAll}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-xs font-medium transition"
+                  >
+                    {st === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
+                    {st === 'loading' ? 'در حال اجرا...' : 'اجرای تست'}
+                  </button>
+                  <RahyabResultBox cardId={card.id} />
+                </div>
+              );
+            })}
           </div>
-          <StatusBadge status={sendStatus} />
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          یک پیامک واقعی به شماره زیر ارسال می‌کند. از اعتبار حساب کسر می‌شود.
-        </p>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شماره موبایل هدف *</label>
-            <input
-              className={inp}
-              value={testPhone}
-              onChange={e => setTestPhone(e.target.value)}
-              placeholder="09121234567"
-              dir="ltr"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">متن پیامک *</label>
-            <textarea
-              className={inp + ' resize-none'}
-              rows={3}
-              value={testMessage}
-              onChange={e => setTestMessage(e.target.value)}
-            />
-            <p className={`text-xs mt-1 ${testMessage.length > 160 ? 'text-amber-500' : 'text-gray-400'}`}>
-              {testMessage.length} کاراکتر {testMessage.length > 160 ? '— بیش از ۱ پیامک' : ''}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={sendTest}
-          disabled={sendStatus === 'loading' || providers.length === 0}
-          className="flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition"
-        >
-          {sendStatus === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          {sendStatus === 'loading' ? 'در حال ارسال...' : 'ارسال پیامک تست'}
-        </button>
-        <ResultBox result={sendResult} status={sendStatus} />
-      </div>
 
-      {/* Troubleshooting guide */}
-      <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 space-y-2">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-          <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">راهنمای رفع مشکل</p>
-        </div>
-        <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1.5 list-disc list-inside leading-relaxed">
-          <li>کد وضعیت <strong>10</strong>: کلید API نامعتبر است — از پنل sms.ir کلید جدید دریافت کنید</li>
-          <li>کد وضعیت <strong>11</strong>: کلید API غیرفعال است — از پنل آن را فعال کنید</li>
-          <li>کد وضعیت <strong>101</strong>: شماره خط نامعتبر است — شماره خط را از پنل sms.ir بررسی کنید</li>
-          <li>کد وضعیت <strong>102</strong>: اعتبار کافی نیست — حساب را شارژ کنید</li>
-          <li>کد وضعیت <strong>104</strong>: فرمت شماره موبایل اشتباه است (باید با ۰۹ یا ۹۸ شروع شود)</li>
-          <li>کد وضعیت <strong>123</strong>: خط ارسال نیاز به فعال‌سازی دارد — با پشتیبانی sms.ir تماس بگیرید</li>
-          <li>خطای اتصال: Edge Function نمی‌تواند به api.sms.ir متصل شود — سرویس Supabase را بررسی کنید</li>
-        </ul>
-      </div>
+          {/* Rahyab troubleshooting */}
+          <div className="bg-teal-50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-800 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-teal-600 dark:text-teal-400 flex-shrink-0" />
+              <p className="text-sm font-semibold text-teal-700 dark:text-teal-300">راهنمای رفع مشکل رهیاب رایان</p>
+            </div>
+            <ul className="text-xs text-teal-700 dark:text-teal-400 space-y-1.5 list-disc list-inside leading-relaxed">
+              <li>خطای احراز هویت: نام کاربری یا توکن را بررسی کنید — توکن مقدم‌تر است</li>
+              <li>وضعیت تحویل <strong>0</strong>: نامشخص | <strong>2</strong>: تحویل داده شد | <strong>5</strong>: تحویل نشد | <strong>9</strong>: بلاک شده</li>
+              <li>timeout در اتصال: آدرس SOAP URL را بررسی کنید (پیش‌فرض: RahyabBulk.ir)</li>
+              <li>پیامک ارسال شده اما ReturnID منفی: شماره اختصاصی صحیح نیست</li>
+              <li>doReceiveSMSByFlag: پیام‌های خوانده‌شده را پرچم‌گذاری می‌کند — هر پیام فقط یکبار برمی‌گردد</li>
+            </ul>
+          </div>
+        </>
+      )}
+
+      {/* ── REST 2-step test panel ────────────────────────────────────── */}
+      {!isRahyabProvider && (
+        <>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {connStatus === 'ok' ? <Wifi className="w-4 h-4 text-green-500" /> : connStatus === 'error' ? <WifiOff className="w-4 h-4 text-red-500" /> : <Wifi className="w-4 h-4 text-gray-400" />}
+                <h4 className="font-semibold text-gray-800 dark:text-white text-sm">مرحله ۱ — تست اتصال و اعتبار</h4>
+              </div>
+              <StatusBadge status={connStatus} />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">بررسی می‌کند که کلید API معتبر است و مقدار اعتبار حساب را نمایش می‌دهد.</p>
+            <button onClick={testConnection} disabled={connStatus === 'loading' || providers.length === 0}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition">
+              {connStatus === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+              {connStatus === 'loading' ? 'در حال بررسی...' : 'بررسی اتصال'}
+            </button>
+            <RestResultBox result={connResult} status={connStatus} />
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Send className="w-4 h-4 text-green-500" />
+                <h4 className="font-semibold text-gray-800 dark:text-white text-sm">مرحله ۲ — ارسال پیامک آزمایشی</h4>
+              </div>
+              <StatusBadge status={sendStatus} />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">یک پیامک واقعی به شماره زیر ارسال می‌کند. از اعتبار حساب کسر می‌شود.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شماره موبایل هدف *</label>
+                <input className={inp} value={testPhone} onChange={e => setTestPhone(e.target.value)} placeholder="09121234567" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">متن پیامک *</label>
+                <textarea className={inp + ' resize-none'} rows={3} value={testMessage} onChange={e => setTestMessage(e.target.value)} />
+                <p className={`text-xs mt-1 ${testMessage.length > 160 ? 'text-amber-500' : 'text-gray-400'}`}>
+                  {testMessage.length} کاراکتر {testMessage.length > 160 ? '— بیش از ۱ پیامک' : ''}
+                </p>
+              </div>
+            </div>
+            <button onClick={sendTest} disabled={sendStatus === 'loading' || providers.length === 0}
+              className="flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition">
+              {sendStatus === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {sendStatus === 'loading' ? 'در حال ارسال...' : 'ارسال پیامک تست'}
+            </button>
+            <RestResultBox result={sendResult} status={sendStatus} />
+          </div>
+
+          <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">راهنمای رفع مشکل</p>
+            </div>
+            <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1.5 list-disc list-inside leading-relaxed">
+              <li>کد وضعیت <strong>10</strong>: کلید API نامعتبر است — از پنل sms.ir کلید جدید دریافت کنید</li>
+              <li>کد وضعیت <strong>11</strong>: کلید API غیرفعال است — از پنل آن را فعال کنید</li>
+              <li>کد وضعیت <strong>101</strong>: شماره خط نامعتبر است — شماره خط را از پنل sms.ir بررسی کنید</li>
+              <li>کد وضعیت <strong>102</strong>: اعتبار کافی نیست — حساب را شارژ کنید</li>
+              <li>کد وضعیت <strong>104</strong>: فرمت شماره موبایل اشتباه است (باید با ۰۹ یا ۹۸ شروع شود)</li>
+              <li>کد وضعیت <strong>123</strong>: خط ارسال نیاز به فعال‌سازی دارد — با پشتیبانی sms.ir تماس بگیرید</li>
+              <li>خطای اتصال: Edge Function نمی‌تواند به api.sms.ir متصل شود — سرویس Supabase را بررسی کنید</li>
+            </ul>
+          </div>
+        </>
+      )}
     </div>
   );
 }

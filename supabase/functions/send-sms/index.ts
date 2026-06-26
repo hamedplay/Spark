@@ -62,9 +62,15 @@ Deno.serve(async (req: Request) => {
         soap_url:   p.api_url || "http://RahyabBulk.ir/WebService/sms.asmx",
       };
 
-      const rahyabBody = mode === "test_connection"
-        ? { action: "test", _providerOverride: providerOverride }
-        : { action: "send", mobiles: body.mobiles, message: body.message, isFarsi: true, _providerOverride: providerOverride };
+      let rahyabBody: Record<string, unknown>;
+      if (mode === "test_connection") {
+        rahyabBody = { action: "test", _providerOverride: providerOverride };
+      } else if (mode === "rahyab_test") {
+        // Forward any raw Rahyab test action (hello_world, get_info, receive_by_flag, etc.)
+        rahyabBody = { ...body.rahyabPayload, _providerOverride: providerOverride };
+      } else {
+        rahyabBody = { action: "send", mobiles: body.mobiles, message: body.message, isFarsi: true, _providerOverride: providerOverride };
+      }
 
       const resp = await fetch(`${supabaseUrl}/functions/v1/rahyab-sms`, {
         method: "POST",
