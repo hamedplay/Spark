@@ -341,7 +341,6 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
               { key: 'show_cancelled_meetings', label: 'نمایش جلسات لغوشده',        icon: EyeOff },
               { key: 'compact_cards',           label: 'حالت فشرده کارت‌ها',        icon: LayoutCompact },
               { key: 'notifications_enabled',   label: 'فعال‌سازی اعلان‌ها',        icon: Bell },
-              { key: 'hide_off_hours',          label: 'پنهان کردن ساعات غیرکاری',  icon: Clock },
             ].map(item => {
               const Icon = item.icon;
               const val = prefs[item.key as keyof typeof prefs] as boolean;
@@ -631,18 +630,7 @@ function ProfileDropdown({
                 <span className="text-sm text-gray-700 dark:text-gray-200">پروفایل کاربری</span>
               </button>
 
-              {/* 2. User Settings */}
-              <button
-                onClick={openSettings}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors text-right"
-              >
-                <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                  <Palette className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <span className="text-sm text-gray-700 dark:text-gray-200">تنظیمات کاربری</span>
-              </button>
-
-              {/* 3. Change Password */}
+              {/* 2. Change Password */}
               <button
                 onClick={openPassword}
                 className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors text-right"
@@ -653,7 +641,7 @@ function ProfileDropdown({
                 <span className="text-sm text-gray-700 dark:text-gray-200">تغییر رمز عبور</span>
               </button>
 
-              {/* 4. Status */}
+              {/* 3. Status */}
               <div ref={statusRef} className="relative">
                 <button
                   onClick={() => setShowStatusFlyout(v => !v)}
@@ -684,6 +672,17 @@ function ProfileDropdown({
                   </div>
                 )}
               </div>
+
+              {/* 4. User Settings */}
+              <button
+                onClick={openSettings}
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors text-right"
+              >
+                <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                  <Palette className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="text-sm text-gray-700 dark:text-gray-200">تنظیمات کاربری</span>
+              </button>
 
               {/* 5. PWA Install */}
               <button

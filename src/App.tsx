@@ -38,9 +38,7 @@ function App() {
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'archived'>(() => {
-    return (localStorage.getItem('meetings_status_filter') as 'all' | 'open' | 'archived') || 'open';
-  });
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'archived'>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activePage, setActivePage] = useState<'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'groups' | 'channels'>('calendar');
@@ -659,11 +657,7 @@ function App() {
               
               <select
                 value={statusFilter}
-                onChange={(e) => {
-                  const val = e.target.value as 'all' | 'open' | 'archived';
-                  setStatusFilter(val);
-                  localStorage.setItem('meetings_status_filter', val);
-                }}
+                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'open' | 'archived')}
                 className="w-full sm:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               >
                 <option value="all">همه جلسات</option>

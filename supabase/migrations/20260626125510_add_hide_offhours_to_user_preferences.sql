@@ -1,0 +1,1 @@
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS hide_offhours boolean NOT NULL DEFAULT false;

@@ -77,7 +77,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   system:  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
 };
 
-const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-sm';
+const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-sm [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ value, onChange, color = 'bg-green-500' }: { value: boolean; onChange: (v: boolean) => void; color?: string }) {
@@ -554,12 +554,11 @@ function GroupsTab() {
                           <select
                             value={rule.provider_id || ''}
                             onChange={e => setRule(cat.key, 'provider_id', e.target.value || null)}
-                            className="appearance-none text-xs pr-2 pl-6 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500 max-w-36"
-                            style={{ colorScheme: 'light dark' }}
+                            className="appearance-none text-xs pr-2 pl-6 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500 max-w-36 [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white"
                           >
-                            <option value="" className="text-gray-700 bg-white dark:text-gray-200 dark:bg-gray-700">پیش‌فرض (سرویس‌دهنده اصلی)</option>
+                            <option value="">پیش‌فرض (سرویس‌دهنده اصلی)</option>
                             {providers.map(p => (
-                              <option key={p.id} value={p.id} className="text-gray-700 bg-white dark:text-gray-200 dark:bg-gray-700">
+                              <option key={p.id} value={p.id}>
                                 {p.title}{p.provider_type === 'rahyab' ? ' (SOAP)' : ''}
                               </option>
                             ))}
@@ -1433,13 +1432,12 @@ function TestTab() {
               className={inp + ' appearance-none pl-8'}
               value={selectedProvider}
               onChange={e => { setSelectedProvider(e.target.value); resetAll(); }}
-              style={{ colorScheme: 'light dark' }}
             >
               {!selectedProvider && (
-                <option value="" disabled className="text-gray-400 bg-white dark:bg-gray-700">انتخاب سرویس‌دهنده...</option>
+                <option value="" disabled>انتخاب سرویس‌دهنده...</option>
               )}
               {providers.map(p => (
-                <option key={p.id} value={p.id} className="text-gray-900 bg-white dark:text-white dark:bg-gray-700">
+                <option key={p.id} value={p.id}>
                   {p.title}{p.is_default ? ' (پیش‌فرض)' : ''}{p.provider_type === 'rahyab' ? ' — SOAP' : p.line_number ? ` — ${p.line_number}` : ''}
                 </option>
               ))}

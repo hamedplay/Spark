@@ -308,15 +308,20 @@ export function CalendarPage({
   const [workStartMin, setWorkStartMin] = useState(420);  // 07:00
   const [workEndMin, setWorkEndMin] = useState(1170);     // 19:30
 
-  // Hide off-hours based on permission
+  // Hide off-hours based on permission and user preference
   const { hasPermission } = usePermissions();
-  const [hideOffHours, setHideOffHours] = useState(() => prefs.hide_off_hours ?? false);
+  const [hideOffHours, setHideOffHours] = useState(false);
   const canHideOffHours = hasPermission('calendar_hide_offhours');
 
-  // Sync hideOffHours when prefs load from DB
+  // Sync hideOffHours from user preferences (prefs loaded async)
+  const prefHideApplied = useRef(false);
   useEffect(() => {
-    setHideOffHours(prefs.hide_off_hours ?? false);
-  }, [prefs.hide_off_hours]);
+    if (prefHideApplied.current) return;
+    if (prefs.hide_offhours) {
+      prefHideApplied.current = true;
+      setHideOffHours(true);
+    }
+  }, [prefs.hide_offhours]);
 
   // When hiding off-hours, clip visible range to work hours (with 1hr buffer)
   const visibleStartMin = hideOffHours ? Math.max(HOURS_START * 60, workStartMin - 60) : HOURS_START * 60;
@@ -326,7 +331,7 @@ export function CalendarPage({
 
   useEffect(() => {
     supabase.from('system_config').select('key,value').eq('section', 'regional')
-      .in('key', ['work_start_time', 'work_end_time']).then(({ data }) => {
+      .in('key', ['work_start_time', 'work_end_time', 'hide_offhours_default']).then(({ data }) => {
       if (!data) return;
       data.forEach(row => {
         if (row.key === 'work_start_time' && row.value) {
@@ -336,6 +341,9 @@ export function CalendarPage({
         if (row.key === 'work_end_time' && row.value) {
           const m = timeToMinutes(row.value);
           if (m >= 0) setWorkEndMin(m);
+        }
+        if (row.key === 'hide_offhours_default') {
+          setHideOffHours(row.value === 'true');
         }
       });
     });
@@ -1896,13 +1904,9 @@ export function CalendarPage({
                 </div>
               )}
             </div>
-            {canHideOffHours && (
+            {(canHideOffHours || prefs.hide_offhours !== undefined) && (viewMode === 'day' || viewMode === 'week') && (
               <button
-                onClick={() => {
-                  const next = !hideOffHours;
-                  setHideOffHours(next);
-                  updatePrefs({ hide_off_hours: next });
-                }}
+                onClick={() => { const next = !hideOffHours; setHideOffHours(next); updatePrefs({ hide_offhours: next }); }}
                 title={hideOffHours ? 'نمایش ساعات غیرکاری' : 'پنهان کردن ساعات غیرکاری'}
                 className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${hideOffHours ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
               >

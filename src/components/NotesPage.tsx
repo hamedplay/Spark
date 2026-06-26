@@ -147,35 +147,50 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
 
   const handleShareImage = async (note: Note) => {
     setShareMenuNoteId(null);
-    try {
-      setLoading(true);
-      setShareNote(note);
-      setShareImageData(null);
-      // Wait for the branded card to render
-      await new Promise(r => setTimeout(r, 300));
-      if (!brandedCardRef.current) { toast.error('خطا در ایجاد تصویر یادداشت'); return; }
+    setLoading(true);
+    setShareNote(note);
+    setShareImageData(null);
 
-      // Retry up to 3 times to handle slow font/resource loading
+    try {
+      // Poll for the ref — DOM commit + image load can take >80ms on slow networks
+      let elapsed = 0;
+      while (!brandedCardRef.current && elapsed < 2000) {
+        await new Promise(r => setTimeout(r, 60));
+        elapsed += 60;
+      }
+      if (!brandedCardRef.current) {
+        toast.error('خطا در ایجاد تصویر یادداشت');
+        setShareNote(null);
+        return;
+      }
+
+      // Wait for any images inside the card to finish loading
+      const imgs = brandedCardRef.current.querySelectorAll('img');
+      await Promise.all(Array.from(imgs).map(img =>
+        img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+      ));
+
+      // Retry toPng up to 3 times — it can fail on first attempt on slow/busy devices
       let imageData: string | null = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          imageData = await toPng(brandedCardRef.current, {
-            quality: 1,
-            pixelRatio: 2,
-            backgroundColor: '#ffffff',
-            skipFonts: false,
-            cacheBust: true,
-          });
+          imageData = await toPng(brandedCardRef.current, { quality: 1, pixelRatio: 2, backgroundColor: '#ffffff' });
           break;
         } catch {
-          if (attempt < 2) await new Promise(r => setTimeout(r, 400));
+          if (attempt === 3) throw new Error('toPng failed after 3 attempts');
+          await new Promise(r => setTimeout(r, 150 * attempt));
         }
       }
-      if (!imageData) throw new Error('image_failed');
+      if (!imageData) throw new Error('no image data');
 
-      if (navigator.share && navigator.canShare?.({ files: [new File([], 'note.png', { type: 'image/png' })] })) {
-        const res = await fetch(imageData);
-        const blob = await res.blob();
+      // Try native share (files); fall through to download modal if not supported
+      let canShareFiles = false;
+      try {
+        canShareFiles = !!(navigator.share && navigator.canShare?.({ files: [new File([], 'note.png', { type: 'image/png' })] }));
+      } catch { /* canShare not supported */ }
+
+      if (canShareFiles) {
+        const blob = await (await fetch(imageData)).blob();
         const file = new File([blob], 'note.png', { type: 'image/png' });
         await navigator.share({ title: note.title, files: [file] });
         toast.success('یادداشت با موفقیت به اشتراک گذاشته شد');
@@ -185,7 +200,8 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') toast.error('خطا در اشتراک‌گذاری تصویر');
-      if (!shareImageData) setShareNote(null);
+      setShareNote(null);
+      setShareImageData(null);
     } finally {
       setLoading(false);
     }
@@ -536,36 +552,32 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
             style={{
               width: '360px',
               backgroundColor: '#fff',
-              fontFamily: 'Vazirmatn, Vazir, Tahoma, Arial, sans-serif',
+              fontFamily: 'Vazirmatn, system-ui, sans-serif',
               direction: 'rtl',
               borderRadius: '16px',
               overflow: 'hidden',
               boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
             }}
           >
-            {/* Colored header */}
-            <div style={{ backgroundColor: '#14b8a6', padding: '16px 20px' }}>
+            {/* Header */}
+            <div style={{ backgroundColor: '#3b82f6', padding: '16px 20px' }}>
               <p style={{ color: '#fff', fontWeight: 700, fontSize: 16, margin: 0 }}>{shareNote.title}</p>
               <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, margin: '4px 0 0' }}>
                 {new Date(shareNote.created_at).toLocaleDateString('fa-IR')}
               </p>
             </div>
-            {/* Content body */}
+            {/* Body */}
             <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ color: '#6b7280', fontSize: 12, minWidth: 64, flexShrink: 0 }}>یادداشت:</span>
-                <span style={{ color: '#111827', fontSize: 12, lineHeight: 1.7, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{shareNote.content}</span>
-              </div>
+              {shareNote.content && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ color: '#6b7280', fontSize: 12, minWidth: 64, flexShrink: 0 }}>محتوا:</span>
+                  <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.7' }}>{shareNote.content}</span>
+                </div>
+              )}
             </div>
             {/* Footer */}
             <div style={{ padding: '10px 20px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <img src="/logo_spark.png" alt="Spark" style={{ width: 20, height: 20, objectFit: 'contain' }} />
-                  <span style={{ color: '#6b7280', fontSize: 11, fontWeight: 600 }}>اسپارک</span>
-                </div>
-                <p style={{ color: '#9ca3af', fontSize: 11, margin: 0 }}>سامانه مدیریت سازمانی</p>
-              </div>
+              <p style={{ color: '#9ca3af', fontSize: 11, margin: 0, textAlign: 'center' }}>سیستم مدیریت جلسات</p>
             </div>
           </div>
         </div>

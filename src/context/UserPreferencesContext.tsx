@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
 export interface UserPreferences {
@@ -11,7 +11,7 @@ export interface UserPreferences {
   notifications_enabled: boolean;
   theme: 'light' | 'dark';
   accent_color: string;
-  hide_off_hours: boolean;
+  hide_offhours: boolean;
 }
 
 const DEFAULTS: UserPreferences = {
@@ -24,7 +24,7 @@ const DEFAULTS: UserPreferences = {
   notifications_enabled: true,
   theme: 'light',
   accent_color: 'teal',
-  hide_off_hours: false,
+  hide_offhours: false,
 };
 
 interface UserPreferencesContextValue {
@@ -50,7 +50,7 @@ function mapRow(data: Record<string, unknown>): UserPreferences {
     notifications_enabled: (data.notifications_enabled as boolean) ?? DEFAULTS.notifications_enabled,
     theme: (data.theme as 'light' | 'dark') ?? DEFAULTS.theme,
     accent_color: (data.accent_color as string) ?? DEFAULTS.accent_color,
-    hide_off_hours: (data.hide_off_hours as boolean) ?? DEFAULTS.hide_off_hours,
+    hide_offhours: (data.hide_offhours as boolean) ?? DEFAULTS.hide_offhours,
   };
 }
 
@@ -58,12 +58,6 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-
-  // Always keep a ref in sync so updatePrefs never reads stale closure state
-  const prefsRef = useRef<UserPreferences>(DEFAULTS);
-  prefsRef.current = prefs;
-  const userIdRef = useRef<string | null>(null);
-  userIdRef.current = userId;
 
   useEffect(() => {
     (async () => {
@@ -115,14 +109,14 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
   }, []);
 
   const updatePrefs = useCallback(async (patch: Partial<UserPreferences>) => {
-    const next = { ...prefsRef.current, ...patch };
+    const next = { ...prefs, ...patch };
     setPrefs(next);
 
-    if (!userIdRef.current) return;
+    if (!userId) return;
     await supabase
       .from('user_preferences')
-      .upsert({ user_id: userIdRef.current, ...next, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
-  }, []);
+      .upsert({ user_id: userId, ...next, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  }, [prefs, userId]);
 
   return (
     <UserPreferencesContext.Provider value={{ prefs, loading, updatePrefs }}>

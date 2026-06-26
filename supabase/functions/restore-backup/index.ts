@@ -47,42 +47,29 @@ async function loadIds(
 // Profiles is excluded — user accounts are managed separately outside backup/restore.
 const ALLOWED_TABLES = new Set([
   // Core content
-  "meetings", "participants", "meeting_inbox", "shared_meetings", "actions",
-  "tasks", "task_workflow_steps", "notes", "contacts_email",
-  // Chat
-  "chat_conversations", "chat_group_members", "chat_messages",
-  "chat_message_stars", "chat_message_reactions", "chat_reminders", "chat_tags",
-  // Channels
+  "meetings", "participants", "tasks", "notes", "contacts_email",
+  // Chat & Channels
+  "chat_conversations", "chat_messages", "chat_tags",
   "channels", "channel_members", "channel_messages", "channel_work_topics",
-  "channel_broadcasts", "channel_group_tasks", "channel_group_task_assignments",
-  "channel_group_task_activities", "channel_message_stars", "channel_message_reactions",
-  "channel_message_private_pins", "channel_notification_rules", "channel_sms_rules",
   // Calendar
-  "calendars", "calendar_occasions", "all_day_events", "calendar_subscriptions",
+  "calendars", "calendar_occasions",
   // Notifications
-  "notifications", "notification_templates", "notification_group_rules",
+  "notifications", "notification_templates",
   // User & Groups
-  "user_preferences", "user_bale_mapping", "user_access_relations",
-  "user_groups", "user_group_members",
+  "user_preferences", "user_groups", "user_group_members",
   // Org structure
-  "org_organizations", "org_units", "org_positions", "org_position_members",
-  "org_position_permissions", "org_level_definitions", "org_level_permissions",
+  "org_units", "org_positions", "org_position_members",
   // Config & Logs
-  "system_config", "spark_config", "spark_ai_settings", "spark_field_keywords", "spark_memory",
-  "social_channel_configs", "sms_providers", "sms_templates", "sms_group_rules",
-  "hr_sso_config", "rahyab_settings", "daily_report_config", "audit_log",
+  "system_config", "spark_config", "social_channel_configs",
+  "sms_providers", "sms_templates", "daily_report_config", "audit_log",
 ]);
 
 // Dependency-ordered restore sequence (parents before children).
 const RESTORE_ORDER = [
-  // Independent config — no FKs
-  "org_organizations",
-  "org_level_definitions",
-  "org_level_permissions",
-  "hr_sso_config",
-  "rahyab_settings",
-  "spark_ai_settings",
-  "spark_field_keywords",
+  // Independent config tables first
+  "org_units",
+  "org_positions",
+  "user_groups",
   "notification_templates",
   "social_channel_configs",
   "sms_providers",
@@ -90,58 +77,29 @@ const RESTORE_ORDER = [
   "system_config",
   "spark_config",
   "daily_report_config",
-  // Org structure (depends on org_units/positions)
-  "org_units",
-  "org_positions",
-  "org_position_permissions",
-  // User-dependent
+  // User-dependent tables
   "user_preferences",
-  "user_bale_mapping",
-  "user_access_relations",
-  "spark_memory",
   "calendars",
-  "all_day_events",
-  "calendar_subscriptions",
   "calendar_occasions",
   "contacts_email",
   "notes",
   "tasks",
-  "task_workflow_steps",
   "chat_tags",
   // Meetings and children
   "meetings",
   "participants",
-  "meeting_inbox",
-  "shared_meetings",
-  "actions",
   // Channels and children
   "channels",
-  "channel_notification_rules",
-  "channel_sms_rules",
   "channel_work_topics",
   "channel_members",
-  "channel_broadcasts",
-  "channel_group_tasks",
-  "channel_group_task_assignments",
-  "channel_group_task_activities",
   "channel_messages",
-  "channel_message_stars",
-  "channel_message_reactions",
-  "channel_message_private_pins",
-  // Groups and group-dependent config
-  "user_groups",
-  "notification_group_rules",
-  "sms_group_rules",
-  "user_group_members",
-  // Org position members (depends on org_positions + users)
+  // Org positions members (depends on org_positions + users)
   "org_position_members",
+  // Group members (depends on user_groups + users)
+  "user_group_members",
   // Chat (conversations before messages)
   "chat_conversations",
-  "chat_group_members",
   "chat_messages",
-  "chat_message_stars",
-  "chat_message_reactions",
-  "chat_reminders",
   // Notifications and logs last
   "notifications",
   "audit_log",
@@ -150,76 +108,44 @@ const RESTORE_ORDER = [
 // Upsert conflict columns for tables with composite or non-standard unique constraints.
 // All other tables default to "id".
 const CONFLICT_COLUMN: Record<string, string> = {
-  notification_templates:          "category,event_type,audience",
-  system_config:                   "section,key",
-  user_group_members:              "group_id,user_id",
-  chat_conversations:              "participant_a,participant_b",
-  user_preferences:                "user_id",
-  channel_members:                 "channel_id,user_id",
-  org_position_members:            "position_id,user_id",
-  sms_templates:                   "category,event_type,audience",
-  spark_config:                    "module",
-  chat_tags:                       "user_id,name",
-  // New tables with composite unique constraints
-  calendar_subscriptions:          "calendar_id,user_id",
-  chat_group_members:              "conversation_id,user_id",
-  channel_notification_rules:      "channel_id,notification_type",
-  channel_sms_rules:               "channel_id,sms_category",
-  channel_message_stars:           "message_id,user_id",
-  channel_message_private_pins:    "message_id,user_id",
-  channel_group_task_assignments:  "group_task_id,assignee_id",
-  meeting_inbox:                   "meeting_id,user_id",
-  notification_group_rules:        "group_id,notification_type",
-  sms_group_rules:                 "group_id,sms_category",
-  org_position_permissions:        "position_id,permission_key",
-  org_level_permissions:           "level,permission_key",
-  spark_field_keywords:            "module,field_key",
-  spark_memory:                    "user_id,key",
-  user_access_relations:           "user_id,related_user_id",
-  user_bale_mapping:               "user_id",
+  // Original
+  notification_templates: "category,event_type,audience",
+  system_config:          "section,key",
+  user_group_members:     "group_id,user_id",
+  chat_conversations:     "participant_a,participant_b",
+  // New
+  user_preferences:       "user_id",       // PK is user_id, no id column
+  channel_members:        "channel_id,user_id",
+  org_position_members:   "position_id,user_id",
+  sms_templates:          "category,event_type,audience",
+  spark_config:           "module",
+  chat_tags:              "user_id,name",
 };
 
 // For tables whose PK is not "id", specify the real PK column here.
 // Used by loadIds for insert-vs-update tracking.
 const TABLE_PK: Record<string, string> = {
   user_preferences: "user_id",
-  user_bale_mapping: "user_id",
 };
 
 // Required user FK columns per table.
 // Rows where any of these reference a non-existent profile are skipped entirely.
 const REQUIRED_USER_FKS: Record<string, string[]> = {
-  meetings:                    ["user_id"],
-  tasks:                       ["user_id"],
-  notes:                       ["user_id"],
-  contacts_email:              ["user_id"],
-  user_preferences:            ["user_id"],
-  user_group_members:          ["user_id"],
-  chat_conversations:          ["participant_a", "participant_b"],
-  chat_messages:               ["sender_id"],
-  channel_members:             ["user_id"],
-  channel_messages:            ["sender_id"],
-  calendars:                   ["user_id"],
-  org_position_members:        ["user_id"],
-  notifications:               ["user_id"],
-  audit_log:                   ["user_id"],
-  chat_tags:                   ["user_id"],
-  // New tables
-  all_day_events:              ["user_id"],
-  calendar_subscriptions:      ["user_id"],
-  user_bale_mapping:           ["user_id"],
-  user_access_relations:       ["user_id"],
-  spark_memory:                ["user_id"],
-  meeting_inbox:               ["user_id"],
-  shared_meetings:             ["sender_id"],
-  chat_group_members:          ["user_id"],
-  chat_message_stars:          ["user_id"],
-  chat_message_reactions:      ["user_id"],
-  chat_reminders:              ["user_id"],
-  channel_group_task_activities: ["user_id"],
-  channel_message_stars:       ["user_id"],
-  channel_message_reactions:   ["user_id"],
-  channel_message_private_pins: ["user_id"],
+  meetings:             ["user_id"],
+  tasks:                ["user_id"],
+  notes:                ["user_id"],
+  contacts_email:       ["user_id"],
+  user_preferences:     ["user_id"],
+  user_group_members:   ["user_id"],
+  chat_conversations:   ["participant_a", "participant_b"],
+  chat_messages:        ["sender_id"],
+  channel_members:      ["user_id"],
+  channel_messages:     ["sender_id"],
+  calendars:            ["user_id"],
+  org_position_members: ["user_id"],
+  notifications:        ["user_id"],
+  audit_log:            ["user_id"],
+  chat_tags:            ["user_id"],
 };
 
 // Nullable user FK columns per table.
@@ -233,10 +159,6 @@ const NULLABLE_USER_FKS: Record<string, string[]> = {
   channel_work_topics:   ["created_by", "assignee_id"],
   org_position_members:  ["assigned_by"],
   daily_report_config:   ["updated_by"],
-  // New tables
-  channel_group_tasks:         ["created_by"],
-  channel_group_task_assignments: ["assignee_id"],
-  user_access_relations:       ["created_by"],
 };
 
 const BATCH_SIZE = 50;
@@ -274,10 +196,6 @@ function preFilterRows(
   existingConvIds: Set<string>,
   existingChannelIds: Set<string>,
   existingMeetingIds: Set<string>,
-  existingTaskIds: Set<string>,
-  existingChatMsgIds: Set<string>,
-  existingChannelMsgIds: Set<string>,
-  existingChannelGroupTaskIds: Set<string>,
 ): { filtered: Record<string, unknown>[]; skipped: RowError[] } {
   const filtered: Record<string, unknown>[] = [];
   const skipped: RowError[] = [];
@@ -287,10 +205,11 @@ function preFilterRows(
   for (let i = 0; i < rows.length; i++) {
     let row = { ...rows[i] };
     const rowNum = i + 2;
+    // user_preferences uses user_id as PK, not id
     const rowId = String(row.id ?? row.user_id ?? "");
     let skip = false;
 
-    // Required user FK check
+    // Required user FK check — skip row if referenced user not in system
     for (const col of reqFks) {
       const val = String(row[col] ?? "");
       if (val && !existingUserIds.has(val)) {
@@ -317,81 +236,50 @@ function preFilterRows(
     if (tableKey === "user_group_members") {
       const gid = String(row.group_id ?? "");
       if (gid && !existingGroupIds.has(gid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "گروه کاربری مرجع وجود ندارد", dependency: `group_id=${gid.slice(0, 8)}…` });
+        skipped.push({
+          row: rowNum, id: rowId,
+          reason: "گروه کاربری مرجع وجود ندارد",
+          dependency: `group_id=${gid.slice(0, 8)}…`,
+        });
         continue;
       }
     }
 
-    // notification_group_rules / sms_group_rules: check group exists
-    if (tableKey === "notification_group_rules" || tableKey === "sms_group_rules") {
-      const gid = String(row.group_id ?? "");
-      if (gid && !existingGroupIds.has(gid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "گروه کاربری مرجع وجود ندارد", dependency: `group_id=${gid.slice(0, 8)}…` });
-        continue;
-      }
-    }
-
-    // channel-dependent tables: check the channel exists
-    if (["channel_members", "channel_messages", "channel_work_topics",
-         "channel_broadcasts", "channel_group_tasks",
-         "channel_notification_rules", "channel_sms_rules"].includes(tableKey)) {
+    // channel_members & channel_messages: check the channel exists
+    if (tableKey === "channel_members" || tableKey === "channel_messages" || tableKey === "channel_work_topics") {
       const cid = String(row.channel_id ?? "");
       if (cid && !existingChannelIds.has(cid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "کانال مرجع بازیابی نشد یا وجود ندارد", dependency: `channel_id=${cid.slice(0, 8)}…` });
+        skipped.push({
+          row: rowNum, id: rowId,
+          reason: "کانال مرجع بازیابی نشد یا وجود ندارد",
+          dependency: `channel_id=${cid.slice(0, 8)}…`,
+        });
         continue;
       }
     }
 
-    // chat_messages / chat_group_members: check the conversation exists
-    if (tableKey === "chat_messages" || tableKey === "chat_group_members") {
+    // chat_messages: check the conversation exists
+    if (tableKey === "chat_messages") {
       const cid = String(row.conversation_id ?? "");
       if (cid && !existingConvIds.has(cid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "مکالمه مرجع بازیابی نشد یا وجود ندارد", dependency: `conversation_id=${cid.slice(0, 8)}…` });
+        skipped.push({
+          row: rowNum, id: rowId,
+          reason: "مکالمه مرجع بازیابی نشد یا وجود ندارد",
+          dependency: `conversation_id=${cid.slice(0, 8)}…`,
+        });
         continue;
       }
     }
 
-    // participants / meeting_inbox / shared_meetings / actions: check the meeting exists
-    if (["participants", "meeting_inbox", "shared_meetings", "actions"].includes(tableKey)) {
+    // participants: check the meeting exists
+    if (tableKey === "participants") {
       const mid = String(row.meeting_id ?? "");
       if (mid && !existingMeetingIds.has(mid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "جلسه مرجع بازیابی نشد یا وجود ندارد", dependency: `meeting_id=${mid.slice(0, 8)}…` });
-        continue;
-      }
-    }
-
-    // task_workflow_steps: check the task exists
-    if (tableKey === "task_workflow_steps") {
-      const tid = String(row.task_id ?? "");
-      if (tid && !existingTaskIds.has(tid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "وظیفه مرجع بازیابی نشد یا وجود ندارد", dependency: `task_id=${tid.slice(0, 8)}…` });
-        continue;
-      }
-    }
-
-    // chat_message_stars / chat_message_reactions / chat_reminders: check message exists
-    if (["chat_message_stars", "chat_message_reactions", "chat_reminders"].includes(tableKey)) {
-      const mid = String(row.message_id ?? "");
-      if (mid && !existingChatMsgIds.has(mid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "پیام چت مرجع بازیابی نشد یا وجود ندارد", dependency: `message_id=${mid.slice(0, 8)}…` });
-        continue;
-      }
-    }
-
-    // channel_message_stars / reactions / private_pins: check channel message exists
-    if (["channel_message_stars", "channel_message_reactions", "channel_message_private_pins"].includes(tableKey)) {
-      const mid = String(row.message_id ?? "");
-      if (mid && !existingChannelMsgIds.has(mid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "پیام کانال مرجع بازیابی نشد یا وجود ندارد", dependency: `message_id=${mid.slice(0, 8)}…` });
-        continue;
-      }
-    }
-
-    // channel_group_task_assignments / activities: check the group task exists
-    if (["channel_group_task_assignments", "channel_group_task_activities"].includes(tableKey)) {
-      const tid = String(row.group_task_id ?? row.task_id ?? "");
-      if (tid && !existingChannelGroupTaskIds.has(tid)) {
-        skipped.push({ row: rowNum, id: rowId, reason: "وظیفه گروهی کانال مرجع بازیابی نشد", dependency: `task_id=${tid.slice(0, 8)}…` });
+        skipped.push({
+          row: rowNum, id: rowId,
+          reason: "جلسه مرجع بازیابی نشد یا وجود ندارد",
+          dependency: `meeting_id=${mid.slice(0, 8)}…`,
+        });
         continue;
       }
     }
@@ -440,6 +328,7 @@ async function upsertRows(
       if (isComposite) {
         inserted += batch.length;
       } else {
+        // Track using the conflict column (may be "id" or "user_id" etc.)
         const pkCol = TABLE_PK[tableKey] ?? "id";
         for (const row of originalBatch) {
           if (existingIds.has(String(row[pkCol] ?? ""))) updated++;
@@ -507,7 +396,7 @@ Deno.serve(async (req: Request) => {
     if (!tables || typeof tables !== "object") return jsonRes({ error: "Invalid payload" }, 400);
     if (strategy !== "upsert" && strategy !== "replace") return jsonRes({ error: "Invalid strategy" }, 400);
 
-    // Silently drop disallowed tables
+    // Silently drop disallowed tables (e.g. profiles, _meta in old/new backup files)
     const filteredTables: Record<string, any[]> = {};
     for (const [k, v] of Object.entries(tables)) {
       if (ALLOWED_TABLES.has(k) && Array.isArray(v)) filteredTables[k] = v;
@@ -541,15 +430,11 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Pre-load FK dependency sets ───────────────────────────────────────────
-    const existingUserIds       = await loadIds(supabase, "profiles", "user_id");
-    let existingGroupIds        = await loadIds(supabase, "user_groups", "id");
-    let existingConvIds         = await loadIds(supabase, "chat_conversations", "id");
-    let existingChannelIds      = await loadIds(supabase, "channels", "id");
-    let existingMeetingIds      = await loadIds(supabase, "meetings", "id");
-    let existingTaskIds         = await loadIds(supabase, "tasks", "id");
-    let existingChatMsgIds      = new Set<string>();
-    let existingChannelMsgIds   = new Set<string>();
-    let existingGroupTaskIds    = new Set<string>();
+    const existingUserIds  = await loadIds(supabase, "profiles", "user_id");
+    let existingGroupIds   = await loadIds(supabase, "user_groups", "id");
+    let existingConvIds    = await loadIds(supabase, "chat_conversations", "id");
+    let existingChannelIds = await loadIds(supabase, "channels", "id");
+    let existingMeetingIds = await loadIds(supabase, "meetings", "id");
 
     // ── Restore each table in dependency order ────────────────────────────────
     for (const tableKey of sortedKeys) {
@@ -561,32 +446,18 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      // Refresh FK sets after parent tables are restored
-      if (tableKey === "user_group_members" || tableKey === "notification_group_rules" || tableKey === "sms_group_rules") {
+      // Refresh FK sets after each "parent" table is restored to capture newly inserted IDs.
+      if (tableKey === "user_group_members") {
         existingGroupIds = await loadIds(supabase, "user_groups", "id");
       }
-      if (tableKey === "chat_messages" || tableKey === "chat_group_members") {
+      if (tableKey === "chat_messages") {
         existingConvIds = await loadIds(supabase, "chat_conversations", "id");
       }
-      if (["channel_members", "channel_messages", "channel_work_topics",
-           "channel_broadcasts", "channel_group_tasks",
-           "channel_notification_rules", "channel_sms_rules"].includes(tableKey)) {
+      if (tableKey === "channel_members" || tableKey === "channel_messages" || tableKey === "channel_work_topics") {
         existingChannelIds = await loadIds(supabase, "channels", "id");
       }
-      if (["participants", "meeting_inbox", "shared_meetings", "actions"].includes(tableKey)) {
+      if (tableKey === "participants") {
         existingMeetingIds = await loadIds(supabase, "meetings", "id");
-      }
-      if (tableKey === "task_workflow_steps") {
-        existingTaskIds = await loadIds(supabase, "tasks", "id");
-      }
-      if (["chat_message_stars", "chat_message_reactions", "chat_reminders"].includes(tableKey)) {
-        existingChatMsgIds = await loadIds(supabase, "chat_messages", "id");
-      }
-      if (["channel_message_stars", "channel_message_reactions", "channel_message_private_pins"].includes(tableKey)) {
-        existingChannelMsgIds = await loadIds(supabase, "channel_messages", "id");
-      }
-      if (["channel_group_task_assignments", "channel_group_task_activities"].includes(tableKey)) {
-        existingGroupTaskIds = await loadIds(supabase, "channel_group_tasks", "id");
       }
 
       const priorDeleteError = results[tableKey]?.deleteError;
@@ -595,8 +466,7 @@ Deno.serve(async (req: Request) => {
       const { filtered, skipped: preSkipped } = preFilterRows(
         tableKey, rawRows,
         existingUserIds, existingGroupIds, existingConvIds,
-        existingChannelIds, existingMeetingIds, existingTaskIds,
-        existingChatMsgIds, existingChannelMsgIds, existingGroupTaskIds,
+        existingChannelIds, existingMeetingIds,
       );
 
       // Step 2: pre-load existing IDs for insert-vs-update tracking
