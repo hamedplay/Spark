@@ -784,7 +784,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const externalOptions = contacts.map(c => ({ id: c.name, name: c.name, sub: c.email }));
   const filteredExternal = externalOptions.filter(c =>
     !selectedExternal.includes(c.id) &&
-    (c.name.toLowerCase().includes(externalSearch.toLowerCase()) || c.sub.toLowerCase().includes(externalSearch.toLowerCase()))
+    (c.name.toLowerCase().includes(externalSearch.toLowerCase()) || (c.sub ?? '').toLowerCase().includes(externalSearch.toLowerCase()))
   );
 
   const addQuickExternal = async () => {
