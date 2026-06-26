@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Download, Upload, Database, Loader2, CheckCircle, AlertTriangle, Shield, FileText, Calendar, ClipboardList, MessageSquare, BookOpen, FolderOpen, Table2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, Upload, Database, Loader2, CheckCircle, AlertTriangle, Shield, FileText, Calendar, ClipboardList, MessageSquare, BookOpen, FolderOpen, Table2, RefreshCw, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -13,27 +13,68 @@ interface TableConfig {
 }
 
 const TABLES: TableConfig[] = [
-  { key: 'meetings', label: 'جلسات', icon: Calendar, color: 'text-teal-500', description: 'تمام جلسات ثبت‌شده' },
-  { key: 'tasks', label: 'اقدامات', icon: ClipboardList, color: 'text-green-500', description: 'اقدامات و وظایف' },
-  { key: 'notes', label: 'یادداشت‌ها', icon: BookOpen, color: 'text-amber-500', description: 'یادداشت‌های کاربران' },
-  { key: 'contacts_email', label: 'مخاطبین', icon: FolderOpen, color: 'text-orange-500', description: 'مخاطبین خارج از سازمان' },
-  { key: 'chat_conversations', label: 'مکالمات چت', icon: MessageSquare, color: 'text-rose-400', description: 'لیست مکالمات چت سازمانی' },
-  { key: 'chat_messages', label: 'پیام‌های چت', icon: MessageSquare, color: 'text-rose-500', description: 'پیام‌های داخلی سازمان' },
-  { key: 'notifications', label: 'اعلان‌ها', icon: FileText, color: 'text-gray-500', description: 'تاریخچه اعلان‌ها' },
-  { key: 'user_groups', label: 'گروه‌های کاربری', icon: Shield, color: 'text-red-500', description: 'گروه‌ها و دسترسی‌ها' },
-  { key: 'user_group_members', label: 'اعضای گروه‌ها', icon: Shield, color: 'text-red-400', description: 'عضویت در گروه‌های کاربری' },
-  { key: 'org_units', label: 'واحدهای سازمانی', icon: Table2, color: 'text-cyan-500', description: 'ساختار واحدهای سازمان' },
-  { key: 'org_positions', label: 'سمت‌های سازمانی', icon: Table2, color: 'text-cyan-600', description: 'سمت‌ها در چارت سازمانی' },
-  { key: 'audit_log', label: 'لاگ رخدادها', icon: Shield, color: 'text-slate-500', description: 'تاریخچه تمام رخدادها' },
-  { key: 'system_config', label: 'تنظیمات سیستم', icon: Database, color: 'text-blue-400', description: 'پیکربندی و تنظیمات' },
-  { key: 'notification_templates', label: 'قالب‌های اعلان', icon: FileText, color: 'text-blue-400', description: 'قالب‌های متن اعلان' },
-  { key: 'social_channel_configs', label: 'تنظیمات شبکه اجتماعی', icon: Shield, color: 'text-teal-600', description: 'پیکربندی بات‌های پیام‌رسان' },
-  { key: 'sms_providers', label: 'تنظیمات پیامک', icon: FileText, color: 'text-green-600', description: 'پیکربندی ارائه‌دهنده SMS' },
+  // ── Core content ────────────────────────────────────────────────────────────
+  { key: 'meetings',             label: 'جلسات',                     icon: Calendar,      color: 'text-teal-500',   description: 'تمام جلسات ثبت‌شده' },
+  { key: 'participants',         label: 'شرکت‌کنندگان',              icon: ClipboardList,  color: 'text-teal-400',   description: 'شرکت‌کنندگان جلسات' },
+  { key: 'tasks',                label: 'اقدامات',                   icon: ClipboardList,  color: 'text-green-500',  description: 'اقدامات و وظایف' },
+  { key: 'notes',                label: 'یادداشت‌ها',                icon: BookOpen,       color: 'text-amber-500',  description: 'یادداشت‌های کاربران' },
+  { key: 'contacts_email',       label: 'مخاطبین',                   icon: FolderOpen,     color: 'text-orange-500', description: 'مخاطبین خارج از سازمان' },
+  // ── Chat & Channels ─────────────────────────────────────────────────────────
+  { key: 'chat_conversations',   label: 'مکالمات چت',                icon: MessageSquare,  color: 'text-rose-400',   description: 'لیست مکالمات چت سازمانی' },
+  { key: 'chat_messages',        label: 'پیام‌های چت',               icon: MessageSquare,  color: 'text-rose-500',   description: 'پیام‌های داخلی سازمان' },
+  { key: 'chat_tags',            label: 'برچسب‌های چت',              icon: MessageSquare,  color: 'text-rose-300',   description: 'برچسب‌های تعریف‌شده در چت' },
+  { key: 'channels',             label: 'کانال‌ها',                  icon: MessageSquare,  color: 'text-indigo-500', description: 'کانال‌های سازمانی' },
+  { key: 'channel_members',      label: 'اعضای کانال‌ها',            icon: MessageSquare,  color: 'text-indigo-400', description: 'عضویت کاربران در کانال‌ها' },
+  { key: 'channel_messages',     label: 'پیام‌های کانال',            icon: MessageSquare,  color: 'text-indigo-600', description: 'پیام‌های کانال‌های سازمانی' },
+  { key: 'channel_work_topics',  label: 'موضوعات کاری',              icon: MessageSquare,  color: 'text-violet-500', description: 'موضوعات کاری کانال‌ها' },
+  // ── Calendar ────────────────────────────────────────────────────────────────
+  { key: 'calendars',            label: 'تقویم‌ها',                  icon: Calendar,       color: 'text-cyan-500',   description: 'تقویم‌های شخصی کاربران' },
+  { key: 'calendar_occasions',   label: 'مناسبت‌های تقویم',          icon: Calendar,       color: 'text-cyan-400',   description: 'مناسبت‌ها و رویدادهای تقویم' },
+  // ── Notifications ───────────────────────────────────────────────────────────
+  { key: 'notifications',        label: 'اعلان‌ها',                  icon: FileText,       color: 'text-gray-500',   description: 'تاریخچه اعلان‌ها' },
+  { key: 'notification_templates', label: 'قالب‌های اعلان',          icon: FileText,       color: 'text-blue-400',   description: 'قالب‌های متن اعلان' },
+  // ── User & Groups ───────────────────────────────────────────────────────────
+  { key: 'user_preferences',     label: 'تنظیمات کاربران',           icon: Shield,         color: 'text-sky-500',    description: 'تنظیمات و ترجیحات کاربران' },
+  { key: 'user_groups',          label: 'گروه‌های کاربری',           icon: Shield,         color: 'text-red-500',    description: 'گروه‌ها و دسترسی‌ها' },
+  { key: 'user_group_members',   label: 'اعضای گروه‌ها',             icon: Shield,         color: 'text-red-400',    description: 'عضویت در گروه‌های کاربری' },
+  // ── Org Structure ───────────────────────────────────────────────────────────
+  { key: 'org_units',            label: 'واحدهای سازمانی',           icon: Table2,         color: 'text-cyan-600',   description: 'ساختار واحدهای سازمان' },
+  { key: 'org_positions',        label: 'سمت‌های سازمانی',           icon: Table2,         color: 'text-cyan-700',   description: 'سمت‌ها در چارت سازمانی' },
+  { key: 'org_position_members', label: 'اعضای سمت‌ها',              icon: Table2,         color: 'text-cyan-800',   description: 'انتساب کاربران به سمت‌های سازمانی' },
+  // ── Config & Logs ───────────────────────────────────────────────────────────
+  { key: 'system_config',        label: 'تنظیمات سیستم',             icon: Database,       color: 'text-blue-400',   description: 'پیکربندی و تنظیمات' },
+  { key: 'spark_config',         label: 'پیکربندی اسپارک',           icon: Database,       color: 'text-purple-500', description: 'تنظیمات ماژول‌های اسپارک' },
+  { key: 'social_channel_configs', label: 'تنظیمات شبکه اجتماعی',   icon: Shield,         color: 'text-teal-600',   description: 'پیکربندی بات‌های پیام‌رسان' },
+  { key: 'sms_providers',        label: 'تنظیمات پیامک',             icon: FileText,       color: 'text-green-600',  description: 'پیکربندی ارائه‌دهنده SMS' },
+  { key: 'sms_templates',        label: 'قالب‌های پیامک',            icon: FileText,       color: 'text-green-500',  description: 'قالب‌های متن پیامک' },
+  { key: 'daily_report_config',  label: 'پیکربندی گزارش روزانه',     icon: FileText,       color: 'text-lime-600',   description: 'تنظیمات ارسال گزارش روزانه' },
+  { key: 'audit_log',            label: 'لاگ رخدادها',               icon: Shield,         color: 'text-slate-500',  description: 'تاریخچه تمام رخدادها' },
 ];
 
 const TABLE_LABEL: Record<string, string> = Object.fromEntries(TABLES.map(t => [t.key, t.label]));
 const TABLE_ICON: Record<string, React.ElementType> = Object.fromEntries(TABLES.map(t => [t.key, t.icon]));
 const TABLE_COLOR: Record<string, string> = Object.fromEntries(TABLES.map(t => [t.key, t.color]));
+
+const BACKUP_VERSION = '2.0';
+const PAGE_SIZE = 1000;
+
+/** Fetch all rows for a table using range-based pagination to avoid the 50K limit. */
+async function fetchAllRows(tableKey: string): Promise<any[]> {
+  const all: any[] = [];
+  let page = 0;
+  while (true) {
+    const { data, error } = await (supabase as any)
+      .from(tableKey)
+      .select('*')
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    page++;
+  }
+  return all;
+}
 
 function TableRow({ cfg, selected, onToggle, status }: {
   cfg: TableConfig;
@@ -68,7 +109,6 @@ function TableRow({ cfg, selected, onToggle, status }: {
   );
 }
 
-// ── Restore table row ────────────────────────────────────────────────────────
 function RestoreTableRow({ tableKey, rowCount, selected, onToggle, status }: {
   tableKey: string;
   rowCount: number;
@@ -110,6 +150,7 @@ function RestoreTableRow({ tableKey, rowCount, selected, onToggle, status }: {
 function RestorePanel() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [parsedData, setParsedData] = useState<Record<string, any[]> | null>(null);
+  const [backupMeta, setBackupMeta] = useState<Record<string, any> | null>(null);
   const [fileName, setFileName] = useState('');
   const [parseError, setParseError] = useState('');
   const [parsing, setParsing] = useState(false);
@@ -127,10 +168,7 @@ function RestorePanel() {
     return n;
   });
 
-  const selectAll = () => {
-    if (!parsedData) return;
-    setSelectedTables(new Set(Object.keys(parsedData)));
-  };
+  const selectAll = () => { if (parsedData) setSelectedTables(new Set(Object.keys(parsedData))); };
   const selectNone = () => setSelectedTables(new Set());
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,28 +177,25 @@ function RestorePanel() {
     setFileName(file.name);
     setParseError('');
     setParsedData(null);
+    setBackupMeta(null);
     setSelectedTables(new Set());
     setTableStatus({});
     setConfirmed(false);
     setParsing(true);
 
     try {
-      // Silently drop the profiles key — user accounts are managed separately
-      const stripProfiles = (obj: Record<string, any[]>) => {
-        const { profiles: _p, ...rest } = obj;
-        return rest;
-      };
-
       if (file.name.endsWith('.json')) {
         const text = await file.text();
         const obj = JSON.parse(text);
         if (typeof obj !== 'object' || Array.isArray(obj)) throw new Error('فرمت JSON نامعتبر است');
-        for (const [k, v] of Object.entries(obj)) {
+        // Strip metadata and profiles keys
+        const { _meta, profiles: _p, ...rest } = obj as any;
+        if (_meta) setBackupMeta(_meta);
+        for (const [k, v] of Object.entries(rest)) {
           if (!Array.isArray(v)) throw new Error(`جدول "${k}" آرایه نیست`);
         }
-        const data = stripProfiles(obj as Record<string, any[]>);
-        setParsedData(data);
-        setSelectedTables(new Set(Object.keys(data)));
+        setParsedData(rest as Record<string, any[]>);
+        setSelectedTables(new Set(Object.keys(rest)));
       } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(buf, { type: 'array' });
@@ -168,7 +203,7 @@ function RestorePanel() {
         const labelToKey = Object.fromEntries(TABLES.map(t => [t.label.slice(0, 31), t.key]));
         for (const sheetName of wb.SheetNames) {
           const tableKey = labelToKey[sheetName] ?? sheetName;
-          if (tableKey === 'profiles') continue; // skip user data
+          if (tableKey === 'profiles' || tableKey === '_meta') continue;
           const ws = wb.Sheets[sheetName];
           result[tableKey] = XLSX.utils.sheet_to_json(ws);
         }
@@ -181,7 +216,6 @@ function RestorePanel() {
       setParseError(err.message || 'خطا در خواندن فایل');
     } finally {
       setParsing(false);
-      // Reset input so same file can be re-selected
       if (fileRef.current) fileRef.current.value = '';
     }
   };
@@ -194,7 +228,6 @@ function RestorePanel() {
     for (const k of selectedTables) init[k] = 'loading';
     setTableStatus(init);
 
-    // Build payload with only selected tables
     const tables: Record<string, any[]> = {};
     for (const k of selectedTables) tables[k] = parsedData[k] ?? [];
 
@@ -245,7 +278,6 @@ function RestorePanel() {
 
   return (
     <div className="space-y-4">
-      {/* File picker */}
       <div
         onClick={() => fileRef.current?.click()}
         className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-2xl cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500 transition-colors bg-gray-50 dark:bg-gray-800/50 group"
@@ -261,6 +293,11 @@ function RestorePanel() {
           <div className="text-center">
             <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{fileName}</p>
             <p className="text-xs text-gray-400 mt-0.5">{Object.keys(parsedData).length} جدول شناسایی شد</p>
+            {backupMeta && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                نسخه {backupMeta.version} — {new Date(backupMeta.created_at).toLocaleString('fa-IR')}
+              </p>
+            )}
           </div>
         ) : (
           <div className="text-center">
@@ -280,7 +317,6 @@ function RestorePanel() {
 
       {parsedData && (
         <>
-          {/* Strategy */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">روش بازیابی</p>
             <div className="grid grid-cols-2 gap-3">
@@ -301,7 +337,6 @@ function RestorePanel() {
             </div>
           </div>
 
-          {/* Table selection */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -326,7 +361,6 @@ function RestorePanel() {
             </div>
           </div>
 
-          {/* Progress */}
           {running && totalSelected > 0 && (
             <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800 p-4">
               <div className="flex items-center justify-between mb-2">
@@ -342,7 +376,6 @@ function RestorePanel() {
             </div>
           )}
 
-          {/* Restore report */}
           {restoreReport && !running && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-1">
               <div className="flex items-center justify-between mb-3">
@@ -365,27 +398,17 @@ function RestorePanel() {
                       <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">کل: {(r.total ?? 0).toLocaleString('fa-IR')}</span>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 text-xs">
-                      {(r.inserted ?? 0) > 0 && (
-                        <span className="font-medium text-green-600 dark:text-green-400">+{(r.inserted).toLocaleString('fa-IR')}</span>
-                      )}
-                      {(r.updated ?? 0) > 0 && (
-                        <span className="font-medium text-blue-600 dark:text-blue-400">↑{(r.updated).toLocaleString('fa-IR')}</span>
-                      )}
-                      {(r.skipped ?? 0) > 0 && (
-                        <span className="font-medium text-amber-600 dark:text-amber-400">○{(r.skipped).toLocaleString('fa-IR')}</span>
-                      )}
-                      {(r.failed ?? 0) > 0 && (
-                        <span className="font-medium text-red-600 dark:text-red-400">✗{(r.failed).toLocaleString('fa-IR')}</span>
-                      )}
+                      {(r.inserted ?? 0) > 0 && <span className="font-medium text-green-600 dark:text-green-400">+{(r.inserted).toLocaleString('fa-IR')}</span>}
+                      {(r.updated ?? 0) > 0 && <span className="font-medium text-blue-600 dark:text-blue-400">↑{(r.updated).toLocaleString('fa-IR')}</span>}
+                      {(r.skipped ?? 0) > 0 && <span className="font-medium text-amber-600 dark:text-amber-400">○{(r.skipped).toLocaleString('fa-IR')}</span>}
+                      {(r.failed ?? 0) > 0 && <span className="font-medium text-red-600 dark:text-red-400">✗{(r.failed).toLocaleString('fa-IR')}</span>}
                       {r.errors?.length > 0
                         ? expandedReportTable === key
                           ? <ChevronUp className="w-3 h-3 text-gray-400" />
                           : <ChevronDown className="w-3 h-3 text-gray-400" />
-                        : null
-                      }
+                        : null}
                     </div>
                   </button>
-
                   {expandedReportTable === key && r.errors?.length > 0 && (
                     <div className="border-t border-gray-100 dark:border-gray-700 max-h-52 overflow-y-auto">
                       {r.errors.slice(0, 100).map((e: any, ei: number) => (
@@ -395,16 +418,10 @@ function RestorePanel() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed">{e.reason || '(علت نامشخص)'}</p>
-                            {e.dependency && (
-                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono truncate">{e.dependency}</p>
-                            )}
-                            {e.id && (
-                              <p className="text-xs text-gray-300 dark:text-gray-600 font-mono truncate">{e.id}</p>
-                            )}
+                            {e.dependency && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono truncate">{e.dependency}</p>}
+                            {e.id && <p className="text-xs text-gray-300 dark:text-gray-600 font-mono truncate">{e.id}</p>}
                           </div>
-                          {e.code && (
-                            <span className="flex-shrink-0 text-xs text-gray-300 dark:text-gray-600 font-mono">{e.code}</span>
-                          )}
+                          {e.code && <span className="flex-shrink-0 text-xs text-gray-300 dark:text-gray-600 font-mono">{e.code}</span>}
                         </div>
                       ))}
                       {r.errors.length > 100 && (
@@ -414,7 +431,6 @@ function RestorePanel() {
                       )}
                     </div>
                   )}
-
                   {r.deleteError && (
                     <p className="px-3 py-2 text-xs text-red-500 dark:text-red-400 border-t border-gray-100 dark:border-gray-700">
                       حذف ناموفق: {r.deleteError}
@@ -425,7 +441,6 @@ function RestorePanel() {
             </div>
           )}
 
-          {/* Replace warning */}
           {strategy === 'replace' && (
             <div className="flex items-start gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl">
               <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
@@ -434,19 +449,13 @@ function RestorePanel() {
                   حالت جایگزینی: تمام داده‌های فعلی جداول انتخاب‌شده حذف خواهند شد. این عملیات برگشت‌پذیر نیست.
                 </p>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={confirmed}
-                    onChange={e => setConfirmed(e.target.checked)}
-                    className="w-4 h-4 accent-red-500"
-                  />
+                  <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="w-4 h-4 accent-red-500" />
                   <span className="text-xs text-red-700 dark:text-red-300 font-medium">تأیید می‌کنم که داده‌های فعلی حذف شوند</span>
                 </label>
               </div>
             </div>
           )}
 
-          {/* Restore button */}
           <button
             onClick={runRestore}
             disabled={running || selectedTables.size === 0 || (strategy === 'replace' && !confirmed)}
@@ -466,10 +475,11 @@ function RestorePanel() {
 // ── Main BackupPanel ─────────────────────────────────────────────────────────
 export function BackupPanel() {
   const [selected, setSelected] = useState<Set<string>>(new Set(TABLES.map(t => t.key)));
-  const [format, setFormat] = useState<'json' | 'xlsx'>('xlsx');
+  const [format, setFormat] = useState<'json' | 'xlsx'>('json');
   const [running, setRunning] = useState(false);
   const [tableStatus, setTableStatus] = useState<Record<string, 'idle' | 'loading' | 'done' | 'error'>>({});
   const [showRestore, setShowRestore] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   const toggle = (key: string) => setSelected(s => {
     const n = new Set(s);
@@ -483,31 +493,46 @@ export function BackupPanel() {
   const runBackup = async () => {
     if (selected.size === 0) { toast.error('حداقل یک جدول انتخاب کنید'); return; }
     setRunning(true);
+    setProgress({ done: 0, total: selected.size });
 
     const init: Record<string, 'idle' | 'loading' | 'done' | 'error'> = {};
     TABLES.forEach(t => { init[t.key] = selected.has(t.key) ? 'loading' : 'idle'; });
     setTableStatus(init);
 
     const result: Record<string, any[]> = {};
+    let doneCount = 0;
 
     for (const cfg of TABLES) {
       if (!selected.has(cfg.key)) continue;
       try {
-        const { data, error } = await supabase.from(cfg.key as any).select('*').limit(50000);
-        if (error) throw error;
-        result[cfg.key] = data || [];
+        const rows = await fetchAllRows(cfg.key);
+        result[cfg.key] = rows;
         setTableStatus(s => ({ ...s, [cfg.key]: 'done' }));
       } catch {
         result[cfg.key] = [];
         setTableStatus(s => ({ ...s, [cfg.key]: 'error' }));
         toast.error(`خطا در خواندن ${cfg.label}`);
       }
+      doneCount++;
+      setProgress({ done: doneCount, total: selected.size });
     }
 
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const rowCounts = Object.fromEntries(Object.entries(result).map(([k, v]) => [k, v.length]));
+    const totalRows = Object.values(rowCounts).reduce((a, b) => a + b, 0);
 
     if (format === 'json') {
-      const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+      const payload = {
+        _meta: {
+          version: BACKUP_VERSION,
+          created_at: new Date().toISOString(),
+          table_count: Object.keys(result).length,
+          total_rows: totalRows,
+          row_counts: rowCounts,
+        },
+        ...result,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -524,12 +549,10 @@ export function BackupPanel() {
       XLSX.writeFile(wb, `backup_${ts}.xlsx`);
     }
 
-    toast.success(`پشتیبان‌گیری از ${Object.values(result).filter(r => r.length > 0).length} جدول انجام شد`);
+    const nonEmpty = Object.values(result).filter(r => r.length > 0).length;
+    toast.success(`پشتیبان‌گیری از ${nonEmpty} جدول — ${totalRows.toLocaleString('fa-IR')} ردیف`);
     setRunning(false);
   };
-
-  const doneCount = Object.values(tableStatus).filter(s => s === 'done').length;
-  const totalSelected = selected.size;
 
   return (
     <div className="space-y-5" dir="rtl">
@@ -542,7 +565,7 @@ export function BackupPanel() {
         <div>
           <h3 className="font-bold text-gray-800 dark:text-white">پشتیبان‌گیری از دیتابیس</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            خروجی از جداول انتخاب‌شده به فرمت JSON یا Excel
+            خروجی کامل از {TABLES.length} جدول به فرمت JSON یا Excel
           </p>
         </div>
       </div>
@@ -550,13 +573,22 @@ export function BackupPanel() {
       {/* Format selector */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">فرمت خروجی</p>
-        <div className="flex gap-3">
-          {(['xlsx', 'json'] as const).map(f => (
+        <div className="flex gap-3 mb-3">
+          {(['json', 'xlsx'] as const).map(f => (
             <button key={f} onClick={() => setFormat(f)}
               className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all ${format === f ? 'bg-blue-500 text-white border-blue-500' : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}>
-              {f === 'xlsx' ? 'Excel (.xlsx)' : 'JSON'}
+              {f === 'json' ? 'JSON (پیشنهادی برای مهاجرت)' : 'Excel (.xlsx)'}
             </button>
           ))}
+        </div>
+        <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+          <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+            {format === 'json'
+              ? 'JSON تمام انواع داده (JSONB، آرایه، null) را بدون محدودیت تعداد ردیف حفظ می‌کند و برای مهاجرت به دیتابیس جدید توصیه می‌شود.'
+              : 'Excel برای مشاهده و ویرایش دستی مناسب است اما ممکن است انواع داده پیچیده (JSONB) را دقیق نگه ندارد.'
+            }
+          </p>
         </div>
       </div>
 
@@ -567,12 +599,8 @@ export function BackupPanel() {
             جداول ({selected.size} از {TABLES.length} انتخاب‌شده)
           </p>
           <div className="flex gap-2">
-            <button onClick={selectAll} className="text-xs px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
-              همه
-            </button>
-            <button onClick={selectNone} className="text-xs px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-              هیچ‌کدام
-            </button>
+            <button onClick={selectAll} className="text-xs px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">همه</button>
+            <button onClick={selectNone} className="text-xs px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">هیچ‌کدام</button>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto">
@@ -589,16 +617,16 @@ export function BackupPanel() {
       </div>
 
       {/* Progress */}
-      {running && totalSelected > 0 && (
+      {running && progress.total > 0 && (
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800 p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-blue-700 dark:text-blue-300">در حال پشتیبان‌گیری...</span>
-            <span className="text-sm text-blue-600 dark:text-blue-400">{doneCount} / {totalSelected}</span>
+            <span className="text-sm text-blue-600 dark:text-blue-400">{progress.done} / {progress.total}</span>
           </div>
           <div className="w-full bg-blue-100 dark:bg-blue-900/50 rounded-full h-2">
             <div
               className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${totalSelected > 0 ? (doneCount / totalSelected) * 100 : 0}%` }}
+              style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
             />
           </div>
         </div>
@@ -608,7 +636,7 @@ export function BackupPanel() {
       <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
         <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
-          فایل پشتیبان شامل داده‌های واقعی است. آن را در مکان امن ذخیره کنید و به اشخاص غیرمجاز دسترسی ندهید.
+          فایل پشتیبان حاوی داده‌های واقعی سازمان است. در مکان امن ذخیره کنید و به اشخاص غیرمجاز دسترسی ندهید.
         </p>
       </div>
 

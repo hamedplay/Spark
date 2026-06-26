@@ -39,7 +39,7 @@ const NAV_ITEMS = [
   { key: 'access', label: 'حقوق دسترسی', icon: Lock, sub: [
     { key: 'security', label: 'امنیت و دسترسی' },
     { key: 'server', label: 'دسترسی سرور' },
-    { key: 'backup', label: 'پشتیبان‌گیری' },
+    { key: 'backup', label: 'پشتیبان‌گیری و بازگردانی' },
   ]},
   { key: 'audit', label: 'رویدادها و رخدادها', icon: Activity, sub: [
     { key: 'audit_log', label: 'گزارش رخدادها' },

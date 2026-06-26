@@ -23,68 +23,142 @@ async function getCallerProfile(token: string) {
   return { user, isAdmin: data?.is_admin === true };
 }
 
-async function loadIds(supabase: ReturnType<typeof adminClient>, table: string, col = "id"): Promise<Set<string>> {
-  const { data } = await (supabase as any).from(table).select(col).limit(100000);
-  return new Set((data ?? []).map((r: any) => String(r[col])));
+async function loadIds(
+  supabase: ReturnType<typeof adminClient>,
+  table: string,
+  col = "id",
+): Promise<Set<string>> {
+  const PAGE = 10000;
+  const all: string[] = [];
+  let page = 0;
+  while (true) {
+    const { data } = await (supabase as any)
+      .from(table)
+      .select(col)
+      .range(page * PAGE, (page + 1) * PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data) all.push(String(r[col]));
+    if (data.length < PAGE) break;
+    page++;
+  }
+  return new Set(all);
 }
 
-// Profiles is excluded — user accounts are managed separately outside backup/restore
+// Profiles is excluded — user accounts are managed separately outside backup/restore.
 const ALLOWED_TABLES = new Set([
-  "meetings", "tasks", "notes", "contacts_email",
-  "chat_conversations", "chat_messages", "notifications", "user_groups",
-  "user_group_members", "org_units", "org_positions", "audit_log",
-  "system_config", "notification_templates", "social_channel_configs", "sms_providers",
+  // Core content
+  "meetings", "participants", "tasks", "notes", "contacts_email",
+  // Chat & Channels
+  "chat_conversations", "chat_messages", "chat_tags",
+  "channels", "channel_members", "channel_messages", "channel_work_topics",
+  // Calendar
+  "calendars", "calendar_occasions",
+  // Notifications
+  "notifications", "notification_templates",
+  // User & Groups
+  "user_preferences", "user_groups", "user_group_members",
+  // Org structure
+  "org_units", "org_positions", "org_position_members",
+  // Config & Logs
+  "system_config", "spark_config", "social_channel_configs",
+  "sms_providers", "sms_templates", "daily_report_config", "audit_log",
 ]);
 
-// Dependency-ordered restore sequence (parents before children)
+// Dependency-ordered restore sequence (parents before children).
 const RESTORE_ORDER = [
+  // Independent config tables first
   "org_units",
   "org_positions",
   "user_groups",
   "notification_templates",
   "social_channel_configs",
   "sms_providers",
+  "sms_templates",
   "system_config",
-  "meetings",
-  "tasks",
-  "notes",
+  "spark_config",
+  "daily_report_config",
+  // User-dependent tables
+  "user_preferences",
+  "calendars",
+  "calendar_occasions",
   "contacts_email",
+  "notes",
+  "tasks",
+  "chat_tags",
+  // Meetings and children
+  "meetings",
+  "participants",
+  // Channels and children
+  "channels",
+  "channel_work_topics",
+  "channel_members",
+  "channel_messages",
+  // Org positions members (depends on org_positions + users)
+  "org_position_members",
+  // Group members (depends on user_groups + users)
   "user_group_members",
+  // Chat (conversations before messages)
   "chat_conversations",
   "chat_messages",
+  // Notifications and logs last
   "notifications",
   "audit_log",
 ];
 
-// Upsert conflict columns for tables with composite unique constraints
-// All other tables use the default "id" conflict column
+// Upsert conflict columns for tables with composite or non-standard unique constraints.
+// All other tables default to "id".
 const CONFLICT_COLUMN: Record<string, string> = {
+  // Original
   notification_templates: "category,event_type,audience",
-  system_config: "section,key",
-  user_group_members: "group_id,user_id",
-  chat_conversations: "participant_a,participant_b",
+  system_config:          "section,key",
+  user_group_members:     "group_id,user_id",
+  chat_conversations:     "participant_a,participant_b",
+  // New
+  user_preferences:       "user_id",       // PK is user_id, no id column
+  channel_members:        "channel_id,user_id",
+  org_position_members:   "position_id,user_id",
+  sms_templates:          "category,event_type,audience",
+  spark_config:           "module",
+  chat_tags:              "user_id,name",
+};
+
+// For tables whose PK is not "id", specify the real PK column here.
+// Used by loadIds for insert-vs-update tracking.
+const TABLE_PK: Record<string, string> = {
+  user_preferences: "user_id",
 };
 
 // Required user FK columns per table.
-// Rows where any of these reference a non-existent user are skipped (pre-filter).
+// Rows where any of these reference a non-existent profile are skipped entirely.
 const REQUIRED_USER_FKS: Record<string, string[]> = {
-  meetings: ["user_id"],
-  tasks: ["user_id"],
-  notes: ["user_id"],
-  contacts_email: ["user_id"],
-  user_group_members: ["user_id"],
-  chat_conversations: ["participant_a", "participant_b"],
-  chat_messages: ["sender_id"],
-  notifications: ["user_id"],
-  audit_log: ["user_id"],
+  meetings:             ["user_id"],
+  tasks:                ["user_id"],
+  notes:                ["user_id"],
+  contacts_email:       ["user_id"],
+  user_preferences:     ["user_id"],
+  user_group_members:   ["user_id"],
+  chat_conversations:   ["participant_a", "participant_b"],
+  chat_messages:        ["sender_id"],
+  channel_members:      ["user_id"],
+  channel_messages:     ["sender_id"],
+  calendars:            ["user_id"],
+  org_position_members: ["user_id"],
+  notifications:        ["user_id"],
+  audit_log:            ["user_id"],
+  chat_tags:            ["user_id"],
 };
 
 // Nullable user FK columns per table.
 // These are nullified (row is kept) when the referenced user no longer exists.
 const NULLABLE_USER_FKS: Record<string, string[]> = {
-  user_groups: ["created_by"],
-  system_config: ["updated_by"],
-  notifications: ["sender_id"],
+  user_groups:           ["created_by"],
+  system_config:         ["updated_by"],
+  notifications:         ["sender_id"],
+  channels:              ["created_by"],
+  channel_messages:      ["pinned_by"],
+  channel_work_topics:   ["created_by", "assignee_id"],
+  org_position_members:  ["assigned_by"],
+  daily_report_config:   ["updated_by"],
 };
 
 const BATCH_SIZE = 50;
@@ -109,13 +183,19 @@ interface TableResult {
   deleteError?: string;
 }
 
-/** Pre-filter rows that cannot be restored due to missing FK dependencies. */
+/**
+ * Pre-filter rows that cannot be restored due to missing FK dependencies.
+ * Nullifies nullable user FKs instead of skipping the row.
+ * Continues processing remaining rows even when some are skipped.
+ */
 function preFilterRows(
   tableKey: string,
   rows: Record<string, unknown>[],
   existingUserIds: Set<string>,
   existingGroupIds: Set<string>,
   existingConvIds: Set<string>,
+  existingChannelIds: Set<string>,
+  existingMeetingIds: Set<string>,
 ): { filtered: Record<string, unknown>[]; skipped: RowError[] } {
   const filtered: Record<string, unknown>[] = [];
   const skipped: RowError[] = [];
@@ -125,7 +205,8 @@ function preFilterRows(
   for (let i = 0; i < rows.length; i++) {
     let row = { ...rows[i] };
     const rowNum = i + 2;
-    const rowId = String(row.id ?? "");
+    // user_preferences uses user_id as PK, not id
+    const rowId = String(row.id ?? row.user_id ?? "");
     let skip = false;
 
     // Required user FK check — skip row if referenced user not in system
@@ -164,7 +245,20 @@ function preFilterRows(
       }
     }
 
-    // chat_messages: check the conversation exists (restored or pre-existing)
+    // channel_members & channel_messages: check the channel exists
+    if (tableKey === "channel_members" || tableKey === "channel_messages" || tableKey === "channel_work_topics") {
+      const cid = String(row.channel_id ?? "");
+      if (cid && !existingChannelIds.has(cid)) {
+        skipped.push({
+          row: rowNum, id: rowId,
+          reason: "کانال مرجع بازیابی نشد یا وجود ندارد",
+          dependency: `channel_id=${cid.slice(0, 8)}…`,
+        });
+        continue;
+      }
+    }
+
+    // chat_messages: check the conversation exists
     if (tableKey === "chat_messages") {
       const cid = String(row.conversation_id ?? "");
       if (cid && !existingConvIds.has(cid)) {
@@ -172,6 +266,19 @@ function preFilterRows(
           row: rowNum, id: rowId,
           reason: "مکالمه مرجع بازیابی نشد یا وجود ندارد",
           dependency: `conversation_id=${cid.slice(0, 8)}…`,
+        });
+        continue;
+      }
+    }
+
+    // participants: check the meeting exists
+    if (tableKey === "participants") {
+      const mid = String(row.meeting_id ?? "");
+      if (mid && !existingMeetingIds.has(mid)) {
+        skipped.push({
+          row: rowNum, id: rowId,
+          reason: "جلسه مرجع بازیابی نشد یا وجود ندارد",
+          dependency: `meeting_id=${mid.slice(0, 8)}…`,
         });
         continue;
       }
@@ -200,7 +307,7 @@ async function upsertRows(
   supabase: ReturnType<typeof adminClient>,
   tableKey: string,
   rows: Record<string, unknown>[],
-  existingIds: Set<string>, // pre-loaded existing IDs for insert-vs-update tracking
+  existingIds: Set<string>,
 ): Promise<{ inserted: number; updated: number; constraintSkipped: number; failed: number; errors: RowError[] }> {
   const conflictCol = CONFLICT_COLUMN[tableKey] ?? "id";
   const isComposite = conflictCol.includes(",");
@@ -221,8 +328,10 @@ async function upsertRows(
       if (isComposite) {
         inserted += batch.length;
       } else {
+        // Track using the conflict column (may be "id" or "user_id" etc.)
+        const pkCol = TABLE_PK[tableKey] ?? "id";
         for (const row of originalBatch) {
-          if (existingIds.has(String(row.id ?? ""))) updated++;
+          if (existingIds.has(String(row[pkCol] ?? ""))) updated++;
           else inserted++;
         }
       }
@@ -234,15 +343,15 @@ async function upsertRows(
       const prepRow = batch[j];
       const origRow = originalBatch[j];
       const rowNum = i + j + 2;
-      const rowId = String(origRow.id ?? "");
+      const rowId = String(origRow.id ?? origRow.user_id ?? "");
+      const pkCol = TABLE_PK[tableKey] ?? "id";
 
       const { error: e } = await (supabase as any).from(tableKey).upsert(prepRow, { onConflict: conflictCol });
       if (!e) {
         if (isComposite) inserted++;
-        else if (existingIds.has(String(origRow.id ?? ""))) updated++;
+        else if (existingIds.has(String(origRow[pkCol] ?? ""))) updated++;
         else inserted++;
       } else if (["23505", "23503", "23514", "23502"].includes(e.code ?? "")) {
-        // Constraint violations: count as skipped, not hard failures
         constraintSkipped++;
         if (errors.length < MAX_ERRORS) {
           const reason =
@@ -287,10 +396,10 @@ Deno.serve(async (req: Request) => {
     if (!tables || typeof tables !== "object") return jsonRes({ error: "Invalid payload" }, 400);
     if (strategy !== "upsert" && strategy !== "replace") return jsonRes({ error: "Invalid strategy" }, 400);
 
-    // Silently drop disallowed tables (e.g. profiles in old backup files) instead of erroring
+    // Silently drop disallowed tables (e.g. profiles, _meta in old/new backup files)
     const filteredTables: Record<string, any[]> = {};
     for (const [k, v] of Object.entries(tables)) {
-      if (ALLOWED_TABLES.has(k)) filteredTables[k] = v;
+      if (ALLOWED_TABLES.has(k) && Array.isArray(v)) filteredTables[k] = v;
     }
 
     const supabase = adminClient();
@@ -304,16 +413,13 @@ Deno.serve(async (req: Request) => {
 
     // ── Replace strategy: delete in reverse dependency order ──────────────────
     if (strategy === "replace") {
-      const deleteOrder = [...sortedKeys].sort((a, b) => {
-        const ai = RESTORE_ORDER.indexOf(a);
-        const bi = RESTORE_ORDER.indexOf(b);
-        return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
-      });
+      const deleteOrder = [...sortedKeys].reverse();
       for (const tableKey of deleteOrder) {
+        const pkCol = TABLE_PK[tableKey] ?? "id";
         const { error: delErr } = await (supabase as any)
           .from(tableKey)
           .delete()
-          .neq("id", "00000000-0000-0000-0000-000000000000");
+          .neq(pkCol, "00000000-0000-0000-0000-000000000000");
         if (delErr) {
           results[tableKey] = {
             success: false, total: 0, inserted: 0, updated: 0, skipped: 0, failed: 0,
@@ -324,9 +430,11 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Pre-load FK dependency sets ───────────────────────────────────────────
-    const existingUserIds = await loadIds(supabase, "profiles", "user_id");
-    let existingGroupIds = await loadIds(supabase, "user_groups", "id");
-    let existingConvIds = await loadIds(supabase, "chat_conversations", "id");
+    const existingUserIds  = await loadIds(supabase, "profiles", "user_id");
+    let existingGroupIds   = await loadIds(supabase, "user_groups", "id");
+    let existingConvIds    = await loadIds(supabase, "chat_conversations", "id");
+    let existingChannelIds = await loadIds(supabase, "channels", "id");
+    let existingMeetingIds = await loadIds(supabase, "meetings", "id");
 
     // ── Restore each table in dependency order ────────────────────────────────
     for (const tableKey of sortedKeys) {
@@ -338,25 +446,34 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      // Refresh group IDs just before restoring members (captures newly restored groups)
+      // Refresh FK sets after each "parent" table is restored to capture newly inserted IDs.
       if (tableKey === "user_group_members") {
         existingGroupIds = await loadIds(supabase, "user_groups", "id");
       }
-      // Refresh conversation IDs just before restoring messages
       if (tableKey === "chat_messages") {
         existingConvIds = await loadIds(supabase, "chat_conversations", "id");
+      }
+      if (tableKey === "channel_members" || tableKey === "channel_messages" || tableKey === "channel_work_topics") {
+        existingChannelIds = await loadIds(supabase, "channels", "id");
+      }
+      if (tableKey === "participants") {
+        existingMeetingIds = await loadIds(supabase, "meetings", "id");
       }
 
       const priorDeleteError = results[tableKey]?.deleteError;
 
       // Step 1: pre-filter rows with unresolvable FK dependencies
       const { filtered, skipped: preSkipped } = preFilterRows(
-        tableKey, rawRows, existingUserIds, existingGroupIds, existingConvIds,
+        tableKey, rawRows,
+        existingUserIds, existingGroupIds, existingConvIds,
+        existingChannelIds, existingMeetingIds,
       );
 
       // Step 2: pre-load existing IDs for insert-vs-update tracking
-      const isComposite = (CONFLICT_COLUMN[tableKey] ?? "").includes(",");
-      const existingTableIds = isComposite ? new Set<string>() : await loadIds(supabase, tableKey, "id");
+      const conflictCol = CONFLICT_COLUMN[tableKey] ?? "id";
+      const isComposite = conflictCol.includes(",");
+      const pkCol = TABLE_PK[tableKey] ?? "id";
+      const existingTableIds = isComposite ? new Set<string>() : await loadIds(supabase, tableKey, pkCol);
 
       try {
         const { inserted, updated, constraintSkipped, failed, errors } =
