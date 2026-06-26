@@ -34,11 +34,7 @@ import { GlobalCallProvider } from './context/GlobalCallContext';
 import { useUserPreferences } from './context/UserPreferencesContext';
 
 function App() {
-  // Check for ?conference=CODE guest join link before anything else
   const conferenceCode = new URLSearchParams(window.location.search).get('conference');
-  if (conferenceCode) {
-    return <GuestJoinPage code={conferenceCode} />;
-  }
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -408,6 +404,10 @@ function App() {
       window.removeEventListener('popstate', checkAdminPath);
     };
   }, [isAuthenticated, isAdmin]);
+
+  if (conferenceCode) {
+    return <GuestJoinPage code={conferenceCode} />;
+  }
 
   if (loading) {
     return (
