@@ -1193,6 +1193,9 @@ function TestTab() {
   const [connStatus, setConnStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const [connResult, setConnResult] = useState<any>(null);
 
+  const selectedProviderObj = providers.find(p => p.id === selectedProvider);
+  const isRahyabProvider = selectedProviderObj?.provider_type === 'rahyab';
+
   const [sendStatus, setSendStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const [sendResult, setSendResult] = useState<any>(null);
 
@@ -1288,7 +1291,12 @@ function TestTab() {
         )}
         {result.credit !== undefined && (
           <p className="text-green-700 dark:text-green-300">
-            <span className="font-semibold">اعتبار حساب: </span>{result.credit} تومان
+            <span className="font-semibold">اعتبار حساب: </span>{result.credit}
+          </p>
+        )}
+        {result.expireDate !== undefined && result.expireDate !== "" && (
+          <p className="text-green-700 dark:text-green-300">
+            <span className="font-semibold">تاریخ انقضا: </span>{result.expireDate}
           </p>
         )}
         {result.sent !== undefined && (
@@ -1367,7 +1375,9 @@ function TestTab() {
           <StatusBadge status={connStatus} />
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          بررسی می‌کند که کلید API معتبر است و مقدار اعتبار حساب را نمایش می‌دهد.
+          {isRahyabProvider
+            ? 'اتصال به وب‌سرویس SOAP رهیاب رایان را بررسی می‌کند و اعتبار و تاریخ انقضای سرویس را نمایش می‌دهد.'
+            : 'بررسی می‌کند که کلید API معتبر است و مقدار اعتبار حساب را نمایش می‌دهد.'}
         </p>
         <button
           onClick={testConnection}

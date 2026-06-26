@@ -33,9 +33,8 @@ function escapeXml(s: string): string {
 
 function extractResult(xml: string, action: string): string {
   const tag = `${action}Result`;
-  const m = xml.match(new RegExp(`<(?:[^:]+:)?${tag}[^>]*>([\\s\\S]*?)<\/(?:[^:]+:)?${tag}>`));
+  const m = xml.match(new RegExp(`<(?:[^:]+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:[^:]+:)?${tag}>`));
   if (!m) return "";
-  // Unescape HTML entities
   return m[1]
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -84,48 +83,61 @@ async function callSoap(
 // ── Parse helpers ─────────────────────────────────────────────────────────────
 
 function parseGetInfo(result: string): { ok: boolean; credit: string; expireDate: string; error?: string } {
-  // OK;12345;1402/12/29
+  // Response: OK;Credit;ExpireDate; e.g. OK;8546525;2022-02-22;
   if (!result.startsWith("OK")) return { ok: false, credit: "", expireDate: "", error: result };
   const parts = result.split(";");
   return { ok: true, credit: parts[1] ?? "", expireDate: parts[2] ?? "" };
 }
 
 function parseSendOk(result: string): { ok: boolean; returnIds: string[]; error?: string } {
+  // Response: "Send OK.<ReturnIDs>id1;id2;-1</ReturnIDs>"
   if (!result.startsWith("Send OK")) {
     return { ok: false, returnIds: [], error: result };
   }
   const m = result.match(/<ReturnIDs>(.*?)<\/ReturnIDs>/s);
-  const ids = m ? m[1].split(";").filter(Boolean) : [];
+  const ids = m ? m[1].split(";").filter(id => id && id !== "-1") : [];
   return { ok: true, returnIds: ids };
 }
 
+function getCdata(inner: string, tag: string): string {
+  // Handles both CDATA and plain text values
+  const m = inner.match(new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))<\\/${tag}>`));
+  if (!m) return "";
+  return (m[1] ?? m[2] ?? "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim();
+}
+
 function parseReceiveXml(xml: string): { rowId: string; dateTime: string; sender: string; receiver: string; message: string }[] {
+  // Per API docs, doReceiveSMS returns <smsBatch><sms><rowID/><origAddr/><destAddr/><time/><message/>
   const items: { rowId: string; dateTime: string; sender: string; receiver: string; message: string }[] = [];
-  const blocks = xml.matchAll(/<MessageReceive[^>]*>([\s\S]*?)<\/MessageReceive>/g);
+  const blocks = xml.matchAll(/<sms[^>]*>([\s\S]*?)<\/sms>/g);
   for (const b of blocks) {
     const inner = b[1];
-    const get = (tag: string) => {
-      const m = inner.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
-      return m ? m[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim() : "";
-    };
     items.push({
-      rowId: get("RowID"),
-      dateTime: get("DateTime"),
-      sender: get("Sender"),
-      receiver: get("Receiver"),
-      message: get("Message"),
+      rowId:    getCdata(inner, "rowID"),
+      dateTime: getCdata(inner, "time"),
+      sender:   getCdata(inner, "origAddr"),
+      receiver: getCdata(inner, "destAddr"),
+      message:  getCdata(inner, "message"),
     });
   }
   return items;
 }
 
-function parseDelivery(result: string): Record<string, number> {
-  // "id:status;id:status" or XML
+function parseDelivery(returnIds: string[], result: string): Record<string, number> {
+  // doGetDelivery returns plain status codes in order: "0;2;-1"
+  // We map each status back to the corresponding returnId by position
+  const statuses = result.split(";");
   const map: Record<string, number> = {};
-  for (const part of result.split(";")) {
-    const [id, status] = part.split(":");
-    if (id && status !== undefined) map[id.trim()] = parseInt(status.trim(), 10);
-  }
+  returnIds.forEach((id, i) => {
+    const s = statuses[i];
+    if (id && s !== undefined && s.trim() !== "") {
+      map[id.trim()] = parseInt(s.trim(), 10);
+    }
+  });
   return map;
 }
 
@@ -147,7 +159,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const action: string = body.action; // send | get_info | receive | get_delivery | test | save_settings | load_settings | inbox
 
-    // ── load_settings (no credentials needed) ────────────────────────
+    // ── load_settings ────────────────────────────────────────────────
     if (action === "load_settings") {
       const { data } = await supabase.from("rahyab_settings").select("*").limit(1).maybeSingle();
       return json({ ok: true, settings: data });
@@ -163,7 +175,7 @@ Deno.serve(async (req: Request) => {
           password: s.password ?? "",
           short_code: s.short_code ?? "",
           token: s.token ?? "",
-          soap_url: s.soap_url || "http://RahvabBulk.ir/WebService/sms.asmx",
+          soap_url: s.soap_url || "http://RahyabBulk.ir/WebService/sms.asmx",
           is_active: s.is_active ?? false,
           updated_at: new Date().toISOString(),
         }).eq("id", existing.data.id);
@@ -173,7 +185,7 @@ Deno.serve(async (req: Request) => {
           password: s.password ?? "",
           short_code: s.short_code ?? "",
           token: s.token ?? "",
-          soap_url: s.soap_url || "http://RahvabBulk.ir/WebService/sms.asmx",
+          soap_url: s.soap_url || "http://RahyabBulk.ir/WebService/sms.asmx",
           is_active: s.is_active ?? false,
         }]);
       }
@@ -190,20 +202,36 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, messages: data ?? [] });
     }
 
-    // For all SOAP actions, load settings from DB
-    const { data: settings } = await supabase
-      .from("rahyab_settings")
-      .select("*")
-      .limit(1)
-      .maybeSingle();
+    // ── Resolve credentials: _providerOverride takes priority over DB ──
+    // When called from send-sms with a rahyab-type provider, credentials
+    // are passed directly so we don't need the legacy rahyab_settings table.
+    const override = body._providerOverride as Record<string, string> | undefined;
 
-    if (!settings) return json({ ok: false, error: "تنظیمات رهیاب رایان پیکربندی نشده است" }, 400);
+    let soapUrl: string;
+    let uUsername: string;
+    let uPassword: string;
+    let uNumber: string;
 
-    const soapUrl: string = settings.soap_url || "http://RahvabBulk.ir/WebService/sms.asmx";
-    // Use token as username when provided (more secure)
-    const uUsername: string = settings.token || settings.username || "";
-    const uPassword: string = settings.password || "";
-    const uNumber: string = settings.short_code || "";
+    if (override) {
+      soapUrl   = override.soap_url   || "http://RahyabBulk.ir/WebService/sms.asmx";
+      uUsername = override.token      || override.username || "";
+      // Per API docs: when using token, password can be any string of ≥5 chars
+      uPassword = override.password   || "12345";
+      uNumber   = override.short_code || "";
+    } else {
+      const { data: settings } = await supabase
+        .from("rahyab_settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+
+      if (!settings) return json({ ok: false, error: "تنظیمات رهیاب رایان پیکربندی نشده است" }, 400);
+
+      soapUrl   = settings.soap_url || "http://RahyabBulk.ir/WebService/sms.asmx";
+      uUsername = settings.token    || settings.username || "";
+      uPassword = settings.password || "";
+      uNumber   = settings.short_code || "";
+    }
 
     if (!uUsername) return json({ ok: false, error: "نام کاربری یا توکن پیکربندی نشده است" }, 400);
 
@@ -252,7 +280,7 @@ Deno.serve(async (req: Request) => {
         if (!parsed.ok) { errors.push(parsed.error ?? "ارسال ناموفق"); continue; }
         allIds.push(...parsed.returnIds);
 
-        // Respect the 3-second minimum interval between requests
+        // API requires ≥3s between requests
         if (i + CHUNK < mobiles.length) {
           await new Promise(r => setTimeout(r, 3100));
         }
@@ -272,9 +300,9 @@ Deno.serve(async (req: Request) => {
 
       const messages = parseReceiveXml(soap.result || soap.rawXml || "");
 
-      // Persist to rahyab_inbox (ignore duplicates via UNIQUE on row_id)
       for (const m of messages) {
         if (!m.rowId) continue;
+        // time format from API: "2011/06/13 00:00:14"
         const received_at = m.dateTime
           ? new Date(m.dateTime.replace(/(\d{4})\/(\d{2})\/(\d{2})/, "$1-$2-$3")).toISOString()
           : new Date().toISOString();
@@ -293,16 +321,18 @@ Deno.serve(async (req: Request) => {
       const returnIds: string[] = body.returnIds ?? [];
       if (!returnIds.length) return json({ ok: false, error: "شناسه پیام وارد نشده" }, 400);
 
+      // doGetDelivery returns plain ordered status codes: "0;2;-1"
+      // API requires ≥1s between requests, username only (no password)
       const CHUNK = 100;
       const deliveryMap: Record<string, number> = {};
 
       for (let i = 0; i < returnIds.length; i += CHUNK) {
         const chunk = returnIds.slice(i, i + CHUNK);
         const soap = await callSoap(soapUrl, "doGetDelivery", {
-          userName: uUsername,
+          uUsername,
           uReturnIDs: chunk.join(";"),
         });
-        if (soap.ok) Object.assign(deliveryMap, parseDelivery(soap.result));
+        if (soap.ok) Object.assign(deliveryMap, parseDelivery(chunk, soap.result));
         if (i + CHUNK < returnIds.length) await new Promise(r => setTimeout(r, 1100));
       }
 
