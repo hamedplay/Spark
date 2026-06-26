@@ -326,7 +326,7 @@ export function CalendarPage({
 
   useEffect(() => {
     supabase.from('system_config').select('key,value').eq('section', 'regional')
-      .in('key', ['work_start_time', 'work_end_time', 'hide_offhours_default']).then(({ data }) => {
+      .in('key', ['work_start_time', 'work_end_time']).then(({ data }) => {
       if (!data) return;
       data.forEach(row => {
         if (row.key === 'work_start_time' && row.value) {
@@ -336,9 +336,6 @@ export function CalendarPage({
         if (row.key === 'work_end_time' && row.value) {
           const m = timeToMinutes(row.value);
           if (m >= 0) setWorkEndMin(m);
-        }
-        if (row.key === 'hide_offhours_default') {
-          setHideOffHours(row.value === 'true');
         }
       });
     });
