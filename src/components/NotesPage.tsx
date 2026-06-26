@@ -174,7 +174,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       let imageData: string | null = null;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          imageData = await toPng(brandedCardRef.current, { quality: 1, pixelRatio: 2, backgroundColor: '#1e3a5f' });
+          imageData = await toPng(brandedCardRef.current, { quality: 0.95, pixelRatio: 2 });
           break;
         } catch {
           if (attempt === 3) throw new Error('toPng failed after 3 attempts');
@@ -549,42 +549,22 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
         <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -1 }}>
           <div
             ref={brandedCardRef}
-            style={{
-              width: '480px',
-              background: 'linear-gradient(135deg, #0f2845 0%, #1e3a5f 50%, #0f2845 100%)',
-              padding: '0',
-              fontFamily: 'Vazir, Tahoma, Arial, sans-serif',
-              direction: 'rtl',
-              borderRadius: '16px',
-              overflow: 'hidden',
-            }}
+            style={{ width: 360, backgroundColor: '#fff', fontFamily: 'Vazirmatn, system-ui, Tahoma, sans-serif', direction: 'rtl', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.12)' }}
           >
-            {/* Header bar */}
-            <div style={{ background: 'rgba(255,255,255,0.08)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-              <img src="/logo_spark.png" alt="Spark" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
-              <div>
-                <div style={{ color: '#ffffff', fontSize: '14px', fontWeight: 'bold', lineHeight: '1.3' }}>اسپارک</div>
-                <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px', lineHeight: '1.3' }}>سامانه هوشمند مدیریت سازمانی</div>
+            <div style={{ backgroundColor: '#0d9488', padding: '16px 20px' }}>
+              <p style={{ color: '#fff', fontWeight: 700, fontSize: 16, margin: 0, lineHeight: '1.5' }}>{shareNote.title}</p>
+              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, margin: '4px 0 0' }}>
+                {new Date(shareNote.created_at).toLocaleDateString('fa-IR')}
+              </p>
+            </div>
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ color: '#6b7280', fontSize: 12, minWidth: 64, flexShrink: 0 }}>متن:</span>
+                <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.8' }}>{shareNote.content}</span>
               </div>
             </div>
-            {/* Content area */}
-            <div style={{ padding: '20px' }}>
-              {/* Title */}
-              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 16px', marginBottom: '12px', borderRight: '4px solid #60a5fa' }}>
-                <div style={{ color: '#93c5fd', fontSize: '11px', marginBottom: '4px' }}>عنوان یادداشت</div>
-                <div style={{ color: '#ffffff', fontSize: '16px', fontWeight: 'bold', lineHeight: '1.6' }}>{shareNote.title}</div>
-              </div>
-              {/* Content */}
-              <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: '10px', padding: '14px 16px', minHeight: '80px' }}>
-                <div style={{ color: '#e2e8f0', fontSize: '13px', lineHeight: '1.9', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{shareNote.content}</div>
-              </div>
-              {/* Date */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px' }}>
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}>
-                  {new Date(shareNote.created_at).toLocaleDateString('fa-IR')}
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px' }}>spark.app</div>
-              </div>
+            <div style={{ padding: '10px 20px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+              <p style={{ color: '#9ca3af', fontSize: 11, margin: 0, textAlign: 'center' }}>سامانه هوشمند مدیریت سازمانی</p>
             </div>
           </div>
         </div>
