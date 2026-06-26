@@ -1433,6 +1433,9 @@ function TestTab() {
               value={selectedProvider}
               onChange={e => { setSelectedProvider(e.target.value); resetAll(); }}
             >
+              {!selectedProvider && (
+                <option value="" disabled>انتخاب سرویس‌دهنده...</option>
+              )}
               {providers.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.title}{p.is_default ? ' (پیش‌فرض)' : ''}{p.provider_type === 'rahyab' ? ' — SOAP' : p.line_number ? ` — ${p.line_number}` : ''}
