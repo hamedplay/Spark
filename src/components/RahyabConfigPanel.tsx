@@ -30,7 +30,7 @@ interface InboxMessage {
 
 const BLANK_SETTINGS: RahyabSettings = {
   username: '', password: '', short_code: '', token: '',
-  soap_url: 'http://RahvabBulk.ir/WebService/sms.asmx', is_active: false,
+  soap_url: 'http://RahyabBulk.ir/WebService/sms.asmx', is_active: false,
 };
 
 const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm';
@@ -121,7 +121,7 @@ function SettingsTab() {
         <div className="text-xs text-teal-700 dark:text-teal-300 leading-relaxed space-y-1">
           <p className="font-medium">نکات امنیتی</p>
           <p>برای امنیت بیشتر از فیلد <strong>توکن</strong> به جای نام کاربری استفاده کنید. در صورت وجود توکن، نام کاربری نادیده گرفته می‌شود.</p>
-          <p>آدرس وب‌سرویس: <span className="font-mono">http://RahvabBulk.ir/WebService/sms.asmx</span></p>
+          <p>آدرس وب‌سرویس: <span className="font-mono">http://RahyabBulk.ir/WebService/sms.asmx</span></p>
         </div>
       </div>
 
@@ -156,7 +156,7 @@ function SettingsTab() {
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">آدرس وب‌سرویس SOAP</label>
             <input className={inp} value={form.soap_url} onChange={e => set('soap_url', e.target.value)} dir="ltr" />
             <p className="text-xs text-gray-400 mt-1">
-              گزینه‌های جایگزین: <span className="font-mono">https://RahvabBulk.ir:8443/WebService/sms.asmx</span>
+              گزینه‌های جایگزین: <span className="font-mono">https://RahyabBulk.ir:8443/WebService/sms.asmx</span>
             </p>
           </div>
         </div>
@@ -255,9 +255,9 @@ function AccountTab() {
         <div className="bg-teal-50 dark:bg-teal-900/20 rounded-2xl border border-teal-100 dark:border-teal-800 px-4 py-3">
           <p className="text-xs text-teal-700 dark:text-teal-300">
             برای گزارشات تفصیلی‌تر به پنل رهیاب رایان مراجعه کنید:
-            <a href="https://RahvabBulk.ir/" target="_blank" rel="noopener noreferrer"
+            <a href="https://RahyabBulk.ir/" target="_blank" rel="noopener noreferrer"
               className="font-mono mr-1 underline hover:no-underline" dir="ltr">
-              https://RahvabBulk.ir/
+              https://RahyabBulk.ir/
             </a>
           </p>
         </div>
@@ -492,7 +492,7 @@ function EngineSelector() {
           className={`p-3 rounded-xl border transition-all text-right ${engine === 'rahyab' ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-600' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'}`}
         >
           <p className={`text-sm font-semibold ${engine === 'rahyab' ? 'text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-300'}`}>وب‌سرویس رهیاب رایان</p>
-          <p className="text-xs text-gray-400 mt-0.5">SOAP — RahvabBulk.ir</p>
+          <p className="text-xs text-gray-400 mt-0.5">SOAP — RahyabBulk.ir</p>
           {engine === 'rahyab' && <span className="inline-block mt-1.5 text-xs text-teal-600 dark:text-teal-400 font-medium">● فعال</span>}
         </button>
       </div>
