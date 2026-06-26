@@ -851,13 +851,18 @@ export function ProfilePage() {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">در نمایش روزانه و هفتگی، ساعات خارج از وقت کاری پنهان شود</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => updatePrefs({ hide_off_hours: !prefs.hide_off_hours })}
-                className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${prefs.hide_off_hours ? 'bg-amber-500' : 'bg-gray-200 dark:bg-gray-600'}`}
-              >
-                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${prefs.hide_off_hours ? 'translate-x-5' : 'translate-x-1'}`} />
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={`text-xs font-medium ${prefs.hide_off_hours ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                  {prefs.hide_off_hours ? 'فعال' : 'غیرفعال'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updatePrefs({ hide_off_hours: !prefs.hide_off_hours })}
+                  className={`w-11 h-6 rounded-full relative transition-colors ${prefs.hide_off_hours ? 'bg-amber-500' : 'bg-gray-200 dark:bg-gray-600'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${prefs.hide_off_hours ? 'translate-x-5' : 'translate-x-1'}`} />
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -525,7 +525,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
             }}
           >
             {/* Colored header */}
-            <div style={{ backgroundColor: '#3b82f6', padding: '16px 20px' }}>
+            <div style={{ backgroundColor: '#14b8a6', padding: '16px 20px' }}>
               <p style={{ color: '#fff', fontWeight: 700, fontSize: 16, margin: 0 }}>{shareNote.title}</p>
               <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, margin: '4px 0 0' }}>
                 {new Date(shareNote.created_at).toLocaleDateString('fa-IR')}
