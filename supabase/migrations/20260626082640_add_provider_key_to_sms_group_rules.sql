@@ -1,1 +1,0 @@
-ALTER TABLE sms_group_rules ADD COLUMN IF NOT EXISTS provider_key TEXT DEFAULT NULL;
