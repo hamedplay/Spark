@@ -16,7 +16,6 @@ import { SystemMonitoringPage } from './SystemMonitoringPage';
 
 import { AuditLogPage } from './AuditLogPage';
 import { BackupPanel } from './BackupPanel';
-import { RahyabConfigPanel } from './RahyabConfigPanel';
 interface ConfigEntry { id: string; section: string; key: string; value: string | null; value_type: string; label: string | null; description: string | null; }
 interface AuditEntry { id: string; user_name: string | null; ip_address: string | null; user_agent: string | null; module: string | null; entity_name: string | null; action: string; details: string | null; severity: string; created_at: string; }
 interface UserGroup { id: string; name: string; display_name: string | null; description: string | null; is_system: boolean; is_public: boolean; permissions: Record<string, boolean>; member_count?: number; }
@@ -48,7 +47,6 @@ const NAV_ITEMS = [
   { key: 'notifications', label: 'اعلان‌ها و پیامک', icon: Bell, sub: [
     { key: 'notifications', label: 'اعلان‌ها' },
     { key: 'sms', label: 'پیامک' },
-    { key: 'rahyab', label: 'وب‌سرویس رهیاب رایان' },
     { key: 'social_notifications', label: 'شبکه‌های اجتماعی' },
     { key: 'email', label: 'پست الکترونیک' },
     { key: 'daily_report', label: 'ارسال جلسات مدیریتی' },
@@ -986,10 +984,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
       // ── SMS ───────────────────────────────────────────────────────────────
       case 'sms':
         return <SmsConfigPanel />;
-
-      // ── Rahyab Rayan ───────────────────────────────────────────────────────
-      case 'rahyab':
-        return <RahyabConfigPanel />;
 
       // ── Social Notifications ───────────────────────────────────────────────
       case 'social_notifications':
