@@ -1,38 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/supabase';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
-}
-
-// Validate URL format
-try {
-  new URL(supabaseUrl);
-} catch (error) {
-  throw new Error('Invalid Supabase URL format. Please check your VITE_SUPABASE_URL in .env file.');
-}
-
-// Log configuration for debugging (only in development)
-if (import.meta.env.DEV) {
-  console.log('Supabase Configuration:', {
-    url: supabaseUrl,
-    hasAnonKey: !!supabaseAnonKey,
-    anonKeyLength: supabaseAnonKey?.length
-  });
+function getSafeStorage(): Storage | undefined {
+  try {
+    localStorage.setItem('__test__', '1');
+    localStorage.removeItem('__test__');
+    return localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     storageKey: 'meeting-manager-auth',
-    storage: localStorage,
+    storage: getSafeStorage(),
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'implicit',
-    debug: import.meta.env.DEV
+    debug: false,
   },
   global: {
     headers: {
@@ -72,8 +62,7 @@ export const isAuthenticated = async () => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error) {
-      console.error('Error getting session:', error);
-      localStorage.removeItem('meeting-manager-auth');
+      try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
       await supabase.auth.signOut();
       return false;
     }
@@ -84,16 +73,14 @@ export const isAuthenticated = async () => {
 
     const { data: { user }, error: refreshError } = await supabase.auth.getUser();
     if (refreshError || !user) {
-      console.error('Error refreshing user:', refreshError);
-      localStorage.removeItem('meeting-manager-auth');
+      try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
       await supabase.auth.signOut();
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error('Error checking authentication:', error);
-    localStorage.removeItem('meeting-manager-auth');
+    try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
     await supabase.auth.signOut();
     return false;
   }
@@ -167,10 +154,10 @@ export const handleSupabaseError = (error: any) => {
   }
   
   // Authentication issues
-  if (error.message === 'session_not_found' || 
-      error.code === 'refresh_token_not_found' || 
+  if (error.message === 'session_not_found' ||
+      error.code === 'refresh_token_not_found' ||
       error.message?.includes('Invalid Refresh Token')) {
-    localStorage.removeItem('meeting-manager-auth');
+    try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
     supabase.auth.signOut();
     return new Error('نشست شما منقضی شده است. لطفاً دوباره وارد شوید');
   }
@@ -206,13 +193,11 @@ export const handleSupabaseError = (error: any) => {
 
 // Setup auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
-  console.log('Auth state changed:', event, session?.user?.id);
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-    localStorage.removeItem('meeting-manager-auth');
+    try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
   } else if (event === 'TOKEN_REFRESHED' && !session) {
     supabase.auth.signOut();
   } else if (event === 'SIGNED_IN' && session) {
-    // Ensure profile exists on sign in
     (async () => {
       if (session.user) {
         await ensureProfile(session.user.id, session.user.email || '');
