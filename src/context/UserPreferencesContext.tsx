@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 export interface UserPreferences {
@@ -59,6 +59,12 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Always keep a ref in sync so updatePrefs never reads stale closure state
+  const prefsRef = useRef<UserPreferences>(DEFAULTS);
+  prefsRef.current = prefs;
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = userId;
+
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -109,14 +115,14 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
   }, []);
 
   const updatePrefs = useCallback(async (patch: Partial<UserPreferences>) => {
-    const next = { ...prefs, ...patch };
+    const next = { ...prefsRef.current, ...patch };
     setPrefs(next);
 
-    if (!userId) return;
+    if (!userIdRef.current) return;
     await supabase
       .from('user_preferences')
-      .upsert({ user_id: userId, ...next, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
-  }, [prefs, userId]);
+      .upsert({ user_id: userIdRef.current, ...next, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  }, []);
 
   return (
     <UserPreferencesContext.Provider value={{ prefs, loading, updatePrefs }}>
