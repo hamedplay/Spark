@@ -58,7 +58,7 @@ export function CalendarPage({
   sparkNavigateDate, onSparkNavigateDateConsumed,
   sparkCalendarMeetingPrefill, onSparkCalendarMeetingPrefillConsumed,
 }: CalendarPageProps) {
-  const { prefs } = useUserPreferences();
+  const { prefs, updatePrefs } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const p = localStorage.getItem('user_prefs_calendar_view') as ViewMode | null;
@@ -310,8 +310,13 @@ export function CalendarPage({
 
   // Hide off-hours based on permission
   const { hasPermission } = usePermissions();
-  const [hideOffHours, setHideOffHours] = useState(false);
+  const [hideOffHours, setHideOffHours] = useState(() => prefs.hide_off_hours ?? false);
   const canHideOffHours = hasPermission('calendar_hide_offhours');
+
+  // Sync hideOffHours when prefs load from DB
+  useEffect(() => {
+    setHideOffHours(prefs.hide_off_hours ?? false);
+  }, [prefs.hide_off_hours]);
 
   // When hiding off-hours, clip visible range to work hours (with 1hr buffer)
   const visibleStartMin = hideOffHours ? Math.max(HOURS_START * 60, workStartMin - 60) : HOURS_START * 60;
@@ -1894,9 +1899,13 @@ export function CalendarPage({
                 </div>
               )}
             </div>
-            {canHideOffHours && (viewMode === 'day' || viewMode === 'week') && (
+            {canHideOffHours && (
               <button
-                onClick={() => setHideOffHours(h => !h)}
+                onClick={() => {
+                  const next = !hideOffHours;
+                  setHideOffHours(next);
+                  updatePrefs({ hide_off_hours: next });
+                }}
                 title={hideOffHours ? 'نمایش ساعات غیرکاری' : 'پنهان کردن ساعات غیرکاری'}
                 className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${hideOffHours ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
               >

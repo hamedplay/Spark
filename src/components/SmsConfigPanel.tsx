@@ -555,10 +555,11 @@ function GroupsTab() {
                             value={rule.provider_id || ''}
                             onChange={e => setRule(cat.key, 'provider_id', e.target.value || null)}
                             className="appearance-none text-xs pr-2 pl-6 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500 max-w-36"
+                            style={{ colorScheme: 'light dark' }}
                           >
-                            <option value="">پیش‌فرض (سرویس‌دهنده اصلی)</option>
+                            <option value="" className="text-gray-700 bg-white dark:text-gray-200 dark:bg-gray-700">پیش‌فرض (سرویس‌دهنده اصلی)</option>
                             {providers.map(p => (
-                              <option key={p.id} value={p.id}>
+                              <option key={p.id} value={p.id} className="text-gray-700 bg-white dark:text-gray-200 dark:bg-gray-700">
                                 {p.title}{p.provider_type === 'rahyab' ? ' (SOAP)' : ''}
                               </option>
                             ))}
@@ -1432,12 +1433,13 @@ function TestTab() {
               className={inp + ' appearance-none pl-8'}
               value={selectedProvider}
               onChange={e => { setSelectedProvider(e.target.value); resetAll(); }}
+              style={{ colorScheme: 'light dark' }}
             >
               {!selectedProvider && (
-                <option value="" disabled>انتخاب سرویس‌دهنده...</option>
+                <option value="" disabled className="text-gray-400 bg-white dark:bg-gray-700">انتخاب سرویس‌دهنده...</option>
               )}
               {providers.map(p => (
-                <option key={p.id} value={p.id}>
+                <option key={p.id} value={p.id} className="text-gray-900 bg-white dark:text-white dark:bg-gray-700">
                   {p.title}{p.is_default ? ' (پیش‌فرض)' : ''}{p.provider_type === 'rahyab' ? ' — SOAP' : p.line_number ? ` — ${p.line_number}` : ''}
                 </option>
               ))}

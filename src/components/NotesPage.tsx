@@ -153,7 +153,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       setShareImageData(null);
       await new Promise(r => setTimeout(r, 80));
       if (!brandedCardRef.current) { toast.error('خطا در ایجاد تصویر یادداشت'); return; }
-      const imageData = await toPng(brandedCardRef.current, { quality: 1, pixelRatio: 2, backgroundColor: '#1e3a5f' });
+      const imageData = await toPng(brandedCardRef.current, { quality: 1, pixelRatio: 2, backgroundColor: '#ffffff' });
 
       if (navigator.share && navigator.canShare?.({ files: [new File([], 'note.png', { type: 'image/png' })] })) {
         const blob = await (await fetch(imageData)).blob();
@@ -515,40 +515,37 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
           <div
             ref={brandedCardRef}
             style={{
-              width: '480px',
-              background: 'linear-gradient(135deg, #0f2845 0%, #1e3a5f 50%, #0f2845 100%)',
-              padding: '0',
-              fontFamily: 'Vazir, Tahoma, Arial, sans-serif',
+              width: '360px',
+              backgroundColor: '#fff',
+              fontFamily: 'Vazirmatn, Vazir, Tahoma, Arial, sans-serif',
               direction: 'rtl',
               borderRadius: '16px',
               overflow: 'hidden',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
             }}
           >
-            {/* Header bar */}
-            <div style={{ background: 'rgba(255,255,255,0.08)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-              <img src="/logo_spark.png" alt="Spark" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
-              <div>
-                <div style={{ color: '#ffffff', fontSize: '14px', fontWeight: 'bold', lineHeight: '1.3' }}>اسپارک</div>
-                <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px', lineHeight: '1.3' }}>سامانه هوشمند مدیریت سازمانی</div>
+            {/* Colored header */}
+            <div style={{ backgroundColor: '#3b82f6', padding: '16px 20px' }}>
+              <p style={{ color: '#fff', fontWeight: 700, fontSize: 16, margin: 0 }}>{shareNote.title}</p>
+              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, margin: '4px 0 0' }}>
+                {new Date(shareNote.created_at).toLocaleDateString('fa-IR')}
+              </p>
+            </div>
+            {/* Content body */}
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ color: '#6b7280', fontSize: 12, minWidth: 64, flexShrink: 0 }}>یادداشت:</span>
+                <span style={{ color: '#111827', fontSize: 12, lineHeight: 1.7, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{shareNote.content}</span>
               </div>
             </div>
-            {/* Content area */}
-            <div style={{ padding: '20px' }}>
-              {/* Title */}
-              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 16px', marginBottom: '12px', borderRight: '4px solid #60a5fa' }}>
-                <div style={{ color: '#93c5fd', fontSize: '11px', marginBottom: '4px' }}>عنوان یادداشت</div>
-                <div style={{ color: '#ffffff', fontSize: '16px', fontWeight: 'bold', lineHeight: '1.6' }}>{shareNote.title}</div>
-              </div>
-              {/* Content */}
-              <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: '10px', padding: '14px 16px', minHeight: '80px' }}>
-                <div style={{ color: '#e2e8f0', fontSize: '13px', lineHeight: '1.9', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{shareNote.content}</div>
-              </div>
-              {/* Date */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px' }}>
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}>
-                  {new Date(shareNote.created_at).toLocaleDateString('fa-IR')}
+            {/* Footer */}
+            <div style={{ padding: '10px 20px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <img src="/logo_spark.png" alt="Spark" style={{ width: 20, height: 20, objectFit: 'contain' }} />
+                  <span style={{ color: '#6b7280', fontSize: 11, fontWeight: 600 }}>اسپارک</span>
                 </div>
-                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px' }}>spark.app</div>
+                <p style={{ color: '#9ca3af', fontSize: 11, margin: 0 }}>سامانه مدیریت سازمانی</p>
               </div>
             </div>
           </div>
