@@ -12,6 +12,8 @@ export interface UserPreferences {
   theme: 'light' | 'dark';
   accent_color: string;
   hide_offhours: boolean;
+  work_start_time: string | null;
+  work_end_time: string | null;
 }
 
 const DEFAULTS: UserPreferences = {
@@ -25,6 +27,8 @@ const DEFAULTS: UserPreferences = {
   theme: 'light',
   accent_color: 'teal',
   hide_offhours: false,
+  work_start_time: null,
+  work_end_time: null,
 };
 
 interface UserPreferencesContextValue {
@@ -51,6 +55,8 @@ function mapRow(data: Record<string, unknown>): UserPreferences {
     theme: (data.theme as 'light' | 'dark') ?? DEFAULTS.theme,
     accent_color: (data.accent_color as string) ?? DEFAULTS.accent_color,
     hide_offhours: (data.hide_offhours as boolean) ?? DEFAULTS.hide_offhours,
+    work_start_time: (data.work_start_time as string | null) ?? null,
+    work_end_time: (data.work_end_time as string | null) ?? null,
   };
 }
 
@@ -74,7 +80,6 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
       if (data) {
         const mapped = mapRow(data);
         setPrefs(mapped);
-        // Seed localStorage so ThemeContext initializes with correct values on next render
         localStorage.setItem('theme', mapped.theme);
         localStorage.setItem('accent_color', mapped.accent_color);
       }

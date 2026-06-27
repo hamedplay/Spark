@@ -349,6 +349,18 @@ export function CalendarPage({
     });
   }, []);
 
+  // Override work hours with user personal preference when set
+  useEffect(() => {
+    if (prefs.work_start_time) {
+      const m = timeToMinutes(prefs.work_start_time);
+      if (m >= 0) setWorkStartMin(m);
+    }
+    if (prefs.work_end_time) {
+      const m = timeToMinutes(prefs.work_end_time);
+      if (m >= 0) setWorkEndMin(m);
+    }
+  }, [prefs.work_start_time, prefs.work_end_time]);
+
   // Spark: change view mode
   useEffect(() => {
     if (!initialView) return;

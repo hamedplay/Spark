@@ -666,6 +666,7 @@ export function ProfilePage() {
           </div>
         </div>
         <div className="p-6 space-y-3">
+          {/* Hide off-hours toggle */}
           <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
@@ -683,6 +684,62 @@ export function ProfilePage() {
             >
               <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${prefs.hide_offhours ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
+          </div>
+
+          {/* Work hours range */}
+          <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-white">ساعات کاری شخصی</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">بازه ساعات کاری شما در تقویم (پیش‌فرض: تنظیمات سازمان)</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3" dir="rtl">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">شروع ساعات کاری</label>
+                <select
+                  value={prefs.work_start_time ?? ''}
+                  onChange={e => updatePrefs({ work_start_time: e.target.value || null })}
+                  className="w-full py-2 px-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  dir="ltr"
+                >
+                  <option value="">پیش‌فرض سازمان</option>
+                  {Array.from({ length: 48 }, (_, i) => {
+                    const h = Math.floor(i / 2).toString().padStart(2, '0');
+                    const m = i % 2 === 0 ? '00' : '30';
+                    return <option key={i} value={`${h}:${m}`}>{`${h}:${m}`}</option>;
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">پایان ساعات کاری</label>
+                <select
+                  value={prefs.work_end_time ?? ''}
+                  onChange={e => updatePrefs({ work_end_time: e.target.value || null })}
+                  className="w-full py-2 px-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  dir="ltr"
+                >
+                  <option value="">پیش‌فرض سازمان</option>
+                  {Array.from({ length: 48 }, (_, i) => {
+                    const h = Math.floor(i / 2).toString().padStart(2, '0');
+                    const m = i % 2 === 0 ? '00' : '30';
+                    return <option key={i} value={`${h}:${m}`}>{`${h}:${m}`}</option>;
+                  })}
+                </select>
+              </div>
+            </div>
+            {(prefs.work_start_time || prefs.work_end_time) && (
+              <button
+                type="button"
+                onClick={() => updatePrefs({ work_start_time: null, work_end_time: null })}
+                className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 transition-colors"
+              >
+                بازگشت به پیش‌فرض سازمان
+              </button>
+            )}
           </div>
         </div>
       </div>
