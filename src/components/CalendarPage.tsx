@@ -127,6 +127,14 @@ export function CalendarPage({
   const [dragMoveCurrentDeltaSlot, setDragMoveCurrentDeltaSlot] = useState(0);
   const [dragMoveCurrentDeltaDay, setDragMoveCurrentDeltaDay] = useState(0);
   const [dragMoveOriginalDate, setDragMoveOriginalDate] = useState('');
+  const [pendingMove, setPendingMove] = useState<{
+    meeting: MeetingData;
+    updates: Record<string, string>;
+    ns: number;
+    ne: number;
+    oldDateIso: string;
+    newDateIso: string;
+  } | null>(null);
   const weekGridRef = useRef<HTMLDivElement | null>(null);
   const dayGridRef = useRef<HTMLDivElement | null>(null);
 
@@ -1333,19 +1341,9 @@ export function CalendarPage({
               origDate.setDate(origDate.getDate() + deltaDay);
               newDate = `${origDate.getFullYear()}-${String(origDate.getMonth() + 1).padStart(2, '0')}-${String(origDate.getDate()).padStart(2, '0')}`;
             }
-            const updates: any = { start_time: minutesToTime(ns * 30), end_time: minutesToTime(ne * 30), duration: `${minutesToTime(ns * 30)} - ${minutesToTime(ne * 30)}` };
+            const updates: Record<string, string> = { start_time: minutesToTime(ns * 30), end_time: minutesToTime(ne * 30), duration: `${minutesToTime(ns * 30)} - ${minutesToTime(ne * 30)}` };
             if (newDate !== dragMoveOriginalDate) updates.request_date = new Date(newDate + 'T12:00:00').toISOString();
-            const { error } = await supabase.from('meetings').update(updates).eq('id', dragMoveMeeting.id);
-            if (!error) {
-              toast.success('جلسه جابجا شد');
-              fetchMeetings();
-              sendNotification('جلسه جابجا شد', dragMoveMeeting.subject);
-              const movedMtg = { ...dragMoveMeeting, start_time: minutesToTime(ns * 30), end_time: minutesToTime(ne * 30) };
-              if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'جلسه جابجا شد', fallbackMessage: `جلسه «${dragMoveMeeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
-              const dragPIds = (dragMoveMeeting.participant_user_ids || []);
-              const moveParticipants = [...dragPIds, ...((dragMoveMeeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
-              if (moveParticipants.length) await Promise.all(moveParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: dragPIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${dragMoveMeeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
-            } else toast.error('خطا');
+            setPendingMove({ meeting: dragMoveMeeting, updates, ns, ne, oldDateIso: dragMoveOriginalDate, newDateIso: newDate });
           }
         }
         setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0);
@@ -1453,6 +1451,22 @@ export function CalendarPage({
 
   if (!currentJy) return null;
 
+  const commitMove = async () => {
+    if (!pendingMove) return;
+    const { meeting, updates, ns, ne } = pendingMove;
+    const { error } = await supabase.from('meetings').update(updates).eq('id', meeting.id);
+    if (!error) {
+      toast.success('جلسه جابجا شد');
+      fetchMeetings();
+      sendNotification('جلسه جابجا شد', meeting.subject);
+      const movedMtg = { ...meeting, start_time: minutesToTime(ns * 30), end_time: minutesToTime(ne * 30) };
+      if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'جلسه جابجا شد', fallbackMessage: `جلسه «${meeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
+      const dragPIds = (meeting.participant_user_ids || []);
+      const moveParticipants = [...dragPIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
+      if (moveParticipants.length) await Promise.all(moveParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: dragPIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
+    } else toast.error('خطا');
+    setPendingMove(null);
+  };
 
   return (
     <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
@@ -2106,6 +2120,49 @@ export function CalendarPage({
                 onEditCalendar={cal => { setEditingCalendar(cal); setCalendarForm({ name: cal.name, type: cal.type, description: cal.description || '', is_active: cal.is_active, enable_reminder: cal.enable_reminder, create_online_link: false, show_time_overlap: cal.enable_overlap, free_for_all: true, color: cal.color }); setShowCreateCalendar(true); setShowMobileSidebar(false); }}
                 onDeleteCalendar={id => { handleDeleteCalendar(id); setShowMobileSidebar(false); }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move confirmation dialog */}
+      {pendingMove && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" dir="rtl">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 mx-4 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">تأیید جابجایی جلسه</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">آیا از جابجایی این جلسه اطمینان دارید؟</p>
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
+              <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingMove.meeting.subject}</p>
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
+                <span className="text-gray-600 dark:text-gray-300">
+                  {(() => { const d = new Date(pendingMove.oldDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
+                  {' — '}
+                  <span dir="ltr">{pendingMove.meeting.start_time} تا {pendingMove.meeting.end_time}</span>
+                </span>
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
+                <span className="text-teal-600 dark:text-teal-400 font-medium">
+                  {(() => { const d = new Date(pendingMove.newDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
+                  {' — '}
+                  <span dir="ltr">{pendingMove.updates.start_time} تا {pendingMove.updates.end_time}</span>
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingMove(null)}
+                className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={commitMove}
+                className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                تأیید جابجایی
+              </button>
             </div>
           </div>
         </div>
