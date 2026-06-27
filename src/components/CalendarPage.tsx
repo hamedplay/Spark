@@ -58,7 +58,7 @@ export function CalendarPage({
   sparkNavigateDate, onSparkNavigateDateConsumed,
   sparkCalendarMeetingPrefill, onSparkCalendarMeetingPrefillConsumed,
 }: CalendarPageProps) {
-  const { prefs, updatePrefs } = useUserPreferences();
+  const { prefs, updatePrefs, loading: prefsLoading } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const p = localStorage.getItem('user_prefs_calendar_view') as ViewMode | null;
@@ -313,10 +313,10 @@ export function CalendarPage({
   const [hideOffHours, setHideOffHours] = useState(false);
   const canHideOffHours = hasPermission('calendar_hide_offhours');
 
-  // Sync hideOffHours from user preferences
+  // Sync hideOffHours from user preferences — only after prefs are loaded from DB
   useEffect(() => {
-    setHideOffHours(prefs.hide_offhours);
-  }, [prefs.hide_offhours]);
+    if (!prefsLoading) setHideOffHours(prefs.hide_offhours);
+  }, [prefs.hide_offhours, prefsLoading]);
 
   // When hiding off-hours, clip visible range to work hours (with 1hr buffer)
   const visibleStartMin = hideOffHours ? Math.max(HOURS_START * 60, workStartMin - 60) : HOURS_START * 60;
@@ -326,7 +326,7 @@ export function CalendarPage({
 
   useEffect(() => {
     supabase.from('system_config').select('key,value').eq('section', 'regional')
-      .in('key', ['work_start_time', 'work_end_time', 'hide_offhours_default']).then(({ data }) => {
+      .in('key', ['work_start_time', 'work_end_time']).then(({ data }) => {
       if (!data) return;
       data.forEach(row => {
         if (row.key === 'work_start_time' && row.value) {
@@ -337,15 +337,13 @@ export function CalendarPage({
           const m = timeToMinutes(row.value);
           if (m >= 0) setWorkEndMin(m);
         }
-        if (row.key === 'hide_offhours_default') {
-          setHideOffHours(row.value === 'true');
-        }
       });
     });
   }, []);
 
-  // Override work hours with user personal preference when set
+  // Override work hours with user personal preference when set — only after prefs are loaded from DB
   useEffect(() => {
+    if (prefsLoading) return;
     if (prefs.work_start_time) {
       const m = timeToMinutes(prefs.work_start_time);
       if (m >= 0) setWorkStartMin(m);
@@ -354,7 +352,7 @@ export function CalendarPage({
       const m = timeToMinutes(prefs.work_end_time);
       if (m >= 0) setWorkEndMin(m);
     }
-  }, [prefs.work_start_time, prefs.work_end_time]);
+  }, [prefs.work_start_time, prefs.work_end_time, prefsLoading]);
 
   // Spark: change view mode
   useEffect(() => {
