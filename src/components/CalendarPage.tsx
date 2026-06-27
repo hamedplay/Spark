@@ -1452,8 +1452,10 @@ export function CalendarPage({
   if (!currentJy) return null;
 
   const commitMove = async () => {
-    if (!pendingMove) return;
-    const { meeting, updates, ns, ne } = pendingMove;
+    const snap = pendingMove;
+    if (!snap) return;
+    setPendingMove(null); // dismiss modal immediately so calendar is unblocked
+    const { meeting, updates, ns, ne } = snap;
     const { error } = await supabase.from('meetings').update(updates).eq('id', meeting.id);
     if (!error) {
       toast.success('جلسه جابجا شد');
@@ -1465,7 +1467,6 @@ export function CalendarPage({
       const moveParticipants = [...dragPIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
       if (moveParticipants.length) await Promise.all(moveParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: dragPIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
     } else toast.error('خطا');
-    setPendingMove(null);
   };
 
   return (
