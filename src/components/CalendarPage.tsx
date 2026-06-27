@@ -1904,7 +1904,7 @@ export function CalendarPage({
                 </div>
               )}
             </div>
-            {(canHideOffHours || prefs.hide_offhours !== undefined) && (viewMode === 'day' || viewMode === 'week') && (
+            {(canHideOffHours || prefs.hide_offhours !== undefined) && (
               <button
                 onClick={() => { const next = !hideOffHours; setHideOffHours(next); updatePrefs({ hide_offhours: next }); }}
                 title={hideOffHours ? 'نمایش ساعات غیرکاری' : 'پنهان کردن ساعات غیرکاری'}

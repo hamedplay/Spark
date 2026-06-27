@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   User, Mail, Phone, Building, MapPin, Camera, Loader2, Save,
-  Briefcase, Hash, Globe, Linkedin, Calendar, Users, CreditCard,
+  Briefcase, Hash, Globe, Linkedin, Users, CreditCard,
   ChevronDown, ChevronUp, CheckCircle2, Crown, Building2, Link2, MessageCircle,
-  Smartphone, Monitor, Download, ExternalLink, Apple, Chrome, AtSign,
-  Unlink, RefreshCw, Clock,
+  Monitor, Download, ExternalLink, Apple, Chrome, AtSign,
+  Unlink, RefreshCw, Clock, Settings,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -654,6 +654,39 @@ export function ProfilePage() {
         </div>
       </div>
 
+      {/* User preferences card */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mb-4">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+          <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center">
+            <Settings className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">تنظیمات کاربری</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">شخصی‌سازی نمایش و رفتار سامانه</p>
+          </div>
+        </div>
+        <div className="p-6 space-y-3">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-white">پنهان کردن ساعات غیرکاری</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">در تقویم، ساعات خارج از ساعات کاری پنهان می‌شود</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => updatePrefs({ hide_offhours: !prefs.hide_offhours })}
+              className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${prefs.hide_offhours ? 'bg-amber-500' : 'bg-gray-200 dark:bg-gray-600'}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${prefs.hide_offhours ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
       <form onSubmit={handleSave} className="space-y-4">
 
         {/* Personal info */}
@@ -830,33 +863,6 @@ export function ProfilePage() {
 
               {/* Bale messenger */}
               <BaleConnectSection />
-            </div>
-          )}
-        </div>
-
-        {/* Calendar preferences */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <SectionHeader id="calendar" title="تنظیمات تقویم" subtitle="شخصی‌سازی نمایش تقویم و ساعات کاری" />
-          {openSection === 'calendar' && (
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800 dark:text-white">پنهان کردن ساعات غیرکاری</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">در نمای روز و هفته، ساعات خارج از ساعات کاری پنهان می‌شود</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => updatePrefs({ hide_offhours: !prefs.hide_offhours })}
-                  className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${prefs.hide_offhours ? 'bg-amber-500' : 'bg-gray-200 dark:bg-gray-600'}`}
-                >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${prefs.hide_offhours ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
             </div>
           )}
         </div>
