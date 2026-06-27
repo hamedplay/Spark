@@ -227,108 +227,110 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     }
   };
 
-  const setupSpeechRecognition = (isForm: boolean = false) => {
-    if ('webkitSpeechRecognition' in window) {
-      const recognition = new window.webkitSpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'fa-IR';
+  const getSpeechRecognitionAPI = (): any =>
+    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
 
-      if (isMobile) {
-        recognition.continuous = false;
+  const startRecognitionSession = (isForm: boolean) => {
+    const SpeechRecognitionAPI = getSpeechRecognitionAPI();
+    if (!SpeechRecognitionAPI) return;
+
+    // Create a fresh instance on every start — required on some Android/iOS browsers
+    // where the same object cannot be reused after onend fires.
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = !isMobile;
+    recognition.interimResults = true;
+    recognition.lang = 'fa-IR';
+
+    recognition.onstart = () => {
+      if (isForm) {
+        setIsFormRecording(true);
+        formLastResultRef.current = '';
+        formFinalTranscriptRef.current = '';
+        setFormVoiceTranscript('');
+      } else {
+        setIsRecording(true);
+        lastResultRef.current = '';
+        finalTranscriptRef.current = '';
+        setVoiceTranscript('');
       }
+    };
 
-      recognition.onstart = () => {
-        if (isForm) {
-          setIsFormRecording(true);
-          formLastResultRef.current = '';
-          formFinalTranscriptRef.current = '';
-          setFormVoiceTranscript('');
-        } else {
-          setIsRecording(true);
-          lastResultRef.current = '';
-          finalTranscriptRef.current = '';
-          setVoiceTranscript('');
-        }
-      };
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      let finalTranscript = isForm ? formFinalTranscriptRef.current : finalTranscriptRef.current;
+      const lastResult = isForm ? formLastResultRef : lastResultRef;
 
-      recognition.onresult = (event: any) => {
-        let interimTranscript = '';
-        let finalTranscript = isForm ? formFinalTranscriptRef.current : finalTranscriptRef.current;
-        const lastResult = isForm ? formLastResultRef : lastResultRef;
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            if (transcript !== lastResult.current) {
-              finalTranscript += (finalTranscript ? ' ' : '') + transcript;
-              lastResult.current = transcript;
-            }
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-
-        if (isForm) {
-          formFinalTranscriptRef.current = finalTranscript;
-          const fullTranscript = (finalTranscript + ' ' + interimTranscript).trim();
-          setFormVoiceTranscript(fullTranscript);
-          setNewNote(prev => ({ ...prev, content: fullTranscript }));
-        } else {
-          finalTranscriptRef.current = finalTranscript;
-          setVoiceTranscript((finalTranscript + ' ' + interimTranscript).trim());
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        if (event.error === 'not-allowed') {
-          toast.error('لطفاً دسترسی میکروفون را فعال کنید');
-        } else if (event.error === 'network') {
-          toast.error('خطا در اتصال به شبکه');
-        } else {
-          toast.error('خطا در تشخیص گفتار');
-        }
-        
-        if (isForm) {
-          setIsFormRecording(false);
-        } else {
-          setIsRecording(false);
-        }
-      };
-
-      recognition.onend = () => {
-        if (isForm) {
-          setIsFormRecording(false);
-          if (isMobile && formFinalTranscriptRef.current) {
-            setNewNote(prev => ({ ...prev, content: formFinalTranscriptRef.current }));
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          if (transcript !== lastResult.current) {
+            finalTranscript += (finalTranscript ? ' ' : '') + transcript;
+            lastResult.current = transcript;
           }
         } else {
-          setIsRecording(false);
-          if (isMobile && finalTranscriptRef.current && userId) {
-            saveVoiceNote();
-          }
+          interimTranscript += transcript;
         }
-      };
+      }
 
       if (isForm) {
-        formRecognitionRef.current = recognition;
+        formFinalTranscriptRef.current = finalTranscript;
+        const fullTranscript = (finalTranscript + ' ' + interimTranscript).trim();
+        setFormVoiceTranscript(fullTranscript);
+        setNewNote(prev => ({ ...prev, content: fullTranscript }));
       } else {
-        recognitionRef.current = recognition;
+        finalTranscriptRef.current = finalTranscript;
+        setVoiceTranscript((finalTranscript + ' ' + interimTranscript).trim());
       }
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+        toast.error('لطفاً دسترسی میکروفون را فعال کنید');
+        if (isForm) setIsFormRecording(false);
+        else setIsRecording(false);
+      } else if (event.error === 'network') {
+        toast.error('برای تشخیص گفتار به اتصال اینترنت نیاز است');
+        if (isForm) setIsFormRecording(false);
+        else setIsRecording(false);
+      } else if (event.error === 'audio-capture') {
+        toast.error('میکروفون در دسترس نیست');
+        if (isForm) setIsFormRecording(false);
+        else setIsRecording(false);
+      }
+      // no-speech / aborted / other: handled silently via onend
+    };
+
+    recognition.onend = () => {
+      if (isForm) {
+        setIsFormRecording(false);
+        if (isMobile && formFinalTranscriptRef.current) {
+          setNewNote(prev => ({ ...prev, content: formFinalTranscriptRef.current }));
+        }
+      } else {
+        setIsRecording(false);
+        if (isMobile && finalTranscriptRef.current && userId) {
+          saveVoiceNote();
+        }
+      }
+    };
+
+    if (isForm) {
+      formRecognitionRef.current = recognition;
     } else {
-      // Browser support is checked at call site
+      recognitionRef.current = recognition;
+    }
+
+    try {
+      recognition.start();
+    } catch {
+      if (isForm) setIsFormRecording(false);
+      else setIsRecording(false);
+      toast.error('خطا در شروع ضبط صدا');
     }
   };
 
   useEffect(() => {
-    const supported = 'webkitSpeechRecognition' in window;
-    if (!supported) {
-      toast.error('مرورگر شما از تبدیل گفتار به متن پشتیبانی نمی‌کند');
-      return;
-    }
-    setupSpeechRecognition();
-    setupSpeechRecognition(true);
+    // No toast on page load — show support error only when user clicks the button
   }, []);
 
   const fetchNotes = async () => {
@@ -359,46 +361,27 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   }, []);
 
   const toggleRecording = async (isForm: boolean = false) => {
+    if (!getSpeechRecognitionAPI()) {
+      toast.error('مرورگر شما از تبدیل گفتار به متن پشتیبانی نمی‌کند.\nلطفاً از Chrome یا Safari استفاده کنید.');
+      return;
+    }
+
     if (!hasRecordingPermission) {
       const granted = await requestRecordingPermission();
       if (!granted) return;
     }
 
     if (isForm ? isFormRecording : isRecording) {
+      // Stop current session
       if (isForm && formRecognitionRef.current) {
-        formRecognitionRef.current.stop();
+        try { formRecognitionRef.current.stop(); } catch {}
       } else if (!isForm && recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      if (!isForm && voiceTranscript.trim() && userId) {
-        saveVoiceNote();
+        try { recognitionRef.current.stop(); } catch {}
+        if (voiceTranscript.trim() && userId) saveVoiceNote();
       }
     } else {
-      if (isForm) {
-        formLastResultRef.current = '';
-        formFinalTranscriptRef.current = '';
-        setFormVoiceTranscript('');
-        if (formRecognitionRef.current) {
-          try {
-            await formRecognitionRef.current.start();
-          } catch (error) {
-            console.error('Error starting form recognition:', error);
-            toast.error('خطا در شروع ضبط صدا');
-          }
-        }
-      } else {
-        lastResultRef.current = '';
-        finalTranscriptRef.current = '';
-        setVoiceTranscript('');
-        if (recognitionRef.current) {
-          try {
-            await recognitionRef.current.start();
-          } catch (error) {
-            console.error('Error starting recognition:', error);
-            toast.error('خطا در شروع ضبط صدا');
-          }
-        }
-      }
+      // Start a fresh session
+      startRecognitionSession(isForm);
     }
   };
 
