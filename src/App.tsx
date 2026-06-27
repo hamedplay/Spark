@@ -65,7 +65,7 @@ function App() {
   const { theme } = useTheme();
   const { prefs, loading: prefsLoading } = useUserPreferences();
 
-  const [sparkVisible, setSparkVisible] = useState(true);
+  const [sparkVisible, setSparkVisible] = useState(false);
 
   useEffect(() => {
     const loadSparkVisible = () => {
