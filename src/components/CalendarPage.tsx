@@ -143,6 +143,10 @@ export function CalendarPage({
   const [resizeStartY, setResizeStartY] = useState(0);
   const [resizeOriginalEndSlot, setResizeOriginalEndSlot] = useState(0);
   const [resizeCurrentDelta, setResizeCurrentDelta] = useState(0);
+  const [pendingResize, setPendingResize] = useState<{
+    meeting: MeetingData;
+    newEndTime: string;
+  } | null>(null);
 
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -1354,17 +1358,7 @@ export function CalendarPage({
           const ne = resizeOriginalEndSlot + delta;
           const ss = minutesToSlotIndex(timeToMinutes(resizeMeeting.start_time));
           if (ne > ss && ne <= (HOURS_END - HOURS_START) * 2) {
-            const { error } = await supabase.from('meetings').update({ end_time: minutesToTime(ne * 30), duration: `${resizeMeeting.start_time} - ${minutesToTime(ne * 30)}` }).eq('id', resizeMeeting.id);
-            if (!error) {
-              toast.success('مدت جلسه تغییر کرد');
-              fetchMeetings();
-              sendNotification('زمان جلسه تغییر کرد', resizeMeeting.subject);
-              const resizedMtg = { ...resizeMeeting, end_time: minutesToTime(ne * 30) };
-              if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'مدت جلسه تغییر کرد', fallbackMessage: `جلسه «${resizeMeeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
-              const resizePIds = (resizeMeeting.participant_user_ids || []);
-              const resizeParticipants = [...resizePIds, ...((resizeMeeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
-              if (resizeParticipants.length) await Promise.all(resizeParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: resizePIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${resizeMeeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
-            } else toast.error('خطا');
+            setPendingResize({ meeting: resizeMeeting, newEndTime: minutesToTime(ne * 30) });
           }
         }
         setResizeMeeting(null); setResizeCurrentDelta(0);
@@ -1466,6 +1460,24 @@ export function CalendarPage({
       const dragPIds = (meeting.participant_user_ids || []);
       const moveParticipants = [...dragPIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
       if (moveParticipants.length) await Promise.all(moveParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: dragPIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
+    } else toast.error('خطا');
+  };
+
+  const commitResize = async () => {
+    const snap = pendingResize;
+    if (!snap) return;
+    setPendingResize(null);
+    const { meeting, newEndTime } = snap;
+    const { error } = await supabase.from('meetings').update({ end_time: newEndTime, duration: `${meeting.start_time} - ${newEndTime}` }).eq('id', meeting.id);
+    if (!error) {
+      toast.success('مدت جلسه تغییر کرد');
+      fetchMeetings();
+      sendNotification('زمان جلسه تغییر کرد', meeting.subject);
+      const resizedMtg = { ...meeting, end_time: newEndTime };
+      if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'مدت جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
+      const resizePIds = (meeting.participant_user_ids || []);
+      const resizeParticipants = [...resizePIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
+      if (resizeParticipants.length) await Promise.all(resizeParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: resizePIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
     } else toast.error('خطا');
   };
 
@@ -2163,6 +2175,45 @@ export function CalendarPage({
                 className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
               >
                 تأیید جابجایی
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resize confirmation dialog */}
+      {pendingResize && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" dir="rtl">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 mx-4 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">تأیید تغییر مدت جلسه</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">آیا از تغییر زمان پایان این جلسه اطمینان دارید؟</p>
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
+              <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingResize.meeting.subject}</p>
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
+                <span className="text-gray-600 dark:text-gray-300" dir="ltr">
+                  {pendingResize.meeting.start_time} تا {pendingResize.meeting.end_time}
+                </span>
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
+                <span className="text-teal-600 dark:text-teal-400 font-medium" dir="ltr">
+                  {pendingResize.meeting.start_time} تا {pendingResize.newEndTime}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingResize(null)}
+                className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={commitResize}
+                className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                تأیید تغییر
               </button>
             </div>
           </div>
