@@ -1207,12 +1207,12 @@ export function CalendarPage({
   // ---- Navigation ----
   const navigatePrev = () => {
     if (viewMode === 'day') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() - 1); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
-    else if (viewMode === 'week') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() - 7); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
+    else if (viewMode === 'week' || viewMode === 'list-week') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() - 7); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
     else { let nm = currentJm - 1, ny = currentJy; if (nm < 1) { nm = 12; ny--; } setCurrentJy(ny); setCurrentJm(nm); setSidebarJy(ny); setSidebarJm(nm); }
   };
   const navigateNext = () => {
     if (viewMode === 'day') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() + 1); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
-    else if (viewMode === 'week') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() + 7); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
+    else if (viewMode === 'week' || viewMode === 'list-week') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() + 7); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
     else { let nm = currentJm + 1, ny = currentJy; if (nm > 12) { nm = 1; ny++; } setCurrentJy(ny); setCurrentJm(nm); setSidebarJy(ny); setSidebarJm(nm); }
   };
   const goToToday = () => {
@@ -1222,9 +1222,11 @@ export function CalendarPage({
 
   const getNavTitle = () => {
     if (viewMode === 'day') return `${selectedJd} ${JALAALI_MONTHS[selectedJm - 1]} ${selectedJy}`;
-    if (viewMode === 'week') {
+    if (viewMode === 'week' || viewMode === 'list-week') {
       const start = weekDays[0]; const end = weekDays[6];
-      return start && end ? `${start.jd} - ${end.jd} ${JALAALI_MONTHS[start.jm - 1]} ${start.jy}` : '';
+      if (!start || !end) return '';
+      if (start.jm === end.jm) return `${start.jd} - ${end.jd} ${JALAALI_MONTHS[start.jm - 1]} ${start.jy}`;
+      return `${start.jd} ${JALAALI_MONTHS[start.jm - 1]} - ${end.jd} ${JALAALI_MONTHS[end.jm - 1]} ${end.jy}`;
     }
     return `${JALAALI_MONTHS[currentJm - 1]} ${currentJy}`;
   };
@@ -1263,13 +1265,20 @@ export function CalendarPage({
   const listMeetings = useMemo(() => {
     if (!viewMode.startsWith('list')) return [];
     const result: { date: string; jy: number; jm: number; jd: number; meetings: MeetingData[] }[] = [];
-    const daysInMonth = getJalaaliMonthDays(currentJy, currentJm);
-    for (let d = 1; d <= daysInMonth; d++) {
-      const ms = getMeetings(currentJy, currentJm, d);
-      if (ms.length > 0) result.push({ date: `${currentJy}/${currentJm}/${d}`, jy: currentJy, jm: currentJm, jd: d, meetings: ms });
+    if (viewMode === 'list-week') {
+      for (const day of weekDays) {
+        const ms = getMeetings(day.jy, day.jm, day.jd);
+        if (ms.length > 0) result.push({ date: `${day.jy}/${day.jm}/${day.jd}`, jy: day.jy, jm: day.jm, jd: day.jd, meetings: ms });
+      }
+    } else {
+      const daysInMonth = getJalaaliMonthDays(currentJy, currentJm);
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ms = getMeetings(currentJy, currentJm, d);
+        if (ms.length > 0) result.push({ date: `${currentJy}/${currentJm}/${d}`, jy: currentJy, jm: currentJm, jd: d, meetings: ms });
+      }
     }
     return result;
-  }, [viewMode, currentJy, currentJm, getMeetings]);
+  }, [viewMode, currentJy, currentJm, weekDays, getMeetings]);
 
   // ---- Drag/grid helpers ----
   // Returns the correct inner grid element for slot-from-Y calculations.
