@@ -313,14 +313,9 @@ export function CalendarPage({
   const [hideOffHours, setHideOffHours] = useState(false);
   const canHideOffHours = hasPermission('calendar_hide_offhours');
 
-  // Sync hideOffHours from user preferences (prefs loaded async)
-  const prefHideApplied = useRef(false);
+  // Sync hideOffHours from user preferences
   useEffect(() => {
-    if (prefHideApplied.current) return;
-    if (prefs.hide_offhours) {
-      prefHideApplied.current = true;
-      setHideOffHours(true);
-    }
+    setHideOffHours(prefs.hide_offhours);
   }, [prefs.hide_offhours]);
 
   // When hiding off-hours, clip visible range to work hours (with 1hr buffer)
