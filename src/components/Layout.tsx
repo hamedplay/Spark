@@ -295,6 +295,73 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
+          {/* ── Calendar preferences */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">تنظیمات تقویم</p>
+            <div className="space-y-3">
+              {/* Hide off-hours toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">پنهان کردن ساعات غیرکاری</span>
+                </div>
+                <button
+                  onClick={() => handle({ hide_offhours: !prefs.hide_offhours })}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${prefs.hide_offhours ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${prefs.hide_offhours ? 'right-0.5' : 'left-0.5'}`} />
+                </button>
+              </div>
+
+              {/* Work hours */}
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400">ساعات کاری شخصی (پیش‌فرض: تنظیمات سازمان)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-gray-400 mb-1">شروع</label>
+                    <select
+                      value={prefs.work_start_time ?? ''}
+                      onChange={e => handle({ work_start_time: e.target.value || null })}
+                      className="w-full py-1.5 px-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      dir="ltr"
+                    >
+                      <option value="">پیش‌فرض</option>
+                      {Array.from({ length: 48 }, (_, i) => {
+                        const h = Math.floor(i / 2).toString().padStart(2, '0');
+                        const m = i % 2 === 0 ? '00' : '30';
+                        return <option key={i} value={`${h}:${m}`}>{`${h}:${m}`}</option>;
+                      })}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-400 mb-1">پایان</label>
+                    <select
+                      value={prefs.work_end_time ?? ''}
+                      onChange={e => handle({ work_end_time: e.target.value || null })}
+                      className="w-full py-1.5 px-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      dir="ltr"
+                    >
+                      <option value="">پیش‌فرض</option>
+                      {Array.from({ length: 48 }, (_, i) => {
+                        const h = Math.floor(i / 2).toString().padStart(2, '0');
+                        const m = i % 2 === 0 ? '00' : '30';
+                        return <option key={i} value={`${h}:${m}`}>{`${h}:${m}`}</option>;
+                      })}
+                    </select>
+                  </div>
+                </div>
+                {(prefs.work_start_time || prefs.work_end_time) && (
+                  <button
+                    onClick={() => handle({ work_start_time: null, work_end_time: null })}
+                    className="text-[11px] text-red-500 hover:text-red-600 dark:text-red-400 transition-colors"
+                  >
+                    بازگشت به پیش‌فرض سازمان
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* ── Default landing page */}
           <div>
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">صفحه پیش‌فرض بعد از ورود</p>
