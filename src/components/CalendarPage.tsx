@@ -1329,7 +1329,7 @@ export function CalendarPage({
     };
     const onEnd = async (clientX: number, clientY: number) => {
       if (dragMoveMeeting) {
-        const deltaSlot = Math.round((clientY - dragMoveStartY) / SLOT_HEIGHT);
+        const deltaSlot = Math.round((clientY - dragMoveStartY) / slotHeight);
         const deltaDay = viewMode === 'week' ? getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX) : 0;
         if (deltaSlot !== 0 || deltaDay !== 0) {
           const ns = dragMoveOriginalSlot + deltaSlot;
@@ -1382,7 +1382,7 @@ export function CalendarPage({
       document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu);
       document.removeEventListener('touchmove', tm); document.removeEventListener('touchend', tu);
     };
-  }, [dragMoveMeeting, dragMoveStartY, dragMoveStartX, dragMoveOriginalSlot, dragMoveOriginalEndSlot, dragMoveOriginalDate, resizeMeeting, resizeStartY, resizeOriginalEndSlot, viewMode]);
+  }, [dragMoveMeeting, dragMoveStartY, dragMoveStartX, dragMoveOriginalSlot, dragMoveOriginalEndSlot, dragMoveOriginalDate, resizeMeeting, resizeStartY, resizeOriginalEndSlot, viewMode, slotHeight]);
 
   // Cancel all-day drag on global mouseup
   useEffect(() => {
