@@ -500,7 +500,7 @@ export function VideoConferencePage() {
     try {
       const { error } = await supabase.from('conference_participants').upsert([{
         room_id: room.id, user_id: userId, display_name: userName,
-        role: room.host_id === userId ? 'host' : 'participant',
+        role: room.host_id === userId ? 'host' : 'member',
         status: 'joined', joined_at: new Date().toISOString(),
         is_muted: isMuted, is_video_off: isVideoOff, peer_id: peerId,
       }], { onConflict: 'room_id,user_id' });

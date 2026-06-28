@@ -22,7 +22,7 @@ export interface ConferenceParticipant {
   room_id: string;
   user_id: string;
   display_name: string;
-  role: 'host' | 'participant';
+  role: 'host' | 'admin' | 'moderator' | 'member' | 'guest';
   status: 'waiting' | 'joined' | 'left';
   joined_at: string | null;
   left_at: string | null;

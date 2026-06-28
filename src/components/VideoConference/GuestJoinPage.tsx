@@ -281,7 +281,7 @@ export function GuestJoinPage({ code }: Props) {
       room_id: room.id,
       user_id: participantId,
       display_name: participantName,
-      role: 'participant',
+      role: authUserId ? 'member' : 'guest',
       status: 'joined',
       joined_at: new Date().toISOString(),
       is_muted: isMuted,
