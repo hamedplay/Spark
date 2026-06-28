@@ -1,0 +1,1 @@
+ALTER TABLE conference_signals ALTER COLUMN to_peer_id DROP NOT NULL;
