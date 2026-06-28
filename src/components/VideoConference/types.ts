@@ -42,6 +42,10 @@ export interface ConferenceMessage {
   display_name: string;
   body: string;
   created_at: string;
+  reply_to_id?: string | null;
+  reply_to_body?: string | null;
+  reply_to_name?: string | null;
+  is_deleted?: boolean;
 }
 
 export interface ConferencePoll {
@@ -76,6 +80,7 @@ export interface PeerConnection {
   connectionState: RTCPeerConnectionState;
   networkQuality: 'excellent' | 'good' | 'fair' | 'poor';
   speakingSeconds: number;
+  audioLevel: number;
 }
 
 export interface Reaction {
@@ -87,3 +92,6 @@ export interface Reaction {
   y: number;
   createdAt: number;
 }
+
+export type SidePanel = 'chat' | 'participants' | 'polls' | 'whiteboard' | 'settings' | null;
+export type LayoutMode = 'grid' | 'sidebar';

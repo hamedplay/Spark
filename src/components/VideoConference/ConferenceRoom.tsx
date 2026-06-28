@@ -2,18 +2,21 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users,
   Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2,
-  Crown, Pin, X, Send, Copy, Check, Loader2,
+  Crown, Pin, X, Send, Copy, Check,
   Grid2x2 as Grid, LayoutGrid as Layout, Smile, BarChart2,
-  PenTool, Trash2, Volume2, VolumeX, Activity, UserPlus,
-  ShieldAlert, UserX, Mic2, Settings2, ChevronUp, ChevronDown,
+  PenTool, Volume2, VolumeX, Activity, UserPlus,
+  ShieldAlert, UserX, Mic2, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
 import type {
   ConferenceRoom, ConferenceParticipant, ConferenceMessage,
-  PeerConnection, ConferencePoll, WhiteboardStroke, Reaction,
+  PeerConnection, Reaction, SidePanel, LayoutMode,
 } from './types';
+import { VideoTile, QualityDot } from './VideoTile';
+import { Whiteboard } from './Whiteboard';
+import { PollPanel } from './PollPanel';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const RTC_CONFIG: RTCConfiguration = {
@@ -35,261 +38,6 @@ interface Props {
   localStream: MediaStream;
   onLeave: () => void;
   onInvite?: () => void;
-}
-
-type LayoutMode = 'grid' | 'sidebar';
-type SidePanel = 'chat' | 'participants' | 'polls' | 'whiteboard' | null;
-
-// ── Quality dot ───────────────────────────────────────────────────────────────
-function QualityDot({ quality }: { quality: PeerConnection['networkQuality'] }) {
-  const c = { excellent:'bg-green-500', good:'bg-teal-400', fair:'bg-amber-400', poor:'bg-red-500' };
-  return <span className={`w-2 h-2 rounded-full flex-shrink-0 ${c[quality] ?? 'bg-gray-400'}`} />;
-}
-
-// ── Video tile ────────────────────────────────────────────────────────────────
-function VideoTile({ stream, displayName, isMuted, isVideoOff, isHandRaised, isLocal, isPinned, isHost, networkQuality, onPin, small = false }: {
-  stream: MediaStream | null; displayName: string; isMuted: boolean; isVideoOff: boolean;
-  isHandRaised: boolean; isLocal: boolean; isPinned: boolean; isHost: boolean;
-  networkQuality: PeerConnection['networkQuality']; onPin: () => void; small?: boolean;
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el || !stream) return;
-    // Always reassign so track replacements (screen share ↔ camera) take effect
-    el.srcObject = stream;
-    el.play().catch(() => {});
-
-    // When tracks are added/replaced in the same stream object, re-attach
-    const onAddTrack = () => {
-      el.srcObject = null;
-      el.srcObject = stream;
-      el.play().catch(() => {});
-    };
-    stream.addEventListener('addtrack', onAddTrack);
-    return () => stream.removeEventListener('addtrack', onAddTrack);
-  }, [stream]);
-
-  const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
-  const ring = isHandRaised ? 'ring-2 ring-yellow-400' : isPinned ? 'ring-2 ring-teal-400' : '';
-
-  return (
-    <div className={`relative bg-gray-900 rounded-2xl overflow-hidden cursor-pointer aspect-video ${ring}`} onClick={onPin}>
-      {!isVideoOff && stream ? (
-        <video ref={videoRef} autoPlay playsInline muted={isLocal}
-          className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`} />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-950">
-          <div className={`rounded-full flex items-center justify-center font-bold text-white bg-gradient-to-br from-teal-600 to-teal-800 ${small ? 'w-10 h-10 text-base' : 'w-20 h-20 text-3xl'}`}>
-            {initials}
-          </div>
-        </div>
-      )}
-      <div className="absolute bottom-0 left-0 right-0 px-2.5 py-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-        <div className="flex items-center gap-1.5">
-          <QualityDot quality={networkQuality} />
-          <span className={`text-white font-medium truncate flex-1 ${small ? 'text-xs' : 'text-sm'}`}>
-            {isLocal ? `${displayName} (شما)` : displayName}
-          </span>
-          {isHost && <Crown className={`text-amber-400 flex-shrink-0 ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
-          {isHandRaised && <Hand className={`text-yellow-400 animate-bounce flex-shrink-0 ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
-          {isMuted && <MicOff className={`text-red-400 flex-shrink-0 ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
-          {isVideoOff && <VideoOff className={`text-red-400 flex-shrink-0 ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
-        </div>
-      </div>
-      {isPinned && !small && <div className="absolute top-2 right-2 bg-teal-500/90 rounded-lg p-1"><Pin className="w-3 h-3 text-white" /></div>}
-    </div>
-  );
-}
-
-// ── Whiteboard (touch + mouse) ────────────────────────────────────────────────
-function Whiteboard({ roomId, userId }: { roomId: string; userId: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
-  const [color, setColor] = useState('#00d4aa');
-  const [width, setWidth] = useState(4);
-  const drawing = useRef(false);
-  const currentPath = useRef<{ x: number; y: number }[]>([]);
-
-  const getPos = (clientX: number, clientY: number) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    return { x: (clientX - rect.left) / rect.width * canvas.width, y: (clientY - rect.top) / rect.height * canvas.height };
-  };
-
-  const drawStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: WhiteboardStroke) => {
-    if (stroke.points.length < 2) return;
-    ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = stroke.color; ctx.lineWidth = stroke.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-    stroke.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
-  }, []);
-
-  const startDraw = (x: number, y: number) => { drawing.current = true; currentPath.current = [getPos(x, y)]; };
-  const moveDraw = (x: number, y: number) => {
-    if (!drawing.current) return;
-    currentPath.current.push(getPos(x, y));
-    const ctx = canvasRef.current?.getContext('2d');
-    if (ctx && currentPath.current.length >= 2) drawStroke(ctx, { id:'', userId, points: currentPath.current, color, width, tool });
-  };
-  const endDraw = async () => {
-    if (!drawing.current || currentPath.current.length < 2) { drawing.current = false; return; }
-    const stroke: WhiteboardStroke = { id: crypto.randomUUID(), userId, points: [...currentPath.current], color, width, tool };
-    drawing.current = false; currentPath.current = [];
-    const { error } = await supabase.from('conference_whiteboard').insert({ room_id: roomId, user_id: userId, stroke_data: stroke });
-    if (error) console.error('whiteboard insert error:', error);
-  };
-
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.from('conference_whiteboard').select('stroke_data').eq('room_id', roomId).order('created_at');
-      const ctx = canvasRef.current?.getContext('2d');
-      if (!ctx || !data) return;
-      data.forEach(({ stroke_data }) => drawStroke(ctx, stroke_data as WhiteboardStroke));
-    };
-    load();
-    const ch = supabase.channel(`wb-${roomId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conference_whiteboard', filter: `room_id=eq.${roomId}` },
-        ({ new: row }) => {
-          const ctx = canvasRef.current?.getContext('2d');
-          if (ctx && row.stroke_data?.userId !== userId) drawStroke(ctx, row.stroke_data as WhiteboardStroke);
-        })
-      .subscribe();
-    return () => { ch.unsubscribe(); };
-  }, [roomId, userId, drawStroke]);
-
-  const COLORS = ['#00d4aa','#3b82f6','#ef4444','#f59e0b','#ec4899','#ffffff','#374151','#000000'];
-
-  return (
-    <div className="flex flex-col h-full gap-2 p-2">
-      <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-        <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
-          {(['pen','eraser'] as const).map(t => (
-            <button key={t} onClick={() => setTool(t)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${tool === t ? 'bg-teal-600 text-white' : 'text-gray-400 hover:text-white'}`}>
-              {t === 'pen' ? 'قلم' : 'پاک‌کن'}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1.5">
-          {COLORS.map(c => (
-            <button key={c} onClick={() => setColor(c)}
-              className={`w-6 h-6 rounded-full border-2 transition-transform ${color === c ? 'border-white scale-125' : 'border-transparent'}`}
-              style={{ background: c }} />
-          ))}
-        </div>
-        <select value={width} onChange={e => setWidth(Number(e.target.value))}
-          className="bg-gray-800 text-white text-xs rounded-lg px-2 py-1.5 border border-gray-700">
-          {[2,4,8,14,20].map(w => <option key={w} value={w}>{w}px</option>)}
-        </select>
-        <button onClick={() => { const ctx = canvasRef.current?.getContext('2d'); if (ctx) ctx.clearRect(0,0,canvasRef.current!.width,canvasRef.current!.height); supabase.from('conference_whiteboard').delete().eq('room_id', roomId).then(()=>{}); }}
-          className="p-1.5 bg-red-900/40 hover:bg-red-900/60 text-red-400 rounded-lg transition-colors">
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="flex-1 rounded-xl overflow-hidden bg-white min-h-0">
-        <canvas ref={canvasRef} width={1200} height={700} className="w-full h-full"
-          style={{ cursor: tool === 'eraser' ? 'cell' : 'crosshair', touchAction: 'none' }}
-          onMouseDown={e => startDraw(e.clientX, e.clientY)}
-          onMouseMove={e => moveDraw(e.clientX, e.clientY)}
-          onMouseUp={endDraw} onMouseLeave={endDraw}
-          onTouchStart={e => { e.preventDefault(); startDraw(e.touches[0].clientX, e.touches[0].clientY); }}
-          onTouchMove={e => { e.preventDefault(); moveDraw(e.touches[0].clientX, e.touches[0].clientY); }}
-          onTouchEnd={e => { e.preventDefault(); endDraw(); }} />
-      </div>
-    </div>
-  );
-}
-
-// ── Poll panel ────────────────────────────────────────────────────────────────
-function PollPanel({ roomId, userId, isHost }: { roomId: string; userId: string; isHost: boolean }) {
-  const [polls, setPolls] = useState<ConferencePoll[]>([]);
-  const [question, setQuestion] = useState('');
-  const [options, setOptions] = useState(['', '']);
-  const [creating, setCreating] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-
-  const loadPolls = useCallback(async () => {
-    const { data: pData } = await supabase.from('conference_polls').select('*').eq('room_id', roomId).order('created_at', { ascending: false });
-    if (!pData) return;
-    const pollsWithVotes = await Promise.all(pData.map(async p => {
-      const { data: votes } = await supabase.from('conference_poll_votes').select('option_index').eq('poll_id', p.id);
-      const { data: myVote } = await supabase.from('conference_poll_votes').select('option_index').eq('poll_id', p.id).eq('user_id', userId).maybeSingle();
-      const voteCounts: Record<number, number> = {};
-      votes?.forEach(v => { voteCounts[v.option_index] = (voteCounts[v.option_index] || 0) + 1; });
-      return { ...p, options: p.options as string[], votes: voteCounts, my_vote: myVote?.option_index ?? null };
-    }));
-    setPolls(pollsWithVotes);
-  }, [roomId, userId]);
-
-  useEffect(() => {
-    loadPolls();
-    const ch = supabase.channel(`polls-${roomId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_polls', filter: `room_id=eq.${roomId}` }, loadPolls)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conference_poll_votes' }, loadPolls)
-      .subscribe();
-    return () => { ch.unsubscribe(); };
-  }, [roomId, loadPolls]);
-
-  const createPoll = async () => {
-    if (!question.trim() || options.filter(o => o.trim()).length < 2) { toast.error('سوال و حداقل ۲ گزینه لازم است'); return; }
-    setCreating(true);
-    await supabase.from('conference_polls').insert({ room_id: roomId, created_by: userId, question, options: options.filter(o => o.trim()) });
-    setQuestion(''); setOptions(['', '']); setShowCreate(false); setCreating(false);
-  };
-
-  return (
-    <div className="flex flex-col h-full overflow-y-auto p-3 gap-3">
-      {isHost && (
-        <button onClick={() => setShowCreate(v => !v)}
-          className="w-full py-2 bg-teal-700 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
-          <BarChart2 className="w-4 h-4" /> نظرسنجی جدید
-        </button>
-      )}
-      {showCreate && (
-        <div className="bg-gray-800 rounded-xl p-3 space-y-2">
-          <input value={question} onChange={e => setQuestion(e.target.value)} placeholder="سوال..."
-            className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm" />
-          {options.map((o, i) => (
-            <input key={i} value={o} onChange={e => { const a = [...options]; a[i] = e.target.value; setOptions(a); }}
-              placeholder={`گزینه ${i + 1}`} className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm" />
-          ))}
-          <button onClick={() => setOptions(o => [...o, ''])} className="text-teal-400 text-xs">+ گزینه جدید</button>
-          <button onClick={createPoll} disabled={creating}
-            className="w-full py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-sm font-medium disabled:opacity-50">
-            {creating ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'ایجاد'}
-          </button>
-        </div>
-      )}
-      {polls.map(poll => {
-        const total = Object.values(poll.votes || {}).reduce((a, b) => a + b, 0);
-        return (
-          <div key={poll.id} className="bg-gray-800 rounded-xl p-3">
-            <p className="text-white text-sm font-medium mb-2">{poll.question}</p>
-            <div className="space-y-1.5">
-              {poll.options.map((opt, i) => {
-                const cnt = poll.votes?.[i] || 0;
-                const pct = total ? Math.round(cnt / total * 100) : 0;
-                return (
-                  <button key={i} onClick={() => poll.my_vote == null && supabase.from('conference_poll_votes').insert({ poll_id: poll.id, user_id: userId, option_index: i }).then(() => loadPolls())}
-                    className={`w-full text-right rounded-lg overflow-hidden relative transition-all ${poll.my_vote === i ? 'ring-2 ring-teal-400' : 'hover:opacity-80'}`}
-                    disabled={poll.my_vote != null}>
-                    <div className="absolute inset-0 bg-teal-900/40" style={{ width: `${pct}%` }} />
-                    <div className="relative flex justify-between items-center px-3 py-2 text-sm">
-                      <span className="text-white">{opt}</span><span className="text-teal-300 text-xs font-mono">{pct}%</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-gray-500 text-xs mt-1.5">{total} رای</p>
-          </div>
-        );
-      })}
-      {polls.length === 0 && <p className="text-center text-gray-500 text-sm py-8">هنوز نظرسنجی‌ای وجود ندارد</p>}
-    </div>
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -431,7 +179,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     };
 
     // Store
-    const conn: PeerConnection = { peerId: remotePeerId, userId: remoteUserId, displayName: remoteDisplayName, pc, stream: null, isMuted: false, isVideoOff: false, isHandRaised: false, connectionState: 'new', networkQuality: 'good', speakingSeconds: 0 };
+    const conn: PeerConnection = { peerId: remotePeerId, userId: remoteUserId, displayName: remoteDisplayName, pc, stream: null, isMuted: false, isVideoOff: false, isHandRaised: false, connectionState: 'new', networkQuality: 'good', speakingSeconds: 0, audioLevel: 0 };
     peersRef.current.set(remotePeerId, conn);
     setPeers(new Map(peersRef.current));
     return pc;
