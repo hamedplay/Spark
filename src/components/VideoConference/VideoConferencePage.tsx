@@ -20,6 +20,15 @@ function generateCode() {
   return c;
 }
 
+async function generateUniqueCode(): Promise<string> {
+  for (let i = 0; i < 5; i++) {
+    const code = generateCode();
+    const { data } = await supabase.from('conference_rooms').select('id').eq('code', code).maybeSingle();
+    if (!data) return code;
+  }
+  throw new Error('کد یکتا پیدا نشد، لطفاً دوباره تلاش کنید');
+}
+
 // ── Invite modal ──────────────────────────────────────────────────────────────
 interface UserProfile { user_id: string; full_name: string | null; email: string | null; }
 
@@ -315,6 +324,8 @@ export function VideoConferencePage() {
   // fix: stop previous stream before acquiring new one
   const localStreamRef = useRef<MediaStream | null>(null);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
+  // fix: guard against concurrent doJoin calls (stream race condition)
+  const joiningRef = useRef(false);
 
   // fix: ghost participant cleanup on page unload
   const activeRoomRef = useRef<ConferenceRoom | null>(null);
@@ -362,6 +373,17 @@ export function VideoConferencePage() {
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Realtime: auto-refresh rooms list when any room changes (no manual refresh needed)
+  useEffect(() => {
+    if (!userId) return;
+    const ch = supabase.channel('conf-rooms-lobby')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_rooms' }, () => {
+        if (!activeRoomRef.current) fetchRooms(userIdRef.current || undefined);
+      })
+      .subscribe();
+    return () => { ch.unsubscribe(); };
+  }, [userId, fetchRooms]);
 
   const isRoomActive = (room: any): boolean => {
     if (room.status === 'ended') return false;
@@ -441,12 +463,13 @@ export function VideoConferencePage() {
 
   // fix: doJoin with full validation + stream race condition guard
   const doJoin = async (room: ConferenceRoom) => {
-    if (!userId) return;
+    if (!userId || joiningRef.current) return;
+    joiningRef.current = true;
 
-    // Server-side validation
-    if (room.is_locked) { toast.error('این اتاق قفل شده است'); return; }
+    // Client-side pre-check (UX only — server enforces via RLS)
+    if (room.is_locked) { toast.error('این اتاق قفل شده است'); joiningRef.current = false; return; }
     if ((room.participant_count ?? 0) >= room.max_participants) {
-      toast.error('ظرفیت اتاق پر شده است'); return;
+      toast.error('ظرفیت اتاق پر شده است'); joiningRef.current = false; return;
     }
 
     setJoiningRoomId(room.id);
@@ -466,6 +489,7 @@ export function VideoConferencePage() {
       } catch {
         toast.error('دسترسی به دوربین و میکروفن امکان‌پذیر نیست. لطفاً مجوزها را بررسی کنید.');
         setJoiningRoomId(null);
+        joiningRef.current = false;
         return;
       }
     }
@@ -493,6 +517,7 @@ export function VideoConferencePage() {
       toast.error('خطا در ورود به اتاق: ' + (e.message || ''));
     } finally {
       setJoiningRoomId(null);
+      joiningRef.current = false;
     }
   };
 
@@ -501,9 +526,10 @@ export function VideoConferencePage() {
     if (!userId) return;
     setCreating(true);
     try {
+      const code = await generateUniqueCode();
       const { data: room, error } = await supabase.from('conference_rooms').insert([{
         name: createName.trim() || `جلسه ${moment().format('jYYYY/jMM/jDD HH:mm')}`,
-        code: generateCode(), host_id: userId, status: 'active',
+        code, host_id: userId, status: 'active',
         password: null, waiting_room_enabled: false, is_locked: false,
       }]).select().single();
       if (error || !room) throw error;
@@ -540,21 +566,22 @@ export function VideoConferencePage() {
     }
   };
 
-  // fix: mark participant as left in DB + stop stream
+  // fix: stream cleanup moved to finally so it always runs even if DB update fails
   const handleLeave = async () => {
-    if (activeRoom && userId) {
-      try {
+    try {
+      if (activeRoom && userId) {
         await supabase.from('conference_participants')
           .update({ status: 'left' })
           .eq('room_id', activeRoom.id)
           .eq('user_id', userId);
-      } catch (e) {
-        console.error('handleLeave update error:', e);
       }
+    } catch (e) {
+      console.error('handleLeave update error:', e);
+    } finally {
+      localStream?.getTracks().forEach(t => t.stop());
+      setActiveRoom(null); setLocalStream(null); setMyPeerId('');
+      fetchRooms(userId || undefined);
     }
-    localStream?.getTracks().forEach(t => t.stop());
-    setActiveRoom(null); setLocalStream(null); setMyPeerId('');
-    fetchRooms(userId || undefined);
   };
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
@@ -698,7 +725,7 @@ export function VideoConferencePage() {
                 type="text"
                 value={joinCode}
                 onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === 'Enter' && handleJoinByCode()}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleJoinByCode(); } }}
                 placeholder="XXX-XXX-XXX"
                 maxLength={11}
                 dir="ltr"
