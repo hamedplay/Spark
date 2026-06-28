@@ -404,7 +404,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         from_user_id: currentUserId,
         from_display_name: currentUserName,
         to_peer_id: null,
-        type: 'join',
+        signal_type: 'join',
         payload: data,
       }).then(({ error }) => { if (error) console.error('conference_signals insert error:', error); });
     }
