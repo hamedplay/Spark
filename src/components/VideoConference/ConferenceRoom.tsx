@@ -137,7 +137,8 @@ function Whiteboard({ roomId, userId }: { roomId: string; userId: string }) {
     if (!drawing.current || currentPath.current.length < 2) { drawing.current = false; return; }
     const stroke: WhiteboardStroke = { id: crypto.randomUUID(), userId, points: [...currentPath.current], color, width, tool };
     drawing.current = false; currentPath.current = [];
-    await supabase.from('conference_whiteboard').insert({ room_id: roomId, user_id: userId, stroke_data: stroke });
+    const { error } = await supabase.from('conference_whiteboard').insert({ room_id: roomId, user_id: userId, stroke_data: stroke });
+    if (error) console.error('whiteboard insert error:', error);
   };
 
   useEffect(() => {
@@ -340,6 +341,16 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     return () => clearInterval(t);
   }, []);
 
+  // Heartbeat — update presence every 15s so stale records can be detected
+  useEffect(() => {
+    const t = setInterval(async () => {
+      await supabase.from('conference_participants')
+        .update({ updated_at: new Date().toISOString() } as any)
+        .eq('room_id', room.id).eq('user_id', currentUserId).eq('status', 'joined');
+    }, 15000);
+    return () => clearInterval(t);
+  }, [room.id, currentUserId]);
+
   const fmt = (s: number) => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
@@ -398,6 +409,22 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       const cur = peersRef.current.get(remotePeerId);
       if (cur) { peersRef.current.set(remotePeerId, { ...cur, connectionState: pc.connectionState }); setPeers(new Map(peersRef.current)); }
       if (pc.connectionState === 'connected') toast.success(`${remoteDisplayName} وارد شد`);
+      if (pc.connectionState === 'disconnected') {
+        // Start a 30s grace period; if still disconnected, remove the peer
+        setTimeout(() => {
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            pc.close();
+            peersRef.current.delete(remotePeerId);
+            setPeers(new Map(peersRef.current));
+            // Send leave signal so other peers clean up
+            sendSignalRef.current(null, 'peer_left', { peerId: remotePeerId, displayName: remoteDisplayName });
+            supabase.from('conference_participants')
+              .update({ status: 'left', left_at: new Date().toISOString() })
+              .eq('room_id', room.id).eq('user_id', remoteUserId)
+              .then(() => {});
+          }
+        }, 30000);
+      }
       if (pc.connectionState === 'failed') {
         setTimeout(() => { if (pc.connectionState === 'failed') { pc.close(); peersRef.current.delete(remotePeerId); setPeers(new Map(peersRef.current)); } }, 2000);
       }
@@ -508,6 +535,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           const cur = peersRef.current.get(from);
           if (cur) { cur.pc.close(); peersRef.current.delete(from); setPeers(new Map(peersRef.current)); toast(`${from_name} جلسه را ترک کرد`); }
 
+        } else if (type === 'peer_left') {
+          // A peer was force-removed due to disconnect timeout
+          const targetPeerId = data.peerId as string;
+          const cur = peersRef.current.get(targetPeerId);
+          if (cur) { cur.pc.close(); peersRef.current.delete(targetPeerId); setPeers(new Map(peersRef.current)); }
+
         } else if (type === 'end') {
           // Host ended the room — all participants must leave
           for (const p of peersRef.current.values()) p.pc.close();
@@ -593,6 +626,21 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           onLeave();
         }
       })
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'room_mod_actions',
+        filter: `room_id=eq.${room.id}`,
+      }, ({ new: row }) => {
+        if (row.target_user_id !== currentUserId) return;
+        if (row.action_type === 'kick') {
+          toast.error('شما توسط میزبان از جلسه خارج شدید');
+          for (const p of peersRef.current.values()) p.pc.close();
+          peersRef.current.clear();
+          onLeave();
+        } else if (row.action_type === 'mute') {
+          localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = false; });
+          setIsMuted(true);
+        }
+      })
       .subscribe();
 
     return () => {
@@ -636,7 +684,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // ── Controls ───────────────────────────────────────────────────────────────
   const broadcastState = useCallback((muted: boolean, videoOff: boolean, handRaised: boolean) => {
     sendSignal(null, 'state', { peerId: myPeerId, isMuted: muted, isVideoOff: videoOff, isHandRaised: handRaised });
-    supabase.from('conference_participants').update({ is_muted: muted, is_video_off: videoOff, is_hand_raised: handRaised }).eq('room_id', room.id).eq('user_id', currentUserId).then(() => {});
+    supabase.from('conference_participants')
+      .update({ is_muted: muted, is_video_off: videoOff, is_hand_raised: handRaised })
+      .eq('room_id', room.id).eq('user_id', currentUserId)
+      .then(({ error }) => { if (error) console.error('broadcastState DB error:', error); });
   }, [sendSignal, myPeerId, room.id, currentUserId]);
 
   const toggleMute = () => { const n = !isMuted; localStream.getAudioTracks().forEach(t => { t.enabled = !n; }); setIsMuted(n); broadcastState(n, isVideoOff, isHandRaised); };
@@ -645,7 +696,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   const startScreenShare = async () => {
     try {
-      const ss = await (navigator.mediaDevices as any).getDisplayMedia({ video: true, audio: false });
+      const ss = await (navigator.mediaDevices as any).getDisplayMedia({ video: true, audio: true });
       screenStreamRef.current = ss;
       const screenTrack = ss.getVideoTracks()[0];
 
@@ -653,19 +704,24 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       for (const p of peersRef.current.values()) {
         const sender = p.pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
-          await sender.replaceTrack(screenTrack).catch(() => {});
+          await sender.replaceTrack(screenTrack).catch(err => console.error('replaceTrack error:', err));
         } else {
-          // No video sender yet — add the track and renegotiate
           p.pc.addTrack(screenTrack, localStreamRef.current);
         }
       }
 
       setIsScreenSharing(true);
+      sendSignal(null, 'state', { peerId: myPeerId, isMuted, isVideoOff, isHandRaised, isScreenSharing: true });
 
-      // When user clicks the browser "Stop sharing" button
       screenTrack.onended = () => stopScreenShareRef.current();
     } catch (e: any) {
-      if (e?.name !== 'NotAllowedError') toast.error('خطا در اشتراک‌گذاری صفحه');
+      if (e?.name === 'NotAllowedError') {
+        toast.error('دسترسی به اشتراک‌گذاری صفحه رد شد');
+      } else if (e?.name === 'TypeError') {
+        toast.error('لطفاً مرورگر خود را به‌روز کنید یا افزونه موردنیاز را نصب کنید');
+      } else if (e?.name !== 'AbortError') {
+        toast.error('خطا در اشتراک‌گذاری صفحه');
+      }
     }
   };
 
@@ -711,11 +767,16 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const sendMessage = async () => {
     const body = messageInput.trim();
     if (!body) return;
-    const msg: ConferenceMessage = { id: crypto.randomUUID(), room_id: room.id, user_id: currentUserId, display_name: currentUserName, body, created_at: new Date().toISOString() };
+    const tempId = crypto.randomUUID();
+    const msg: ConferenceMessage = { id: tempId, room_id: room.id, user_id: currentUserId, display_name: currentUserName, body, created_at: new Date().toISOString() };
     sendSignal(null, 'chat', msg);
     setMessages(prev => [...prev, msg]);
     setMessageInput('');
-    supabase.from('conference_messages').insert([msg]).then(() => {});
+    const { error } = await supabase.from('conference_messages').insert([msg]);
+    if (error) {
+      console.error('sendMessage DB error:', error);
+      // silently fail persist — message was already delivered via broadcast
+    }
   };
 
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -729,14 +790,33 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   }, []);
 
   // ── Host management ────────────────────────────────────────────────────────
-  const muteAll = () => {
+  const muteAll = async () => {
     sendSignal(null, 'host_mute_all', { fromHost: currentUserName });
+    // Log server-side
+    for (const p of peersRef.current.values()) {
+      await supabase.from('room_mod_actions').insert({
+        room_id: room.id, by_admin_id: currentUserId,
+        target_user_id: p.userId, action_type: 'mute',
+      });
+    }
     toast.success('درخواست قطع میکروفون برای همه ارسال شد');
   };
 
   const kickParticipant = async (peerId: string, displayName: string) => {
+    const targetPeer = peersRef.current.get(peerId);
     sendSignal(peerId, 'kick', { fromHost: currentUserName });
-    // Remove from local state after brief delay
+    // Log server-side
+    if (targetPeer) {
+      const { error } = await supabase.from('room_mod_actions').insert({
+        room_id: room.id, by_admin_id: currentUserId,
+        target_user_id: targetPeer.userId, action_type: 'kick',
+      });
+      if (error) console.error('kick mod_action error:', error);
+      // Mark participant as left in DB
+      await supabase.from('conference_participants')
+        .update({ status: 'left', left_at: new Date().toISOString() })
+        .eq('room_id', room.id).eq('user_id', targetPeer.userId);
+    }
     setTimeout(() => {
       const cur = peersRef.current.get(peerId);
       if (cur) { cur.pc.close(); peersRef.current.delete(peerId); setPeers(new Map(peersRef.current)); }
@@ -747,19 +827,19 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const doLeave = async (endRoom: boolean) => {
     setShowLeaveConfirm(false);
     if (endRoom) {
-      // Broadcast end to all peers first
       sendSignalRef.current(null, 'end', { displayName: currentUserName });
-      await supabase.from('conference_rooms').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', room.id);
+      const { error } = await supabase.from('conference_rooms').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', room.id);
+      if (error) console.error('doLeave end room error:', error);
     } else {
       sendSignalRef.current(null, 'leave', { displayName: currentUserName });
     }
     for (const p of peersRef.current.values()) p.pc.close();
     peersRef.current.clear();
-    // Stop screen share tracks (we own those)
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
     channelRef.current?.unsubscribe();
-    await supabase.from('conference_participants').update({ status: 'left', left_at: new Date().toISOString() }).eq('room_id', room.id).eq('user_id', currentUserId);
+    const { error: leaveErr } = await supabase.from('conference_participants').update({ status: 'left', left_at: new Date().toISOString() }).eq('room_id', room.id).eq('user_id', currentUserId);
+    if (leaveErr) console.error('doLeave participant update error:', leaveErr);
     onLeave();
   };
 
@@ -1036,7 +1116,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       {/* Host leave confirm */}
       {showLeaveConfirm && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div role="dialog" aria-modal="true" aria-label="خروج از جلسه" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm text-center space-y-4" dir="rtl">
             <div className="w-14 h-14 rounded-full bg-red-900/40 flex items-center justify-center mx-auto">
               <PhoneOff className="w-7 h-7 text-red-400" />
@@ -1046,7 +1126,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               <p className="text-gray-400 text-sm">شما میزبان هستید. چه کاری انجام دهید؟</p>
             </div>
             <div className="flex flex-col gap-2">
-              <button onClick={() => doLeave(false)}
+              <button onClick={() => doLeave(false)} autoFocus
                 className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors text-sm">
                 فقط خودم خارج شوم (جلسه ادامه دارد)
               </button>
@@ -1060,6 +1140,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Screen share badge */}
+      {isScreenSharing && !isMobile && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-teal-600/95 rounded-full px-4 py-1.5 flex items-center gap-2 text-sm font-medium text-white shadow-lg pointer-events-none">
+          <ScreenShare className="w-4 h-4" />{currentUserName} در حال ارائه صفحه است
         </div>
       )}
 
@@ -1136,65 +1223,65 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           </>
         ) : (
           /* Desktop: single scrollable row */
-          <div className="flex items-center justify-center gap-2 px-3 py-3 overflow-x-auto">
-            <button onClick={toggleMute} title={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'}
+          <div role="toolbar" aria-label="کنترل‌های جلسه" className="flex items-center justify-center gap-2 px-3 py-3 overflow-x-auto">
+            <button onClick={toggleMute} title={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-label={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-pressed={isMuted}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
-            <button onClick={toggleVideo} title={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'}
+            <button onClick={toggleVideo} title={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-label={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-pressed={isVideoOff}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
             </button>
             {room.allow_screen_share && (
-              <button onClick={isScreenSharing ? stopScreenShare : startScreenShare} title="اشتراک صفحه"
+              <button onClick={isScreenSharing ? stopScreenShare : startScreenShare} title="اشتراک صفحه" aria-label={isScreenSharing ? 'توقف اشتراک صفحه' : 'شروع اشتراک صفحه'} aria-pressed={isScreenSharing}
                 className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isScreenSharing ? 'bg-teal-600 hover:bg-teal-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
                 {isScreenSharing ? <ScreenShareOff className="w-5 h-5" /> : <ScreenShare className="w-5 h-5" />}
               </button>
             )}
-            <button onClick={toggleHand} title="بلند کردن دست"
+            <button onClick={toggleHand} title="بلند کردن دست" aria-label={isHandRaised ? 'پایین آوردن دست' : 'بلند کردن دست'} aria-pressed={isHandRaised}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isHandRaised ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <Hand className="w-5 h-5" />
             </button>
             {room.allow_reactions && (
               <div className="relative flex-shrink-0">
-                <button onClick={() => setShowEmojiPicker(v => !v)} title="واکنش"
+                <button onClick={() => setShowEmojiPicker(v => !v)} title="واکنش" aria-label="ارسال واکنش ایموجی" aria-expanded={showEmojiPicker}
                   className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg ${showEmojiPicker ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   <Smile className="w-5 h-5" />
                 </button>
                 {showEmojiPicker && (
-                  <div className="absolute bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 rounded-2xl p-2 flex flex-wrap gap-1 shadow-2xl border border-gray-700 z-50 w-48">
-                    {EMOJIS.map(e => <button key={e} onClick={() => sendEmoji(e)} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-700 text-lg transition-colors">{e}</button>)}
+                  <div role="listbox" aria-label="انتخاب ایموجی" className="absolute bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 rounded-2xl p-2 flex flex-wrap gap-1 shadow-2xl border border-gray-700 z-50 w-48">
+                    {EMOJIS.map(e => <button key={e} onClick={() => sendEmoji(e)} aria-label={`واکنش ${e}`} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-700 text-lg transition-colors">{e}</button>)}
                   </div>
                 )}
               </div>
             )}
             {room.allow_chat && (
-              <button onClick={() => togglePanel('chat')} title="چت"
+              <button onClick={() => togglePanel('chat')} title="چت" aria-label="باز کردن پنل چت" aria-pressed={sidePanel === 'chat'}
                 className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'chat' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                 <MessageSquare className="w-5 h-5" />
-                {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+                {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold" aria-label={`${unreadCount} پیام خوانده نشده`}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
               </button>
             )}
-            <button onClick={() => togglePanel('participants')} title="شرکت‌کنندگان"
+            <button onClick={() => togglePanel('participants')} title="شرکت‌کنندگان" aria-label="باز کردن لیست شرکت‌کنندگان" aria-pressed={sidePanel === 'participants'}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <Users className="w-5 h-5" />
             </button>
-            <button onClick={() => togglePanel('polls')} title="نظرسنجی"
+            <button onClick={() => togglePanel('polls')} title="نظرسنجی" aria-label="باز کردن نظرسنجی" aria-pressed={sidePanel === 'polls'}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'polls' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <BarChart2 className="w-5 h-5" />
             </button>
-            <button onClick={() => togglePanel('whiteboard')} title="وایت‌بورد"
+            <button onClick={() => togglePanel('whiteboard')} title="وایت‌بورد" aria-label="باز کردن وایت‌بورد" aria-pressed={sidePanel === 'whiteboard'}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <PenTool className="w-5 h-5" />
             </button>
             <div className="w-px h-8 bg-gray-700 flex-shrink-0" />
-            <button onClick={() => setIsSpeakerMuted(v => !v)} title={isSpeakerMuted ? 'فعال کردن صدا' : 'قطع صدا'}
+            <button onClick={() => setIsSpeakerMuted(v => !v)} title={isSpeakerMuted ? 'فعال کردن صدا' : 'قطع صدا'} aria-label={isSpeakerMuted ? 'فعال کردن صدای اسپیکر' : 'قطع صدای اسپیکر'} aria-pressed={isSpeakerMuted}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isSpeakerMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isSpeakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
             </button>
             {/* Host-only: mute all */}
             {isHost && peers.size > 0 && (
-              <button onClick={muteAll} title="قطع میکروفون همه شرکت‌کنندگان"
+              <button onClick={muteAll} title="قطع میکروفون همه شرکت‌کنندگان" aria-label="قطع میکروفون همه شرکت‌کنندگان"
                 className="w-12 h-12 rounded-full bg-amber-700 hover:bg-amber-600 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
                 <ShieldAlert className="w-5 h-5" />
               </button>
