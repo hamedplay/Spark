@@ -3,10 +3,10 @@ import {
   Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users,
   Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2,
   Crown, Pin, X, Send, Copy, Check,
-  Grid2x2 as Grid, LayoutGrid as Layout, Smile, BarChart2,
+  Smile, BarChart2,
   PenTool, Volume2, VolumeX, Activity, UserPlus,
   ShieldAlert, UserX, Mic2, ChevronUp, ChevronDown, ArrowRightLeft,
-  SlidersHorizontal,
+  SlidersHorizontal, LayoutGrid, MonitorPlay, PanelRight,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
@@ -113,7 +113,14 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [messageInput, setMessageInput] = useState('');
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
+    try { return (localStorage.getItem(`conf_layout_${room.id}`) as LayoutMode) || 'gallery'; } catch { return 'gallery'; }
+  });
+  // Drag-and-drop tile order — peerIds, persisted to localStorage
+  const [tileOrder, setTileOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(`conf_tile_order_${room.id}`) || '[]'); } catch { return []; }
+  });
+  const dragSrcRef = useRef<string | null>(null);
   const [sidePanel, setSidePanel] = useState<SidePanel>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -121,8 +128,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [codeCopied, setCodeCopied] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [myQuality, setMyQuality] = useState<PeerConnection['networkQuality']>('good');
-  const [tileSize, setTileSize] = useState(3);
-
   // Peer latencies (peerId → RTT ms) — updated every 3s via WebRTC getStats()
   const [peerLatencies, setPeerLatencies] = useState<Record<string, number>>({});
 
@@ -730,6 +735,15 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     return () => window.removeEventListener('resize', h);
   }, []);
 
+  // Persist layout + tile order
+  useEffect(() => {
+    try { localStorage.setItem(`conf_layout_${room.id}`, layoutMode); } catch {}
+  }, [layoutMode, room.id]);
+
+  useEffect(() => {
+    try { localStorage.setItem(`conf_tile_order_${room.id}`, JSON.stringify(tileOrder)); } catch {}
+  }, [tileOrder, room.id]);
+
   // ── Host management ────────────────────────────────────────────────────────
   const muteAll = async () => {
     sendSignal(null, 'host_mute_all', { fromHost: currentUserName });
@@ -870,9 +884,24 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             {codeCopied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
             <span className="hidden sm:inline">{room.code}</span>
           </button>
-          <button onClick={() => setLayoutMode(l => l === 'grid' ? 'sidebar' : 'grid')} title="تغییر نما" className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors hidden sm:flex">
-            {layoutMode === 'grid' ? <Layout className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
-          </button>
+          {/* Layout mode toggle — 3 modes */}
+          <div className="hidden sm:flex items-center gap-0.5 bg-gray-800 rounded-lg p-0.5">
+            {([
+              { mode: 'gallery', icon: LayoutGrid, title: 'نمای گالری' },
+              { mode: 'speaker', icon: MonitorPlay, title: 'نمای سخنران' },
+              { mode: 'sidebar', icon: PanelRight, title: 'نمای نوار کناری' },
+            ] as const).map(({ mode, icon: Icon, title }) => (
+              <button
+                key={mode}
+                onClick={() => setLayoutMode(mode)}
+                title={title}
+                aria-pressed={layoutMode === mode}
+                className={`p-1.5 rounded-md transition-colors ${layoutMode === mode ? 'bg-teal-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+              </button>
+            ))}
+          </div>
           <button onClick={() => setIsFullscreen(v => !v)} title="تمام‌صفحه" className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors">
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -886,64 +915,158 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       <div className="flex flex-1 overflow-hidden min-h-0 relative">
         {/* Video area */}
         <div className="flex-1 flex flex-col overflow-hidden p-2 gap-2 min-w-0">
-          {!pinnedPeerId && layoutMode === 'grid' && allTiles.length > 1 && (
-            <div className="hidden sm:flex items-center gap-2 flex-shrink-0 px-1">
-              <span className="text-gray-500 text-xs">کوچک</span>
-              <input type="range" min={1} max={5} value={tileSize}
-                onChange={e => setTileSize(Number(e.target.value))}
-                className="flex-1 h-1.5 accent-teal-500 cursor-pointer" />
-              <span className="text-gray-500 text-xs">بزرگ</span>
-            </div>
-          )}
+          {(() => {
+            // Compute ordered tiles — respect saved drag order, fill in any new peers at the end
+            const rawTiles = allTiles;
+            const orderedTiles = [
+              ...tileOrder.map(id => rawTiles.find(t => t.peerId === id)).filter(Boolean) as typeof rawTiles,
+              ...rawTiles.filter(t => !tileOrder.includes(t.peerId)),
+            ];
 
-          {pinnedPeerId ? (
-            <div className="flex flex-col flex-1 gap-2 min-h-0">
-              <div className="flex-1 min-h-0">
-                {allTiles.filter(t => t.peerId === pinnedPeerId).map(t => (
-                  <VideoTile key={t.peerId} {...t} isPinned isHost={t.isHost} onPin={() => setPinnedPeerId(null)} />
-                ))}
-              </div>
-              <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
-                {allTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
-                  <div key={t.peerId} className="w-28 sm:w-32 flex-shrink-0">
-                    <VideoTile {...t} isPinned={false} isHost={t.isHost} onPin={() => setPinnedPeerId(t.peerId)} small />
+            // DnD handlers
+            const onDragStart = (peerId: string) => { dragSrcRef.current = peerId; };
+            const onDragOver = (e: React.DragEvent, peerId: string) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+            };
+            const onDrop = (e: React.DragEvent, targetId: string) => {
+              e.preventDefault();
+              const srcId = dragSrcRef.current;
+              if (!srcId || srcId === targetId) return;
+              const ids = orderedTiles.map(t => t.peerId);
+              const si = ids.indexOf(srcId);
+              const ti = ids.indexOf(targetId);
+              if (si === -1 || ti === -1) return;
+              const next = [...ids];
+              next.splice(si, 1);
+              next.splice(ti, 0, srcId);
+              setTileOrder(next);
+              dragSrcRef.current = null;
+            };
+
+            const makeDraggable = (peerId: string) => ({
+              draggable: true,
+              onDragStart: () => onDragStart(peerId),
+              onDragOver: (e: React.DragEvent) => onDragOver(e, peerId),
+              onDrop: (e: React.DragEvent) => onDrop(e, peerId),
+              style: { cursor: 'grab' } as React.CSSProperties,
+            });
+
+            if (pinnedPeerId) {
+              return (
+                <div className="flex flex-col flex-1 gap-2 min-h-0">
+                  <div className="flex-1 min-h-0">
+                    {orderedTiles.filter(t => t.peerId === pinnedPeerId).map(t => (
+                      <VideoTile key={t.peerId} {...t} isPinned isHost={t.isHost} onPin={() => setPinnedPeerId(null)} />
+                    ))}
                   </div>
-                ))}
+                  <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
+                    {orderedTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
+                      <div key={t.peerId} className="w-28 sm:w-32 flex-shrink-0" {...makeDraggable(t.peerId)}>
+                        <VideoTile {...t} isPinned={false} isHost={t.isHost} onPin={() => setPinnedPeerId(t.peerId)} small />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            // ── Gallery ────────────────────────────────────────────────────────
+            if (layoutMode === 'gallery') {
+              const n = orderedTiles.length;
+              const cols =
+                n === 1 ? 'grid-cols-1' :
+                n === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+                n <= 4 ? 'grid-cols-2' :
+                n <= 6 ? 'grid-cols-2 sm:grid-cols-3' :
+                n <= 9 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4';
+              return (
+                <div className={`flex-1 overflow-y-auto grid gap-2 content-start ${cols}`}>
+                  {orderedTiles.map(t => (
+                    <div key={t.peerId} {...makeDraggable(t.peerId)}>
+                      <VideoTile {...t}
+                        isPinned={pinnedPeerId === t.peerId}
+                        isHost={t.isHost}
+                        onPin={() => setPinnedPeerId(p => p === t.peerId ? null : t.peerId)} />
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+
+            // ── Speaker ────────────────────────────────────────────────────────
+            if (layoutMode === 'speaker') {
+              const [speaker, ...rest] = orderedTiles;
+              return (
+                <div className="flex flex-col flex-1 gap-2 min-h-0">
+                  <div className="flex-1 min-h-0" {...makeDraggable(speaker.peerId)}>
+                    <VideoTile {...speaker}
+                      isPinned={false}
+                      isHost={speaker.isHost}
+                      onPin={() => setPinnedPeerId(speaker.peerId)} />
+                  </div>
+                  {rest.length > 0 && (
+                    <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
+                      {rest.map(t => (
+                        <div key={t.peerId} className="w-28 sm:w-36 flex-shrink-0" {...makeDraggable(t.peerId)}>
+                          <VideoTile {...t}
+                            isPinned={false}
+                            isHost={t.isHost}
+                            onPin={() => {
+                              // Promote to speaker: swap with index 0
+                              setTileOrder(prev => {
+                                const ids = orderedTiles.map(x => x.peerId);
+                                const si = ids.indexOf(t.peerId);
+                                if (si <= 0) return prev;
+                                const next = [...ids];
+                                next.splice(si, 1);
+                                next.unshift(t.peerId);
+                                return next;
+                              });
+                            }}
+                            small />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // ── Sidebar ────────────────────────────────────────────────────────
+            const [main, ...others] = orderedTiles;
+            return (
+              <div className="flex flex-1 gap-2 min-h-0">
+                <div className="w-28 sm:w-36 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
+                  {others.map(t => (
+                    <div key={t.peerId} {...makeDraggable(t.peerId)}>
+                      <VideoTile {...t}
+                        isPinned={false}
+                        isHost={t.isHost}
+                        onPin={() => {
+                          setTileOrder(prev => {
+                            const ids = orderedTiles.map(x => x.peerId);
+                            const si = ids.indexOf(t.peerId);
+                            if (si <= 0) return prev;
+                            const next = [...ids];
+                            next.splice(si, 1);
+                            next.unshift(t.peerId);
+                            return next;
+                          });
+                        }}
+                        small />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex-1 min-w-0" {...makeDraggable(main.peerId)}>
+                  <VideoTile {...main}
+                    isPinned={false}
+                    isHost={main.isHost}
+                    onPin={() => {}} />
+                </div>
               </div>
-            </div>
-          ) : layoutMode === 'sidebar' ? (
-            <div className="flex flex-1 gap-2 min-h-0">
-              <div className="w-28 sm:w-36 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
-                {allTiles.slice(1).map(t => (
-                  <VideoTile key={t.peerId} {...t} isPinned={false} isHost={t.isHost} onPin={() => setPinnedPeerId(t.peerId)} small />
-                ))}
-              </div>
-              <div className="flex-1 min-w-0">
-                <VideoTile {...allTiles[0]} isPinned={false} isHost={allTiles[0].isHost} onPin={() => {}} />
-              </div>
-            </div>
-          ) : (
-            <div className={`flex-1 overflow-y-auto grid gap-2 content-start ${
-              tileSize === 1 ? 'grid-cols-1' :
-              tileSize === 2 ? 'grid-cols-2' :
-              tileSize === 3 ? (
-                allTiles.length === 1 ? 'grid-cols-1' :
-                allTiles.length <= 2 ? 'grid-cols-1 sm:grid-cols-2' :
-                allTiles.length <= 4 ? 'grid-cols-2' :
-                allTiles.length <= 9 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'
-              ) :
-              tileSize === 4 ? 'grid-cols-2 sm:grid-cols-4' :
-              'grid-cols-2 sm:grid-cols-5 md:grid-cols-6'
-            }`}>
-              {allTiles.map(t => (
-                <VideoTile key={t.peerId} {...t}
-                  isPinned={pinnedPeerId === t.peerId}
-                  isHost={t.isHost}
-                  onPin={() => setPinnedPeerId(p => p === t.peerId ? null : t.peerId)}
-                  small={tileSize >= 4} />
-              ))}
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Side panel */}

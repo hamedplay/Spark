@@ -103,4 +103,4 @@ export interface Reaction {
 }
 
 export type SidePanel = 'chat' | 'participants' | 'polls' | 'whiteboard' | 'settings' | null;
-export type LayoutMode = 'grid' | 'sidebar';
+export type LayoutMode = 'gallery' | 'speaker' | 'sidebar';
