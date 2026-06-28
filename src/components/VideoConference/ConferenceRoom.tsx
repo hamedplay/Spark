@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users,
   Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2,
   Crown, Pin, X, Send, Copy, Check,
   Grid2x2 as Grid, LayoutGrid as Layout, Smile, BarChart2,
   PenTool, Volume2, VolumeX, Activity, UserPlus,
-  ShieldAlert, UserX, Mic2, ChevronUp, ChevronDown,
+  ShieldAlert, UserX, Mic2, ChevronUp, ChevronDown, ArrowRightLeft,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
@@ -30,6 +30,40 @@ const RTC_CONFIG: RTCConfiguration = {
 
 const EMOJIS = ['👍','👏','❤️','😂','😮','🎉','🙌','🔥','💯','✅'];
 
+// ── Media state reducer ───────────────────────────────────────────────────────
+type MediaState = {
+  isMuted: boolean;
+  isVideoOff: boolean;
+  isHandRaised: boolean;
+  isScreenSharing: boolean;
+  isSpeakerMuted: boolean;
+};
+
+type MediaAction =
+  | { type: 'TOGGLE_MUTE' }
+  | { type: 'TOGGLE_VIDEO' }
+  | { type: 'TOGGLE_HAND' }
+  | { type: 'SET_SCREEN_SHARING'; value: boolean }
+  | { type: 'SET_SPEAKER_MUTED'; value: boolean }
+  | { type: 'FORCE_MUTE' }
+  | { type: 'SET_HAND'; value: boolean };
+
+function mediaReducer(state: MediaState, action: MediaAction): MediaState {
+  switch (action.type) {
+    case 'TOGGLE_MUTE': return { ...state, isMuted: !state.isMuted };
+    case 'TOGGLE_VIDEO': return { ...state, isVideoOff: !state.isVideoOff };
+    case 'TOGGLE_HAND': return { ...state, isHandRaised: !state.isHandRaised };
+    case 'SET_SCREEN_SHARING': return { ...state, isScreenSharing: action.value };
+    case 'SET_SPEAKER_MUTED': return { ...state, isSpeakerMuted: action.value };
+    case 'FORCE_MUTE': return { ...state, isMuted: true };
+    case 'SET_HAND': return { ...state, isHandRaised: action.value };
+    default: return state;
+  }
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface HandRaiseEntry { peerId: string; name: string; time: number; }
+
 interface Props {
   room: ConferenceRoom;
   currentUserId: string;
@@ -44,16 +78,21 @@ interface Props {
 // ── Main component ────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 export function ConferenceRoomView({ room, currentUserId, currentUserName, myPeerId, localStream, onLeave, onInvite }: Props) {
-  // ── State ──────────────────────────────────────────────────────────────────
+  // ── Media state (reducer eliminates scattered setters + prevents race conditions)
+  const [media, dispatch] = useReducer(mediaReducer, {
+    isMuted: false, isVideoOff: false, isHandRaised: false,
+    isScreenSharing: false, isSpeakerMuted: false,
+  });
+  // Stable ref so callbacks (onended, timers) always read current media state
+  const mediaRef = useRef(media);
+  mediaRef.current = media;
+  const { isMuted, isVideoOff, isHandRaised, isScreenSharing, isSpeakerMuted } = media;
+
+  // ── Other state ────────────────────────────────────────────────────────────
   const [peers, setPeers] = useState<Map<string, PeerConnection>>(new Map());
   const [messages, setMessages] = useState<ConferenceMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
   const [reactions, setReactions] = useState<Reaction[]>([]);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
-  const [isHandRaised, setIsHandRaised] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid');
   const [sidePanel, setSidePanel] = useState<SidePanel>(null);
@@ -63,9 +102,14 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [codeCopied, setCodeCopied] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [myQuality, setMyQuality] = useState<PeerConnection['networkQuality']>('good');
-  const [tileSize, setTileSize] = useState(3); // 1=large, 2=medium, 3=default, 4=small, 5=tiny
+  const [tileSize, setTileSize] = useState(3);
 
-  const isHost = room.host_id === currentUserId;
+  // Dynamic host — updated on transfer
+  const [hostId, setHostId] = useState(room.host_id);
+  const isHost = hostId === currentUserId;
+
+  // Hand raise queue (sorted by raise time)
+  const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseEntry[]>([]);
 
   // ── Refs (never stale in callbacks) ───────────────────────────────────────
   const peersRef = useRef<Map<string, PeerConnection>>(new Map());
@@ -74,8 +118,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const chatEndRef = useRef<HTMLDivElement>(null);
   const iceCandidateQueue = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
-  // Keep mutable refs for values used inside channel callbacks
-  // This avoids stale closures without recreating the channel
   const myPeerIdRef = useRef(myPeerId);
   const localStreamRef = useRef(localStream);
   const sidePanelRef = useRef(sidePanel);
@@ -89,7 +131,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     return () => clearInterval(t);
   }, []);
 
-  // Heartbeat — update presence every 15s so stale records can be detected
+  // Heartbeat
   useEffect(() => {
     const t = setInterval(async () => {
       await supabase.from('conference_participants')
@@ -104,9 +146,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
   };
 
-  // ── Core WebRTC helpers (using refs, never stale) ─────────────────────────
-
-  // Send via Broadcast channel (instant, <50ms) + DB for persistence/late-joiners
+  // ── WebRTC helpers ─────────────────────────────────────────────────────────
   const sendSignal = useCallback((toPeerId: string | null, type: string, data: object) => {
     const payload = {
       from: myPeerIdRef.current,
@@ -116,9 +156,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       type,
       data,
     };
-    // Broadcast: instant delivery to all currently subscribed peers
     channelRef.current?.send({ type: 'broadcast', event: 'signal', payload });
-    // DB: for late-joiners who weren't subscribed yet (only for 'join' announcement)
     if (type === 'join') {
       supabase.from('conference_signals').insert({
         room_id: room.id,
@@ -132,14 +170,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     }
   }, [currentUserId, currentUserName, room.id]);
 
-  // Create RTCPeerConnection and wire up handlers
   const buildPC = useCallback((remotePeerId: string, remoteUserId: string, remoteDisplayName: string): RTCPeerConnection => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
 
-    // Add local tracks
     localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
 
-    // Remote track received
     pc.ontrack = (e) => {
       const stream = e.streams[0];
       if (!stream) return;
@@ -147,24 +182,20 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       if (cur) { peersRef.current.set(remotePeerId, { ...cur, stream }); setPeers(new Map(peersRef.current)); }
     };
 
-    // ICE candidate ready
     pc.onicecandidate = (e) => {
       if (e.candidate) sendSignal(remotePeerId, 'ice', { candidate: e.candidate.toJSON() });
     };
 
-    // Connection state changes
     pc.onconnectionstatechange = () => {
       const cur = peersRef.current.get(remotePeerId);
       if (cur) { peersRef.current.set(remotePeerId, { ...cur, connectionState: pc.connectionState }); setPeers(new Map(peersRef.current)); }
       if (pc.connectionState === 'connected') toast.success(`${remoteDisplayName} وارد شد`);
       if (pc.connectionState === 'disconnected') {
-        // Start a 30s grace period; if still disconnected, remove the peer
         setTimeout(() => {
           if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
             pc.close();
             peersRef.current.delete(remotePeerId);
             setPeers(new Map(peersRef.current));
-            // Send leave signal so other peers clean up
             sendSignalRef.current(null, 'peer_left', { peerId: remotePeerId, displayName: remoteDisplayName });
             supabase.from('conference_participants')
               .update({ status: 'left', left_at: new Date().toISOString() })
@@ -178,7 +209,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       }
     };
 
-    // Store
     const conn: PeerConnection = { peerId: remotePeerId, userId: remoteUserId, displayName: remoteDisplayName, pc, stream: null, isMuted: false, isVideoOff: false, isHandRaised: false, connectionState: 'new', networkQuality: 'good', speakingSeconds: 0, audioLevel: 0 };
     peersRef.current.set(remotePeerId, conn);
     setPeers(new Map(peersRef.current));
@@ -210,7 +240,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     } catch (e) { console.error('makeOffer failed', e); }
   }, [getPC]);
 
-  // Stable refs — updated every render so channel callbacks are never stale
+  // Stable refs — updated every render
   const makeOfferRef = useRef(makeOffer);
   const sendSignalRef = useRef(sendSignal);
   const getPCRef = useRef(getPC);
@@ -221,7 +251,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   getPCRef.current = getPC;
   flushICERef.current = flushICE;
 
-  // ── Single channel setup — stable for room lifetime ───────────────────────
+  // ── Channel setup ──────────────────────────────────────────────────────────
   useEffect(() => {
     const ch = supabase.channel(`conf-${room.id}`, {
       config: { broadcast: { self: false } },
@@ -235,12 +265,9 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       (async () => {
         if (type === 'join') {
-          // New peer announced their arrival.
-          // Only the peer with the lower peerId makes the offer (deterministic, prevents glare).
           if (myPeerIdRef.current < from) {
             await makeOfferRef.current(from, from_user_id, from_name);
           } else {
-            // We have higher peerId: just prepare PC and wait for their offer
             getPCRef.current(from, from_user_id, from_name);
           }
 
@@ -284,13 +311,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           if (cur) { cur.pc.close(); peersRef.current.delete(from); setPeers(new Map(peersRef.current)); toast(`${from_name} جلسه را ترک کرد`); }
 
         } else if (type === 'peer_left') {
-          // A peer was force-removed due to disconnect timeout
           const targetPeerId = data.peerId as string;
           const cur = peersRef.current.get(targetPeerId);
           if (cur) { cur.pc.close(); peersRef.current.delete(targetPeerId); setPeers(new Map(peersRef.current)); }
 
         } else if (type === 'end') {
-          // Host ended the room — all participants must leave
           for (const p of peersRef.current.values()) p.pc.close();
           peersRef.current.clear();
           toast.error('میزبان جلسه را پایان داد');
@@ -298,7 +323,17 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
         } else if (type === 'state') {
           const cur = peersRef.current.get(from);
-          if (cur) { peersRef.current.set(from, { ...cur, isMuted: data.isMuted, isVideoOff: data.isVideoOff, isHandRaised: data.isHandRaised }); setPeers(new Map(peersRef.current)); }
+          if (cur) {
+            const wasHandRaised = cur.isHandRaised;
+            peersRef.current.set(from, { ...cur, isMuted: data.isMuted, isVideoOff: data.isVideoOff, isHandRaised: data.isHandRaised });
+            setPeers(new Map(peersRef.current));
+            // Update hand raise queue on state changes
+            if (data.isHandRaised && !wasHandRaised) {
+              setHandRaiseQueue(q => [...q.filter(e => e.peerId !== from), { peerId: from, name: from_name, time: Date.now() }]);
+            } else if (!data.isHandRaised && wasHandRaised) {
+              setHandRaiseQueue(q => q.filter(e => e.peerId !== from));
+            }
+          }
 
         } else if (type === 'chat') {
           setMessages(prev => [...prev, data]);
@@ -310,13 +345,25 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           setTimeout(() => setReactions(prev => prev.filter(x => x.id !== r.id)), 3000);
 
         } else if (type === 'host_mute_all') {
-          // Host asked everyone to mute
           localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = false; });
-          setIsMuted(true);
-          toast(`میزبان درخواست قطع میکروفون داد`);
+          dispatch({ type: 'FORCE_MUTE' });
+          toast('میزبان درخواست قطع میکروفون داد');
+
+        } else if (type === 'lower_hand') {
+          // Host asked us to lower our hand
+          dispatch({ type: 'SET_HAND', value: false });
+          broadcastStateRef.current(mediaRef.current.isMuted, mediaRef.current.isVideoOff, false);
+          toast('میزبان دست شما را پایین آورد');
+
+        } else if (type === 'host_transfer') {
+          setHostId(data.newHostUserId as string);
+          if (data.newHostUserId === currentUserId) {
+            toast.success('شما به عنوان میزبان جدید انتخاب شدید');
+          } else {
+            toast(`میزبانی به ${data.newHostName} منتقل شد`);
+          }
 
         } else if (type === 'kick') {
-          // We were kicked
           toast.error('شما توسط میزبان از جلسه خارج شدید');
           for (const p of peersRef.current.values()) p.pc.close();
           peersRef.current.clear();
@@ -327,11 +374,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     .subscribe(async (status) => {
       if (status !== 'SUBSCRIBED') return;
 
-      // Announce join to everyone currently in channel
       sendSignalRef.current(null, 'join', { userId: currentUserId, displayName: currentUserName, peerId: myPeerId });
 
-      // Connect to participants already in DB (joined before us).
-      // Give a short delay so our own participant record with peer_id is committed.
       await new Promise(r => setTimeout(r, 500));
 
       const { data: existing } = await supabase
@@ -345,11 +389,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         for (const p of existing) {
           if (!p.peer_id || p.peer_id === myPeerId) continue;
           if (myPeerIdRef.current < p.peer_id) {
-            // We have lower peerId — make the offer (deterministic rule)
             await makeOfferRef.current(p.peer_id, p.user_id, p.display_name);
           } else {
-            // We have higher peerId — prepare PC; peer with lower ID should offer us.
-            // But give them 1.5s to do so; if no offer arrives, we take over.
             const existingPC = getPCRef.current(p.peer_id, p.user_id, p.display_name);
             setTimeout(async () => {
               if (!existingPC.remoteDescription && existingPC.signalingState === 'stable') {
@@ -361,7 +402,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       }
     });
 
-    // Listen for room ended via DB (catches late-joiners and guests)
     const roomCh = supabase.channel(`room-status-${room.id}`)
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'conference_rooms',
@@ -372,6 +412,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           peersRef.current.clear();
           toast.error('میزبان جلسه را پایان داد');
           onLeave();
+        }
+        // Sync host transfers that came through DB
+        if (row.host_id && row.host_id !== room.host_id) {
+          setHostId(row.host_id as string);
         }
       })
       .on('postgres_changes', {
@@ -386,7 +430,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           onLeave();
         } else if (row.action_type === 'mute') {
           localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = false; });
-          setIsMuted(true);
+          dispatch({ type: 'FORCE_MUTE' });
         }
       })
       .subscribe();
@@ -438,9 +482,30 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       .then(({ error }) => { if (error) console.error('broadcastState DB error:', error); });
   }, [sendSignal, myPeerId, room.id, currentUserId]);
 
-  const toggleMute = () => { const n = !isMuted; localStream.getAudioTracks().forEach(t => { t.enabled = !n; }); setIsMuted(n); broadcastState(n, isVideoOff, isHandRaised); };
-  const toggleVideo = () => { const n = !isVideoOff; localStream.getVideoTracks().forEach(t => { t.enabled = !n; }); setIsVideoOff(n); broadcastState(isMuted, n, isHandRaised); };
-  const toggleHand = () => { const n = !isHandRaised; setIsHandRaised(n); broadcastState(isMuted, isVideoOff, n); if (n) toast('دست شما بلند شد'); };
+  // Stable ref so it's usable inside channel callbacks without stale closure
+  const broadcastStateRef = useRef(broadcastState);
+  broadcastStateRef.current = broadcastState;
+
+  const toggleMute = () => {
+    const n = !isMuted;
+    localStream.getAudioTracks().forEach(t => { t.enabled = !n; });
+    dispatch({ type: 'TOGGLE_MUTE' });
+    broadcastState(n, isVideoOff, isHandRaised);
+  };
+
+  const toggleVideo = () => {
+    const n = !isVideoOff;
+    localStream.getVideoTracks().forEach(t => { t.enabled = !n; });
+    dispatch({ type: 'TOGGLE_VIDEO' });
+    broadcastState(isMuted, n, isHandRaised);
+  };
+
+  const toggleHand = () => {
+    const n = !isHandRaised;
+    dispatch({ type: 'TOGGLE_HAND' });
+    broadcastState(isMuted, isVideoOff, n);
+    if (n) toast('دست شما بلند شد');
+  };
 
   const startScreenShare = async () => {
     try {
@@ -448,7 +513,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       screenStreamRef.current = ss;
       const screenTrack = ss.getVideoTracks()[0];
 
-      // Replace video track in every peer connection
       for (const p of peersRef.current.values()) {
         const sender = p.pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
@@ -458,35 +522,37 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         }
       }
 
-      setIsScreenSharing(true);
+      dispatch({ type: 'SET_SCREEN_SHARING', value: true });
       sendSignal(null, 'state', { peerId: myPeerId, isMuted, isVideoOff, isHandRaised, isScreenSharing: true });
 
       screenTrack.onended = () => stopScreenShareRef.current();
     } catch (e: any) {
       if (e?.name === 'NotAllowedError') {
-        toast.error('دسترسی به اشتراک‌گذاری صفحه رد شد');
+        toast.error(
+          'دسترسی به اشتراک‌گذاری صفحه رد شد.\nدر تنظیمات مرورگر، دسترسی صفحه نمایش را فعال کنید.',
+          { duration: 6000 }
+        );
       } else if (e?.name === 'TypeError') {
-        toast.error('لطفاً مرورگر خود را به‌روز کنید یا افزونه موردنیاز را نصب کنید');
+        toast.error('مرورگر شما از اشتراک‌گذاری صفحه پشتیبانی نمی‌کند. لطفاً Chrome یا Edge را امتحان کنید.');
+      } else if (e?.name === 'NotFoundError') {
+        toast.error('صفحه‌ای برای اشتراک‌گذاری یافت نشد.');
       } else if (e?.name !== 'AbortError') {
-        toast.error('خطا در اشتراک‌گذاری صفحه');
+        toast.error('خطا در اشتراک‌گذاری صفحه. دوباره تلاش کنید.', { duration: 4000 });
       }
     }
   };
 
   const stopScreenShare = useCallback(async () => {
-    // Stop all screen tracks
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
 
-    // Restore camera video track in every peer connection
     const camTrack = localStreamRef.current.getVideoTracks()[0] ?? null;
 
     for (const p of peersRef.current.values()) {
       const sender = p.pc.getSenders().find(s => s.track?.kind === 'video');
       if (sender) {
         if (camTrack) {
-          // Re-enable the track before replacing
-          camTrack.enabled = !isVideoOff;
+          camTrack.enabled = !mediaRef.current.isVideoOff;
           await sender.replaceTrack(camTrack).catch(() => {});
         } else {
           await sender.replaceTrack(null).catch(() => {});
@@ -494,14 +560,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       }
     }
 
-    setIsScreenSharing(false);
+    dispatch({ type: 'SET_SCREEN_SHARING', value: false });
+    // Use ref so this is never stale when called from screenTrack.onended
+    const { isMuted: m, isVideoOff: v, isHandRaised: h } = mediaRef.current;
+    broadcastStateRef.current(m, v, h);
+  }, []);
 
-    // Broadcast updated state so remotes re-render their video tiles
-    broadcastState(isMuted, isVideoOff, isHandRaised);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMuted, isVideoOff, isHandRaised]);
-
-  // Keep stopScreenShare ref up-to-date (used in screenTrack.onended)
   stopScreenShareRef.current = stopScreenShare;
 
   const sendEmoji = (emoji: string) => {
@@ -521,10 +585,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     setMessages(prev => [...prev, msg]);
     setMessageInput('');
     const { error } = await supabase.from('conference_messages').insert([msg]);
-    if (error) {
-      console.error('sendMessage DB error:', error);
-      // silently fail persist — message was already delivered via broadcast
-    }
+    if (error) console.error('sendMessage DB error:', error);
   };
 
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -540,7 +601,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // ── Host management ────────────────────────────────────────────────────────
   const muteAll = async () => {
     sendSignal(null, 'host_mute_all', { fromHost: currentUserName });
-    // Log server-side
     for (const p of peersRef.current.values()) {
       await supabase.from('room_mod_actions').insert({
         room_id: room.id, by_admin_id: currentUserId,
@@ -553,14 +613,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const kickParticipant = async (peerId: string, displayName: string) => {
     const targetPeer = peersRef.current.get(peerId);
     sendSignal(peerId, 'kick', { fromHost: currentUserName });
-    // Log server-side
     if (targetPeer) {
       const { error } = await supabase.from('room_mod_actions').insert({
         room_id: room.id, by_admin_id: currentUserId,
         target_user_id: targetPeer.userId, action_type: 'kick',
       });
       if (error) console.error('kick mod_action error:', error);
-      // Mark participant as left in DB
       await supabase.from('conference_participants')
         .update({ status: 'left', left_at: new Date().toISOString() })
         .eq('room_id', room.id).eq('user_id', targetPeer.userId);
@@ -570,6 +628,25 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       if (cur) { cur.pc.close(); peersRef.current.delete(peerId); setPeers(new Map(peersRef.current)); }
     }, 500);
     toast.success(`${displayName} از جلسه خارج شد`);
+  };
+
+  // Lower a specific participant's hand (host only)
+  const lowerHand = (peerId: string) => {
+    sendSignal(peerId, 'lower_hand', { fromHost: currentUserName });
+    setHandRaiseQueue(q => q.filter(e => e.peerId !== peerId));
+  };
+
+  // Transfer host to another participant
+  const transferHost = async (targetPeerId: string, targetUserId: string, targetName: string) => {
+    sendSignal(null, 'host_transfer', { newHostUserId: targetUserId, newHostName: targetName });
+    const { error } = await supabase.from('conference_rooms')
+      .update({ host_id: targetUserId })
+      .eq('id', room.id);
+    if (error) { console.error('transferHost error:', error); toast.error('خطا در انتقال میزبانی'); return; }
+    setHostId(targetUserId);
+    // Remove from hand queue if they had hand raised
+    setHandRaiseQueue(q => q.filter(e => e.peerId !== targetPeerId));
+    toast.success(`میزبانی به ${targetName} منتقل شد`);
   };
 
   const doLeave = async (endRoom: boolean) => {
@@ -601,19 +678,21 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // ── Tiles ──────────────────────────────────────────────────────────────────
   const allTiles = [
     { peerId: myPeerId, userId: currentUserId, displayName: currentUserName, stream: localStream, isMuted, isVideoOff, isHandRaised, isLocal: true, isHost, networkQuality: myQuality },
-    ...Array.from(peers.values()).map(p => ({ peerId: p.peerId, userId: p.userId, displayName: p.displayName, stream: p.stream, isMuted: p.isMuted, isVideoOff: p.isVideoOff, isHandRaised: p.isHandRaised, isLocal: false, isHost: room.host_id === p.userId, networkQuality: p.networkQuality })),
+    ...Array.from(peers.values()).map(p => ({ peerId: p.peerId, userId: p.userId, displayName: p.displayName, stream: p.stream, isMuted: p.isMuted, isVideoOff: p.isVideoOff, isHandRaised: p.isHandRaised, isLocal: false, isHost: hostId === p.userId, networkQuality: p.networkQuality })),
   ];
 
   const qualityColor = { excellent:'text-green-400', good:'text-teal-400', fair:'text-amber-400', poor:'text-red-400' };
 
-  // Core controls always visible on mobile
+  // Sorted hand raise queue (earliest first)
+  const sortedQueue = [...handRaiseQueue].sort((a, b) => a.time - b.time);
+
   const coreControls = (
     <>
-      <button onClick={toggleMute} title={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'}
+      <button onClick={toggleMute} title={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-pressed={isMuted}
         className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
         {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
       </button>
-      <button onClick={toggleVideo} title={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'}
+      <button onClick={toggleVideo} title={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-pressed={isVideoOff}
         className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
         {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
       </button>
@@ -659,7 +738,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             {codeCopied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
             <span className="hidden sm:inline">{room.code}</span>
           </button>
-          <button onClick={() => setLayoutMode(l => l === 'grid' ? 'sidebar' : 'grid')} title="تغییر نمای ویدیو" className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors hidden sm:flex">
+          <button onClick={() => setLayoutMode(l => l === 'grid' ? 'sidebar' : 'grid')} title="تغییر نما" className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors hidden sm:flex">
             {layoutMode === 'grid' ? <Layout className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
           </button>
           <button onClick={() => setIsFullscreen(v => !v)} title="تمام‌صفحه" className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors">
@@ -675,7 +754,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       <div className="flex flex-1 overflow-hidden min-h-0 relative">
         {/* Video area */}
         <div className="flex-1 flex flex-col overflow-hidden p-2 gap-2 min-w-0">
-          {/* Tile size slider — desktop only */}
           {!pinnedPeerId && layoutMode === 'grid' && allTiles.length > 1 && (
             <div className="hidden sm:flex items-center gap-2 flex-shrink-0 px-1">
               <span className="text-gray-500 text-xs">کوچک</span>
@@ -736,10 +814,9 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           )}
         </div>
 
-        {/* Side panel — desktop: inline sidebar | mobile: overlay from bottom */}
+        {/* Side panel */}
         {sidePanel && (
           <>
-            {/* Mobile overlay backdrop */}
             {isMobile && (
               <div className="absolute inset-0 bg-black/60 z-30" onClick={() => setSidePanel(null)} />
             )}
@@ -750,7 +827,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                 : 'w-64 md:w-72 flex-shrink-0 border-r relative'
               }
             `}>
-              {/* Panel tab bar */}
               <div className="flex border-b border-gray-800 flex-shrink-0">
                 {isMobile && (
                   <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-gray-600 rounded-full" />
@@ -758,10 +834,19 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                 {(['chat','participants','polls','whiteboard'] as SidePanel[]).filter(Boolean).map(p => (
                   <button key={p!} onClick={() => togglePanel(p)}
                     className={`flex-1 py-2.5 text-xs font-medium transition-colors ${sidePanel === p ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500 hover:text-gray-300'}`}>
-                    {p === 'chat' ? 'چت' : p === 'participants' ? 'افراد' : p === 'polls' ? 'نظرسنجی' : 'وایت‌بورد'}
+                    {p === 'chat' ? 'چت' : p === 'participants' ? (
+                      <span className="flex items-center justify-center gap-1">
+                        افراد
+                        {sortedQueue.length > 0 && (
+                          <span className="w-4 h-4 rounded-full bg-yellow-500 text-black text-[10px] flex items-center justify-center font-bold">
+                            {sortedQueue.length}
+                          </span>
+                        )}
+                      </span>
+                    ) : p === 'polls' ? 'نظرسنجی' : 'وایت‌بورد'}
                   </button>
                 ))}
-                <button onClick={() => setSidePanel(null)} className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
+                <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -788,7 +873,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                     <input value={messageInput} onChange={e => setMessageInput(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                       placeholder="پیام..." className="flex-1 bg-gray-800 text-white rounded-xl px-3 py-2 text-sm outline-none placeholder-gray-500 min-w-0" />
-                    <button onClick={sendMessage} className="p-2 bg-teal-600 hover:bg-teal-500 rounded-xl transition-colors flex-shrink-0">
+                    <button onClick={sendMessage} aria-label="ارسال پیام" className="p-2 bg-teal-600 hover:bg-teal-500 rounded-xl transition-colors flex-shrink-0">
                       <Send className="w-4 h-4" />
                     </button>
                   </div>
@@ -797,6 +882,28 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
               {sidePanel === 'participants' && (
                 <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+                  {/* Hand raise queue — host only */}
+                  {isHost && sortedQueue.length > 0 && (
+                    <div className="p-2 bg-yellow-900/20 rounded-xl border border-yellow-700/40">
+                      <p className="text-xs font-semibold text-yellow-400 flex items-center gap-1.5 mb-1.5">
+                        <Hand className="w-3 h-3" />صف دست‌بالاها ({sortedQueue.length})
+                      </p>
+                      {sortedQueue.map((entry, i) => (
+                        <div key={entry.peerId} className="flex items-center gap-2 py-1">
+                          <span className="w-4 h-4 rounded-full bg-yellow-600/40 text-yellow-300 text-[10px] flex items-center justify-center font-bold flex-shrink-0">{i + 1}</span>
+                          <span className="text-sm text-gray-200 flex-1 truncate">{entry.name}</span>
+                          <span className="text-xs text-gray-500 flex-shrink-0">{Math.round((Date.now() - entry.time) / 1000)}ث پیش</span>
+                          <button onClick={() => lowerHand(entry.peerId)}
+                            title="پایین آوردن دست"
+                            aria-label={`پایین آوردن دست ${entry.name}`}
+                            className="p-1 rounded-lg bg-yellow-900/40 hover:bg-yellow-900/70 text-yellow-400 transition-colors flex-shrink-0">
+                            <Hand className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Host tools */}
                   {isHost && peers.size > 0 && (
                     <div className="p-2 bg-gray-800/60 rounded-xl space-y-1.5 border border-gray-700">
@@ -809,6 +916,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       </button>
                     </div>
                   )}
+
+                  {/* Participant list */}
                   {allTiles.map(t => (
                     <div key={t.peerId} className="flex items-center gap-2 p-2 bg-gray-800 rounded-xl group">
                       <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -819,6 +928,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                         <div className="flex items-center gap-1 mt-0.5">
                           <QualityDot quality={t.networkQuality} />
                           <span className="text-xs text-gray-500">{t.networkQuality}</span>
+                          {t.isHost && <span className="text-xs text-amber-400 mr-1">میزبان</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
@@ -826,7 +936,24 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                         {t.isMuted && <MicOff className="w-3 h-3 text-red-400" />}
                         {t.isVideoOff && <VideoOff className="w-3 h-3 text-red-400" />}
                         {t.isHandRaised && <Hand className="w-3.5 h-3.5 text-yellow-400 animate-bounce" />}
-                        {/* Host kick button */}
+                        {/* Host lower hand */}
+                        {isHost && !t.isLocal && t.isHandRaised && (
+                          <button onClick={() => lowerHand(t.peerId)}
+                            title="پایین آوردن دست"
+                            className="p-1 rounded-lg hover:bg-yellow-900/40 text-yellow-500 hover:text-yellow-300 transition-colors">
+                            <Hand className="w-3 h-3" />
+                          </button>
+                        )}
+                        {/* Transfer host */}
+                        {isHost && !t.isLocal && !t.isHost && (
+                          <button onClick={() => transferHost(t.peerId, t.userId, t.displayName)}
+                            title="انتقال میزبانی"
+                            aria-label={`انتقال میزبانی به ${t.displayName}`}
+                            className="p-1 rounded-lg bg-transparent hover:bg-amber-900/40 text-gray-600 hover:text-amber-400 transition-colors opacity-0 group-hover:opacity-100">
+                            <ArrowRightLeft className="w-3 h-3" />
+                          </button>
+                        )}
+                        {/* Kick */}
                         {isHost && !t.isLocal && (
                           <button onClick={() => kickParticipant(t.peerId, t.displayName)}
                             title="خارج کردن از جلسه"
@@ -834,7 +961,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                             <UserX className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {/* Pin button */}
+                        {/* Pin */}
                         {!t.isLocal && (
                           <button onClick={() => setPinnedPeerId(p => p === t.peerId ? null : t.peerId)}
                             title="پین کردن"
@@ -893,8 +1020,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       {/* Screen share badge */}
       {isScreenSharing && !isMobile && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-teal-600/95 rounded-full px-4 py-1.5 flex items-center gap-2 text-sm font-medium text-white shadow-lg pointer-events-none">
-          <ScreenShare className="w-4 h-4" />{currentUserName} در حال ارائه صفحه است
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-teal-600/95 rounded-full px-4 py-1.5 flex items-center gap-2 text-sm font-medium text-white shadow-lg">
+          <ScreenShare className="w-4 h-4" />
+          {currentUserName} در حال ارائه صفحه است
+          <button onClick={stopScreenShare} className="mr-1 px-2 py-0.5 rounded-full bg-white/20 hover:bg-white/30 text-xs transition-colors">
+            توقف
+          </button>
         </div>
       )}
 
@@ -908,17 +1039,15 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       {/* Bottom controls */}
       <div className="bg-gray-900/95 border-t border-gray-800 flex-shrink-0" dir="rtl">
-        {/* Mobile: primary controls row + expand toggle */}
         {isMobile ? (
           <>
             <div className="flex items-center justify-center gap-2 px-3 py-2.5">
               {coreControls}
-              <button onClick={() => setShowAllControls(v => !v)}
+              <button onClick={() => setShowAllControls(v => !v)} aria-label="بیشتر"
                 className="w-11 h-11 rounded-full flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-all flex-shrink-0">
                 {showAllControls ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
               </button>
             </div>
-            {/* Expanded secondary controls */}
             {showAllControls && (
               <div className="flex items-center justify-center gap-2 px-3 pb-3 flex-wrap">
                 {room.allow_screen_share && (
@@ -927,7 +1056,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                     {isScreenSharing ? <ScreenShareOff className="w-5 h-5" /> : <ScreenShare className="w-5 h-5" />}
                   </button>
                 )}
-                <button onClick={toggleHand} title="بلند کردن دست"
+                <button onClick={toggleHand} title="بلند کردن دست" aria-pressed={isHandRaised}
                   className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${isHandRaised ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   <Hand className="w-5 h-5" />
                 </button>
@@ -945,8 +1074,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   </div>
                 )}
                 <button onClick={() => { togglePanel('participants'); setShowAllControls(false); }} title="شرکت‌کنندگان"
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                  className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   <Users className="w-5 h-5" />
+                  {sortedQueue.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full text-[9px] text-black flex items-center justify-center font-bold">{sortedQueue.length}</span>
+                  )}
                 </button>
                 <button onClick={() => { togglePanel('polls'); setShowAllControls(false); }} title="نظرسنجی"
                   className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'polls' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
@@ -956,7 +1088,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   <PenTool className="w-5 h-5" />
                 </button>
-                <button onClick={() => setIsSpeakerMuted(v => !v)} title={isSpeakerMuted ? 'فعال کردن صدا' : 'قطع صدا'}
+                <button onClick={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })} title={isSpeakerMuted ? 'فعال کردن صدا' : 'قطع صدا'}
                   className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${isSpeakerMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   {isSpeakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                 </button>
@@ -970,29 +1102,28 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             )}
           </>
         ) : (
-          /* Desktop: single scrollable row */
           <div role="toolbar" aria-label="کنترل‌های جلسه" className="flex items-center justify-center gap-2 px-3 py-3 overflow-x-auto">
-            <button onClick={toggleMute} title={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-label={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-pressed={isMuted}
+            <button onClick={toggleMute} aria-label={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-pressed={isMuted}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
-            <button onClick={toggleVideo} title={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-label={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-pressed={isVideoOff}
+            <button onClick={toggleVideo} aria-label={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-pressed={isVideoOff}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
             </button>
             {room.allow_screen_share && (
-              <button onClick={isScreenSharing ? stopScreenShare : startScreenShare} title="اشتراک صفحه" aria-label={isScreenSharing ? 'توقف اشتراک صفحه' : 'شروع اشتراک صفحه'} aria-pressed={isScreenSharing}
+              <button onClick={isScreenSharing ? stopScreenShare : startScreenShare} aria-label={isScreenSharing ? 'توقف اشتراک صفحه' : 'شروع اشتراک صفحه'} aria-pressed={isScreenSharing}
                 className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isScreenSharing ? 'bg-teal-600 hover:bg-teal-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
                 {isScreenSharing ? <ScreenShareOff className="w-5 h-5" /> : <ScreenShare className="w-5 h-5" />}
               </button>
             )}
-            <button onClick={toggleHand} title="بلند کردن دست" aria-label={isHandRaised ? 'پایین آوردن دست' : 'بلند کردن دست'} aria-pressed={isHandRaised}
+            <button onClick={toggleHand} aria-label={isHandRaised ? 'پایین آوردن دست' : 'بلند کردن دست'} aria-pressed={isHandRaised}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isHandRaised ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <Hand className="w-5 h-5" />
             </button>
             {room.allow_reactions && (
               <div className="relative flex-shrink-0">
-                <button onClick={() => setShowEmojiPicker(v => !v)} title="واکنش" aria-label="ارسال واکنش ایموجی" aria-expanded={showEmojiPicker}
+                <button onClick={() => setShowEmojiPicker(v => !v)} aria-label="ارسال واکنش ایموجی" aria-expanded={showEmojiPicker}
                   className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg ${showEmojiPicker ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   <Smile className="w-5 h-5" />
                 </button>
@@ -1004,37 +1135,39 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               </div>
             )}
             {room.allow_chat && (
-              <button onClick={() => togglePanel('chat')} title="چت" aria-label="باز کردن پنل چت" aria-pressed={sidePanel === 'chat'}
+              <button onClick={() => togglePanel('chat')} aria-label="باز کردن پنل چت" aria-pressed={sidePanel === 'chat'}
                 className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'chat' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                 <MessageSquare className="w-5 h-5" />
-                {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold" aria-label={`${unreadCount} پیام خوانده نشده`}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
+                {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>}
               </button>
             )}
-            <button onClick={() => togglePanel('participants')} title="شرکت‌کنندگان" aria-label="باز کردن لیست شرکت‌کنندگان" aria-pressed={sidePanel === 'participants'}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+            <button onClick={() => togglePanel('participants')} aria-label="باز کردن لیست شرکت‌کنندگان" aria-pressed={sidePanel === 'participants'}
+              className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <Users className="w-5 h-5" />
+              {sortedQueue.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full text-xs text-black flex items-center justify-center font-bold">{sortedQueue.length}</span>
+              )}
             </button>
-            <button onClick={() => togglePanel('polls')} title="نظرسنجی" aria-label="باز کردن نظرسنجی" aria-pressed={sidePanel === 'polls'}
+            <button onClick={() => togglePanel('polls')} aria-label="باز کردن نظرسنجی" aria-pressed={sidePanel === 'polls'}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'polls' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <BarChart2 className="w-5 h-5" />
             </button>
-            <button onClick={() => togglePanel('whiteboard')} title="وایت‌بورد" aria-label="باز کردن وایت‌بورد" aria-pressed={sidePanel === 'whiteboard'}
+            <button onClick={() => togglePanel('whiteboard')} aria-label="باز کردن وایت‌بورد" aria-pressed={sidePanel === 'whiteboard'}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <PenTool className="w-5 h-5" />
             </button>
             <div className="w-px h-8 bg-gray-700 flex-shrink-0" />
-            <button onClick={() => setIsSpeakerMuted(v => !v)} title={isSpeakerMuted ? 'فعال کردن صدا' : 'قطع صدا'} aria-label={isSpeakerMuted ? 'فعال کردن صدای اسپیکر' : 'قطع صدای اسپیکر'} aria-pressed={isSpeakerMuted}
+            <button onClick={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })} aria-label={isSpeakerMuted ? 'فعال کردن صدای اسپیکر' : 'قطع صدای اسپیکر'} aria-pressed={isSpeakerMuted}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isSpeakerMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isSpeakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
             </button>
-            {/* Host-only: mute all */}
             {isHost && peers.size > 0 && (
-              <button onClick={muteAll} title="قطع میکروفون همه شرکت‌کنندگان" aria-label="قطع میکروفون همه شرکت‌کنندگان"
+              <button onClick={muteAll} aria-label="قطع میکروفون همه شرکت‌کنندگان"
                 className="w-12 h-12 rounded-full bg-amber-700 hover:bg-amber-600 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
                 <ShieldAlert className="w-5 h-5" />
               </button>
             )}
-            <button onClick={leaveRoom} title="ترک/پایان جلسه"
+            <button onClick={leaveRoom} aria-label="ترک یا پایان جلسه"
               className="w-14 h-12 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
               <PhoneOff className="w-5 h-5" />
             </button>
