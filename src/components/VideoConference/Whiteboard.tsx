@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import toast from 'react-hot-toast';
 import type { WhiteboardStroke, Point } from './types';
 
 const COLORS = ['#00d4aa', '#3b82f6', '#ef4444', '#f59e0b', '#ec4899', '#ffffff', '#374151', '#000000'];
@@ -24,8 +25,8 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   const [isClearing, setIsClearing] = useState(false);
   const drawing = useRef(false);
   const currentPath = useRef<Point[]>([]);
-  // last drawn point index — for incremental drawing (fix #2)
-  const lastDrawnIdx = useRef(0);
+  // fix #1: hold the subscribed channel so clearBoard can reuse it for broadcast
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const getPos = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current!;
@@ -37,19 +38,26 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   };
 
   const drawStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: WhiteboardStroke) => {
-    if (stroke.points.length < 2) return;
+    if (!stroke.points.length) return;
     ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
     ctx.strokeStyle = stroke.color;
+    ctx.fillStyle = stroke.color;
     ctx.lineWidth = stroke.width;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    // fix #3: single-point tap → draw a dot instead of silently doing nothing
+    if (stroke.points.length === 1) {
+      ctx.beginPath();
+      ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.width / 2, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
     ctx.beginPath();
     ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
     stroke.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
     ctx.stroke();
   }, []);
 
-  // fix #2: draw only the NEW segment since last call instead of the full path
   const drawSegment = useCallback((ctx: CanvasRenderingContext2D, points: Point[], fromIdx: number, strokeTool: 'pen' | 'eraser', strokeColor: string, strokeWidth: number) => {
     if (fromIdx < 1 || fromIdx >= points.length) return;
     ctx.globalCompositeOperation = strokeTool === 'eraser' ? 'destination-out' : 'source-over';
@@ -72,7 +80,6 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   const startDraw = (x: number, y: number) => {
     drawing.current = true;
     currentPath.current = [getPos(x, y)];
-    lastDrawnIdx.current = 0;
   };
 
   const moveDraw = (x: number, y: number) => {
@@ -86,23 +93,35 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
     currentPath.current.push(pos);
     const ctx = canvasRef.current?.getContext('2d');
     const idx = currentPath.current.length - 1;
-    // fix #2: only draw the newest segment
     if (ctx && idx >= 1) {
       drawSegment(ctx, currentPath.current, idx, tool, color, width);
-      lastDrawnIdx.current = idx;
     }
   };
 
+  // fix #4: show toast when stroke fails to persist
   const endDraw = async () => {
-    if (!drawing.current || currentPath.current.length < 2) { drawing.current = false; return; }
+    if (!drawing.current || !currentPath.current.length) { drawing.current = false; return; }
+
+    // fix #3: allow single-point strokes (dots)
     const stroke: WhiteboardStroke = {
       id: safeUUID(), userId, points: [...currentPath.current], color, width, tool,
     };
     drawing.current = false;
     currentPath.current = [];
-    lastDrawnIdx.current = 0;
-    const { error } = await supabase.from('conference_whiteboard').insert({ room_id: roomId, user_id: userId, stroke_data: stroke });
-    if (error) console.error('whiteboard insert error:', error);
+
+    // Draw dot for single-point tap (not yet drawn by moveDraw)
+    if (stroke.points.length === 1) {
+      const ctx = canvasRef.current?.getContext('2d');
+      if (ctx) drawStroke(ctx, stroke);
+    }
+
+    const { error } = await supabase.from('conference_whiteboard').insert({
+      room_id: roomId, user_id: userId, stroke_data: stroke,
+    });
+    if (error) {
+      console.error('whiteboard insert error:', error);
+      toast.error('خطا در ذخیره stroke — تغییر فقط برای شما نمایش داده می‌شود');
+    }
   };
 
   useEffect(() => {
@@ -113,7 +132,6 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
         .eq('room_id', roomId)
         .order('created_at');
 
-      // fix #3: only render if load succeeded
       if (error) { console.error('whiteboard load error:', error); return; }
       const ctx = canvasRef.current?.getContext('2d');
       if (!ctx || !data) return;
@@ -123,44 +141,51 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
 
     load();
 
+    // fix #1: keep a ref to the subscribed channel so clearBoard can reuse it
     const ch = supabase.channel(`wb-${roomId}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'conference_whiteboard', filter: `room_id=eq.${roomId}` },
         ({ new: row }) => {
           const ctx = canvasRef.current?.getContext('2d');
-          // Don't redraw our own strokes — already painted live during moveDraw
           if (ctx && row.stroke_data?.userId !== userId) {
             drawStroke(ctx, row.stroke_data as WhiteboardStroke);
           }
         })
-      // fix #1: listen for DELETE events so all clients clear when board is wiped
       .on('postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'conference_whiteboard', filter: `room_id=eq.${roomId}` },
         () => { clearCanvas(); })
-      // fix #1 (broadcast fallback): immediate clear via broadcast before DB delete propagates
-      .on('broadcast', { event: 'wb_clear' }, () => { clearCanvas(); })
+      // fix #5: reset drawing state on remote clear to prevent ghost strokes
+      .on('broadcast', { event: 'wb_clear' }, () => {
+        drawing.current = false;
+        currentPath.current = [];
+        clearCanvas();
+      })
       .subscribe();
 
-    return () => { ch.unsubscribe(); };
+    channelRef.current = ch;
+
+    return () => {
+      ch.unsubscribe();
+      channelRef.current = null;
+    };
   }, [roomId, userId, drawStroke, clearCanvas]);
 
-  // fix #1 + #3 + #5: clear with moderation check, broadcast first, then delete
+  // fix #1: reuse the already-subscribed channel for broadcast
   const clearBoard = async () => {
-    if (!isHost) return; // moderation: only host can clear all
+    if (!isHost) return;
     setIsClearing(true);
     try {
       // Broadcast immediate clear to all clients before DB round-trip
-      const broadcastCh = supabase.channel(`wb-${roomId}`);
-      broadcastCh.send({ type: 'broadcast', event: 'wb_clear', payload: { by: userId } });
+      channelRef.current?.send({ type: 'broadcast', event: 'wb_clear', payload: { by: userId } });
 
       const { error } = await supabase
         .from('conference_whiteboard')
         .delete()
         .eq('room_id', roomId);
 
-      // fix #3: only clear local canvas after confirmed delete
       if (error) {
         console.error('whiteboard clear error:', error);
+        toast.error('خطا در پاک کردن تخته');
       } else {
         clearCanvas();
       }
@@ -196,7 +221,6 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
           className="bg-gray-800 text-white text-xs rounded-lg px-2 py-1.5 border border-gray-700">
           {[2, 4, 8, 14, 20].map(w => <option key={w} value={w}>{w}px</option>)}
         </select>
-        {/* fix #5: clear only visible/enabled for host */}
         {isHost && (
           <button onClick={clearBoard} disabled={isClearing} aria-label="پاک کردن تخته سفید"
             className="p-1.5 bg-red-900/40 hover:bg-red-900/60 disabled:opacity-50 text-red-400 rounded-lg transition-colors">
@@ -204,15 +228,17 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
           </button>
         )}
       </div>
-      <div className="flex-1 rounded-xl overflow-hidden bg-white min-h-0">
+
+      {/* fix #2: center canvas and maintain 1200:700 aspect ratio to prevent stroke distortion */}
+      <div className="flex-1 min-h-0 flex items-center justify-center bg-white rounded-xl overflow-hidden">
         <canvas
           ref={canvasRef}
           width={1200}
           height={700}
           aria-label="تخته سفید مشترک"
           role="img"
-          className="w-full h-full"
-          style={{ cursor: tool === 'eraser' ? 'cell' : 'crosshair', touchAction: 'none' }}
+          className="max-w-full max-h-full"
+          style={{ aspectRatio: '1200/700', cursor: tool === 'eraser' ? 'cell' : 'crosshair', touchAction: 'none' }}
           onMouseDown={e => startDraw(e.clientX, e.clientY)}
           onMouseMove={e => moveDraw(e.clientX, e.clientY)}
           onMouseUp={endDraw}
