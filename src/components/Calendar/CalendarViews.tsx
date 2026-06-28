@@ -339,7 +339,6 @@ export function CalendarViews(p: CalendarViewProps) {
       e.stopPropagation(); e.preventDefault();
       if (!canMove || !origDateStr) return;
       dragMovedRef.current = false;
-      setPreviewMeeting(null);
       setDragMoveMeeting(meeting); setDragMoveStartY(e.clientY); setDragMoveStartX(e.clientX);
       setDragMoveOriginalSlot(startSlot); setDragMoveOriginalEndSlot(endSlot);
       setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0);
@@ -348,9 +347,6 @@ export function CalendarViews(p: CalendarViewProps) {
     const onBlockTouch = (e: React.TouchEvent) => {
       e.stopPropagation();
       if (!canMove || !origDateStr) return;
-      e.preventDefault();
-      dragMovedRef.current = false;
-      setPreviewMeeting(null);
       const t = e.touches[0];
       setDragMoveMeeting(meeting); setDragMoveStartY(t.clientY); setDragMoveStartX(t.clientX);
       setDragMoveOriginalSlot(startSlot); setDragMoveOriginalEndSlot(endSlot);
@@ -376,7 +372,7 @@ export function CalendarViews(p: CalendarViewProps) {
 
     return (
       <div key={meeting.id}
-        className={`absolute rounded-lg overflow-hidden select-none touch-none group ${isNested ? 'ring-[3px] ring-white shadow-[0_0_0_1px_rgba(0,0,0,0.25)] shadow-xl' : 'border border-white/20'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
+        className={`absolute rounded-lg overflow-hidden select-none group ${isNested ? 'ring-[3px] ring-white shadow-[0_0_0_1px_rgba(0,0,0,0.25)] shadow-xl' : 'border border-white/20'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
         style={{ top: `${visualTop}px`, height: `${visualHeight}px`, backgroundColor: color, zIndex: (isBeingDragged || isBeingResized) ? 30 : blockZIndex, ...insetStyle, transition: (isBeingDragged || isBeingResized) ? 'none' : 'box-shadow 0.15s', ...ghostStyle }}
         onMouseDown={onBlockDown} onTouchStart={onBlockTouch}
         onMouseUp={e => { e.stopPropagation(); if (!dragMovedRef.current) { setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0); } }}

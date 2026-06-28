@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
-import { insertNotification } from '../lib/notifications';
 import { PlusCircle, Loader2, Mail, Lock, UserPlus, Save, Users, X, Plus, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, BookUser, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -435,32 +434,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         logAudit({ module: 'meetings', action: 'meeting_created', entity_name: subject, entity_id: meetingData?.id, details: `جلسه جدید "${subject}" ثبت شد`, severity: 'info' });
 
         toast.success('درخواست جلسه ثبت شد');
-
-        // Notify invited participants and observers via Bale / SMS / in-app
-        const participantIds = selectedParticipants.map(p => p.id).filter(id => id !== userId);
-        const observerIds = selectedNotifyUsers.map(u => u.id).filter(id => id !== userId && !participantIds.includes(id));
-        await Promise.all([
-          ...participantIds.map(uid => insertNotification({
-            userId: uid,
-            category: 'meeting',
-            eventType: 'invite',
-            audience: 'participants',
-            fallbackTitle: `دعوت به جلسه: ${subject}`,
-            fallbackMessage: `شما به جلسه «${subject}» دعوت شده‌اید`,
-            senderId: userId,
-            actionUrl: 'meetings',
-          })),
-          ...observerIds.map(uid => insertNotification({
-            userId: uid,
-            category: 'meeting',
-            eventType: 'invite',
-            audience: 'observers',
-            fallbackTitle: `اطلاع از جلسه: ${subject}`,
-            fallbackMessage: `جلسه «${subject}» برای اطلاع شما ثبت شده است`,
-            senderId: userId,
-            actionUrl: 'meetings',
-          })),
-        ]);
       }
 
       // Save contact only when manually entered (not from contacts list)

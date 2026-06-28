@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   User, Mail, Phone, Building, MapPin, Camera, Loader2, Save,
-  Briefcase, Hash, Users, CreditCard,
+  Briefcase, Hash, Globe, Linkedin, Users, CreditCard,
   ChevronDown, ChevronUp, CheckCircle2, Crown, Building2, Link2, MessageCircle,
   Monitor, Download, ExternalLink, Apple, Chrome, AtSign,
   Unlink, RefreshCw,
@@ -116,6 +116,8 @@ interface Profile {
   department: string;
   employee_id: string;
   hire_date: string;
+  website: string;
+  linkedin_url: string;
   bale_chat_id: string;
   primary_position_id: string | null;
   primary_unit_id: string | null;
@@ -127,7 +129,7 @@ const empty: Omit<Profile, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
   full_name: '', email: '', username: '', phone: '', organization: '', position: '',
   location: '', bio: '', avatar_url: '', national_id: '', birth_date: '',
   gender: '', city: '', department: '', employee_id: '', hire_date: '',
-  bale_chat_id: '',
+  website: '', linkedin_url: '', bale_chat_id: '',
   primary_position_id: null, primary_unit_id: null,
 };
 
@@ -809,9 +811,21 @@ export function ProfilePage() {
 
         {/* Social / links */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <SectionHeader id="social" title="شبکه‌های اجتماعی و پیام‌رسان" subtitle="شناسه پیام‌رسان بله" />
+          <SectionHeader id="social" title="شبکه‌های اجتماعی و پیام‌رسان" subtitle="وب‌سایت، لینکدین و شناسه پیام‌رسان بله" />
           {openSection === 'social' && (
             <div className="p-6 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <Field label="وب‌سایت" icon={Globe}>
+                  <input type="url" value={profile.website} onChange={e => set('website', e.target.value)}
+                    className={inp} placeholder="https://example.com" dir="ltr" />
+                </Field>
+
+                <Field label="پروفایل لینکدین" icon={Linkedin}>
+                  <input type="url" value={profile.linkedin_url} onChange={e => set('linkedin_url', e.target.value)}
+                    className={inp} placeholder="https://linkedin.com/in/username" dir="ltr" />
+                </Field>
+              </div>
+
               {/* Bale messenger */}
               <BaleConnectSection />
             </div>

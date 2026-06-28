@@ -536,37 +536,6 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
         } catch {
           toast.error('خطا در ارسال مجدد');
         }
-      } else {
-        // Normal edit: notify participants and observers about the change
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: savedMtg } = await supabase
-              .from('meetings')
-              .select('participant_user_ids, notify_users')
-              .eq('id', meeting.id)
-              .maybeSingle();
-            const pIds: string[] = (savedMtg?.participant_user_ids ?? []);
-            const nIds: string[] = (savedMtg?.notify_users ?? []);
-            const notifyIds = [...pIds, ...nIds.filter(id => !pIds.includes(id))].filter(id => id !== user.id);
-            if (notifyIds.length > 0) {
-              await Promise.all(notifyIds.map(uid =>
-                insertNotification({
-                  userId: uid,
-                  category: 'meeting',
-                  eventType: 'change',
-                  audience: pIds.includes(uid) ? 'participants' : 'observers',
-                  fallbackTitle: 'جلسه ویرایش شد',
-                  fallbackMessage: `جلسه «${meeting.subject}» ویرایش شده است`,
-                  senderId: user.id,
-                  actionUrl: 'meetings',
-                })
-              ));
-            }
-          }
-        } catch {
-          // fire-and-forget — don't block UI
-        }
       }
       setIsEditing(false);
       setEditPrefill(null);

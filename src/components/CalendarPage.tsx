@@ -58,7 +58,7 @@ export function CalendarPage({
   sparkNavigateDate, onSparkNavigateDateConsumed,
   sparkCalendarMeetingPrefill, onSparkCalendarMeetingPrefillConsumed,
 }: CalendarPageProps) {
-  const { prefs, updatePrefs, loading: prefsLoading } = useUserPreferences();
+  const { prefs, updatePrefs } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const p = localStorage.getItem('user_prefs_calendar_view') as ViewMode | null;
@@ -127,14 +127,6 @@ export function CalendarPage({
   const [dragMoveCurrentDeltaSlot, setDragMoveCurrentDeltaSlot] = useState(0);
   const [dragMoveCurrentDeltaDay, setDragMoveCurrentDeltaDay] = useState(0);
   const [dragMoveOriginalDate, setDragMoveOriginalDate] = useState('');
-  const [pendingMove, setPendingMove] = useState<{
-    meeting: MeetingData;
-    updates: Record<string, string>;
-    ns: number;
-    ne: number;
-    oldDateIso: string;
-    newDateIso: string;
-  } | null>(null);
   const weekGridRef = useRef<HTMLDivElement | null>(null);
   const dayGridRef = useRef<HTMLDivElement | null>(null);
 
@@ -143,10 +135,6 @@ export function CalendarPage({
   const [resizeStartY, setResizeStartY] = useState(0);
   const [resizeOriginalEndSlot, setResizeOriginalEndSlot] = useState(0);
   const [resizeCurrentDelta, setResizeCurrentDelta] = useState(0);
-  const [pendingResize, setPendingResize] = useState<{
-    meeting: MeetingData;
-    newEndTime: string;
-  } | null>(null);
 
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -155,6 +143,11 @@ export function CalendarPage({
   // Search
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingResize, setPendingResize] = useState<{
+    meeting: MeetingData;
+    ne: number;
+    newEndTime: string;
+  } | null>(null);
   const searchRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -325,10 +318,10 @@ export function CalendarPage({
   const [hideOffHours, setHideOffHours] = useState(false);
   const canHideOffHours = hasPermission('calendar_hide_offhours');
 
-  // Sync hideOffHours from user preferences — only after prefs are loaded from DB
+  // Sync hideOffHours from user preferences
   useEffect(() => {
-    if (!prefsLoading) setHideOffHours(prefs.hide_offhours);
-  }, [prefs.hide_offhours, prefsLoading]);
+    setHideOffHours(prefs.hide_offhours);
+  }, [prefs.hide_offhours]);
 
   // When hiding off-hours, clip visible range to work hours (with 1hr buffer)
   const visibleStartMin = hideOffHours ? Math.max(HOURS_START * 60, workStartMin - 60) : HOURS_START * 60;
@@ -338,7 +331,7 @@ export function CalendarPage({
 
   useEffect(() => {
     supabase.from('system_config').select('key,value').eq('section', 'regional')
-      .in('key', ['work_start_time', 'work_end_time']).then(({ data }) => {
+      .in('key', ['work_start_time', 'work_end_time', 'hide_offhours_default']).then(({ data }) => {
       if (!data) return;
       data.forEach(row => {
         if (row.key === 'work_start_time' && row.value) {
@@ -349,13 +342,15 @@ export function CalendarPage({
           const m = timeToMinutes(row.value);
           if (m >= 0) setWorkEndMin(m);
         }
+        if (row.key === 'hide_offhours_default') {
+          setHideOffHours(row.value === 'true');
+        }
       });
     });
   }, []);
 
-  // Override work hours with user personal preference when set — only after prefs are loaded from DB
+  // Override work hours with user personal preference when set
   useEffect(() => {
-    if (prefsLoading) return;
     if (prefs.work_start_time) {
       const m = timeToMinutes(prefs.work_start_time);
       if (m >= 0) setWorkStartMin(m);
@@ -364,7 +359,7 @@ export function CalendarPage({
       const m = timeToMinutes(prefs.work_end_time);
       if (m >= 0) setWorkEndMin(m);
     }
-  }, [prefs.work_start_time, prefs.work_end_time, prefsLoading]);
+  }, [prefs.work_start_time, prefs.work_end_time]);
 
   // Spark: change view mode
   useEffect(() => {
@@ -1219,12 +1214,12 @@ export function CalendarPage({
   // ---- Navigation ----
   const navigatePrev = () => {
     if (viewMode === 'day') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() - 1); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
-    else if (viewMode === 'week' || viewMode === 'list-week') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() - 7); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
+    else if (viewMode === 'week') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() - 7); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
     else { let nm = currentJm - 1, ny = currentJy; if (nm < 1) { nm = 12; ny--; } setCurrentJy(ny); setCurrentJm(nm); setSidebarJy(ny); setSidebarJm(nm); }
   };
   const navigateNext = () => {
     if (viewMode === 'day') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() + 1); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
-    else if (viewMode === 'week' || viewMode === 'list-week') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() + 7); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
+    else if (viewMode === 'week') { const d = new Date(jalaaliToDate(selectedJy, selectedJm, selectedJd)); d.setDate(d.getDate() + 7); const j = toJalaali(d); setSelectedJy(j.jy); setSelectedJm(j.jm); setSelectedJd(j.jd); setCurrentJy(j.jy); setCurrentJm(j.jm); }
     else { let nm = currentJm + 1, ny = currentJy; if (nm > 12) { nm = 1; ny++; } setCurrentJy(ny); setCurrentJm(nm); setSidebarJy(ny); setSidebarJm(nm); }
   };
   const goToToday = () => {
@@ -1234,11 +1229,9 @@ export function CalendarPage({
 
   const getNavTitle = () => {
     if (viewMode === 'day') return `${selectedJd} ${JALAALI_MONTHS[selectedJm - 1]} ${selectedJy}`;
-    if (viewMode === 'week' || viewMode === 'list-week') {
+    if (viewMode === 'week') {
       const start = weekDays[0]; const end = weekDays[6];
-      if (!start || !end) return '';
-      if (start.jm === end.jm) return `${start.jd} - ${end.jd} ${JALAALI_MONTHS[start.jm - 1]} ${start.jy}`;
-      return `${start.jd} ${JALAALI_MONTHS[start.jm - 1]} - ${end.jd} ${JALAALI_MONTHS[end.jm - 1]} ${end.jy}`;
+      return start && end ? `${start.jd} - ${end.jd} ${JALAALI_MONTHS[start.jm - 1]} ${start.jy}` : '';
     }
     return `${JALAALI_MONTHS[currentJm - 1]} ${currentJy}`;
   };
@@ -1277,20 +1270,13 @@ export function CalendarPage({
   const listMeetings = useMemo(() => {
     if (!viewMode.startsWith('list')) return [];
     const result: { date: string; jy: number; jm: number; jd: number; meetings: MeetingData[] }[] = [];
-    if (viewMode === 'list-week') {
-      for (const day of weekDays) {
-        const ms = getMeetings(day.jy, day.jm, day.jd);
-        if (ms.length > 0) result.push({ date: `${day.jy}/${day.jm}/${day.jd}`, jy: day.jy, jm: day.jm, jd: day.jd, meetings: ms });
-      }
-    } else {
-      const daysInMonth = getJalaaliMonthDays(currentJy, currentJm);
-      for (let d = 1; d <= daysInMonth; d++) {
-        const ms = getMeetings(currentJy, currentJm, d);
-        if (ms.length > 0) result.push({ date: `${currentJy}/${currentJm}/${d}`, jy: currentJy, jm: currentJm, jd: d, meetings: ms });
-      }
+    const daysInMonth = getJalaaliMonthDays(currentJy, currentJm);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ms = getMeetings(currentJy, currentJm, d);
+      if (ms.length > 0) result.push({ date: `${currentJy}/${currentJm}/${d}`, jy: currentJy, jm: currentJm, jd: d, meetings: ms });
     }
     return result;
-  }, [viewMode, currentJy, currentJm, weekDays, getMeetings]);
+  }, [viewMode, currentJy, currentJm, getMeetings]);
 
   // ---- Drag/grid helpers ----
   // Returns the correct inner grid element for slot-from-Y calculations.
@@ -1333,7 +1319,7 @@ export function CalendarPage({
     };
     const onEnd = async (clientX: number, clientY: number) => {
       if (dragMoveMeeting) {
-        const deltaSlot = Math.round((clientY - dragMoveStartY) / slotHeight);
+        const deltaSlot = Math.round((clientY - dragMoveStartY) / SLOT_HEIGHT);
         const deltaDay = viewMode === 'week' ? getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX) : 0;
         if (deltaSlot !== 0 || deltaDay !== 0) {
           const ns = dragMoveOriginalSlot + deltaSlot;
@@ -1345,9 +1331,19 @@ export function CalendarPage({
               origDate.setDate(origDate.getDate() + deltaDay);
               newDate = `${origDate.getFullYear()}-${String(origDate.getMonth() + 1).padStart(2, '0')}-${String(origDate.getDate()).padStart(2, '0')}`;
             }
-            const updates: Record<string, string> = { start_time: minutesToTime(ns * 30), end_time: minutesToTime(ne * 30), duration: `${minutesToTime(ns * 30)} - ${minutesToTime(ne * 30)}` };
+            const updates: any = { start_time: minutesToTime(ns * 30), end_time: minutesToTime(ne * 30), duration: `${minutesToTime(ns * 30)} - ${minutesToTime(ne * 30)}` };
             if (newDate !== dragMoveOriginalDate) updates.request_date = new Date(newDate + 'T12:00:00').toISOString();
-            setPendingMove({ meeting: dragMoveMeeting, updates, ns, ne, oldDateIso: dragMoveOriginalDate, newDateIso: newDate });
+            const { error } = await supabase.from('meetings').update(updates).eq('id', dragMoveMeeting.id);
+            if (!error) {
+              toast.success('جلسه جابجا شد');
+              fetchMeetings();
+              sendNotification('جلسه جابجا شد', dragMoveMeeting.subject);
+              const movedMtg = { ...dragMoveMeeting, start_time: minutesToTime(ns * 30), end_time: minutesToTime(ne * 30) };
+              if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'جلسه جابجا شد', fallbackMessage: `جلسه «${dragMoveMeeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
+              const dragPIds = (dragMoveMeeting.participant_user_ids || []);
+              const moveParticipants = [...dragPIds, ...((dragMoveMeeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
+              if (moveParticipants.length) await Promise.all(moveParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: dragPIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${dragMoveMeeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
+            } else toast.error('خطا');
           }
         }
         setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0);
@@ -1358,7 +1354,7 @@ export function CalendarPage({
           const ne = resizeOriginalEndSlot + delta;
           const ss = minutesToSlotIndex(timeToMinutes(resizeMeeting.start_time));
           if (ne > ss && ne <= (HOURS_END - HOURS_START) * 2) {
-            setPendingResize({ meeting: resizeMeeting, newEndTime: minutesToTime(ne * 30) });
+            setPendingResize({ meeting: resizeMeeting, ne, newEndTime: minutesToTime(ne * 30) });
           }
         }
         setResizeMeeting(null); setResizeCurrentDelta(0);
@@ -1376,7 +1372,7 @@ export function CalendarPage({
       document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu);
       document.removeEventListener('touchmove', tm); document.removeEventListener('touchend', tu);
     };
-  }, [dragMoveMeeting, dragMoveStartY, dragMoveStartX, dragMoveOriginalSlot, dragMoveOriginalEndSlot, dragMoveOriginalDate, resizeMeeting, resizeStartY, resizeOriginalEndSlot, viewMode, slotHeight]);
+  }, [dragMoveMeeting, dragMoveStartY, dragMoveStartX, dragMoveOriginalSlot, dragMoveOriginalEndSlot, dragMoveOriginalDate, resizeMeeting, resizeStartY, resizeOriginalEndSlot, viewMode]);
 
   // Cancel all-day drag on global mouseup
   useEffect(() => {
@@ -1445,41 +1441,6 @@ export function CalendarPage({
 
   if (!currentJy) return null;
 
-  const commitMove = async () => {
-    const snap = pendingMove;
-    if (!snap) return;
-    setPendingMove(null); // dismiss modal immediately so calendar is unblocked
-    const { meeting, updates, ns, ne } = snap;
-    const { error } = await supabase.from('meetings').update(updates).eq('id', meeting.id);
-    if (!error) {
-      toast.success('جلسه جابجا شد');
-      fetchMeetings();
-      sendNotification('جلسه جابجا شد', meeting.subject);
-      const movedMtg = { ...meeting, start_time: minutesToTime(ns * 30), end_time: minutesToTime(ne * 30) };
-      if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'جلسه جابجا شد', fallbackMessage: `جلسه «${meeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
-      const dragPIds = (meeting.participant_user_ids || []);
-      const moveParticipants = [...dragPIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
-      if (moveParticipants.length) await Promise.all(moveParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: dragPIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
-    } else toast.error('خطا');
-  };
-
-  const commitResize = async () => {
-    const snap = pendingResize;
-    if (!snap) return;
-    setPendingResize(null);
-    const { meeting, newEndTime } = snap;
-    const { error } = await supabase.from('meetings').update({ end_time: newEndTime, duration: `${meeting.start_time} - ${newEndTime}` }).eq('id', meeting.id);
-    if (!error) {
-      toast.success('مدت جلسه تغییر کرد');
-      fetchMeetings();
-      sendNotification('زمان جلسه تغییر کرد', meeting.subject);
-      const resizedMtg = { ...meeting, end_time: newEndTime };
-      if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'مدت جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
-      const resizePIds = (meeting.participant_user_ids || []);
-      const resizeParticipants = [...resizePIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
-      if (resizeParticipants.length) await Promise.all(resizeParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: resizePIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
-    } else toast.error('خطا');
-  };
 
   return (
     <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
@@ -1498,6 +1459,24 @@ export function CalendarPage({
                 <p className="text-white/80 text-xs mt-0.5">
                   {reminderAlert.minutesBefore >= 60
                     ? `${reminderAlert.minutesBefore / 60} ساعت دیگر`
+  const commitResize = async () => {
+    const snap = pendingResize;
+    if (!snap) return;
+    setPendingResize(null);
+    const { meeting, newEndTime } = snap;
+    const { error } = await supabase.from('meetings').update({ end_time: newEndTime, duration: `${meeting.start_time} - ${newEndTime}` }).eq('id', meeting.id);
+    if (!error) {
+      toast.success('مدت جلسه تغییر کرد');
+      fetchMeetings();
+      sendNotification('زمان جلسه تغییر کرد', meeting.subject);
+      const resizedMtg = { ...meeting, end_time: newEndTime };
+      if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'مدت جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
+      const resizePIds = (meeting.participant_user_ids || []);
+      const resizeParticipants = [...resizePIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
+      if (resizeParticipants.length) await Promise.all(resizeParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: resizePIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
+    } else toast.error('خطا');
+  };
+
                     : `${reminderAlert.minutesBefore} دقیقه دیگر`}
                 </p>
               </div>
@@ -2138,48 +2117,11 @@ export function CalendarPage({
         </div>
       )}
 
-      {/* Move confirmation dialog */}
-      {pendingMove && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" dir="rtl">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 mx-4 w-full max-w-sm">
-            <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">تأیید جابجایی جلسه</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">آیا از جابجایی این جلسه اطمینان دارید؟</p>
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
-              <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingMove.meeting.subject}</p>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
-                <span className="text-gray-600 dark:text-gray-300">
-                  {(() => { const d = new Date(pendingMove.oldDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
-                  {' — '}
-                  <span dir="ltr">{pendingMove.meeting.start_time} تا {pendingMove.meeting.end_time}</span>
-                </span>
-              </div>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
-                <span className="text-teal-600 dark:text-teal-400 font-medium">
-                  {(() => { const d = new Date(pendingMove.newDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
-                  {' — '}
-                  <span dir="ltr">{pendingMove.updates.start_time} تا {pendingMove.updates.end_time}</span>
-                </span>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setPendingMove(null)}
-                className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={commitMove}
-                className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                تأیید جابجایی
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}
+      <MeetingInboxButton />
+    </div>
+  );
+}
 
       {/* Resize confirmation dialog */}
       {pendingResize && (
@@ -2219,9 +2161,3 @@ export function CalendarPage({
           </div>
         </div>
       )}
-
-      {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}
-      <MeetingInboxButton />
-    </div>
-  );
-}

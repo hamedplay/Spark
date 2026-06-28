@@ -810,7 +810,7 @@ const MENU_PERMISSION_KEY: Record<string, string> = {
   'spark':            'spark',
 };
 
-export function Layout({ children, activePage, onPageChange, isAdmin = false, userPermissions, sparkVisible = false }: LayoutProps) {
+export function Layout({ children, activePage, onPageChange, isAdmin = false, userPermissions, sparkVisible = true }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
     return saved !== null ? saved === 'true' : true;

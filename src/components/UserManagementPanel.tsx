@@ -83,6 +83,8 @@ export interface AdminProfile {
   city?: string | null;
   location?: string | null;
   bio?: string | null;
+  website?: string | null;
+  linkedin_url?: string | null;
   national_id?: string | null;
   avatar_url?: string | null;
   is_admin: boolean | null;
@@ -327,6 +329,16 @@ function UserProfileForm({
           </Field>
           <Field label="موقعیت مکانی (دفتر)" icon={MapPin}>
             <input className={inp} value={form.location || ''} onChange={e => set('location', e.target.value)} placeholder="آدرس دفتر" />
+          </Field>
+        </SectionAccordion>
+
+        {/* Social section */}
+        <SectionAccordion title="شبکه‌های اجتماعی و وب" subtitle="وب‌سایت، لینکدین و لینک‌های حرفه‌ای" open={section === 'social'} onToggle={() => setSection('social')}>
+          <Field label="وب‌سایت" icon={Globe}>
+            <input className={inp} type="url" value={form.website || ''} onChange={e => set('website', e.target.value)} placeholder="https://example.com" dir="ltr" />
+          </Field>
+          <Field label="پروفایل لینکدین" icon={Globe}>
+            <input className={inp} type="url" value={form.linkedin_url || ''} onChange={e => set('linkedin_url', e.target.value)} placeholder="https://linkedin.com/in/username" dir="ltr" />
           </Field>
         </SectionAccordion>
 
@@ -801,6 +813,8 @@ const EXCEL_COLUMNS = [
   { key: 'hire_date',    label: 'تاریخ استخدام' },
   { key: 'location',     label: 'موقعیت مکانی' },
   { key: 'bio',          label: 'درباره کاربر' },
+  { key: 'website',      label: 'وب‌سایت' },
+  { key: 'linkedin_url', label: 'لینکدین' },
   { key: 'is_admin',     label: 'ادمین (true/false)' },
   { key: 'is_active',    label: 'فعال (true/false)' },
 ];
@@ -975,7 +989,16 @@ function UserPreviewPanel({ user, onBack, onEdit }: { user: AdminProfile; onBack
         </div>
       )}
 
-      {/* Social section removed */}
+      {/* Social */}
+      {(user.website || user.linkedin_url) && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+            <Globe className="w-4 h-4 text-purple-500" />شبکه‌های اجتماعی
+          </h4>
+          <InfoRow label="وب‌سایت" value={user.website} />
+          <InfoRow label="لینکدین" value={user.linkedin_url} />
+        </div>
+      )}
 
       <div className="text-xs text-gray-400 text-left pb-4">
         تاریخ ثبت: {user.created_at ? new Date(user.created_at).toLocaleString('fa-IR') : '—'}
@@ -1258,6 +1281,8 @@ export function UserManagementPanel({ currentUserId }: Props) {
               city: updated.city,
               location: updated.location,
               bio: updated.bio,
+              website: updated.website,
+              linkedin_url: updated.linkedin_url,
               national_id: updated.national_id,
               is_admin: updated.is_admin,
             },
@@ -1284,6 +1309,8 @@ export function UserManagementPanel({ currentUserId }: Props) {
         city: updated.city,
         location: updated.location,
         bio: updated.bio,
+        website: updated.website,
+        linkedin_url: updated.linkedin_url,
         national_id: updated.national_id,
         is_admin: updated.is_admin,
         is_active: updated.is_active,
@@ -1299,7 +1326,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
   const emptyNew: AdminProfile = {
     user_id: '', full_name: '', email: '', username: '', phone: '', organization: '', position: '',
     department: '', employee_id: '', hire_date: '', birth_date: '', gender: '', city: '',
-    location: '', bio: '', national_id: '', avatar_url: '',
+    location: '', bio: '', website: '', linkedin_url: '', national_id: '', avatar_url: '',
     is_admin: false, is_active: true, is_hidden: false, created_at: null,
   };
 
@@ -1430,6 +1457,8 @@ export function UserManagementPanel({ currentUserId }: Props) {
             hire_date:    str(cell(row, 'تاریخ استخدام', 'hire_date')),
             location:     str(cell(row, 'موقعیت مکانی', 'location')),
             bio:          str(cell(row, 'درباره کاربر', 'bio')),
+            website:      str(cell(row, 'وب‌سایت', 'website')),
+            linkedin_url: str(cell(row, 'لینکدین', 'linkedin_url', 'linkedin')),
             is_admin:     bool(cell(row, 'ادمین (true/false)', 'is_admin', 'admin'), false),
             is_active:    bool(cell(row, 'فعال (true/false)', 'is_active', 'active'), true),
           },
@@ -1493,6 +1522,8 @@ export function UserManagementPanel({ currentUserId }: Props) {
       '',                // تاریخ استخدام
       '',                // موقعیت مکانی
       '',                // درباره کاربر
+      '',                // وب‌سایت
+      '',                // لینکدین
       'false',           // ادمین (true/false)
       'true',            // فعال (true/false)
       'Password@123',    // رمز عبور (اختیاری — پیش‌فرض: Ss123456)

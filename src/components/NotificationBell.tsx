@@ -160,7 +160,7 @@ function showRichToast(n: AppNotification, onNavigate?: (page: PageId) => void) 
           {n.sender_name && n.type === 'chat' && (
             <p className="text-[11px] text-teal-600 dark:text-teal-400 font-medium">{n.sender_name}</p>
           )}
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 leading-relaxed whitespace-pre-line">{n.message}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 leading-relaxed">{n.message}</p>
           {targetPage && (
             <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-1 font-medium">برای رفتن کلیک کنید</p>
           )}
@@ -316,7 +316,7 @@ function NotificationPanelContent({
                       <p className="text-xs text-teal-600 dark:text-teal-400 font-medium mb-1">{n.sender_name}</p>
                     )}
 
-                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-line">{n.message}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{n.message}</p>
                   </div>
                 </div>
               ))}
