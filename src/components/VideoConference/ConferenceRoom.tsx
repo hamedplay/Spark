@@ -395,16 +395,15 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       data,
     };
     channelRef.current?.send({ type: 'broadcast', event: 'signal', payload });
-    if (type === 'join') {
-      // Guard: skip insert if required fields are missing (prevents HTTP 400)
-      if (!room?.id || !myPeerIdRef.current || !currentUserId) return;
+    const persistedTypes = ['offer', 'answer', 'ice', 'renegotiate'];
+    if (persistedTypes.includes(type) && room?.id && myPeerIdRef.current && currentUserId && toPeerId) {
       supabase.from('conference_signals').insert({
         room_id: room.id,
         from_peer_id: myPeerIdRef.current,
         from_user_id: currentUserId,
         from_display_name: currentUserName,
-        to_peer_id: null,
-        signal_type: 'join',
+        to_peer_id: toPeerId,
+        signal_type: type,
         payload: data,
       }).then(({ error }) => { if (error) console.error('conference_signals insert error:', error); });
     }
