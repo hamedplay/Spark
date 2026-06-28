@@ -16,6 +16,8 @@ export interface ConferenceRoom {
   meeting_id: string | null;
   created_at: string;
   ended_at: string | null;
+  expires_at: string | null;
+  speaking_limit_enabled: boolean;
 }
 
 export interface ConferenceParticipant {

@@ -142,8 +142,15 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [hostId, setHostId] = useState(room.host_id);
   const isHost = hostId === currentUserId;
 
-  // Runtime chat toggle — starts from room setting, updated via DB subscription
-  const [chatEnabled, setChatEnabled] = useState(room.chat_enabled ?? true);
+  // Runtime speaking limit toggle — starts from room setting, synced via DB subscription
+  const [speakingLimitEnabled, setSpeakingLimitEnabled] = useState(room.speaking_limit_enabled ?? true);
+
+  // Meeting expiry: secondsLeft = null means no limit; negative = already expired
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(() => {
+    if (!room.expires_at) return null;
+    return Math.round((new Date(room.expires_at).getTime() - Date.now()) / 1000);
+  });
+  const warned5MinRef = useRef(false);
 
   // Role of the current user — fetched once on mount and updated on transfer
   const [myRole, setMyRole] = useState<RoleType>(room.host_id === currentUserId ? 'host' : 'member');
@@ -179,6 +186,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     setChatEnabled(next);
     await supabase.from('conference_rooms').update({ chat_enabled: next }).eq('id', room.id);
   }, [chatEnabled, room.id]);
+
+  const toggleSpeakingLimit = useCallback(async () => {
+    const next = !speakingLimitEnabled;
+    setSpeakingLimitEnabled(next);
+    await supabase.from('conference_rooms').update({ speaking_limit_enabled: next }).eq('id', room.id);
+    toast(next ? 'محدودیت زمان صحبت فعال شد' : 'محدودیت زمان صحبت غیرفعال شد');
+  }, [speakingLimitEnabled, room.id]);
 
   // Hand raise queue (sorted by raise time)
   const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseEntry[]>([]);
@@ -222,11 +236,24 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   localStreamRef.current = localStream;
   sidePanelRef.current = sidePanel;
 
-  // Duration
+  // Duration + meeting countdown
   useEffect(() => {
-    const t = setInterval(() => setDuration(d => d + 1), 1000);
+    const t = setInterval(() => {
+      setDuration(d => d + 1);
+      if (room.expires_at) {
+        const left = Math.round((new Date(room.expires_at).getTime() - Date.now()) / 1000);
+        setSecondsLeft(left);
+        if (!warned5MinRef.current && left > 0 && left <= 300) {
+          warned5MinRef.current = true;
+          toast('۵ دقیقه تا پایان جلسه باقی مانده', { icon: '⏰', duration: 6000 });
+        }
+        if (left <= 0 && left > -3) {
+          toast.error('زمان جلسه به پایان رسید', { duration: 6000 });
+        }
+      }
+    }, 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [room.expires_at]);
 
   // Heartbeat
   useEffect(() => {
@@ -237,6 +264,64 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     }, 15000);
     return () => clearInterval(t);
   }, [room.id, currentUserId]);
+
+  // Speaking timer — tracks consecutive speaking seconds, auto-mutes at 60s
+  const speakingSecsRef = useRef(0);
+  const [speakingSecs, setSpeakingSecs] = useState(0);
+  const speakingLimitEnabledRef = useRef(speakingLimitEnabled);
+  speakingLimitEnabledRef.current = speakingLimitEnabled;
+
+  useEffect(() => {
+    if (!localStream.getAudioTracks().length) return;
+
+    let ctx: AudioContext;
+    try { ctx = new AudioContext(); } catch { return; }
+
+    const source = ctx.createMediaStreamSource(localStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.8;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    const INTERVAL = 500;
+    const SPEAKING_THRESHOLD = 0.04;
+    const LIMIT_SECS = 60;
+
+    const t = setInterval(() => {
+      // Skip measurement if muted
+      if (mediaRef.current.isMuted) {
+        speakingSecsRef.current = 0;
+        setSpeakingSecs(0);
+        return;
+      }
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / (data.length * 255);
+      if (avg > SPEAKING_THRESHOLD) {
+        speakingSecsRef.current += INTERVAL / 1000;
+        setSpeakingSecs(Math.floor(speakingSecsRef.current));
+        if (speakingLimitEnabledRef.current && speakingSecsRef.current >= LIMIT_SECS) {
+          // Auto-mute
+          localStreamRef.current.getAudioTracks().forEach(tr => { tr.enabled = false; });
+          dispatch({ type: 'FORCE_MUTE' });
+          broadcastStateRef.current(true, mediaRef.current.isVideoOff, mediaRef.current.isHandRaised);
+          toast.error('زمان صحبت شما تمام شد — میکروفون قطع شد', { duration: 5000, icon: '🎙️' });
+          speakingSecsRef.current = 0;
+          setSpeakingSecs(0);
+        }
+      } else {
+        // Reset on silence
+        speakingSecsRef.current = 0;
+        setSpeakingSecs(0);
+      }
+    }, INTERVAL);
+
+    return () => {
+      clearInterval(t);
+      ctx.close().catch(() => {});
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localStream]);
 
   // Avatar fetch — loads profile photos for local user + any new peers
   useEffect(() => {
@@ -576,6 +661,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         if (typeof row.chat_enabled === 'boolean') {
           setChatEnabled(row.chat_enabled);
         }
+        // Sync speaking limit toggle
+        if (typeof row.speaking_limit_enabled === 'boolean') {
+          setSpeakingLimitEnabled(row.speaking_limit_enabled);
+        }
       })
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'room_mod_actions',
@@ -893,7 +982,16 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
           <span className="font-bold text-sm truncate max-w-[120px] sm:max-w-xs">{room.name || 'جلسه ویدیویی'}</span>
-          <span className="text-gray-400 text-xs font-mono flex-shrink-0">{fmt(duration)}</span>
+          {/* Meeting duration / countdown */}
+          {secondsLeft !== null ? (
+            <span className={`text-xs font-mono flex-shrink-0 flex items-center gap-1 ${
+              secondsLeft <= 300 ? 'text-red-400 animate-pulse' : 'text-amber-400'
+            }`}>
+              ⏱ {secondsLeft > 0 ? fmt(secondsLeft) : 'تمام شد'}
+            </span>
+          ) : (
+            <span className="text-gray-400 text-xs font-mono flex-shrink-0">{fmt(duration)}</span>
+          )}
           <span className={`hidden sm:flex items-center gap-1 text-xs flex-shrink-0 ${qualityColor[myQuality]}`}>
             <Activity className="w-3 h-3" />{myQuality}
           </span>
@@ -1275,20 +1373,38 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                 </div>
               )}
               {sidePanel === 'settings' && (
-                <SettingsPanel
-                  videoQuality={videoQuality}
-                  dataSaverMode={dataSaverMode}
-                  isApplying={applyingVideoConstraints}
-                  onChangeQuality={(q) => {
-                    setVideoQuality(q);
-                    applyVideoConstraints(q, dataSaverMode);
-                  }}
-                  onToggleDataSaver={() => {
-                    const next = !dataSaverMode;
-                    setDataSaverMode(next);
-                    applyVideoConstraints(videoQuality, next);
-                  }}
-                />
+                <>
+                  <SettingsPanel
+                    videoQuality={videoQuality}
+                    dataSaverMode={dataSaverMode}
+                    isApplying={applyingVideoConstraints}
+                    onChangeQuality={(q) => {
+                      setVideoQuality(q);
+                      applyVideoConstraints(q, dataSaverMode);
+                    }}
+                    onToggleDataSaver={() => {
+                      const next = !dataSaverMode;
+                      setDataSaverMode(next);
+                      applyVideoConstraints(videoQuality, next);
+                    }}
+                  />
+                  {/* Speaking limit toggle — host/admin only */}
+                  {checkPermission('mute_all') && (
+                    <div className="px-4 py-3 border-t border-gray-800 flex items-center justify-between gap-3 flex-shrink-0">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-200">محدودیت زمان صحبت</p>
+                        <p className="text-xs text-gray-500 mt-0.5">هر کاربر حداکثر ۶۰ ثانیه پشت سر هم</p>
+                      </div>
+                      <button
+                        onClick={toggleSpeakingLimit}
+                        aria-pressed={speakingLimitEnabled}
+                        className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${speakingLimitEnabled ? 'bg-teal-600' : 'bg-gray-700'}`}
+                      >
+                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${speakingLimitEnabled ? 'right-0.5' : 'left-0.5'}`} />
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </>
@@ -1346,6 +1462,15 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       {/* Bottom controls */}
       <div className="bg-gray-900/95 border-t border-gray-800 flex-shrink-0 relative" dir="rtl">
+        {/* Speaking progress bar — shown when user is actively speaking and limit is on */}
+        {speakingLimitEnabled && speakingSecs > 0 && !isMuted && (
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gray-800">
+            <div
+              className={`h-full transition-all duration-500 ${speakingSecs >= 50 ? 'bg-red-500' : speakingSecs >= 30 ? 'bg-amber-400' : 'bg-teal-400'}`}
+              style={{ width: `${Math.min((speakingSecs / 60) * 100, 100)}%` }}
+            />
+          </div>
+        )}
         {/* Emoji picker — rendered here (above overflow-x-auto) so it's never clipped */}
         {showEmojiPicker && room.allow_reactions && (
           <div role="listbox" aria-label="انتخاب ایموجی"
