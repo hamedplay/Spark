@@ -174,5 +174,3 @@ export const VideoTile = memo(function VideoTile({
     </div>
   );
 });
-
-export { VideoTile, QualityDot }
