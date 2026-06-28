@@ -151,6 +151,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // Runtime speaking limit toggle — starts from room setting, synced via DB subscription
   const [speakingLimitEnabled, setSpeakingLimitEnabled] = useState(room.speaking_limit_enabled ?? true);
 
+  // Per-user speaking limit in seconds (default 60, host can set per participant)
+  const [myLimitSecs, setMyLimitSecs] = useState(60);
+  const myLimitSecsRef = useRef(myLimitSecs);
+  myLimitSecsRef.current = myLimitSecs;
+
   // Meeting expiry: secondsLeft = null means no limit; negative = already expired
   const [secondsLeft, setSecondsLeft] = useState<number | null>(() => {
     if (!room.expires_at) return null;
@@ -190,6 +195,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const toggleChatEnabled = useCallback(async () => {
     const next = !chatEnabled;
     setChatEnabled(next);
+    sendSignalRef.current(null, 'chat_toggle', { enabled: next });
     await supabase.from('conference_rooms').update({ chat_enabled: next }).eq('id', room.id);
   }, [chatEnabled, room.id]);
 
@@ -251,25 +257,23 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [showBanList, setShowBanList] = useState(false);
   // Role change dropdown (peerId → open)
   const [roleDropdown, setRoleDropdown] = useState<string | null>(null);
+  // Per-participant speaking limit editor (peerId → open)
+  const [limitEditor, setLimitEditor] = useState<string | null>(null);
+  const [limitInputs, setLimitInputs] = useState<Record<string, string>>({});
 
   const applyVideoConstraints = useCallback(async (quality: VideoQuality, dataSaver: boolean) => {
     const preset = VIDEO_QUALITY_PRESETS[dataSaver ? 'low' : quality];
     const frameRate = dataSaver ? 15 : preset.frameRate;
     setApplyingVideoConstraints(true);
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: preset.width }, height: { ideal: preset.height }, frameRate: { ideal: frameRate } },
-        audio: false,
-      });
-      const newTrack = newStream.getVideoTracks()[0];
-      for (const peer of peersRef.current.values()) {
-        const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(newTrack).catch(() => {});
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        await videoTrack.applyConstraints({
+          width: { ideal: preset.width },
+          height: { ideal: preset.height },
+          frameRate: { ideal: frameRate },
+        });
       }
-      const oldTrack = localStreamRef.current.getVideoTracks()[0];
-      if (oldTrack) { localStreamRef.current.removeTrack(oldTrack); oldTrack.stop(); }
-      localStreamRef.current.addTrack(newTrack);
-      newTrack.enabled = !mediaRef.current.isVideoOff;
       toast.success('کیفیت ویدیو تغییر کرد');
     } catch {
       toast.error('خطا در تغییر کیفیت ویدیو');
@@ -341,7 +345,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
     const INTERVAL = 500;
     const SPEAKING_THRESHOLD = 0.04;
-    const LIMIT_SECS = 60;
 
     const t = setInterval(() => {
       // Skip measurement if muted
@@ -355,7 +358,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       if (avg > SPEAKING_THRESHOLD) {
         speakingSecsRef.current += INTERVAL / 1000;
         setSpeakingSecs(Math.floor(speakingSecsRef.current));
-        if (speakingLimitEnabledRef.current && speakingSecsRef.current >= LIMIT_SECS) {
+        if (speakingLimitEnabledRef.current && speakingSecsRef.current >= myLimitSecsRef.current) {
           // Auto-mute
           localStreamRef.current.getAudioTracks().forEach(tr => { tr.enabled = false; });
           dispatch({ type: 'FORCE_MUTE' });
@@ -656,6 +659,14 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             setMyRole(data.newRole as RoleType);
             const labels: Record<string, string> = { admin: 'مدیر', moderator: 'ناظر', member: 'عضو', guest: 'مهمان', host: 'میزبان' };
             toast(`نقش شما به "${labels[data.newRole] || data.newRole}" تغییر یافت`);
+          }
+        } else if (type === 'chat_toggle') {
+          setChatEnabled(data.enabled as boolean);
+        } else if (type === 'speaking_limit_change') {
+          if (data.targetUserId === currentUserId) {
+            const secs = Math.max(10, Math.min(600, Number(data.limitSecs) || 60));
+            setMyLimitSecs(secs);
+            toast(`محدودیت صحبت شما به ${secs} ثانیه تغییر یافت`);
           }
         }
       })();
@@ -1095,7 +1106,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 rounded-lg text-xs flex-shrink-0">
-            <Users className="w-3.5 h-3.5 text-teal-400" /><span>{allTiles.length}</span>
+            <Users className="w-3.5 h-3.5 text-teal-400" /><span>{participants.length || allTiles.length}</span>
           </div>
         </div>
       </div>
@@ -1452,6 +1463,43 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                             <UserX className="w-3.5 h-3.5" />
                           </button>
                         )}
+                        {/* Per-user speaking limit */}
+                        {checkPermission('mute_all') && speakingLimitEnabled && !t.isLocal && !t.isHost && (
+                          <div className="relative">
+                            <button
+                              onClick={() => { setLimitEditor(d => d === t.peerId ? null : t.peerId); setLimitInputs(prev => ({ ...prev, [t.peerId]: '60' })); }}
+                              title="تنظیم محدودیت زمان صحبت"
+                              className="p-1 rounded-lg hover:bg-teal-900/40 text-gray-600 hover:text-teal-400 transition-colors opacity-0 group-hover:opacity-100">
+                              <Clock className="w-3.5 h-3.5" />
+                            </button>
+                            {limitEditor === t.peerId && (
+                              <div className="absolute left-0 top-7 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-2 w-40" onClick={e => e.stopPropagation()}>
+                                <p className="text-[10px] text-gray-400 mb-1.5">محدودیت صحبت (ثانیه)</p>
+                                <div className="flex gap-1">
+                                  <input
+                                    type="number"
+                                    min={10}
+                                    max={600}
+                                    value={limitInputs[t.peerId] ?? '60'}
+                                    onChange={e => setLimitInputs(prev => ({ ...prev, [t.peerId]: e.target.value }))}
+                                    className="flex-1 bg-gray-800 text-white text-xs rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-teal-600 w-0"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const secs = Math.max(10, Math.min(600, Number(limitInputs[t.peerId]) || 60));
+                                      sendSignalRef.current(t.peerId, 'speaking_limit_change', { targetUserId: t.userId, limitSecs: secs });
+                                      setLimitEditor(null);
+                                      toast.success(`محدودیت صحبت ${t.displayName}: ${secs}ث`);
+                                    }}
+                                    className="px-2 py-1 bg-teal-600 hover:bg-teal-500 rounded-lg text-xs text-white transition-colors flex-shrink-0"
+                                  >
+                                    ثبت
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {/* Pin */}
                         {!t.isLocal && (
                           <button onClick={() => setPinnedPeerId(p => p === t.peerId ? null : t.peerId)}
@@ -1497,7 +1545,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                     <div className="px-4 py-3 border-t border-gray-800 flex items-center justify-between gap-3 flex-shrink-0">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-200">محدودیت زمان صحبت</p>
-                        <p className="text-xs text-gray-500 mt-0.5">هر کاربر حداکثر ۶۰ ثانیه پشت سر هم</p>
+                        <p className="text-xs text-gray-500 mt-0.5">محدودیت پیش‌فرض ۶۰ ثانیه — قابل تنظیم برای هر کاربر</p>
                       </div>
                       <button
                         onClick={toggleSpeakingLimit}
@@ -1624,8 +1672,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         {speakingLimitEnabled && speakingSecs > 0 && !isMuted && (
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-gray-800">
             <div
-              className={`h-full transition-all duration-500 ${speakingSecs >= 50 ? 'bg-red-500' : speakingSecs >= 30 ? 'bg-amber-400' : 'bg-teal-400'}`}
-              style={{ width: `${Math.min((speakingSecs / 60) * 100, 100)}%` }}
+              className={`h-full transition-all duration-500 ${speakingSecs >= myLimitSecs * 0.83 ? 'bg-red-500' : speakingSecs >= myLimitSecs * 0.5 ? 'bg-amber-400' : 'bg-teal-400'}`}
+              style={{ width: `${Math.min((speakingSecs / myLimitSecs) * 100, 100)}%` }}
             />
           </div>
         )}
