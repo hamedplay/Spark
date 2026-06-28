@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
+import { DeviceSelector } from './DeviceSelector';
 import type { ConferenceRoom } from './types';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
@@ -321,6 +322,9 @@ export function VideoConferencePage() {
 
   const [inviteRoom, setInviteRoom] = useState<ConferenceRoom | null>(null);
 
+  // Pre-join device selection
+  const [preJoinRoom, setPreJoinRoom] = useState<ConferenceRoom | null>(null);
+
   // fix: stop previous stream before acquiring new one
   const localStreamRef = useRef<MediaStream | null>(null);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
@@ -463,7 +467,7 @@ export function VideoConferencePage() {
   }, [userId, fetchRooms]);
 
   // fix: doJoin with full validation + stream race condition guard
-  const doJoin = async (room: ConferenceRoom) => {
+  const doJoin = async (room: ConferenceRoom, stream: MediaStream) => {
     if (!userId || joiningRef.current) return;
     joiningRef.current = true;
 
@@ -477,23 +481,9 @@ export function VideoConferencePage() {
     const peerId = `${userId}-${Date.now()}`;
     setMyPeerId(peerId);
 
-    // fix: stop any previous stream before acquiring new one
+    // fix: stop any previous stream before using new one
     localStreamRef.current?.getTracks().forEach(t => t.stop());
 
-    let stream: MediaStream | null = null;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: !isVideoOff, audio: true });
-    } catch {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setIsVideoOff(true);
-      } catch {
-        toast.error('دسترسی به دوربین و میکروفن امکان‌پذیر نیست. لطفاً مجوزها را بررسی کنید.');
-        setJoiningRoomId(null);
-        joiningRef.current = false;
-        return;
-      }
-    }
     stream.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
     stream.getVideoTracks().forEach(t => { t.enabled = !isVideoOff; });
 
@@ -513,6 +503,7 @@ export function VideoConferencePage() {
       setLocalStream(stream);
       setActiveRoom({ ...room });
       setJoinCode('');
+      setPreJoinRoom(null);
     } catch (e: any) {
       stream.getTracks().forEach(t => t.stop());
       toast.error('خطا در ورود به اتاق: ' + (e.message || ''));
@@ -535,7 +526,7 @@ export function VideoConferencePage() {
       }]).select().single();
       if (error || !room) throw error;
       setCreateName(''); setShowCreate(false);
-      await doJoin(room);
+      setPreJoinRoom(room);
     } catch (e: any) {
       toast.error('خطا در ایجاد اتاق: ' + (e.message || ''));
     } finally {
@@ -546,7 +537,6 @@ export function VideoConferencePage() {
   const handleJoinByCode = async () => {
     const raw = joinCode.trim();
     if (!raw) { toast.error('کد اتاق را وارد کنید'); return; }
-    // Validate length before formatting (raw should be 9 alphanum chars)
     const stripped = raw.replace(/[-\s]/g, '');
     if (stripped.length !== 9) { toast.error('کد اتاق باید ۹ کاراکتر باشد (مثلاً XXX-XXX-XXX)'); return; }
 
@@ -559,7 +549,7 @@ export function VideoConferencePage() {
         .maybeSingle();
       if (error) throw error;
       if (!room) { toast.error('اتاقی با این کد یافت نشد'); return; }
-      await doJoin(room);
+      setPreJoinRoom(room);
     } catch (e: any) {
       toast.error('خطا در ورود با کد: ' + (e.message || ''));
     } finally {
@@ -799,7 +789,7 @@ export function VideoConferencePage() {
                     key={room.id}
                     room={room}
                     currentUserId={userId || ''}
-                    onJoin={() => doJoin(room)}
+                    onJoin={() => setPreJoinRoom(room)}
                     onInvite={() => setInviteRoom(room)}
                     joining={joiningRoomId === room.id}
                   />
@@ -812,6 +802,42 @@ export function VideoConferencePage() {
 
       {inviteRoom && userId && (
         <InviteModal room={inviteRoom} currentUserId={userId} onClose={() => setInviteRoom(null)} />
+      )}
+
+      {/* Pre-join device selection modal */}
+      {preJoinRoom && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="تنظیم دستگاه قبل از ورود"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          dir="rtl"
+        >
+          <div className="bg-gray-950 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
+              <div>
+                <h2 className="font-bold text-white text-sm flex items-center gap-2">
+                  <Video className="w-4 h-4 text-teal-500" />
+                  تنظیمات قبل از ورود
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">{preJoinRoom.name || 'جلسه ویدیویی'}</p>
+              </div>
+              <button
+                onClick={() => setPreJoinRoom(null)}
+                aria-label="بستن"
+                className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5">
+              <DeviceSelector
+                onConfirm={(stream) => doJoin(preJoinRoom, stream)}
+                submitLabel="ورود به جلسه"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

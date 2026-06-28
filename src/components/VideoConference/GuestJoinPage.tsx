@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Video, Mic, MicOff, VideoOff, Loader2, LogIn, AlertCircle,
-  Shield, Lock, ChevronDown, Users,
+  Video, Loader2, LogIn, AlertCircle,
+  Shield, Lock, Users,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
+import { DeviceSelector } from './DeviceSelector';
 import type { ConferenceRoom } from './types';
 
 function generateGuestId() {
@@ -47,90 +48,23 @@ export function GuestJoinPage({ code }: Props) {
   const [loading, setLoading] = useState(false);
   const [joinAllowed, setJoinAllowed] = useState(false);
   const [meetingStartsIn, setMeetingStartsIn] = useState<number | null>(null);
-  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [myPeerId, setMyPeerId] = useState('');
   const [waitingRequestId, setWaitingRequestId] = useState<string | null>(null);
-  const [showPlayButton, setShowPlayButton] = useState(false);
   const [guestId] = useState(() => generateGuestId());
-
-  // Device selection
-  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
-  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedVideoId, setSelectedVideoId] = useState('');
-  const [selectedAudioId, setSelectedAudioId] = useState('');
-  const [showDeviceSelector, setShowDeviceSelector] = useState(false);
 
   // Auth user — if logged in, auto-join
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authUserName, setAuthUserName] = useState<string | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const previewStreamRef = useRef<MediaStream | null>(null);
   const lastJoinAttemptRef = useRef<number>(0);
   const autoJoinedRef = useRef(false);
 
-  useEffect(() => { previewStreamRef.current = previewStream; }, [previewStream]);
-
-  // Attach stream to video element
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el || !previewStream) return;
-    el.srcObject = previewStream;
-    el.play().catch((e: DOMException) => {
-      if (e.name === 'NotAllowedError') setShowPlayButton(true);
-    });
-  }, [previewStream]);
-
-  // Enumerate available devices after getting permissions
-  const enumerateDevices = useCallback(async () => {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const vd = devices.filter(d => d.kind === 'videoinput');
-      const ad = devices.filter(d => d.kind === 'audioinput');
-      setVideoDevices(vd);
-      setAudioDevices(ad);
-      if (vd.length && !selectedVideoId) setSelectedVideoId(vd[0].deviceId);
-      if (ad.length && !selectedAudioId) setSelectedAudioId(ad[0].deviceId);
-    } catch { /* permissions not yet granted */ }
-  }, [selectedVideoId, selectedAudioId]);
-
-  // Start preview with specific device IDs
-  const startPreview = useCallback(async (videoId?: string, audioId?: string) => {
-    previewStreamRef.current?.getTracks().forEach(t => t.stop());
-
-    const videoConstraint = videoId ? { deviceId: { exact: videoId } } : true;
-    const audioConstraint = audioId ? { deviceId: { exact: audioId } } : true;
-
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraint,
-        audio: audioConstraint,
-      });
-      setPreviewStream(s);
-      setIsVideoOff(false);
-      setError('');
-      await enumerateDevices();
-    } catch {
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint });
-        setPreviewStream(s);
-        setIsVideoOff(true);
-        await enumerateDevices();
-      } catch {
-        setIsVideoOff(true);
-        setError('دسترسی به دوربین و میکروفن امکان‌پذیر نیست. لطفاً مجوزها را بررسی کنید.');
-      }
-    }
-  }, [enumerateDevices]);
-
-  // Initial setup
+  // ── Auth + room loading ────────────────────────────────────────────────────
   useEffect(() => {
     let timeInterval: ReturnType<typeof setInterval> | null = null;
-
-    startPreview();
 
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
@@ -143,7 +77,6 @@ export function GuestJoinPage({ code }: Props) {
     });
 
     setRoomLoading(true);
-    // Fetch room WITHOUT password field — use a select that omits it
     supabase
       .from('conference_rooms')
       .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, record_enabled, meeting_id, created_at, ended_at')
@@ -154,10 +87,8 @@ export function GuestJoinPage({ code }: Props) {
         setRoomLoading(false);
         if (fetchErr || !data) { setError('اتاقی با این کد یافت نشد یا جلسه پایان یافته است'); return; }
 
-        // Check server-side if room has a password (boolean only)
         const { data: hasPwd } = await supabase.rpc('room_has_password', { p_room_id: data.id });
 
-        // Count current participants
         const { count } = await supabase
           .from('conference_participants')
           .select('*', { count: 'exact', head: true })
@@ -210,14 +141,11 @@ export function GuestJoinPage({ code }: Props) {
         setError('خطا در بارگذاری اتاق. لطفاً صفحه را رفرش کنید.');
       });
 
-    return () => {
-      previewStreamRef.current?.getTracks().forEach(t => t.stop());
-      if (timeInterval) clearInterval(timeInterval);
-    };
+    return () => { if (timeInterval) clearInterval(timeInterval); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
-  // Realtime waiting room subscription (replaces polling)
+  // ── Waiting room realtime subscription ────────────────────────────────────
   useEffect(() => {
     if (step !== 'waiting' || !waitingRequestId) return;
 
@@ -234,7 +162,7 @@ export function GuestJoinPage({ code }: Props) {
         async ({ new: row }) => {
           if (row.status === 'admitted') {
             ch.unsubscribe();
-            await doEnterRoom();
+            if (localStream) await doEnterRoom(localStream);
           } else if (row.status === 'rejected') {
             ch.unsubscribe();
             setStep('form');
@@ -248,26 +176,8 @@ export function GuestJoinPage({ code }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, waitingRequestId]);
 
-  const acquireStream = useCallback(async (): Promise<MediaStream | null> => {
-    const existing = previewStreamRef.current;
-    if (existing && existing.getTracks().some(t => t.readyState === 'live')) return existing;
-    for (let i = 0; i < 4; i++) {
-      await new Promise(r => setTimeout(r, 500));
-      const s = previewStreamRef.current;
-      if (s && s.getTracks().some(t => t.readyState === 'live')) return s;
-    }
-    return navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(() => null);
-  }, []);
-
-  const doEnterRoom = useCallback(async (overrideName?: string) => {
+  const doEnterRoom = useCallback(async (stream: MediaStream, overrideName?: string) => {
     if (!room) { setStep('form'); setError('اتاق یافت نشد'); return; }
-
-    const stream = await acquireStream();
-    if (!stream) {
-      setStep('form');
-      setError('دسترسی به دوربین و میکروفن امکان‌پذیر نیست. لطفاً مجوزها را بررسی کنید.');
-      return;
-    }
 
     stream.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
     stream.getVideoTracks().forEach(t => { t.enabled = !isVideoOff; });
@@ -298,18 +208,23 @@ export function GuestJoinPage({ code }: Props) {
 
     setLocalStream(stream);
     setStep('in-room');
-  }, [room, acquireStream, isMuted, isVideoOff, authUserId, guestId, displayName]);
+  }, [room, isMuted, isVideoOff, authUserId, guestId, displayName]);
 
-  // Auto-join for authenticated users
-  useEffect(() => {
-    if (step !== 'form') return;
-    if (!authUserId || !authUserName || !room || !joinAllowed || autoJoinedRef.current) return;
-    autoJoinedRef.current = true;
-    setStep('auth-joining');
-    doEnterRoom(authUserName);
-  }, [step, authUserId, authUserName, room, joinAllowed, doEnterRoom]);
+  // Auto-join for authenticated users — triggered once DeviceSelector confirms
+  const handleDeviceSelectorConfirm = useCallback(async (stream: MediaStream) => {
+    stream.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
+    stream.getVideoTracks().forEach(t => { t.enabled = !isVideoOff; });
+    setLocalStream(stream);
 
-  const handleJoin = async () => {
+    if (authUserId && authUserName && room && joinAllowed && !autoJoinedRef.current) {
+      autoJoinedRef.current = true;
+      setStep('auth-joining');
+      await doEnterRoom(stream, authUserName);
+      return;
+    }
+  }, [isMuted, isVideoOff, authUserId, authUserName, room, joinAllowed, doEnterRoom]);
+
+  const handleJoin = async (stream: MediaStream) => {
     const now = Date.now();
     if (now - lastJoinAttemptRef.current < 2000) return;
     lastJoinAttemptRef.current = now;
@@ -324,7 +239,6 @@ export function GuestJoinPage({ code }: Props) {
     setLoading(true);
     setError('');
 
-    // Server-side validation — password never leaves server
     const { data: validation, error: rpcErr } = await supabase.rpc('validate_room_join', {
       p_room_id: room.id,
       p_password: room.has_password ? password : null,
@@ -357,7 +271,6 @@ export function GuestJoinPage({ code }: Props) {
         .single();
 
       if (waitErr || !req) {
-        // fix: show error if waiting room insert fails (previously silent)
         setError('خطا در ثبت درخواست ورود. لطفاً دوباره تلاش کنید.');
         setLoading(false);
         return;
@@ -369,7 +282,7 @@ export function GuestJoinPage({ code }: Props) {
       return;
     }
 
-    await doEnterRoom();
+    await doEnterRoom(stream);
     setLoading(false);
   };
 
@@ -380,12 +293,10 @@ export function GuestJoinPage({ code }: Props) {
     }
 
     localStream?.getTracks().forEach(t => t.stop());
-    previewStream?.getTracks().forEach(t => t.stop());
 
     setStep('form');
     setLocalStream(null);
     setMyPeerId('');
-    setPreviewStream(null);
     autoJoinedRef.current = false;
 
     if (room) {
@@ -400,18 +311,6 @@ export function GuestJoinPage({ code }: Props) {
       const { data: hasPwd } = await supabase.rpc('room_has_password', { p_room_id: freshRoom.id });
       setRoom({ ...freshRoom, has_password: hasPwd === true, participant_count: 0, password: undefined as any });
     }
-
-    startPreview();
-  };
-
-  // Handle device change from selector
-  const handleDeviceChange = async (kind: 'video' | 'audio', deviceId: string) => {
-    if (kind === 'video') setSelectedVideoId(deviceId);
-    else setSelectedAudioId(deviceId);
-    await startPreview(
-      kind === 'video' ? deviceId : selectedVideoId,
-      kind === 'audio' ? deviceId : selectedAudioId,
-    );
   };
 
   // ── Auth-joining loading screen ────────────────────────────────────────────
@@ -460,7 +359,6 @@ export function GuestJoinPage({ code }: Props) {
           <div>
             <h2 className="text-xl font-bold text-white mb-2">در اتاق انتظار هستید</h2>
             <p className="text-gray-400 text-sm">منتظر تأیید میزبان باشید...</p>
-            <p className="text-gray-600 text-xs mt-1">اعلان فوری از طریق Realtime</p>
           </div>
           <div className="bg-gray-800 rounded-xl px-4 py-3">
             <p className="text-gray-400 text-xs">نام شما</p>
@@ -476,11 +374,13 @@ export function GuestJoinPage({ code }: Props) {
   }
 
   // ── Join form ──────────────────────────────────────────────────────────────
+  const isSubmitDisabled = loading || !room || !displayName.trim() || !joinAllowed;
+
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4" dir="rtl">
       <div className="w-full max-w-md space-y-4">
         {/* Header */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-2">
           <div className="inline-flex items-center gap-2 mb-3">
             <Video className="w-7 h-7 text-teal-500" />
             <span className="text-2xl font-bold text-white">ورود به جلسه</span>
@@ -504,100 +404,23 @@ export function GuestJoinPage({ code }: Props) {
           ) : null}
         </div>
 
-        {/* Camera preview */}
-        <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-video w-full shadow-xl">
-          {!isVideoOff && previewStream ? (
-            <>
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-              {showPlayButton && (
-                <button
-                  onClick={() => { videoRef.current?.play().catch(() => {}); setShowPlayButton(false); }}
-                  className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-white gap-2 text-sm"
-                >
-                  <Video className="w-8 h-8" />
-                  کلیک برای پخش تصویر
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-950">
-              <div className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center">
-                {displayName ? (
-                  <span className="text-2xl font-bold text-white">{displayName[0].toUpperCase()}</span>
-                ) : (
-                  <VideoOff className="w-7 h-7 text-gray-500" />
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Mic/Cam controls */}
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
-            <button
-              onClick={() => { const n = !isMuted; previewStream?.getAudioTracks().forEach(t => { t.enabled = !n; }); setIsMuted(n); }}
-              aria-label={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'}
-              aria-pressed={isMuted}
-              className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all ${isMuted ? 'bg-red-600' : 'bg-gray-700/90 hover:bg-gray-600'}`}>
-              {isMuted ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-white" />}
-            </button>
-            <button
-              onClick={() => { const n = !isVideoOff; previewStream?.getVideoTracks().forEach(t => { t.enabled = !n; }); setIsVideoOff(n); }}
-              aria-label={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'}
-              aria-pressed={isVideoOff}
-              className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all ${isVideoOff ? 'bg-red-600' : 'bg-gray-700/90 hover:bg-gray-600'}`}>
-              {isVideoOff ? <VideoOff className="w-4 h-4 text-white" /> : <Video className="w-4 h-4 text-white" />}
-            </button>
-          </div>
-
-          {/* Device selector toggle */}
-          {(videoDevices.length > 1 || audioDevices.length > 1) && (
-            <button
-              onClick={() => setShowDeviceSelector(v => !v)}
-              aria-label="انتخاب دستگاه"
-              className="absolute top-2 left-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white text-xs flex items-center gap-1 transition-colors"
-            >
-              <ChevronDown className="w-3 h-3" />
-              دستگاه
-            </button>
-          )}
-        </div>
-
-        {/* Device selectors — shown when toggled */}
-        {showDeviceSelector && (videoDevices.length > 0 || audioDevices.length > 0) && (
-          <div className="bg-gray-900 rounded-xl border border-gray-700 p-3 space-y-2">
-            {videoDevices.length > 1 && (
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">دوربین</label>
-                <select
-                  value={selectedVideoId}
-                  onChange={e => handleDeviceChange('video', e.target.value)}
-                  className="w-full bg-gray-800 text-white text-xs rounded-lg px-2 py-1.5 border border-gray-700"
-                >
-                  {videoDevices.map(d => (
-                    <option key={d.deviceId} value={d.deviceId}>{d.label || `دوربین ${d.deviceId.slice(0,4)}`}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {audioDevices.length > 1 && (
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">میکروفون</label>
-                <select
-                  value={selectedAudioId}
-                  onChange={e => handleDeviceChange('audio', e.target.value)}
-                  className="w-full bg-gray-800 text-white text-xs rounded-lg px-2 py-1.5 border border-gray-700"
-                >
-                  {audioDevices.map(d => (
-                    <option key={d.deviceId} value={d.deviceId}>{d.label || `میکروفون ${d.deviceId.slice(0,4)}`}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Form */}
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5 space-y-4">
+        {/* DeviceSelector with extra fields embedded */}
+        <DeviceSelector
+          onConfirm={(stream) => {
+            if (authUserId && authUserName && room && joinAllowed && !autoJoinedRef.current) {
+              handleDeviceSelectorConfirm(stream);
+            } else {
+              handleJoin(stream);
+            }
+          }}
+          submitLabel={
+            loading ? 'در حال ورود...' :
+            !joinAllowed ? 'جلسه هنوز شروع نشده' :
+            room?.waiting_room_enabled ? 'درخواست ورود' : 'ورود به جلسه'
+          }
+          submitDisabled={isSubmitDisabled}
+        >
+          {/* Errors and join timing */}
           {!joinAllowed && room && (
             <div className="flex items-start gap-2 p-3 bg-amber-900/30 border border-amber-700/50 rounded-xl text-amber-300 text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -617,6 +440,7 @@ export function GuestJoinPage({ code }: Props) {
             </div>
           )}
 
+          {/* Name input */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1.5">نام شما</label>
             {authUserId ? (
@@ -632,7 +456,7 @@ export function GuestJoinPage({ code }: Props) {
                 type="text"
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleJoin()}
+                onKeyDown={e => e.key === 'Enter' && !isSubmitDisabled && handleJoin(localStream!)}
                 placeholder="نام و نام خانوادگی"
                 autoFocus
                 maxLength={60}
@@ -641,7 +465,7 @@ export function GuestJoinPage({ code }: Props) {
             )}
           </div>
 
-          {/* Password field — shown only if room has a password (server confirms) */}
+          {/* Password field */}
           {room?.has_password && (
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1.5">رمز عبور جلسه</label>
@@ -649,26 +473,17 @@ export function GuestJoinPage({ code }: Props) {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleJoin()}
+                onKeyDown={e => e.key === 'Enter' && !isSubmitDisabled && handleJoin(localStream!)}
                 placeholder="رمز عبور"
                 className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
               />
             </div>
           )}
 
-          <button
-            onClick={handleJoin}
-            disabled={loading || !room || !displayName.trim() || !joinAllowed}
-            className="w-full py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl font-semibold text-base transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"
-          >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
-            {!joinAllowed ? 'جلسه هنوز شروع نشده' : room?.waiting_room_enabled ? 'درخواست ورود' : 'ورود به جلسه'}
-          </button>
-
           <p className="text-center text-xs text-gray-500">
             ورود به عنوان مهمان — نیاز به ثبت‌نام ندارد
           </p>
-        </div>
+        </DeviceSelector>
       </div>
     </div>
   );
