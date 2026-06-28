@@ -249,7 +249,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">شماره موبایل</label>
                   <div className="relative">
-                    <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="مثال: 09123456789"
+                    <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="   مثال: 09123456789"
                       className={inp} dir="ltr" disabled={otpSent} />
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   </div>
