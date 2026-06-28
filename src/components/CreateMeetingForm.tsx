@@ -21,6 +21,7 @@ function MultiSelectField({
 }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -38,10 +39,26 @@ function MultiSelectField({
     (o.name.toLowerCase().includes(query.toLowerCase()) || (o.sub || '').toLowerCase().includes(query.toLowerCase()))
   );
 
+  useEffect(() => { setHighlightedIndex(0); }, [query, open]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (filtered.length === 1) { onAdd({ id: filtered[0].id, name: filtered[0].name }); setQuery(''); setOpen(false); }
+      if (open && filtered.length > 0) {
+        const item = filtered[highlightedIndex] || filtered[0];
+        onAdd({ id: item.id, name: item.name });
+        setQuery('');
+        setHighlightedIndex(0);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpen(true);
+      setHighlightedIndex(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Escape') {
+      setOpen(false);
     }
   };
 
@@ -72,43 +89,49 @@ function MultiSelectField({
               // حالت جستجو — لیست مسطح
               filtered.length === 0
                 ? <div className="p-3 text-sm text-gray-400">کاربری یافت نشد</div>
-                : filtered.map(o => (
+                : filtered.map((o, idx) => (
                   <button key={o.id} type="button"
                     onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); setOpen(false); }}
-                    className="w-full text-right px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0">
+                    className={`w-full text-right px-3 py-2 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0 ${idx === highlightedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-600'}`}>
                     <span>{o.name}</span>
                     {o.sub && <span className="text-xs text-gray-400 truncate mr-2 max-w-[160px]">{o.sub}</span>}
                   </button>
                 ))
             ) : groups ? (
               // حالت گروه‌بندی واحد سازمانی
-              groups.map(group => {
-                const groupItems = group.options.filter(o => !selected.find(s => s.id === o.id));
-                if (groupItems.length === 0) return null;
-                return (
-                  <div key={group.label}>
-                    <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide bg-gray-50 dark:bg-gray-800 sticky top-0">
-                      {group.label}
+              (() => {
+                let flatIdx = 0;
+                return groups.map(group => {
+                  const groupItems = group.options.filter(o => !selected.find(s => s.id === o.id));
+                  if (groupItems.length === 0) return null;
+                  return (
+                    <div key={group.label}>
+                      <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide bg-gray-50 dark:bg-gray-800 sticky top-0">
+                        {group.label}
+                      </div>
+                      {groupItems.map(o => {
+                        const currentIdx = flatIdx++;
+                        return (
+                          <button key={o.id} type="button"
+                            onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); setOpen(false); }}
+                            className={`w-full text-right px-3 py-2 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0 ${currentIdx === highlightedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-600'}`}>
+                            <span>{o.name}</span>
+                            {o.sub && <span className="text-xs text-gray-400 truncate mr-2 max-w-[160px]">{o.sub}</span>}
+                          </button>
+                        );
+                      })}
                     </div>
-                    {groupItems.map(o => (
-                      <button key={o.id} type="button"
-                        onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); setOpen(false); }}
-                        className="w-full text-right px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0">
-                        <span>{o.name}</span>
-                        {o.sub && <span className="text-xs text-gray-400 truncate mr-2 max-w-[160px]">{o.sub}</span>}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })
+                  );
+                });
+              })()
             ) : (
               // حالت قدیمی — لیست مسطح
               filtered.length === 0
                 ? <div className="p-3 text-sm text-gray-400">کاربری یافت نشد</div>
-                : filtered.slice(0, 8).map(o => (
+                : filtered.slice(0, 8).map((o, idx) => (
                   <button key={o.id} type="button"
                     onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); setOpen(false); }}
-                    className="w-full text-right px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0">
+                    className={`w-full text-right px-3 py-2 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0 ${idx === highlightedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-600'}`}>
                     <span>{o.name}</span>
                     {o.sub && <span className="text-xs text-gray-400">{o.sub}</span>}
                   </button>
@@ -907,6 +930,18 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
             value={externalSearch}
             onChange={e => { setExternalSearch(e.target.value); setShowExternalDropdown(true); }}
             onFocus={() => setShowExternalDropdown(true)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (filteredContacts.length > 0) {
+                  setSelectedExternal(p => [...p, filteredContacts[0].name]);
+                  setExternalSearch('');
+                  setShowExternalDropdown(false);
+                }
+              } else if (e.key === 'Escape') {
+                setShowExternalDropdown(false);
+              }
+            }}
             placeholder={selectedExternal.length === 0 ? 'جستجوی مخاطبین خارج سازمان...' : ''}
             className="flex-1 min-w-[120px] outline-none bg-transparent text-sm dark:text-white placeholder-gray-400"
           />

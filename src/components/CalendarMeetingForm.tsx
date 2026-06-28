@@ -137,6 +137,7 @@ function MultiSelectField({
 }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -165,27 +166,51 @@ function MultiSelectField({
     (o.name.toLowerCase().includes(query.toLowerCase()) || (o.sub || '').toLowerCase().includes(query.toLowerCase()))
   );
 
+  useEffect(() => { setHighlightedIndex(0); }, [query, open]);
+
   const toggleUnit = (label: string) => setExpandedUnits(prev => {
     const next = new Set(prev);
     next.has(label) ? next.delete(label) : next.add(label);
     return next;
   });
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (open && filtered.length > 0) {
+        const item = filtered[highlightedIndex] || filtered[0];
+        onAdd({ id: item.id, name: item.name });
+        setQuery('');
+        setHighlightedIndex(0);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpen(true);
+      setHighlightedIndex(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
   const renderDropdown = () => {
     if (query || !groups) {
       // flat filtered list
       if (filtered.length === 0) return <div className="p-3 text-sm text-gray-400">کاربری یافت نشد</div>;
-      return filtered.slice(0, 8).map(o => (
+      return filtered.slice(0, 8).map((o, idx) => (
         <button key={o.id} type="button"
           onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); }}
-          className="w-full text-right px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0">
+          className={`w-full text-right px-3 py-2 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0 ${idx === highlightedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-600'}`}>
           <span>{o.name}</span>
           {o.sub && <span className="text-xs text-gray-400 truncate max-w-[120px]">{o.sub}</span>}
         </button>
       ));
     }
 
-    // grouped display
+    // grouped display — highlight uses flat filtered index
+    let flatIdx = 0;
     return groups.map(g => {
       const groupOptions = g.options.filter(o => !isSelected(o.id));
       if (groupOptions.length === 0) return null;
@@ -199,14 +224,17 @@ function MultiSelectField({
             <span className="text-xs text-gray-400">{groupOptions.length}</span>
             {expanded ? <ChevronDown className="w-3 h-3 text-gray-400" /> : <ChevronRight className="w-3 h-3 text-gray-400" />}
           </button>
-          {expanded && groupOptions.map(o => (
-            <button key={o.id} type="button"
-              onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); }}
-              className="w-full text-right px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0 pr-6">
-              <span>{o.name}</span>
-              {o.sub && <span className="text-xs text-gray-400 truncate max-w-[120px]">{o.sub}</span>}
-            </button>
-          ))}
+          {expanded && groupOptions.map(o => {
+            const currentIdx = flatIdx++;
+            return (
+              <button key={o.id} type="button"
+                onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); }}
+                className={`w-full text-right px-4 py-2 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0 pr-6 ${currentIdx === highlightedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-600'}`}>
+                <span>{o.name}</span>
+                {o.sub && <span className="text-xs text-gray-400 truncate max-w-[120px]">{o.sub}</span>}
+              </button>
+            );
+          })}
         </div>
       );
     });
@@ -237,6 +265,7 @@ function MultiSelectField({
           value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
           placeholder={selected.length === 0 ? placeholder : ''}
           className="flex-1 min-w-[120px] outline-none bg-transparent text-sm dark:text-white placeholder-gray-400"
         />
@@ -1020,6 +1049,18 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
               value={externalSearch}
               onChange={e => { setExternalSearch(e.target.value); setShowExternalDropdown(true); }}
               onFocus={() => setShowExternalDropdown(true)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (filteredExternal.length > 0) {
+                    setSelectedExternal(prev => [...prev, filteredExternal[0].name]);
+                    setExternalSearch('');
+                    setShowExternalDropdown(false);
+                  }
+                } else if (e.key === 'Escape') {
+                  setShowExternalDropdown(false);
+                }
+              }}
               placeholder={selectedExternal.length === 0 ? 'جستجوی مخاطبین...' : ''}
               className="flex-1 min-w-[120px] outline-none bg-transparent text-sm dark:text-white placeholder-gray-400"
             />
