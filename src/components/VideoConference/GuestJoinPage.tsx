@@ -1,23 +1,48 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Video, Mic, MicOff, VideoOff, Loader2, LogIn, AlertCircle, Shield, Lock } from 'lucide-react';
+import {
+  Video, Mic, MicOff, VideoOff, Loader2, LogIn, AlertCircle,
+  Shield, Lock, ChevronDown, Users,
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import type { ConferenceRoom } from './types';
 
 function generateGuestId() {
-  return crypto.randomUUID();
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 interface Props {
   code: string;
 }
 
+// Minimal room shape returned to guest — no password field
+interface RoomPublic {
+  id: string;
+  name: string;
+  code: string;
+  host_id: string;
+  status: string;
+  max_participants: number;
+  is_locked: boolean;
+  has_password: boolean;
+  waiting_room_enabled: boolean;
+  allow_reactions: boolean;
+  allow_screen_share: boolean;
+  allow_chat: boolean;
+  record_enabled: boolean;
+  meeting_id: string | null;
+  created_at: string;
+  ended_at: string | null;
+  participant_count: number;
+}
+
 export function GuestJoinPage({ code }: Props) {
   const [step, setStep] = useState<'form' | 'waiting' | 'in-room' | 'auth-joining'>('form');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
-  const [room, setRoom] = useState<ConferenceRoom | null>(null);
-  const [roomLoading, setRoomLoading] = useState(true); // fix 7
+  const [room, setRoom] = useState<RoomPublic | null>(null);
+  const [roomLoading, setRoomLoading] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [joinAllowed, setJoinAllowed] = useState(false);
@@ -28,23 +53,28 @@ export function GuestJoinPage({ code }: Props) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [myPeerId, setMyPeerId] = useState('');
   const [waitingRequestId, setWaitingRequestId] = useState<string | null>(null);
-  const [showPlayButton, setShowPlayButton] = useState(false); // fix 9
+  const [showPlayButton, setShowPlayButton] = useState(false);
   const [guestId] = useState(() => generateGuestId());
-  // Auth user state — if logged in, skip the name form and auto-join
+
+  // Device selection
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedVideoId, setSelectedVideoId] = useState('');
+  const [selectedAudioId, setSelectedAudioId] = useState('');
+  const [showDeviceSelector, setShowDeviceSelector] = useState(false);
+
+  // Auth user — if logged in, auto-join
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authUserName, setAuthUserName] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  // Ref so doEnterRoom (which closes over stale state) always sees latest stream
-  const previewStreamRef = useRef<MediaStream | null>(null);
-  // fix 8: cooldown ref to prevent join spam
-  const lastJoinAttemptRef = useRef<number>(0);
-  // fix 5: consecutive poll error counter
-  const pollErrorCountRef = useRef(0);
 
-  // Keep ref in sync with state
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const previewStreamRef = useRef<MediaStream | null>(null);
+  const lastJoinAttemptRef = useRef<number>(0);
+  const autoJoinedRef = useRef(false);
+
   useEffect(() => { previewStreamRef.current = previewStream; }, [previewStream]);
 
-  // fix 9: attach srcObject and handle Safari autoplay restriction
+  // Attach stream to video element
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !previewStream) return;
@@ -54,24 +84,54 @@ export function GuestJoinPage({ code }: Props) {
     });
   }, [previewStream]);
 
-  // Initial setup: camera preview + auth check + room load (fix 10: clean up intervals)
+  // Enumerate available devices after getting permissions
+  const enumerateDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const vd = devices.filter(d => d.kind === 'videoinput');
+      const ad = devices.filter(d => d.kind === 'audioinput');
+      setVideoDevices(vd);
+      setAudioDevices(ad);
+      if (vd.length && !selectedVideoId) setSelectedVideoId(vd[0].deviceId);
+      if (ad.length && !selectedAudioId) setSelectedAudioId(ad[0].deviceId);
+    } catch { /* permissions not yet granted */ }
+  }, [selectedVideoId, selectedAudioId]);
+
+  // Start preview with specific device IDs
+  const startPreview = useCallback(async (videoId?: string, audioId?: string) => {
+    previewStreamRef.current?.getTracks().forEach(t => t.stop());
+
+    const videoConstraint = videoId ? { deviceId: { exact: videoId } } : true;
+    const audioConstraint = audioId ? { deviceId: { exact: audioId } } : true;
+
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraint,
+        audio: audioConstraint,
+      });
+      setPreviewStream(s);
+      setIsVideoOff(false);
+      setError('');
+      await enumerateDevices();
+    } catch {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint });
+        setPreviewStream(s);
+        setIsVideoOff(true);
+        await enumerateDevices();
+      } catch {
+        setIsVideoOff(true);
+        setError('دسترسی به دوربین و میکروفن امکان‌پذیر نیست. لطفاً مجوزها را بررسی کنید.');
+      }
+    }
+  }, [enumerateDevices]);
+
+  // Initial setup
   useEffect(() => {
     let timeInterval: ReturnType<typeof setInterval> | null = null;
 
-    // Start camera preview
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(s => setPreviewStream(s))
-      .catch(() => {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-          .then(s => { setPreviewStream(s); setIsVideoOff(true); })
-          .catch(() => {
-            // fix 3: both denied — show clear message
-            setIsVideoOff(true);
-            setError('دسترسی به دوربین و میکروفن امکان‌پذیر نیست. لطفاً مجوزها را بررسی کنید.');
-          });
-      });
+    startPreview();
 
-    // Check if user is already authenticated
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
         const { data: profile } = await supabase.from('profiles').select('full_name, email').eq('user_id', user.id).maybeSingle();
@@ -82,18 +142,36 @@ export function GuestJoinPage({ code }: Props) {
       }
     });
 
-    // Load room info + check linked meeting start time
     setRoomLoading(true);
-    supabase.from('conference_rooms').select('*')
+    // Fetch room WITHOUT password field — use a select that omits it
+    supabase
+      .from('conference_rooms')
+      .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, record_enabled, meeting_id, created_at, ended_at')
       .eq('code', code.toUpperCase().trim())
       .neq('status', 'ended')
       .maybeSingle()
-      .then(async ({ data }) => {
+      .then(async ({ data, error: fetchErr }) => {
         setRoomLoading(false);
-        if (!data) { setError('اتاقی با این کد یافت نشد یا جلسه پایان یافته است'); return; }
-        setRoom(data as ConferenceRoom);
+        if (fetchErr || !data) { setError('اتاقی با این کد یافت نشد یا جلسه پایان یافته است'); return; }
 
-        // Check meeting start time
+        // Check server-side if room has a password (boolean only)
+        const { data: hasPwd } = await supabase.rpc('room_has_password', { p_room_id: data.id });
+
+        // Count current participants
+        const { count } = await supabase
+          .from('conference_participants')
+          .select('*', { count: 'exact', head: true })
+          .eq('room_id', data.id)
+          .eq('status', 'joined');
+
+        const roomData: RoomPublic = {
+          ...data,
+          has_password: hasPwd === true,
+          participant_count: count ?? 0,
+          password: undefined as any,
+        };
+        setRoom(roomData);
+
         const { data: meeting } = await supabase
           .from('meetings')
           .select('start_time, request_date')
@@ -109,7 +187,7 @@ export function GuestJoinPage({ code }: Props) {
           try {
             const dateStr = meeting.request_date.slice(0, 10);
             const [h, min] = meeting.start_time.split(':').map(Number);
-            const meetingStart = new Date(`${dateStr}T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`);
+            const meetingStart = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
             const tenMinBefore = new Date(meetingStart.getTime() - 10 * 60 * 1000);
             const now = new Date();
             if (now >= tenMinBefore) {
@@ -125,7 +203,6 @@ export function GuestJoinPage({ code }: Props) {
         };
 
         checkTime();
-        // fix 10: store interval ref for cleanup
         timeInterval = setInterval(checkTime, 30000);
       })
       .catch(() => {
@@ -140,55 +217,45 @@ export function GuestJoinPage({ code }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
-  // fix 5: poll waiting room status with error tracking
+  // Realtime waiting room subscription (replaces polling)
   useEffect(() => {
     if (step !== 'waiting' || !waitingRequestId) return;
-    pollErrorCountRef.current = 0;
 
-    const interval = setInterval(async () => {
-      try {
-        const { data, error: pollErr } = await supabase.from('conference_waiting_room')
-          .select('status').eq('id', waitingRequestId).maybeSingle();
-
-        if (pollErr) throw pollErr;
-        pollErrorCountRef.current = 0;
-
-        if (data?.status === 'admitted') {
-          clearInterval(interval);
-          await doEnterRoom();
-        } else if (data?.status === 'rejected') {
-          clearInterval(interval);
-          setStep('form');
-          setError('متاسفانه میزبان درخواست ورود شما را رد کرد');
+    const ch = supabase
+      .channel(`waiting-${waitingRequestId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conference_waiting_room',
+          filter: `id=eq.${waitingRequestId}`,
+        },
+        async ({ new: row }) => {
+          if (row.status === 'admitted') {
+            ch.unsubscribe();
+            await doEnterRoom();
+          } else if (row.status === 'rejected') {
+            ch.unsubscribe();
+            setStep('form');
+            setError('متاسفانه میزبان درخواست ورود شما را رد کرد');
+          }
         }
-      } catch (e) {
-        console.error('waiting room poll error:', e);
-        pollErrorCountRef.current += 1;
-        if (pollErrorCountRef.current >= 5) {
-          clearInterval(interval);
-          setStep('form');
-          setError('خطا در اتصال به سرور. لطفاً دوباره تلاش کنید.');
-        }
-      }
-    }, 2000);
-    return () => clearInterval(interval);
+      )
+      .subscribe();
+
+    return () => { ch.unsubscribe(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, waitingRequestId]);
 
-  // fix 2: get stream helper — check preview first, retry, then audio-only fallback
   const acquireStream = useCallback(async (): Promise<MediaStream | null> => {
-    // Use existing preview if available
     const existing = previewStreamRef.current;
-    if (existing && existing.getTracks().some(t => t.readyState === 'live')) {
-      return existing;
-    }
-    // Retry up to 4 times (2s total)
+    if (existing && existing.getTracks().some(t => t.readyState === 'live')) return existing;
     for (let i = 0; i < 4; i++) {
       await new Promise(r => setTimeout(r, 500));
       const s = previewStreamRef.current;
       if (s && s.getTracks().some(t => t.readyState === 'live')) return s;
     }
-    // Fallback: audio-only
     return navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(() => null);
   }, []);
 
@@ -221,14 +288,19 @@ export function GuestJoinPage({ code }: Props) {
       is_video_off: isVideoOff,
       peer_id: peerId,
     }], { onConflict: 'room_id,user_id' });
-    if (upsertErr) { setStep('form'); setError('خطا در ورود به اتاق: ' + upsertErr.message); setLoading(false); return; }
+
+    if (upsertErr) {
+      setStep('form');
+      setError('خطا در ورود به اتاق: ' + upsertErr.message);
+      setLoading(false);
+      return;
+    }
 
     setLocalStream(stream);
     setStep('in-room');
   }, [room, acquireStream, isMuted, isVideoOff, authUserId, guestId, displayName]);
 
-  // fix 4: auto-join only when step === 'form' to allow re-join after leaving
-  const autoJoinedRef = useRef(false);
+  // Auto-join for authenticated users
   useEffect(() => {
     if (step !== 'form') return;
     if (!authUserId || !authUserName || !room || !joinAllowed || autoJoinedRef.current) return;
@@ -237,7 +309,6 @@ export function GuestJoinPage({ code }: Props) {
     doEnterRoom(authUserName);
   }, [step, authUserId, authUserName, room, joinAllowed, doEnterRoom]);
 
-  // fix 8: join with 2s cooldown
   const handleJoin = async () => {
     const now = Date.now();
     if (now - lastJoinAttemptRef.current < 2000) return;
@@ -249,20 +320,51 @@ export function GuestJoinPage({ code }: Props) {
       setError(`جلسه هنوز شروع نشده است. ورود ${meetingStartsIn !== null ? `${meetingStartsIn} دقیقه دیگر` : 'تا ۱۰ دقیقه قبل از شروع'} فعال می‌شود`);
       return;
     }
-    if (room.password && room.password !== password) { setError('رمز عبور اشتباه است'); return; }
-    if (room.is_locked) { setError('این اتاق قفل شده است'); return; }
 
     setLoading(true);
     setError('');
 
+    // Server-side validation — password never leaves server
+    const { data: validation, error: rpcErr } = await supabase.rpc('validate_room_join', {
+      p_room_id: room.id,
+      p_password: room.has_password ? password : null,
+    });
+
+    if (rpcErr || !validation) {
+      setError('خطا در اتصال به سرور. لطفاً دوباره تلاش کنید.');
+      setLoading(false);
+      return;
+    }
+
+    if (!validation.allowed) {
+      const msgs: Record<string, string> = {
+        wrong_password: 'رمز عبور اشتباه است',
+        room_locked: 'این اتاق قفل شده است',
+        room_full: 'ظرفیت اتاق پر شده است',
+        room_ended: 'این جلسه پایان یافته است',
+        room_not_found: 'اتاقی با این کد یافت نشد',
+      };
+      setError(msgs[validation.reason] || 'ورود به اتاق امکان‌پذیر نیست');
+      setLoading(false);
+      return;
+    }
+
     if (room.waiting_room_enabled) {
-      const { data: req } = await supabase.from('conference_waiting_room').insert([{
-        room_id: room.id, user_id: guestId, display_name: displayName,
-      }]).select().single();
-      if (req) {
-        setWaitingRequestId(req.id);
-        setStep('waiting');
+      const { data: req, error: waitErr } = await supabase
+        .from('conference_waiting_room')
+        .insert([{ room_id: room.id, user_id: guestId, display_name: displayName }])
+        .select()
+        .single();
+
+      if (waitErr || !req) {
+        // fix: show error if waiting room insert fails (previously silent)
+        setError('خطا در ثبت درخواست ورود. لطفاً دوباره تلاش کنید.');
+        setLoading(false);
+        return;
       }
+
+      setWaitingRequestId(req.id);
+      setStep('waiting');
       setLoading(false);
       return;
     }
@@ -271,52 +373,48 @@ export function GuestJoinPage({ code }: Props) {
     setLoading(false);
   };
 
-  // fix 1: delete participant record on leave
   const handleLeave = async () => {
-    // fix 1: remove participant from DB
     if (room && myPeerId) {
       await supabase.from('conference_participants')
         .delete().eq('room_id', room.id).eq('peer_id', myPeerId);
     }
 
-    // Stop all active streams
     localStream?.getTracks().forEach(t => t.stop());
     previewStream?.getTracks().forEach(t => t.stop());
 
-    // Reset room-join state so they can re-enter
     setStep('form');
     setLocalStream(null);
     setMyPeerId('');
     setPreviewStream(null);
-    autoJoinedRef.current = false; // fix 4: allow re-join after leaving
+    autoJoinedRef.current = false;
 
-    // Re-fetch the room (it may still be active if only participant left)
     if (room) {
       const { data: freshRoom } = await supabase
         .from('conference_rooms')
-        .select('*')
+        .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, record_enabled, meeting_id, created_at, ended_at')
         .eq('id', room.id)
         .neq('status', 'ended')
         .maybeSingle();
 
-      if (!freshRoom) {
-        window.location.href = window.location.origin;
-        return;
-      }
-      setRoom(freshRoom as ConferenceRoom);
+      if (!freshRoom) { window.location.href = window.location.origin; return; }
+      const { data: hasPwd } = await supabase.rpc('room_has_password', { p_room_id: freshRoom.id });
+      setRoom({ ...freshRoom, has_password: hasPwd === true, participant_count: 0, password: undefined as any });
     }
 
-    // Restart camera/mic preview
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(s => { setPreviewStream(s); setIsVideoOff(false); })
-      .catch(() => {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-          .then(s => { setPreviewStream(s); setIsVideoOff(true); })
-          .catch(() => { setIsVideoOff(true); });
-      });
+    startPreview();
   };
 
-  // ── Auth user loading ────────────────────────────────────────────────────
+  // Handle device change from selector
+  const handleDeviceChange = async (kind: 'video' | 'audio', deviceId: string) => {
+    if (kind === 'video') setSelectedVideoId(deviceId);
+    else setSelectedAudioId(deviceId);
+    await startPreview(
+      kind === 'video' ? deviceId : selectedVideoId,
+      kind === 'audio' ? deviceId : selectedAudioId,
+    );
+  };
+
+  // ── Auth-joining loading screen ────────────────────────────────────────────
   if (step === 'auth-joining') {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4" dir="rtl">
@@ -335,14 +433,14 @@ export function GuestJoinPage({ code }: Props) {
     );
   }
 
-  // ── In room ──────────────────────────────────────────────────────────────
+  // ── In room ────────────────────────────────────────────────────────────────
   if (step === 'in-room' && room && localStream) {
     const activeUserId = authUserId || guestId;
     const activeUserName = authUserName || displayName;
     return (
       <div className="h-screen">
         <ConferenceRoomView
-          room={room}
+          room={room as unknown as ConferenceRoom}
           currentUserId={activeUserId}
           currentUserName={activeUserName}
           myPeerId={myPeerId}
@@ -353,7 +451,7 @@ export function GuestJoinPage({ code }: Props) {
     );
   }
 
-  // ── Waiting room ─────────────────────────────────────────────────────────
+  // ── Waiting room ───────────────────────────────────────────────────────────
   if (step === 'waiting') {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4" dir="rtl">
@@ -362,6 +460,7 @@ export function GuestJoinPage({ code }: Props) {
           <div>
             <h2 className="text-xl font-bold text-white mb-2">در اتاق انتظار هستید</h2>
             <p className="text-gray-400 text-sm">منتظر تأیید میزبان باشید...</p>
+            <p className="text-gray-600 text-xs mt-1">اعلان فوری از طریق Realtime</p>
           </div>
           <div className="bg-gray-800 rounded-xl px-4 py-3">
             <p className="text-gray-400 text-xs">نام شما</p>
@@ -376,7 +475,7 @@ export function GuestJoinPage({ code }: Props) {
     );
   }
 
-  // ── Join form ────────────────────────────────────────────────────────────
+  // ── Join form ──────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4" dir="rtl">
       <div className="w-full max-w-md space-y-4">
@@ -386,7 +485,6 @@ export function GuestJoinPage({ code }: Props) {
             <Video className="w-7 h-7 text-teal-500" />
             <span className="text-2xl font-bold text-white">ورود به جلسه</span>
           </div>
-          {/* fix 7: show loading/error state for room */}
           {roomLoading ? (
             <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
               <Loader2 className="w-4 h-4 animate-spin text-teal-500" />
@@ -395,9 +493,12 @@ export function GuestJoinPage({ code }: Props) {
           ) : room ? (
             <div className="bg-gray-800 rounded-xl px-4 py-2 inline-block">
               <p className="text-teal-400 font-medium">{room.name || 'جلسه ویدیویی'}</p>
-              <div className="flex items-center justify-center gap-2 mt-1">
+              <div className="flex items-center justify-center gap-3 mt-1">
                 {room.is_locked && <span className="flex items-center gap-1 text-xs text-amber-400"><Lock className="w-3 h-3" /> قفل شده</span>}
                 {room.waiting_room_enabled && <span className="flex items-center gap-1 text-xs text-blue-400"><Shield className="w-3 h-3" /> اتاق انتظار</span>}
+                <span className="flex items-center gap-1 text-xs text-gray-400">
+                  <Users className="w-3 h-3" /> {room.participant_count} / {room.max_participants} نفر
+                </span>
               </div>
             </div>
           ) : null}
@@ -408,7 +509,6 @@ export function GuestJoinPage({ code }: Props) {
           {!isVideoOff && previewStream ? (
             <>
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-              {/* fix 9: Safari autoplay fallback button */}
               {showPlayButton && (
                 <button
                   onClick={() => { videoRef.current?.play().catch(() => {}); setShowPlayButton(false); }}
@@ -430,8 +530,9 @@ export function GuestJoinPage({ code }: Props) {
               </div>
             </div>
           )}
+
+          {/* Mic/Cam controls */}
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
-            {/* fix 6: aria-label + aria-pressed on mic button */}
             <button
               onClick={() => { const n = !isMuted; previewStream?.getAudioTracks().forEach(t => { t.enabled = !n; }); setIsMuted(n); }}
               aria-label={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'}
@@ -439,7 +540,6 @@ export function GuestJoinPage({ code }: Props) {
               className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all ${isMuted ? 'bg-red-600' : 'bg-gray-700/90 hover:bg-gray-600'}`}>
               {isMuted ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-white" />}
             </button>
-            {/* fix 6: aria-label + aria-pressed on video button */}
             <button
               onClick={() => { const n = !isVideoOff; previewStream?.getVideoTracks().forEach(t => { t.enabled = !n; }); setIsVideoOff(n); }}
               aria-label={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'}
@@ -448,7 +548,53 @@ export function GuestJoinPage({ code }: Props) {
               {isVideoOff ? <VideoOff className="w-4 h-4 text-white" /> : <Video className="w-4 h-4 text-white" />}
             </button>
           </div>
+
+          {/* Device selector toggle */}
+          {(videoDevices.length > 1 || audioDevices.length > 1) && (
+            <button
+              onClick={() => setShowDeviceSelector(v => !v)}
+              aria-label="انتخاب دستگاه"
+              className="absolute top-2 left-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white text-xs flex items-center gap-1 transition-colors"
+            >
+              <ChevronDown className="w-3 h-3" />
+              دستگاه
+            </button>
+          )}
         </div>
+
+        {/* Device selectors — shown when toggled */}
+        {showDeviceSelector && (videoDevices.length > 0 || audioDevices.length > 0) && (
+          <div className="bg-gray-900 rounded-xl border border-gray-700 p-3 space-y-2">
+            {videoDevices.length > 1 && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">دوربین</label>
+                <select
+                  value={selectedVideoId}
+                  onChange={e => handleDeviceChange('video', e.target.value)}
+                  className="w-full bg-gray-800 text-white text-xs rounded-lg px-2 py-1.5 border border-gray-700"
+                >
+                  {videoDevices.map(d => (
+                    <option key={d.deviceId} value={d.deviceId}>{d.label || `دوربین ${d.deviceId.slice(0,4)}`}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {audioDevices.length > 1 && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">میکروفون</label>
+                <select
+                  value={selectedAudioId}
+                  onChange={e => handleDeviceChange('audio', e.target.value)}
+                  className="w-full bg-gray-800 text-white text-xs rounded-lg px-2 py-1.5 border border-gray-700"
+                >
+                  {audioDevices.map(d => (
+                    <option key={d.deviceId} value={d.deviceId}>{d.label || `میکروفون ${d.deviceId.slice(0,4)}`}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Form */}
         <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5 space-y-4">
@@ -489,18 +635,21 @@ export function GuestJoinPage({ code }: Props) {
                 onKeyDown={e => e.key === 'Enter' && handleJoin()}
                 placeholder="نام و نام خانوادگی"
                 autoFocus
+                maxLength={60}
                 className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
               />
             )}
           </div>
 
-          {room?.password && (
+          {/* Password field — shown only if room has a password (server confirms) */}
+          {room?.has_password && (
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1.5">رمز عبور جلسه</label>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleJoin()}
                 placeholder="رمز عبور"
                 className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
               />
