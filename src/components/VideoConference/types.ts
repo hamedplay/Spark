@@ -55,6 +55,7 @@ export interface ConferencePoll {
   question: string;
   options: string[];
   is_active: boolean;
+  ended_at?: string | null;
   votes?: Record<number, number>;
   my_vote?: number | null;
 }

@@ -27,14 +27,12 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
   const [options, setOptions] = useState(['', '']);
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  // track which poll is currently being voted on to prevent double-click
   const [votingPollId, setVotingPollId] = useState<string | null>(null);
-  // expanded voter list per poll (host only)
   const [expandedVoters, setExpandedVoters] = useState<string | null>(null);
   const [voterMap, setVoterMap] = useState<Record<string, VoterInfo[]>>({});
   const pollIdsRef = useRef<string[]>([]);
 
-  // ── Bulk load: single query per poll group, no N+1 ──────────────────────
+  // ── Initial load: single bulk query, no N+1 ───────────────────────────────
   const loadPolls = useCallback(async () => {
     try {
       const { data: pData, error: pErr } = await supabase
@@ -48,7 +46,6 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
       const ids = pData.map(p => p.id);
       pollIdsRef.current = ids;
 
-      // Single bulk query for all votes in this room's polls
       const { data: allVotes, error: vErr } = await supabase
         .from('conference_poll_votes')
         .select('poll_id, option_index, user_id')
@@ -64,13 +61,12 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
         if (v.user_id === userId) votesByPoll[v.poll_id].myVote = v.option_index;
       });
 
-      const merged = pData.map(p => ({
+      setPolls(pData.map(p => ({
         ...p,
         options: p.options as string[],
         votes: votesByPoll[p.id].counts,
         my_vote: votesByPoll[p.id].myVote,
-      }));
-      setPolls(merged);
+      })));
     } catch (e) {
       console.error('loadPolls error:', e);
       toast.error('خطا در بارگذاری نظرسنجی‌ها');
@@ -79,28 +75,59 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
     }
   }, [roomId, userId]);
 
-  // ── Realtime: filter votes to only polls belonging to this room ──────────
+  // ── Realtime: incremental updates instead of full reloads ─────────────────
   useEffect(() => {
     loadPolls();
 
     const ch = supabase.channel(`polls-${roomId}`)
+      // Poll INSERT → prepend to list
       .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'conference_polls',
+        event: 'INSERT', schema: 'public', table: 'conference_polls',
         filter: `room_id=eq.${roomId}`,
-      }, loadPolls)
+      }, ({ new: row }) => {
+        const poll: ConferencePoll = {
+          ...row as ConferencePoll,
+          options: row.options as string[],
+          votes: {},
+          my_vote: null,
+        };
+        setPolls(prev => [poll, ...prev]);
+        pollIdsRef.current = [row.id, ...pollIdsRef.current];
+      })
+      // Poll UPDATE (close) → patch is_active + ended_at in place
       .on('postgres_changes', {
-        // Filter votes to this room's polls via a dedicated DB view/function
-        // isn't possible directly with supabase realtime, so we use a broad
-        // subscription and re-check room ownership inside loadPolls itself.
+        event: 'UPDATE', schema: 'public', table: 'conference_polls',
+        filter: `room_id=eq.${roomId}`,
+      }, ({ new: row }) => {
+        setPolls(prev => prev.map(p =>
+          p.id === row.id ? { ...p, is_active: row.is_active, ended_at: row.ended_at } : p
+        ));
+      })
+      // Poll DELETE → remove from list
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'conference_polls',
+        filter: `room_id=eq.${roomId}`,
+      }, ({ old: row }) => {
+        setPolls(prev => prev.filter(p => p.id !== row.id));
+        pollIdsRef.current = pollIdsRef.current.filter(id => id !== row.id);
+      })
+      // Vote INSERT → increment the right option; skip own votes (already optimistic)
+      .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'conference_poll_votes',
-      }, (payload) => {
-        // Only reload if the vote belongs to one of our polls
-        if (pollIdsRef.current.includes(payload.new.poll_id)) loadPolls();
+      }, ({ new: row }) => {
+        if (!pollIdsRef.current.includes(row.poll_id)) return;
+        if (row.user_id === userId) return; // optimistic update already applied
+        setPolls(prev => prev.map(p => {
+          if (p.id !== row.poll_id) return p;
+          const counts = { ...(p.votes || {}) };
+          counts[row.option_index] = (counts[row.option_index] || 0) + 1;
+          return { ...p, votes: counts };
+        }));
       })
       .subscribe();
 
     return () => { ch.unsubscribe(); };
-  }, [roomId, loadPolls]);
+  }, [roomId, userId, loadPolls]);
 
   // ── Validation ────────────────────────────────────────────────────────────
   const validatePoll = (): string | null => {
@@ -142,7 +169,6 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
     if (poll.my_vote != null || votingPollId === poll.id) return;
     setVotingPollId(poll.id);
 
-    // Optimistic update
     setPolls(prev => prev.map(p => {
       if (p.id !== poll.id) return p;
       const counts = { ...(p.votes || {}) };
@@ -162,7 +188,7 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
           counts[optionIndex] = Math.max(0, (counts[optionIndex] || 1) - 1);
           return { ...p, votes: counts, my_vote: null };
         }));
-        // 23505 = unique_violation — means already voted (race condition)
+        // 23505 = unique_violation (DB unique constraint enforces one vote per user)
         if (error.code === '23505') {
           toast('شما قبلاً در این نظرسنجی رأی داده‌اید');
         } else {
@@ -180,7 +206,7 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
   const closePoll = async (pollId: string) => {
     try {
       const { error } = await supabase.from('conference_polls')
-        .update({ is_active: false })
+        .update({ is_active: false, ended_at: new Date().toISOString() })
         .eq('id', pollId);
       if (error) throw error;
       toast.success('نظرسنجی بسته شد');
@@ -191,7 +217,6 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
 
   const deletePoll = async (pollId: string) => {
     try {
-      // cascade delete handles votes
       const { error } = await supabase.from('conference_polls')
         .delete().eq('id', pollId);
       if (error) throw error;
@@ -201,33 +226,48 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
     }
   };
 
+  // ── Batch voter load: one DB round-trip for all uncached polls ────────────
   const loadVoters = async (pollId: string) => {
     if (expandedVoters === pollId) { setExpandedVoters(null); return; }
     setExpandedVoters(pollId);
     if (voterMap[pollId]) return;
+
+    // Load all polls not yet in cache in one batch
+    const missingIds = pollIdsRef.current.filter(id => !voterMap[id]);
+    if (!missingIds.length) return;
+
     try {
-      const { data, error } = await supabase
+      const { data: votes, error: vErr } = await supabase
         .from('conference_poll_votes')
-        .select('user_id, option_index')
-        .eq('poll_id', pollId);
-      if (error) throw error;
-      // Try to get display names from participants table
-      const userIds = (data || []).map(v => v.user_id);
-      const { data: parts } = await supabase
-        .from('conference_participants')
-        .select('user_id, display_name')
-        .eq('room_id', roomId)
-        .in('user_id', userIds);
+        .select('poll_id, user_id, option_index')
+        .in('poll_id', missingIds);
+      if (vErr) throw vErr;
+
+      const userIds = [...new Set((votes || []).map(v => v.user_id))];
+      const { data: parts } = userIds.length
+        ? await supabase
+            .from('conference_participants')
+            .select('user_id, display_name')
+            .eq('room_id', roomId)
+            .in('user_id', userIds)
+        : { data: [] };
+
       const nameMap: Record<string, string> = {};
       (parts || []).forEach(p => { nameMap[p.user_id] = p.display_name; });
-      setVoterMap(prev => ({
-        ...prev,
-        [pollId]: (data || []).map(v => ({
-          user_id: v.user_id,
-          display_name: nameMap[v.user_id] || 'ناشناس',
-          option_index: v.option_index,
-        })),
-      }));
+
+      const grouped: Record<string, VoterInfo[]> = {};
+      missingIds.forEach(id => { grouped[id] = []; });
+      (votes || []).forEach(v => {
+        if (grouped[v.poll_id]) {
+          grouped[v.poll_id].push({
+            user_id: v.user_id,
+            display_name: nameMap[v.user_id] || 'ناشناس',
+            option_index: v.option_index,
+          });
+        }
+      });
+
+      setVoterMap(prev => ({ ...prev, ...grouped }));
     } catch (e) {
       console.error('loadVoters error:', e);
       toast.error('خطا در بارگذاری رأی‌دهندگان');
@@ -262,7 +302,6 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
   return (
     <div className="flex flex-col h-full overflow-y-auto p-3 gap-3" aria-label="پنل نظرسنجی">
 
-      {/* Create button */}
       {isHost && (
         <button
           onClick={() => setShowCreate(v => !v)}
@@ -273,7 +312,6 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
         </button>
       )}
 
-      {/* Create form */}
       {showCreate && (
         <div className="bg-gray-800 rounded-xl p-3 space-y-2">
           <div>
@@ -327,14 +365,12 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
         <div className="flex justify-center py-8">
           <Loader2 className="w-6 h-6 animate-spin text-teal-500" />
         </div>
       )}
 
-      {/* Poll list */}
       {!loading && polls.length === 0 && (
         <p className="text-center text-gray-500 text-sm py-8">هنوز نظرسنجی‌ای وجود ندارد</p>
       )}
@@ -385,7 +421,6 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
               </div>
             </div>
 
-            {/* Options */}
             <div className="space-y-1.5" aria-live="polite" aria-label="نتایج نظرسنجی">
               {poll.options.map((opt, i) => {
                 const cnt = poll.votes?.[i] || 0;
@@ -406,7 +441,6 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
                       'cursor-default'
                     }`}
                   >
-                    {/* Vote bar with smooth animation */}
                     <div
                       className="absolute inset-0 bg-teal-900/40 transition-all duration-500 ease-out"
                       style={{ width: `${pct}%` }}
@@ -426,9 +460,15 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
               })}
             </div>
 
-            {/* Footer */}
             <div className="flex items-center justify-between mt-1.5">
-              <p className="text-gray-500 text-xs">{total} رأی</p>
+              <p className="text-gray-500 text-xs">
+                {total} رأی
+                {isClosed && poll.ended_at && (
+                  <span className="mr-2 text-gray-600">
+                    · بسته شد: {new Date(poll.ended_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </p>
               {isHost && total > 0 && (
                 <button
                   onClick={() => loadVoters(poll.id)}
@@ -442,7 +482,6 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
               )}
             </div>
 
-            {/* Voter list (host only) */}
             {isHost && expandedVoters === poll.id && (
               <div className="mt-2 pt-2 border-t border-gray-700 space-y-1">
                 {voterMap[poll.id] ? (
