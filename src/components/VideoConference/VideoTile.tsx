@@ -2,9 +2,16 @@ import React, { useEffect, useRef, useState, memo } from 'react';
 import { Crown, Hand, MicOff, VideoOff, Pin, ScreenShare, Play } from 'lucide-react';
 import type { PeerConnection } from './types';
 
-function QualityDot({ quality }: { quality: PeerConnection['networkQuality'] }) {
+function QualityDot({ quality, pingMs }: { quality: PeerConnection['networkQuality']; pingMs?: number }) {
   const c = { excellent: 'bg-green-500', good: 'bg-teal-400', fair: 'bg-amber-400', poor: 'bg-red-500' };
-  return <span className={`w-2 h-2 rounded-full flex-shrink-0 ${c[quality] ?? 'bg-gray-400'}`} />;
+  const title = pingMs !== undefined ? `تأخیر: ${Math.round(pingMs)}ms` : undefined;
+  return (
+    <span
+      className={`w-2 h-2 rounded-full flex-shrink-0 ${c[quality] ?? 'bg-gray-400'}`}
+      title={title}
+      aria-label={title}
+    />
+  );
 }
 
 export { QualityDot };
@@ -22,6 +29,8 @@ interface VideoTileProps {
   networkQuality: PeerConnection['networkQuality'];
   /** @deprecated audioLevel is measured internally via WebAudioContext; this prop is ignored */
   audioLevel?: number;
+  avatarUrl?: string;
+  pingMs?: number;
   onPin: () => void;
   small?: boolean;
 }
@@ -51,7 +60,7 @@ function useAudioLevel(stream: MediaStream | null, isMuted: boolean): number {
     try {
       ctx = new AudioContext();
     } catch {
-      return; // WebAudio not available (e.g., headless environment)
+      return;
     }
     ctxRef.current = ctx;
 
@@ -83,14 +92,16 @@ function useAudioLevel(stream: MediaStream | null, isMuted: boolean): number {
 
 export const VideoTile = memo(function VideoTile({
   stream, displayName, isMuted, isVideoOff, isHandRaised, isLocal, isPinned,
-  isHost, isScreenSharing, networkQuality, onPin, small = false,
+  isHost, isScreenSharing, networkQuality, avatarUrl, pingMs, onPin, small = false,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // fix: autoplay rejection (Safari/iOS)
   const [needsPlayGesture, setNeedsPlayGesture] = useState(false);
   const [playError, setPlayError] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
-  // Real audio level measurement — works for both local and remote streams
+  // Reset image error state when avatar URL changes
+  useEffect(() => { setImgError(false); }, [avatarUrl]);
+
   const audioLevel = useAudioLevel(stream, isMuted);
 
   useEffect(() => {
@@ -105,7 +116,6 @@ export const VideoTile = memo(function VideoTile({
       if (err.name === 'NotAllowedError') setNeedsPlayGesture(true);
     });
 
-    // fix: handle track changes (addtrack + removetrack)
     const syncStream = () => {
       el.srcObject = null;
       el.srcObject = stream;
@@ -119,12 +129,10 @@ export const VideoTile = memo(function VideoTile({
     return () => {
       stream.removeEventListener('addtrack', syncStream);
       stream.removeEventListener('removetrack', syncStream);
-      // fix: clear srcObject on cleanup to release media resources
       el.srcObject = null;
     };
   }, [stream]);
 
-  // Re-sync when isVideoOff changes (track may have been added/removed)
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !stream || isVideoOff) return;
@@ -142,15 +150,11 @@ export const VideoTile = memo(function VideoTile({
 
   const initials = safeInitials(displayName);
   const ring = isHandRaised ? 'ring-2 ring-yellow-400' : isPinned ? 'ring-2 ring-teal-400' : '';
-
-  // fix: only mirror local camera, not screen share
   const shouldMirror = isLocal && !isScreenSharing;
-
-  // active speaker glow — driven by real WebAudio measurement
   const speakerGlow = !isMuted && audioLevel > 0.05 ? 'ring-2 ring-green-400' : '';
   const ringClass = ring || speakerGlow;
-
   const showVideo = !isVideoOff && stream;
+  const showAvatarImg = !showVideo && avatarUrl && !imgError;
 
   return (
     <div
@@ -158,7 +162,6 @@ export const VideoTile = memo(function VideoTile({
       role="group"
       aria-label={isLocal ? `${displayName} (شما)` : displayName}
     >
-      {/* Video element — always mounted so srcObject assignment works */}
       <video
         ref={videoRef}
         autoPlay
@@ -167,16 +170,24 @@ export const VideoTile = memo(function VideoTile({
         className={`w-full h-full ${isScreenSharing ? 'object-contain' : 'object-cover'} ${shouldMirror ? 'scale-x-[-1]' : ''} ${showVideo ? '' : 'hidden'}`}
       />
 
-      {/* Avatar fallback */}
+      {/* Avatar fallback — profile photo if available, initials otherwise */}
       {!showVideo && (
         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-950">
-          <div className={`rounded-full flex items-center justify-center font-bold text-white bg-gradient-to-br from-teal-600 to-teal-800 ${small ? 'w-10 h-10 text-base' : 'w-20 h-20 text-3xl'}`}>
-            {initials}
-          </div>
+          {showAvatarImg ? (
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              className={`rounded-full object-cover ${small ? 'w-10 h-10' : 'w-20 h-20'}`}
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className={`rounded-full flex items-center justify-center font-bold text-white bg-gradient-to-br from-teal-600 to-teal-800 ${small ? 'w-10 h-10 text-base' : 'w-20 h-20 text-3xl'}`}>
+              {initials}
+            </div>
+          )}
         </div>
       )}
 
-      {/* fix: autoplay blocked overlay — shows error feedback if retry also fails */}
       {needsPlayGesture && (
         <button
           onClick={handlePlayGesture}
@@ -192,7 +203,6 @@ export const VideoTile = memo(function VideoTile({
         </button>
       )}
 
-      {/* Screen share badge */}
       {isScreenSharing && !small && (
         <div className="absolute top-2 right-2 bg-teal-600/90 rounded-lg px-1.5 py-0.5 flex items-center gap-1 z-10">
           <ScreenShare className="w-3 h-3 text-white" />
@@ -200,7 +210,6 @@ export const VideoTile = memo(function VideoTile({
         </div>
       )}
 
-      {/* Pin button (hover, top-left corner) */}
       {!small && (
         <button
           onClick={onPin}
@@ -217,10 +226,9 @@ export const VideoTile = memo(function VideoTile({
         </button>
       )}
 
-      {/* Bottom bar */}
       <div className="absolute bottom-0 left-0 right-0 px-2.5 py-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
         <div className="flex items-center gap-1.5">
-          <QualityDot quality={networkQuality} />
+          <QualityDot quality={networkQuality} pingMs={pingMs} />
           <span className={`text-white font-medium truncate flex-1 ${small ? 'text-xs' : 'text-sm'}`}>
             {isLocal ? `${displayName} (شما)` : displayName}
           </span>

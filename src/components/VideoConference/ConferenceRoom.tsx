@@ -104,6 +104,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [myQuality, setMyQuality] = useState<PeerConnection['networkQuality']>('good');
   const [tileSize, setTileSize] = useState(3);
 
+  // Peer latencies (peerId → RTT ms) — updated every 3s via WebRTC getStats()
+  const [peerLatencies, setPeerLatencies] = useState<Record<string, number>>({});
+
+  // Peer avatar URLs (userId → avatar_url) fetched from profiles on demand
+  const [peerAvatarUrls, setPeerAvatarUrls] = useState<Record<string, string>>({});
+  const fetchedAvatarUserIds = useRef<Set<string>>(new Set());
+
   // Dynamic host — updated on transfer
   const [hostId, setHostId] = useState(room.host_id);
   const isHost = hostId === currentUserId;
@@ -141,6 +148,59 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     return () => clearInterval(t);
   }, [room.id, currentUserId]);
 
+  // Avatar fetch — loads profile photos for local user + any new peers
+  useEffect(() => {
+    const toFetch = [currentUserId, ...Array.from(peers.values()).map(p => p.userId)]
+      .filter(uid => !fetchedAvatarUserIds.current.has(uid));
+    if (!toFetch.length) return;
+    toFetch.forEach(uid => fetchedAvatarUserIds.current.add(uid));
+    supabase.from('profiles').select('user_id, avatar_url').in('user_id', toFetch)
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const map: Record<string, string> = {};
+        data.forEach(p => { if (p.avatar_url) map[p.user_id] = p.avatar_url; });
+        if (Object.keys(map).length) setPeerAvatarUrls(prev => ({ ...prev, ...map }));
+      }).catch(() => {});
+  }, [peers, currentUserId]);
+
+  // RTT polling — every 3s read candidate-pair stats from each RTCPeerConnection
+  useEffect(() => {
+    const t = setInterval(async () => {
+      const latencies: Record<string, number> = {};
+      for (const [peerId, peer] of peersRef.current) {
+        try {
+          const stats = await peer.pc.getStats();
+          stats.forEach(report => {
+            if (
+              report.type === 'candidate-pair' &&
+              (report as any).state === 'succeeded' &&
+              typeof (report as any).currentRoundTripTime === 'number'
+            ) {
+              latencies[peerId] = Math.round((report as any).currentRoundTripTime * 1000);
+            }
+          });
+          // Update networkQuality on the PeerConnection object
+          const rtt = latencies[peerId];
+          if (rtt !== undefined && peersRef.current.has(peerId)) {
+            peersRef.current.get(peerId)!.networkQuality =
+              rtt < 100 ? 'excellent' : rtt < 200 ? 'good' : rtt < 400 ? 'fair' : 'poor';
+          }
+        } catch { /* ignore — pc may have been closed */ }
+      }
+      if (Object.keys(latencies).length) {
+        setPeerLatencies(latencies);
+        setPeers(new Map(peersRef.current)); // propagate updated networkQuality
+        // Update local quality from average peer RTT
+        const values = Object.values(latencies);
+        if (values.length) {
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          setMyQuality(avg < 100 ? 'excellent' : avg < 200 ? 'good' : avg < 400 ? 'fair' : 'poor');
+        }
+      }
+    }, 3000);
+    return () => clearInterval(t);
+  }, []);
+
   const fmt = (s: number) => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
@@ -158,6 +218,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     };
     channelRef.current?.send({ type: 'broadcast', event: 'signal', payload });
     if (type === 'join') {
+      // Guard: skip insert if required fields are missing (prevents HTTP 400)
+      if (!room?.id || !myPeerIdRef.current || !currentUserId) return;
       supabase.from('conference_signals').insert({
         room_id: room.id,
         from_peer_id: myPeerIdRef.current,
@@ -166,7 +228,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         to_peer_id: null,
         type: 'join',
         payload: data,
-      }).then(() => {});
+      }).then(({ error }) => { if (error) console.error('conference_signals insert error:', error); });
     }
   }, [currentUserId, currentUserName, room.id]);
 
@@ -677,8 +739,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   // ── Tiles ──────────────────────────────────────────────────────────────────
   const allTiles = [
-    { peerId: myPeerId, userId: currentUserId, displayName: currentUserName, stream: localStream, isMuted, isVideoOff, isHandRaised, isLocal: true, isHost, networkQuality: myQuality },
-    ...Array.from(peers.values()).map(p => ({ peerId: p.peerId, userId: p.userId, displayName: p.displayName, stream: p.stream, isMuted: p.isMuted, isVideoOff: p.isVideoOff, isHandRaised: p.isHandRaised, isLocal: false, isHost: hostId === p.userId, networkQuality: p.networkQuality })),
+    { peerId: myPeerId, userId: currentUserId, displayName: currentUserName, stream: localStream, isMuted, isVideoOff, isHandRaised, isLocal: true, isHost, networkQuality: myQuality, avatarUrl: peerAvatarUrls[currentUserId], pingMs: undefined as number | undefined },
+    ...Array.from(peers.values()).map(p => ({ peerId: p.peerId, userId: p.userId, displayName: p.displayName, stream: p.stream, isMuted: p.isMuted, isVideoOff: p.isVideoOff, isHandRaised: p.isHandRaised, isLocal: false, isHost: hostId === p.userId, networkQuality: p.networkQuality, avatarUrl: peerAvatarUrls[p.userId], pingMs: peerLatencies[p.peerId] })),
   ];
 
   const qualityColor = { excellent:'text-green-400', good:'text-teal-400', fair:'text-amber-400', poor:'text-red-400' };
@@ -1029,16 +1091,29 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         </div>
       )}
 
-      {/* Floating reactions */}
+      {/* Floating reactions — emoji + sender name */}
       {reactions.map(r => (
-        <div key={r.id} className="fixed pointer-events-none z-[9999] text-3xl"
+        <div key={r.id} className="fixed pointer-events-none z-[9999] flex flex-col items-center gap-0.5"
           style={{ left: `${r.x}%`, top: `${r.y}%`, animation: 'float-up 3s ease-out forwards' }}>
-          {r.emoji}
+          <span className="text-3xl">{r.emoji}</span>
+          <span className="text-[10px] text-white/80 bg-black/50 rounded-full px-1.5 py-0.5 leading-tight max-w-[72px] truncate">{r.displayName}</span>
         </div>
       ))}
 
       {/* Bottom controls */}
-      <div className="bg-gray-900/95 border-t border-gray-800 flex-shrink-0" dir="rtl">
+      <div className="bg-gray-900/95 border-t border-gray-800 flex-shrink-0 relative" dir="rtl">
+        {/* Emoji picker — rendered here (above overflow-x-auto) so it's never clipped */}
+        {showEmojiPicker && room.allow_reactions && (
+          <div role="listbox" aria-label="انتخاب ایموجی"
+            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-800 rounded-2xl p-2 flex flex-wrap gap-1 shadow-2xl border border-gray-700 z-[200] w-52">
+            {EMOJIS.map(e => (
+              <button key={e} onClick={() => sendEmoji(e)} aria-label={`واکنش ${e}`}
+                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-700 text-lg transition-colors">
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
         {isMobile ? (
           <>
             <div className="flex items-center justify-center gap-2 px-3 py-2.5">
@@ -1061,17 +1136,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   <Hand className="w-5 h-5" />
                 </button>
                 {room.allow_reactions && (
-                  <div className="relative">
-                    <button onClick={() => setShowEmojiPicker(v => !v)} title="واکنش"
-                      className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${showEmojiPicker ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                      <Smile className="w-5 h-5" />
-                    </button>
-                    {showEmojiPicker && (
-                      <div className="absolute bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 rounded-2xl p-2 flex flex-wrap gap-1 shadow-2xl border border-gray-700 z-50 w-48">
-                        {EMOJIS.map(e => <button key={e} onClick={() => sendEmoji(e)} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-700 text-lg transition-colors">{e}</button>)}
-                      </div>
-                    )}
-                  </div>
+                  <button onClick={() => setShowEmojiPicker(v => !v)} title="واکنش"
+                    aria-pressed={showEmojiPicker}
+                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${showEmojiPicker ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                    <Smile className="w-5 h-5" />
+                  </button>
                 )}
                 <button onClick={() => { togglePanel('participants'); setShowAllControls(false); }} title="شرکت‌کنندگان"
                   className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
@@ -1122,16 +1191,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               <Hand className="w-5 h-5" />
             </button>
             {room.allow_reactions && (
-              <div className="relative flex-shrink-0">
+              <div className="flex-shrink-0">
                 <button onClick={() => setShowEmojiPicker(v => !v)} aria-label="ارسال واکنش ایموجی" aria-expanded={showEmojiPicker}
+                  aria-pressed={showEmojiPicker}
                   className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg ${showEmojiPicker ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   <Smile className="w-5 h-5" />
                 </button>
-                {showEmojiPicker && (
-                  <div role="listbox" aria-label="انتخاب ایموجی" className="absolute bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 rounded-2xl p-2 flex flex-wrap gap-1 shadow-2xl border border-gray-700 z-50 w-48">
-                    {EMOJIS.map(e => <button key={e} onClick={() => sendEmoji(e)} aria-label={`واکنش ${e}`} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-700 text-lg transition-colors">{e}</button>)}
-                  </div>
-                )}
               </div>
             )}
             {room.allow_chat && (
