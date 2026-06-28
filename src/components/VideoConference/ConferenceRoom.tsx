@@ -142,6 +142,9 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [hostId, setHostId] = useState(room.host_id);
   const isHost = hostId === currentUserId;
 
+  // Runtime chat toggle — starts from room setting, updated via DB subscription
+  const [chatEnabled, setChatEnabled] = useState(room.chat_enabled ?? true);
+
   // Runtime speaking limit toggle — starts from room setting, synced via DB subscription
   const [speakingLimitEnabled, setSpeakingLimitEnabled] = useState(room.speaking_limit_enabled ?? true);
 
