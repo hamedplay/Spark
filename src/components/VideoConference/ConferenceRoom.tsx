@@ -6,6 +6,7 @@ import {
   Grid2x2 as Grid, LayoutGrid as Layout, Smile, BarChart2,
   PenTool, Volume2, VolumeX, Activity, UserPlus,
   ShieldAlert, UserX, Mic2, ChevronUp, ChevronDown, ArrowRightLeft,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
@@ -17,6 +18,8 @@ import type {
 import { VideoTile, QualityDot } from './VideoTile';
 import { Whiteboard } from './Whiteboard';
 import { PollPanel } from './PollPanel';
+import { SettingsPanel, VIDEO_QUALITY_PRESETS } from './SettingsPanel';
+import type { VideoQuality } from './SettingsPanel';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const RTC_CONFIG: RTCConfiguration = {
@@ -134,6 +137,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // Role of the current user — fetched once on mount and updated on transfer
   const [myRole, setMyRole] = useState<RoleType>(room.host_id === currentUserId ? 'host' : 'member');
 
+  // Video quality settings
+  const [videoQuality, setVideoQuality] = useState<VideoQuality>('medium');
+  const [dataSaverMode, setDataSaverMode] = useState(false);
+  const [applyingVideoConstraints, setApplyingVideoConstraints] = useState(false);
+
   useEffect(() => {
     supabase.from('conference_participants')
       .select('role')
@@ -152,6 +160,32 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   // Hand raise queue (sorted by raise time)
   const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseEntry[]>([]);
+
+  const applyVideoConstraints = useCallback(async (quality: VideoQuality, dataSaver: boolean) => {
+    const preset = VIDEO_QUALITY_PRESETS[dataSaver ? 'low' : quality];
+    const frameRate = dataSaver ? 15 : preset.frameRate;
+    setApplyingVideoConstraints(true);
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: preset.width }, height: { ideal: preset.height }, frameRate: { ideal: frameRate } },
+        audio: false,
+      });
+      const newTrack = newStream.getVideoTracks()[0];
+      for (const peer of peersRef.current.values()) {
+        const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(newTrack).catch(() => {});
+      }
+      const oldTrack = localStreamRef.current.getVideoTracks()[0];
+      if (oldTrack) { localStreamRef.current.removeTrack(oldTrack); oldTrack.stop(); }
+      localStreamRef.current.addTrack(newTrack);
+      newTrack.enabled = !mediaRef.current.isVideoOff;
+      toast.success('کیفیت ویدیو تغییر کرد');
+    } catch {
+      toast.error('خطا در تغییر کیفیت ویدیو');
+    } finally {
+      setApplyingVideoConstraints(false);
+    }
+  }, []);
 
   // ── Refs (never stale in callbacks) ───────────────────────────────────────
   const peersRef = useRef<Map<string, PeerConnection>>(new Map());
@@ -929,24 +963,38 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                 {isMobile && (
                   <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-gray-600 rounded-full" />
                 )}
-                {(['chat','participants','polls','whiteboard'] as SidePanel[]).filter(Boolean).map(p => (
-                  <button key={p!} onClick={() => togglePanel(p)}
-                    className={`flex-1 py-2.5 text-xs font-medium transition-colors ${sidePanel === p ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500 hover:text-gray-300'}`}>
-                    {p === 'chat' ? 'چت' : p === 'participants' ? (
-                      <span className="flex items-center justify-center gap-1">
-                        افراد
-                        {sortedQueue.length > 0 && (
-                          <span className="w-4 h-4 rounded-full bg-yellow-500 text-black text-[10px] flex items-center justify-center font-bold">
-                            {sortedQueue.length}
+                {sidePanel === 'settings' ? (
+                  <>
+                    <div className="flex-1 flex items-center px-3 py-2.5 gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-teal-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-teal-400">تنظیمات</span>
+                    </div>
+                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {(['chat','participants','polls','whiteboard'] as SidePanel[]).filter(Boolean).map(p => (
+                      <button key={p!} onClick={() => togglePanel(p)}
+                        className={`flex-1 py-2.5 text-xs font-medium transition-colors ${sidePanel === p ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500 hover:text-gray-300'}`}>
+                        {p === 'chat' ? 'چت' : p === 'participants' ? (
+                          <span className="flex items-center justify-center gap-1">
+                            افراد
+                            {sortedQueue.length > 0 && (
+                              <span className="w-4 h-4 rounded-full bg-yellow-500 text-black text-[10px] flex items-center justify-center font-bold">
+                                {sortedQueue.length}
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </span>
-                    ) : p === 'polls' ? 'نظرسنجی' : 'وایت‌بورد'}
-                  </button>
-                ))}
-                <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
-                  <X className="w-4 h-4" />
-                </button>
+                        ) : p === 'polls' ? 'نظرسنجی' : 'وایت‌بورد'}
+                      </button>
+                    ))}
+                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
               </div>
 
               {sidePanel === 'chat' && (
@@ -1084,6 +1132,22 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   <Whiteboard roomId={room.id} userId={currentUserId} isHost={checkPermission('toggle_whiteboard')} />
                 </div>
               )}
+              {sidePanel === 'settings' && (
+                <SettingsPanel
+                  videoQuality={videoQuality}
+                  dataSaverMode={dataSaverMode}
+                  isApplying={applyingVideoConstraints}
+                  onChangeQuality={(q) => {
+                    setVideoQuality(q);
+                    applyVideoConstraints(q, dataSaverMode);
+                  }}
+                  onToggleDataSaver={() => {
+                    const next = !dataSaverMode;
+                    setDataSaverMode(next);
+                    applyVideoConstraints(videoQuality, next);
+                  }}
+                />
+              )}
             </div>
           </>
         )}
@@ -1195,6 +1259,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   <PenTool className="w-5 h-5" />
                 </button>
+                <button onClick={() => { togglePanel('settings'); setShowAllControls(false); }} title="تنظیمات"
+                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'settings' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                  <SlidersHorizontal className="w-5 h-5" />
+                </button>
                 <button onClick={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })} title={isSpeakerMuted ? 'فعال کردن صدا' : 'قطع صدا'}
                   className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${isSpeakerMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   {isSpeakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
@@ -1258,6 +1326,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             <button onClick={() => togglePanel('whiteboard')} aria-label="باز کردن وایت‌بورد" aria-pressed={sidePanel === 'whiteboard'}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <PenTool className="w-5 h-5" />
+            </button>
+            <button onClick={() => togglePanel('settings')} aria-label="تنظیمات" aria-pressed={sidePanel === 'settings'}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'settings' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              <SlidersHorizontal className="w-5 h-5" />
             </button>
             <div className="w-px h-8 bg-gray-700 flex-shrink-0" />
             <button onClick={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })} aria-label={isSpeakerMuted ? 'فعال کردن صدای اسپیکر' : 'قطع صدای اسپیکر'} aria-pressed={isSpeakerMuted}
