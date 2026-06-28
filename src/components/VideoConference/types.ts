@@ -42,6 +42,7 @@ export interface ConferenceMessage {
   display_name: string;
   body: string;
   created_at: string;
+  role?: 'admin' | 'moderator' | 'user' | 'system';
   reply_to_id?: string | null;
   reply_to_body?: string | null;
   reply_to_name?: string | null;
@@ -63,10 +64,15 @@ export interface ConferencePoll {
 export interface WhiteboardStroke {
   id: string;
   userId: string;
-  points: { x: number; y: number }[];
+  points: Point[];
   color: string;
   width: number;
   tool: 'pen' | 'eraser' | 'line' | 'rect' | 'circle';
+}
+
+export interface Point {
+  x: number;
+  y: number;
 }
 
 export interface PeerConnection {
@@ -92,6 +98,7 @@ export interface Reaction {
   x: number;
   y: number;
   createdAt: number;
+  expiresAt?: number;
 }
 
 export type SidePanel = 'chat' | 'participants' | 'polls' | 'whiteboard' | 'settings' | null;

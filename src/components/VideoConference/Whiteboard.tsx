@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { WhiteboardStroke } from './types';
+import type { WhiteboardStroke, Point } from './types';
 
 const COLORS = ['#00d4aa', '#3b82f6', '#ef4444', '#f59e0b', '#ec4899', '#ffffff', '#374151', '#000000'];
 
@@ -23,7 +23,7 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   const [width, setWidth] = useState(4);
   const [isClearing, setIsClearing] = useState(false);
   const drawing = useRef(false);
-  const currentPath = useRef<{ x: number; y: number }[]>([]);
+  const currentPath = useRef<Point[]>([]);
   // last drawn point index — for incremental drawing (fix #2)
   const lastDrawnIdx = useRef(0);
 
@@ -50,7 +50,7 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   }, []);
 
   // fix #2: draw only the NEW segment since last call instead of the full path
-  const drawSegment = useCallback((ctx: CanvasRenderingContext2D, points: { x: number; y: number }[], fromIdx: number, strokeTool: 'pen' | 'eraser', strokeColor: string, strokeWidth: number) => {
+  const drawSegment = useCallback((ctx: CanvasRenderingContext2D, points: Point[], fromIdx: number, strokeTool: 'pen' | 'eraser', strokeColor: string, strokeWidth: number) => {
     if (fromIdx < 1 || fromIdx >= points.length) return;
     ctx.globalCompositeOperation = strokeTool === 'eraser' ? 'destination-out' : 'source-over';
     ctx.strokeStyle = strokeColor;
