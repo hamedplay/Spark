@@ -67,7 +67,8 @@ export interface WhiteboardStroke {
   points: Point[];
   color: string;
   width: number;
-  tool: 'pen' | 'eraser' | 'line' | 'rect' | 'circle';
+  tool: 'pen' | 'eraser' | 'line' | 'rect' | 'circle' | 'arrow' | 'text';
+  text?: string;
 }
 
 export interface Point {
