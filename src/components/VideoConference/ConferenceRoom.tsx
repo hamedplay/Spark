@@ -7,6 +7,7 @@ import {
   PenTool, Volume2, VolumeX, Activity, UserPlus,
   ShieldAlert, UserX, Mic2, ChevronUp, ChevronDown, ArrowRightLeft,
   SlidersHorizontal, LayoutGrid, MonitorPlay, PanelRight,
+  Shield, ShieldCheck, ShieldOff, Clock,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
@@ -20,6 +21,9 @@ import { Whiteboard } from './Whiteboard';
 import { PollPanel } from './PollPanel';
 import { SettingsPanel, VIDEO_QUALITY_PRESETS } from './SettingsPanel';
 import { ChatPanel } from './ChatPanel';
+import { PendingApprovalsList } from './ApprovalGate';
+import type { PendingApproval } from './ApprovalGate';
+import { BanList } from './BanList';
 import type { VideoQuality } from './SettingsPanel';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -71,12 +75,12 @@ type Permission =
   | 'kick' | 'ban' | 'transfer_host'
   | 'toggle_chat' | 'toggle_whiteboard'
   | 'mute_all' | 'mute_user'
-  | 'manage_polls' | 'lower_hand';
+  | 'manage_polls' | 'lower_hand' | 'manage_roles';
 
 const ROLE_PERMISSIONS: Record<RoleType, Set<Permission>> = {
-  host:      new Set(['kick','ban','transfer_host','toggle_chat','toggle_whiteboard','mute_all','mute_user','manage_polls','lower_hand']),
-  admin:     new Set(['kick','ban','toggle_chat','toggle_whiteboard','mute_all','mute_user','manage_polls','lower_hand']),
-  moderator: new Set(['mute_user','manage_polls','lower_hand']),
+  host:      new Set(['kick','ban','transfer_host','toggle_chat','toggle_whiteboard','mute_all','mute_user','manage_polls','lower_hand','manage_roles']),
+  admin:     new Set(['kick','ban','toggle_chat','toggle_whiteboard','mute_all','mute_user','manage_polls','lower_hand','manage_roles']),
+  moderator: new Set(['mute_user','manage_polls','lower_hand','manage_roles']),
   member:    new Set(),
   guest:     new Set(),
 };
@@ -196,8 +200,57 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     toast(next ? 'محدودیت زمان صحبت فعال شد' : 'محدودیت زمان صحبت غیرفعال شد');
   }, [speakingLimitEnabled, room.id]);
 
-  // Hand raise queue (sorted by raise time)
+  const ROLE_LABELS: Record<RoleType, string> = { host: 'میزبان', admin: 'مدیر', moderator: 'ناظر', member: 'عضو', guest: 'مهمان' };
+  const ROLE_COLORS: Record<RoleType, string> = {
+    host: 'text-amber-400 bg-amber-900/30',
+    admin: 'text-blue-400 bg-blue-900/30',
+    moderator: 'text-purple-400 bg-purple-900/30',
+    member: 'text-gray-400 bg-gray-700/50',
+    guest: 'text-gray-500 bg-gray-800/50',
+  };
+
+  // Load pending approvals for host/admin
+  useEffect(() => {
+    if (!isHost && myRole !== 'admin') return;
+    const loadApprovals = async () => {
+      const { data } = await supabase
+        .from('pending_approvals')
+        .select('*')
+        .eq('room_id', room.id)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at');
+      setPendingApprovals((data as PendingApproval[]) || []);
+    };
+    loadApprovals();
+    const ch = supabase.channel(`conf-approvals-${room.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_approvals', filter: `room_id=eq.${room.id}` }, loadApprovals)
+      .subscribe();
+    return () => { ch.unsubscribe(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.id, isHost, myRole]);
+
+  const approveUser = async (approvalId: string) => {
+    await supabase.from('pending_approvals').update({ status: 'approved', approved_by: currentUserId }).eq('id', approvalId);
+    setPendingApprovals(prev => prev.filter(a => a.id !== approvalId));
+  };
+
+  const rejectUser = async (approvalId: string) => {
+    await supabase.from('pending_approvals').update({ status: 'rejected', approved_by: currentUserId }).eq('id', approvalId);
+    setPendingApprovals(prev => prev.filter(a => a.id !== approvalId));
+  };
   const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseEntry[]>([]);
+
+  // Pending approvals (host/admin view)
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
+  // Kick confirmation state
+  const [kickConfirm, setKickConfirm] = useState<{ peerId: string; userId: string; displayName: string } | null>(null);
+  const [kickAndBan, setKickAndBan] = useState(false);
+  const [banReason, setBanReason] = useState('');
+  // Ban list visibility
+  const [showBanList, setShowBanList] = useState(false);
+  // Role change dropdown (peerId → open)
+  const [roleDropdown, setRoleDropdown] = useState<string | null>(null);
 
   const applyVideoConstraints = useCallback(async (quality: VideoQuality, dataSaver: boolean) => {
     const preset = VIDEO_QUALITY_PRESETS[dataSaver ? 'low' : quality];
@@ -597,6 +650,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           for (const p of peersRef.current.values()) p.pc.close();
           peersRef.current.clear();
           onLeave();
+
+        } else if (type === 'role_change') {
+          if (data.targetUserId === currentUserId) {
+            setMyRole(data.newRole as RoleType);
+            const labels: Record<string, string> = { admin: 'مدیر', moderator: 'ناظر', member: 'عضو', guest: 'مهمان', host: 'میزبان' };
+            toast(`نقش شما به "${labels[data.newRole] || data.newRole}" تغییر یافت`);
+          }
         }
       })();
     })
@@ -727,6 +787,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     localStream.getAudioTracks().forEach(t => { t.enabled = !n; });
     dispatch({ type: 'TOGGLE_MUTE' });
     broadcastState(n, isVideoOff, isHandRaised);
+    if (!n) { speakingSecsRef.current = 0; setSpeakingSecs(0); }
   };
 
   const toggleVideo = () => {
@@ -877,7 +938,24 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     toast.success(`${displayName} از جلسه خارج شد`);
   };
 
-  // Lower a specific participant's hand (host only)
+  const banParticipant = async (targetUserId: string, displayName: string, reason?: string) => {
+    await supabase.from('banned_users').upsert([{
+      room_id: room.id, user_id: targetUserId,
+      display_name: displayName, banned_by: currentUserId,
+      reason: reason || null,
+    }], { onConflict: 'room_id,user_id' });
+  };
+
+  const changeRole = async (targetPeerId: string, targetUserId: string, displayName: string, newRole: RoleType) => {
+    const { error } = await supabase.from('conference_participants')
+      .update({ role: newRole })
+      .eq('room_id', room.id)
+      .eq('user_id', targetUserId);
+    if (error) { toast.error('خطا در تغییر نقش'); return; }
+    sendSignal(null, 'role_change', { targetUserId, newRole });
+    setRoleDropdown(null);
+    toast.success(`نقش ${displayName} به "${ROLE_LABELS[newRole]}" تغییر یافت`);
+  };
   const lowerHand = (peerId: string) => {
     sendSignal(peerId, 'lower_hand', { fromHost: currentUserName });
     setHandRaiseQueue(q => q.filter(e => e.peerId !== peerId));
@@ -1273,6 +1351,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                     </div>
                   )}
 
+                  {/* Pending approvals — host/admin only */}
+                  <PendingApprovalsList
+                    approvals={pendingApprovals}
+                    onApprove={approveUser}
+                    onReject={rejectUser}
+                  />
+
                   {/* Host tools */}
                   {(checkPermission('mute_all') || checkPermission('kick')) && peers.size > 0 && (
                     <div className="p-2 bg-gray-800/60 rounded-xl space-y-1.5 border border-gray-700">
@@ -1285,25 +1370,39 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                           <Mic2 className="w-3.5 h-3.5" />قطع میکروفون همه
                         </button>
                       )}
+                      {checkPermission('ban') && (
+                        <button onClick={() => setShowBanList(v => !v)}
+                          className="w-full flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-red-900/30 text-gray-200 hover:text-red-300 rounded-lg text-xs transition-colors">
+                          <ShieldOff className="w-3.5 h-3.5" />
+                          {showBanList ? 'بستن لیست مسدودشدگان' : 'لیست مسدودشدگان'}
+                        </button>
+                      )}
+                      {showBanList && <BanList roomId={room.id} />}
                     </div>
                   )}
 
                   {/* Participant list */}
-                  {allTiles.map(t => (
-                    <div key={t.peerId} className="flex items-center gap-2 p-2 bg-gray-800 rounded-xl group">
+                  {allTiles.map(t => {
+                    const dbRole = t.isLocal ? myRole : ((participants.find(p => p.user_id === t.userId)?.role as RoleType) || 'member');
+                    const effectiveRole: RoleType = t.isHost ? 'host' : dbRole;
+                    const assignableRoles: RoleType[] = effectiveRole === 'host' ? [] :
+                      (checkPermission('manage_roles') ? (['admin','moderator','member','guest'] as RoleType[]).filter(r => r !== effectiveRole) : []);
+                    return (
+                    <div key={t.peerId} className="flex items-center gap-2 p-2 bg-gray-800 rounded-xl group relative">
                       <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
                         {t.displayName[0]?.toUpperCase() || '?'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{t.isLocal ? `${t.displayName} (شما)` : t.displayName}</p>
-                        <div className="flex items-center gap-1 mt-0.5">
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                           <QualityDot quality={t.networkQuality} />
-                          <span className="text-xs text-gray-500">{t.networkQuality}</span>
-                          {t.isHost && <span className="text-xs text-amber-400 mr-1">میزبان</span>}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${ROLE_COLORS[effectiveRole]}`}>
+                            {effectiveRole === 'host' && <Crown className="w-2.5 h-2.5 inline mr-0.5" />}
+                            {ROLE_LABELS[effectiveRole]}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {t.isHost && <Crown className="w-3.5 h-3.5 text-amber-400" />}
                         {t.isMuted && <MicOff className="w-3 h-3 text-red-400" />}
                         {t.isVideoOff && <VideoOff className="w-3 h-3 text-red-400" />}
                         {t.isHandRaised && <Hand className="w-3.5 h-3.5 text-yellow-400 animate-bounce" />}
@@ -1315,6 +1414,27 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                             <Hand className="w-3 h-3" />
                           </button>
                         )}
+                        {/* Role change */}
+                        {assignableRoles.length > 0 && !t.isLocal && !t.isHost && (
+                          <div className="relative">
+                            <button
+                              onClick={() => setRoleDropdown(d => d === t.peerId ? null : t.peerId)}
+                              title="تغییر نقش"
+                              className="p-1 rounded-lg hover:bg-blue-900/40 text-gray-600 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100">
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                            </button>
+                            {roleDropdown === t.peerId && (
+                              <div className="absolute left-0 top-6 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 py-1 min-w-[100px]">
+                                {assignableRoles.map(r => (
+                                  <button key={r} onClick={() => changeRole(t.peerId, t.userId, t.displayName, r)}
+                                    className={`w-full text-right px-3 py-1.5 text-xs hover:bg-gray-800 transition-colors ${ROLE_COLORS[r]}`}>
+                                    {ROLE_LABELS[r]}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {/* Transfer host */}
                         {checkPermission('transfer_host') && !t.isLocal && !t.isHost && (
                           <button onClick={() => transferHost(t.peerId, t.userId, t.displayName)}
@@ -1325,8 +1445,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                           </button>
                         )}
                         {/* Kick */}
-                        {checkPermission('kick') && !t.isLocal && (
-                          <button onClick={() => kickParticipant(t.peerId, t.displayName)}
+                        {checkPermission('kick') && !t.isLocal && !t.isHost && (
+                          <button onClick={() => { setKickConfirm({ peerId: t.peerId, userId: t.userId, displayName: t.displayName }); setKickAndBan(false); setBanReason(''); }}
                             title="خارج کردن از جلسه"
                             className="p-1 rounded-lg bg-red-900/0 hover:bg-red-900/40 text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
                             <UserX className="w-3.5 h-3.5" />
@@ -1342,7 +1462,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {participants.length > allTiles.length && (
                     <p className="text-xs text-gray-500 text-center py-1">{participants.length} نفر در جلسه</p>
                   )}
@@ -1393,6 +1514,60 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           </>
         )}
       </div>
+
+      {/* Kick / kick+ban confirmation modal */}
+      {kickConfirm && (
+        <div role="dialog" aria-modal="true" aria-label="اخراج از جلسه" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm space-y-4" dir="rtl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center flex-shrink-0">
+                <UserX className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold">اخراج کاربر</h3>
+                <p className="text-gray-400 text-sm">{kickConfirm.displayName}</p>
+              </div>
+            </div>
+            {checkPermission('ban') && (
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <div
+                  onClick={() => setKickAndBan(v => !v)}
+                  className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${kickAndBan ? 'bg-red-600 border-red-600' : 'border-gray-600 bg-gray-800 group-hover:border-red-500'}`}
+                >
+                  {kickAndBan && <Check className="w-2.5 h-2.5 text-white" />}
+                </div>
+                <span className="text-sm text-gray-300">و مسدود کردن این کاربر</span>
+              </label>
+            )}
+            {kickAndBan && (
+              <input
+                value={banReason}
+                onChange={e => setBanReason(e.target.value)}
+                placeholder="دلیل مسدودسازی (اختیاری)"
+                className="w-full p-2.5 bg-gray-800 border border-gray-700 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-600"
+              />
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (kickAndBan) await banParticipant(kickConfirm.userId, kickConfirm.displayName, banReason || undefined);
+                  await kickParticipant(kickConfirm.peerId, kickConfirm.displayName);
+                  setKickConfirm(null);
+                }}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                {kickAndBan ? 'اخراج و مسدودسازی' : 'اخراج'}
+              </button>
+              <button
+                onClick={() => setKickConfirm(null)}
+                className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm transition-colors"
+              >
+                انصراف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Host leave confirm */}
       {showLeaveConfirm && (
@@ -1497,8 +1672,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                 <button onClick={() => { togglePanel('participants'); setShowAllControls(false); }} title="شرکت‌کنندگان"
                   className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                   <Users className="w-5 h-5" />
-                  {sortedQueue.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full text-[9px] text-black flex items-center justify-center font-bold">{sortedQueue.length}</span>
+                  {(sortedQueue.length + pendingApprovals.length) > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full text-[9px] text-black flex items-center justify-center font-bold">{sortedQueue.length + pendingApprovals.length}</span>
                   )}
                 </button>
                 <button onClick={() => { togglePanel('polls'); setShowAllControls(false); }} title="نظرسنجی"
@@ -1565,8 +1740,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             <button onClick={() => togglePanel('participants')} aria-label="باز کردن لیست شرکت‌کنندگان" aria-pressed={sidePanel === 'participants'}
               className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <Users className="w-5 h-5" />
-              {sortedQueue.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full text-xs text-black flex items-center justify-center font-bold">{sortedQueue.length}</span>
+              {(sortedQueue.length + pendingApprovals.length) > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full text-xs text-black flex items-center justify-center font-bold">{sortedQueue.length + pendingApprovals.length}</span>
               )}
             </button>
             <button onClick={() => togglePanel('polls')} aria-label="باز کردن نظرسنجی" aria-pressed={sidePanel === 'polls'}

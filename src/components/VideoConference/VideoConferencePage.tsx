@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Video, Plus, LogIn, Copy, Check, Loader2, Mic, MicOff,
   VideoOff, Users, Clock, Crown, Link2, UserPlus, Send,
-  Search, X, ChevronRight, RefreshCw, Globe, Calendar, Lock, Unlock,
+  Search, X, ChevronRight, RefreshCw, Globe, Calendar, Lock, Unlock, Shield,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
+import { ApprovalWaitingGate } from './ApprovalGate';
 import type { ConferenceRoom } from './types';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
@@ -314,6 +315,10 @@ export function VideoConferencePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [requireApproval, setRequireApproval] = useState(false);
+
+  // Pre-join approval gate
+  const [waitingApproval, setWaitingApproval] = useState<{ room: ConferenceRoom; stream: MediaStream; isMuted: boolean; isVideoOff: boolean } | null>(null);
 
   const [joinCode, setJoinCode] = useState('');
   const [joining, setJoining] = useState(false);
@@ -477,6 +482,29 @@ export function VideoConferencePage() {
       toast.error('ظرفیت اتاق پر شده است'); joiningRef.current = false; return;
     }
 
+    // Ban check
+    const { data: ban } = await supabase
+      .from('banned_users')
+      .select('id')
+      .eq('room_id', room.id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (ban) {
+      toast.error('شما از این اتاق مسدود شده‌اید');
+      stream.getTracks().forEach(t => t.stop());
+      joiningRef.current = false;
+      setPreJoinRoom(null);
+      return;
+    }
+
+    // Require-approval gate (not for host)
+    if (room.require_approval && room.host_id !== userId) {
+      setWaitingApproval({ room, stream, isMuted, isVideoOff });
+      setPreJoinRoom(null);
+      joiningRef.current = false;
+      return;
+    }
+
     setJoiningRoomId(room.id);
     const peerId = `${userId}-${Date.now()}`;
     setMyPeerId(peerId);
@@ -523,9 +551,10 @@ export function VideoConferencePage() {
         name: createName.trim() || `جلسه ${moment().format('jYYYY/jMM/jDD HH:mm')}`,
         code, host_id: userId, status: 'active',
         password: null, waiting_room_enabled: false, is_locked: false,
+        require_approval: requireApproval,
       }]).select().single();
       if (error || !room) throw error;
-      setCreateName(''); setShowCreate(false);
+      setCreateName(''); setRequireApproval(false); setShowCreate(false);
       setPreJoinRoom(room);
     } catch (e: any) {
       toast.error('خطا در ایجاد اتاق: ' + (e.message || ''));
@@ -585,6 +614,41 @@ export function VideoConferencePage() {
         <p className="text-lg font-medium dark:text-white">برای استفاده از ویدیو کنفرانس وارد شوید</p>
         <p className="text-sm text-gray-500">لطفاً ابتدا در سامانه احراز هویت کنید</p>
       </div>
+    );
+  }
+
+  // ── Approval waiting gate ──────────────────────────────────────────────────
+  if (waitingApproval && userId) {
+    return (
+      <ApprovalWaitingGate
+        roomId={waitingApproval.room.id}
+        userId={userId}
+        displayName={userName}
+        onApproved={async () => {
+          const { room, stream, isMuted: mut, isVideoOff: voff } = waitingApproval;
+          setWaitingApproval(null);
+          const peerId = `${userId}-${Date.now()}`;
+          setMyPeerId(peerId);
+          localStreamRef.current?.getTracks().forEach(t => t.stop());
+          stream.getAudioTracks().forEach(t => { t.enabled = !mut; });
+          stream.getVideoTracks().forEach(t => { t.enabled = !voff; });
+          try {
+            const { error } = await supabase.from('conference_participants').upsert([{
+              room_id: room.id, user_id: userId, display_name: userName,
+              role: 'member', status: 'joined', joined_at: new Date().toISOString(),
+              is_muted: mut, is_video_off: voff, peer_id: peerId,
+            }], { onConflict: 'room_id,user_id' });
+            if (error) throw error;
+            setLocalStream(stream);
+            setActiveRoom({ ...room });
+          } catch (e: any) {
+            stream.getTracks().forEach(t => t.stop());
+            toast.error('خطا در ورود: ' + (e.message || ''));
+          }
+        }}
+        onRejected={() => { waitingApproval.stream.getTracks().forEach(t => t.stop()); setWaitingApproval(null); }}
+        onCancel={() => { waitingApproval.stream.getTracks().forEach(t => t.stop()); setWaitingApproval(null); }}
+      />
     );
   }
 
@@ -683,6 +747,18 @@ export function VideoConferencePage() {
                   placeholder="نام جلسه (اختیاری)"
                   className="w-full p-2.5 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-sm"
                 />
+                <label className="flex items-center gap-2 cursor-pointer group select-none">
+                  <div
+                    onClick={() => setRequireApproval(v => !v)}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${requireApproval ? 'bg-teal-600 border-teal-600' : 'border-gray-400 dark:border-gray-500 group-hover:border-teal-500'}`}
+                  >
+                    {requireApproval && <Check className="w-2.5 h-2.5 text-white" />}
+                  </div>
+                  <span className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5 text-teal-500" />
+                    تأیید میزبان برای ورود
+                  </span>
+                </label>
                 <div className="flex gap-2">
                   <button
                     type="submit"
