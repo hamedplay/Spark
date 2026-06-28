@@ -20,6 +20,7 @@ import { Whiteboard } from './Whiteboard';
 import { PollPanel } from './PollPanel';
 import { SettingsPanel, VIDEO_QUALITY_PRESETS } from './SettingsPanel';
 import { ChatPanel } from './ChatPanel';
+import { QuickReactions } from './QuickReactions';
 import type { VideoQuality } from './SettingsPanel';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -112,6 +113,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [peers, setPeers] = useState<Map<string, PeerConnection>>(new Map());
   const [messages, setMessages] = useState<ConferenceMessage[]>([]);
   const [reactions, setReactions] = useState<Reaction[]>([]);
+  // userId → emoji, cleared after 3s
+  const [tileReactions, setTileReactions] = useState<Map<string, string>>(new Map());
   const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
     try { return (localStorage.getItem(`conf_layout_${room.id}`) as LayoutMode) || 'gallery'; } catch { return 'gallery'; }
@@ -395,6 +398,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const getPCRef = useRef(getPC);
   const flushICERef = useRef(flushICE);
   const stopScreenShareRef = useRef<() => void>(() => {});
+  const showTileReactionRef = useRef<(userId: string, emoji: string) => void>(() => {});
   makeOfferRef.current = makeOffer;
   sendSignalRef.current = sendSignal;
   getPCRef.current = getPC;
@@ -492,6 +496,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           const r: Reaction = { ...data, x: Math.random() * 80 + 10, y: Math.random() * 60 + 20, createdAt: Date.now() };
           setReactions(prev => [...prev, r]);
           setTimeout(() => setReactions(prev => prev.filter(x => x.id !== r.id)), 3000);
+          showTileReactionRef.current(data.userId, data.emoji);
 
         } else if (type === 'host_mute_all') {
           localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = false; });
@@ -721,12 +726,25 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   stopScreenShareRef.current = stopScreenShare;
 
+  const showTileReaction = useCallback((userId: string, emoji: string) => {
+    setTileReactions(prev => new Map(prev).set(userId, emoji));
+    setTimeout(() => {
+      setTileReactions(prev => {
+        const next = new Map(prev);
+        next.delete(userId);
+        return next;
+      });
+    }, 3000);
+  }, []);
+  showTileReactionRef.current = showTileReaction;
+
   const sendEmoji = (emoji: string) => {
     setShowEmojiPicker(false);
     const r: Reaction = { id: crypto.randomUUID(), userId: currentUserId, displayName: currentUserName, emoji, x: 0, y: 0, createdAt: Date.now() };
     sendSignal(null, 'reaction', r);
     setReactions(prev => [...prev, { ...r, x: Math.random() * 80 + 10, y: Math.random() * 60 + 20 }]);
     setTimeout(() => setReactions(prev => prev.filter(x => x.id !== r.id)), 3000);
+    showTileReaction(currentUserId, emoji);
   };
 
 
@@ -866,6 +884,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     <div className={`flex flex-col bg-gray-950 text-white select-none ${isFullscreen ? 'fixed inset-0 z-[9999]' : 'h-full'}`} dir="rtl">
       <style>{`
         @keyframes float-up{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-120px) scale(1.5)}}
+        @keyframes tile-reaction{0%{opacity:0;transform:scale(0.5)}15%{opacity:1;transform:scale(1.2)}30%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(0.8)}}
         .conf-panel-mobile{transition:transform 0.3s cubic-bezier(.4,0,.2,1)}
       `}</style>
 
@@ -919,7 +938,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       {/* Main area */}
       <div className="flex flex-1 overflow-hidden min-h-0 relative">
         {/* Video area */}
-        <div className="flex-1 flex flex-col overflow-hidden p-2 gap-2 min-w-0">
+        <div className="flex-1 flex flex-col overflow-hidden p-2 gap-2 min-w-0 relative">
           {(() => {
             // Compute ordered tiles — respect saved drag order, fill in any new peers at the end
             const rawTiles = allTiles;
@@ -962,13 +981,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                 <div className="flex flex-col flex-1 gap-2 min-h-0">
                   <div className="flex-1 min-h-0">
                     {orderedTiles.filter(t => t.peerId === pinnedPeerId).map(t => (
-                      <VideoTile key={t.peerId} {...t} isPinned isHost={t.isHost} onPin={() => setPinnedPeerId(null)} />
+                      <VideoTile key={t.peerId} {...t} isPinned isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(null)} />
                     ))}
                   </div>
                   <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
                     {orderedTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
                       <div key={t.peerId} className="w-28 sm:w-32 flex-shrink-0" {...makeDraggable(t.peerId)}>
-                        <VideoTile {...t} isPinned={false} isHost={t.isHost} onPin={() => setPinnedPeerId(t.peerId)} small />
+                        <VideoTile {...t} isPinned={false} isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(t.peerId)} small />
                       </div>
                     ))}
                   </div>
@@ -992,6 +1011,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       <VideoTile {...t}
                         isPinned={pinnedPeerId === t.peerId}
                         isHost={t.isHost}
+                        activeReaction={tileReactions.get(t.userId)}
                         onPin={() => setPinnedPeerId(p => p === t.peerId ? null : t.peerId)} />
                     </div>
                   ))}
@@ -1008,6 +1028,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                     <VideoTile {...speaker}
                       isPinned={false}
                       isHost={speaker.isHost}
+                      activeReaction={tileReactions.get(speaker.userId)}
                       onPin={() => setPinnedPeerId(speaker.peerId)} />
                   </div>
                   {rest.length > 0 && (
@@ -1017,8 +1038,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                           <VideoTile {...t}
                             isPinned={false}
                             isHost={t.isHost}
+                            activeReaction={tileReactions.get(t.userId)}
                             onPin={() => {
-                              // Promote to speaker: swap with index 0
                               setTileOrder(prev => {
                                 const ids = orderedTiles.map(x => x.peerId);
                                 const si = ids.indexOf(t.peerId);
@@ -1048,6 +1069,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       <VideoTile {...t}
                         isPinned={false}
                         isHost={t.isHost}
+                        activeReaction={tileReactions.get(t.userId)}
                         onPin={() => {
                           setTileOrder(prev => {
                             const ids = orderedTiles.map(x => x.peerId);
@@ -1067,11 +1089,19 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   <VideoTile {...main}
                     isPinned={false}
                     isHost={main.isHost}
+                    activeReaction={tileReactions.get(main.userId)}
                     onPin={() => {}} />
                 </div>
               </div>
             );
           })()}
+
+          {/* Quick reactions bar — fixed bottom-center of video area */}
+          {room.allow_reactions && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50">
+              <QuickReactions onSend={sendEmoji} />
+            </div>
+          )}
         </div>
 
         {/* Side panel */}

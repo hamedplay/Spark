@@ -31,6 +31,7 @@ interface VideoTileProps {
   audioLevel?: number;
   avatarUrl?: string;
   pingMs?: number;
+  activeReaction?: string | null;
   onPin: () => void;
   small?: boolean;
 }
@@ -92,7 +93,7 @@ function useAudioLevel(stream: MediaStream | null, isMuted: boolean): number {
 
 export const VideoTile = memo(function VideoTile({
   stream, displayName, isMuted, isVideoOff, isHandRaised, isLocal, isPinned,
-  isHost, isScreenSharing, networkQuality, avatarUrl, pingMs, onPin, small = false,
+  isHost, isScreenSharing, networkQuality, avatarUrl, pingMs, activeReaction, onPin, small = false,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [needsPlayGesture, setNeedsPlayGesture] = useState(false);
@@ -224,6 +225,13 @@ export const VideoTile = memo(function VideoTile({
         >
           <Pin className="w-3 h-3 text-white" />
         </button>
+      )}
+
+      {activeReaction && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+          style={{ animation: 'tile-reaction 3s ease-out forwards' }}>
+          <span className={`${small ? 'text-4xl' : 'text-6xl'} drop-shadow-lg`}>{activeReaction}</span>
+        </div>
       )}
 
       <div className="absolute bottom-0 left-0 right-0 px-2.5 py-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
