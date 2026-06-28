@@ -854,7 +854,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               {sidePanel === 'polls' && <PollPanel roomId={room.id} userId={currentUserId} isHost={isHost} />}
               {sidePanel === 'whiteboard' && (
                 <div className="flex-1 overflow-hidden min-h-0">
-                  <Whiteboard roomId={room.id} userId={currentUserId} />
+                  <Whiteboard roomId={room.id} userId={currentUserId} isHost={isHost} />
                 </div>
               )}
             </div>
