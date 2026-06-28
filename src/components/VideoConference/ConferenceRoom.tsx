@@ -20,7 +20,6 @@ import { Whiteboard } from './Whiteboard';
 import { PollPanel } from './PollPanel';
 import { SettingsPanel, VIDEO_QUALITY_PRESETS } from './SettingsPanel';
 import { ChatPanel } from './ChatPanel';
-import { QuickReactions } from './QuickReactions';
 import type { VideoQuality } from './SettingsPanel';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -395,18 +394,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       data,
     };
     channelRef.current?.send({ type: 'broadcast', event: 'signal', payload });
-    const persistedTypes = ['offer', 'answer', 'ice', 'renegotiate'];
-    if (persistedTypes.includes(type) && room?.id && myPeerIdRef.current && currentUserId && toPeerId) {
-      supabase.from('conference_signals').insert({
-        room_id: room.id,
-        from_peer_id: myPeerIdRef.current,
-        from_user_id: currentUserId,
-        from_display_name: currentUserName,
-        to_peer_id: toPeerId,
-        signal_type: type,
-        payload: data,
-      }).then(({ error }) => { if (error) console.error('conference_signals insert error:', error); });
-    }
   }, [currentUserId, currentUserName, room.id]);
 
   const buildPC = useCallback((remotePeerId: string, remoteUserId: string, remoteDisplayName: string): RTCPeerConnection => {
@@ -1196,12 +1183,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             );
           })()}
 
-          {/* Quick reactions bar — fixed bottom-center of video area */}
-          {room.allow_reactions && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50">
-              <QuickReactions onSend={sendEmoji} />
-            </div>
-          )}
         </div>
 
         {/* Side panel */}
