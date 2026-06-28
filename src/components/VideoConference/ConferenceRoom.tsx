@@ -268,11 +268,16 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     try {
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
       if (videoTrack) {
-        await videoTrack.applyConstraints({
-          width: { ideal: preset.width },
-          height: { ideal: preset.height },
-          frameRate: { ideal: frameRate },
-        });
+        try {
+          await videoTrack.applyConstraints({
+            width: { ideal: preset.width },
+            height: { ideal: preset.height },
+            frameRate: { ideal: frameRate },
+          });
+        } catch {
+          // Some mobile browsers reject full constraints — retry with only frameRate
+          await videoTrack.applyConstraints({ frameRate: { ideal: frameRate } }).catch(() => {});
+        }
       }
       toast.success('کیفیت ویدیو تغییر کرد');
     } catch {
@@ -1106,7 +1111,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 rounded-lg text-xs flex-shrink-0">
-            <Users className="w-3.5 h-3.5 text-teal-400" /><span>{participants.length || allTiles.length}</span>
+            <Users className="w-3.5 h-3.5 text-teal-400" /><span>{allTiles.length}</span>
           </div>
         </div>
       </div>
@@ -1162,7 +1167,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   </div>
                   <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
                     {orderedTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
-                      <div key={t.peerId} className="w-28 sm:w-32 flex-shrink-0" {...makeDraggable(t.peerId)}>
+                      <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0" {...makeDraggable(t.peerId)}>
                         <VideoTile {...t} isPinned={false} isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(t.peerId)} small />
                       </div>
                     ))}
@@ -1210,7 +1215,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   {rest.length > 0 && (
                     <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
                       {rest.map(t => (
-                        <div key={t.peerId} className="w-28 sm:w-36 flex-shrink-0" {...makeDraggable(t.peerId)}>
+                        <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0" {...makeDraggable(t.peerId)}>
                           <VideoTile {...t}
                             isPinned={false}
                             isHost={t.isHost}
@@ -1238,10 +1243,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             // ── Sidebar ────────────────────────────────────────────────────────
             const [main, ...others] = orderedTiles;
             return (
-              <div className="flex flex-1 gap-2 min-h-0">
-                <div className="w-28 sm:w-36 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
+              <div className="flex flex-1 gap-2 min-h-0 flex-row-reverse">
+                <div className="w-32 sm:w-44 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
                   {others.map(t => (
-                    <div key={t.peerId} {...makeDraggable(t.peerId)}>
+                    <div key={t.peerId} className="flex-shrink-0" {...makeDraggable(t.peerId)}>
                       <VideoTile {...t}
                         isPinned={false}
                         isHost={t.isHost}
