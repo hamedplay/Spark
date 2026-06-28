@@ -11,6 +11,7 @@ export interface ConferenceRoom {
   allow_reactions: boolean;
   allow_screen_share: boolean;
   allow_chat: boolean;
+  chat_enabled: boolean;
   record_enabled: boolean;
   meeting_id: string | null;
   created_at: string;
@@ -41,6 +42,7 @@ export interface ConferenceMessage {
   user_id: string;
   display_name: string;
   body: string;
+  image_url?: string | null;
   created_at: string;
   role?: 'admin' | 'moderator' | 'user' | 'system';
   reply_to_id?: string | null;

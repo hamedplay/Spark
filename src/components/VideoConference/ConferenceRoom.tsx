@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useReducer } from 'rea
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users,
   Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2,
-  Crown, Pin, X, Send, Copy, Check,
+  Crown, Pin, X, Copy, Check,
   Smile, BarChart2,
   PenTool, Volume2, VolumeX, Activity, UserPlus,
   ShieldAlert, UserX, Mic2, ChevronUp, ChevronDown, ArrowRightLeft,
@@ -19,6 +19,7 @@ import { VideoTile, QualityDot } from './VideoTile';
 import { Whiteboard } from './Whiteboard';
 import { PollPanel } from './PollPanel';
 import { SettingsPanel, VIDEO_QUALITY_PRESETS } from './SettingsPanel';
+import { ChatPanel } from './ChatPanel';
 import type { VideoQuality } from './SettingsPanel';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -110,7 +111,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // ── Other state ────────────────────────────────────────────────────────────
   const [peers, setPeers] = useState<Map<string, PeerConnection>>(new Map());
   const [messages, setMessages] = useState<ConferenceMessage[]>([]);
-  const [messageInput, setMessageInput] = useState('');
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
@@ -139,6 +139,9 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [hostId, setHostId] = useState(room.host_id);
   const isHost = hostId === currentUserId;
 
+  // Runtime chat toggle — starts from room setting, updated via DB subscription
+  const [chatEnabled, setChatEnabled] = useState(room.chat_enabled ?? true);
+
   // Role of the current user — fetched once on mount and updated on transfer
   const [myRole, setMyRole] = useState<RoleType>(room.host_id === currentUserId ? 'host' : 'member');
 
@@ -162,6 +165,17 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     const effectiveRole: RoleType = hostId === currentUserId ? 'host' : myRole;
     return ROLE_PERMISSIONS[effectiveRole]?.has(perm) ?? false;
   };
+
+  // Stable wrapper around sendSignalRef so ChatPanel never holds a stale closure
+  const sendSignalStable = useCallback((to: string | null, type: string, data: object) => {
+    sendSignalRef.current(to, type, data);
+  }, []);
+
+  const toggleChatEnabled = useCallback(async () => {
+    const next = !chatEnabled;
+    setChatEnabled(next);
+    await supabase.from('conference_rooms').update({ chat_enabled: next }).eq('id', room.id);
+  }, [chatEnabled, room.id]);
 
   // Hand raise queue (sorted by raise time)
   const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseEntry[]>([]);
@@ -196,7 +210,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const peersRef = useRef<Map<string, PeerConnection>>(new Map());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const iceCandidateQueue = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
   const myPeerIdRef = useRef(myPeerId);
@@ -554,6 +567,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         if (row.host_id && row.host_id !== room.host_id) {
           setHostId(row.host_id as string);
         }
+        // Sync runtime chat toggle
+        if (typeof row.chat_enabled === 'boolean') {
+          setChatEnabled(row.chat_enabled);
+        }
       })
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'room_mod_actions',
@@ -595,7 +612,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     return () => { ch.unsubscribe(); };
   }, [room.id]);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   // Quality
   useEffect(() => {
@@ -713,17 +729,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     setTimeout(() => setReactions(prev => prev.filter(x => x.id !== r.id)), 3000);
   };
 
-  const sendMessage = async () => {
-    const body = messageInput.trim();
-    if (!body) return;
-    const tempId = crypto.randomUUID();
-    const msg: ConferenceMessage = { id: tempId, room_id: room.id, user_id: currentUserId, display_name: currentUserName, body, created_at: new Date().toISOString() };
-    sendSignal(null, 'chat', msg);
-    setMessages(prev => [...prev, msg]);
-    setMessageInput('');
-    const { error } = await supabase.from('conference_messages').insert([msg]);
-    if (error) console.error('sendMessage DB error:', error);
-  };
 
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -1121,32 +1126,16 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               </div>
 
               {sidePanel === 'chat' && (
-                <>
-                  <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
-                    {messages.map(m => (
-                      <div key={m.id}>
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className={`text-xs font-semibold ${m.user_id === currentUserId ? 'text-teal-400' : 'text-amber-400'}`}>
-                            {m.user_id === currentUserId ? 'شما' : m.display_name}
-                          </span>
-                          <span className="text-gray-600 text-xs">{moment(m.created_at).format('HH:mm')}</span>
-                        </div>
-                        <div className={`text-sm rounded-xl px-3 py-2 break-words ${m.user_id === currentUserId ? 'bg-teal-900/50 text-teal-100' : 'bg-gray-800 text-gray-200'}`}>
-                          {m.body}
-                        </div>
-                      </div>
-                    ))}
-                    <div ref={chatEndRef} />
-                  </div>
-                  <div className="p-2 border-t border-gray-800 flex gap-2">
-                    <input value={messageInput} onChange={e => setMessageInput(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                      placeholder="پیام..." className="flex-1 bg-gray-800 text-white rounded-xl px-3 py-2 text-sm outline-none placeholder-gray-500 min-w-0" />
-                    <button onClick={sendMessage} aria-label="ارسال پیام" className="p-2 bg-teal-600 hover:bg-teal-500 rounded-xl transition-colors flex-shrink-0">
-                      <Send className="w-4 h-4" />
-                    </button>
-                  </div>
-                </>
+                <ChatPanel
+                  roomId={room.id}
+                  currentUserId={currentUserId}
+                  currentUserName={currentUserName}
+                  messages={messages}
+                  chatEnabled={chatEnabled}
+                  canToggleChat={checkPermission('toggle_chat')}
+                  onToggleChat={toggleChatEnabled}
+                  sendSignal={sendSignalStable}
+                />
               )}
 
               {sidePanel === 'participants' && (
