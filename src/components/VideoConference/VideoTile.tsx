@@ -20,6 +20,7 @@ interface VideoTileProps {
   isHost: boolean;
   isScreenSharing?: boolean;
   networkQuality: PeerConnection['networkQuality'];
+  /** @deprecated audioLevel is measured internally via WebAudioContext; this prop is ignored */
   audioLevel?: number;
   onPin: () => void;
   small?: boolean;
@@ -32,13 +33,65 @@ function safeInitials(name: string): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
+// Measure audio level from a MediaStream using WebAudio AnalyserNode.
+// Returns a value 0–1. Only runs when stream has audio tracks and isMuted=false.
+function useAudioLevel(stream: MediaStream | null, isMuted: boolean): number {
+  const [level, setLevel] = useState(0);
+  const rafRef = useRef<number>(0);
+  const ctxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    if (!stream || isMuted) {
+      setLevel(0);
+      return;
+    }
+    if (!stream.getAudioTracks().length) return;
+
+    let ctx: AudioContext;
+    try {
+      ctx = new AudioContext();
+    } catch {
+      return; // WebAudio not available (e.g., headless environment)
+    }
+    ctxRef.current = ctx;
+
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.8;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    const tick = () => {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / (data.length * 255);
+      setLevel(avg);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      ctx.close().catch(() => {});
+      ctxRef.current = null;
+      setLevel(0);
+    };
+  }, [stream, isMuted]);
+
+  return level;
+}
+
 export const VideoTile = memo(function VideoTile({
   stream, displayName, isMuted, isVideoOff, isHandRaised, isLocal, isPinned,
-  isHost, isScreenSharing, networkQuality, audioLevel = 0, onPin, small = false,
+  isHost, isScreenSharing, networkQuality, onPin, small = false,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // fix #1: autoplay rejection (Safari/iOS)
+  // fix: autoplay rejection (Safari/iOS)
   const [needsPlayGesture, setNeedsPlayGesture] = useState(false);
+  const [playError, setPlayError] = useState(false);
+
+  // Real audio level measurement — works for both local and remote streams
+  const audioLevel = useAudioLevel(stream, isMuted);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -47,11 +100,12 @@ export const VideoTile = memo(function VideoTile({
     el.srcObject = stream;
     el.play().then(() => {
       setNeedsPlayGesture(false);
+      setPlayError(false);
     }).catch((err: Error) => {
       if (err.name === 'NotAllowedError') setNeedsPlayGesture(true);
     });
 
-    // fix #3: handle track changes (addtrack + removetrack)
+    // fix: handle track changes (addtrack + removetrack)
     const syncStream = () => {
       el.srcObject = null;
       el.srcObject = stream;
@@ -65,7 +119,7 @@ export const VideoTile = memo(function VideoTile({
     return () => {
       stream.removeEventListener('addtrack', syncStream);
       stream.removeEventListener('removetrack', syncStream);
-      // fix #2: clear srcObject on cleanup to release media resources
+      // fix: clear srcObject on cleanup to release media resources
       el.srcObject = null;
     };
   }, [stream]);
@@ -80,17 +134,20 @@ export const VideoTile = memo(function VideoTile({
   }, [isVideoOff, stream]);
 
   const handlePlayGesture = () => {
-    videoRef.current?.play().then(() => setNeedsPlayGesture(false)).catch(() => {});
+    setPlayError(false);
+    videoRef.current?.play()
+      .then(() => { setNeedsPlayGesture(false); setPlayError(false); })
+      .catch(() => { setPlayError(true); });
   };
 
   const initials = safeInitials(displayName);
   const ring = isHandRaised ? 'ring-2 ring-yellow-400' : isPinned ? 'ring-2 ring-teal-400' : '';
 
-  // fix #8: only mirror local camera, not screen share
+  // fix: only mirror local camera, not screen share
   const shouldMirror = isLocal && !isScreenSharing;
 
-  // active speaker glow when audioLevel > threshold
-  const speakerGlow = !isMuted && audioLevel > 0.15 ? 'ring-2 ring-green-400' : '';
+  // active speaker glow — driven by real WebAudio measurement
+  const speakerGlow = !isMuted && audioLevel > 0.05 ? 'ring-2 ring-green-400' : '';
   const ringClass = ring || speakerGlow;
 
   const showVideo = !isVideoOff && stream;
@@ -99,7 +156,7 @@ export const VideoTile = memo(function VideoTile({
     <div
       className={`relative bg-gray-900 rounded-2xl overflow-hidden aspect-video ${ringClass}`}
       role="group"
-      aria-label={`تایل ویدیو ${isLocal ? `(شما) ${displayName}` : displayName}`}
+      aria-label={isLocal ? `${displayName} (شما)` : displayName}
     >
       {/* Video element — always mounted so srcObject assignment works */}
       <video
@@ -119,7 +176,7 @@ export const VideoTile = memo(function VideoTile({
         </div>
       )}
 
-      {/* fix #1: autoplay blocked overlay */}
+      {/* fix: autoplay blocked overlay — shows error feedback if retry also fails */}
       {needsPlayGesture && (
         <button
           onClick={handlePlayGesture}
@@ -129,7 +186,9 @@ export const VideoTile = memo(function VideoTile({
           <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
             <Play className="w-6 h-6 text-white" />
           </div>
-          <span className="text-white text-xs">کلیک برای پخش</span>
+          <span className="text-white text-xs">
+            {playError ? 'پخش ممکن نیست — لطفاً مرورگر را بررسی کنید' : 'کلیک برای پخش'}
+          </span>
         </button>
       )}
 
