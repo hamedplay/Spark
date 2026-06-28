@@ -355,36 +355,6 @@ export function VideoConferencePage() {
     };
   }, []);
 
-  // fix: auth guard — set notLoggedIn instead of infinite spinner
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setNotLoggedIn(true); setLoading(false); return; }
-        setUserId(user.id);
-        const { data: p } = await supabase.from('profiles').select('full_name, email').eq('user_id', user.id).maybeSingle();
-        setUserName(p?.full_name || p?.email || 'کاربر');
-        await fetchRooms(user.id);
-      } catch (e) {
-        console.error('init error:', e);
-        toast.error('خطا در بارگذاری اطلاعات');
-        setLoading(false);
-      }
-    })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Realtime: auto-refresh rooms list when any room changes (no manual refresh needed)
-  useEffect(() => {
-    if (!userId) return;
-    const ch = supabase.channel('conf-rooms-lobby')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_rooms' }, () => {
-        if (!activeRoomRef.current) fetchRooms(userIdRef.current || undefined);
-      })
-      .subscribe();
-    return () => { ch.unsubscribe(); };
-  }, [userId, fetchRooms]);
-
   const isRoomActive = (room: any): boolean => {
     if (room.status === 'ended') return false;
     const now = new Date();
@@ -409,6 +379,7 @@ export function VideoConferencePage() {
   };
 
   // fix: N+1 removed — single bulk count query instead of one per room
+  // IMPORTANT: declared before any useEffect that includes it in a dep array to avoid TDZ
   const fetchRooms = useCallback(async (uid?: string) => {
     setLoading(true);
     const targetUserId = uid || userId;
@@ -460,6 +431,36 @@ export function VideoConferencePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  // fix: auth guard — set notLoggedIn instead of infinite spinner
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setNotLoggedIn(true); setLoading(false); return; }
+        setUserId(user.id);
+        const { data: p } = await supabase.from('profiles').select('full_name, email').eq('user_id', user.id).maybeSingle();
+        setUserName(p?.full_name || p?.email || 'کاربر');
+        await fetchRooms(user.id);
+      } catch (e) {
+        console.error('init error:', e);
+        toast.error('خطا در بارگذاری اطلاعات');
+        setLoading(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Realtime: auto-refresh rooms list when any room changes (no manual refresh needed)
+  useEffect(() => {
+    if (!userId) return;
+    const ch = supabase.channel('conf-rooms-lobby')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_rooms' }, () => {
+        if (!activeRoomRef.current) fetchRooms(userIdRef.current || undefined);
+      })
+      .subscribe();
+    return () => { ch.unsubscribe(); };
+  }, [userId, fetchRooms]);
 
   // fix: doJoin with full validation + stream race condition guard
   const doJoin = async (room: ConferenceRoom) => {
