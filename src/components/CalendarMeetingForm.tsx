@@ -513,7 +513,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       };
 
       const allParticipantIds = [...selectedParticipants.map(p=>p.id), ...selectedNotifyUsers.map(u=>u.id)];
-      const meetingDateStr = scheduleDate ? `${scheduleDate.jd}/${scheduleDate.jm}/${scheduleDate.jy}` : '';
+      const meetingDateStr = scheduleDate ? `${scheduleDate.jy}/${String(scheduleDate.jm).padStart(2, '0')}/${String(scheduleDate.jd).padStart(2, '0')}` : '';
       const meetingTimeStr = startTime && endTime ? `${startTime}-${endTime}` : startTime || '';
       const smsPlaceholders: Record<string, string> = {
         meeting_subject: subject,

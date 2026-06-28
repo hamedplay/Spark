@@ -485,7 +485,7 @@ export function CalendarPage({
     if (gregDateStr) {
       const d = new Date(gregDateStr + 'T00:00:00');
       const j = toJalaali(d);
-      meetingDateStr = `${j.jd}/${j.jm}/${j.jy}`;
+      meetingDateStr = `${j.jy}/${String(j.jm).padStart(2, '0')}/${String(j.jd).padStart(2, '0')}`;
     }
     const meetingTimeStr = m.start_time && m.end_time ? `${m.start_time} - ${m.end_time}` : m.start_time || '';
     const senderName = allProfiles.find(p => p.user_id === currentUserId)?.full_name || '';
