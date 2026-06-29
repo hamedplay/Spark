@@ -76,7 +76,7 @@ function App() {
         .eq('key', 'spark_visible')
         .maybeSingle()
         .then(({ data }) => {
-          setSparkVisible(data ? data.value !== 'false' : true);
+          setSparkVisible(data ? data.value === 'true' : false);
         })
         .catch(() => {});
     };
