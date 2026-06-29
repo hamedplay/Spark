@@ -1,3 +1,13 @@
+export interface AgendaItem {
+  id: string;
+  meeting_id: string;
+  title: string;
+  presenter: string | null;
+  duration_minutes: number | null;
+  sort_order: number;
+  created_at?: string;
+}
+
 export interface Meeting {
   id: string;
   subject: string;
