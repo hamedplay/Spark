@@ -50,10 +50,30 @@ function boardReducer(s: BoardState, a: BoardAction): BoardState {
 // ─── Drawing helpers ──────────────────────────────────────────────────────────
 const COLORS = ['#000000', '#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7'];
 const WIDTHS = [2, 4, 8, 14, 20];
+// محدودیت‌های اعتبارسنجی برای جلوگیری از DoS رندر
+const MAX_POINTS = 2000;
+const MAX_TEXT_LEN = 500;
+const VALID_TOOLS = new Set(['pen', 'eraser', 'line', 'rect', 'circle', 'arrow', 'text']);
+const VALID_COLORS = new Set(COLORS);
+const MIN_WIDTH = 1;
+const MAX_WIDTH = 40;
 
 function safeUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// اعتبارسنجی stroke دریافتی از ریموت — جلوگیری از DoS یا تزریق داده مخرب
+function validateStroke(data: unknown): WhiteboardStroke | null {
+  if (!data || typeof data !== 'object') return null;
+  const s = data as Record<string, unknown>;
+  if (typeof s.id !== 'string' || typeof s.userId !== 'string') return null;
+  if (!VALID_TOOLS.has(s.tool as string)) return null;
+  if (!Array.isArray(s.points) || s.points.length > MAX_POINTS) return null;
+  if (typeof s.color !== 'string' || !VALID_COLORS.has(s.color)) return null;
+  if (typeof s.width !== 'number' || s.width < MIN_WIDTH || s.width > MAX_WIDTH) return null;
+  if (s.text !== undefined && (typeof s.text !== 'string' || s.text.length > MAX_TEXT_LEN)) return null;
+  return s as unknown as WhiteboardStroke;
 }
 
 function drawArrowHead(ctx: CanvasRenderingContext2D, from: Point, to: Point, width: number) {
@@ -142,6 +162,8 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   const [textPos, setTextPos] = useState<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
   const [textInput, setTextInput] = useState('');
   const textInputRef = useRef<HTMLInputElement>(null);
+  // جلوگیری از درج دوتایی متن (Enter + onBlur هر دو commitText صدا می‌زنند)
+  const committedRef = useRef(false);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const toolRef = useRef(tool); toolRef.current = tool;
@@ -171,16 +193,20 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   // ─── Load + realtime ───────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
+      // user_id را هم select می‌کنیم تا echo-suppression سروری باشد، نه از stroke_data
       const { data, error } = await supabase
-        .from('conference_whiteboard').select('id, stroke_data').eq('room_id', roomId).order('created_at');
+        .from('conference_whiteboard')
+        .select('id, stroke_data, user_id')
+        .eq('room_id', roomId)
+        .order('created_at');
       if (error) { console.error('whiteboard load error:', error); return; }
       if (data) dispatch({
         type: 'LOAD',
-        rows: data.map(r => ({
-          stroke: r.stroke_data as WhiteboardStroke,
-          dbRowId: r.id,
-          isOwn: (r.stroke_data as WhiteboardStroke).userId === userId,
-        })),
+        rows: data.map(r => {
+          const stroke = validateStroke(r.stroke_data);
+          if (!stroke) return null;
+          return { stroke, dbRowId: r.id, isOwn: r.user_id === userId };
+        }).filter((e): e is BoardEntry => e !== null),
       });
     };
     load();
@@ -189,8 +215,10 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'conference_whiteboard', filter: `room_id=eq.${roomId}` },
         ({ new: row }) => {
-          if (row.stroke_data?.userId !== userId)
-            dispatch({ type: 'ADD_REMOTE', stroke: row.stroke_data as WhiteboardStroke });
+          // echo-suppression: بر اساس ستون واقعی user_id، نه stroke_data.userId
+          if (row.user_id === userId) return;
+          const stroke = validateStroke(row.stroke_data);
+          if (stroke) dispatch({ type: 'ADD_REMOTE', stroke });
         })
       .on('postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'conference_whiteboard', filter: `room_id=eq.${roomId}` },
@@ -205,11 +233,12 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
       .subscribe();
 
     channelRef.current = ch;
-    return () => { ch.unsubscribe(); channelRef.current = null; };
+    return () => { supabase.removeChannel(ch); channelRef.current = null; };
   }, [roomId, userId, clearOverlay]);
 
   // ─── Persist own stroke ────────────────────────────────────────────────────
   const saveStroke = useCallback(async (stroke: WhiteboardStroke) => {
+    // رندر بلافاصله روی canvas اصلی (optimistic)
     renderStroke(mainRef.current!.getContext('2d')!, stroke);
     const { data, error } = await supabase
       .from('conference_whiteboard')
@@ -259,6 +288,7 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
     if (toolRef.current === 'text') {
       const pos = getPos(clientX, clientY);
       const cr = containerRef.current!.getBoundingClientRect();
+      committedRef.current = false;
       setTextPos({ sx: clientX - cr.left, sy: clientY - cr.top, cx: pos.x, cy: pos.y });
       setTextInput('');
       setTimeout(() => textInputRef.current?.focus(), 30);
@@ -315,7 +345,16 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
     await saveStroke(stroke);
   };
 
+  // وقتی ماوس از canvas خارج می‌شود، stroke را finalize می‌کنیم (نه discard)
+  const onLeave = (clientX: number, clientY: number) => {
+    if (!drawing.current) return;
+    onUp(clientX, clientY);
+  };
+
   const commitText = async () => {
+    // guard: از درج دوتایی جلوگیری می‌کنیم (Enter + onBlur)
+    if (committedRef.current) return;
+    committedRef.current = true;
     if (!textInput.trim() || !textPos) { setTextPos(null); return; }
     const stroke: WhiteboardStroke = {
       id: safeUUID(), userId,
@@ -382,11 +421,11 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
 
       {/* Canvas */}
       <div ref={containerRef} className="relative flex-1 min-h-0 flex items-center justify-center bg-white rounded-xl overflow-hidden">
-        {/* Main canvas — finalized strokes */}
+        {/* canvas اصلی — stroke‌های نهایی */}
         <canvas ref={mainRef} width={1200} height={700}
           className="max-w-full max-h-full absolute"
           style={{ aspectRatio: '1200/700' }} />
-        {/* Overlay canvas — in-progress shape/pen preview */}
+        {/* canvas overlay — preview در حال رسم */}
         <canvas ref={overlayRef} width={1200} height={700}
           aria-label="تخته سفید مشترک" role="img"
           className="max-w-full max-h-full relative z-10"
@@ -394,12 +433,12 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
           onMouseDown={e => onDown(e.clientX, e.clientY)}
           onMouseMove={e => onMove(e.clientX, e.clientY)}
           onMouseUp={e => onUp(e.clientX, e.clientY)}
-          onMouseLeave={() => { if (!drawing.current) return; drawing.current = false; clearOverlay(); penPath.current = []; startPt.current = null; }}
+          onMouseLeave={e => onLeave(e.clientX, e.clientY)}
           onTouchStart={e => { if (e.touches.length !== 1) return; e.preventDefault(); onDown(e.touches[0].clientX, e.touches[0].clientY); }}
           onTouchMove={e => { if (e.touches.length !== 1) return; e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY); }}
           onTouchEnd={e => { e.preventDefault(); if (e.changedTouches.length) onUp(e.changedTouches[0].clientX, e.changedTouches[0].clientY); }}
         />
-        {/* Floating text input */}
+        {/* input شناور برای متن */}
         {textPos && (
           <div className="absolute z-20" style={{ left: textPos.sx, top: textPos.sy, transform: 'translate(0,-50%)' }}>
             <input
@@ -408,10 +447,11 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
               onChange={e => setTextInput(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Enter') { e.preventDefault(); commitText(); }
-                if (e.key === 'Escape') { setTextPos(null); setTextInput(''); }
+                if (e.key === 'Escape') { committedRef.current = true; setTextPos(null); setTextInput(''); }
               }}
               onBlur={commitText}
               placeholder="متن..."
+              maxLength={MAX_TEXT_LEN}
               className="border-2 border-teal-500 rounded-lg px-2 py-1 outline-none shadow-lg min-w-[120px]"
               style={{ color, fontSize: `${Math.max(width * 5, 16)}px`, background: 'rgba(255,255,255,0.95)' }}
             />

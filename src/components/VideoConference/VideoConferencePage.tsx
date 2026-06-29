@@ -60,7 +60,9 @@ function InviteModal({ room, currentUserId, onClose }: {
           .not('is_hidden', 'eq', true)
           .limit(30);
         if (search.trim()) {
-          query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+          // sanitize: فقط کاراکترهای مجاز را نگه می‌داریم تا از PostgREST injection جلوگیری شود
+          const safe = search.replace(/[%_\\'"]/g, '');
+          query = query.or(`full_name.ilike.%${safe}%,email.ilike.%${safe}%`);
         }
         const { data, error } = await query;
         if (error) throw error;
@@ -344,25 +346,60 @@ export function VideoConferencePage() {
   useEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => { myPeerIdRef.current = myPeerId; }, [myPeerId]);
 
+  // sendBeacon نمی‌تواند header احراز هویت بفرستد — از heartbeat + server reaper استفاده می‌کنیم.
+  // هر ۲۰ ثانیه یک‌بار last_seen را به‌روز می‌کنیم؛ reaper در DB کاربرانی که last_seen
+  // بیش از ۴۵ ثانیه گذشته را به status='left' تغییر می‌دهد.
+  // در pagehide/beforeunload هم یک آپدیت فوری می‌زنیم (بهتر از sendBeacon برای auth flows).
   useEffect(() => {
-    const markLeft = () => {
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+    const sendHeartbeat = async () => {
       const r = activeRoomRef.current;
       const uid = userIdRef.current;
-      const pid = myPeerIdRef.current;
-      if (r && uid) {
-        // Use sendBeacon so it fires even during page unload
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/conference_participants?room_id=eq.${r.id}&user_id=eq.${uid}`;
-        const payload = JSON.stringify({ status: 'left', peer_id: pid });
-        navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
-      }
+      if (!r || !uid) return;
+      await supabase
+        .from('conference_participants')
+        .update({ last_seen: new Date().toISOString() })
+        .eq('room_id', r.id)
+        .eq('user_id', uid)
+        .eq('status', 'joined');
     };
-    window.addEventListener('pagehide', markLeft);
-    window.addEventListener('beforeunload', markLeft);
+
+    const markLeft = async () => {
+      const r = activeRoomRef.current;
+      const uid = userIdRef.current;
+      if (!r || !uid) return;
+      // keepalive fetch — جایگزین sendBeacon که auth header ندارد
+      try {
+        await supabase
+          .from('conference_participants')
+          .update({ status: 'left' })
+          .eq('room_id', r.id)
+          .eq('user_id', uid);
+      } catch { /* page unloading — best effort */ }
+    };
+
+    const startHeartbeat = () => {
+      if (heartbeatInterval) return;
+      heartbeatInterval = setInterval(sendHeartbeat, 20_000);
+    };
+    const stopHeartbeat = () => {
+      if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+    };
+
+    // فقط وقتی اتاق فعال داریم heartbeat را شروع می‌کنیم
+    if (activeRoom) startHeartbeat();
+    else stopHeartbeat();
+
+    const handleUnload = () => { markLeft(); stopHeartbeat(); };
+    window.addEventListener('pagehide', handleUnload);
+    window.addEventListener('beforeunload', handleUnload);
     return () => {
-      window.removeEventListener('pagehide', markLeft);
-      window.removeEventListener('beforeunload', markLeft);
+      stopHeartbeat();
+      window.removeEventListener('pagehide', handleUnload);
+      window.removeEventListener('beforeunload', handleUnload);
     };
-  }, []);
+  }, [activeRoom]);
 
   const isRoomActive = (room: any): boolean => {
     if (room.status === 'ended') return false;
@@ -395,7 +432,8 @@ export function VideoConferencePage() {
     try {
       const { data: rd, error: rdErr } = await supabase
         .from('conference_rooms')
-        .select('*, meeting:meeting_id(request_date, start_time, end_time, subject)')
+        // فقط ستون‌های لازم — password هرگز به کلاینت نمی‌آید
+        .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, record_enabled, require_approval, created_at, ended_at, meeting_id, meeting:meeting_id(request_date, start_time, end_time, subject)')
         .neq('status', 'ended')
         .order('created_at', { ascending: false });
       if (rdErr) throw rdErr;
@@ -468,7 +506,7 @@ export function VideoConferencePage() {
         if (!activeRoomRef.current) fetchRooms(userIdRef.current || undefined);
       })
       .subscribe();
-    return () => { ch.unsubscribe(); };
+    return () => { supabase.removeChannel(ch); };
   }, [userId, fetchRooms]);
 
   // fix: doJoin with full validation + stream race condition guard
@@ -572,7 +610,8 @@ export function VideoConferencePage() {
     setJoining(true);
     try {
       const formatted = stripped.replace(/(.{3})(.{3})(.{3})/, '$1-$2-$3').toUpperCase();
-      const { data: room, error } = await supabase.from('conference_rooms').select('*')
+      const { data: room, error } = await supabase.from('conference_rooms')
+        .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, record_enabled, require_approval, created_at, ended_at, meeting_id')
         .or(`code.eq.${formatted},code.eq.${stripped.toUpperCase()}`)
         .neq('status', 'ended')
         .maybeSingle();
@@ -627,6 +666,23 @@ export function VideoConferencePage() {
         onApproved={async () => {
           const { room, stream, isMuted: mut, isVideoOff: voff } = waitingApproval;
           setWaitingApproval(null);
+
+          // بررسی مجدد ban و ظرفیت بعد از تأیید میزبان
+          const [banRes, countRes] = await Promise.all([
+            supabase.from('banned_users').select('id').eq('room_id', room.id).eq('user_id', userId!).maybeSingle(),
+            supabase.from('conference_participants').select('*', { count: 'exact', head: true }).eq('room_id', room.id).eq('status', 'joined'),
+          ]);
+          if (banRes.data) {
+            stream.getTracks().forEach(t => t.stop());
+            toast.error('شما از این اتاق مسدود شده‌اید');
+            return;
+          }
+          if ((countRes.count ?? 0) >= room.max_participants) {
+            stream.getTracks().forEach(t => t.stop());
+            toast.error('ظرفیت اتاق پر شده است');
+            return;
+          }
+
           const peerId = `${userId}-${Date.now()}`;
           setMyPeerId(peerId);
           localStreamRef.current?.getTracks().forEach(t => t.stop());

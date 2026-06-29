@@ -9,6 +9,9 @@ export const VIDEO_QUALITY_PRESETS: Record<VideoQuality, { width: number; height
   low:    { width: 320,  height: 240,  frameRate: 15, label: 'کیفیت پایین',  res: '320×240',  bitrate: '300 Kbps' },
 };
 
+// ترتیب ثابت گزینه‌ها — به Object.keys اتکا نمی‌کنیم
+const QUALITY_ORDER: VideoQuality[] = ['high', 'medium', 'low'];
+
 interface Props {
   videoQuality: VideoQuality;
   dataSaverMode: boolean;
@@ -18,6 +21,7 @@ interface Props {
 }
 
 export function SettingsPanel({ videoQuality, dataSaverMode, isApplying, onChangeQuality, onToggleDataSaver }: Props) {
+  // وقتی data saver فعال است، کیفیت مؤثر همیشه low است
   const effectiveQuality: VideoQuality = dataSaverMode ? 'low' : videoQuality;
 
   return (
@@ -29,32 +33,38 @@ export function SettingsPanel({ videoQuality, dataSaverMode, isApplying, onChang
           کیفیت ویدیو
         </p>
         <div className="space-y-2">
-          {(Object.keys(VIDEO_QUALITY_PRESETS) as VideoQuality[]).map(q => {
+          {QUALITY_ORDER.map(q => {
             const preset = VIDEO_QUALITY_PRESETS[q];
+            // گزینه انتخاب‌شده توسط کاربر (برای ذخیره‌سازی تنظیمات)
             const selected = videoQuality === q;
+            // گزینه‌ای که واقعاً در حال اعمال است — در حالت data saver همیشه low
             const active = effectiveQuality === q;
             return (
               <button
                 key={q}
                 onClick={() => !dataSaverMode && onChangeQuality(q)}
                 disabled={dataSaverMode || isApplying}
-                aria-pressed={selected}
+                aria-pressed={active}
                 className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-right
-                  ${selected && !dataSaverMode
+                  ${active
                     ? 'border-teal-500 bg-teal-900/30'
                     : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'}
                   ${dataSaverMode ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
               >
                 <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors
-                  ${selected && !dataSaverMode ? 'border-teal-400' : 'border-gray-600'}`}>
-                  {selected && !dataSaverMode && (
+                  ${active ? 'border-teal-400' : 'border-gray-600'}`}>
+                  {active && (
                     <div className="w-2 h-2 rounded-full bg-teal-400" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${selected && !dataSaverMode ? 'text-teal-300' : 'text-gray-200'}`}>
+                  <p className={`text-sm font-medium ${active ? 'text-teal-300' : 'text-gray-200'}`}>
                     {preset.label}
+                    {/* نشان‌گر data saver کنار low */}
+                    {q === 'low' && dataSaverMode && (
+                      <span className="mr-2 text-[10px] text-amber-400 font-normal">(صرفه‌جویی)</span>
+                    )}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">{preset.res} · {preset.frameRate}fps · {preset.bitrate}</p>
                 </div>
@@ -81,7 +91,8 @@ export function SettingsPanel({ videoQuality, dataSaverMode, isApplying, onChang
             disabled={isApplying}
             role="switch"
             aria-checked={dataSaverMode}
-            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 focus:outline-none
+            aria-label={dataSaverMode ? 'غیرفعال کردن حالت صرفه‌جویی داده' : 'فعال کردن حالت صرفه‌جویی داده'}
+            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800
               ${dataSaverMode ? 'bg-teal-500' : 'bg-gray-600'}
               ${isApplying ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           >

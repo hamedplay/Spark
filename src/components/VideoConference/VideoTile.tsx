@@ -16,6 +16,17 @@ function QualityDot({ quality, pingMs }: { quality: PeerConnection['networkQuali
 
 export { QualityDot };
 
+// فقط URL های ایمن (https یا blob) را می‌پذیریم
+function isSafeAvatarUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'blob:';
+  } catch {
+    return false;
+  }
+}
+
 interface VideoTileProps {
   stream: MediaStream | null;
   displayName: string;
@@ -27,8 +38,6 @@ interface VideoTileProps {
   isHost: boolean;
   isScreenSharing?: boolean;
   networkQuality: PeerConnection['networkQuality'];
-  /** @deprecated audioLevel is measured internally via WebAudioContext; this prop is ignored */
-  audioLevel?: number;
   avatarUrl?: string;
   pingMs?: number;
   activeReaction?: string | null;
@@ -43,19 +52,17 @@ function safeInitials(name: string): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
-// Measure audio level from a MediaStream using WebAudio AnalyserNode.
-// Returns a value 0–1. Only runs when stream has audio tracks and isMuted=false.
+// اندازه‌گیری سطح صدا از MediaStream با AnalyserNode
+// وقتی isMuted=true یا track وجود ندارد، مقدار ۰ برمی‌گردد.
 function useAudioLevel(stream: MediaStream | null, isMuted: boolean): number {
   const [level, setLevel] = useState(0);
   const rafRef = useRef<number>(0);
-  const ctxRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
-    if (!stream || isMuted) {
+    if (!stream || isMuted || !stream.getAudioTracks().length) {
       setLevel(0);
       return;
     }
-    if (!stream.getAudioTracks().length) return;
 
     let ctx: AudioContext;
     try {
@@ -63,7 +70,6 @@ function useAudioLevel(stream: MediaStream | null, isMuted: boolean): number {
     } catch {
       return;
     }
-    ctxRef.current = ctx;
 
     const source = ctx.createMediaStreamSource(stream);
     const analyser = ctx.createAnalyser();
@@ -72,7 +78,9 @@ function useAudioLevel(stream: MediaStream | null, isMuted: boolean): number {
     source.connect(analyser);
     const data = new Uint8Array(analyser.frequencyBinCount);
 
+    let alive = true;
     const tick = () => {
+      if (!alive) return;
       analyser.getByteFrequencyData(data);
       const avg = data.reduce((a, b) => a + b, 0) / (data.length * 255);
       setLevel(avg);
@@ -81,9 +89,11 @@ function useAudioLevel(stream: MediaStream | null, isMuted: boolean): number {
     rafRef.current = requestAnimationFrame(tick);
 
     return () => {
+      alive = false;
       cancelAnimationFrame(rafRef.current);
+      // قبل از بستن context، source را disconnect می‌کنیم تا نشت جلوگیری شود
+      source.disconnect();
       ctx.close().catch(() => {});
-      ctxRef.current = null;
       setLevel(0);
     };
   }, [stream, isMuted]);
@@ -100,14 +110,19 @@ export const VideoTile = memo(function VideoTile({
   const [playError, setPlayError] = useState(false);
   const [imgError, setImgError] = useState(false);
 
-  // Reset image error state when avatar URL changes
+  // وقتی آدرس avatar عوض می‌شود، خطای قبلی را ریست می‌کنیم
   useEffect(() => { setImgError(false); }, [avatarUrl]);
 
   const audioLevel = useAudioLevel(stream, isMuted);
 
+  // --- stream sync ---
+  // از یک flag debounce برای جلوگیری از re-attach همزمان در addtrack/removetrack استفاده می‌کنیم
+  const syncPendingRef = useRef(false);
+
   useEffect(() => {
     const el = videoRef.current;
-    if (!el || !stream) return;
+    if (!el) return;
+    if (!stream) { el.srcObject = null; return; }
 
     el.srcObject = stream;
     el.play().then(() => {
@@ -118,12 +133,21 @@ export const VideoTile = memo(function VideoTile({
     });
 
     const syncStream = () => {
-      el.srcObject = null;
-      el.srcObject = stream;
-      el.play().catch((err: Error) => {
-        if (err.name === 'NotAllowedError') setNeedsPlayGesture(true);
+      if (syncPendingRef.current) return;
+      syncPendingRef.current = true;
+      // یک tick صبر می‌کنیم تا رویدادهای addtrack/removetrack متعدد در یک فریم ادغام شوند
+      requestAnimationFrame(() => {
+        syncPendingRef.current = false;
+        const vid = videoRef.current;
+        if (!vid) return;
+        vid.srcObject = null;
+        vid.srcObject = stream;
+        vid.play().catch((err: Error) => {
+          if (err.name === 'NotAllowedError') setNeedsPlayGesture(true);
+        });
       });
     };
+
     stream.addEventListener('addtrack', syncStream);
     stream.addEventListener('removetrack', syncStream);
 
@@ -134,9 +158,14 @@ export const VideoTile = memo(function VideoTile({
     };
   }, [stream]);
 
+  // وقتی isVideoOff از true به false تغییر می‌کند، ویدیو را play می‌کنیم
+  // اما فقط اگر stream موجود باشد و srcObject قبلاً set شده باشد
   useEffect(() => {
+    if (isVideoOff) return;
     const el = videoRef.current;
-    if (!el || !stream || isVideoOff) return;
+    if (!el || !stream) return;
+    // اگر srcObject هنوز set نشده، effect قبلی آن را set خواهد کرد
+    if (!el.srcObject) return;
     el.play().catch((err: Error) => {
       if (err.name === 'NotAllowedError') setNeedsPlayGesture(true);
     });
@@ -155,7 +184,7 @@ export const VideoTile = memo(function VideoTile({
   const speakerGlow = !isMuted && audioLevel > 0.05 ? 'ring-2 ring-green-400' : '';
   const ringClass = ring || speakerGlow;
   const showVideo = !isVideoOff && stream;
-  const showAvatarImg = !showVideo && avatarUrl && !imgError;
+  const showAvatarImg = !showVideo && isSafeAvatarUrl(avatarUrl) && !imgError;
 
   return (
     <div
@@ -171,7 +200,7 @@ export const VideoTile = memo(function VideoTile({
         className={`w-full h-full ${isScreenSharing ? 'object-contain' : 'object-cover'} ${shouldMirror ? 'scale-x-[-1]' : ''} ${showVideo ? '' : 'hidden'}`}
       />
 
-      {/* Avatar fallback — profile photo if available, initials otherwise */}
+      {/* آواتار fallback — عکس پروفایل یا حروف اول نام */}
       {!showVideo && (
         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-950">
           {showAvatarImg ? (
@@ -211,17 +240,17 @@ export const VideoTile = memo(function VideoTile({
         </div>
       )}
 
+      {/* دکمه Pin — روی کیبورد با focus-within قابل دسترس */}
       {!small && (
         <button
           onClick={onPin}
           aria-label={isPinned ? 'لغو پین' : 'پین کردن'}
           aria-pressed={isPinned}
-          className={`absolute top-2 left-2 z-10 rounded-lg p-1 transition-opacity ${
-            isPinned
+          className={`absolute top-2 left-2 z-10 rounded-lg p-1 transition-opacity
+            ${isPinned
               ? 'bg-teal-500/90 opacity-100'
-              : 'bg-black/40 opacity-0 hover:opacity-100 focus:opacity-100 group-hover:opacity-100'
-          }`}
-          onKeyDown={e => e.key === 'Enter' && onPin()}
+              : 'bg-black/40 opacity-0 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100'}
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400`}
         >
           <Pin className="w-3 h-3 text-white" />
         </button>
