@@ -232,7 +232,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     const ch = supabase.channel(`conf-approvals-${room.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_approvals', filter: `room_id=eq.${room.id}` }, loadApprovals)
       .subscribe();
-    return () => { ch.unsubscribe(); };
+    return () => { supabase.removeChannel(ch); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id, isHost, myRole]);
 
@@ -323,7 +323,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   useEffect(() => {
     const t = setInterval(async () => {
       await supabase.from('conference_participants')
-        .update({ updated_at: new Date().toISOString() } as any)
+        .update({ last_seen: new Date().toISOString() })
         .eq('room_id', room.id).eq('user_id', currentUserId).eq('status', 'joined');
     }, 15000);
     return () => clearInterval(t);
@@ -749,8 +749,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       .subscribe();
 
     return () => {
-      ch.unsubscribe();
-      roomCh.unsubscribe();
+      supabase.removeChannel(ch);
+      supabase.removeChannel(roomCh);
       for (const p of peersRef.current.values()) p.pc.close();
       peersRef.current.clear();
     };
@@ -768,7 +768,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     const ch = supabase.channel(`conf-parts-${room.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_participants', filter: `room_id=eq.${room.id}` }, load)
       .subscribe();
-    return () => { ch.unsubscribe(); };
+    return () => { supabase.removeChannel(ch); };
   }, [room.id]);
 
 
@@ -824,21 +824,41 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     try {
       const ss = await (navigator.mediaDevices as any).getDisplayMedia({ video: true, audio: true });
       screenStreamRef.current = ss;
-      const screenTrack = ss.getVideoTracks()[0];
+      const screenVideoTrack = ss.getVideoTracks()[0];
+      const screenAudioTrack = ss.getAudioTracks()[0] ?? null;
 
       for (const p of peersRef.current.values()) {
-        const sender = p.pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          await sender.replaceTrack(screenTrack).catch(err => console.error('replaceTrack error:', err));
+        const videoSender = p.pc.getSenders().find(s => s.track?.kind === 'video');
+        let needsRenegotiation = false;
+
+        if (videoSender) {
+          await videoSender.replaceTrack(screenVideoTrack).catch(err => console.error('replaceTrack video error:', err));
         } else {
-          p.pc.addTrack(screenTrack, localStreamRef.current);
+          p.pc.addTrack(screenVideoTrack, localStreamRef.current);
+          needsRenegotiation = true;
+        }
+
+        if (screenAudioTrack) {
+          const audioSender = p.pc.getSenders().find(s => s.track?.kind === 'audio');
+          if (!audioSender) {
+            p.pc.addTrack(screenAudioTrack, ss);
+            needsRenegotiation = true;
+          }
+        }
+
+        if (needsRenegotiation && p.pc.signalingState === 'stable') {
+          try {
+            const offer = await p.pc.createOffer();
+            await p.pc.setLocalDescription(offer);
+            sendSignalRef.current(p.peerId, 'offer', { sdp: p.pc.localDescription });
+          } catch (e) { console.error('renegotiation after addTrack failed', e); }
         }
       }
 
       dispatch({ type: 'SET_SCREEN_SHARING', value: true });
       sendSignal(null, 'state', { peerId: myPeerId, isMuted, isVideoOff, isHandRaised, isScreenSharing: true });
 
-      screenTrack.onended = () => stopScreenShareRef.current();
+      screenVideoTrack.onended = () => stopScreenShareRef.current();
     } catch (e: any) {
       if (e?.name === 'NotAllowedError') {
         toast.error(
@@ -907,6 +927,14 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showAllControls, setShowAllControls] = useState(false);
 
+  // Close role dropdown and limit editor when clicking outside
+  useEffect(() => {
+    if (!roleDropdown && !limitEditor) return;
+    const handler = () => { setRoleDropdown(null); setLimitEditor(null); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [roleDropdown, limitEditor]);
+
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', h);
@@ -934,19 +962,16 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     toast.success('درخواست قطع میکروفون برای همه ارسال شد');
   };
 
-  const kickParticipant = async (peerId: string, displayName: string) => {
-    const targetPeer = peersRef.current.get(peerId);
+  const kickParticipant = async (peerId: string, targetUserId: string, displayName: string) => {
     sendSignal(peerId, 'kick', { fromHost: currentUserName });
-    if (targetPeer) {
-      const { error } = await supabase.from('room_mod_actions').insert({
-        room_id: room.id, by_admin_id: currentUserId,
-        target_user_id: targetPeer.userId, action_type: 'kick',
-      });
-      if (error) console.error('kick mod_action error:', error);
-      await supabase.from('conference_participants')
-        .update({ status: 'left', left_at: new Date().toISOString() })
-        .eq('room_id', room.id).eq('user_id', targetPeer.userId);
-    }
+    const { error } = await supabase.from('room_mod_actions').insert({
+      room_id: room.id, by_admin_id: currentUserId,
+      target_user_id: targetUserId, action_type: 'kick',
+    });
+    if (error) console.error('kick mod_action error:', error);
+    await supabase.from('conference_participants')
+      .update({ status: 'left', left_at: new Date().toISOString() })
+      .eq('room_id', room.id).eq('user_id', targetUserId);
     setTimeout(() => {
       const cur = peersRef.current.get(peerId);
       if (cur) { cur.pc.close(); peersRef.current.delete(peerId); setPeers(new Map(peersRef.current)); }
@@ -954,12 +979,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     toast.success(`${displayName} از جلسه خارج شد`);
   };
 
-  const banParticipant = async (targetUserId: string, displayName: string, reason?: string) => {
+  const banParticipant = async (targetPeerId: string, targetUserId: string, displayName: string, reason?: string) => {
     await supabase.from('banned_users').upsert([{
       room_id: room.id, user_id: targetUserId,
       display_name: displayName, banned_by: currentUserId,
       reason: reason || null,
     }], { onConflict: 'room_id,user_id' });
+    await kickParticipant(targetPeerId, targetUserId, displayName);
   };
 
   const changeRole = async (targetPeerId: string, targetUserId: string, displayName: string, newRole: RoleType) => {
@@ -1003,7 +1029,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     peersRef.current.clear();
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
-    channelRef.current?.unsubscribe();
+    if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; }
     const { error: leaveErr } = await supabase.from('conference_participants').update({ status: 'left', left_at: new Date().toISOString() }).eq('room_id', room.id).eq('user_id', currentUserId);
     if (leaveErr) console.error('doLeave participant update error:', leaveErr);
     onLeave();
@@ -1202,6 +1228,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
             // ── Speaker ────────────────────────────────────────────────────────
             if (layoutMode === 'speaker') {
+              if (!orderedTiles.length) return null;
               const [speaker, ...rest] = orderedTiles;
               return (
                 <div className="flex flex-col flex-1 gap-2 min-h-0">
@@ -1241,6 +1268,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             }
 
             // ── Sidebar ────────────────────────────────────────────────────────
+            if (!orderedTiles.length) return null;
             const [main, ...others] = orderedTiles;
             return (
               <div className="flex flex-1 gap-2 min-h-0 flex-row-reverse">
@@ -1271,7 +1299,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                     isPinned={false}
                     isHost={main.isHost}
                     activeReaction={tileReactions.get(main.userId)}
-                    onPin={() => {}} />
+                    onPin={() => setPinnedPeerId(p => p === main.peerId ? null : main.peerId)} />
                 </div>
               </div>
             );
@@ -1308,7 +1336,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   </>
                 ) : (
                   <>
-                    {(['chat','participants','polls','whiteboard'] as SidePanel[]).filter(Boolean).map(p => (
+                    {(['chat','participants','polls','whiteboard'] as SidePanel[]).filter(p => {
+                    if (p === 'chat') return room.allow_chat;
+                    if (p === 'whiteboard') return true;
+                    if (p === 'polls') return true;
+                    return true;
+                  }).map(p => (
                       <button key={p!} onClick={() => togglePanel(p)}
                         className={`flex-1 py-2.5 text-xs font-medium transition-colors ${sidePanel === p ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500 hover:text-gray-300'}`}>
                         {p === 'chat' ? 'چت' : p === 'participants' ? (
@@ -1398,8 +1431,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   )}
 
                   {/* Participant list */}
-                  {allTiles.map(t => {
-                    const dbRole = t.isLocal ? myRole : ((participants.find(p => p.user_id === t.userId)?.role as RoleType) || 'member');
+                  {(() => {
+                    const roleMap = new Map(participants.map(p => [p.user_id, p.role as RoleType]));
+                    return allTiles.map(t => {
+                    const dbRole = t.isLocal ? myRole : (roleMap.get(t.userId) || 'member');
                     const effectiveRole: RoleType = t.isHost ? 'host' : dbRole;
                     const assignableRoles: RoleType[] = effectiveRole === 'host' ? [] :
                       (checkPermission('manage_roles') ? (['admin','moderator','member','guest'] as RoleType[]).filter(r => r !== effectiveRole) : []);
@@ -1440,7 +1475,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                               <ShieldCheck className="w-3.5 h-3.5" />
                             </button>
                             {roleDropdown === t.peerId && (
-                              <div className="absolute left-0 top-6 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 py-1 min-w-[100px]">
+                              <div className="absolute left-0 top-6 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 py-1 min-w-[100px]" onMouseDown={e => e.stopPropagation()}>
                                 {assignableRoles.map(r => (
                                   <button key={r} onClick={() => changeRole(t.peerId, t.userId, t.displayName, r)}
                                     className={`w-full text-right px-3 py-1.5 text-xs hover:bg-gray-800 transition-colors ${ROLE_COLORS[r]}`}>
@@ -1472,13 +1507,16 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                         {checkPermission('mute_all') && speakingLimitEnabled && !t.isLocal && !t.isHost && (
                           <div className="relative">
                             <button
-                              onClick={() => { setLimitEditor(d => d === t.peerId ? null : t.peerId); setLimitInputs(prev => ({ ...prev, [t.peerId]: '60' })); }}
+                              onClick={() => {
+                                setLimitEditor(d => d === t.peerId ? null : t.peerId);
+                                setLimitInputs(prev => ({ ...prev, [t.peerId]: prev[t.peerId] ?? '60' }));
+                              }}
                               title="تنظیم محدودیت زمان صحبت"
                               className="p-1 rounded-lg hover:bg-teal-900/40 text-gray-600 hover:text-teal-400 transition-colors opacity-0 group-hover:opacity-100">
                               <Clock className="w-3.5 h-3.5" />
                             </button>
                             {limitEditor === t.peerId && (
-                              <div className="absolute left-0 top-7 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-2 w-40" onClick={e => e.stopPropagation()}>
+                              <div className="absolute left-0 top-7 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-2 w-40" onMouseDown={e => e.stopPropagation()}>
                                 <p className="text-[10px] text-gray-400 mb-1.5">محدودیت صحبت (ثانیه)</p>
                                 <div className="flex gap-1">
                                   <input
@@ -1516,7 +1554,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       </div>
                     </div>
                     );
-                  })}
+                  });
+                  })()}
                   {participants.length > allTiles.length && (
                     <p className="text-xs text-gray-500 text-center py-1">{participants.length} نفر در جلسه</p>
                   )}
@@ -1603,8 +1642,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             <div className="flex gap-2">
               <button
                 onClick={async () => {
-                  if (kickAndBan) await banParticipant(kickConfirm.userId, kickConfirm.displayName, banReason || undefined);
-                  await kickParticipant(kickConfirm.peerId, kickConfirm.displayName);
+                  if (kickAndBan) await banParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName, banReason || undefined);
+                  else await kickParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName);
                   setKickConfirm(null);
                 }}
                 className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-medium transition-colors"
@@ -1674,7 +1713,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       {/* Bottom controls */}
       <div className="bg-gray-900/95 border-t border-gray-800 flex-shrink-0 relative" dir="rtl">
         {/* Speaking progress bar — shown when user is actively speaking and limit is on */}
-        {speakingLimitEnabled && speakingSecs > 0 && !isMuted && (
+        {speakingLimitEnabled && speakingSecs > 0 && !isMuted && myLimitSecs > 0 && (
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-gray-800">
             <div
               className={`h-full transition-all duration-500 ${speakingSecs >= myLimitSecs * 0.83 ? 'bg-red-500' : speakingSecs >= myLimitSecs * 0.5 ? 'bg-amber-400' : 'bg-teal-400'}`}
