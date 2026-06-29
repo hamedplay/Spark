@@ -496,7 +496,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       }
     };
 
-    const conn: PeerConnection = { peerId: remotePeerId, userId: remoteUserId, displayName: remoteDisplayName, pc, stream: null, isMuted: false, isVideoOff: false, isHandRaised: false, connectionState: 'new', networkQuality: 'good', speakingSeconds: 0, audioLevel: 0 };
+    const conn: PeerConnection = { peerId: remotePeerId, userId: remoteUserId, displayName: remoteDisplayName, pc, stream: null, screenStream: null, isScreenSharing: false, isMuted: false, isVideoOff: false, isHandRaised: false, connectionState: 'new', networkQuality: 'good', speakingSeconds: 0, audioLevel: 0 };
     peersRef.current.set(remotePeerId, conn);
     setPeers(new Map(peersRef.current));
     return pc;
@@ -628,7 +628,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           if (sidePanelRef.current !== 'chat') setUnreadCount(c => c + 1);
 
         } else if (type === 'reaction') {
-          const r: Reaction = { ...data, x: Math.random() * 80 + 10, y: Math.random() * 60 + 20, createdAt: Date.now() };
+          const r: Reaction = { ...data, x: Math.random() * 80 + 10, y: Math.random() * 60 + 20, createdAt: Date.now(), expiresAt: Date.now() + 3000 };
           setReactions(prev => [...prev, r]);
           setTimeout(() => setReactions(prev => prev.filter(x => x.id !== r.id)), 3000);
           showTileReactionRef.current(data.userId, data.emoji);
@@ -895,7 +895,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   const sendEmoji = (emoji: string) => {
     setShowEmojiPicker(false);
-    const r: Reaction = { id: crypto.randomUUID(), userId: currentUserId, displayName: currentUserName, emoji, x: 0, y: 0, createdAt: Date.now() };
+    const r: Reaction = { id: crypto.randomUUID(), userId: currentUserId, displayName: currentUserName, emoji, x: 0, y: 0, createdAt: Date.now(), expiresAt: Date.now() + 3000 };
     sendSignal(null, 'reaction', r);
     setReactions(prev => [...prev, { ...r, x: Math.random() * 80 + 10, y: Math.random() * 60 + 20 }]);
     setTimeout(() => setReactions(prev => prev.filter(x => x.id !== r.id)), 3000);

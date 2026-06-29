@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Send, ImagePlus, MessageSquareOff, MessageSquare, Loader2, X,
+  Send, ImagePlus, MessageSquareOff, MessageSquare, Loader2, X, ChevronDown,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
@@ -20,6 +20,9 @@ interface Props {
 
 interface TypingUser { userId: string; name: string; ts: number; }
 
+// How far from the bottom (px) counts as "near bottom"
+const SCROLL_THRESHOLD = 80;
+
 export function ChatPanel({
   roomId, currentUserId, currentUserName,
   messages, chatEnabled, canToggleChat, onToggleChat, sendSignal,
@@ -28,16 +31,38 @@ export function ChatPanel({
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
+  const [hasUnread, setHasUnread] = useState(false);
 
+  const listRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingChRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const isNearBottomRef = useRef(true);
 
-  // ── Auto-scroll ──────────────────────────────────────────────────────────────
+  // ── Track scroll position to decide whether to auto-scroll ──────────────────
+  const handleScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distFromBottom < SCROLL_THRESHOLD;
+    if (isNearBottomRef.current) setHasUnread(false);
+  };
+
+  // ── Auto-scroll: only when already near the bottom ───────────────────────────
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isNearBottomRef.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setHasUnread(false);
+    } else {
+      setHasUnread(true);
+    }
   }, [messages]);
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setHasUnread(false);
+  };
 
   // ── Typing-indicator channel ─────────────────────────────────────────────────
   useEffect(() => {
@@ -60,14 +85,21 @@ export function ChatPanel({
 
     typingChRef.current = ch;
 
-    // Stale-typing cleanup — remove entries older than 4s
+    // Stale-typing cleanup — remove entries older than 3 s
     const cleaner = setInterval(() => {
-      setTypingUsers(prev => prev.filter(u => Date.now() - u.ts < 4000));
+      setTypingUsers(prev => prev.filter(u => Date.now() - u.ts < 3000));
     }, 1000);
 
     return () => {
+      // Null out the ref before unsubscribing so broadcastTyping won't fire
+      typingChRef.current = null;
       ch.unsubscribe();
       clearInterval(cleaner);
+      // Clean up any pending typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
     };
   }, [roomId, currentUserId]);
 
@@ -79,13 +111,16 @@ export function ChatPanel({
     });
   }, [currentUserId, currentUserName]);
 
-  // ── Send text message ────────────────────────────────────────────────────────
+  // ── Send text message — DB first, then broadcast ─────────────────────────────
   const sendMessage = useCallback(async (imageUrl?: string) => {
     const body = input.trim();
     if (!body && !imageUrl) return;
 
     broadcastTyping(false);
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
 
     const msg: ConferenceMessage = {
       id: crypto.randomUUID(),
@@ -96,11 +131,17 @@ export function ChatPanel({
       image_url: imageUrl ?? null,
       created_at: new Date().toISOString(),
     };
-    sendSignal(null, 'chat', msg);
-    setInput('');
 
+    // Persist first — if it fails, keep input intact so user can retry
     const { error } = await supabase.from('conference_messages').insert([msg]);
-    if (error) console.error('sendMessage DB error:', error);
+    if (error) {
+      toast.error('خطا در ارسال پیام. دوباره تلاش کنید.');
+      return;
+    }
+
+    // Only clear input and broadcast after successful persist
+    setInput('');
+    sendSignal(null, 'chat', msg);
   }, [input, roomId, currentUserId, currentUserName, sendSignal, broadcastTyping]);
 
   // ── Image upload ─────────────────────────────────────────────────────────────
@@ -119,6 +160,9 @@ export function ChatPanel({
       return;
     }
 
+    // TODO (security): server-side MIME validation, magic-bytes check, and
+    // restricted bucket policy should be configured in Supabase Storage settings
+    // to prevent MIME-sniffing bypasses and limit public exposure.
     setUploading(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
@@ -141,7 +185,11 @@ export function ChatPanel({
     setInput(val);
     broadcastTyping(true);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => broadcastTyping(false), 2000);
+    // Auto-stop typing signal after 3 s of silence (aligned with cleaner interval)
+    typingTimeoutRef.current = setTimeout(() => {
+      broadcastTyping(false);
+      typingTimeoutRef.current = null;
+    }, 3000);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -169,8 +217,8 @@ export function ChatPanel({
           ${chatEnabled ? 'bg-gray-800/40' : 'bg-red-950/40'}`}>
           <div className="flex items-center gap-2 min-w-0">
             {chatEnabled
-              ? <MessageSquare className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
-              : <MessageSquareOff className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+              ? <MessageSquare className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" aria-hidden="true" />
+              : <MessageSquareOff className="w-3.5 h-3.5 text-red-400 flex-shrink-0" aria-hidden="true" />}
             <span className={`text-xs ${chatEnabled ? 'text-gray-400' : 'text-red-400'}`}>
               {chatEnabled ? 'چت فعال است' : 'چت غیرفعال شده'}
             </span>
@@ -178,6 +226,7 @@ export function ChatPanel({
           {canToggleChat && (
             <button
               onClick={onToggleChat}
+              aria-label={chatEnabled ? 'غیرفعال کردن چت' : 'فعال کردن چت'}
               className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors flex-shrink-0
                 ${chatEnabled
                   ? 'bg-red-900/40 hover:bg-red-900/70 text-red-400'
@@ -190,10 +239,14 @@ export function ChatPanel({
       )}
 
       {/* Message list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+      <div
+        ref={listRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0 relative"
+      >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-2 py-8">
-            <MessageSquare className="w-8 h-8 opacity-30" />
+            <MessageSquare className="w-8 h-8 opacity-30" aria-hidden="true" />
             <p className="text-xs">هنوز پیامی ارسال نشده</p>
           </div>
         )}
@@ -240,17 +293,31 @@ export function ChatPanel({
         <div ref={chatEndRef} />
       </div>
 
+      {/* New-message indicator when user has scrolled up */}
+      {hasUnread && (
+        <div className="flex justify-center flex-shrink-0 pb-1 -mt-1">
+          <button
+            onClick={scrollToBottom}
+            aria-label="رفتن به آخرین پیام"
+            className="flex items-center gap-1 px-3 py-1 bg-teal-600/90 hover:bg-teal-500 text-white text-xs rounded-full shadow-lg transition-colors"
+          >
+            <ChevronDown className="w-3 h-3" aria-hidden="true" />
+            پیام جدید
+          </button>
+        </div>
+      )}
+
       {/* Typing indicator */}
       {typingLabel && (
         <div className="px-3 py-1 flex-shrink-0">
           <span className="text-xs text-gray-500 italic flex items-center gap-1.5">
-            <span className="flex gap-0.5">
+            <span className="flex gap-0.5" aria-hidden="true">
               {[0, 1, 2].map(i => (
                 <span key={i} className="w-1 h-1 rounded-full bg-gray-500 animate-bounce"
                   style={{ animationDelay: `${i * 0.15}s` }} />
               ))}
             </span>
-            {typingLabel}
+            <span aria-live="polite">{typingLabel}</span>
           </span>
         </div>
       )}
@@ -263,10 +330,10 @@ export function ChatPanel({
             onChange={e => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="پیام..."
+            aria-label="متن پیام"
             className="flex-1 bg-gray-800 text-white rounded-xl px-3 py-2 text-sm outline-none placeholder-gray-500 min-w-0 focus:ring-1 focus:ring-teal-600"
             disabled={uploading}
           />
-          {/* Image upload button */}
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
@@ -275,8 +342,8 @@ export function ChatPanel({
             className="p-2 bg-gray-700 hover:bg-gray-600 rounded-xl transition-colors flex-shrink-0 disabled:opacity-50"
           >
             {uploading
-              ? <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
-              : <ImagePlus className="w-4 h-4 text-gray-300" />
+              ? <Loader2 className="w-4 h-4 animate-spin text-teal-400" aria-hidden="true" />
+              : <ImagePlus className="w-4 h-4 text-gray-300" aria-hidden="true" />
             }
           </button>
           <input
@@ -292,13 +359,13 @@ export function ChatPanel({
             aria-label="ارسال پیام"
             className="p-2 bg-teal-600 hover:bg-teal-500 rounded-xl transition-colors flex-shrink-0 disabled:opacity-40"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       ) : (
         <div className="p-3 border-t border-gray-800 flex-shrink-0">
           <p className="text-xs text-gray-600 text-center flex items-center justify-center gap-1.5">
-            <MessageSquareOff className="w-3.5 h-3.5" />
+            <MessageSquareOff className="w-3.5 h-3.5" aria-hidden="true" />
             چت توسط میزبان غیرفعال شده است
           </p>
         </div>
@@ -315,10 +382,10 @@ export function ChatPanel({
         >
           <button
             onClick={() => setLightboxUrl(null)}
-            aria-label="بستن"
+            aria-label="بستن نمایش تصویر"
             className="absolute top-4 left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
           <img
             src={lightboxUrl}
