@@ -338,8 +338,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       setApplyingVideoConstraints(false);
     }
   }, []);
-  // wire ref so adaptive bitrate interval always calls the latest version
-  applyVideoConstraintsRef.current = applyVideoConstraints;
+
   const peersRef = useRef<Map<string, PeerConnection>>(new Map());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -358,6 +357,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const dataSaverModeRef = useRef(dataSaverMode);
   videoQualityRef.current = videoQuality;
   dataSaverModeRef.current = dataSaverMode;
+  // wire ref so adaptive bitrate interval always calls the latest version
+  applyVideoConstraintsRef.current = applyVideoConstraints;
 
   // Duration + meeting countdown
   useEffect(() => {
