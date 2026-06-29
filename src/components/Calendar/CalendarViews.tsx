@@ -133,97 +133,61 @@ export interface CalendarViewProps {
 // ─── Overlap computation ───────────────────────────────────────────────────────
 interface OverlapInfo {
   meeting: MeetingData;
-  leftPct: number;   // 0-100
-  widthPct: number;  // 0-100
+  colIdx: number;
+  totalCols: number;
   zIndex: number;
-  isNested: boolean;
 }
 
 function computeOverlapLayers(mts: MeetingData[]): OverlapInfo[] {
   const withTime = mts.filter(m => m.start_time && m.end_time);
   if (withTime.length === 0) return [];
 
-  // Sort by duration descending (longest first), then by start time
+  // Sort by start time, then by duration descending
   const sorted = [...withTime].sort((a, b) => {
-    const durA = timeToMinutes(a.end_time) - timeToMinutes(a.start_time);
-    const durB = timeToMinutes(b.end_time) - timeToMinutes(b.start_time);
-    if (durB !== durA) return durB - durA;
-    return timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
+    const sa = timeToMinutes(a.start_time), sb = timeToMinutes(b.start_time);
+    if (sa !== sb) return sa - sb;
+    const da = timeToMinutes(a.end_time) - sa, db = timeToMinutes(b.end_time) - sb;
+    return db - da;
   });
 
-  // Build overlap groups: each group is a set of meetings that overlap with at least one other in the group
-  const groups: MeetingData[][] = [];
+  // Build overlap clusters: merge any meetings whose intervals overlap
+  const clusters: MeetingData[][] = [];
   for (const m of sorted) {
     const sMin = timeToMinutes(m.start_time);
     const eMin = timeToMinutes(m.end_time);
-    let placed = false;
-    for (const g of groups) {
-      const overlapsAny = g.some(o => {
-        const os = timeToMinutes(o.start_time);
-        const oe = timeToMinutes(o.end_time);
-        return sMin < oe && eMin > os;
-      });
-      if (overlapsAny) { g.push(m); placed = true; break; }
+    let merged = false;
+    for (const cl of clusters) {
+      const clMax = Math.max(...cl.map(x => timeToMinutes(x.end_time)));
+      const clMin = Math.min(...cl.map(x => timeToMinutes(x.start_time)));
+      if (sMin < clMax && eMin > clMin) { cl.push(m); merged = true; break; }
     }
-    if (!placed) groups.push([m]);
+    if (!merged) clusters.push([m]);
   }
 
   const result: OverlapInfo[] = [];
 
-  for (const group of groups) {
-    if (group.length === 1) {
-      // No overlap — full width
-      result.push({ meeting: group[0], leftPct: 0, widthPct: 100, zIndex: 10, isNested: false });
+  for (const cluster of clusters) {
+    if (cluster.length === 1) {
+      result.push({ meeting: cluster[0], colIdx: 0, totalCols: 1, zIndex: 10 });
       continue;
     }
 
-    // Assign columns using a greedy interval-graph coloring.
-    // Column 0 = longest meeting (full or near-full width), subsequent columns are nested inside
+    // Greedy interval-graph column assignment (like Google Calendar)
     const cols: MeetingData[][] = [];
-    for (const m of group) {
+    for (const m of cluster) {
       const sMin = timeToMinutes(m.start_time);
-      const eMin = timeToMinutes(m.end_time);
-      let assigned = false;
+      let placed = false;
       for (const col of cols) {
-        const lastInCol = col[col.length - 1];
-        const lastEnd = timeToMinutes(lastInCol.end_time);
-        const lastStart = timeToMinutes(lastInCol.start_time);
-        // Can place in this column if this meeting doesn't overlap the last one placed here
-        // OR if it's fully contained within the last one (nesting case)
-        const fullyContained = sMin >= timeToMinutes(col[0].start_time) && eMin <= timeToMinutes(col[0].end_time);
-        if (sMin >= lastEnd || fullyContained) {
-          col.push(m); assigned = true; break;
-        }
+        const lastEnd = timeToMinutes(col[col.length - 1].end_time);
+        if (sMin >= lastEnd) { col.push(m); placed = true; break; }
       }
-      if (!assigned) cols.push([m]);
+      if (!placed) cols.push([m]);
     }
 
     const totalCols = cols.length;
-    // Google Calendar style: col 0 gets most of the width, nested cols share the remainder
-    // Col 0: 100% - (nested_cols * inset) wide, starting at 0
-    // Each nested col: progressively inset — wider gap so nested meetings stand out clearly
-    const INSET_PER_LEVEL = totalCols > 1 ? Math.min(28, 70 / totalCols) : 0;
-
     cols.forEach((col, colIdx) => {
       col.forEach(m => {
-        let leftPct: number;
-        let widthPct: number;
-        if (colIdx === 0) {
-          // Base (longest) meeting: nearly full width
-          leftPct = 0;
-          widthPct = totalCols === 1 ? 100 : 100 - INSET_PER_LEVEL * 1.2;
-        } else {
-          // Nested meetings: inset from left + shrink right edge for visible gap
-          leftPct = colIdx * INSET_PER_LEVEL;
-          widthPct = 100 - leftPct - INSET_PER_LEVEL;
-        }
-        result.push({
-          meeting: m,
-          leftPct,
-          widthPct,
-          zIndex: 10 + colIdx * 5,
-          isNested: colIdx > 0,
-        });
+        result.push({ meeting: m, colIdx, totalCols, zIndex: 10 + colIdx });
       });
     });
   }
@@ -305,10 +269,9 @@ export function CalendarViews(p: CalendarViewProps) {
   const renderMeetingBlock = (
     meeting: MeetingData,
     colWidthMultiple = 1,
-    leftPct = 0,
-    widthPct = 100,
+    colIdx = 0,
+    totalCols = 1,
     blockZIndex = 10,
-    isNested = false,
   ) => {
     const startMin = timeToMinutes(meeting.start_time);
     const endMin = timeToMinutes(meeting.end_time);
@@ -327,12 +290,18 @@ export function CalendarViews(p: CalendarViewProps) {
     const canMove = meeting.user_id === currentUserId || meeting.meeting_manager === currentUserId;
     const isCompact = visualHeight < 48;
     const isTiny = visualHeight < 28;
+    const isOverlapping = totalCols > 1;
 
-    // Percentage-based positioning — RTL: anchor from right (start side)
-    const GUTTER = 4; // px gap from column edge
+    // True side-by-side column layout with a visible gap between columns
+    const GAP = 3; // px gap between adjacent columns
+    const colWidthPct = 100 / totalCols;
+    // RTL layout: col 0 = rightmost, colIdx increases leftward
+    const rightPct = colIdx * colWidthPct;
+    const leftPct = 100 - (colIdx + 1) * colWidthPct;
+
     const insetStyle: React.CSSProperties = {
-      right: `calc(${leftPct}% + ${GUTTER}px)`,
-      left: `calc(${100 - leftPct - widthPct}% + ${GUTTER}px)`,
+      right: `calc(${rightPct}% + ${colIdx === 0 ? 2 : GAP / 2}px)`,
+      left: `calc(${leftPct}% + ${colIdx === totalCols - 1 ? 2 : GAP / 2}px)`,
     };
 
     const onBlockDown = (e: React.MouseEvent) => {
@@ -376,8 +345,8 @@ export function CalendarViews(p: CalendarViewProps) {
 
     return (
       <div key={meeting.id}
-        className={`absolute rounded-lg overflow-hidden select-none touch-none group ${isNested ? 'ring-[3px] ring-white shadow-[0_0_0_1px_rgba(0,0,0,0.25)] shadow-xl' : 'border border-white/20'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
-        style={{ top: `${visualTop}px`, height: `${visualHeight}px`, backgroundColor: color, zIndex: (isBeingDragged || isBeingResized) ? 30 : blockZIndex, ...insetStyle, transition: (isBeingDragged || isBeingResized) ? 'none' : 'box-shadow 0.15s', ...ghostStyle }}
+        className={`absolute rounded-lg overflow-hidden select-none touch-none group border-2 border-white dark:border-gray-900 ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl hover:brightness-105' : 'cursor-pointer hover:shadow-xl hover:brightness-105'} transition-shadow transition-[filter]`}
+        style={{ top: `${visualTop}px`, height: `${visualHeight}px`, backgroundColor: color, zIndex: (isBeingDragged || isBeingResized) ? 30 : blockZIndex, ...insetStyle, transition: (isBeingDragged || isBeingResized) ? 'none' : 'box-shadow 0.15s, filter 0.15s', ...ghostStyle }}
         onMouseDown={onBlockDown} onTouchStart={onBlockTouch}
         onMouseUp={e => { e.stopPropagation(); if (!dragMovedRef.current) { setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0); } }}
         onClick={e => { e.stopPropagation(); handleBlockClick(meeting, e); }}
@@ -428,8 +397,8 @@ export function CalendarViews(p: CalendarViewProps) {
     const withTimeIds = new Set(assigned.map(a => a.meeting.id));
     const noTime = mts.filter(m => !withTimeIds.has(m.id));
     return [
-      ...assigned.map(({ meeting, leftPct, widthPct, zIndex, isNested }) =>
-        renderMeetingBlock(meeting, colWidthMultiple, leftPct, widthPct, zIndex, isNested)
+      ...assigned.map(({ meeting, colIdx, totalCols, zIndex }) =>
+        renderMeetingBlock(meeting, colWidthMultiple, colIdx, totalCols, zIndex)
       ),
       ...noTime.map(m => renderMeetingBlock(m, colWidthMultiple)),
     ];
