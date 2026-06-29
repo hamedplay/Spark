@@ -10,6 +10,8 @@ import {
   Shield, ShieldCheck, ShieldOff, Clock,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { startDiagnostics, stopDiagnostics, stopAllDiagnostics, attemptICERestart } from '../../lib/webrtcDiagnostics';
+import type { PeerDiagnostics } from '../../lib/webrtcDiagnostics';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
 import type {
@@ -30,17 +32,42 @@ import { BanList } from './BanList';
 import type { VideoQuality } from './SettingsPanel';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-  ],
-  iceCandidatePoolSize: 10,
-  iceTransportPolicy: 'all',
-  bundlePolicy: 'max-bundle',
-  rtcpMuxPolicy: 'require',
-};
+
+const MAX_PARTICIPANTS = 20;
+
+// Build ICE server list from env — only self-hosted TURN, no external STUN
+function buildRTCConfig(): RTCConfiguration {
+  const host = import.meta.env.VITE_TURN_HOST;
+  const username = import.meta.env.VITE_TURN_USERNAME;
+  const credential = import.meta.env.VITE_TURN_PASSWORD;
+
+  const iceServers: RTCIceServer[] = [];
+
+  if (host && username && credential) {
+    iceServers.push({
+      urls: [
+        `turn:${host}:3478?transport=udp`,
+        `turn:${host}:3478?transport=tcp`,
+        `turns:${host}:5349`,
+      ],
+      username,
+      credential,
+    });
+  } else {
+    // Fallback for local dev without TURN configured — log a warning
+    console.warn('[WebRTC] VITE_TURN_HOST/USERNAME/PASSWORD not set. ICE will rely on direct connectivity only.');
+  }
+
+  return {
+    iceServers,
+    iceCandidatePoolSize: 10,
+    iceTransportPolicy: iceServers.length > 0 ? 'relay' : 'all',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+  };
+}
+
+const RTC_CONFIG: RTCConfiguration = buildRTCConfig();
 
 function calculateBitrate(width: number, height: number, fps: number) {
   const pixels = width * height;
@@ -175,6 +202,9 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // Peer avatar URLs (userId → avatar_url) fetched from profiles on demand
   const [peerAvatarUrls, setPeerAvatarUrls] = useState<Record<string, string>>({});
   const fetchedAvatarUserIds = useRef<Set<string>>(new Set());
+
+  // WebRTC diagnostics — peerId → latest stats snapshot
+  const [peerDiagnostics, setPeerDiagnostics] = useState<Map<string, PeerDiagnostics>>(new Map());
 
   // Dynamic host — updated on transfer
   const [hostId, setHostId] = useState(room.host_id);
@@ -583,20 +613,32 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       if (cur) { peersRef.current.set(remotePeerId, { ...cur, connectionState: pc.connectionState }); setPeers(new Map(peersRef.current)); }
       if (pc.connectionState === 'connected') toast.success(`${remoteDisplayName} وارد شد`);
       if (pc.connectionState === 'disconnected') {
-        setTimeout(() => {
-          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-            pc.close();
-            peersRef.current.delete(remotePeerId);
-            setPeers(new Map(peersRef.current));
-            sendSignalRef.current(null, 'peer_left', { peerId: remotePeerId, displayName: remoteDisplayName });
-            supabase.from('conference_participants')
-              .update({ status: 'left', left_at: new Date().toISOString() })
-              .eq('room_id', room.id).eq('user_id', remoteUserId)
-              .then(() => {});
+        // First try ICE restart before giving up
+        setTimeout(async () => {
+          if (pc.connectionState !== 'disconnected' && pc.connectionState !== 'failed') return;
+          const restarted = await attemptICERestart(pc, (offer) => {
+            sendSignalRef.current(remotePeerId, 'offer', { sdp: offer, iceRestart: true });
+          });
+          if (!restarted) {
+            // ICE restart not possible — wait a bit more then clean up
+            setTimeout(() => {
+              if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                stopDiagnostics(remotePeerId);
+                pc.close();
+                peersRef.current.delete(remotePeerId);
+                setPeers(new Map(peersRef.current));
+                sendSignalRef.current(null, 'peer_left', { peerId: remotePeerId, displayName: remoteDisplayName });
+                supabase.from('conference_participants')
+                  .update({ status: 'left', left_at: new Date().toISOString() })
+                  .eq('room_id', room.id).eq('user_id', remoteUserId)
+                  .then(() => {});
+              }
+            }, 15000);
           }
-        }, 30000);
+        }, 5000);
       }
       if (pc.connectionState === 'failed') {
+        stopDiagnostics(remotePeerId);
         setTimeout(() => { if (pc.connectionState === 'failed') { pc.close(); peersRef.current.delete(remotePeerId); setPeers(new Map(peersRef.current)); } }, 2000);
       }
     };
@@ -604,6 +646,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     const conn: PeerConnection = { peerId: remotePeerId, userId: remoteUserId, displayName: remoteDisplayName, pc, stream: null, screenStream: null, isScreenSharing: false, isMuted: false, isVideoOff: false, isHandRaised: false, connectionState: 'new', networkQuality: 'good', speakingSeconds: 0, audioLevel: 0 };
     peersRef.current.set(remotePeerId, conn);
     setPeers(new Map(peersRef.current));
+
+    // Start diagnostics — update state every 5s
+    startDiagnostics(pc, remotePeerId, (d) => {
+      setPeerDiagnostics(prev => new Map(prev).set(remotePeerId, d));
+    });
+
     return pc;
   }, [sendSignal]);
 
@@ -658,6 +706,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       (async () => {
         if (type === 'join') {
+          // Reject new peers if room is at capacity
+          if (peersRef.current.size >= MAX_PARTICIPANTS - 1) {
+            console.warn(`[WebRTC] Ignoring join from ${from_name} — room at capacity (${MAX_PARTICIPANTS})`);
+            return;
+          }
           if (myPeerIdRef.current < from) {
             await makeOfferRef.current(from, from_user_id, from_name);
           } else {
@@ -1148,6 +1201,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     }
     for (const p of peersRef.current.values()) p.pc.close();
     peersRef.current.clear();
+    stopAllDiagnostics();
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; }
