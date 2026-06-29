@@ -300,6 +300,7 @@ export function GuestJoinPage({ code }: Props) {
     const { data: validation, error: rpcErr } = await supabase.rpc('validate_room_join', {
       p_room_id: room.id,
       p_password: room.has_password ? password : null,
+      p_user_id: authUserId || guestId,
     });
 
     if (rpcErr || !validation) {
@@ -315,6 +316,7 @@ export function GuestJoinPage({ code }: Props) {
         room_full: 'ظرفیت اتاق پر شده است',
         room_ended: 'این جلسه پایان یافته است',
         room_not_found: 'اتاقی با این کد یافت نشد',
+        banned: 'دسترسی شما به این اتاق مسدود شده است',
       };
       setError(msgs[validation.reason] || 'ورود به اتاق امکان‌پذیر نیست');
       setLoading(false);
