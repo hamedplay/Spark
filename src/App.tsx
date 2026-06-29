@@ -418,19 +418,24 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <AuthPage onSuccess={() => {
-      // Show splash after login if enabled
-      supabase.from('system_config').select('value').eq('section', 'appearance').eq('key', 'splash_enabled').maybeSingle().then(({ data }) => {
-        const enabled = !data || data.value === 'true' || data.value === null;
-        if (enabled && !sessionStorage.getItem('spark_splash_shown')) {
-          sessionStorage.setItem('spark_splash_shown', '1');
-          setShowSplash(true);
-          setSplashDone(false);
-        }
-      }).catch(() => {});
-      setIsAuthenticated(true);
-      setActivePage('calendar');
-    }} />;
+    return (
+      <>
+        <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+        <AuthPage onSuccess={() => {
+          // Show splash after login if enabled
+          supabase.from('system_config').select('value').eq('section', 'appearance').eq('key', 'splash_enabled').maybeSingle().then(({ data }) => {
+            const enabled = !data || data.value === 'true' || data.value === null;
+            if (enabled && !sessionStorage.getItem('spark_splash_shown')) {
+              sessionStorage.setItem('spark_splash_shown', '1');
+              setShowSplash(true);
+              setSplashDone(false);
+            }
+          }).catch(() => {});
+          setIsAuthenticated(true);
+          setActivePage('calendar');
+        }} />
+      </>
+    );
   }
 
   // If admin page is active and user is admin, show admin dashboard
