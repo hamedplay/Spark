@@ -13,28 +13,17 @@ export interface DevicePrefs {
 }
 
 function loadPrefs(): Partial<DevicePrefs> {
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
 }
 
 function savePrefs(p: Partial<DevicePrefs>) {
-  try {
-    const existing = loadPrefs();
-    localStorage.setItem(LS_KEY, JSON.stringify({ ...existing, ...p }));
-  } catch {}
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ ...loadPrefs(), ...p })); } catch {}
 }
 
 interface Props {
-  /** Called when the user confirms device selection. The stream is already live. */
   onConfirm: (stream: MediaStream, prefs: DevicePrefs) => void;
-  /** Optional submit button label */
   submitLabel?: string;
-  /** Extra content (e.g. name input, password field) rendered above the submit button */
   children?: React.ReactNode;
-  /** Whether the submit button should be disabled (e.g. required field not filled) */
   submitDisabled?: boolean;
 }
 
@@ -46,25 +35,29 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  // isVideoOff tracks the UI toggle state. We always acquire a video track —
+  // toggling only sets track.enabled, so re-enabling works after device switch.
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [acquiring, setAcquiring] = useState(false);
   const [permError, setPermError] = useState('');
 
-  // Volume meter
   const [volume, setVolume] = useState(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
   const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
-  // Speaker test
   const [testingSound, setTestingSound] = useState(false);
   const [soundTestDone, setSoundTestDone] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Hidden <audio> element used for speaker routing (setSinkId on AudioContext.destination is not supported)
+  const speakerTestRef = useRef<HTMLAudioElement | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   useEffect(() => { streamRef.current = stream; }, [stream]);
+
+  // Prevent cleanup from stopping the stream after the user confirms
+  const confirmedRef = useRef(false);
 
   const audioInputs = devices.filter(d => d.kind === 'audioinput');
   const audioOutputs = devices.filter(d => d.kind === 'audiooutput');
@@ -80,24 +73,20 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
       const hasId = (kind: MediaDeviceKind, id: string) =>
         list.some(d => d.kind === kind && d.deviceId === id);
 
-      const vd = list.filter(d => d.kind === 'videoinput');
-      const ai = list.filter(d => d.kind === 'audioinput');
-      const ao = list.filter(d => d.kind === 'audiooutput');
-
       setSelectedVideo(prev => {
         if (prev && hasId('videoinput', prev)) return prev;
         if (saved.videoInputId && hasId('videoinput', saved.videoInputId)) return saved.videoInputId;
-        return vd[0]?.deviceId || '';
+        return list.find(d => d.kind === 'videoinput')?.deviceId || '';
       });
       setSelectedAudioInput(prev => {
         if (prev && hasId('audioinput', prev)) return prev;
         if (saved.audioInputId && hasId('audioinput', saved.audioInputId)) return saved.audioInputId;
-        return ai[0]?.deviceId || '';
+        return list.find(d => d.kind === 'audioinput')?.deviceId || '';
       });
       setSelectedAudioOutput(prev => {
         if (prev && hasId('audiooutput', prev)) return prev;
         if (saved.audioOutputId && hasId('audiooutput', saved.audioOutputId)) return saved.audioOutputId;
-        return ao[0]?.deviceId || '';
+        return list.find(d => d.kind === 'audiooutput')?.deviceId || '';
       });
     } catch {}
   }, []);
@@ -127,7 +116,8 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
 
       const data = new Uint8Array(analyser.frequencyBinCount);
       const tick = () => {
-        analyser.getByteFrequencyData(data);
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(data);
         const avg = data.reduce((a, b) => a + b, 0) / data.length;
         setVolume(Math.min(100, Math.round((avg / 128) * 100)));
         animFrameRef.current = requestAnimationFrame(tick);
@@ -137,67 +127,79 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
   }, [stopVolumeMeter]);
 
   // ── Acquire stream ─────────────────────────────────────────────────────────
-  const acquireStream = useCallback(async (
-    videoId: string, audioId: string, videoOff = false,
-  ) => {
+  // Always request both audio and video tracks. isVideoOff is applied via
+  // track.enabled after acquisition, so toggling video always works even
+  // after a device switch.
+  const acquireStream = useCallback(async (videoId: string, audioId: string, currentVideoOff: boolean) => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     stopVolumeMeter();
     setAcquiring(true);
     setPermError('');
 
-    const videoConstraint = videoOff ? false : (videoId ? { deviceId: { exact: videoId } } : true);
-    const audioConstraint = audioId ? { deviceId: { exact: audioId } } : true;
+    const videoConstraint: MediaTrackConstraints | boolean = videoId ? { deviceId: { exact: videoId } } : true;
+    const audioConstraint: MediaTrackConstraints | boolean = audioId ? { deviceId: { exact: audioId } } : true;
 
     let s: MediaStream | null = null;
     try {
-      s = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraint,
-        audio: audioConstraint,
-      });
-      setIsVideoOff(false);
-    } catch {
+      s = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: audioConstraint });
+    } catch (err: any) {
+      // Video failed — try audio only
       try {
         s = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint });
-        setIsVideoOff(true);
-      } catch {
-        setPermError('دسترسی به دوربین و میکروفن امکان‌پذیر نیست. لطفاً مجوزها را بررسی کنید.');
+      } catch (audioErr: any) {
+        let msg = 'دسترسی به دوربین و میکروفن امکان‌پذیر نیست. لطفاً مجوزها را بررسی کنید.';
+        const name = err?.name || audioErr?.name;
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          msg = 'مجوز دسترسی رد شد. در تنظیمات مرورگر دسترسی دوربین/میکروفن را فعال کنید.';
+        } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          msg = 'دوربین یا میکروفن یافت نشد. اتصال دستگاه را بررسی کنید.';
+        }
+        setPermError(msg);
         setAcquiring(false);
         return;
       }
     }
 
+    // Apply current toggle state without re-requesting media
+    s.getVideoTracks().forEach(t => { t.enabled = !currentVideoOff; });
+    s.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
+
     setStream(s);
     setAcquiring(false);
     await enumerateDevices();
     startVolumeMeter(s);
+  }, [enumerateDevices, startVolumeMeter, stopVolumeMeter, isMuted]);
 
-    // attach to video element
-    if (videoRef.current) {
-      videoRef.current.srcObject = s;
-      videoRef.current.play().catch(() => {});
-    }
-  }, [enumerateDevices, startVolumeMeter, stopVolumeMeter]);
-
-  // Initial acquire
-  useEffect(() => {
-    const saved = loadPrefs();
-    enumerateDevices().then(() => {
-      acquireStream(saved.videoInputId || '', saved.audioInputId || '');
-    });
-    return () => {
-      streamRef.current?.getTracks().forEach(t => t.stop());
-      stopVolumeMeter();
-      cancelAnimationFrame(animFrameRef.current);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Update video srcObject when stream changes
+  // Attach stream to video element
   useEffect(() => {
     if (!videoRef.current || !stream) return;
     videoRef.current.srcObject = stream;
     videoRef.current.play().catch(() => {});
   }, [stream]);
+
+  // Initial acquire + devicechange listener
+  useEffect(() => {
+    confirmedRef.current = false;
+    const saved = loadPrefs();
+    enumerateDevices().then(() => {
+      acquireStream(saved.videoInputId || '', saved.audioInputId || '', false);
+    });
+
+    const handleDeviceChange = () => enumerateDevices();
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+
+    return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+      // Only stop tracks if the user didn't confirm — confirmed streams are
+      // kept alive for the conference room.
+      if (!confirmedRef.current) {
+        streamRef.current?.getTracks().forEach(t => t.stop());
+      }
+      stopVolumeMeter();
+      cancelAnimationFrame(animFrameRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Device change handlers ─────────────────────────────────────────────────
   const handleVideoChange = async (deviceId: string) => {
@@ -215,9 +217,10 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
   const handleAudioOutputChange = (deviceId: string) => {
     setSelectedAudioOutput(deviceId);
     savePrefs({ audioOutputId: deviceId });
-    // Apply to video element if supported
-    const el = audioRef.current as any;
+    // Route speaker test audio element to selected output
+    const el = speakerTestRef.current as any;
     if (el?.setSinkId) el.setSinkId(deviceId).catch(() => {});
+    // Also route video element playback if supported
     const vid = videoRef.current as any;
     if (vid?.setSinkId) vid.setSinkId(deviceId).catch(() => {});
   };
@@ -230,11 +233,12 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
 
   const toggleVideo = () => {
     const next = !isVideoOff;
+    // Toggle enabled on existing track — no new getUserMedia call needed.
     stream?.getVideoTracks().forEach(t => { t.enabled = !next; });
     setIsVideoOff(next);
   };
 
-  // ── Speaker test ───────────────────────────────────────────────────────────
+  // ── Speaker test — uses a hidden <audio> element so setSinkId works ─────────
   const playTestSound = async () => {
     if (testingSound) return;
     setTestingSound(true);
@@ -248,14 +252,16 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
       osc.connect(gain);
-
-      // Route to selected output if supported
-      if (selectedAudioOutput && (ctx.destination as any).setSinkId) {
-        await (ctx.destination as any).setSinkId(selectedAudioOutput).catch(() => {});
-      }
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.8);
+
+      // Route to selected output via the hidden <audio> element if supported
+      const el = speakerTestRef.current as any;
+      if (el && selectedAudioOutput && el.setSinkId) {
+        el.setSinkId(selectedAudioOutput).catch(() => {});
+      }
+
       osc.onended = () => {
         ctx.close();
         setTestingSound(false);
@@ -270,6 +276,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
   // ── Confirm ────────────────────────────────────────────────────────────────
   const handleConfirm = () => {
     if (!stream) return;
+    confirmedRef.current = true;
     const prefs: DevicePrefs = {
       audioInputId: selectedAudioInput,
       audioOutputId: selectedAudioOutput,
@@ -279,36 +286,39 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
     onConfirm(stream, prefs);
   };
 
-  // ── Volume bar segments ────────────────────────────────────────────────────
   const bars = 16;
 
   return (
     <div className="space-y-4" dir="rtl">
+      {/* Hidden audio element for speaker routing */}
+      <audio ref={speakerTestRef} className="hidden" />
+
       {/* Video preview */}
       <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-video w-full shadow-xl">
-        {!isVideoOff && stream ? (
+        {stream ? (
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover scale-x-[-1]"
+            className={`w-full h-full object-cover scale-x-[-1] transition-opacity ${isVideoOff ? 'opacity-0' : 'opacity-100'}`}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-950">
+        ) : null}
+        {(!stream || isVideoOff) && (
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-950">
             <div className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center">
               <VideoOff className="w-7 h-7 text-gray-500" />
             </div>
           </div>
         )}
         {acquiring && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
             <Loader2 className="w-8 h-8 animate-spin text-teal-400" />
           </div>
         )}
 
         {/* Mic / Cam toggles */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-10">
           <button
             onClick={toggleMute}
             aria-label={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'}
@@ -356,7 +366,6 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
               </option>
             ))}
           </select>
-          {/* Volume bar */}
           <div className="flex items-center gap-2 pt-0.5">
             <span className="text-xs text-gray-500 w-12 flex-shrink-0">سطح صدا</span>
             <div
@@ -372,10 +381,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
                 const active = volume >= threshold;
                 const color = i < bars * 0.5 ? 'bg-teal-500' : i < bars * 0.8 ? 'bg-yellow-400' : 'bg-red-500';
                 return (
-                  <div
-                    key={i}
-                    className={`flex-1 h-2 rounded-sm transition-all duration-75 ${active ? color : 'bg-gray-700'}`}
-                  />
+                  <div key={i} className={`flex-1 h-2 rounded-sm transition-all duration-75 ${active ? color : 'bg-gray-700'}`} />
                 );
               })}
             </div>
@@ -454,10 +460,8 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
         </div>
       </div>
 
-      {/* Extra content slot (name input, password, etc.) */}
       {children}
 
-      {/* Confirm */}
       <button
         onClick={handleConfirm}
         disabled={!stream || acquiring || !!submitDisabled}

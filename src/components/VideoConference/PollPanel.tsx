@@ -63,6 +63,16 @@ function OptionBar({
   );
 }
 
+// Escape a single CSV cell value to prevent formula injection
+function csvCell(value: string | number): string {
+  const str = String(value);
+  // Prefix formula starters with a single quote to neutralize them
+  const safe = /^[=+\-@]/.test(str) ? "'" + str : str;
+  // Wrap in quotes if it contains comma, quote, or newline
+  if (/[",\n\r]/.test(safe)) return '"' + safe.replace(/"/g, '""') + '"';
+  return safe;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
   const [polls, setPolls] = useState<ConferencePoll[]>([]);
@@ -110,7 +120,7 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
 
   // ── Realtime ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    loadPolls();
+    // Subscribe FIRST, then load — prevents missing events that arrive between load and subscribe
     const ch = supabase.channel(`polls-${roomId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conference_polls', filter: `room_id=eq.${roomId}` },
         ({ new: row }) => {
@@ -136,7 +146,10 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
           }));
         })
       .subscribe();
-    return () => { ch.unsubscribe(); };
+
+    loadPolls();
+
+    return () => { supabase.removeChannel(ch); };
   }, [roomId, userId, loadPolls]);
 
   // ── Create ────────────────────────────────────────────────────────────────
@@ -186,14 +199,20 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
         poll_id: poll.id, room_id: roomId, user_id: userId, option_index: optionIndex,
       });
       if (error) {
-        setPolls(prev => prev.map(p => {
-          if (p.id !== poll.id) return p;
-          const counts = { ...(p.votes || {}) };
-          counts[optionIndex] = Math.max(0, (counts[optionIndex] || 1) - 1);
-          return { ...p, votes: counts, my_vote: null };
-        }));
-        if (error.code === '23505') toast('شما قبلاً در این نظرسنجی رأی داده‌اید');
-        else throw error;
+        if (error.code === '23505') {
+          // Duplicate vote — reload to show real server state
+          toast('شما قبلاً در این نظرسنجی رأی داده‌اید');
+          await loadPolls();
+        } else {
+          // Rollback optimistic update
+          setPolls(prev => prev.map(p => {
+            if (p.id !== poll.id) return p;
+            const counts = { ...(p.votes || {}) };
+            counts[optionIndex] = Math.max(0, (counts[optionIndex] || 1) - 1);
+            return { ...p, votes: counts, my_vote: null };
+          }));
+          throw error;
+        }
       }
     } catch (e: any) {
       toast.error('خطا در ثبت رأی');
@@ -217,6 +236,13 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
     try {
       const { error } = await supabase.from('conference_polls').delete().eq('id', pollId);
       if (error) throw error;
+      // Clear cached voter data for this poll and collapse voter panel if open
+      setVoterMap(prev => {
+        const next = { ...prev };
+        delete next[pollId];
+        return next;
+      });
+      setExpandedVoters(prev => prev === pollId ? null : prev);
       toast.success('نظرسنجی حذف شد');
     } catch (e: any) { toast.error('خطا در حذف نظرسنجی'); }
   };
@@ -225,12 +251,10 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
   const loadVoters = async (pollId: string) => {
     if (expandedVoters === pollId) { setExpandedVoters(null); return; }
     setExpandedVoters(pollId);
-    if (voterMap[pollId]) return;
-    const missing = pollIdsRef.current.filter(id => !voterMap[id]);
-    if (!missing.length) return;
+    // Always fetch fresh data for the clicked poll
     try {
       const { data: votes, error: vErr } = await supabase
-        .from('conference_poll_votes').select('poll_id, user_id, option_index').in('poll_id', missing);
+        .from('conference_poll_votes').select('user_id, option_index').eq('poll_id', pollId);
       if (vErr) throw vErr;
       const userIds = [...new Set((votes || []).map(v => v.user_id))];
       const { data: parts } = userIds.length
@@ -238,17 +262,24 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
         : { data: [] };
       const nameMap: Record<string, string> = {};
       (parts || []).forEach(p => { nameMap[p.user_id] = p.display_name; });
-      const grouped: Record<string, VoterInfo[]> = {};
-      missing.forEach(id => { grouped[id] = []; });
-      (votes || []).forEach(v => { if (grouped[v.poll_id]) grouped[v.poll_id].push({ user_id: v.user_id, display_name: nameMap[v.user_id] || 'ناشناس', option_index: v.option_index }); });
-      setVoterMap(prev => ({ ...prev, ...grouped }));
+      const voters: VoterInfo[] = (votes || []).map(v => ({
+        user_id: v.user_id,
+        display_name: nameMap[v.user_id] || 'ناشناس',
+        option_index: v.option_index,
+      }));
+      setVoterMap(prev => ({ ...prev, [pollId]: voters }));
     } catch (e) { toast.error('خطا در بارگذاری رأی‌دهندگان'); }
   };
 
   const exportCSV = (poll: ConferencePoll) => {
     const total = Object.values(poll.votes || {}).reduce((a, b) => a + b, 0);
-    const rows = [['گزینه', 'تعداد رأی', 'درصد'], ...poll.options.map((opt, i) => { const cnt = poll.votes?.[i] || 0; return [opt, cnt, `${total ? Math.round(cnt / total * 100) : 0}%`]; }), ['مجموع', total, '100%']];
-    const csv = rows.map(r => r.join(',')).join('\n');
+    const header = ['گزینه', 'تعداد رأی', 'درصد'].map(csvCell).join(',');
+    const dataRows = poll.options.map((opt, i) => {
+      const cnt = poll.votes?.[i] || 0;
+      return [csvCell(opt), csvCell(cnt), csvCell(`${total ? Math.round(cnt / total * 100) : 0}%`)].join(',');
+    });
+    const footer = [csvCell('مجموع'), csvCell(total), csvCell('100%')].join(',');
+    const csv = [header, ...dataRows, footer].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `poll-${poll.id.slice(0, 8)}.csv`; a.click();

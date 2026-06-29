@@ -8,16 +8,24 @@ import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
 import type { ConferenceRoom } from './types';
 
-function generateGuestId() {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+const GUEST_ID_KEY = 'conf_guest_id';
+
+function getOrCreateGuestId(): string {
+  try {
+    const stored = localStorage.getItem(GUEST_ID_KEY);
+    if (stored) return stored;
+  } catch { /* localStorage unavailable */ }
+  const id = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+  try { localStorage.setItem(GUEST_ID_KEY, id); } catch { /* ignore */ }
+  return id;
 }
 
 interface Props {
   code: string;
 }
 
-// Minimal room shape returned to guest — no password field
 interface RoomPublic {
   id: string;
   name: string;
@@ -38,6 +46,9 @@ interface RoomPublic {
   participant_count: number;
 }
 
+// 5-minute waiting room timeout
+const WAITING_TIMEOUT_MS = 5 * 60 * 1000;
+
 export function GuestJoinPage({ code }: Props) {
   const [step, setStep] = useState<'form' | 'waiting' | 'in-room' | 'auth-joining'>('form');
   const [displayName, setDisplayName] = useState('');
@@ -53,16 +64,21 @@ export function GuestJoinPage({ code }: Props) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [myPeerId, setMyPeerId] = useState('');
   const [waitingRequestId, setWaitingRequestId] = useState<string | null>(null);
-  const [guestId] = useState(() => generateGuestId());
 
-  // Auth user — if logged in, auto-join
+  // Stable guest ID persisted across refreshes (prevents ban bypass)
+  const [guestId] = useState(() => getOrCreateGuestId());
+
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authUserName, setAuthUserName] = useState<string | null>(null);
 
   const lastJoinAttemptRef = useRef<number>(0);
   const autoJoinedRef = useRef(false);
 
-  // ── Auth + room loading ────────────────────────────────────────────────────
+  // Refs for stable access inside async realtime callbacks
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const doEnterRoomRef = useRef<((stream: MediaStream, overrideName?: string) => Promise<void>) | null>(null);
+
+  // ── Auth + room loading ─────────────────────────────────────────────────────
   useEffect(() => {
     let timeInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -99,7 +115,6 @@ export function GuestJoinPage({ code }: Props) {
           ...data,
           has_password: hasPwd === true,
           participant_count: count ?? 0,
-          password: undefined as any,
         };
         setRoom(roomData);
 
@@ -145,39 +160,23 @@ export function GuestJoinPage({ code }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
-  // ── Waiting room realtime subscription ────────────────────────────────────
-  useEffect(() => {
-    if (step !== 'waiting' || !waitingRequestId) return;
-
-    const ch = supabase
-      .channel(`waiting-${waitingRequestId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'conference_waiting_room',
-          filter: `id=eq.${waitingRequestId}`,
-        },
-        async ({ new: row }) => {
-          if (row.status === 'admitted') {
-            ch.unsubscribe();
-            if (localStream) await doEnterRoom(localStream);
-          } else if (row.status === 'rejected') {
-            ch.unsubscribe();
-            setStep('form');
-            setError('متاسفانه میزبان درخواست ورود شما را رد کرد');
-          }
-        }
-      )
-      .subscribe();
-
-    return () => { ch.unsubscribe(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, waitingRequestId]);
+  // Keep refs current whenever state changes
+  useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
   const doEnterRoom = useCallback(async (stream: MediaStream, overrideName?: string) => {
     if (!room) { setStep('form'); setError('اتاق یافت نشد'); return; }
+
+    // Re-check capacity right before entering
+    const { count } = await supabase
+      .from('conference_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('room_id', room.id)
+      .eq('status', 'joined');
+    if ((count ?? 0) >= room.max_participants) {
+      setStep('form');
+      setError('ظرفیت اتاق پر شده است');
+      return;
+    }
 
     stream.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
     stream.getVideoTracks().forEach(t => { t.enabled = !isVideoOff; });
@@ -209,6 +208,65 @@ export function GuestJoinPage({ code }: Props) {
     setLocalStream(stream);
     setStep('in-room');
   }, [room, isMuted, isVideoOff, authUserId, guestId, displayName]);
+
+  // Keep doEnterRoom ref current
+  useEffect(() => { doEnterRoomRef.current = doEnterRoom; }, [doEnterRoom]);
+
+  // ── Waiting room realtime subscription ─────────────────────────────────────
+  useEffect(() => {
+    if (step !== 'waiting' || !waitingRequestId) return;
+
+    let expired = false;
+
+    const ch = supabase
+      .channel(`waiting-${waitingRequestId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conference_waiting_room',
+          filter: `id=eq.${waitingRequestId}`,
+        },
+        async ({ new: row }) => {
+          if (expired) return;
+          if (row.status === 'admitted') {
+            supabase.removeChannel(ch);
+            const stream = localStreamRef.current;
+            if (stream && doEnterRoomRef.current) {
+              await doEnterRoomRef.current(stream);
+            } else {
+              setStep('form');
+              setError('خطا در ورود: جریان رسانه موجود نیست');
+            }
+          } else if (row.status === 'rejected') {
+            supabase.removeChannel(ch);
+            setStep('form');
+            setError('متاسفانه میزبان درخواست ورود شما را رد کرد');
+          }
+        }
+      )
+      .subscribe();
+
+    // 5-minute timeout
+    const timeout = setTimeout(async () => {
+      expired = true;
+      supabase.removeChannel(ch);
+      // Clean up the waiting room record
+      if (waitingRequestId) {
+        await supabase.from('conference_waiting_room').delete().eq('id', waitingRequestId);
+      }
+      setWaitingRequestId(null);
+      setStep('form');
+      setError('زمان انتظار به پایان رسید. لطفاً دوباره تلاش کنید.');
+    }, WAITING_TIMEOUT_MS);
+
+    return () => {
+      expired = true;
+      supabase.removeChannel(ch);
+      clearTimeout(timeout);
+    };
+  }, [step, waitingRequestId]);
 
   // Auto-join for authenticated users — triggered once DeviceSelector confirms
   const handleDeviceSelectorConfirm = useCallback(async (stream: MediaStream) => {
@@ -276,6 +334,9 @@ export function GuestJoinPage({ code }: Props) {
         return;
       }
 
+      // CRITICAL: store stream in state (and ref) before entering waiting step
+      setLocalStream(stream);
+      localStreamRef.current = stream;
       setWaitingRequestId(req.id);
       setStep('waiting');
       setLoading(false);
@@ -284,6 +345,14 @@ export function GuestJoinPage({ code }: Props) {
 
     await doEnterRoom(stream);
     setLoading(false);
+  };
+
+  const handleCancelWaiting = async () => {
+    if (waitingRequestId) {
+      await supabase.from('conference_waiting_room').delete().eq('id', waitingRequestId);
+      setWaitingRequestId(null);
+    }
+    setStep('form');
   };
 
   const handleLeave = async () => {
@@ -309,11 +378,11 @@ export function GuestJoinPage({ code }: Props) {
 
       if (!freshRoom) { window.location.href = window.location.origin; return; }
       const { data: hasPwd } = await supabase.rpc('room_has_password', { p_room_id: freshRoom.id });
-      setRoom({ ...freshRoom, has_password: hasPwd === true, participant_count: 0, password: undefined as any });
+      setRoom({ ...freshRoom, has_password: hasPwd === true, participant_count: 0 });
     }
   };
 
-  // ── Auth-joining loading screen ────────────────────────────────────────────
+  // ── Auth-joining loading screen ─────────────────────────────────────────────
   if (step === 'auth-joining') {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4" dir="rtl">
@@ -332,7 +401,7 @@ export function GuestJoinPage({ code }: Props) {
     );
   }
 
-  // ── In room ────────────────────────────────────────────────────────────────
+  // ── In room ─────────────────────────────────────────────────────────────────
   if (step === 'in-room' && room && localStream) {
     const activeUserId = authUserId || guestId;
     const activeUserName = authUserName || displayName;
@@ -350,7 +419,7 @@ export function GuestJoinPage({ code }: Props) {
     );
   }
 
-  // ── Waiting room ───────────────────────────────────────────────────────────
+  // ── Waiting room ────────────────────────────────────────────────────────────
   if (step === 'waiting') {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4" dir="rtl">
@@ -364,8 +433,10 @@ export function GuestJoinPage({ code }: Props) {
             <p className="text-gray-400 text-xs">نام شما</p>
             <p className="text-white font-medium">{displayName}</p>
           </div>
-          <button onClick={() => setStep('form')}
-            className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-sm transition-colors">
+          <button
+            onClick={handleCancelWaiting}
+            className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-sm transition-colors"
+          >
             انصراف
           </button>
         </div>
@@ -373,7 +444,7 @@ export function GuestJoinPage({ code }: Props) {
     );
   }
 
-  // ── Join form ──────────────────────────────────────────────────────────────
+  // ── Join form ───────────────────────────────────────────────────────────────
   const isSubmitDisabled = loading || !room || !displayName.trim() || !joinAllowed;
 
   return (
@@ -456,7 +527,11 @@ export function GuestJoinPage({ code }: Props) {
                 type="text"
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !isSubmitDisabled && handleJoin(localStream!)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !isSubmitDisabled && localStream) {
+                    handleJoin(localStream);
+                  }
+                }}
                 placeholder="نام و نام خانوادگی"
                 autoFocus
                 maxLength={60}
@@ -473,7 +548,11 @@ export function GuestJoinPage({ code }: Props) {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !isSubmitDisabled && handleJoin(localStream!)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !isSubmitDisabled && localStream) {
+                    handleJoin(localStream);
+                  }
+                }}
                 placeholder="رمز عبور"
                 className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
               />
