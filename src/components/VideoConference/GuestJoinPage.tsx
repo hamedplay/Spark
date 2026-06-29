@@ -448,8 +448,19 @@ export function GuestJoinPage({ code }: Props) {
   const isSubmitDisabled = loading || !room || !displayName.trim() || !joinAllowed;
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4" dir="rtl">
-      <div className="w-full max-w-md space-y-4">
+    <div
+      className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+      dir="rtl"
+      style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}
+    >
+      {/* تصویر پس‌زمینه */}
+      <div
+        className="absolute inset-0 bg-cover bg-center opacity-10"
+        style={{ backgroundImage: `url('https://images.pexels.com/photos/3183150/pexels-photo-3183150.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1')` }}
+        aria-hidden="true"
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-gray-950/60 via-gray-950/40 to-gray-950/80" aria-hidden="true" />
+      <div className="relative z-10 w-full max-w-md space-y-4">
         {/* Header */}
         <div className="text-center mb-2">
           <div className="inline-flex items-center gap-2 mb-3">

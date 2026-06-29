@@ -288,10 +288,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   // Pending approvals (host/admin view)
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
-  // Kick confirmation state
+  // Kick/ban action menu (null = closed)
   const [kickConfirm, setKickConfirm] = useState<{ peerId: string; userId: string; displayName: string } | null>(null);
-  const [kickAndBan, setKickAndBan] = useState(false);
-  const [banReason, setBanReason] = useState('');
   // Ban list visibility
   const [showBanList, setShowBanList] = useState(false);
   // Role change dropdown (peerId → open)
@@ -1083,13 +1081,27 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     toast.success(`${displayName} از جلسه خارج شد`);
   };
 
-  const banParticipant = async (targetPeerId: string, targetUserId: string, displayName: string, reason?: string) => {
+  // durationMinutes = null → مسدودی دائمی
+  const banParticipant = async (
+    targetPeerId: string, targetUserId: string, displayName: string,
+    durationMinutes: number | null,
+  ) => {
+    const expiresAt = durationMinutes != null
+      ? new Date(Date.now() + durationMinutes * 60_000).toISOString()
+      : null;
+
     await supabase.from('banned_users').upsert([{
       room_id: room.id, user_id: targetUserId,
       display_name: displayName, banned_by: currentUserId,
-      reason: reason || null,
+      expires_at: expiresAt,
     }], { onConflict: 'room_id,user_id' });
+
     await kickParticipant(targetPeerId, targetUserId, displayName);
+
+    const label = durationMinutes == null
+      ? 'دائمی'
+      : durationMinutes < 60 ? `${durationMinutes} دقیقه` : `${durationMinutes / 60} ساعت`;
+    toast.success(`${displayName} مسدود شد (${label})`);
   };
 
   const changeRole = async (targetPeerId: string, targetUserId: string, displayName: string, newRole: RoleType) => {
@@ -1463,12 +1475,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   />
 
                   {/* Host tools */}
-                  {(checkPermission('mute_all') || checkPermission('kick')) && peers.size > 0 && (
+                  {(checkPermission('mute_all') || checkPermission('kick') || checkPermission('ban')) && (
                     <div className="p-2 bg-gray-800/60 rounded-xl space-y-1.5 border border-gray-700">
                       <p className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
                         <Crown className="w-3 h-3" />ابزار مدیریت
                       </p>
-                      {checkPermission('mute_all') && (
+                      {checkPermission('mute_all') && peers.size > 0 && (
                         <button onClick={muteAll}
                           className="w-full flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-amber-900/40 text-gray-200 hover:text-amber-300 rounded-lg text-xs transition-colors">
                           <Mic2 className="w-3.5 h-3.5" />قطع میکروفون همه
@@ -1662,56 +1674,56 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         )}
       </div>
 
-      {/* Kick / kick+ban confirmation modal */}
+      {/* Kick / Ban action menu */}
       {kickConfirm && (
-        <div role="dialog" aria-modal="true" aria-label="اخراج از جلسه" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm space-y-4" dir="rtl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center flex-shrink-0">
-                <UserX className="w-5 h-5 text-red-400" />
+        <div role="dialog" aria-modal="true" aria-label="مدیریت کاربر" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 w-full max-w-sm space-y-3" dir="rtl">
+            <div className="flex items-center gap-3 pb-2 border-b border-gray-800">
+              <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                {kickConfirm.displayName[0]?.toUpperCase() || '?'}
               </div>
               <div>
-                <h3 className="text-white font-bold">اخراج کاربر</h3>
-                <p className="text-gray-400 text-sm">{kickConfirm.displayName}</p>
+                <h3 className="text-white font-bold text-sm">{kickConfirm.displayName}</h3>
+                <p className="text-gray-500 text-xs">انتخاب عملیات</p>
               </div>
+              <button onClick={() => setKickConfirm(null)} className="mr-auto p-1 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
-            {checkPermission('ban') && (
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <div
-                  onClick={() => setKickAndBan(v => !v)}
-                  className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${kickAndBan ? 'bg-red-600 border-red-600' : 'border-gray-600 bg-gray-800 group-hover:border-red-500'}`}
+
+            {/* Kick — no ban */}
+            <button
+              onClick={async () => { await kickParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName); setKickConfirm(null); }}
+              className="w-full flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-200 transition-colors text-right"
+            >
+              <UserX className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <div>
+                <p className="font-medium">اخراج (بدون مسدودی)</p>
+                <p className="text-xs text-gray-500">کاربر می‌تواند دوباره وارد شود</p>
+              </div>
+            </button>
+
+            {checkPermission('ban') && (<>
+              <p className="text-xs text-gray-500 px-1">مسدود کردن:</p>
+              {([
+                { label: '۱ دقیقه', min: 1 },
+                { label: '۵ دقیقه', min: 5 },
+                { label: '۱۵ دقیقه', min: 15 },
+                { label: '۳۰ دقیقه', min: 30 },
+                { label: 'دائمی', min: null },
+              ] as { label: string; min: number | null }[]).map(({ label, min }) => (
+                <button
+                  key={label}
+                  onClick={async () => { await banParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName, min); setKickConfirm(null); }}
+                  className="w-full flex items-center gap-3 p-3 bg-gray-800 hover:bg-red-900/30 rounded-xl text-sm text-gray-200 hover:text-red-300 transition-colors text-right"
                 >
-                  {kickAndBan && <Check className="w-2.5 h-2.5 text-white" />}
-                </div>
-                <span className="text-sm text-gray-300">و مسدود کردن این کاربر</span>
-              </label>
-            )}
-            {kickAndBan && (
-              <input
-                value={banReason}
-                onChange={e => setBanReason(e.target.value)}
-                placeholder="دلیل مسدودسازی (اختیاری)"
-                className="w-full p-2.5 bg-gray-800 border border-gray-700 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-600"
-              />
-            )}
-            <div className="flex gap-2">
-              <button
-                onClick={async () => {
-                  if (kickAndBan) await banParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName, banReason || undefined);
-                  else await kickParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName);
-                  setKickConfirm(null);
-                }}
-                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                {kickAndBan ? 'اخراج و مسدودسازی' : 'اخراج'}
-              </button>
-              <button
-                onClick={() => setKickConfirm(null)}
-                className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm transition-colors"
-              >
-                انصراف
-              </button>
-            </div>
+                  <ShieldOff className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <span>مسدودی {label}</span>
+                </button>
+              ))}
+            </>)}
+
+            <button onClick={() => setKickConfirm(null)} className="w-full py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors">
+              انصراف
+            </button>
           </div>
         </div>
       )}
