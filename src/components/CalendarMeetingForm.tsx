@@ -542,6 +542,14 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         join_link: joinLink,
         sender_name: userDisplayName,
         representative: representative || '',
+        agenda: agendaEnabled && agendaItems.length > 0
+          ? agendaItems.map((item, idx) => {
+              const parts = [`${idx + 1}. ${item.title}`];
+              if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+              if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+              return parts.join(' | ');
+            }).join('\n')
+          : '',
       };
 
       // Build agenda summary for notification messages

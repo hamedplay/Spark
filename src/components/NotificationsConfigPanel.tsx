@@ -103,6 +103,7 @@ const ALL_PLACEHOLDERS = [
   { key: 'note_title',      label: 'عنوان یادداشت' },
   { key: 'message_preview', label: 'پیش‌نمایش پیام' },
   { key: 'alert_message',   label: 'متن هشدار' },
+  { key: 'agenda',          label: 'دستور جلسه' },
 ];
 
 const TABS = [
@@ -862,6 +863,7 @@ const NOTIF_SAMPLE_VALUES: Record<string, string> = {
   message_preview: 'سلام، آیا گزارش آماده شده؟',
   alert_message: 'خرابی موقت در سرویس ایمیل',
   join_link: 'https://example.com?conference=ABC-DEF-GHI',
+  agenda: '۱. بررسی پیشرفت پروژه | ارائه‌دهنده: علی محمدی | ۲۰ دقیقه\n۲. تخصیص منابع | ۱۵ دقیقه',
 };
 
 function fillNotifPreview(text: string, customVars: Record<string, string>): string {
