@@ -544,6 +544,16 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         representative: representative || '',
       };
 
+      // Build agenda summary for notification messages
+      const agendaSummary = agendaEnabled && agendaItems.length > 0
+        ? '\n\nدستور جلسه:\n' + agendaItems.map((item, idx) => {
+            const parts = [`${idx + 1}. ${item.title}`];
+            if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+            if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+            return parts.join(' | ');
+          }).join('\n')
+        : '';
+
       // Fetch display names for all participants in one query
       let participantNameMap: Record<string, string> = {};
       const participantIds = selectedParticipants.map(p => p.id).filter(id => id !== userId);
@@ -643,12 +653,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           );
         }
 
-        await insertNotification({ userId, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد`, placeholders: smsPlaceholders, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
+        await insertNotification({ userId, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد${agendaSummary}`, placeholders: smsPlaceholders, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
         if (participantIds.length) {
-          await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', audience: 'participants', fallbackTitle: isFirstSchedule ? 'دعوت به جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', audience: 'participants', fallbackTitle: isFirstSchedule ? 'دعوت به جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
         }
         if (observerIds.length) {
-          await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', audience: 'observers', fallbackTitle: isFirstSchedule ? 'اطلاع از جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', audience: 'observers', fallbackTitle: isFirstSchedule ? 'اطلاع از جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
         }
         if (sendSms && selectedExternal.length > 0) {
           const fallbackSms = `دعوت به جلسه: «${subject}» | تاریخ: ${meetingDateStr} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
@@ -685,12 +695,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         }
         if (repeatEnabled && md && repeatEndDate) await createRepeatMeetings(record, repeatType, repeatInterval, repeatEndDate);
         toast.success('جلسه ثبت شد');
-        await insertNotification({ userId, category: 'meeting', eventType: 'invite', fallbackTitle: 'جلسه ثبت شد', fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}`, placeholders: smsPlaceholders, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
+        await insertNotification({ userId, category: 'meeting', eventType: 'invite', fallbackTitle: 'جلسه ثبت شد', fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}${agendaSummary}`, placeholders: smsPlaceholders, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
         if (participantIds.length) {
-          await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
         }
         if (observerIds.length) {
-          await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
         }
         if (sendSms && selectedExternal.length > 0) {
           const fallbackSms = `دعوت به جلسه: «${subject}» | تاریخ: ${meetingDateStr} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;

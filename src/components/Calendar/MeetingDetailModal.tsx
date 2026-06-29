@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Clock, MapPin, Users, User, Phone, Bell, RefreshCw, UserPlus, Share2, ExternalLink, Trash2, CreditCard as Edit2, Video, Copy, Check, Link, FileText, Image, CalendarDays, CheckCircle2, XCircle, HelpCircle, UserCheck } from 'lucide-react';
+import { X, Clock, MapPin, Users, User, Phone, Bell, RefreshCw, UserPlus, Share2, ExternalLink, Trash2, CreditCard as Edit2, Video, Copy, Check, Link, FileText, Image, CalendarDays, CheckCircle2, XCircle, HelpCircle, UserCheck, ClipboardList } from 'lucide-react';
 import { MeetingData, CalendarEntry, ProfileEntry } from './types';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
 import moment from 'moment-jalaali';
+
+interface AgendaItem {
+  id: string;
+  title: string;
+  presenter: string | null;
+  duration_minutes: number | null;
+  sort_order: number;
+}
 
 interface Props {
   meeting: MeetingData;
@@ -37,6 +45,17 @@ export function MeetingDetailModal({
 
   // Per-participant inbox status — only fetched for the meeting owner
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, 'pending' | 'accepted' | 'declined' | 'delegated'>>({});
+
+  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from('meeting_agenda_items')
+      .select('id, title, presenter, duration_minutes, sort_order')
+      .eq('meeting_id', m.id)
+      .order('sort_order')
+      .then(({ data }) => { if (data) setAgendaItems(data as AgendaItem[]); });
+  }, [m.id]);
 
   useEffect(() => {
     if (!isOwner || !m.participant_user_ids?.length) return;
@@ -418,6 +437,38 @@ const getJalaliDate = (): string => {
             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
               <p className="text-xs text-gray-400 mb-1.5">یادداشت</p>
               <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{m.notes}</p>
+            </div>
+          )}
+
+          {/* Agenda */}
+          {agendaItems.length > 0 && (
+            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+              <div className="flex items-center gap-2 mb-2.5">
+                <ClipboardList className="w-4 h-4 text-gray-400" />
+                <p className="text-xs text-gray-400 font-medium">دستور جلسه ({agendaItems.length} آیتم)</p>
+              </div>
+              <div className="space-y-2">
+                {agendaItems.map((item, idx) => (
+                  <div key={item.id} className="flex items-start gap-2.5 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-100 dark:border-gray-600">
+                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                        {item.presenter && (
+                          <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                            <UserCheck className="w-3 h-3" />{item.presenter}
+                          </span>
+                        )}
+                        {item.duration_minutes && (
+                          <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                            <Clock className="w-3 h-3" />{item.duration_minutes} دقیقه
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
