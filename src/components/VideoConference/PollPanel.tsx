@@ -99,16 +99,30 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
       const ids = pData.map(p => p.id);
       pollIdsRef.current = ids;
 
+      // Non-hosts: fetch only aggregate counts (no user_id) — voter identity is host-only
       const { data: allVotes, error: vErr } = await supabase
-        .from('conference_poll_votes').select('poll_id, option_index, user_id').in('poll_id', ids);
+        .from('conference_poll_votes')
+        .select(isHost ? 'poll_id, option_index, user_id' : 'poll_id, option_index')
+        .in('poll_id', ids);
       if (vErr) throw vErr;
 
+      // For non-hosts we also need our own vote to mark the selected option
+      let myVotesMap: Record<string, number> = {};
+      if (!isHost) {
+        const { data: myVotes } = await supabase
+          .from('conference_poll_votes')
+          .select('poll_id, option_index')
+          .in('poll_id', ids)
+          .eq('user_id', userId);
+        (myVotes || []).forEach(v => { myVotesMap[v.poll_id] = v.option_index; });
+      }
+
       const byPoll: Record<string, { counts: Record<number, number>; myVote: number | null }> = {};
-      ids.forEach(id => { byPoll[id] = { counts: {}, myVote: null }; });
+      ids.forEach(id => { byPoll[id] = { counts: {}, myVote: isHost ? null : (myVotesMap[id] ?? null) }; });
       (allVotes || []).forEach(v => {
         if (!byPoll[v.poll_id]) return;
         byPoll[v.poll_id].counts[v.option_index] = (byPoll[v.poll_id].counts[v.option_index] || 0) + 1;
-        if (v.user_id === userId) byPoll[v.poll_id].myVote = v.option_index;
+        if (isHost && v.user_id === userId) byPoll[v.poll_id].myVote = v.option_index;
       });
 
       setPolls(pData.map(p => ({ ...p, options: p.options as string[], votes: byPoll[p.id].counts, my_vote: byPoll[p.id].myVote })));
