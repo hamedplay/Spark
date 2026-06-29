@@ -57,6 +57,7 @@ export function GuestJoinPage({ code }: Props) {
   const [roomLoading, setRoomLoading] = useState(true);
   const [error, setError] = useState('');
   const [banDetail, setBanDetail] = useState<{ reason: string | null; expiresAt: string | null } | null>(null);
+  const [banNow, setBanNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(false);
   const [joinAllowed, setJoinAllowed] = useState(false);
   const [meetingStartsIn, setMeetingStartsIn] = useState<number | null>(null);
@@ -163,6 +164,73 @@ export function GuestJoinPage({ code }: Props) {
 
   // Keep refs current whenever state changes
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
+
+  // ── Ban check on load + realtime watch ────────────────────────────────────
+  useEffect(() => {
+    if (!room) return;
+    const userId = authUserId || guestId;
+
+    const checkBan = async () => {
+      const { data } = await supabase
+        .from('banned_users')
+        .select('reason, expires_at')
+        .eq('room_id', room.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!data) { setBanDetail(null); return; }
+
+      const stillActive = !data.expires_at || new Date(data.expires_at) > new Date();
+      if (stillActive) {
+        setBanDetail({ reason: data.reason ?? null, expiresAt: data.expires_at ?? null });
+      } else {
+        setBanDetail(null);
+      }
+    };
+
+    checkBan();
+
+    // Watch for ban being added or removed for this user in realtime
+    const ch = supabase
+      .channel(`my-ban-${room.id}-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'banned_users', filter: `room_id=eq.${room.id}` },
+        ({ eventType, new: newRow, old: oldRow }) => {
+          const affected = (eventType === 'DELETE' ? oldRow : newRow) as { user_id?: string; reason?: string | null; expires_at?: string | null } | undefined;
+          if (!affected || affected.user_id !== userId) return;
+
+          if (eventType === 'DELETE') {
+            setBanDetail(null);
+            return;
+          }
+          const active = !affected.expires_at || new Date(affected.expires_at) > new Date();
+          if (active) {
+            setBanDetail({ reason: affected.reason ?? null, expiresAt: affected.expires_at ?? null });
+          } else {
+            setBanDetail(null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { ch.unsubscribe(); };
+  }, [room, authUserId, guestId]);
+
+  // Tick every 30s to keep countdown fresh when user is on ban screen
+  useEffect(() => {
+    if (!banDetail?.expiresAt) return;
+    const t = setInterval(() => {
+      const remaining = new Date(banDetail.expiresAt!).getTime() - Date.now();
+      if (remaining <= 0) {
+        setBanDetail(null); // auto-clear when expired
+        clearInterval(t);
+      } else {
+        setBanNow(Date.now());
+      }
+    }, 30_000);
+    return () => clearInterval(t);
+  }, [banDetail]);
 
   const doEnterRoom = useCallback(async (stream: MediaStream, overrideName?: string) => {
     if (!room) { setStep('form'); setError('اتاق یافت نشد'); return; }
@@ -542,7 +610,7 @@ export function GuestJoinPage({ code }: Props) {
                 <div className="flex items-center gap-1.5 text-amber-400 text-xs">
                   <Clock className="w-3.5 h-3.5 flex-shrink-0" />
                   {(() => {
-                    const diff = Math.ceil((new Date(banDetail.expiresAt).getTime() - Date.now()) / 60000);
+                    const diff = Math.ceil((new Date(banDetail.expiresAt).getTime() - banNow) / 60000);
                     if (diff <= 0) return 'مسدودیت منقضی شده — لطفاً دوباره تلاش کنید';
                     if (diff < 60) return `رفع مسدودیت پس از ${diff} دقیقه`;
                     const h = Math.floor(diff / 60);
