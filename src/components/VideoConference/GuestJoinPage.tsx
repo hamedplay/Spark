@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Video, Loader2, LogIn, AlertCircle,
-  Shield, Lock, Users,
+  Shield, Lock, Users, ShieldOff, Clock,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
@@ -56,6 +56,7 @@ export function GuestJoinPage({ code }: Props) {
   const [room, setRoom] = useState<RoomPublic | null>(null);
   const [roomLoading, setRoomLoading] = useState(true);
   const [error, setError] = useState('');
+  const [banDetail, setBanDetail] = useState<{ reason: string | null; expiresAt: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [joinAllowed, setJoinAllowed] = useState(false);
   const [meetingStartsIn, setMeetingStartsIn] = useState<number | null>(null);
@@ -296,6 +297,7 @@ export function GuestJoinPage({ code }: Props) {
 
     setLoading(true);
     setError('');
+    setBanDetail(null);
 
     const { data: validation, error: rpcErr } = await supabase.rpc('validate_room_join', {
       p_room_id: room.id,
@@ -310,15 +312,22 @@ export function GuestJoinPage({ code }: Props) {
     }
 
     if (!validation.allowed) {
-      const msgs: Record<string, string> = {
-        wrong_password: 'رمز عبور اشتباه است',
-        room_locked: 'این اتاق قفل شده است',
-        room_full: 'ظرفیت اتاق پر شده است',
-        room_ended: 'این جلسه پایان یافته است',
-        room_not_found: 'اتاقی با این کد یافت نشد',
-        banned: 'دسترسی شما به این اتاق مسدود شده است',
-      };
-      setError(msgs[validation.reason] || 'ورود به اتاق امکان‌پذیر نیست');
+      if (validation.reason === 'banned') {
+        setBanDetail({
+          reason: validation.ban_reason ?? null,
+          expiresAt: validation.ban_expires_at ?? null,
+        });
+      } else {
+        setBanDetail(null);
+        const msgs: Record<string, string> = {
+          wrong_password: 'رمز عبور اشتباه است',
+          room_locked: 'این اتاق قفل شده است',
+          room_full: 'ظرفیت اتاق پر شده است',
+          room_ended: 'این جلسه پایان یافته است',
+          room_not_found: 'اتاقی با این کد یافت نشد',
+        };
+        setError(msgs[validation.reason] || 'ورود به اتاق امکان‌پذیر نیست');
+      }
       setLoading(false);
       return;
     }
@@ -514,6 +523,39 @@ export function GuestJoinPage({ code }: Props) {
                   <p className="text-xs text-amber-400 mt-0.5">ورود {meetingStartsIn} دقیقه دیگر فعال می‌شود</p>
                 )}
               </div>
+            </div>
+          )}
+
+          {banDetail && (
+            <div className="p-4 bg-red-950/60 border border-red-700/60 rounded-xl space-y-2" dir="rtl">
+              <div className="flex items-center gap-2 text-red-400">
+                <ShieldOff className="w-4 h-4 flex-shrink-0" />
+                <span className="font-semibold text-sm">دسترسی شما مسدود شده است</span>
+              </div>
+              {banDetail.reason && (
+                <p className="text-red-300 text-sm bg-red-900/30 rounded-lg px-3 py-2">
+                  <span className="text-red-400 text-xs block mb-0.5">دلیل:</span>
+                  {banDetail.reason}
+                </p>
+              )}
+              {banDetail.expiresAt ? (
+                <div className="flex items-center gap-1.5 text-amber-400 text-xs">
+                  <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                  {(() => {
+                    const diff = Math.ceil((new Date(banDetail.expiresAt).getTime() - Date.now()) / 60000);
+                    if (diff <= 0) return 'مسدودیت منقضی شده — لطفاً دوباره تلاش کنید';
+                    if (diff < 60) return `رفع مسدودیت پس از ${diff} دقیقه`;
+                    const h = Math.floor(diff / 60);
+                    const m = diff % 60;
+                    return `رفع مسدودیت پس از ${h} ساعت${m ? ` و ${m} دقیقه` : ''}`;
+                  })()}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-red-500 text-xs">
+                  <ShieldOff className="w-3.5 h-3.5 flex-shrink-0" />
+                  مسدودیت دائمی
+                </div>
+              )}
             </div>
           )}
 
