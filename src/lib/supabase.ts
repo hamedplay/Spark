@@ -163,7 +163,14 @@ export const handleSupabaseError = (error: any) => {
   }
   
   // Invalid credentials
-  if (error.message?.includes('Invalid login credentials')) {
+  if (
+    error.message?.includes('Invalid login credentials') ||
+    error.message?.toLowerCase().includes('invalid login') ||
+    error.code === 'invalid_credentials' ||
+    error.message?.includes('Invalid email or password') ||
+    error.message?.includes('Email not found') ||
+    (error.status === 400 && error.message?.toLowerCase().includes('invalid'))
+  ) {
     return new Error('ایمیل یا رمز عبور اشتباه است');
   }
   
@@ -183,7 +190,7 @@ export const handleSupabaseError = (error: any) => {
   }
   
   // Server errors
-  if (error.status >= 500) {
+  if (Number(error.status) >= 500) {
     return new Error('خطای سرور. لطفاً چند لحظه صبر کرده و دوباره تلاش کنید');
   }
   

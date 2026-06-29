@@ -69,7 +69,11 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         loginEmail = emailData as string;
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: form.password });
-      if (error) { toast.error(handleSupabaseError(error).message); return; }
+      if (error) {
+        const msg = handleSupabaseError(error).message;
+        toast.error(msg || 'ایمیل یا رمز عبور اشتباه است');
+        return;
+      }
       if (data.user) {
         // Check if the user account is active
         const { data: profileData } = await supabase.from('profiles').select('is_active').eq('user_id', data.user.id).maybeSingle();
