@@ -3,6 +3,7 @@ import {
   Video, Plus, LogIn, Copy, Check, Loader2, Mic, MicOff,
   VideoOff, Users, Clock, Crown, Link2, UserPlus, Send,
   Search, X, ChevronRight, RefreshCw, Globe, Calendar, Lock, Unlock, Shield,
+  ShieldOff,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
@@ -314,6 +315,9 @@ export function VideoConferencePage() {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
 
+  // Ban detail modal — shown when a join attempt is blocked by an active ban
+  const [banDetail, setBanDetail] = useState<{ reason: string | null; expiresAt: string | null } | null>(null);
+
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -520,15 +524,14 @@ export function VideoConferencePage() {
       toast.error('ظرفیت اتاق پر شده است'); joiningRef.current = false; return;
     }
 
-    // Ban check
-    const { data: ban } = await supabase
-      .from('banned_users')
-      .select('id')
-      .eq('room_id', room.id)
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (ban) {
-      toast.error('شما از این اتاق مسدود شده‌اید');
+    // Ban check via RPC (handles expiry + returns reason/expires_at)
+    const { data: validation } = await supabase.rpc('validate_room_join', {
+      p_room_id: room.id,
+      p_password: null,
+      p_user_id: userId,
+    });
+    if (validation && !validation.allowed && validation.reason === 'banned') {
+      setBanDetail({ reason: validation.ban_reason ?? null, expiresAt: validation.ban_expires_at ?? null });
       stream.getTracks().forEach(t => t.stop());
       joiningRef.current = false;
       setPreJoinRoom(null);
@@ -669,12 +672,12 @@ export function VideoConferencePage() {
 
           // بررسی مجدد ban و ظرفیت بعد از تأیید میزبان
           const [banRes, countRes] = await Promise.all([
-            supabase.from('banned_users').select('id').eq('room_id', room.id).eq('user_id', userId!).maybeSingle(),
+            supabase.rpc('validate_room_join', { p_room_id: room.id, p_password: null, p_user_id: userId! }),
             supabase.from('conference_participants').select('*', { count: 'exact', head: true }).eq('room_id', room.id).eq('status', 'joined'),
           ]);
-          if (banRes.data) {
+          if (banRes.data && !banRes.data.allowed && banRes.data.reason === 'banned') {
             stream.getTracks().forEach(t => t.stop());
-            toast.error('شما از این اتاق مسدود شده‌اید');
+            setBanDetail({ reason: banRes.data.ban_reason ?? null, expiresAt: banRes.data.ban_expires_at ?? null });
             return;
           }
           if ((countRes.count ?? 0) >= room.max_participants) {
@@ -723,6 +726,39 @@ export function VideoConferencePage() {
         />
         {inviteRoom && userId && (
           <InviteModal room={inviteRoom} currentUserId={userId} onClose={() => setInviteRoom(null)} />
+        )}
+        {banDetail && (
+          <div role="dialog" aria-modal="true" aria-label="مسدودیت" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div className="bg-gray-900 border border-red-800/60 rounded-2xl p-6 w-full max-w-sm space-y-4" dir="rtl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center flex-shrink-0">
+                  <ShieldOff className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold">دسترسی مسدود شده</h3>
+                  <p className="text-red-400 text-xs">ورود به این اتاق برای شما ممکن نیست</p>
+                </div>
+              </div>
+              {banDetail.reason && (
+                <div className="bg-red-950/50 border border-red-800/40 rounded-xl p-3">
+                  <p className="text-red-400 text-xs mb-1">دلیل مسدودیت:</p>
+                  <p className="text-red-200 text-sm">{banDetail.reason}</p>
+                </div>
+              )}
+              <div className={`flex items-center gap-2 text-xs rounded-xl px-3 py-2 ${banDetail.expiresAt ? 'bg-amber-950/40 text-amber-400' : 'bg-red-950/40 text-red-400'}`}>
+                <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                {banDetail.expiresAt ? (() => {
+                  const diff = Math.ceil((new Date(banDetail.expiresAt).getTime() - Date.now()) / 60000);
+                  if (diff <= 0) return 'مسدودیت منقضی شده — لطفاً دوباره تلاش کنید';
+                  if (diff < 60) return `رفع مسدودیت پس از ${diff} دقیقه`;
+                  const h = Math.floor(diff / 60);
+                  const m = diff % 60;
+                  return `رفع مسدودیت پس از ${h} ساعت${m ? ` و ${m} دقیقه` : ''}`;
+                })() : 'مسدودیت دائمی'}
+              </div>
+              <button onClick={() => setBanDetail(null)} className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-sm transition-colors">باشه</button>
+            </div>
+          </div>
         )}
       </>
     );
@@ -934,6 +970,49 @@ export function VideoConferencePage() {
 
       {inviteRoom && userId && (
         <InviteModal room={inviteRoom} currentUserId={userId} onClose={() => setInviteRoom(null)} />
+      )}
+
+      {/* Ban detail modal */}
+      {banDetail && (
+        <div role="dialog" aria-modal="true" aria-label="مسدودیت" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-gray-900 border border-red-800/60 rounded-2xl p-6 w-full max-w-sm space-y-4" dir="rtl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center flex-shrink-0">
+                <ShieldOff className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold">دسترسی مسدود شده</h3>
+                <p className="text-red-400 text-xs">ورود به این اتاق برای شما ممکن نیست</p>
+              </div>
+            </div>
+
+            {banDetail.reason && (
+              <div className="bg-red-950/50 border border-red-800/40 rounded-xl p-3">
+                <p className="text-red-400 text-xs mb-1">دلیل مسدودیت:</p>
+                <p className="text-red-200 text-sm">{banDetail.reason}</p>
+              </div>
+            )}
+
+            <div className={`flex items-center gap-2 text-xs rounded-xl px-3 py-2 ${banDetail.expiresAt ? 'bg-amber-950/40 text-amber-400' : 'bg-red-950/40 text-red-400'}`}>
+              <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+              {banDetail.expiresAt ? (() => {
+                const diff = Math.ceil((new Date(banDetail.expiresAt).getTime() - Date.now()) / 60000);
+                if (diff <= 0) return 'مسدودیت منقضی شده — لطفاً دوباره تلاش کنید';
+                if (diff < 60) return `رفع مسدودیت پس از ${diff} دقیقه`;
+                const h = Math.floor(diff / 60);
+                const m = diff % 60;
+                return `رفع مسدودیت پس از ${h} ساعت${m ? ` و ${m} دقیقه` : ''}`;
+              })() : 'مسدودیت دائمی'}
+            </div>
+
+            <button
+              onClick={() => setBanDetail(null)}
+              className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-sm transition-colors"
+            >
+              باشه
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Pre-join device selection modal */}
