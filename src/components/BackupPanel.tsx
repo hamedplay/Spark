@@ -18,6 +18,7 @@ const TABLES: TableConfig[] = [
   { key: 'shared_meetings',                label: 'جلسات مشترک',                   icon: Calendar,      color: 'text-teal-400',    description: 'جلسات به‌اشتراک گذاشته‌شده' },
   { key: 'meeting_inbox',                  label: 'صندوق ورودی جلسات',             icon: Calendar,      color: 'text-teal-300',    description: 'دعوت‌نامه‌های جلسات' },
   { key: 'participants',                   label: 'شرکت‌کنندگان',                  icon: ClipboardList, color: 'text-teal-400',    description: 'شرکت‌کنندگان جلسات' },
+  { key: 'meeting_agenda_items',           label: 'دستور جلسات',                   icon: ClipboardList, color: 'text-teal-600',    description: 'آیتم‌های دستور جلسه' },
   { key: 'tasks',                          label: 'اقدامات',                        icon: ClipboardList, color: 'text-green-500',   description: 'اقدامات و وظایف' },
   { key: 'task_workflow_steps',            label: 'مراحل گردش‌کار',                icon: ClipboardList, color: 'text-green-400',   description: 'مراحل گردش‌کار وظایف' },
   { key: 'notes',                          label: 'یادداشت‌ها',                    icon: BookOpen,      color: 'text-amber-500',   description: 'یادداشت‌های کاربران' },
@@ -56,6 +57,10 @@ const TABLES: TableConfig[] = [
   { key: 'conference_polls',              label: 'نظرسنجی‌های کنفرانس',           icon: Video,         color: 'text-sky-600',     description: 'نظرسنجی‌های جلسات ویدئو' },
   { key: 'conference_poll_votes',         label: 'آرای نظرسنجی کنفرانس',          icon: Video,         color: 'text-sky-400',     description: 'آرای نظرسنجی ویدئوکنفرانس' },
   { key: 'conference_breakout_rooms',     label: 'اتاق‌های گروهی کنفرانس',        icon: Video,         color: 'text-sky-300',     description: 'اتاق‌های گروهی ویدئوکنفرانس' },
+  { key: 'conference_reactions',          label: 'واکنش‌های کنفرانس',             icon: Video,         color: 'text-sky-200',     description: 'واکنش‌های emoji جلسات ویدئو' },
+  { key: 'room_mod_actions',              label: 'اقدامات مدیریت کنفرانس',        icon: Video,         color: 'text-sky-600',     description: 'اقدامات ناظران در اتاق کنفرانس' },
+  { key: 'pending_approvals',             label: 'درخواست‌های ورود کنفرانس',      icon: Video,         color: 'text-sky-500',     description: 'درخواست‌های تأیید ورود به اتاق' },
+  { key: 'banned_users',                  label: 'کاربران مسدود کنفرانس',         icon: Video,         color: 'text-red-400',     description: 'کاربران مسدود در اتاق کنفرانس' },
   // ── Notifications ───────────────────────────────────────────────────────────
   { key: 'notifications',                 label: 'اعلان‌ها',                      icon: FileText,      color: 'text-gray-500',    description: 'تاریخچه اعلان‌ها' },
   { key: 'notification_templates',        label: 'قالب‌های اعلان',                icon: FileText,      color: 'text-blue-400',    description: 'قالب‌های متن اعلان' },

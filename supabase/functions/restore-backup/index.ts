@@ -48,6 +48,7 @@ async function loadIds(
 const ALLOWED_TABLES = new Set([
   // Core content
   "meetings", "shared_meetings", "meeting_inbox", "participants",
+  "meeting_agenda_items",
   "tasks", "task_workflow_steps", "notes", "contacts_email",
   // Calendar
   "calendars", "calendar_occasions", "all_day_events", "calendar_subscriptions",
@@ -62,6 +63,7 @@ const ALLOWED_TABLES = new Set([
   // Video Conference
   "conference_rooms", "conference_participants", "conference_messages",
   "conference_polls", "conference_poll_votes", "conference_breakout_rooms",
+  "conference_reactions", "room_mod_actions", "pending_approvals", "banned_users",
   // Notifications
   "notifications", "notification_templates", "notification_group_rules",
   // Broadcasts
@@ -119,6 +121,7 @@ const RESTORE_ORDER = [
   "shared_meetings",
   "meeting_inbox",
   "participants",
+  "meeting_agenda_items",
   // Channels and children
   "channels",
   "channel_work_topics",
@@ -147,13 +150,17 @@ const RESTORE_ORDER = [
   "chat_message_reactions",
   "chat_message_stars",
   "chat_reminders",
-  // Video conference
+  // Video conference (rooms first, then children)
   "conference_rooms",
   "conference_polls",
   "conference_participants",
   "conference_messages",
+  "conference_reactions",
   "conference_poll_votes",
   "conference_breakout_rooms",
+  "room_mod_actions",
+  "pending_approvals",
+  "banned_users",
   // Broadcasts
   "broadcast_messages",
   "broadcast_recipients",
@@ -201,6 +208,8 @@ const CONFLICT_COLUMN: Record<string, string> = {
   spark_memory:                    "user_id,key",
   user_access_relations:           "user_id,related_user_id",
   user_bale_mapping:               "user_id",
+  // New conference tables with composite unique constraints
+  banned_users:                    "room_id,user_id",
 };
 
 // For tables whose PK is not "id", specify the real PK column here.
@@ -233,15 +242,15 @@ const REQUIRED_USER_FKS: Record<string, string[]> = {
   bale_link_tokens:            ["user_id"],
   broadcast_recipients:        ["user_id"],
   calendar_subscriptions:      ["user_id"],
-  channel_message_private_pins:["user_id"],  // part of composite key
-  channel_message_reactions:   ["user_id"],  // part of composite key
-  channel_message_stars:       ["user_id"],  // part of composite key
+  channel_message_private_pins:["user_id"],
+  channel_message_reactions:   ["user_id"],
+  channel_message_stars:       ["user_id"],
   chat_group_members:          ["user_id"],
-  chat_message_reactions:      ["user_id"],  // part of composite key
-  chat_message_stars:          ["user_id"],  // part of composite key
+  chat_message_reactions:      ["user_id"],
+  chat_message_stars:          ["user_id"],
   chat_reminders:              ["user_id"],
-  conference_participants:     ["user_id"],  // part of composite key
-  conference_poll_votes:       ["user_id"],  // part of composite key
+  conference_participants:     ["user_id"],
+  conference_poll_votes:       ["user_id"],
   meeting_inbox:               ["user_id"],
   spark_memory:                ["user_id"],
   user_access_relations:       ["user_id", "related_user_id"],
@@ -270,6 +279,9 @@ const NULLABLE_USER_FKS: Record<string, string[]> = {
   sms_dispatch_logs:              ["target_user_id", "triggered_by_user_id"],
   task_workflow_steps:            ["from_user_id", "to_user_id"],
   user_access_relations:          ["created_by"],
+  // Conference tables — banned_by / approved_by are nullable admin UUIDs
+  banned_users:                   ["banned_by"],
+  pending_approvals:              ["approved_by"],
 };
 
 const BATCH_SIZE = 50;
@@ -306,6 +318,7 @@ function preFilterRows(
   existingConvIds: Set<string>,
   existingChannelIds: Set<string>,
   existingMeetingIds: Set<string>,
+  existingRoomIds: Set<string>,
 ): { filtered: Record<string, unknown>[]; skipped: RowError[] } {
   const filtered: Record<string, unknown>[] = [];
   const skipped: RowError[] = [];
@@ -350,8 +363,7 @@ function preFilterRows(
       }
     }
 
-    // channel_members, channel_messages, channel_work_topics, channel_broadcasts,
-    // channel_group_tasks, channel_notification_rules, channel_sms_rules: check channel exists
+    // channel_members, channel_messages, etc: check channel exists
     if ([
       "channel_members", "channel_messages", "channel_work_topics",
       "channel_broadcasts", "channel_group_tasks",
@@ -373,11 +385,23 @@ function preFilterRows(
       }
     }
 
-    // participants, meeting_inbox, shared_meetings: check the meeting exists
-    if (tableKey === "participants" || tableKey === "meeting_inbox" || tableKey === "shared_meetings") {
+    // participants, meeting_inbox, shared_meetings, meeting_agenda_items: check the meeting exists
+    if (["participants", "meeting_inbox", "shared_meetings", "meeting_agenda_items"].includes(tableKey)) {
       const mid = String(row.meeting_id ?? "");
       if (mid && !existingMeetingIds.has(mid)) {
         skipped.push({ row: rowNum, id: rowId, reason: "جلسه مرجع بازیابی نشد یا وجود ندارد", dependency: `meeting_id=${mid.slice(0, 8)}…` });
+        continue;
+      }
+    }
+
+    // conference child tables: check the room exists
+    if ([
+      "conference_participants", "conference_messages", "conference_polls",
+      "conference_reactions", "room_mod_actions", "pending_approvals", "banned_users",
+    ].includes(tableKey)) {
+      const rid = String(row.room_id ?? "");
+      if (rid && !existingRoomIds.has(rid)) {
+        skipped.push({ row: rowNum, id: rowId, reason: "اتاق کنفرانس مرجع بازیابی نشد یا وجود ندارد", dependency: `room_id=${rid.slice(0, 8)}…` });
         continue;
       }
     }
@@ -532,6 +556,7 @@ Deno.serve(async (req: Request) => {
     let existingConvIds    = await loadIds(supabase, "chat_conversations", "id");
     let existingChannelIds = await loadIds(supabase, "channels", "id");
     let existingMeetingIds = await loadIds(supabase, "meetings", "id");
+    let existingRoomIds    = await loadIds(supabase, "conference_rooms", "id");
 
     // ── Restore each table in dependency order ────────────────────────────────
     for (const tableKey of sortedKeys) {
@@ -557,8 +582,14 @@ Deno.serve(async (req: Request) => {
       ].includes(tableKey)) {
         existingChannelIds = await loadIds(supabase, "channels", "id");
       }
-      if (tableKey === "participants" || tableKey === "meeting_inbox" || tableKey === "shared_meetings") {
+      if (["participants", "meeting_inbox", "shared_meetings", "meeting_agenda_items"].includes(tableKey)) {
         existingMeetingIds = await loadIds(supabase, "meetings", "id");
+      }
+      if ([
+        "conference_participants", "conference_messages", "conference_polls",
+        "conference_reactions", "room_mod_actions", "pending_approvals", "banned_users",
+      ].includes(tableKey)) {
+        existingRoomIds = await loadIds(supabase, "conference_rooms", "id");
       }
 
       const priorDeleteError = results[tableKey]?.deleteError;
@@ -566,7 +597,7 @@ Deno.serve(async (req: Request) => {
       const { filtered, skipped: preSkipped } = preFilterRows(
         tableKey, rawRows,
         existingUserIds, existingGroupIds, existingConvIds,
-        existingChannelIds, existingMeetingIds,
+        existingChannelIds, existingMeetingIds, existingRoomIds,
       );
 
       const conflictCol = CONFLICT_COLUMN[tableKey] ?? "id";
