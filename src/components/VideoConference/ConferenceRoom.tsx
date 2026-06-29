@@ -34,10 +34,42 @@ const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
   ],
-  iceCandidatePoolSize: 4,
+  iceCandidatePoolSize: 10,
   iceTransportPolicy: 'all',
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
 };
+
+function calculateBitrate(width: number, height: number, fps: number) {
+  const pixels = width * height;
+  const factor = fps / 30;
+  const base = pixels * 0.07 * factor;
+  return { min: Math.floor(base * 0.5), max: Math.floor(base * 1.5) };
+}
+
+async function setPreferredCodecs(pc: RTCPeerConnection) {
+  if (!RTCRtpSender.getCapabilities) return;
+  const capabilities = RTCRtpSender.getCapabilities('video');
+  if (!capabilities) return;
+  const preferredMimes = ['video/VP9', 'video/H264', 'video/VP8'];
+  const ordered: RTCRtpCodecCapability[] = [];
+  for (const mime of preferredMimes) {
+    const found = capabilities.codecs.filter(c => c.mimeType.toLowerCase() === mime.toLowerCase());
+    ordered.push(...found);
+  }
+  capabilities.codecs.forEach(c => {
+    if (!ordered.find(oc => oc.mimeType === c.mimeType && oc.sdpFmtpLine === c.sdpFmtpLine)) {
+      ordered.push(c);
+    }
+  });
+  for (const transceiver of pc.getTransceivers()) {
+    if (transceiver.sender.track?.kind === 'video') {
+      try { transceiver.setCodecPreferences(ordered); } catch { /* not supported in all browsers */ }
+    }
+  }
+}
 
 const EMOJIS = ['👍','👏','❤️','😂','😮','🎉','🙌','🔥','💯','✅'];
 
@@ -173,6 +205,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const [videoQuality, setVideoQuality] = useState<VideoQuality>('medium');
   const [dataSaverMode, setDataSaverMode] = useState(false);
   const [applyingVideoConstraints, setApplyingVideoConstraints] = useState(false);
+  // Tracks the currently applied quality (may differ from videoQuality when adaptive mode degrades it)
+  const [adaptiveQuality, setAdaptiveQuality] = useState<VideoQuality>('medium');
+  const adaptiveQualityRef = useRef(adaptiveQuality);
+  adaptiveQualityRef.current = adaptiveQuality;
 
   useEffect(() => {
     supabase.from('conference_participants')
@@ -267,8 +303,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const applyVideoConstraints = useCallback(async (quality: VideoQuality, dataSaver: boolean) => {
     const preset = VIDEO_QUALITY_PRESETS[dataSaver ? 'low' : quality];
     const frameRate = dataSaver ? 15 : preset.frameRate;
+    const bitrate = calculateBitrate(preset.width, preset.height, frameRate);
     setApplyingVideoConstraints(true);
     try {
+      // 1. تنظیم resolution/framerate روی local track
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
       if (videoTrack) {
         try {
@@ -278,19 +316,30 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             frameRate: { ideal: frameRate },
           });
         } catch {
-          // Some mobile browsers reject full constraints — retry with only frameRate
           await videoTrack.applyConstraints({ frameRate: { ideal: frameRate } }).catch(() => {});
         }
       }
-      toast.success('کیفیت ویدیو تغییر کرد');
+      // 2. تنظیم bitrate روی همه sender‌ها
+      await Promise.all(Array.from(peersRef.current.values()).map(async (peer) => {
+        const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
+        if (!sender) return;
+        try {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+          params.encodings[0].maxBitrate = bitrate.max;
+          params.encodings[0].maxFramerate = frameRate;
+          await sender.setParameters(params);
+        } catch { /* setParameters ممکن است در همه مرورگرها پشتیبانی نشود */ }
+      }));
+      toast.success('کیفیت ویدیو و پهنای باند بهینه شد');
     } catch {
       toast.error('خطا در تغییر کیفیت ویدیو');
     } finally {
       setApplyingVideoConstraints(false);
     }
   }, []);
-
-  // ── Refs (never stale in callbacks) ───────────────────────────────────────
+  // wire ref so adaptive bitrate interval always calls the latest version
+  applyVideoConstraintsRef.current = applyVideoConstraints;
   const peersRef = useRef<Map<string, PeerConnection>>(new Map());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -302,6 +351,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   myPeerIdRef.current = myPeerId;
   localStreamRef.current = localStream;
   sidePanelRef.current = sidePanel;
+
+  // Stable refs for adaptive bitrate interval (avoids stale closures)
+  const applyVideoConstraintsRef = useRef<(q: VideoQuality, ds: boolean) => Promise<void>>(async () => {});
+  const videoQualityRef = useRef(videoQuality);
+  const dataSaverModeRef = useRef(dataSaverMode);
+  videoQualityRef.current = videoQuality;
+  dataSaverModeRef.current = dataSaverMode;
 
   // Duration + meeting countdown
   useEffect(() => {
@@ -442,6 +498,47 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     return () => clearInterval(t);
   }, []);
 
+  // Adaptive bitrate — هر 4 ثانیه packet loss را چک می‌کنیم و کیفیت را تنظیم می‌کنیم
+  useEffect(() => {
+    const QUALITIES: VideoQuality[] = ['low', 'medium', 'high'];
+    const t = setInterval(async () => {
+      for (const peer of peersRef.current.values()) {
+        const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
+        if (!sender) continue;
+        try {
+          const stats = await sender.getStats();
+          let sent = 0, retransmitted = 0;
+          stats.forEach((report: any) => {
+            if (report.type === 'outbound-rtp' && report.kind === 'video') {
+              sent = report.packetsSent || 0;
+              retransmitted = report.retransmittedPacketsSent || 0;
+            }
+          });
+          if (sent < 10) continue;
+          const lossRate = retransmitted / sent;
+          const curQuality = adaptiveQualityRef.current;
+          const curIdx = QUALITIES.indexOf(curQuality);
+          if (lossRate > 0.05 && curIdx > 0) {
+            const downgraded = QUALITIES[curIdx - 1];
+            setAdaptiveQuality(downgraded);
+            // applyVideoConstraints is defined later; use ref to avoid stale closure
+            applyVideoConstraintsRef.current(downgraded, dataSaverModeRef.current);
+            toast('کیفیت به دلیل ضعف شبکه کاهش یافت', { icon: '📉', duration: 4000 });
+            break;
+          } else if (lossRate < 0.01 && curIdx < QUALITIES.indexOf(videoQualityRef.current)) {
+            const upgraded = QUALITIES[curIdx + 1];
+            setAdaptiveQuality(upgraded);
+            applyVideoConstraintsRef.current(upgraded, dataSaverModeRef.current);
+            toast('کیفیت ویدیو بهبود یافت', { icon: '📈', duration: 3000 });
+            break;
+          }
+        } catch { /* getStats ممکن است در برخی مرورگرها ناموجود باشد */ }
+      }
+    }, 4000);
+    return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fmt = (s: number) => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
@@ -464,6 +561,9 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     const pc = new RTCPeerConnection(RTC_CONFIG);
 
     localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+
+    // تنظیم اولویت codec پس از addTrack
+    setPreferredCodecs(pc);
 
     pc.ontrack = (e) => {
       const stream = e.streams[0];

@@ -136,8 +136,23 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
     setAcquiring(true);
     setPermError('');
 
-    const videoConstraint: MediaTrackConstraints | boolean = videoId ? { deviceId: { exact: videoId } } : true;
-    const audioConstraint: MediaTrackConstraints | boolean = audioId ? { deviceId: { exact: audioId } } : true;
+    const videoConstraint: MediaTrackConstraints | boolean = videoId
+      ? {
+          deviceId: { exact: videoId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30, max: 30 },
+        }
+      : { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+    const audioConstraint: MediaTrackConstraints | boolean = audioId
+      ? {
+          deviceId: { exact: audioId },
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000,
+        }
+      : { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 48000 };
 
     let s: MediaStream | null = null;
     try {
