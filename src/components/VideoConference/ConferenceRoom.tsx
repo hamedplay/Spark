@@ -17,6 +17,9 @@ import type {
   PeerConnection, Reaction, SidePanel, LayoutMode,
 } from './types';
 import { VideoTile, QualityDot } from './VideoTile';
+import { GalleryLayout } from './GalleryLayout';
+import { SpeakerLayout } from './SpeakerLayout';
+import { SidebarLayout } from './SidebarLayout';
 import { Whiteboard } from './Whiteboard';
 import { PollPanel } from './PollPanel';
 import { SettingsPanel, VIDEO_QUALITY_PRESETS } from './SettingsPanel';
@@ -1204,104 +1207,55 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
             // ── Gallery ────────────────────────────────────────────────────────
             if (layoutMode === 'gallery') {
-              const n = orderedTiles.length;
-              const cols =
-                n === 1 ? 'grid-cols-1' :
-                n === 2 ? 'grid-cols-1 sm:grid-cols-2' :
-                n <= 4 ? 'grid-cols-2' :
-                n <= 6 ? 'grid-cols-2 sm:grid-cols-3' :
-                n <= 9 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4';
               return (
-                <div className={`flex-1 overflow-y-auto grid gap-2 content-start ${cols}`}>
-                  {orderedTiles.map(t => (
-                    <div key={t.peerId} {...makeDraggable(t.peerId)}>
-                      <VideoTile {...t}
-                        isPinned={pinnedPeerId === t.peerId}
-                        isHost={t.isHost}
-                        activeReaction={tileReactions.get(t.userId)}
-                        onPin={() => setPinnedPeerId(p => p === t.peerId ? null : t.peerId)} />
-                    </div>
-                  ))}
-                </div>
+                <GalleryLayout
+                  tiles={orderedTiles}
+                  pinnedPeerId={pinnedPeerId}
+                  tileReactions={tileReactions}
+                  makeDraggable={makeDraggable}
+                  onPin={peerId => setPinnedPeerId(p => p === peerId ? null : peerId)}
+                />
               );
             }
 
             // ── Speaker ────────────────────────────────────────────────────────
             if (layoutMode === 'speaker') {
-              if (!orderedTiles.length) return null;
-              const [speaker, ...rest] = orderedTiles;
               return (
-                <div className="flex flex-col flex-1 gap-2 min-h-0">
-                  <div className="flex-1 min-h-0" {...makeDraggable(speaker.peerId)}>
-                    <VideoTile {...speaker}
-                      isPinned={false}
-                      isHost={speaker.isHost}
-                      activeReaction={tileReactions.get(speaker.userId)}
-                      onPin={() => setPinnedPeerId(speaker.peerId)} />
-                  </div>
-                  {rest.length > 0 && (
-                    <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
-                      {rest.map(t => (
-                        <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0" {...makeDraggable(t.peerId)}>
-                          <VideoTile {...t}
-                            isPinned={false}
-                            isHost={t.isHost}
-                            activeReaction={tileReactions.get(t.userId)}
-                            onPin={() => {
-                              setTileOrder(prev => {
-                                const ids = orderedTiles.map(x => x.peerId);
-                                const si = ids.indexOf(t.peerId);
-                                if (si <= 0) return prev;
-                                const next = [...ids];
-                                next.splice(si, 1);
-                                next.unshift(t.peerId);
-                                return next;
-                              });
-                            }}
-                            small />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <SpeakerLayout
+                  tiles={orderedTiles}
+                  tileReactions={tileReactions}
+                  makeDraggable={makeDraggable}
+                  onPinSpeaker={peerId => setPinnedPeerId(peerId)}
+                  onPromoteThumbnail={peerId => setTileOrder(prev => {
+                    const ids = orderedTiles.map(x => x.peerId);
+                    const si = ids.indexOf(peerId);
+                    if (si <= 0) return prev;
+                    const next = [...ids];
+                    next.splice(si, 1);
+                    next.unshift(peerId);
+                    return next;
+                  })}
+                />
               );
             }
 
             // ── Sidebar ────────────────────────────────────────────────────────
-            if (!orderedTiles.length) return null;
-            const [main, ...others] = orderedTiles;
             return (
-              <div className="flex flex-1 gap-2 min-h-0 flex-row-reverse">
-                <div className="w-32 sm:w-44 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
-                  {others.map(t => (
-                    <div key={t.peerId} className="flex-shrink-0" {...makeDraggable(t.peerId)}>
-                      <VideoTile {...t}
-                        isPinned={false}
-                        isHost={t.isHost}
-                        activeReaction={tileReactions.get(t.userId)}
-                        onPin={() => {
-                          setTileOrder(prev => {
-                            const ids = orderedTiles.map(x => x.peerId);
-                            const si = ids.indexOf(t.peerId);
-                            if (si <= 0) return prev;
-                            const next = [...ids];
-                            next.splice(si, 1);
-                            next.unshift(t.peerId);
-                            return next;
-                          });
-                        }}
-                        small />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex-1 min-w-0" {...makeDraggable(main.peerId)}>
-                  <VideoTile {...main}
-                    isPinned={false}
-                    isHost={main.isHost}
-                    activeReaction={tileReactions.get(main.userId)}
-                    onPin={() => setPinnedPeerId(p => p === main.peerId ? null : main.peerId)} />
-                </div>
-              </div>
+              <SidebarLayout
+                tiles={orderedTiles}
+                tileReactions={tileReactions}
+                makeDraggable={makeDraggable}
+                onPinMain={peerId => setPinnedPeerId(p => p === peerId ? null : peerId)}
+                onPromoteSidebar={peerId => setTileOrder(prev => {
+                  const ids = orderedTiles.map(x => x.peerId);
+                  const si = ids.indexOf(peerId);
+                  if (si <= 0) return prev;
+                  const next = [...ids];
+                  next.splice(si, 1);
+                  next.unshift(peerId);
+                  return next;
+                })}
+              />
             );
           })()}
 
