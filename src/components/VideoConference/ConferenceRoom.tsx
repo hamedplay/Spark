@@ -1296,7 +1296,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   </div>
                   <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
                     {orderedTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
-                      <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0" {...makeDraggable(t.peerId)}>
+                      <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0 aspect-video" {...makeDraggable(t.peerId)}>
                         <VideoTile {...t} isPinned={false} isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(t.peerId)} small />
                       </div>
                     ))}

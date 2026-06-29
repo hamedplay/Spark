@@ -188,7 +188,7 @@ export const VideoTile = memo(function VideoTile({
 
   return (
     <div
-      className={`relative bg-gray-900 rounded-2xl overflow-hidden aspect-video h-full w-full ${ringClass}`}
+      className={`relative bg-gray-900 rounded-2xl overflow-hidden h-full w-full ${ringClass}`}
       role="group"
       aria-label={isLocal ? `${displayName} (شما)` : displayName}
     >

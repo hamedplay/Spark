@@ -23,7 +23,7 @@ export function GalleryLayout({ tiles, pinnedPeerId, tileReactions, makeDraggabl
   return (
     <div className={`flex-1 grid gap-2 ${cols} auto-rows-fr ${shouldScroll ? 'overflow-y-auto' : 'overflow-hidden'} min-h-0`}>
       {tiles.map(t => (
-        <div key={t.peerId} className="min-h-0" {...makeDraggable(t.peerId)}>
+        <div key={t.peerId} className="min-h-0 h-full" {...makeDraggable(t.peerId)}>
           <VideoTile
             {...t}
             isPinned={pinnedPeerId === t.peerId}
