@@ -192,6 +192,14 @@ const getJalaliDate = (): string => {
       externalNames ? `🌐 خارج سازمان: ${externalNames}` : '',
       roomCode ? `🔗 لینک آنلاین: ${window.location.origin}/?conference=${roomCode}` : '',
       m.notes ? `📝 یادداشت: ${m.notes}` : '',
+      agendaItems.length > 0
+        ? `📌 دستور جلسه:\n` + agendaItems.map((item, idx) => {
+            const parts = [`${idx + 1}. ${item.title}`];
+            if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+            if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+            return parts.join(' | ');
+          }).join('\n')
+        : '',
     ].filter(Boolean).join('\n');
 
     return lines;
@@ -608,6 +616,14 @@ const getJalaliDate = (): string => {
                 { label: 'خارج سازمان', value: extNames },
                 { label: 'لینک آنلاین', value: roomCode ? `${window.location.origin}/?conference=${roomCode}` : '' },
                 { label: 'یادداشت', value: m.notes },
+                { label: 'دستور جلسه', value: agendaItems.length > 0
+                    ? agendaItems.map((item, idx) => {
+                        const parts = [`${idx + 1}. ${item.title}`];
+                        if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+                        if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+                        return parts.join(' | ');
+                      }).join('\n')
+                    : '' },
               ].filter(r => r.value);
               return rows.map(r => (
                 <div key={r.label} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
