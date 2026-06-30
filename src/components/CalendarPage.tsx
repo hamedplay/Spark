@@ -974,7 +974,7 @@ export function CalendarPage({
     } catch (err: any) { toast.error(err?.message || 'خطا در حذف جلسه'); }
   };
 
-  const handleSendToGoogleCalendar = (m: MeetingData) => {
+  const handleSendToGoogleCalendar = async (m: MeetingData) => {
     const title = encodeURIComponent(m.subject);
     const loc = encodeURIComponent(m.location || '');
     const dateStr = parseRequestDateToDateStr(m.request_date);
@@ -982,7 +982,6 @@ export function CalendarPage({
     const start = dateStr.replace(/-/g, '') + 'T' + m.start_time.replace(':', '') + '00';
     const end = dateStr.replace(/-/g, '') + 'T' + m.end_time.replace(':', '') + '00';
 
-    // Build comprehensive details string
     const participantNames = (m.participant_user_ids || [])
       .map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0, 8))
       .join('، ');
@@ -990,6 +989,20 @@ export function CalendarPage({
       .map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0, 8))
       .join('، ');
     const externalNames = (m.external_participants || []).join('، ');
+
+    const { data: agendaRows } = await supabase
+      .from('meeting_agenda_items')
+      .select('title, presenter, duration_minutes, sort_order')
+      .eq('meeting_id', m.id)
+      .order('sort_order', { ascending: true });
+    const agendaText = (agendaRows && agendaRows.length > 0)
+      ? 'دستور جلسه:\n' + agendaRows.map((item: any, idx: number) => {
+          const parts = [`${idx + 1}. ${item.title}`];
+          if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+          if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+          return parts.join(' | ');
+        }).join('\n')
+      : '';
 
     const detailLines = [
       m.representative ? `نماینده: ${m.representative}` : '',
@@ -1000,6 +1013,7 @@ export function CalendarPage({
       m.is_online && m.conference_room_id ? `جلسه آنلاین: ${window.location.origin}/?conference=${m.conference_room_id}` : '',
       m.notes ? `یادداشت: ${m.notes}` : '',
       m.priority ? `اولویت: ${{ high: 'بالا', medium: 'متوسط', low: 'پایین' }[m.priority] || m.priority}` : '',
+      agendaText,
     ].filter(Boolean).join('\n');
 
     const details = encodeURIComponent(detailLines);
