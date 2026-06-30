@@ -1,6 +1,5 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
 import { readdirSync, mkdirSync, copyFileSync, statSync, existsSync } from 'fs';
 import { join } from 'path';
 
@@ -42,7 +41,7 @@ function copyDirSafe(src: string, dest: string) {
 }
 
 export default defineConfig({
-  plugins: [tailwindcss(), react(), safeCopyPublicDir()],
+  plugins: [react(), safeCopyPublicDir()],
   build: {
     // Disable Vite's built-in public dir copy; safeCopyPublicDir handles it
     // with per-file error handling so locked sandbox files don't abort builds.
