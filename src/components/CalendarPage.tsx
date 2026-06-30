@@ -892,6 +892,7 @@ export function CalendarPage({
 
           const { data: oldParticipants } = await supabase.from('participants').select('name').eq('meeting_id', id);
           const { data: oldActions } = await supabase.from('actions').select('title, status, assignee').eq('meeting_id', id);
+          const { data: oldAgendaItems } = await supabase.from('meeting_agenda_items').select('title, presenter, duration_minutes, sort_order').eq('meeting_id', id).order('sort_order');
 
           const { data: newMtg, error: insertErr } = await supabase
             .from('meetings')
@@ -928,6 +929,9 @@ export function CalendarPage({
           }
           if ((oldActions ?? []).length > 0) {
             await supabase.from('actions').insert((oldActions!).map(a => ({ meeting_id: newId, title: a.title, status: a.status, assignee: a.assignee })));
+          }
+          if ((oldAgendaItems ?? []).length > 0) {
+            await supabase.from('meeting_agenda_items').insert((oldAgendaItems!).map(a => ({ meeting_id: newId, title: a.title, presenter: a.presenter, duration_minutes: a.duration_minutes, sort_order: a.sort_order })));
           }
 
           // Notify participants that the scheduled meeting was cancelled (new unscheduled request created)
