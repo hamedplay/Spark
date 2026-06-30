@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CalendarDays, Clock, MessageSquare, Bell, Users, Save, Loader2, Plus, X, Check, Send, FileText, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { CalendarDays, Clock, MessageSquare, Bell, Users, Save, Loader2, Plus, X, Check, Send, FileText, ChevronDown, ChevronUp, Info, Radio } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -23,6 +23,7 @@ interface Config {
   send_days: number[];
   send_via_sms: boolean;
   send_via_notification: boolean;
+  send_via_bale: boolean;
   recipient_user_ids: string[];
   recipient_group_ids: string[];
   notification_title_tpl: string;
@@ -94,6 +95,7 @@ export function DailyReportConfigPanel() {
     send_days: [0, 1, 2, 3, 4],
     send_via_sms: true,
     send_via_notification: true,
+    send_via_bale: false,
     recipient_user_ids: [],
     recipient_group_ids: [],
     notification_title_tpl: DEFAULT_NOTIF_TITLE,
@@ -126,6 +128,7 @@ export function DailyReportConfigPanel() {
         send_days: d.send_days ?? [0, 1, 2, 3, 4],
         send_via_sms: d.send_via_sms,
         send_via_notification: d.send_via_notification,
+        send_via_bale: d.send_via_bale ?? false,
         recipient_user_ids: d.recipient_user_ids || [],
         recipient_group_ids: d.recipient_group_ids || [],
         notification_title_tpl: d.notification_title_tpl || DEFAULT_NOTIF_TITLE,
@@ -149,6 +152,7 @@ export function DailyReportConfigPanel() {
       send_days: config.send_days,
       send_via_sms: config.send_via_sms,
       send_via_notification: config.send_via_notification,
+      send_via_bale: config.send_via_bale,
       recipient_user_ids: config.recipient_user_ids,
       recipient_group_ids: config.recipient_group_ids,
       notification_title_tpl: config.notification_title_tpl || null,
@@ -313,6 +317,13 @@ export function DailyReportConfigPanel() {
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-green-500" />
                 <span className="text-sm text-gray-700 dark:text-gray-300">پیامک</span>
+              </div>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <Toggle value={config.send_via_bale} onChange={v => setConfig(c => ({ ...c, send_via_bale: v }))} />
+              <div className="flex items-center gap-2">
+                <Radio className="w-4 h-4 text-purple-500" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">پیام بله</span>
               </div>
             </label>
           </div>

@@ -1,0 +1,1 @@
+ALTER TABLE daily_report_config ADD COLUMN IF NOT EXISTS send_via_bale boolean NOT NULL DEFAULT false;

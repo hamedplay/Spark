@@ -356,6 +356,70 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── Bale ─────────────────────────────────────────────────────────────────
+    let baleSent = 0;
+    let baleError: string | null = null;
+    if (config.send_via_bale) {
+      const { data: baleCfg } = await supabase
+        .from("social_channel_configs")
+        .select("bot_token, is_active")
+        .eq("channel", "bale")
+        .maybeSingle();
+
+      if (!baleCfg?.is_active) {
+        baleError = "ربات بله غیرفعال است";
+      } else {
+        const botToken = (baleCfg?.bot_token ?? "").trim();
+        if (!botToken) {
+          baleError = "توکن ربات بله تنظیم نشده";
+        } else {
+          // Build message text (reuse notification body)
+          const titleTpl = config.notification_title_tpl || DEFAULT_NOTIF_TITLE;
+          const bodyTpl = config.notification_body_tpl || DEFAULT_NOTIF_BODY;
+          const notifTitle = renderTemplate(titleTpl, globalVars);
+          let meetingsListForBale = "";
+          if (meetingCount === 0) {
+            meetingsListForBale = "امروز هیچ جلسه‌ای برنامه‌ریزی نشده است.";
+          } else {
+            meetingsListForBale = rows.map(r => {
+              const parts = [r.time, r.subject];
+              if (r.location) parts.push(r.location);
+              return `- ${parts.join(' | ')}`;
+            }).join('\n');
+          }
+          const baleMessage = `${notifTitle}\n\n${renderTemplate(bodyTpl, { ...globalVars, meetings_list: meetingsListForBale })}`;
+
+          // Fetch Bale mappings for all recipients
+          const { data: mappings } = await supabase
+            .from("user_bale_mapping")
+            .select("user_id, bale_chat_id")
+            .in("user_id", recipientIds);
+
+          const chatMap: Record<string, string> = {};
+          (mappings || []).forEach((m: any) => { if (m.bale_chat_id) chatMap[m.user_id] = m.bale_chat_id; });
+
+          for (const uid of recipientIds) {
+            const chatId = chatMap[uid];
+            if (!chatId) continue;
+            try {
+              const res = await fetch(`https://tapi.bale.ai/bot${botToken}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: chatId, text: baleMessage }),
+              });
+              if (res.ok) baleSent++;
+              else {
+                const errBody = await res.text().catch(() => "");
+                console.warn("[daily-meetings] Bale send failed for %s: HTTP %s %s", uid, res.status, errBody.slice(0, 100));
+              }
+            } catch (e: any) {
+              console.warn("[daily-meetings] Bale network error for %s: %s", uid, e?.message);
+            }
+          }
+        }
+      }
+    }
+
     return json({
       ok: true,
       meetings_count: meetingCount,
@@ -363,6 +427,8 @@ Deno.serve(async (req: Request) => {
       notifications_sent: notifSent,
       sms_sent: smsSent,
       sms_error: smsError,
+      bale_sent: baleSent,
+      bale_error: baleError,
       date: jalaaliShort,
       date_long: jalaaliLong,
     });
