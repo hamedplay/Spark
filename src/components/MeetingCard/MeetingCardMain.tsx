@@ -499,7 +499,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       ].filter(Boolean).join('\n');
       const params = new URLSearchParams({
         action: 'TEMPLATE', text: meeting.subject, details, location: meeting.location,
-        dates: `${startDate.toISOString().replace(/[-:.]/g, '')}/${endDate.toISOString().replace(/[-:.]/g, '')}`,
+        dates: `${startDate.toISOString().replace(/(-|:|\.)/g, '')}/${endDate.toISOString().replace(/(-|:|\.)/g, '')}`,
         ctz: 'Asia/Tehran', add: (meeting.guest_emails || []).join(',')
       });
       window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
