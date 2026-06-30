@@ -888,10 +888,18 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
               { label: 'نماینده', value: meeting.representative },
               { label: 'تلفن تماس', value: meeting.phone },
               { label: 'یادداشت', value: meeting.notes },
+              { label: 'دستور جلسه', value: agendaItems.length > 0
+                  ? agendaItems.map((item, idx) => {
+                      const parts = [`${idx + 1}. ${item.title}`];
+                      if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+                      if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+                      return parts.join(' | ');
+                    }).join('\n')
+                  : '' },
             ].filter(r => r.value).map(r => (
               <div key={r.label} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                 <span style={{ color: '#6b7280', fontSize: 12, minWidth: 90, flexShrink: 0 }}>{r.label}:</span>
-                <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word' }}>{r.value}</span>
+                <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{r.value}</span>
               </div>
             ))}
           </div>

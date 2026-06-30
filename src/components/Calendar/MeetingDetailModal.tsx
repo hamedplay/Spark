@@ -628,7 +628,7 @@ const getJalaliDate = (): string => {
               return rows.map(r => (
                 <div key={r.label} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   <span style={{ color: '#6b7280', fontSize: 12, minWidth: 96, flexShrink: 0 }}>{r.label}:</span>
-                  <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word' }}>{r.value}</span>
+                  <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{r.value}</span>
                 </div>
               ));
             })()}
