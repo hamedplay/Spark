@@ -288,6 +288,14 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
     const timeStr = meeting.start_time && meeting.end_time
       ? `${meeting.start_time} - ${meeting.end_time}`
       : meeting.duration;
+    const agendaText = agendaItems.length > 0
+      ? `📌 دستور جلسه:\n` + agendaItems.map((item, idx) => {
+          const parts = [`${idx + 1}. ${item.title}`];
+          if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+          if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+          return parts.join(' | ');
+        }).join('\n')
+      : '';
     const lines = [
       `📋 جلسه: ${meeting.subject}`,
       `📅 تاریخ: ${dateStr}`,
@@ -297,6 +305,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       `📞 تلفن: ${meeting.phone}`,
       meeting.participants.length > 0 ? `👥 شرکت‌کنندگان: ${meeting.participants.join('، ')}` : '',
       meeting.notes ? `📝 یادداشت: ${meeting.notes}` : '',
+      agendaText,
       `\nسیستم مدیریت جلسات اسپارک`,
     ].filter(Boolean).join('\n');
 
@@ -478,7 +487,15 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
         `نماینده: ${meeting.representative}`,
         `شماره تماس: ${meeting.phone}`,
         `شرکت‌کنندگان: ${meeting.participants.join('، ')}`,
-        meeting.notes ? `یادداشت‌ها: ${meeting.notes}` : ''
+        meeting.notes ? `یادداشت‌ها: ${meeting.notes}` : '',
+        agendaItems.length > 0
+          ? `دستور جلسه:\n` + agendaItems.map((item, idx) => {
+              const parts = [`${idx + 1}. ${item.title}`];
+              if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+              if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+              return parts.join(' | ');
+            }).join('\n')
+          : ''
       ].filter(Boolean).join('\n');
       const params = new URLSearchParams({
         action: 'TEMPLATE', text: meeting.subject, details, location: meeting.location,
