@@ -1,0 +1,23 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- Security Phase 4d: pending_approvals — drop spurious anon INSERT
+-- ---------------------------------------------------------------
+-- Before: "insert_pending_approvals_anon" allowed any anonymous user
+-- to INSERT into pending_approvals with no restriction (WITH CHECK true).
+-- This enabled flooding the host with fake approval requests.
+--
+-- Investigation:
+--   ApprovalWaitingGate (the only INSERT call-site) is mounted inside
+--   VideoConferencePage.tsx exclusively when `waitingApproval && userId`
+--   where userId = supabase.auth.getUser().id — authenticated only.
+--   VideoConferencePage.tsx:491 also short-circuits with setNotLoggedIn
+--   if user is null. No frontend code path uses anon INSERT here.
+--
+-- The authenticated INSERT policy (insert_pending_approvals_auth) with
+--   WITH CHECK (auth.uid() = user_id) remains untouched.
+--
+-- ROLLBACK:
+--   CREATE POLICY insert_pending_approvals_anon ON public.pending_approvals
+--     FOR INSERT TO anon WITH CHECK (true);
+-- ═══════════════════════════════════════════════════════════════════
+
+DROP POLICY IF EXISTS insert_pending_approvals_anon ON public.pending_approvals;
