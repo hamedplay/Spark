@@ -32,7 +32,6 @@
     "@eslint/js": "10.0.1",
     "@types/moment-jalaali": "^0.7.9",
     "@types/react": "^19.0.0",
-    "@types/react-datepicker": "7.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/simple-peer": "^9.11.8",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
