@@ -575,7 +575,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
   return (
     <div className="flex flex-col h-full" dir="rtl">
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 px-6 py-4">
+      <div className="shrink-0 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-400 to-sky-500 flex items-center justify-center shadow-md">
@@ -593,7 +593,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="جستجو در راهنما..."
-              className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+              className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-teal-400"
             />
             {searchQuery && (
               <button onClick={() => setSearchQuery('')} className="absolute left-2 top-1/2 -translate-y-1/2">
@@ -606,7 +606,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
 
       <div className="flex flex-1 overflow-hidden">
         {/* ── Sidebar ────────────────────────────────────────────────── */}
-        <div className="w-52 flex-shrink-0 bg-gray-50 dark:bg-gray-900 border-l border-gray-100 dark:border-gray-700 overflow-y-auto">
+        <div className="w-52 shrink-0 bg-gray-50 dark:bg-gray-900 border-l border-gray-100 dark:border-gray-700 overflow-y-auto">
           <div className="p-2 space-y-0.5">
             {(searchQuery ? filtered : SECTIONS).map(section => {
               const Icon = section.icon;
@@ -622,7 +622,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                       : 'text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive ? sc.lightBg : 'bg-white dark:bg-gray-800'}`}>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isActive ? sc.lightBg : 'bg-white dark:bg-gray-800'}`}>
                     <Icon className={`w-4 h-4 ${isActive ? sc.text : 'text-gray-400 dark:text-gray-500'}`} />
                   </div>
                   <span className="text-sm truncate">{section.title}</span>
@@ -669,7 +669,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                       const ItemIcon = item.icon;
                       return (
                         <div key={i} className="flex items-start gap-3 p-3.5 bg-white dark:bg-gray-800">
-                          <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center ${sc.lightBg}`}>
+                          <div className={`w-9 h-9 rounded-xl shrink-0 flex items-center justify-center ${sc.lightBg}`}>
                             <ItemIcon className={`w-4.5 h-4.5 ${item.color || sc.text}`} />
                           </div>
                           <div>
@@ -692,7 +692,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                       <ul className="p-4 space-y-2.5">
                         {step.items.map((item, ii) => (
                           <li key={ii} className="flex items-start gap-2.5">
-                            <span className={`mt-1.5 w-5 h-5 rounded-full text-[10px] font-bold flex-shrink-0 flex items-center justify-center text-white ${sc.bg}`}>{ii + 1}</span>
+                            <span className={`mt-1.5 w-5 h-5 rounded-full text-[10px] font-bold shrink-0 flex items-center justify-center text-white ${sc.bg}`}>{ii + 1}</span>
                             <span className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{item}</span>
                           </li>
                         ))}
@@ -711,7 +711,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                     <ul className="space-y-2">
                       {section.tips.map((tip, ti) => (
                         <li key={ti} className="flex items-start gap-2.5">
-                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${sc.dot}`} />
+                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${sc.dot}`} />
                           <span className="text-sm text-gray-700 dark:text-gray-300">{tip}</span>
                         </li>
                       ))}
@@ -736,7 +736,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                         <button
                           key={qi}
                           onClick={() => onAskSpark(q)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-700 rounded-full text-xs font-medium hover:bg-sky-50 dark:hover:bg-sky-900/30 hover:border-sky-400 transition-all shadow-sm"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-700 rounded-full text-xs font-medium hover:bg-sky-50 dark:hover:bg-sky-900/30 hover:border-sky-400 transition-all shadow-xs"
                         >
                           <Zap className="w-3 h-3" />
                           {q}

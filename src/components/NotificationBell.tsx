@@ -53,7 +53,7 @@ const pageMap: Record<string, PageId> = {
 // Map notification type → icon component + color
 function TypeIcon({ type, size = 18 }: { type: string; size?: number }) {
   const s = size;
-  const cls = 'flex-shrink-0';
+  const cls = 'shrink-0';
 
   if (type === 'chat') return <MessageCircle size={s} className={`${cls} text-teal-500`} />;
   if (type === 'meeting' || type === 'calendar') return <Calendar size={s} className={`${cls} text-blue-500`} />;
@@ -97,7 +97,7 @@ function Avatar({
       <img
         src={url}
         alt={name || ''}
-        className="rounded-full object-cover flex-shrink-0"
+        className="rounded-full object-cover shrink-0"
         style={{ width: size, height: size }}
         onError={() => setImageError(true)}
       />
@@ -106,7 +106,7 @@ function Avatar({
 
   return (
     <div
-      className="rounded-full flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-700 text-white font-bold flex-shrink-0 text-xs"
+      className="rounded-full flex items-center justify-center bg-gradient-to-br from-teal-500 to-teal-700 text-white font-bold shrink-0 text-xs"
       style={{ width: size, height: size, fontSize: size * 0.36 }}
     >
       {initials}
@@ -147,7 +147,7 @@ function showRichToast(n: AppNotification, onNavigate?: (page: PageId) => void) 
         }`}
         dir="rtl"
       >
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${TypeBg(n.type)}`}>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${TypeBg(n.type)}`}>
           {hasSender ? (
             <Avatar url={n.sender_avatar_url} name={n.sender_name} size={40} />
           ) : (
@@ -171,7 +171,7 @@ function showRichToast(n: AppNotification, onNavigate?: (page: PageId) => void) 
             e.stopPropagation();
             toast.dismiss(t.id);
           }}
-          className="p-1 text-gray-300 hover:text-gray-500 dark:hover:text-gray-200 flex-shrink-0"
+          className="p-1 text-gray-300 hover:text-gray-500 dark:hover:text-gray-200 shrink-0"
         >
           <X size={14} />
         </button>
@@ -220,7 +220,7 @@ function NotificationPanelContent({
 }: PanelContentProps) {
   return (
     <>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
             <Bell className="w-4 h-4 text-blue-500" />
@@ -285,7 +285,7 @@ function NotificationPanelContent({
                   }`}
                 >
                   {n.sender_name || n.sender_avatar_url ? (
-                    <div className="relative flex-shrink-0 mt-0.5">
+                    <div className="relative shrink-0 mt-0.5">
                       <Avatar url={n.sender_avatar_url} name={n.sender_name} size={44} />
                       <div
                         className={`absolute -bottom-0.5 -left-0.5 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white dark:border-gray-800 ${TypeBg(
@@ -296,7 +296,7 @@ function NotificationPanelContent({
                       </div>
                     </div>
                   ) : (
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${TypeBg(n.type)}`}>
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${TypeBg(n.type)}`}>
                       <TypeIcon type={n.type} size={22} />
                     </div>
                   )}
@@ -304,8 +304,8 @@ function NotificationPanelContent({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3 mb-1">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug flex-1">{n.title}</p>
-                      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                        {!n.read && <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />}
+                      <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                        {!n.read && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
                         <span className="text-[11px] text-gray-400 dark:text-gray-500 whitespace-nowrap">
                           {timeAgo(n.created_at)}
                         </span>
@@ -326,7 +326,7 @@ function NotificationPanelContent({
       </div>
 
       {notifications.length > 0 && (
-        <div className="px-5 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
+        <div className="px-5 py-2.5 border-t border-gray-100 dark:border-gray-700 shrink-0">
           <p className="text-center text-xs text-gray-400 dark:text-gray-500">
             {notifications.length} اعلان — آخرین ۵۰ اعلان نمایش داده می‌شود
           </p>
@@ -534,7 +534,7 @@ export function NotificationBell({ onNavigate }: NotificationBellProps) {
               className="w-5 h-5 text-blue-500 dark:text-blue-400"
               style={{ animation: 'bellRing 1.2s ease-in-out infinite' }}
             />
-            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full font-bold px-0.5 shadow-sm">
+            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full font-bold px-0.5 shadow-xs">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           </>
@@ -552,7 +552,7 @@ export function NotificationBell({ onNavigate }: NotificationBellProps) {
             style={{ maxHeight: '90vh' }}
             dir="rtl"
           >
-            <div className="flex justify-center pt-2.5 pb-0 flex-shrink-0">
+            <div className="flex justify-center pt-2.5 pb-0 shrink-0">
               <div className="w-10 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
             </div>
 

@@ -213,12 +213,12 @@ export function ChatPanel({
     <>
       {/* Chat-disabled banner + admin toggle */}
       {(!chatEnabled || canToggleChat) && (
-        <div className={`flex items-center justify-between gap-2 px-3 py-2 flex-shrink-0 border-b border-gray-800
+        <div className={`flex items-center justify-between gap-2 px-3 py-2 shrink-0 border-b border-gray-800
           ${chatEnabled ? 'bg-gray-800/40' : 'bg-red-950/40'}`}>
           <div className="flex items-center gap-2 min-w-0">
             {chatEnabled
-              ? <MessageSquare className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" aria-hidden="true" />
-              : <MessageSquareOff className="w-3.5 h-3.5 text-red-400 flex-shrink-0" aria-hidden="true" />}
+              ? <MessageSquare className="w-3.5 h-3.5 text-teal-400 shrink-0" aria-hidden="true" />
+              : <MessageSquareOff className="w-3.5 h-3.5 text-red-400 shrink-0" aria-hidden="true" />}
             <span className={`text-xs ${chatEnabled ? 'text-gray-400' : 'text-red-400'}`}>
               {chatEnabled ? 'چت فعال است' : 'چت غیرفعال شده'}
             </span>
@@ -227,7 +227,7 @@ export function ChatPanel({
             <button
               onClick={onToggleChat}
               aria-label={chatEnabled ? 'غیرفعال کردن چت' : 'فعال کردن چت'}
-              className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors flex-shrink-0
+              className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors shrink-0
                 ${chatEnabled
                   ? 'bg-red-900/40 hover:bg-red-900/70 text-red-400'
                   : 'bg-teal-900/40 hover:bg-teal-900/70 text-teal-400'}`}
@@ -295,7 +295,7 @@ export function ChatPanel({
 
       {/* New-message indicator when user has scrolled up */}
       {hasUnread && (
-        <div className="flex justify-center flex-shrink-0 pb-1 -mt-1">
+        <div className="flex justify-center shrink-0 pb-1 -mt-1">
           <button
             onClick={scrollToBottom}
             aria-label="رفتن به آخرین پیام"
@@ -309,7 +309,7 @@ export function ChatPanel({
 
       {/* Typing indicator */}
       {typingLabel && (
-        <div className="px-3 py-1 flex-shrink-0">
+        <div className="px-3 py-1 shrink-0">
           <span className="text-xs text-gray-500 italic flex items-center gap-1.5">
             <span className="flex gap-0.5" aria-hidden="true">
               {[0, 1, 2].map(i => (
@@ -324,14 +324,14 @@ export function ChatPanel({
 
       {/* Input area */}
       {chatEnabled ? (
-        <div className="p-2 border-t border-gray-800 flex gap-2 flex-shrink-0">
+        <div className="p-2 border-t border-gray-800 flex gap-2 shrink-0">
           <input
             value={input}
             onChange={e => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="پیام..."
             aria-label="متن پیام"
-            className="flex-1 bg-gray-800 text-white rounded-xl px-3 py-2 text-sm outline-none placeholder-gray-500 min-w-0 focus:ring-1 focus:ring-teal-600"
+            className="flex-1 bg-gray-800 text-white rounded-xl px-3 py-2 text-sm outline-hidden placeholder-gray-500 min-w-0 focus:ring-1 focus:ring-teal-600"
             disabled={uploading}
           />
           <button
@@ -339,7 +339,7 @@ export function ChatPanel({
             disabled={uploading}
             aria-label="ارسال تصویر"
             title="ارسال تصویر"
-            className="p-2 bg-gray-700 hover:bg-gray-600 rounded-xl transition-colors flex-shrink-0 disabled:opacity-50"
+            className="p-2 bg-gray-700 hover:bg-gray-600 rounded-xl transition-colors shrink-0 disabled:opacity-50"
           >
             {uploading
               ? <Loader2 className="w-4 h-4 animate-spin text-teal-400" aria-hidden="true" />
@@ -357,13 +357,13 @@ export function ChatPanel({
             onClick={() => sendMessage()}
             disabled={!input.trim() || uploading}
             aria-label="ارسال پیام"
-            className="p-2 bg-teal-600 hover:bg-teal-500 rounded-xl transition-colors flex-shrink-0 disabled:opacity-40"
+            className="p-2 bg-teal-600 hover:bg-teal-500 rounded-xl transition-colors shrink-0 disabled:opacity-40"
           >
             <Send className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       ) : (
-        <div className="p-3 border-t border-gray-800 flex-shrink-0">
+        <div className="p-3 border-t border-gray-800 shrink-0">
           <p className="text-xs text-gray-600 text-center flex items-center justify-center gap-1.5">
             <MessageSquareOff className="w-3.5 h-3.5" aria-hidden="true" />
             چت توسط میزبان غیرفعال شده است
@@ -377,7 +377,7 @@ export function ChatPanel({
           role="dialog"
           aria-modal="true"
           aria-label="نمایش تصویر"
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-xs p-4"
           onClick={() => setLightboxUrl(null)}
         >
           <button

@@ -120,7 +120,7 @@ function CommandPanel({ module, onSendCommand }: CommandPanelProps) {
         onClick={() => setExpanded(v => !v)}
         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
       >
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${c.icon}`}>
           <Icon className="w-4 h-4" />
         </div>
         <span className="flex-1 text-sm font-semibold text-gray-800 dark:text-white text-right">{module.label}</span>
@@ -137,14 +137,14 @@ function CommandPanel({ module, onSendCommand }: CommandPanelProps) {
                   onClick={() => setCustomText(cmd.template)}
                   className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl border text-xs text-right transition-colors ${c.btn}`}
                 >
-                  <Terminal className="w-3 h-3 flex-shrink-0" />
+                  <Terminal className="w-3 h-3 shrink-0" />
                   <span className="flex-1 font-medium">{cmd.label}</span>
                   <span className="text-[10px] opacity-60 truncate max-w-[200px]">{cmd.template.replace(/\[.*?\]/g, '...')}</span>
                 </button>
                 <button
                   onClick={() => onSendCommand(cmd.template)}
                   title="اجرای مستقیم در اسپارک"
-                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 flex items-center justify-center text-gray-400 hover:text-blue-500 transition-colors flex-shrink-0"
+                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 flex items-center justify-center text-gray-400 hover:text-blue-500 transition-colors shrink-0"
                 >
                   <Play className="w-3 h-3" />
                 </button>
@@ -161,7 +161,7 @@ function CommandPanel({ module, onSendCommand }: CommandPanelProps) {
                 onChange={e => setCustomText(e.target.value)}
                 placeholder="دستور خود را بنویسید..."
                 onKeyDown={e => { if (e.key === 'Enter' && customText.trim()) { onSendCommand(customText); setCustomText(''); } }}
-                className="flex-1 px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="flex-1 px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-400"
               />
               <button
                 onClick={() => { if (customText.trim()) { onSendCommand(customText); setCustomText(''); } }}
@@ -190,7 +190,7 @@ function LogCard({ log, onDelete }: { log: SparkLog; onDelete: (id: string) => v
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow">
       <div className="px-4 py-3">
         <div className="flex items-start gap-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${typeMeta.bg}`}>
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${typeMeta.bg}`}>
             <TypeIcon className={`w-4 h-4 ${typeMeta.text}`} />
           </div>
           <div className="flex-1 min-w-0">
@@ -209,7 +209,7 @@ function LogCard({ log, onDelete }: { log: SparkLog; onDelete: (id: string) => v
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {log.payload && Object.keys(log.payload).length > 0 && (
               <button onClick={() => setExpanded(v => !v)} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                 {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -370,7 +370,7 @@ export function SparkPage({ externalLogs, onSendToAssistant }: SparkPageProps) {
 
       {/* How to use */}
       <div className="flex items-start gap-3 p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
-        <Mic className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+        <Mic className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
         <div className="text-xs text-blue-800 dark:text-blue-200 leading-relaxed">
           <p className="font-semibold mb-1">نحوه استفاده از دستورات صوتی</p>
           <p>روی دکمه میکروفون در پنجره اسپارک کلیک کنید. دستور <strong>کامل</strong> خود را بگویید. سپس دوباره روی دکمه توقف کلیک کنید تا اسپارک پردازش کند و اجرا نماید.</p>
@@ -380,11 +380,11 @@ export function SparkPage({ externalLogs, onSendToAssistant }: SparkPageProps) {
       {/* Tabs */}
       <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl">
         <button onClick={() => setActiveTab('commands')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'commands' ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'commands' ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-xs' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
           <Terminal className="w-4 h-4" /> دستورات آماده
         </button>
         <button onClick={() => setActiveTab('logs')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'logs' ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'logs' ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-xs' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
           <Clock className="w-4 h-4" /> سوابق ({logs.length})
         </button>
       </div>
@@ -400,14 +400,14 @@ export function SparkPage({ externalLogs, onSendToAssistant }: SparkPageProps) {
       {activeTab === 'logs' && (
         <>
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 px-4 py-3 flex items-center gap-3 flex-wrap">
-            <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <Filter className="w-4 h-4 text-gray-400 shrink-0" />
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <input type="text" placeholder="جستجو..." value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-400" />
             </div>
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400">
+              className="px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-blue-400">
               <option value="all">همه وضعیت‌ها</option>
               <option value="done">انجام شده</option>
               <option value="pending">در انتظار</option>

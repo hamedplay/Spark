@@ -295,7 +295,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
   return (
     <div className="flex h-full overflow-hidden" dir="rtl">
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <div className={`${showSidebar ? 'flex' : 'hidden lg:flex'} w-full lg:w-80 xl:w-96 flex-shrink-0 flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800`}>
+      <div className={`${showSidebar ? 'flex' : 'hidden lg:flex'} w-full lg:w-80 xl:w-96 shrink-0 flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800`}>
         {loadingConvs ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-7 h-7 animate-spin text-teal-500" />
@@ -375,7 +375,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
               <p className="text-sm opacity-70">یا گفتگوی جدید شروع کنید</p>
               <button
                 onClick={() => setShowNewConv(true)}
-                className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
+                className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-xs"
               >
                 <Plus className="w-4 h-4" /> گفتگوی جدید
               </button>

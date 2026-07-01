@@ -108,7 +108,7 @@ export function BanList({ roomId }: Props) {
       {activeBans.map(b => (
         <div key={b.id} role="listitem" className="flex items-start gap-2 p-2 bg-gray-800 rounded-xl">
           <div
-            className="w-6 h-6 rounded-full bg-red-900/50 flex items-center justify-center text-[10px] font-bold text-red-300 flex-shrink-0 mt-0.5"
+            className="w-6 h-6 rounded-full bg-red-900/50 flex items-center justify-center text-[10px] font-bold text-red-300 shrink mt-0.5"
             aria-hidden="true"
           >
             {(b.display_name[0] || '?').toUpperCase()}
@@ -134,7 +134,7 @@ export function BanList({ roomId }: Props) {
             onClick={() => unban(b.id)}
             aria-label={`رفع مسدودیت ${b.display_name}`}
             title="رفع مسدودیت"
-            className="p-1 rounded-lg hover:bg-teal-900/40 text-gray-500 hover:text-teal-400 transition-colors flex-shrink-0"
+            className="p-1 rounded-lg hover:bg-teal-900/40 text-gray-500 hover:text-teal-400 transition-colors shrink-0"
           >
             <UserCheck className="w-3 h-3" aria-hidden="true" />
           </button>

@@ -120,7 +120,7 @@ export function MeetingEditForm({ meeting, onSave, onCancel }: MeetingEditFormPr
     }
   };
 
-  const inp = 'w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none';
+  const inp = 'w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-400 focus:outline-hidden';
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
@@ -213,7 +213,7 @@ export function MeetingEditForm({ meeting, onSave, onCancel }: MeetingEditFormPr
                 <div className="space-y-2">
                   {agendaItems.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 text-sm">
-                      <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-center font-bold flex-shrink-0">
+                      <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-center font-bold shrink-0">
                         {idx + 1}
                       </span>
                       <div className="flex-1 min-w-0">

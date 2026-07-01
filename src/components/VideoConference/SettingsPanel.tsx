@@ -49,7 +49,7 @@ export function SettingsPanel({ videoQuality, dataSaverMode, isApplying, onChang
                   ${dataSaverMode ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
               >
-                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors
+                <div className={`w-4 h-4 rounded-full border-2 shrink flex items-center justify-center transition-colors
                   ${active ? 'border-teal-400' : 'border-gray-600'}`}>
                   {active && (
                     <div className="w-2 h-2 rounded-full bg-teal-400" />
@@ -66,7 +66,7 @@ export function SettingsPanel({ videoQuality, dataSaverMode, isApplying, onChang
                   <p className="text-xs text-gray-500 mt-0.5">{preset.res} · {preset.frameRate}fps · {preset.bitrate}</p>
                 </div>
                 {active && isApplying && (
-                  <Loader2 className="w-4 h-4 text-teal-400 animate-spin flex-shrink-0" />
+                  <Loader2 className="w-4 h-4 text-teal-400 animate-spin shrink" />
                 )}
               </button>
             );
@@ -89,7 +89,7 @@ export function SettingsPanel({ videoQuality, dataSaverMode, isApplying, onChang
             role="switch"
             aria-checked={dataSaverMode}
             aria-label={dataSaverMode ? 'غیرفعال کردن حالت صرفه‌جویی داده' : 'فعال کردن حالت صرفه‌جویی داده'}
-            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800
+            className={`relative w-11 h-6 rounded-full transition-colors shrink focus:outline-hidden focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800
               ${dataSaverMode ? 'bg-teal-500' : 'bg-gray-600'}
               ${isApplying ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           >

@@ -71,7 +71,7 @@ function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: strin
   useEffect(() => { setVal(entry.value ?? ''); setDirty(false); }, [entry.value]);
   const change = (v: string) => { setVal(v); setDirty(v !== (entry.value ?? '')); };
 
-  const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
+  const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -87,7 +87,7 @@ function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: strin
       {entry.description && <p className="text-xs text-gray-400 dark:text-gray-500">{entry.description}</p>}
       {entry.value_type === 'boolean' ? (
         <button onClick={() => { const n = val === 'true' ? 'false' : 'true'; change(n); onSave(entry.id, n); }}
-          className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${val === 'true' ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+          className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${val === 'true' ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
           <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${val === 'true' ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       ) : entry.value_type === 'password' ? (
@@ -390,7 +390,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                             await loadConfigs();
                           }
                         }}
-                        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${isCollapsed ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                        className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${isCollapsed ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
                       >
                         <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${isCollapsed ? 'left-7' : 'left-1'}`} />
                       </button>
@@ -530,7 +530,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                 <div className="relative">
                   <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                   <input value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="جستجو..."
-                    className="pr-8 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-48" />
+                    className="pr-8 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-48" />
                 </div>
                 <button onClick={loadProfiles} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors" title="بارگذاری مجدد"><RefreshCw className="w-4 h-4" /></button>
                 <button onClick={() => setUserModal('add')}
@@ -560,7 +560,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                       <tr key={p.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
                               {(p.full_name || p.email || '?')[0].toUpperCase()}
                             </div>
                             <div>
@@ -610,7 +610,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                                 ].map(({ icon: Icon, label, modal, color }) => (
                                   <button key={modal} onClick={() => openUserModal(modal, p)}
                                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right">
-                                    <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
+                                    <Icon className={`w-4 h-4 shrink-0 ${color}`} />
                                     <span className="text-sm text-gray-700 dark:text-gray-200">{label}</span>
                                   </button>
                                 ))}
@@ -645,7 +645,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                           <div key={key}>
                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{lbl}</label>
                             <input value={(editForm as any)[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
-                              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
                           </div>
                         ))}
                         <div className="pt-2 flex gap-2">
@@ -664,7 +664,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                         <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
                       </div>
                       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 mb-4 text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                         رمز جدید برای کاربر <strong>{selectedUser.full_name || selectedUser.email}</strong> تنظیم خواهد شد.
                       </div>
                       <div className="space-y-4">
@@ -672,7 +672,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                           <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">رمز عبور جدید</label>
                           <div className="relative">
                             <input type={showNewPass ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pl-10" />
+                              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 pl-10" />
                             <button onClick={() => setShowNewPass(v => !v)} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                               {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
@@ -751,11 +751,11 @@ export function PortalConfigPage({ currentUserId }: Props) {
                         {userActivity.length === 0 && <p className="text-center text-gray-400 py-8">فعالیتی ثبت نشده</p>}
                         {userActivity.map(a => (
                           <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-                            <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${a.severity === 'error' || a.severity === 'critical' ? 'bg-red-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                            <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${a.severity === 'error' || a.severity === 'critical' ? 'bg-red-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{a.action}</span>
-                                <span className="text-xs text-gray-400 flex-shrink-0">{new Date(a.created_at).toLocaleString('fa-IR')}</span>
+                                <span className="text-xs text-gray-400 shrink-0">{new Date(a.created_at).toLocaleString('fa-IR')}</span>
                               </div>
                               <div className="flex gap-3 mt-1">
                                 {a.module && <span className="text-xs text-gray-400">{a.module}</span>}
@@ -817,7 +817,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                         <div key={key}>
                           <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{label}</label>
                           <input type={type} value={(addForm as any)[key]} onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
                         </div>
                       ))}
                       <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-gray-50 dark:bg-gray-700">
@@ -864,7 +864,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {onlineUsers.map(p => (
                   <div key={p.user_id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 flex items-center gap-3">
-                    <div className="relative flex-shrink-0">
+                    <div className="relative shrink-0">
                       <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-bold">
                         {(p.full_name || p.email || '?')[0].toUpperCase()}
                       </div>
@@ -874,7 +874,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                       <p className="font-medium text-gray-800 dark:text-white text-sm truncate">{p.full_name || '—'}</p>
                       <p className="text-xs text-gray-400 truncate">{p.email}</p>
                     </div>
-                    {p.is_admin && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full flex-shrink-0">ادمین</span>}
+                    {p.is_admin && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full shrink-0">ادمین</span>}
                   </div>
                 ))}
               </div>
@@ -1035,7 +1035,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
         <div className="fixed inset-0 z-[200] lg:hidden" onClick={() => setMobileSidebarOpen(false)}>
           <div className="absolute inset-0 bg-black/50" />
           <div className="absolute top-0 right-0 h-full w-64 bg-white dark:bg-gray-800 flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between shrink-0">
               <h2 className="font-bold text-gray-800 dark:text-white flex items-center gap-2 text-sm">
                 <Settings className="w-4 h-4 text-blue-500" /> پیکربندی
               </h2>
@@ -1051,8 +1051,8 @@ export function PortalConfigPage({ currentUserId }: Props) {
       )}
 
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex w-56 flex-shrink-0 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex-col overflow-y-auto">
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+      <div className="hidden lg:flex w-56 shrink-0 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex-col overflow-y-auto">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
           <h2 className="font-bold text-gray-800 dark:text-white flex items-center gap-2 text-sm">
             <Settings className="w-4 h-4 text-blue-500" /> پیکربندی
           </h2>
@@ -1063,21 +1063,21 @@ export function PortalConfigPage({ currentUserId }: Props) {
       {/* Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Breadcrumb bar */}
-        <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 gap-3">
+        <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0 gap-3">
           <div className="flex items-center gap-2 min-w-0">
             {/* Mobile menu button */}
             <button onClick={() => setMobileSidebarOpen(true)}
-              className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 flex-shrink-0">
+              className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 shrink-0">
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 min-w-0">
-              <Settings className="w-4 h-4 flex-shrink-0" />
+              <Settings className="w-4 h-4 shrink-0" />
               <span className="text-gray-400 hidden sm:inline">/</span>
               <span className="text-gray-700 dark:text-gray-200 font-medium truncate">{breadcrumb}</span>
             </div>
           </div>
           <button onClick={() => { loadConfigs(); loadProfiles(); loadGroups(); loadStats(); }}
-            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors flex-shrink-0">
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors shrink-0">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
@@ -1110,7 +1110,7 @@ function LoginHistoryList({ userId }: { userId: string }) {
     <div className="space-y-2 max-h-[50vh] overflow-y-auto">
       {logs.map((l, i) => (
         <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-          <div className="w-7 h-7 rounded-lg bg-gray-200 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-gray-200 dark:bg-gray-600 flex items-center justify-center shrink-0">
             <LoginIcon className="w-3.5 h-3.5 text-gray-500" />
           </div>
           <div className="flex-1 min-w-0">
@@ -1164,10 +1164,10 @@ function VisitedUrlsList({ userId }: { userId: string }) {
       <div className="space-y-1.5">
         {logs.slice(0, 30).map(l => (
           <div key={l.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-xs">
-            <MapPin className="w-3 h-3 text-orange-400 flex-shrink-0" />
+            <MapPin className="w-3 h-3 text-orange-400 shrink-0" />
             <span className="text-gray-500 dark:text-gray-400 font-medium">{l.module}</span>
             <span className="text-gray-400 truncate flex-1">{l.action}</span>
-            <span className="text-gray-300 dark:text-gray-600 flex-shrink-0">{new Date(l.created_at).toLocaleDateString('fa-IR')}</span>
+            <span className="text-gray-300 dark:text-gray-600 shrink-0">{new Date(l.created_at).toLocaleDateString('fa-IR')}</span>
           </div>
         ))}
       </div>

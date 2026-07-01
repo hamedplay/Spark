@@ -147,7 +147,7 @@ function EventDetailModal({ entry, onClose }: { entry: AuditEntry; onClose: () =
                 ) : '—' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-start justify-between py-3 gap-4">
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 flex-shrink-0 w-36 text-left">{label}</span>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0 w-36 text-left">{label}</span>
                   <span className="text-sm text-gray-800 dark:text-white text-right flex-1">{value}</span>
                 </div>
               ))}
@@ -213,7 +213,7 @@ export function AuditLogPage() {
     details: '',
   });
 
-  const inp = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
+  const inp = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors';
 
   const search = useCallback(async () => {
     setLoading(true);

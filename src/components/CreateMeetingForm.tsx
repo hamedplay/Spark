@@ -81,7 +81,7 @@ function MultiSelectField({
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={selected.length === 0 ? placeholder : ''}
-          className="flex-1 min-w-[120px] outline-none bg-transparent text-sm dark:text-white placeholder-gray-400" />
+          className="flex-1 min-w-[120px] outline-hidden bg-transparent text-sm dark:text-white placeholder-gray-400" />
       </div>
       {open && (isSearching ? filtered.length > 0 : (groups ? groups.some(g => g.options.some(o => !selected.find(s => s.id === o.id))) : filtered.length > 0)) && (
         <div className="relative z-20">
@@ -857,7 +857,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
             <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl">
               <div className="p-2 border-b border-gray-100 dark:border-gray-700">
                 <input autoFocus type="text" value={repPickerSearch} onChange={e => setRepPickerSearch(e.target.value)}
-                  placeholder="جستجو در مخاطبین..." className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  placeholder="جستجو در مخاطبین..." className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="max-h-48 overflow-y-auto">
                 {filteredRepContacts.length === 0 ? (
@@ -977,7 +977,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
               }
             }}
             placeholder={selectedExternal.length === 0 ? 'جستجوی مخاطبین خارج سازمان...' : ''}
-            className="flex-1 min-w-[120px] outline-none bg-transparent text-sm dark:text-white placeholder-gray-400"
+            className="flex-1 min-w-[120px] outline-hidden bg-transparent text-sm dark:text-white placeholder-gray-400"
           />
         </div>
         {showExternalDropdown && (
@@ -1197,7 +1197,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
               <div className="space-y-2">
                 {agendaItems.map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 text-sm">
-                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-center font-bold flex-shrink-0">
+                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-center font-bold shrink-0">
                       {idx + 1}
                     </span>
                     <div className="flex-1 min-w-0">
@@ -1239,7 +1239,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
                     type="text"
                     value={agendaForm.title}
                     onChange={e => setAgendaForm(f => ({ ...f, title: e.target.value }))}
-                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:ring-2 focus:ring-blue-400 focus:outline-hidden"
                     placeholder="مثال: بررسی گزارش مالی"
                   />
                 </div>
@@ -1249,7 +1249,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
                     <select
                       value={agendaForm.presenter}
                       onChange={e => setAgendaForm(f => ({ ...f, presenter: e.target.value }))}
-                      className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                      className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:ring-2 focus:ring-blue-400 focus:outline-hidden"
                     >
                       <option value="">انتخاب ارائه‌دهنده...</option>
                       {selectedParticipants.length > 0 && (
@@ -1272,7 +1272,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
                       max="480"
                       value={agendaForm.duration_minutes}
                       onChange={e => setAgendaForm(f => ({ ...f, duration_minutes: e.target.value }))}
-                      className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                      className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:ring-2 focus:ring-blue-400 focus:outline-hidden"
                       placeholder="مثال: 20"
                     />
                   </div>

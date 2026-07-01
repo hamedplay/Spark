@@ -190,7 +190,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
   return (
     <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
         <h2 className="font-bold text-gray-900 dark:text-white text-sm">اقدامات جاری</h2>
         <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
           <X className="w-4 h-4" />
@@ -205,7 +205,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="جستجو در پیام‌ها..."
-            className="w-full pr-9 pl-9 py-2.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:border-teal-400 dark:text-white placeholder-gray-400 transition-colors"
+            className="w-full pr-9 pl-9 py-2.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-hidden focus:border-teal-400 dark:text-white placeholder-gray-400 transition-colors"
           />
           <button
             onClick={() => setShowFilters(v => !v)}
@@ -235,7 +235,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
                     <button key={opt.key} onClick={() => toggleTypeFilter(opt.key)}
                       className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300">
                       <span>{opt.label}</span>
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${typeFilters.has(opt.key) ? 'bg-teal-500 border-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${typeFilters.has(opt.key) ? 'bg-teal-500 border-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
                         {typeFilters.has(opt.key) && <Check className="w-2.5 h-2.5 text-white" />}
                       </div>
                     </button>
@@ -265,7 +265,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
                       {opt.key === 'custom' && dateFilter === 'custom' && (
                         <div className="px-3 pb-2">
                           <input type="date" value={customDate} onChange={e => setCustomDate(e.target.value)}
-                            className="w-full px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white outline-none focus:border-teal-400" />
+                            className="w-full px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white outline-hidden focus:border-teal-400" />
                         </div>
                       )}
                     </div>
@@ -377,7 +377,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
               <div key={r.id}
                 onClick={() => { onNavigateToMessage?.(r.id); onClose(); }}
                 className="flex items-start gap-3 px-4 py-3 hover:bg-teal-50 dark:hover:bg-teal-900/10 border-b border-gray-50 dark:border-gray-700 cursor-pointer transition-colors">
-                <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                   {(r.senderProfile?.full_name || r.senderProfile?.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -385,7 +385,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
                     <span className="text-xs font-semibold text-gray-800 dark:text-white truncate">
                       {r.senderProfile?.full_name || r.senderProfile?.email || 'کاربر'}
                     </span>
-                    <span className="text-[10px] text-gray-400 flex-shrink-0">{moment(r.created_at).format('HH:mm')}</span>
+                    <span className="text-[10px] text-gray-400 shrink-0">{moment(r.created_at).format('HH:mm')}</span>
                   </div>
                   <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2 leading-relaxed">{r.body || '📎 فایل'}</p>
                   <div className="flex items-center gap-1 mt-1 flex-wrap">
@@ -393,7 +393,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
                     {r.message_type === 'urgent' && <span className="text-[10px] text-red-600 bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded">اورژانسی</span>}
                     {r.is_starred && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />}
                     {r.is_pinned && <span className="text-[10px]">📌</span>}
-                    {!(r.read_by || []).includes(currentUserId) && r.sender_id !== currentUserId && <span className="w-2 h-2 rounded-full bg-teal-500 flex-shrink-0" />}
+                    {!(r.read_by || []).includes(currentUserId) && r.sender_id !== currentUserId && <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />}
                   </div>
                 </div>
               </div>

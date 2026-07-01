@@ -105,7 +105,7 @@ export function ChatSidebar({
     <div className="flex flex-col h-full" dir="rtl">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
         <h2 className="text-base font-bold text-gray-900 dark:text-white">چت سازمانی</h2>
 
         <div className="flex gap-1">
@@ -149,13 +149,13 @@ export function ChatSidebar({
       </div>
 
       {/* Tabs */}
-      <div className="flex mx-3 mt-2 mb-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 gap-1 flex-shrink-0">
+      <div className="flex mx-3 mt-2 mb-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 gap-1 shrink-0">
 
         <button
           onClick={() => onTabChange('chats')}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium rounded-lg ${
             activeTab === 'chats'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs'
               : 'text-gray-500'
           }`}
         >
@@ -167,7 +167,7 @@ export function ChatSidebar({
           onClick={() => onTabChange('calls')}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium rounded-lg ${
             activeTab === 'calls'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs'
               : 'text-gray-500'
           }`}
         >
@@ -179,7 +179,7 @@ export function ChatSidebar({
 
       {/* Search */}
       {activeTab === 'chats' && (
-        <div className="px-3 py-2 flex-shrink-0">
+        <div className="px-3 py-2 shrink-0">
           <div className="relative">
 
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -188,7 +188,7 @@ export function ChatSidebar({
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="جستجوی مخاطب..."
-              className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-teal-400 dark:text-white"
+              className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-hidden focus:ring-2 focus:ring-teal-400 dark:text-white"
             />
 
           </div>
@@ -205,7 +205,7 @@ export function ChatSidebar({
               onClick={onOpenSavedMessages}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors border-b border-gray-50 dark:border-gray-700/50 text-right"
             >
-              <div className="w-11 h-11 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">
+              <div className="w-11 h-11 rounded-full bg-teal-500 flex items-center justify-center shrink-0">
                 <Bookmark className="w-5 h-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">

@@ -248,7 +248,7 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="جستجو..."
-              className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-teal-400 dark:text-white"
+              className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-hidden focus:ring-2 focus:ring-teal-400 dark:text-white"
             />
           </div>
         </div>
@@ -271,7 +271,7 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-right disabled:opacity-60"
                 >
                   {t.isSelf ? (
-                    <div className="w-9 h-9 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-teal-500 flex items-center justify-center shrink-0">
                       <Bookmark className="w-4 h-4 text-white" />
                     </div>
                   ) : (
@@ -279,9 +279,9 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
                   )}
                   <span className="flex-1 text-sm text-gray-800 dark:text-gray-200 truncate">{t.name}</span>
                   {sendingChat === t.conversationId ? (
-                    <div className="w-4 h-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    <div className="w-4 h-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin shrink-0" />
                   ) : (
-                    <Send className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <Send className="w-4 h-4 text-gray-400 shrink-0" />
                   )}
                 </button>
               ))
@@ -301,7 +301,7 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
                 className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-right disabled:opacity-60"
               >
                 {t.type === 'channel' ? (
-                  <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
                     <Users className="w-4 h-4 text-white" />
                   </div>
                 ) : (
@@ -312,9 +312,9 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
                   {t.subtitle && <p className="text-[10px] text-gray-400">{t.subtitle}</p>}
                 </div>
                 {sendingBroadcast === t.id ? (
-                  <div className="w-4 h-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                  <div className="w-4 h-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin shrink-0" />
                 ) : (
-                  <Send className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <Send className="w-4 h-4 text-gray-400 shrink-0" />
                 )}
               </button>
             ))

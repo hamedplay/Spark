@@ -24,9 +24,9 @@ export function SpeakerLayout({ tiles, tileReactions, makeDraggable, onPinSpeake
         />
       </div>
       {rest.length > 0 && (
-        <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
+        <div className="flex gap-2 shrink overflow-x-auto pb-1">
           {rest.map(t => (
-            <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0 aspect-video" {...makeDraggable(t.peerId)}>
+            <div key={t.peerId} className="w-36 sm:w-44 shrink aspect-video" {...makeDraggable(t.peerId)}>
               <VideoTile
                 {...t}
                 isPinned={false}

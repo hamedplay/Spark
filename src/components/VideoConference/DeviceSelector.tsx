@@ -372,7 +372,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
           <select
             value={selectedAudioInput}
             onChange={e => handleAudioInputChange(e.target.value)}
-            className="w-full bg-gray-800 text-white text-sm rounded-xl px-3 py-2 border border-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            className="w-full bg-gray-800 text-white text-sm rounded-xl px-3 py-2 border border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-teal-500"
           >
             {audioInputs.length === 0 && <option value="">میکروفونی یافت نشد</option>}
             {audioInputs.map(d => (
@@ -382,7 +382,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
             ))}
           </select>
           <div className="flex items-center gap-2 pt-0.5">
-            <span className="text-xs text-gray-500 w-12 flex-shrink-0">سطح صدا</span>
+            <span className="text-xs text-gray-500 w-12 shrink-0">سطح صدا</span>
             <div
               role="meter"
               aria-label="سطح صدای میکروفون"
@@ -396,11 +396,11 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
                 const active = volume >= threshold;
                 const color = i < bars * 0.5 ? 'bg-teal-500' : i < bars * 0.8 ? 'bg-yellow-400' : 'bg-red-500';
                 return (
-                  <div key={i} className={`flex-1 h-2 rounded-sm transition-all duration-75 ${active ? color : 'bg-gray-700'}`} />
+                  <div key={i} className={`flex-1 h-2 rounded-xs transition-all duration-75 ${active ? color : 'bg-gray-700'}`} />
                 );
               })}
             </div>
-            {isMuted && <span className="text-xs text-red-400 flex-shrink-0">قطع</span>}
+            {isMuted && <span className="text-xs text-red-400 shrink-0">قطع</span>}
           </div>
         </div>
 
@@ -413,7 +413,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
             <select
               value={selectedAudioOutput}
               onChange={e => handleAudioOutputChange(e.target.value)}
-              className="flex-1 bg-gray-800 text-white text-sm rounded-xl px-3 py-2 border border-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              className="flex-1 bg-gray-800 text-white text-sm rounded-xl px-3 py-2 border border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-teal-500"
             >
               {audioOutputs.length === 0 && <option value="">اسپیکر پیش‌فرض</option>}
               {audioOutputs.map(d => (
@@ -427,7 +427,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
               disabled={testingSound}
               title="تست صدا"
               aria-label="پخش صدای آزمایشی"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all flex-shrink-0
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all shrink-0
                 ${soundTestDone
                   ? 'bg-teal-900/50 text-teal-400 border border-teal-700'
                   : testingSound
@@ -453,7 +453,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
             <select
               value={selectedVideo}
               onChange={e => handleVideoChange(e.target.value)}
-              className="flex-1 bg-gray-800 text-white text-sm rounded-xl px-3 py-2 border border-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              className="flex-1 bg-gray-800 text-white text-sm rounded-xl px-3 py-2 border border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-teal-500"
             >
               {videoInputs.length === 0 && <option value="">دوربینی یافت نشد</option>}
               {videoInputs.map(d => (
@@ -467,7 +467,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
               disabled={acquiring}
               title="بارگذاری مجدد"
               aria-label="بارگذاری مجدد دستگاه‌ها"
-              className="p-2.5 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600 transition-colors flex-shrink-0 disabled:opacity-50"
+              className="p-2.5 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600 transition-colors shrink-0 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${acquiring ? 'animate-spin' : ''}`} />
             </button>

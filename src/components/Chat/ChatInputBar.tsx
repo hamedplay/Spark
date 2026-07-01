@@ -600,11 +600,11 @@ export function ChatInputBar({
   const canSend = (body.trim().length > 0 || !!audioBlob) && !loading;
 
   return (
-    <div className="flex-shrink-0 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700" dir="rtl">
+    <div className="shrink-0 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700" dir="rtl">
       {/* Reply/Edit strip */}
       {(replyingTo || editingMessage) && (
         <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
-          <Reply className="w-4 h-4 text-blue-500 flex-shrink-0" />
+          <Reply className="w-4 h-4 text-blue-500 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
               {editingMessage ? 'ویرایش پیام' : 'پاسخ به'}
@@ -623,7 +623,7 @@ export function ChatInputBar({
         <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 dark:bg-red-900/10 border-b border-red-100 dark:border-red-900/30">
           {recordingState === 'recording' ? (
             <>
-              <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+              <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shrink-0" />
               <span className="text-sm font-mono text-red-600 dark:text-red-400 tabular-nums">{formatTime(recordingSeconds)}</span>
               <span className="text-xs text-gray-500 dark:text-gray-300 flex-1">در حال ضبط صدا...</span>
               <button onClick={stopRecording}
@@ -637,7 +637,7 @@ export function ChatInputBar({
             </>
           ) : (
             <>
-              <span className="text-xs text-gray-600 dark:text-gray-300 flex-shrink-0">
+              <span className="text-xs text-gray-600 dark:text-gray-300 shrink-0">
                 صدا ضبط شد ({formatTime(recordingSeconds)})
               </span>
               {audioUrl && <audio src={audioUrl} controls className="h-8 flex-1 min-w-0 max-w-xs" />}
@@ -679,7 +679,7 @@ export function ChatInputBar({
 
       {/* Main composer */}
       <div className="p-2.5">
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-sm">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-xs">
           {/* Textarea */}
           <div className="relative px-3 pt-2.5">
             <textarea
@@ -689,7 +689,7 @@ export function ChatInputBar({
               onKeyDown={handleKeyDown}
               placeholder={isTranscribing ? 'در حال تشخیص صدا...' : 'پیام بنویسید...'}
               rows={2}
-              className="w-full text-sm bg-transparent outline-none dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-none overflow-hidden leading-relaxed"
+              className="w-full text-sm bg-transparent outline-hidden dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-none overflow-hidden leading-relaxed"
               style={{ minHeight: 44, maxHeight: 160 }}
             />
 
@@ -699,7 +699,7 @@ export function ChatInputBar({
                 {mentionFiltered.map(u => (
                   <button key={u.user_id} onClick={() => insertMention(u)}
                     className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-right">
-                    <span className="w-7 h-7 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    <span className="w-7 h-7 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">
                       {(u.full_name || u.email || 'U').charAt(0)}
                     </span>
                     <div className="min-w-0">
@@ -798,7 +798,7 @@ export function ChatInputBar({
                     <button key={t.key}
                       onClick={() => { setMessageType(t.key); setShowTypeMenu(false); }}
                       className={`w-full flex items-start gap-3 px-3 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${messageType === t.key ? 'bg-gray-50 dark:bg-gray-700' : ''}`}>
-                      <span className={`mt-0.5 flex-shrink-0 ${t.color}`}>{t.icon}</span>
+                      <span className={`mt-0.5 shrink-0 ${t.color}`}>{t.icon}</span>
                       <div className="text-right flex-1 min-w-0">
                         <p className={`font-medium ${t.color}`}>{t.label}</p>
                         {t.desc && <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{t.desc}</p>}
@@ -860,7 +860,7 @@ function ToolBtn({
       onClick={onClick}
       title={title}
       // touch-manipulation removes the 300ms click delay on Android without needing onTouchEnd
-      className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors flex-shrink-0 touch-manipulation ${
+      className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors shrink-0 touch-manipulation ${
         active
           ? `bg-gray-100 dark:bg-gray-700 ${activeColor || 'text-teal-500'}`
           : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200'

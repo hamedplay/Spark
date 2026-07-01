@@ -48,13 +48,13 @@ const WEEKDAYS = [
   { index: 6, label: 'جمعه' },
 ];
 
-const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
+const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
 const textarea = inp + ' resize-none font-mono text-xs leading-relaxed';
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button type="button" onClick={() => onChange(!value)}
-      className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-600'}`}>
+      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-600'}`}>
       <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
     </button>
   );
@@ -349,14 +349,14 @@ export function DailyReportConfigPanel() {
                 {filteredUsers.map(p => (
                   <button key={p.user_id} onClick={() => toggleUserId(p.user_id)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-right transition-colors ${config.recipient_user_ids.includes(p.user_id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
-                    <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center flex-shrink-0 text-xs font-bold text-blue-600 dark:text-blue-300">
+                    <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center shrink-0 text-xs font-bold text-blue-600 dark:text-blue-300">
                       {(p.full_name || '?')[0]}
                     </div>
                     <div className="flex-1 min-w-0 text-right">
                       <div className="text-sm text-gray-800 dark:text-gray-200 font-medium truncate">{p.full_name || '—'}</div>
                       <div className="text-xs text-gray-400 truncate">{p.email}</div>
                     </div>
-                    {config.recipient_user_ids.includes(p.user_id) && <Check className="w-4 h-4 text-blue-500 flex-shrink-0" />}
+                    {config.recipient_user_ids.includes(p.user_id) && <Check className="w-4 h-4 text-blue-500 shrink-0" />}
                   </button>
                 ))}
               </div>
@@ -394,11 +394,11 @@ export function DailyReportConfigPanel() {
                 {filteredGroups.map(g => (
                   <button key={g.id} onClick={() => toggleGroupId(g.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-right transition-colors ${config.recipient_group_ids.includes(g.id) ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}>
-                    <div className="w-7 h-7 rounded-full bg-teal-100 dark:bg-teal-800 flex items-center justify-center flex-shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-teal-100 dark:bg-teal-800 flex items-center justify-center shrink-0">
                       <Users className="w-3.5 h-3.5 text-teal-600 dark:text-teal-300" />
                     </div>
                     <span className="flex-1 text-sm text-gray-800 dark:text-gray-200 font-medium text-right">{g.display_name || g.name}</span>
-                    {config.recipient_group_ids.includes(g.id) && <Check className="w-4 h-4 text-teal-500 flex-shrink-0" />}
+                    {config.recipient_group_ids.includes(g.id) && <Check className="w-4 h-4 text-teal-500 shrink-0" />}
                   </button>
                 ))}
               </div>
@@ -492,7 +492,7 @@ export function DailyReportConfigPanel() {
         {/* Info box */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4">
           <div className="flex items-start gap-2">
-            <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
             <div className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed space-y-1">
               <p>در روزهای <strong>{config.send_days.length > 0 ? config.send_days.map(d => WEEKDAYS[d]?.label).join('، ') : 'هیچ روزی'}</strong> ساعت <strong>{config.send_time}</strong> فهرست جلسات تایید‌شده آن روز برای دریافت‌کنندگان ارسال می‌شود.</p>
               <p>اطلاعات هر جلسه شامل: <strong>ساعت برگزاری، عنوان، مکان و نام شرکت‌کنندگان</strong></p>

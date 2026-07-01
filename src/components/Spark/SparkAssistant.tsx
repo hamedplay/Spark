@@ -1007,7 +1007,7 @@ export function SparkAssistant({
       return (
         <div className="max-w-[95%]">
           <div className="flex items-end gap-2">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center flex-shrink-0 mb-0.5">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shrink-0 mb-0.5">
               {aiEnabled ? <Brain className="w-3.5 h-3.5 text-white" /> : <Bot className="w-3.5 h-3.5 text-white" />}
             </div>
             <div className="px-4 py-3 rounded-2xl rounded-br-sm text-sm shadow-md bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 max-w-full">
@@ -1030,18 +1030,18 @@ export function SparkAssistant({
       <div className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
         {msg.role === 'spark' && (
           <div className="flex items-end gap-2 max-w-[92%]">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center flex-shrink-0 mb-0.5">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shrink-0 mb-0.5">
               {aiEnabled ? <Brain className="w-3.5 h-3.5 text-white" /> : <Bot className="w-3.5 h-3.5 text-white" />}
             </div>
-            <div className={`px-3 py-2 rounded-2xl rounded-br-sm text-sm shadow-sm leading-relaxed ${
+            <div className={`px-3 py-2 rounded-2xl rounded-br-sm text-sm shadow-xs leading-relaxed ${
               msg.status === 'failed' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
               : msg.status === 'done' ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-emerald-200 dark:border-emerald-800'
               : msg.status === 'executing' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
               : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-100'}`}>
               <div className="flex items-start gap-1.5">
-                {msg.status === 'done' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />}
-                {msg.status === 'failed' && <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />}
-                {msg.status === 'executing' && <Loader2 className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5 animate-spin" />}
+                {msg.status === 'done' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />}
+                {msg.status === 'failed' && <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />}
+                {msg.status === 'executing' && <Loader2 className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5 animate-spin" />}
                 <span className="whitespace-pre-line">{msg.text}</span>
               </div>
             </div>
@@ -1100,7 +1100,7 @@ export function SparkAssistant({
           dir="rtl"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
+          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
             <div className="flex items-center gap-3">
               <div className={`w-9 h-9 rounded-full flex items-center justify-center ${listening === 'recording' ? 'bg-red-500 animate-pulse' : 'bg-white/20'}`}>
                 {aiEnabled ? <Brain className="w-5 h-5 text-white" /> : <Bot className="w-5 h-5 text-white" />}
@@ -1127,7 +1127,7 @@ export function SparkAssistant({
 
           {/* Recording bar */}
           {listening === 'recording' && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 flex-shrink-0">
+            <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 shrink-0">
               <div className="flex gap-0.5 items-end">
                 {[6, 10, 14, 10, 6].map((h, i) => <div key={i} className="w-1 bg-red-500 rounded-full animate-bounce" style={{ height: h, animationDelay: `${i * 0.12}s` }} />)}
               </div>
@@ -1144,7 +1144,7 @@ export function SparkAssistant({
             {processing && messages[messages.length - 1]?.status !== 'executing' && messages[messages.length - 1]?.status !== 'waiting_confirm' && (
               <div className="flex items-end gap-2">
                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center"><Bot className="w-3.5 h-3.5 text-white" /></div>
-                <div className="px-3 py-2 rounded-2xl bg-white dark:bg-gray-800 flex items-center gap-2 text-gray-400 text-sm shadow-sm">
+                <div className="px-3 py-2 rounded-2xl bg-white dark:bg-gray-800 flex items-center gap-2 text-gray-400 text-sm shadow-xs">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" /> در حال پردازش...
                 </div>
               </div>
@@ -1154,7 +1154,7 @@ export function SparkAssistant({
 
           {/* Suggestions */}
           {messages.length <= 1 && (
-            <div className="px-3 pb-2 flex-shrink-0 bg-gray-50 dark:bg-gray-900">
+            <div className="px-3 pb-2 shrink-0 bg-gray-50 dark:bg-gray-900">
               <p className="text-[10px] text-gray-400 mb-1.5 font-medium">✨ نمونه دستورات:</p>
               <div className="flex flex-wrap gap-1.5">
                 {SUGGESTIONS.map(s => (
@@ -1167,12 +1167,12 @@ export function SparkAssistant({
           )}
 
           {/* Input */}
-          <form onSubmit={handleSubmit} className="flex items-center gap-2 px-3 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
-            <button type="button" onClick={toggleListening} disabled={processing} className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40 ${listening === 'recording' ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-blue-50 hover:text-blue-500'}`}>
+          <form onSubmit={handleSubmit} className="flex items-center gap-2 px-3 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
+            <button type="button" onClick={toggleListening} disabled={processing} className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all disabled:opacity-40 ${listening === 'recording' ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-blue-50 hover:text-blue-500'}`}>
               {listening === 'recording' ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
-            <input type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder={listening === 'recording' ? '🎙️ در حال ضبط...' : aiEnabled ? '🤖 هر دستوری بدید...' : '✏️ دستور متنی یا صوتی...'} disabled={processing} dir="rtl" className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50" />
-            <button type="submit" disabled={!inputText.trim() || processing || listening === 'recording'} className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white flex items-center justify-center flex-shrink-0 transition-colors">
+            <input type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder={listening === 'recording' ? '🎙️ در حال ضبط...' : aiEnabled ? '🤖 هر دستوری بدید...' : '✏️ دستور متنی یا صوتی...'} disabled={processing} dir="rtl" className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-400 disabled:opacity-50" />
+            <button type="submit" disabled={!inputText.trim() || processing || listening === 'recording'} className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white flex items-center justify-center shrink-0 transition-colors">
               {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </form>

@@ -101,7 +101,7 @@ export function ChatSettingsPage({ onClose }: Props) {
   return (
     <div className="flex flex-col h-full w-full bg-white dark:bg-gray-900" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
         <div className="flex items-center gap-2">
           <Palette className="w-5 h-5 text-teal-500" />
           <h2 className="font-bold text-gray-900 dark:text-white text-sm">تنظیمات محیط چت</h2>
@@ -112,12 +112,12 @@ export function ChatSettingsPage({ onClose }: Props) {
       </div>
 
       {/* Section nav — horizontal scrollable tabs */}
-      <div className="flex overflow-x-auto flex-shrink-0 border-b border-gray-100 dark:border-gray-800 px-2 py-1.5 gap-1">
+      <div className="flex overflow-x-auto shrink-0 border-b border-gray-100 dark:border-gray-800 px-2 py-1.5 gap-1">
         {(Object.keys(SECTION_LABELS) as Section[]).map(s => (
           <button
             key={s}
             onClick={() => setActiveSection(s)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${activeSection === s ? 'bg-teal-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${activeSection === s ? 'bg-teal-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
           >
             <span>{SECTION_ICONS[s]}</span>
             {SECTION_LABELS[s]}
@@ -150,13 +150,13 @@ export function ChatSettingsPage({ onClose }: Props) {
               <SettingGroup title="پیش‌نمایش حباب">
                 <div className="flex flex-col gap-2 p-3 rounded-xl bg-gray-50 dark:bg-gray-800">
                   <div className="flex justify-start">
-                    <div className="max-w-[70%] px-3 py-2 rounded-2xl text-sm text-gray-800 shadow-sm"
+                    <div className="max-w-[70%] px-3 py-2 rounded-2xl text-sm text-gray-800 shadow-xs"
                       style={{ backgroundColor: settings.receivedBubbleColor }}>
                       سلام! این یک پیام دریافتی است
                     </div>
                   </div>
                   <div className="flex justify-end">
-                    <div className="max-w-[70%] px-3 py-2 rounded-2xl text-sm text-gray-800 shadow-sm"
+                    <div className="max-w-[70%] px-3 py-2 rounded-2xl text-sm text-gray-800 shadow-xs"
                       style={{ backgroundColor: settings.sentBubbleColor }}>
                       سلام! این یک پیام ارسالی است
                     </div>
@@ -268,7 +268,7 @@ export function ChatSettingsPage({ onClose }: Props) {
         </div>
 
       {/* Footer */}
-      <div className="flex gap-2 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
+      <div className="flex gap-2 px-4 py-3 border-t border-gray-100 dark:border-gray-800 shrink-0">
         <button
           onClick={handleReset}
           className="px-3 py-2 text-sm text-gray-500 hover:text-red-500 border border-gray-200 dark:border-gray-700 rounded-xl transition-colors"
@@ -310,7 +310,7 @@ function ColorSwatch({ color, selected, onSelect }: { color: string; selected: b
 function ColorInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex items-center gap-2">
-      <label className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">{label}:</label>
+      <label className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{label}:</label>
       <input
         type="color"
         value={value}

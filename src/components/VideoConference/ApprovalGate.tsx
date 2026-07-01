@@ -272,7 +272,7 @@ export function PendingApprovalsList({ approvals, onApprove, onReject }: HostPan
       </div>
       {approvals.map(a => (
         <div key={a.id} role="listitem" className="flex items-center gap-2 py-1">
-          <div className="w-6 h-6 rounded-full bg-teal-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0" aria-hidden="true">
+          <div className="w-6 h-6 rounded-full bg-teal-700 flex items-center justify-center text-[10px] font-bold shrink-0" aria-hidden="true">
             {(a.display_name[0] || '?').toUpperCase()}
           </div>
           <span className="text-sm text-gray-200 flex-1 truncate">{a.display_name}</span>
@@ -280,7 +280,7 @@ export function PendingApprovalsList({ approvals, onApprove, onReject }: HostPan
             onClick={() => onApprove(a.id)}
             aria-label={`تأیید ورود ${a.display_name}`}
             title="تأیید ورود"
-            className="p-1 rounded-lg bg-green-900/40 hover:bg-green-900/70 text-green-400 transition-colors flex-shrink-0"
+            className="p-1 rounded-lg bg-green-900/40 hover:bg-green-900/70 text-green-400 transition-colors shrink-0"
           >
             <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
@@ -288,7 +288,7 @@ export function PendingApprovalsList({ approvals, onApprove, onReject }: HostPan
             onClick={() => onReject(a.id)}
             aria-label={`رد درخواست ${a.display_name}`}
             title="رد درخواست"
-            className="p-1 rounded-lg bg-red-900/40 hover:bg-red-900/70 text-red-400 transition-colors flex-shrink-0"
+            className="p-1 rounded-lg bg-red-900/40 hover:bg-red-900/70 text-red-400 transition-colors shrink-0"
           >
             <XCircle className="w-3.5 h-3.5" aria-hidden="true" />
           </button>

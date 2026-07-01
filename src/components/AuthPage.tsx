@@ -229,11 +229,11 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             {mode === 'login' && (
               <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 mb-6">
                 <button onClick={() => setLoginMethod('email')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'email' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'email' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-xs' : 'text-gray-500 dark:text-gray-400'}`}>
                   <Mail className="w-4 h-4" /> ایمیل
                 </button>
                 <button onClick={() => setLoginMethod('phone')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-xs' : 'text-gray-500 dark:text-gray-400'}`}>
                   <Smartphone className="w-4 h-4" /> موبایل
                 </button>
               </div>
@@ -243,7 +243,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             {mode === 'login' && loginMethod === 'phone' && (
               <div className="space-y-4">
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>ورود با شماره موبایل در حال راه‌اندازی است. در صورت نیاز به فعال‌سازی SMS با ادمین تماس بگیرید.</span>
                 </div>
                 <div>

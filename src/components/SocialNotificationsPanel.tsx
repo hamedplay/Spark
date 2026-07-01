@@ -36,14 +36,14 @@ const BLANK: Omit<ChannelConfig, 'channel'> = {
   notes: '',
 };
 
-const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
+const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
 const inpMono = inp + ' font-mono';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function Toggle({ value, onChange, color = 'bg-blue-500' }: { value: boolean; onChange: (v: boolean) => void; color?: string }) {
   return (
     <button type="button" onClick={() => onChange(!value)}
-      className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${value ? color : 'bg-gray-200 dark:bg-gray-600'}`}>
+      className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${value ? color : 'bg-gray-200 dark:bg-gray-600'}`}>
       <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-6' : 'translate-x-1'}`} />
     </button>
   );
@@ -84,7 +84,7 @@ function SecretInput({ value, onChange, placeholder }: { value: string; onChange
 function SectionHeader({ icon, title, badge }: { icon: React.ReactNode; title: string; badge?: string }) {
   return (
     <div className="flex items-center gap-2 pt-1">
-      <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+      <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center shrink-0">
         {icon}
       </div>
       <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</span>
@@ -124,7 +124,7 @@ function SetupGuide({ channel }: { channel: 'telegram' | 'bale' }) {
       <button onClick={() => setOpen(v => !v)}
         className={`w-full flex items-center justify-between px-4 py-3 hover:bg-${color}-100/50 dark:hover:bg-${color}-900/20 transition-colors`}>
         <div className="flex items-center gap-2">
-          <Info className={`w-4 h-4 text-${color}-600 dark:text-${color}-400 flex-shrink-0`} />
+          <Info className={`w-4 h-4 text-${color}-600 dark:text-${color}-400 shrink-0`} />
           <span className={`text-sm font-medium text-${color}-700 dark:text-${color}-300`}>
             راهنمای راه‌اندازی {channel === 'telegram' ? 'تلگرام' : 'بله'}
           </span>
@@ -135,7 +135,7 @@ function SetupGuide({ channel }: { channel: 'telegram' | 'bale' }) {
         <div className={`px-4 pb-5 pt-2 space-y-4 border-t border-${color}-200 dark:border-${color}-800`}>
           {steps.map(s => (
             <div key={s.step} className="flex gap-3">
-              <div className={`w-6 h-6 rounded-full bg-${color}-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5`}>
+              <div className={`w-6 h-6 rounded-full bg-${color}-500 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5`}>
                 {s.step}
               </div>
               <div className="flex-1 min-w-0">
@@ -281,7 +281,7 @@ function BaleWebhookManager({ webhookUrl, webhookSecret }: { webhookUrl: string;
     <div className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden">
       {/* Sub-header */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
-        <Webhook className="w-4 h-4 text-teal-500 flex-shrink-0" />
+        <Webhook className="w-4 h-4 text-teal-500 shrink-0" />
         <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">مدیریت Webhook</span>
         <span className="text-[10px] text-gray-400 font-mono mr-auto">tapi.bale.ai/bot&#x3C;TOKEN&#x3E;/METHOD</span>
       </div>
@@ -336,9 +336,9 @@ function BaleWebhookManager({ webhookUrl, webhookSecret }: { webhookUrl: string;
             <div className="flex items-center gap-2">
               {isRegistered
                 ? hasError
-                  ? <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                  : <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                : <XCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  ? <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                  : <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                : <XCircle className="w-4 h-4 text-gray-400 shrink-0" />
               }
               <span className={`text-xs font-semibold ${isRegistered ? (hasError ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300') : 'text-gray-500'}`}>
                 {isRegistered ? (hasError ? 'Webhook فعال — با خطا' : 'Webhook فعال') : 'Webhook ثبت نشده'}
@@ -348,31 +348,31 @@ function BaleWebhookManager({ webhookUrl, webhookSecret }: { webhookUrl: string;
             <div className="space-y-1.5 text-xs font-mono">
               {webhookInfo.url && (
                 <div className="flex gap-2">
-                  <span className="text-gray-400 flex-shrink-0 w-20">url:</span>
+                  <span className="text-gray-400 shrink-0 w-20">url:</span>
                   <span className="text-gray-700 dark:text-gray-300 break-all">{webhookInfo.url}</span>
                 </div>
               )}
               {webhookInfo.ip_address && (
                 <div className="flex gap-2">
-                  <span className="text-gray-400 flex-shrink-0 w-20">ip:</span>
+                  <span className="text-gray-400 shrink-0 w-20">ip:</span>
                   <span className="text-gray-700 dark:text-gray-300">{webhookInfo.ip_address}</span>
                 </div>
               )}
               <div className="flex gap-2">
-                <span className="text-gray-400 flex-shrink-0 w-20">pending:</span>
+                <span className="text-gray-400 shrink-0 w-20">pending:</span>
                 <span className={`font-semibold ${webhookInfo.pending_update_count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'}`}>
                   {webhookInfo.pending_update_count} آپدیت در صف
                 </span>
               </div>
               {webhookInfo.max_connections && (
                 <div className="flex gap-2">
-                  <span className="text-gray-400 flex-shrink-0 w-20">max_conn:</span>
+                  <span className="text-gray-400 shrink-0 w-20">max_conn:</span>
                   <span className="text-gray-700 dark:text-gray-300">{webhookInfo.max_connections}</span>
                 </div>
               )}
               {webhookInfo.has_custom_certificate && (
                 <div className="flex gap-2">
-                  <span className="text-gray-400 flex-shrink-0 w-20">cert:</span>
+                  <span className="text-gray-400 shrink-0 w-20">cert:</span>
                   <span className="text-gray-700 dark:text-gray-300">custom certificate</span>
                 </div>
               )}
@@ -380,7 +380,7 @@ function BaleWebhookManager({ webhookUrl, webhookSecret }: { webhookUrl: string;
 
             {hasError && (
               <div className="flex items-start gap-2 bg-amber-100 dark:bg-amber-900/20 rounded-lg px-3 py-2 mt-1">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-0.5">آخرین خطا</p>
                   {webhookInfo.last_error_date && (
@@ -443,7 +443,7 @@ function BaleWebhookManager({ webhookUrl, webhookSecret }: { webhookUrl: string;
                         </div>
                         <button
                           onClick={() => { navigator.clipboard.writeText(String(chatId)); toast.success('Chat ID کپی شد'); }}
-                          className="text-[10px] px-2 py-1 bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 rounded-lg hover:bg-teal-100 transition flex-shrink-0"
+                          className="text-[10px] px-2 py-1 bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 rounded-lg hover:bg-teal-100 transition shrink-0"
                         >
                           کپی
                         </button>
@@ -621,7 +621,7 @@ function ChannelCard({ channel, label, icon, accentClass }: {
       {/* Header */}
       <div className={`flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 ${accentClass}`}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/30 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-white/30 flex items-center justify-center shrink-0">
             {icon}
           </div>
           <div>
@@ -669,7 +669,7 @@ function ChannelCard({ channel, label, icon, accentClass }: {
             </div>
             <button
               onClick={getBotInfo}
-              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition flex-shrink-0 ${
+              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition shrink-0 ${
                 tokenStatus === 'ok'
                   ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700'
                   : tokenStatus === 'error'
@@ -790,7 +790,7 @@ function ChannelCard({ channel, label, icon, accentClass }: {
                 <button
                   type="button"
                   onClick={generateSecret}
-                  className="flex items-center gap-1.5 px-3 py-2.5 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-xl text-xs font-medium transition flex-shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-2.5 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-xl text-xs font-medium transition shrink-0"
                   title="تولید Secret Token تصادفی"
                 >
                   <Shuffle className="w-3.5 h-3.5" />
@@ -823,7 +823,7 @@ function ChannelCard({ channel, label, icon, accentClass }: {
             <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 px-4 py-3 space-y-4">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <Database className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">اتصال Supabase (ذخیره‌سازی داده‌های بات)</p>
                 </div>
                 <button
@@ -878,7 +878,7 @@ function ChannelCard({ channel, label, icon, accentClass }: {
             {/* Personal Chat ID note */}
             <div className="rounded-xl bg-teal-50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-800 px-4 py-3">
               <div className="flex items-center gap-2 mb-1">
-                <Link2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0" />
+                <Link2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
                 <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">اتصال به Chat ID شخصی کاربران</p>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
@@ -903,7 +903,7 @@ function ChannelCard({ channel, label, icon, accentClass }: {
 
         {/* Save */}
         <button onClick={save} disabled={saving}
-          className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-sm">
+          className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-xs">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'در حال ذخیره...' : 'ذخیره تنظیمات'}
         </button>
@@ -948,7 +948,7 @@ function ChannelCard({ channel, label, icon, accentClass }: {
           </button>
           {testResult === 'error' && (
             <div className="flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2.5">
-              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
               <p className="text-xs text-red-600 dark:text-red-400">ارسال ناموفق. توکن و Chat ID را بررسی کنید. مطمئن شوید بات عضو گروه است و دسترسی ارسال پیام دارد.</p>
             </div>
           )}
@@ -963,7 +963,7 @@ export function SocialNotificationsPanel() {
   return (
     <div className="space-y-6" dir="rtl">
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
           <Bot className="w-5 h-5 text-blue-500" />
         </div>
         <div>

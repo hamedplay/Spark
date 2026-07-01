@@ -259,7 +259,7 @@ function UserSelector({ users, groups, value, onChange, placeholder }: {
                   <button key={u.user_id} type="button"
                     onClick={() => { onChange(u.user_id, u.full_name || u.email || ''); setOpen(false); setSearch(''); }}
                     className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm">
-                    <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                       {(u.full_name || u.email || '?')[0].toUpperCase()}
                     </div>
                     <div className="text-right">
@@ -275,14 +275,14 @@ function UserSelector({ users, groups, value, onChange, placeholder }: {
                 return (
                   <div key={group.label}>
                     <div className="px-3 py-1.5 flex items-center gap-1.5 bg-gray-50 dark:bg-gray-700/60 sticky top-0 z-10">
-                      <Building2 className="w-3 h-3 text-teal-500 flex-shrink-0" />
+                      <Building2 className="w-3 h-3 text-teal-500 shrink-0" />
                       <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide truncate">{group.label}</span>
                     </div>
                     {group.users.map(u => (
                       <button key={u.user_id} type="button"
                         onClick={() => { onChange(u.user_id, u.full_name || u.email || ''); setOpen(false); setSearch(''); }}
                         className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm border-b border-gray-50 dark:border-gray-700/50 last:border-0">
-                        <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                           {(u.full_name || u.email || '?')[0].toUpperCase()}
                         </div>
                         <div className="text-right min-w-0">
@@ -344,7 +344,7 @@ function AddNoteModal({ task, userId, actorName, actorAvatarUrl, onClose, onSave
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" dir="rtl">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" dir="rtl">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="font-bold dark:text-white flex items-center gap-2">
@@ -391,7 +391,7 @@ function WorkflowModal({ task, steps, users, onClose }: {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" dir="rtl">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" dir="rtl">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div>
@@ -417,7 +417,7 @@ function WorkflowModal({ task, steps, users, onClose }: {
                   const iconBorder = meta.color.split(' ')[1];
                   return (
                     <div key={step.id} className="flex gap-4 relative">
-                      <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center flex-shrink-0 relative z-10 ${iconBg} ${iconBorder}`}>
+                      <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center shrink-0 relative z-10 ${iconBg} ${iconBorder}`}>
                         {meta.icon}
                       </div>
                       <div className={`flex-1 rounded-xl border p-3 ${meta.color}`}>
@@ -513,7 +513,7 @@ function ReferModal({ task, users, groups, currentUserId, actorName, actorAvatar
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" dir="rtl">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" dir="rtl">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="font-bold dark:text-white flex items-center gap-2"><ArrowLeft className="w-4 h-4 text-amber-500" /> ارجاع اقدام</h2>
@@ -835,7 +835,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
       {/* Tabs: کارتابل */}
       <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
         <button onClick={() => setTaskTab('assigned_to_me')}
-          className={`relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${taskTab === 'assigned_to_me' ? 'bg-white dark:bg-gray-700 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+          className={`relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${taskTab === 'assigned_to_me' ? 'bg-white dark:bg-gray-700 text-teal-600 dark:text-teal-400 shadow-xs' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
           کارتابل من
           {assignedToMeCount > 0 && (
             <span className="w-5 h-5 rounded-full bg-teal-500 text-white text-xs flex items-center justify-center font-bold">
@@ -844,7 +844,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
           )}
         </button>
         <button onClick={() => setTaskTab('created_by_me')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${taskTab === 'created_by_me' ? 'bg-white dark:bg-gray-700 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${taskTab === 'created_by_me' ? 'bg-white dark:bg-gray-700 text-teal-600 dark:text-teal-400 shadow-xs' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
           ایجاد شده توسط من
           {createdByMeCount > 0 && (
             <span className="w-5 h-5 rounded-full bg-gray-400 text-white text-xs flex items-center justify-center font-bold">
@@ -853,7 +853,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
           )}
         </button>
         <button onClick={() => setTaskTab('all')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${taskTab === 'all' ? 'bg-white dark:bg-gray-700 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${taskTab === 'all' ? 'bg-white dark:bg-gray-700 text-teal-600 dark:text-teal-400 shadow-xs' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
           همه
         </button>
       </div>
@@ -866,7 +866,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
           </h3>
           {prefillDescription && (
             <div className="mb-4 p-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-700 rounded-xl text-sm text-teal-700 dark:text-teal-300 flex items-start gap-2">
-              <MessageSquare className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
               <span>این اقدام از متن پیام چت ایجاد می‌شود</span>
             </div>
           )}
@@ -995,7 +995,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
                   {/* Card header */}
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <h3 className="font-bold text-gray-800 dark:text-white text-base leading-snug flex-1">{task.title}</h3>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={async () => { setWorkflowTask(task); await fetchWorkflow(task.id); }}
                         className="p-1.5 rounded-lg text-gray-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
@@ -1048,16 +1048,16 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
                   <div className="space-y-1.5 text-sm text-gray-500 dark:text-gray-400 mb-4">
                     {/* مسئول = ایجادکننده (6) */}
                     <div className="flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+                      <User className="w-3.5 h-3.5 shrink-0 text-gray-400" />
                       <span>مسئول: <span className="text-gray-700 dark:text-gray-300 font-medium">{getCreatorName(task)}</span></span>
                     </div>
                     {/* اقدام کننده = assignee (6) */}
                     <div className="flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 flex-shrink-0 text-teal-500" />
+                      <User className="w-3.5 h-3.5 shrink-0 text-teal-500" />
                       <span>اقدام کننده: <span className="text-gray-700 dark:text-gray-300 font-medium">{task.assignee || '—'}</span></span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                      <Calendar className="w-3.5 h-3.5 shrink-0" />
                       {/* ✅ Correct Jalali date */}
                       <span>سررسید: <span className="text-gray-700 dark:text-gray-300 font-medium" dir="ltr">{toJalali(task.due_date)}</span></span>
                     </div>

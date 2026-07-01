@@ -581,7 +581,7 @@ export function GuestJoinPage({ code }: Props) {
           {/* Errors and join timing */}
           {!joinAllowed && room && (
             <div className="flex items-start gap-2 p-3 bg-amber-900/30 border border-amber-700/50 rounded-xl text-amber-300 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium">جلسه هنوز شروع نشده است</p>
                 {meetingStartsIn !== null && (
@@ -594,7 +594,7 @@ export function GuestJoinPage({ code }: Props) {
           {banDetail && (
             <div className="p-4 bg-red-950/60 border border-red-700/60 rounded-xl space-y-2" dir="rtl">
               <div className="flex items-center gap-2 text-red-400">
-                <ShieldOff className="w-4 h-4 flex-shrink-0" />
+                <ShieldOff className="w-4 h-4 shrink-0" />
                 <span className="font-semibold text-sm">دسترسی شما مسدود شده است</span>
               </div>
               {banDetail.reason && (
@@ -605,7 +605,7 @@ export function GuestJoinPage({ code }: Props) {
               )}
               {banDetail.expiresAt ? (
                 <div className="flex items-center gap-1.5 text-amber-400 text-xs">
-                  <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
                   {(() => {
                     const diff = Math.ceil((new Date(banDetail.expiresAt).getTime() - banNow) / 60000);
                     if (diff <= 0) return 'مسدودیت منقضی شده — لطفاً دوباره تلاش کنید';
@@ -617,7 +617,7 @@ export function GuestJoinPage({ code }: Props) {
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 text-red-500 text-xs">
-                  <ShieldOff className="w-3.5 h-3.5 flex-shrink-0" />
+                  <ShieldOff className="w-3.5 h-3.5 shrink-0" />
                   مسدودیت دائمی
                 </div>
               )}
@@ -626,7 +626,7 @@ export function GuestJoinPage({ code }: Props) {
 
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-900/30 border border-red-700/50 rounded-xl text-red-300 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <AlertCircle className="w-4 h-4 shrink-0" />
               {error}
             </div>
           )}
@@ -636,7 +636,7 @@ export function GuestJoinPage({ code }: Props) {
             <label className="block text-sm font-medium text-gray-300 mb-1.5">نام شما</label>
             {authUserId ? (
               <div className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-xl text-gray-200 text-sm flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                <span className="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center text-xs font-bold shrink">
                   {(authUserName || '?')[0].toUpperCase()}
                 </span>
                 {authUserName}
@@ -655,7 +655,7 @@ export function GuestJoinPage({ code }: Props) {
                 placeholder="نام و نام خانوادگی"
                 autoFocus
                 maxLength={60}
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-teal-500 text-sm"
               />
             )}
           </div>
@@ -674,7 +674,7 @@ export function GuestJoinPage({ code }: Props) {
                   }
                 }}
                 placeholder="رمز عبور"
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-hidden focus:ring-2 focus:ring-teal-500 text-sm"
               />
             </div>
           )}

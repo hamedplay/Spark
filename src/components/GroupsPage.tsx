@@ -34,7 +34,7 @@ interface BroadcastMessage {
   sender_name?: string;
 }
 
-const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
+const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
 
 // ─── Group Card ───────────────────────────────────────────────────────────────
 function GroupCard({ group, onEdit, onManageMembers, onDelete, isAdmin }: {
@@ -47,7 +47,7 @@ function GroupCard({ group, onEdit, onManageMembers, onDelete, isAdmin }: {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
       <div className="flex items-start gap-3">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shrink-0">
           <Users className="w-5 h-5 text-white" />
         </div>
         <div className="flex-1 min-w-0">
@@ -65,7 +65,7 @@ function GroupCard({ group, onEdit, onManageMembers, onDelete, isAdmin }: {
           </div>
         </div>
         {isAdmin && (
-          <div className="flex flex-col gap-1 flex-shrink-0">
+          <div className="flex flex-col gap-1 shrink-0">
             <button onClick={onManageMembers} title="مدیریت اعضا"
               className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
               <Users className="w-4 h-4" />
@@ -252,7 +252,7 @@ function MembersModal({ group, onClose }: { group: UserGroup; onClose: () => voi
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" dir="rtl">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
           <div>
             <h3 className="font-bold text-gray-900 dark:text-white">اعضای گروه</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">{group.display_name || group.name}</p>
@@ -261,11 +261,11 @@ function MembersModal({ group, onClose }: { group: UserGroup; onClose: () => voi
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجوی کاربر..."
-              className="w-full pr-9 pl-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full pr-9 pl-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
@@ -279,7 +279,7 @@ function MembersModal({ group, onClose }: { group: UserGroup; onClose: () => voi
               return (
                 <div key={key}>
                   <button onClick={() => toggleUnit(key)} className="w-full flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-700/60 border-b border-gray-100 dark:border-gray-700 text-right sticky top-0 z-10 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                    <Building2 className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                    <Building2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                     <span className="flex-1 text-xs font-semibold text-gray-600 dark:text-gray-300 truncate">{label}</span>
                     <span className="text-xs text-gray-400">{users.filter(u => memberIds.includes(u.user_id)).length}/{users.length}</span>
                     {expanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
@@ -290,7 +290,7 @@ function MembersModal({ group, onClose }: { group: UserGroup; onClose: () => voi
             })
           )}
         </div>
-        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 shrink-0">
           <p className="text-xs text-gray-400">{memberCount} عضو فعال در این گروه</p>
         </div>
       </div>
@@ -302,14 +302,14 @@ function MemberRow({ p, isMember, isLoading, onToggle }: { p: OrgUserProfile; is
   return (
     <button onClick={() => onToggle(p)}
       className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-right border-b border-gray-50 dark:border-gray-700/50 last:border-0 ${isMember ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
-      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${isMember ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${isMember ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
         {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (p.full_name || '?')[0]}
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{p.full_name || '—'}</div>
         <div className="text-xs text-gray-400 truncate">{p.position_title || p.email}</div>
       </div>
-      {isMember && <Check className="w-4 h-4 text-blue-500 flex-shrink-0" />}
+      {isMember && <Check className="w-4 h-4 text-blue-500 shrink-0" />}
     </button>
   );
 }
@@ -407,7 +407,7 @@ function BroadcastTab({ currentUserId, isAdmin }: { currentUserId: string | null
       )}
 
       {showForm && canBroadcast && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-4 shadow-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-4 shadow-xs">
           <h3 className="font-bold text-gray-900 dark:text-white text-sm">ارسال پیام گروهی</h3>
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">عنوان پیام</label>
@@ -447,7 +447,7 @@ function BroadcastTab({ currentUserId, isAdmin }: { currentUserId: string | null
             </div>
           )}
           <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-xs text-blue-600 dark:text-blue-400">
-            <Info className="w-3.5 h-3.5 flex-shrink-0" />
+            <Info className="w-3.5 h-3.5 shrink-0" />
             این پیام به صورت اعلان درون‌برنامه‌ای برای دریافت‌کنندگان ارسال می‌شود.
           </div>
           <div className="flex gap-2">
@@ -546,11 +546,11 @@ function GroupsTab({ isAdmin }: { currentUserId: string | null; isAdmin: boolean
         <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجوی گروه..."
-            className="w-full pr-9 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+            className="w-full pr-9 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition" />
         </div>
         {isAdmin && (
           <button onClick={() => { setTargetEdit(null); setShowForm(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm transition-colors flex-shrink-0">
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm transition-colors shrink-0">
             <Plus className="w-4 h-4" />
             گروه جدید
           </button>
@@ -646,7 +646,7 @@ export function GroupsPage({ currentUserId, isAdmin }: { currentUserId: string |
           const Icon = t.icon;
           return (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}>
               <Icon className="w-4 h-4" />
               {t.label}
             </button>

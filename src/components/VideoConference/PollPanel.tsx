@@ -35,18 +35,18 @@ function OptionBar({
       disabled={!canVote && !isMyVote}
       aria-label={`${label} — ${count} رأی، ${pct} درصد${isMyVote ? ' — انتخاب شما' : ''}`}
       aria-pressed={isMyVote}
-      className={`w-full text-right rounded-xl transition-all select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500
+      className={`w-full text-right rounded-xl transition-all select-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-teal-500
         ${isMyVote ? 'ring-2 ring-teal-400 bg-teal-900/20' : canVote ? 'hover:bg-gray-700/60 cursor-pointer bg-gray-700/30' : 'bg-gray-700/30 cursor-default'}
       `}
     >
       {/* Label row */}
       <div className="flex items-center justify-between px-3 pt-2.5 pb-1 gap-2">
         <span className="text-sm text-white truncate flex items-center gap-1.5">
-          {isMyVote && <Check className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />}
-          {isVoting && !isMyVote && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 flex-shrink-0" />}
+          {isMyVote && <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />}
+          {isVoting && !isMyVote && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />}
           {label}
         </span>
-        <span className="text-xs text-gray-400 font-mono flex-shrink-0 tabular-nums">{count} رأی · {pct}٪</span>
+        <span className="text-xs text-gray-400 font-mono shrink-0 tabular-nums">{count} رأی · {pct}٪</span>
       </div>
       {/* Progress bar */}
       <div className="mx-3 mb-2.5 h-1.5 bg-gray-600 rounded-full overflow-hidden">
@@ -327,7 +327,7 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
               placeholder="سوال نظرسنجی..."
               maxLength={MAX_QUESTION_LEN}
               rows={2}
-              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm resize-none outline-none focus:ring-1 focus:ring-teal-500"
+              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm resize-none outline-hidden focus:ring-1 focus:ring-teal-500"
             />
           </div>
 
@@ -338,17 +338,17 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
           <div className="space-y-1.5">
             {options.map((o, i) => (
               <div key={i} className="flex gap-1 items-center">
-                <span className="text-xs text-gray-500 w-5 flex-shrink-0">{i + 1}</span>
+                <span className="text-xs text-gray-500 w-5 shrink">{i + 1}</span>
                 <input
                   value={o}
                   onChange={e => { const a = [...options]; a[i] = e.target.value; setOptions(a); }}
                   placeholder={`گزینه ${i + 1}`}
-                  className="flex-1 bg-gray-700 text-white rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-teal-500"
+                  className="flex-1 bg-gray-700 text-white rounded-lg px-3 py-1.5 text-sm outline-hidden focus:ring-1 focus:ring-teal-500"
                 />
                 {options.length > MIN_OPTIONS && (
                   <button onClick={() => setOptions(o => o.filter((_, idx) => idx !== i))}
                     aria-label={`حذف گزینه ${i + 1}`}
-                    className="p-1.5 text-gray-500 hover:text-red-400 transition-colors flex-shrink-0">
+                    className="p-1.5 text-gray-500 hover:text-red-400 transition-colors shrink-0">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -398,7 +398,7 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
                 <p className="text-white text-sm font-medium leading-snug">{poll.question}</p>
               </div>
               {isHost && (
-                <div className="flex items-center gap-0.5 flex-shrink-0">
+                <div className="flex items-center gap-0.5 shrink">
                   <button onClick={() => exportCSV(poll)} aria-label="خروجی CSV" title="دانلود CSV"
                     className="p-1.5 text-gray-500 hover:text-teal-400 transition-colors rounded-lg hover:bg-gray-700">
                     <Download className="w-3.5 h-3.5" />

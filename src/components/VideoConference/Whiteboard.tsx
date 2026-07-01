@@ -382,7 +382,7 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   return (
     <div className="flex flex-col h-full gap-2 p-2">
       {/* Toolbar */}
-      <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0 bg-gray-800/60 rounded-xl p-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap shrink bg-gray-800/60 rounded-xl p-1.5">
         <button onClick={handleUndo} disabled={!canUndo} aria-label="لغو" title="Undo"
           className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-30 transition-colors">
           <Undo2 className="w-4 h-4" />
@@ -408,7 +408,7 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
         </div>
         <div className="w-px h-5 bg-gray-600" />
         <select value={width} onChange={e => setWidth(Number(e.target.value))} aria-label="ضخامت"
-          className="bg-gray-700 text-white text-xs rounded-lg px-2 py-1 border border-gray-600 outline-none">
+          className="bg-gray-700 text-white text-xs rounded-lg px-2 py-1 border border-gray-600 outline-hidden">
           {WIDTHS.map(w => <option key={w} value={w}>{w}px</option>)}
         </select>
         {isHost && (
@@ -452,7 +452,7 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
               onBlur={commitText}
               placeholder="متن..."
               maxLength={MAX_TEXT_LEN}
-              className="border-2 border-teal-500 rounded-lg px-2 py-1 outline-none shadow-lg min-w-[120px]"
+              className="border-2 border-teal-500 rounded-lg px-2 py-1 outline-hidden shadow-lg min-w-[120px]"
               style={{ color, fontSize: `${Math.max(width * 5, 16)}px`, background: 'rgba(255,255,255,0.95)' }}
             />
           </div>

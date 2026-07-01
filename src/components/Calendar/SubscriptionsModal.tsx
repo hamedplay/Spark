@@ -48,7 +48,7 @@ export function SubscriptionsModal({
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
           <div>
             <h3 className="text-base font-bold dark:text-white">اشتراک‌گذاری تقویم</h3>
             <p className="text-xs text-gray-400 mt-0.5">{calendar.name}</p>
@@ -59,7 +59,7 @@ export function SubscriptionsModal({
         </div>
 
         {/* Add subscriber */}
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 space-y-2">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0 space-y-2">
           <div className="flex items-center gap-2">
             <button
               onClick={() => { setShowUserPicker(v => !v); onSearchChange(''); }}
@@ -87,7 +87,7 @@ export function SubscriptionsModal({
                   value={subSearch}
                   onChange={e => onSearchChange(e.target.value)}
                   placeholder="جستجوی نام یا ایمیل کاربر..."
-                  className="w-full pl-4 pr-9 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full pl-4 pr-9 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
 
@@ -103,7 +103,7 @@ export function SubscriptionsModal({
                       }}
                       className="w-full text-right px-4 py-2.5 hover:bg-teal-50 dark:hover:bg-teal-900/20 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors"
                     >
-                      <div className="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center shrink-0">
                         <User className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -142,7 +142,7 @@ export function SubscriptionsModal({
                 <tr key={sub.id} className="border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-600 flex items-center justify-center shrink-0">
                         <User className="w-4 h-4 text-gray-500" />
                       </div>
                       <span className="text-sm dark:text-white">{sub.profile?.full_name || sub.profile?.email || 'کاربر'}</span>
