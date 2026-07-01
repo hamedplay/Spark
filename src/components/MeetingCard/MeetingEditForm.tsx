@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, X, Loader2, Users, ClipboardList, Plus, Pencil, Trash2, Check, UserCheck, Clock } from 'lucide-react';
+import { Save, X, Loader as Loader2, Users, ClipboardList, Plus, Pencil, Trash2, Check, UserCheck, Clock } from 'lucide-react';
 import { Meeting } from '../../types';
 import type { AgendaItem } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -135,7 +135,7 @@ export function MeetingEditForm({ meeting, onSave, onCancel }: MeetingEditFormPr
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ و زمان</label>
-            <DatePicker selected={selectedDate} onChange={(date: Date) => setSelectedDate(date)}
+            <DatePicker selected={selectedDate} onChange={(date: Date | null) => { if (date) setSelectedDate(date); }}
               showTimeSelect timeFormat="HH:mm" timeIntervals={15} dateFormat="yyyy/MM/dd HH:mm"
               className={inp} />
           </div>
