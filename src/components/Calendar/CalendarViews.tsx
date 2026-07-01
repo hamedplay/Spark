@@ -262,9 +262,9 @@ export function CalendarViews(p: CalendarViewProps) {
       <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${top}px` }}>
         <div className="flex items-center">
           {showLabel && (
-            <span className="text-[9px] font-bold text-red-500 bg-white dark:bg-gray-900 px-0.5 leading-none flex-shrink-0 -ml-0.5 rounded-sm">{timeLabel}</span>
+            <span className="text-[9px] font-bold text-red-500 bg-white dark:bg-gray-900 px-0.5 leading-none shrink-0 -ml-0.5 rounded-xs">{timeLabel}</span>
           )}
-          <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+          <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
           <div className="flex-1 h-px bg-red-500" />
         </div>
       </div>
@@ -345,7 +345,7 @@ export function CalendarViews(p: CalendarViewProps) {
 
     return (
       <div key={meeting.id}
-        className={`absolute rounded-lg overflow-hidden select-none touch-none group ${isNested ? 'ring-[3px] ring-white dark:ring-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.35)] border-2 border-white/80 dark:border-gray-900/80' : 'border-2 border-white/60 dark:border-gray-900/60 shadow-sm'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
+        className={`absolute rounded-lg overflow-hidden select-none touch-none group ${isNested ? 'ring-[3px] ring-white dark:ring-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.35)] border-2 border-white/80 dark:border-gray-900/80' : 'border-2 border-white/60 dark:border-gray-900/60 shadow-xs'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
         style={{ top: `${visualTop}px`, height: `${visualHeight}px`, backgroundColor: color, zIndex: (isBeingDragged || isBeingResized) ? 30 : blockZIndex, ...insetStyle, transition: (isBeingDragged || isBeingResized) ? 'none' : 'box-shadow 0.15s', ...ghostStyle }}
         onMouseDown={onBlockDown} onTouchStart={onBlockTouch}
         onMouseUp={e => { e.stopPropagation(); if (!dragMovedRef.current) { setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0); } }}
@@ -353,22 +353,22 @@ export function CalendarViews(p: CalendarViewProps) {
       >
         <div className="px-2 py-1 h-full flex flex-col gap-0.5 overflow-hidden">
           {!isTiny && (
-            <div className="flex items-center gap-0.5 flex-shrink-0">
-              <Clock className="w-2.5 h-2.5 text-white/70 flex-shrink-0" />
+            <div className="flex items-center gap-0.5 shrink-0">
+              <Clock className="w-2.5 h-2.5 text-white/70 shrink-0" />
               <span className="text-white/90 text-[10px] font-medium leading-none">{toFarsiTime(dispStart)} – {toFarsiTime(dispEnd)}</span>
             </div>
           )}
-          <div className={`text-white font-semibold leading-tight ${isCompact ? 'text-[11px]' : 'text-xs'} ${isTiny ? 'truncate' : 'line-clamp-2'} flex-shrink-0`}>
+          <div className={`text-white font-semibold leading-tight ${isCompact ? 'text-[11px]' : 'text-xs'} ${isTiny ? 'truncate' : 'line-clamp-2'} shrink-0`}>
             {meeting.subject}
           </div>
           {!isCompact && meeting.location && (
-            <div className="flex items-center gap-0.5 flex-shrink-0">
-              <MapPin className="w-2.5 h-2.5 text-white/60 flex-shrink-0" />
+            <div className="flex items-center gap-0.5 shrink-0">
+              <MapPin className="w-2.5 h-2.5 text-white/60 shrink-0" />
               <span className="text-white/75 text-[10px] truncate">{meeting.location}</span>
             </div>
           )}
           {!isCompact && participantCount > 0 && (
-            <div className="flex items-center gap-0.5 mt-auto flex-shrink-0">
+            <div className="flex items-center gap-0.5 mt-auto shrink-0">
               <div className="flex items-center gap-0.5 bg-white/20 rounded-full px-1.5 py-0.5">
                 <svg className="w-2.5 h-2.5 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 <span className="text-[9px] text-white/90 font-medium">{participantCount}</span>
@@ -433,26 +433,26 @@ export function CalendarViews(p: CalendarViewProps) {
           <div className="p-4">
             <div className="flex items-start justify-between gap-2 mb-3">
               <h3 className="font-bold text-gray-900 dark:text-white text-sm leading-tight">{m.subject}</h3>
-              <button onClick={() => setPreviewMeeting(null)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 -mt-0.5">
+              <button onClick={() => setPreviewMeeting(null)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 -mt-0.5">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="space-y-2 text-sm">
               {m.start_time && m.end_time && (
                 <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                  <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                   <span className="font-medium">{toFarsiTime(m.start_time)} – {toFarsiTime(m.end_time)}</span>
                 </div>
               )}
               {m.location && (
                 <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                  <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                   <span>{m.location}</span>
                 </div>
               )}
               {m.representative && (
                 <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                  <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+                  <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
                   <span>{m.representative}</span>
                 </div>
               )}
@@ -501,7 +501,7 @@ export function CalendarViews(p: CalendarViewProps) {
 
   // ── Hour column ──────────────────────────────────────────────────────────────
   const renderHourColumn = () => (
-    <div className="flex-shrink-0 w-14"
+    <div className="shrink-0 w-14"
       onWheel={e => { if (e.ctrlKey || e.altKey) { e.preventDefault(); adjustSlotHeight(e.deltaY < 0 ? 4 : -4); } }}
       onTouchStart={handleHourColTouchStart}
       onTouchMove={handleHourColTouchMove}
@@ -526,10 +526,10 @@ export function CalendarViews(p: CalendarViewProps) {
     const dayIsHoliday = dayOcc.some((o: any) => o.is_holiday);
     const weekdayIdx = jsDayToWeekday(jalaaliToDate(selectedJy, selectedJm, selectedJd).getDay());
     return (
-      <div className="flex flex-col flex-1 overflow-hidden mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-sm">
-        <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <div className="flex flex-col flex-1 overflow-hidden mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-xs">
+        <div className="border-b border-gray-200 dark:border-gray-700 shrink-0">
           <div className="flex">
-            <div className="w-14 flex-shrink-0" />
+            <div className="w-14 shrink-0" />
             <div className="flex-1 text-center py-2">
               <div className={`text-sm font-medium ${(weekdayIdx === 6 || dayIsHoliday) ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>
                 {JALAALI_WEEKDAYS[weekdayIdx]}
@@ -540,7 +540,7 @@ export function CalendarViews(p: CalendarViewProps) {
             </div>
           </div>
           <div className="flex items-start gap-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/50 px-2 py-1.5 flex-wrap min-h-[32px]">
-            <span className="text-[9px] text-gray-400 w-14 flex-shrink-0 pt-0.5 text-center leading-tight">کل<br/>روز</span>
+            <span className="text-[9px] text-gray-400 w-14 shrink-0 pt-0.5 text-center leading-tight">کل<br/>روز</span>
             <div className="flex flex-wrap gap-1 flex-1">
               {dayOcc.map((o: any) => (
                 <span key={o.id} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${o.is_holiday ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' : o.is_celebration ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>{o.title}</span>
@@ -590,8 +590,8 @@ export function CalendarViews(p: CalendarViewProps) {
 
   // ── Week view ─────────────────────────────────────────────────────────────────
   const renderWeekView = () => (
-    <div className="flex flex-col flex-1 overflow-hidden mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-sm">
-      <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+    <div className="flex flex-col flex-1 overflow-hidden mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-xs">
+      <div className="border-b border-gray-200 dark:border-gray-700 shrink-0">
         <div className="grid grid-cols-[56px_repeat(7,1fr)]">
           <div />
           {weekDays.map(d => {
@@ -638,7 +638,7 @@ export function CalendarViews(p: CalendarViewProps) {
                 {dayEvs.map((ev: any) => (
                   <div key={ev.id} className={`text-[9px] px-1 py-0.5 rounded truncate font-medium leading-tight flex items-center gap-0.5 ${ev.type === 'leave' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' : ev.type === 'meeting' ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
                     <span className="truncate">{ev.title}</span>
-                    <button type="button" onClick={async e => { e.stopPropagation(); await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70 flex-shrink-0"><X className="w-2 h-2" /></button>
+                    <button type="button" onClick={async e => { e.stopPropagation(); await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70 shrink-0"><X className="w-2 h-2" /></button>
                   </div>
                 ))}
                 {!isDragHighlight && (
@@ -718,8 +718,8 @@ export function CalendarViews(p: CalendarViewProps) {
 
   // ── Month view ───────────────────────────────────────────────────────────────
   const renderMonthView = () => (
-    <div className="flex flex-col flex-1 overflow-hidden mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-sm">
-      <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+    <div className="flex flex-col flex-1 overflow-hidden mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-xs">
+      <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 shrink-0">
         {JALAALI_WEEKDAYS.map((d, i) => (
           <div key={d} className={`text-center text-xs font-medium py-2 ${i === 6 ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>{d}</div>
         ))}
@@ -769,13 +769,13 @@ export function CalendarViews(p: CalendarViewProps) {
 
   // ── List view ─────────────────────────────────────────────────────────────────
   const renderListView = () => (
-    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xs">
       {listMeetings.length === 0 ? (
         <div className="text-center py-16 text-gray-400"><Calendar className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>جلسه‌ای وجود ندارد</p></div>
       ) : listMeetings.map(group => (
         <div key={group.date} className="mb-4">
           <div className="flex items-center gap-3 mb-2 sticky top-0 bg-gray-50 dark:bg-gray-900 py-1 z-10">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0 ${isToday(group.jy, group.jm, group.jd) ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-600'}`}>{group.jd}</div>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shrink-0 ${isToday(group.jy, group.jm, group.jd) ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-600'}`}>{group.jd}</div>
             <div>
               <p className="text-sm font-semibold dark:text-white">{JALAALI_WEEKDAYS[jsDayToWeekday(jalaaliToDate(group.jy, group.jm, group.jd).getDay())]}</p>
               <p className="text-xs text-gray-400">{JALAALI_MONTHS[group.jm - 1]} {group.jy}</p>
@@ -791,9 +791,9 @@ export function CalendarViews(p: CalendarViewProps) {
               const externalList = m.external_participants || [];
               const getNameById = (id: string) => allProfiles.find(pr => pr.user_id === id)?.full_name;
               return (
-                <div key={m.id} className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+                <div key={m.id} className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-xs hover:shadow-md transition-shadow">
                   <button className="w-full text-right px-4 py-3.5 flex items-center gap-3" onClick={() => setExpandedMeetingId(isExp ? null : m.id)}>
-                    <div className="w-1.5 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: c }} />
+                    <div className="w-1.5 self-stretch rounded-full shrink-0" style={{ backgroundColor: c }} />
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm dark:text-white truncate">{m.subject}</p>
                       <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -805,14 +805,14 @@ export function CalendarViews(p: CalendarViewProps) {
                         {m.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{m.location}</span>}
                       </div>
                     </div>
-                    <ChevronRight className={`w-4 h-4 text-gray-300 flex-shrink-0 transition-transform duration-200 ${isExp ? '-rotate-90' : ''}`} />
+                    <ChevronRight className={`w-4 h-4 text-gray-300 shrink-0 transition-transform duration-200 ${isExp ? '-rotate-90' : ''}`} />
                   </button>
                   {isExp && (
                     <div className="border-t border-gray-100 dark:border-gray-700">
                       <div className="px-5 py-4 space-y-4">
                         {m.representative && (
                           <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center shrink-0">
                               <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
                             </div>
                             <div>
@@ -824,7 +824,7 @@ export function CalendarViews(p: CalendarViewProps) {
                         )}
                         {participantIds.length > 0 && (
                           <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
                               <Users className="w-4 h-4 text-blue-500" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -837,7 +837,7 @@ export function CalendarViews(p: CalendarViewProps) {
                         )}
                         {notifyIds.length > 0 && (
                           <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
                               <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                             </div>
                             <div className="flex-1 min-w-0">
@@ -850,7 +850,7 @@ export function CalendarViews(p: CalendarViewProps) {
                         )}
                         {externalList.length > 0 && (
                           <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-green-50 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-green-50 dark:bg-green-900/30 flex items-center justify-center shrink-0">
                               <svg className="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
                             </div>
                             <div className="flex-1 min-w-0">

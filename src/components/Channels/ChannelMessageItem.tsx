@@ -131,9 +131,9 @@ function ReadReceiptsModal({
                 return (
                   <div key={p.user_id} className="flex items-center gap-3 py-2">
                     {p.avatar_url ? (
-                      <img src={p.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      <img src={p.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                         {(p.full_name || p.email || '?').charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -145,7 +145,7 @@ function ReadReceiptsModal({
                         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">زمان نامشخص</p>
                       )}
                     </div>
-                    <CheckCheck className="w-4 h-4 text-teal-400 flex-shrink-0" />
+                    <CheckCheck className="w-4 h-4 text-teal-400 shrink-0" />
                   </div>
                 );
               })}
@@ -161,9 +161,9 @@ function ReadReceiptsModal({
               {unseenMembers.map(p => (
                 <div key={p.user_id} className="flex items-center gap-3 py-1.5">
                   {p.avatar_url ? (
-                    <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0 opacity-50" />
+                    <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 opacity-50" />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                       {(p.full_name || p.email || '?').charAt(0).toUpperCase()}
                     </div>
                   )}
@@ -357,7 +357,7 @@ function ChannelMessageItemInner({
     return (
       <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-3 px-2 sm:px-3`} dir="rtl">
         <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 italic bg-gray-100 dark:bg-gray-700/50 px-3 py-2 rounded-xl">
-          <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+          <Trash2 className="w-3.5 h-3.5 shrink-0" />
           <span>این پیام حذف شده است</span>
         </div>
       </div>
@@ -373,21 +373,21 @@ function ChannelMessageItemInner({
   const StatusSquare = () => {
     if (!msgStatus) return (
       <button onClick={cycleStatus} title="وضعیت — کلیک برای تغییر"
-        className={`w-5 h-5 rounded border-2 flex-shrink-0 transition-colors ${isOwn ? 'border-teal-300 hover:border-teal-500' : 'border-gray-300 dark:border-gray-500 hover:border-gray-500'}`} />
+        className={`w-5 h-5 rounded border-2 shrink-0 transition-colors ${isOwn ? 'border-teal-300 hover:border-teal-500' : 'border-gray-300 dark:border-gray-500 hover:border-gray-500'}`} />
     );
     if (msgStatus === 'pending') return (
       <button onClick={cycleStatus} title="در انتظار — کلیک"
-        className="w-5 h-5 rounded border-2 border-amber-400 bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center flex-shrink-0 transition-all" />
+        className="w-5 h-5 rounded border-2 border-amber-400 bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center shrink-0 transition-all" />
     );
     if (msgStatus === 'in_progress') return (
       <button onClick={cycleStatus} title="در حال رسیدگی — کلیک"
-        className="w-5 h-5 rounded border-2 border-amber-400 bg-amber-400 flex items-center justify-center flex-shrink-0">
+        className="w-5 h-5 rounded border-2 border-amber-400 bg-amber-400 flex items-center justify-center shrink-0">
         <Loader className="w-3 h-3 text-white animate-spin" />
       </button>
     );
     return (
       <button onClick={cycleStatus} title="رسیدگی شده — کلیک"
-        className="w-5 h-5 rounded border-2 border-teal-500 bg-teal-500 flex items-center justify-center flex-shrink-0">
+        className="w-5 h-5 rounded border-2 border-teal-500 bg-teal-500 flex items-center justify-center shrink-0">
         <Check className="w-3 h-3 text-white" strokeWidth={3} />
       </button>
     );
@@ -397,7 +397,7 @@ function ChannelMessageItemInner({
     if (!isOwn) return null;
     if (isChannelType) {
       return (
-        <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity flex-shrink-0" title={anySeenByOther ? 'مشاهده شده' : 'رسیده، دیده نشده'}>
+        <button onClick={() => setShowReadReceipts(true)} className="flex items-center gap-0.5 hover:opacity-80 transition-opacity shrink-0" title={anySeenByOther ? 'مشاهده شده' : 'رسیده، دیده نشده'}>
           <CheckCheck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${anySeenByOther ? 'text-teal-500' : 'text-gray-300 dark:text-gray-600'}`} />
           {anySeenByOther && seenCount > 1 && <span className="text-[10px] text-teal-500 font-medium">{seenCount}</span>}
         </button>
@@ -406,7 +406,7 @@ function ChannelMessageItemInner({
     return (
       <button
         onClick={() => setShowReadReceipts(true)}
-        className="flex-shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+        className="shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
         title={anySeenByOther ? 'دیده شده — کلیک برای جزئیات' : 'دیده نشده'}
       >
         <Eye className={`w-3.5 h-3.5 ${anySeenByOther ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-600'}`} />
@@ -433,7 +433,7 @@ function ChannelMessageItemInner({
           )}
 
           {/* Avatar */}
-          <div className="flex-shrink-0 mb-1">
+          <div className="shrink-0 mb-1">
             {msg.senderProfile?.avatar_url ? (
               <img src={msg.senderProfile.avatar_url} alt="" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-white dark:ring-gray-800" />
             ) : (
@@ -457,7 +457,7 @@ function ChannelMessageItemInner({
 
             {/* Card */}
             <div
-              className={`relative rounded-xl ${msg.replyTarget ? 'rounded-tr-none' : ''} border border-gray-200 dark:border-gray-600 shadow-sm ${TYPE_BORDER_CLASS[msg.message_type] || ''}`}
+              className={`relative rounded-xl ${msg.replyTarget ? 'rounded-tr-none' : ''} border border-gray-200 dark:border-gray-600 shadow-xs ${TYPE_BORDER_CLASS[msg.message_type] || ''}`}
               style={{ backgroundColor: isOwn ? (isDark ? '#2a453d' : theme.sentBubbleColor) : (isDark ? '#4d5049' : theme.receivedBubbleColor) }}
             >
               {/* Header */}
@@ -469,15 +469,15 @@ function ChannelMessageItemInner({
                     </span>
                   )}
                   {typeLabel && (
-                    <span className={`flex items-center gap-1 text-[11px] font-semibold flex-shrink-0 ${typeLabel.cls}`}>
+                    <span className={`flex items-center gap-1 text-[11px] font-semibold shrink-0 ${typeLabel.cls}`}>
                       {typeLabel.icon} {typeLabel.text}
                     </span>
                   )}
-                  {msg.isStarred && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 flex-shrink-0" />}
-                  {msg.is_pinned && <Pin className="w-3 h-3 text-amber-500 flex-shrink-0" />}
-                  {!msg.is_pinned && isPrivatelyPinned && <Pin className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+                  {msg.isStarred && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />}
+                  {msg.is_pinned && <Pin className="w-3 h-3 text-amber-500 shrink-0" />}
+                  {!msg.is_pinned && isPrivatelyPinned && <Pin className="w-3 h-3 text-blue-400 shrink-0" />}
                 </div>
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0">{formatTime(msg.created_at)}</span>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{formatTime(msg.created_at)}</span>
               </div>
 
               {/* Body */}
@@ -486,7 +486,7 @@ function ChannelMessageItemInner({
                 {msg.voice_url && isSafeUrl(msg.voice_url) && (
                   <div className="flex items-center gap-2.5 min-w-[140px] sm:min-w-[160px] py-1.5">
                     <button onClick={toggleVoice}
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 transition-colors">
+                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 transition-colors">
                       {isPlayingVoice ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                     </button>
                     <div className="flex-1 flex flex-col gap-1.5">
@@ -526,7 +526,7 @@ function ChannelMessageItemInner({
                     </a>
                   ) : (
                     <div className="flex items-center gap-2 mt-1.5 px-2.5 py-2 bg-gray-100 dark:bg-gray-600 rounded-lg">
-                      <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      <FileText className="w-5 h-5 text-gray-400 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium truncate text-gray-700 dark:text-gray-200">{msg.file_name}</p>
                         {msg.file_size && <p className="text-[10px] text-gray-400">{formatFileSize(msg.file_size)}</p>}
@@ -732,7 +732,7 @@ function ActionBtn({ children, title, onClick, active, activeColor }: {
 }) {
   return (
     <button onClick={onClick} title={title}
-      className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0 ${
+      className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg transition-colors shrink-0 ${
         active
           ? `bg-gray-100 dark:bg-gray-600 ${activeColor || 'text-teal-500'}`
           : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200'
@@ -745,7 +745,7 @@ function ActionBtn({ children, title, onClick, active, activeColor }: {
 function MI({ icon, label, labelClass, onClick }: { icon: React.ReactNode; label: string; labelClass?: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-right">
-      <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{icon}</span>
+      <span className="text-gray-400 dark:text-gray-500 shrink-0">{icon}</span>
       <span className={labelClass || 'text-gray-700 dark:text-gray-300'}>{label}</span>
     </button>
   );
@@ -807,9 +807,9 @@ function ChannelMentionPopup({ user, currentUserId, onClose, onOpenDirectChat }:
         </div>
         <div className="px-5 py-4 flex items-center gap-4">
           {user.avatar_url ? (
-            <img src={user.avatar_url} alt={name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0" />
+            <img src={user.avatar_url} alt={name} className="w-16 h-16 rounded-2xl object-cover shrink-0" />
           ) : (
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-400 to-blue-500 flex items-center justify-center text-white text-2xl font-bold shrink-0">
               {initial}
             </div>
           )}
@@ -833,7 +833,7 @@ function ChannelMentionPopup({ user, currentUserId, onClose, onOpenDirectChat }:
               onClick={handleDM}
               className="w-full flex items-center gap-3 px-4 py-3 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-xl transition-colors font-medium"
             >
-              <MessageSquare className="w-4 h-4 flex-shrink-0" />
+              <MessageSquare className="w-4 h-4 shrink-0" />
               <span className="text-sm">پیام خصوصی</span>
             </button>
           )}

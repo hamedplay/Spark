@@ -47,7 +47,7 @@ function JDateInput({ value, onChange }: { value: string | null | undefined; onC
   const days = jy && jm ? getJMDays(jy, jm) : 31;
   const years = Array.from({ length: 120 }, (_, i) => currentJYear - i);
 
-  const cls = 'flex-1 py-2 px-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500';
+  const cls = 'flex-1 py-2 px-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500';
   return (
     <div className="flex gap-1" dir="rtl">
       <select value={jy || ''} onChange={e => { const v = Number(e.target.value); setJy(v); emit(v, jm, jd); }} className={cls}>
@@ -96,7 +96,7 @@ interface AuditRow { id: string; created_at: string; ip_address: string | null; 
 type Panel = 'list' | 'edit' | 'add' | 'password' | 'deactivate' | 'access' | 'activity' | 'logins' | 'urls' | 'preview' | 'relations';
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
-const inp = 'w-full pr-10 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm';
+const inp = 'w-full pr-10 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm';
 const inpDis = inp + ' bg-gray-50 dark:bg-gray-600 text-gray-500 cursor-not-allowed';
 
 function Field({ label, icon: Icon, children }: { label: string; icon: React.ElementType; children: React.ReactNode }) {
@@ -117,14 +117,14 @@ function SectionAccordion({ title, subtitle, open, onToggle, children }: {
   title: string; subtitle: string; open: boolean; onToggle: () => void; children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 overflow-hidden">
       <button type="button" onClick={onToggle}
         className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition text-right">
         <div>
           <p className="font-semibold text-gray-800 dark:text-white text-sm">{title}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>
         </div>
-        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0 mr-3 ${open ? 'border-teal-500 bg-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
+        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0 mr-3 ${open ? 'border-teal-500 bg-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
           {open && <CheckCircle2 className="w-3 h-3 text-white" />}
         </div>
       </button>
@@ -140,7 +140,7 @@ function AvatarBlock({ profile, editable, onUpload }: {
 }) {
   const initials = (profile.full_name || profile.email || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   return (
-    <div className="relative flex-shrink-0">
+    <div className="relative shrink-0">
       <div className="w-20 h-20 rounded-2xl overflow-hidden bg-teal-100 dark:bg-teal-900/30">
         {profile.avatar_url
           ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -293,7 +293,7 @@ function UserProfileForm({
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">درباره کاربر</label>
             <textarea rows={3} value={form.bio || ''} onChange={e => set('bio', e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition text-sm resize-none"
+              className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-teal-500 transition text-sm resize-none"
               placeholder="توضیحات کوتاه..." />
           </div>
         </SectionAccordion>
@@ -329,7 +329,7 @@ function UserProfileForm({
 
         <div className="flex gap-3 pb-4">
           <button type="submit" disabled={saving}
-            className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white px-8 py-2.5 rounded-xl font-medium transition shadow-sm">
+            className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white px-8 py-2.5 rounded-xl font-medium transition shadow-xs">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {saving ? 'در حال ذخیره...' : isNew ? 'ایجاد کاربر' : 'ذخیره تغییرات'}
           </button>
@@ -359,7 +359,7 @@ function DetailPanel({ title, icon: Icon, iconColor, user, onBack, children }: {
       </div>
       {/* User badge */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl overflow-hidden bg-teal-100 dark:bg-teal-900/30 flex-shrink-0">
+        <div className="w-12 h-12 rounded-2xl overflow-hidden bg-teal-100 dark:bg-teal-900/30 shrink-0">
           {user.avatar_url
             ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
             : <div className="w-full h-full flex items-center justify-center font-bold text-teal-600 dark:text-teal-400">{initials}</div>}
@@ -420,7 +420,7 @@ function PasswordPanel({ user, onBack }: { user: AdminProfile; onBack: () => voi
     <DetailPanel title="تغییر رمز عبور" icon={KeyRound} iconColor="text-amber-500" user={user} onBack={onBack}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-6 space-y-4">
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           رمز جدید بلافاصله جایگزین رمز قبلی می‌شود. این عملیات قابل بازگشت نیست.
         </div>
         <Field label="رمز عبور جدید" icon={KeyRound}>
@@ -634,7 +634,7 @@ function ActivityPanel({ user, onBack }: { user: AdminProfile; onBack: () => voi
           <div className="relative flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو در فعالیت‌ها..."
-              className="w-full pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
           </div>
           <span className="text-xs text-gray-400">{filtered.length} رویداد</span>
         </div>
@@ -645,7 +645,7 @@ function ActivityPanel({ user, onBack }: { user: AdminProfile; onBack: () => voi
             <div key={a.id} className="px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
               <div className="flex items-center justify-between gap-3 mb-1">
                 <span className="text-sm font-medium text-gray-800 dark:text-white">{a.action}</span>
-                <span className="text-xs text-gray-400 flex-shrink-0">{new Date(a.created_at).toLocaleString('fa-IR')}</span>
+                <span className="text-xs text-gray-400 shrink-0">{new Date(a.created_at).toLocaleString('fa-IR')}</span>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
                 {a.module && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sevColor(a.severity)}`}>{a.module}</span>}
@@ -695,13 +695,13 @@ function LoginsPanel({ user, onBack }: { user: AdminProfile; onBack: () => void 
         <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[60vh] overflow-y-auto">
           {logs.map((l, i) => (
             <div key={l.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-              <div className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0 text-xs font-bold text-gray-500">
+              <div className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center shrink-0 text-xs font-bold text-gray-500">
                 {i + 1}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{l.action}</span>
-                  <span className="text-xs text-gray-400 flex-shrink-0">{new Date(l.created_at).toLocaleString('fa-IR')}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{new Date(l.created_at).toLocaleString('fa-IR')}</span>
                 </div>
                 <div className="flex items-center gap-3 mt-0.5">
                   {l.ip_address && <span className="text-xs text-gray-400 font-mono">{l.ip_address}</span>}
@@ -765,10 +765,10 @@ function UrlsPanel({ user, onBack }: { user: AdminProfile; onBack: () => void })
           <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[50vh] overflow-y-auto">
             {logs.slice(0, 50).map(l => (
               <div key={l.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                <MapPin className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-24 flex-shrink-0 truncate">{l.module}</span>
+                <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-24 shrink-0 truncate">{l.module}</span>
                 <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 truncate">{l.action}</span>
-                <span className="text-xs text-gray-300 dark:text-gray-600 flex-shrink-0">{new Date(l.created_at).toLocaleDateString('fa-IR')}</span>
+                <span className="text-xs text-gray-300 dark:text-gray-600 shrink-0">{new Date(l.created_at).toLocaleDateString('fa-IR')}</span>
               </div>
             ))}
           </div>
@@ -813,7 +813,7 @@ function ImportResultModal({ result, onClose }: { result: ImportResult; onClose:
   const allSameReason = topReason && result.errors.every(e => e.reason === topReason);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" dir="rtl"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-700">
@@ -843,7 +843,7 @@ function ImportResultModal({ result, onClose }: { result: ImportResult; onClose:
         {/* Prominent reason banner — shown when all/most errors share the same reason */}
         {result.failed > 0 && topReason && (
           <div className="mx-5 mt-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 flex gap-2 items-start">
-            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="text-xs text-amber-800 dark:text-amber-300">
               <span className="font-bold">{allSameReason ? 'دلیل همه خطاها:' : `شایع‌ترین خطا (${reasonCounts[topReason]} سطر):`}</span>
               {' '}{topReason}
@@ -857,7 +857,7 @@ function ImportResultModal({ result, onClose }: { result: ImportResult; onClose:
             <div className="space-y-2">
               {result.errors.map((e, i) => (
                 <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800">
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                  <div className="shrink-0 w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
                     <span className="text-xs font-bold text-red-600 dark:text-red-400">{e.row}</span>
                   </div>
                   <div className="min-w-0 flex-1">
@@ -894,7 +894,7 @@ function UserPreviewPanel({ user, onBack, onEdit }: { user: AdminProfile; onBack
   const InfoRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
     value ? (
       <div className="flex items-start gap-2 py-2 border-b border-gray-100 dark:border-gray-700/50 last:border-0">
-        <span className="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">{label}</span>
+        <span className="text-xs text-gray-400 w-28 shrink-0 pt-0.5">{label}</span>
         <span className="text-sm text-gray-700 dark:text-gray-200 font-medium break-all">{value}</span>
       </div>
     ) : null
@@ -916,7 +916,7 @@ function UserPreviewPanel({ user, onBack, onEdit }: { user: AdminProfile; onBack
       {/* Avatar + header */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
         <div className="flex items-center gap-4">
-          <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-teal-400 to-blue-500 flex-shrink-0">
+          <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-teal-400 to-blue-500 shrink-0">
             {user.avatar_url
               ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
               : <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold">{initials}</div>}
@@ -1152,7 +1152,7 @@ function UserRelationsPanel({ user, onBack, allProfiles }: { user: AdminProfile;
               return (
                 <div key={r.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${isOwner ? 'bg-blue-500' : 'bg-green-500'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${isOwner ? 'bg-blue-500' : 'bg-green-500'}`}>
                       {(other?.full_name || other?.email || '?')[0]}
                     </div>
                     <div className="min-w-0">
@@ -1172,7 +1172,7 @@ function UserRelationsPanel({ user, onBack, allProfiles }: { user: AdminProfile;
                   {isOwner && (
                     <button
                       onClick={() => handleDelete(r.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0"
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors shrink-0"
                       title="حذف ارتباط"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1548,7 +1548,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو..."
-              className="pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-44" />
+              className="pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-44" />
           </div>
           <button onClick={load} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors" title="بارگذاری مجدد">
             <RefreshCw className="w-4 h-4" />
@@ -1590,7 +1590,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
       </div>
       {/* Import hint */}
       <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300">
-        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
         <span>برای وارد کردن دسته‌ای: ابتدا «قالب» را دانلود کنید، اطلاعات کاربران را پر کنید، سپس «وارد کردن» را بزنید. تنها ستون «ایمیل» الزامی است — اگر رمز عبور خالی باشد، رمز پیش‌فرض <span className="font-mono font-semibold">Ss123456</span> تنظیم می‌شود.</span>
       </div>
 
@@ -1614,7 +1614,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
                   className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-teal-400 to-blue-500">
+                      <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 bg-gradient-to-br from-teal-400 to-blue-500">
                         {p.avatar_url
                           ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
                           : <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
@@ -1670,7 +1670,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
                           {menuItems(p).map(({ icon: Icon, label, panel: target, color }) => (
                             <button key={target} onClick={() => openPanel(target, p)}
                               className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-right">
-                              <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
+                              <Icon className={`w-4 h-4 shrink-0 ${color}`} />
                               <span className="text-sm text-gray-700 dark:text-gray-200">{label}</span>
                             </button>
                           ))}

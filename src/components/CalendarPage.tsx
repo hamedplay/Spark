@@ -1483,7 +1483,7 @@ export function CalendarPage({
           <div className="absolute inset-0 bg-black/50" onClick={() => setReminderAlert(null)} />
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-bounce-in">
             <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
                 <Clock className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -1560,7 +1560,7 @@ export function CalendarPage({
             <div className="p-5 space-y-3">
               <button onClick={() => { openEditForm(repeatEditDialog.meeting); setRepeatEditDialog(null); }}
                 className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group">
-                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 transition-colors">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0 group-hover:bg-blue-500 transition-colors">
                   <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:text-white" />
                 </div>
                 <div>
@@ -1578,7 +1578,7 @@ export function CalendarPage({
                 setRepeatEditDialog(null);
               }}
                 className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-orange-500 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all text-right group">
-                <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-orange-500 transition-colors">
+                <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0 group-hover:bg-orange-500 transition-colors">
                   <RefreshCw className="w-4 h-4 text-orange-600 dark:text-orange-400 group-hover:text-white" />
                 </div>
                 <div>
@@ -1593,7 +1593,7 @@ export function CalendarPage({
                 setRepeatEditDialog(null);
               }}
                 className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group">
-                <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
+                <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0 group-hover:bg-red-500 transition-colors">
                   <Users className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
                 </div>
                 <div>
@@ -1628,7 +1628,7 @@ export function CalendarPage({
                       onClick={() => handleDeleteMeetingConfirm('revert')}
                       className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group"
                     >
-                      <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 transition-colors">
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0 group-hover:bg-blue-500 transition-colors">
                         <RotateCcw className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:text-white" />
                       </div>
                       <div>
@@ -1640,7 +1640,7 @@ export function CalendarPage({
                       onClick={() => handleDeleteMeetingConfirm('full')}
                       className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group"
                     >
-                      <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
+                      <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0 group-hover:bg-red-500 transition-colors">
                         <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
                       </div>
                       <div>
@@ -1654,7 +1654,7 @@ export function CalendarPage({
                     onClick={() => handleDeleteMeetingConfirm('full')}
                     className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group"
                   >
-                    <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
+                    <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0 group-hover:bg-red-500 transition-colors">
                       <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
                     </div>
                     <div>
@@ -1684,9 +1684,9 @@ export function CalendarPage({
                 top: Math.min(y + 4, window.innerHeight - 340),
                 left: Math.min(x, window.innerWidth - 300),
               }}>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${isToday(jy, jm, jd) ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white'}`}>{jd}</div>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isToday(jy, jm, jd) ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white'}`}>{jd}</div>
                   <div>
                     <p className="text-sm font-semibold dark:text-white">{JALAALI_MONTHS[jm - 1]} {jy}</p>
                     <p className="text-xs text-gray-400">{dm.length} جلسه</p>
@@ -1720,7 +1720,7 @@ export function CalendarPage({
                   return (
                     <button key={m.id} onClick={() => { setMonthDayPopup(null); setDetailMeeting(m); }}
                       className="w-full text-right flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: c }} />
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold dark:text-white truncate">{m.subject}</p>
                         {m.start_time && <p className="text-[10px] text-gray-400 mt-0.5">{toFarsiTime(m.start_time)}{m.end_time ? ` – ${toFarsiTime(m.end_time)}` : ''}</p>}
@@ -1729,7 +1729,7 @@ export function CalendarPage({
                   );
                 })}
               </div>
-              <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
+              <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 shrink-0">
                 <button onClick={() => { setMonthDayPopup(null); setSelectedJy(jy); setSelectedJm(jm); setSelectedJd(jd); setViewMode('day'); }}
                   className="w-full py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors">
                   نمایش روزانه
@@ -1785,7 +1785,7 @@ export function CalendarPage({
                   }
                 }}
                 placeholder="عنوان رویداد..."
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:focus:ring-sky-600 placeholder-gray-300 dark:placeholder-gray-600" />
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-sky-400 dark:focus:ring-sky-600 placeholder-gray-300 dark:placeholder-gray-600" />
 
               {/* Save */}
               <button
@@ -1854,22 +1854,22 @@ export function CalendarPage({
         {/* Content */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Top bar */}
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shrink-0 flex-wrap sm:flex-nowrap">
             {/* Mobile sidebar toggle — only visible on small screens */}
-            <button onClick={() => setShowMobileSidebar(true)} className="lg:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0">
+            <button onClick={() => setShowMobileSidebar(true)} className="lg:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg shrink-0">
               <Calendar className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
             {/* Desktop sidebar toggle — only visible on large screens */}
             <button
               onClick={() => setShowDesktopSidebar(v => !v)}
-              className={`hidden lg:flex p-1.5 rounded-lg flex-shrink-0 transition-colors ${showDesktopSidebar ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
+              className={`hidden lg:flex p-1.5 rounded-lg shrink-0 transition-colors ${showDesktopSidebar ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
               title={showDesktopSidebar ? 'پنهان کردن تقویم‌ها' : 'نمایش تقویم‌ها'}
             >
               <PanelRight className="w-4 h-4" />
             </button>
-            <button onClick={goToToday} className="px-2.5 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-white font-medium flex-shrink-0">امروز</button>
+            <button onClick={goToToday} className="px-2.5 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-white font-medium shrink-0">امروز</button>
             {/* Search button + panel */}
-            <div ref={searchRef} className="relative flex-shrink-0">
+            <div ref={searchRef} className="relative shrink-0">
               <button onClick={() => setShowSearch(v => !v)} className={`p-1.5 rounded-lg transition-colors ${showSearch ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`} title="جستجوی جلسات">
                 <Search className="w-4 h-4" />
               </button>
@@ -1880,7 +1880,7 @@ export function CalendarPage({
                       <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                       <input ref={searchInputRef} type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                         placeholder="جستجوی جلسات..." dir="rtl"
-                        className="w-full pr-8 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:text-white placeholder-gray-400"
+                        className="w-full pr-8 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500/40 dark:text-white placeholder-gray-400"
                       />
                     </div>
                   </div>
@@ -1892,7 +1892,7 @@ export function CalendarPage({
                         return (
                           <button key={m.id} onClick={() => navigateToMeeting(m)}
                             className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 text-right transition-colors">
-                            <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0 mt-0.5">
                               <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -1915,11 +1915,11 @@ export function CalendarPage({
                 </div>
               )}
             </div>
-            <button onClick={fetchMeetings} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0"><RefreshCw className="w-4 h-4 text-gray-500 dark:text-gray-400" /></button>
-            <button onClick={navigatePrev} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0"><ChevronRight className="w-5 h-5 dark:text-white" /></button>
-            <button onClick={navigateNext} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0"><ChevronLeft className="w-5 h-5 dark:text-white" /></button>
+            <button onClick={fetchMeetings} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg shrink-0"><RefreshCw className="w-4 h-4 text-gray-500 dark:text-gray-400" /></button>
+            <button onClick={navigatePrev} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg shrink-0"><ChevronRight className="w-5 h-5 dark:text-white" /></button>
+            <button onClick={navigateNext} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg shrink-0"><ChevronLeft className="w-5 h-5 dark:text-white" /></button>
             <h2 className="text-sm sm:text-base font-semibold dark:text-white flex-1 text-center min-w-0 truncate">{getNavTitle()}</h2>
-            <div className="relative flex-shrink-0">
+            <div className="relative shrink-0">
               <button onClick={() => setShowViewDropdown(o => !o)}
                 className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 text-xs sm:text-sm border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-white min-w-[70px] sm:min-w-[90px] justify-between">
                 <span className="hidden sm:inline">{VIEW_OPTIONS.find(v => v.key === viewMode)?.label || 'روز'}</span>
@@ -1931,7 +1931,7 @@ export function CalendarPage({
                   {VIEW_OPTIONS.map(v => (
                     <button key={v.key} onClick={() => { setViewMode(v.key); setShowViewDropdown(false); }}
                       className={`w-full text-right px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${viewMode === v.key ? 'text-blue-500 font-semibold' : 'dark:text-white'}`}>
-                      {viewMode === v.key && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
+                      {viewMode === v.key && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />}
                       {v.label}
                     </button>
                   ))}
@@ -1942,7 +1942,7 @@ export function CalendarPage({
               <button
                 onClick={() => { const next = !hideOffHours; setHideOffHours(next); updatePrefs({ hide_offhours: next }); }}
                 title={hideOffHours ? 'نمایش ساعات غیرکاری' : 'پنهان کردن ساعات غیرکاری'}
-                className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${hideOffHours ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
+                className={`p-1.5 rounded-lg shrink-0 transition-colors ${hideOffHours ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
               >
                 <Clock className="w-4 h-4" />
               </button>
@@ -2043,7 +2043,7 @@ export function CalendarPage({
         </div>
 
         {/* Sidebar — slide in/out from the right */}
-        <div className={`hidden lg:block flex-shrink-0 transition-all duration-300 overflow-hidden ${showDesktopSidebar ? 'w-64 opacity-100' : 'w-0 opacity-0'}`}>
+        <div className={`hidden lg:block shrink-0 transition-all duration-300 overflow-hidden ${showDesktopSidebar ? 'w-64 opacity-100' : 'w-0 opacity-0'}`}>
           <div className="w-64 h-full">
           <CalendarSidebar
             sidebarJy={sidebarJy}
@@ -2088,7 +2088,7 @@ export function CalendarPage({
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileSidebar(false)} />
           <div className="absolute inset-y-0 right-0 w-72 bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInRight" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
             {/* Drawer header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
               <span className="text-sm font-bold dark:text-white">تقویم‌ها</span>
               <button onClick={() => setShowMobileSidebar(false)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
                 <ChevronRight className="w-5 h-5 dark:text-white" />
@@ -2140,7 +2140,7 @@ export function CalendarPage({
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
               <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingMove.meeting.subject}</p>
               <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
+                <span className="text-gray-400 w-10 shrink-0 mt-0.5">قبل:</span>
                 <span className="text-gray-600 dark:text-gray-300">
                   {(() => { const d = new Date(pendingMove.oldDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
                   {' — '}
@@ -2148,7 +2148,7 @@ export function CalendarPage({
                 </span>
               </div>
               <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
+                <span className="text-gray-400 w-10 shrink-0 mt-0.5">بعد:</span>
                 <span className="text-teal-600 dark:text-teal-400 font-medium">
                   {(() => { const d = new Date(pendingMove.newDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
                   {' — '}
@@ -2183,13 +2183,13 @@ export function CalendarPage({
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
               <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingResize.meeting.subject}</p>
               <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
+                <span className="text-gray-400 w-10 shrink-0 mt-0.5">قبل:</span>
                 <span className="text-gray-600 dark:text-gray-300" dir="ltr">
                   {pendingResize.meeting.start_time} تا {pendingResize.meeting.end_time}
                 </span>
               </div>
               <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
+                <span className="text-gray-400 w-10 shrink-0 mt-0.5">بعد:</span>
                 <span className="text-teal-600 dark:text-teal-400 font-medium" dir="ltr">
                   {pendingResize.meeting.start_time} تا {pendingResize.newEndTime}
                 </span>

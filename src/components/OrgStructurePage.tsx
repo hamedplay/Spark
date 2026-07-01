@@ -177,10 +177,10 @@ function OrgChartNode({
                     title="مدیریت تخصیص"
                   >
                     {m.profile?.avatar_url ? (
-                      <img src={m.profile.avatar_url} className="w-5 h-5 rounded-full object-cover flex-shrink-0" alt="" />
+                      <img src={m.profile.avatar_url} className="w-5 h-5 rounded-full object-cover shrink-0" alt="" />
                     ) : (
                       <div
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
                         style={{ backgroundColor: color }}
                       >
                         {(m.profile?.full_name || 'U').charAt(0)}
@@ -190,7 +190,7 @@ function OrgChartNode({
                       {m.profile?.full_name || m.profile?.email || 'کاربر'}
                     </span>
                     {m.is_primary && (
-                      <span className="text-[9px] text-amber-500 font-bold flex-shrink-0">★</span>
+                      <span className="text-[9px] text-amber-500 font-bold shrink-0">★</span>
                     )}
                   </div>
                 ))
@@ -287,7 +287,7 @@ function PositionFormModal({
   const sorted = [...levelDefs].sort((a, b) => a.sort_order - b.sort_order);
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" dir="rtl">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
       <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-900 z-10">
           <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -303,7 +303,7 @@ function PositionFormModal({
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">عنوان سمت *</label>
             <input
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
               value={form.title || ''}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               placeholder="مثال: مدیرعامل، معاون مالی، رئیس اداره منابع انسانی"
@@ -331,7 +331,7 @@ function PositionFormModal({
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">بالادستی (مستقیم)</label>
             <select
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
               value={form.parent_position_id || ''}
               onChange={e => setForm(f => ({ ...f, parent_position_id: e.target.value || null }))}
             >
@@ -349,7 +349,7 @@ function PositionFormModal({
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">واحد / دپارتمان</label>
             <select
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
               value={form.unit_id || ''}
               onChange={e => setForm(f => ({ ...f, unit_id: e.target.value || null }))}
             >
@@ -367,7 +367,7 @@ function PositionFormModal({
                   className="w-10 h-10 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-600 p-0.5"
                 />
                 <input
-                  className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                  className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm font-mono"
                   value={form.color || ''}
                   onChange={e => setForm(f => ({ ...f, color: e.target.value }))}
                 />
@@ -376,7 +376,7 @@ function PositionFormModal({
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">آیکن (ایموجی)</label>
               <input
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
                 value={form.icon || ''}
                 onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
                 placeholder="👑 ⭐ 💼"
@@ -387,7 +387,7 @@ function PositionFormModal({
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">ترتیب نمایش</label>
             <input type="number"
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
               value={form.sort_order ?? 0}
               onChange={e => setForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
             />
@@ -472,9 +472,9 @@ function AssignUserModal({
   });
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" dir="rtl">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
       <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
           <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
             <UserCheck className="w-5 h-5" style={{ color }} />
             مدیریت کاربران: {position.title}
@@ -485,7 +485,7 @@ function AssignUserModal({
         </div>
 
         {currentMembers.length > 0 && (
-          <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+          <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">کاربران فعلی این سمت:</p>
             <div className="flex flex-wrap gap-2">
               {currentMembers.map(m => (
@@ -511,11 +511,11 @@ function AssignUserModal({
           </div>
         )}
 
-        <div className="px-6 py-3 flex-shrink-0">
+        <div className="px-6 py-3 shrink-0">
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
-              className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
               placeholder="جستجو در کاربران..."
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -531,9 +531,9 @@ function AssignUserModal({
                 className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${isAssigned ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-200 dark:hover:border-blue-700'}`}
               >
                 {p.avatar_url ? (
-                  <img src={p.avatar_url} className="w-9 h-9 rounded-full object-cover flex-shrink-0" alt="" />
+                  <img src={p.avatar_url} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
                 ) : (
-                  <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
                     <User className="w-4 h-4 text-blue-500" />
                   </div>
                 )}
@@ -544,14 +544,14 @@ function AssignUserModal({
                   </p>
                 </div>
                 {isAssigned ? (
-                  <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-medium flex-shrink-0">
+                  <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-medium shrink-0">
                     <Check className="w-3.5 h-3.5" /> تخصیص یافته
                   </div>
                 ) : (
                   <button
                     onClick={async () => { setSaving(p.user_id); try { await onAssign(p.user_id, currentMembers.length === 0); } finally { setSaving(null); } }}
                     disabled={saving === p.user_id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-medium rounded-xl transition-colors flex-shrink-0"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-medium rounded-xl transition-colors shrink-0"
                   >
                     {saving === p.user_id ? <Spinner className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                     انتخاب
@@ -585,19 +585,19 @@ function AssignUserModal({
                 </button>
               </div>
               <input
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
                 placeholder="نام و نام خانوادگی"
                 value={newUser.full_name}
                 onChange={e => setNewUser(u => ({ ...u, full_name: e.target.value }))}
               />
               <input
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
                 placeholder="ایمیل *" type="email" dir="ltr"
                 value={newUser.email}
                 onChange={e => setNewUser(u => ({ ...u, email: e.target.value }))}
               />
               <input
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
                 placeholder="رمز عبور *" type="password" dir="ltr"
                 value={newUser.password}
                 onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))}
@@ -640,7 +640,7 @@ function UnitFormModal({ initial, allUnits, onSave, onClose }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" dir="rtl">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
       <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
           <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -652,19 +652,19 @@ function UnitFormModal({ initial, allUnits, onSave, onClose }: {
         <div className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">نام واحد *</label>
-            <input className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+            <input className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
               value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="مثال: معاونت فناوری اطلاعات" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">کد واحد</label>
-            <input className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+            <input className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
               value={form.code || ''} onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
               placeholder="مثال: IT, HR, FIN" dir="ltr" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">واحد بالادستی</label>
-            <select className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+            <select className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
               value={form.parent_id || ''} onChange={e => setForm(f => ({ ...f, parent_id: e.target.value || null }))}>
               <option value="">— ندارد —</option>
               {allUnits.filter(u => u.id !== form.id).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -741,17 +741,17 @@ function LevelManagerPanel({ levelDefs, onRefresh }: { levelDefs: LevelDef[]; on
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">نام سطح *</label>
-              <input className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+              <input className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
                 value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="مثال: رئیس اداره" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">شماره سطح</label>
-              <input type="number" className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+              <input type="number" className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
                 value={form.level} onChange={e => setForm(f => ({ ...f, level: parseInt(e.target.value) || 1 }))} min={1} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">آیکن</label>
-              <input className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+              <input className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
                 value={form.icon} onChange={e => setForm(f => ({ ...f, icon: e.target.value }))} placeholder="👑" />
             </div>
             <div>
@@ -759,7 +759,7 @@ function LevelManagerPanel({ levelDefs, onRefresh }: { levelDefs: LevelDef[]; on
               <div className="flex gap-2">
                 <input type="color" value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))}
                   className="w-10 h-[38px] rounded-xl cursor-pointer border border-gray-200 dark:border-gray-600 p-0.5" />
-                <input className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs font-mono"
+                <input className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-xs font-mono"
                   value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} />
               </div>
             </div>
@@ -924,7 +924,7 @@ function HrSsoConfigPanel({ configs, onSave }: {
             {activeTab === 'hr' ? 'سیستم HR' : 'ارائه‌دهنده SSO'}
           </label>
           <select
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
             value={form.provider_name || ''}
             onChange={e => setForm(f => ({ ...f, provider_name: e.target.value }))}
           >
@@ -939,7 +939,7 @@ function HrSsoConfigPanel({ configs, onSave }: {
           <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">آدرس API (Base URL)</label>
           <input
             type="url" dir="ltr"
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
             value={form.base_url || ''} onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))}
             placeholder="https://hr.company.com/api/v1"
           />
@@ -952,7 +952,7 @@ function HrSsoConfigPanel({ configs, onSave }: {
           </label>
           <input
             type="text" dir="ltr"
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm font-mono"
             value={activeTab === 'hr' ? (form.api_key || '') : (form.client_id || '')}
             onChange={e => setForm(f => activeTab === 'hr' ? { ...f, api_key: e.target.value } : { ...f, client_id: e.target.value })}
             placeholder={activeTab === 'hr' ? 'sk-...' : 'client_id_...'}
@@ -966,7 +966,7 @@ function HrSsoConfigPanel({ configs, onSave }: {
             </label>
             <input
               type="password" dir="ltr"
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm font-mono"
               value={form.client_secret || ''}
               onChange={e => setForm(f => ({ ...f, client_secret: e.target.value }))}
               placeholder="secret_..."
@@ -993,7 +993,7 @@ function HrSsoConfigPanel({ configs, onSave }: {
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">بازه همگام‌سازی (دقیقه)</label>
               <input type="number"
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
                 value={form.sync_interval_minutes || 60}
                 onChange={e => setForm(f => ({ ...f, sync_interval_minutes: parseInt(e.target.value) || 60 }))}
                 min={15} dir="ltr"
@@ -1005,7 +1005,7 @@ function HrSsoConfigPanel({ configs, onSave }: {
         {/* Test result */}
         {testResult && (
           <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${testResult.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'}`}>
-            {testResult.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+            {testResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
             {testResult.msg}
           </div>
         )}
@@ -1057,13 +1057,13 @@ function PositionRow({
         <td className="px-4 py-2.5">
           <div className="flex items-center gap-1.5" style={{ paddingRight: `${depth * 24}px` }}>
             {children.length > 0 ? (
-              <button onClick={() => setExpanded(v => !v)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
+              <button onClick={() => setExpanded(v => !v)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors shrink-0">
                 {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
               </button>
             ) : (
-              <span className="w-5 flex-shrink-0" />
+              <span className="w-5 shrink-0" />
             )}
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="font-medium text-gray-800 dark:text-white text-sm">{icon} {position.title}</span>
           </div>
         </td>
@@ -1380,7 +1380,7 @@ function OrgPermissionsPanel({
                 <button
                   key={l.level}
                   onClick={() => setSelectedLevel(l.level)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${selectedLevel === l.level ? 'border-transparent text-white shadow-sm' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-300'}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${selectedLevel === l.level ? 'border-transparent text-white shadow-xs' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-300'}`}
                   style={selectedLevel === l.level ? { backgroundColor: l.color } : {}}
                 >
                   <span>{l.icon}</span> {l.label}
@@ -1454,7 +1454,7 @@ function OrgPermissionsPanel({
                             <span className="text-sm text-gray-700 dark:text-gray-300">{item.label}</span>
                             <div
                               onClick={() => togglePerm(item.key)}
-                              className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${!perms[item.key] ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                              className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0 ${!perms[item.key] ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
                               style={perms[item.key] ? { backgroundColor: group.color } : {}}
                             >
                               <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${perms[item.key] ? 'translate-x-4' : 'translate-x-0.5'}`} />
@@ -1710,7 +1710,7 @@ export function OrgStructurePage() {
   // Org form modal
   if (showOrgForm) {
     return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" dir="rtl">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
         <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
             <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -1723,7 +1723,7 @@ export function OrgStructurePage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">نام سازمان *</label>
               <input
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
                 value={orgForm.name}
                 onChange={e => setOrgForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="مثال: شرکت نمونه"
@@ -1732,7 +1732,7 @@ export function OrgStructurePage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">نام اختصاری</label>
               <input
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
                 value={orgForm.short_name}
                 onChange={e => setOrgForm(f => ({ ...f, short_name: e.target.value }))}
                 placeholder="مثال: ن.ش"
@@ -1742,7 +1742,7 @@ export function OrgStructurePage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">توضیحات</label>
               <textarea
                 rows={3}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm resize-none"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm resize-none"
                 value={orgForm.description}
                 onChange={e => setOrgForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="توضیح مختصر درباره سازمان"
@@ -1751,7 +1751,7 @@ export function OrgStructurePage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">وبسایت</label>
               <input
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
                 value={orgForm.website}
                 onChange={e => setOrgForm(f => ({ ...f, website: e.target.value }))}
                 placeholder="https://example.com"
@@ -1783,7 +1783,7 @@ export function OrgStructurePage() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
           </div>
           <div>
@@ -1836,9 +1836,9 @@ export function OrgStructurePage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
-            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.key ? 'bg-white dark:bg-gray-900 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.key ? 'bg-white dark:bg-gray-900 text-gray-800 dark:text-white shadow-xs' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
           >
-            <tab.icon className="w-4 h-4 flex-shrink-0" />
+            <tab.icon className="w-4 h-4 shrink-0" />
             {tab.label}
           </button>
         ))}

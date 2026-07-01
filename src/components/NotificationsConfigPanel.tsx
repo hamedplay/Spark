@@ -112,13 +112,13 @@ const TABS = [
   { key: 'logs',      label: 'گزارش اعلان‌ها',    icon: BarChart2 },
 ];
 
-const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition text-sm';
+const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-transparent transition text-sm';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ value, onChange, color = 'bg-amber-500' }: { value: boolean; onChange: (v: boolean) => void; color?: string }) {
   return (
     <button type="button" onClick={() => onChange(!value)}
-      className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${value ? color : 'bg-gray-200 dark:bg-gray-600'}`}>
+      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${value ? color : 'bg-gray-200 dark:bg-gray-600'}`}>
       <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
     </button>
   );
@@ -132,18 +132,18 @@ function GroupSelector({ groups, selected, onSelect }: { groups: UserGroup[]; se
     <div className="relative">
       <button onClick={() => setOpen(v => !v)}
         className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-200 hover:border-amber-400 transition-colors min-w-52">
-        <GroupIcon className="w-4 h-4 text-amber-500 flex-shrink-0" />
+        <GroupIcon className="w-4 h-4 text-amber-500 shrink-0" />
         <span className="flex-1 text-right truncate">{current ? (current.display_name || current.name) : 'انتخاب گروه کاربری'}</span>
-        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden py-1">
           {groups.map(g => (
             <button key={g.id} onClick={() => { onSelect(g.id); setOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-right transition-colors ${selected === g.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
-              <GroupIcon className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+              <GroupIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
               <span className="text-sm text-gray-700 dark:text-gray-200">{g.display_name || g.name}</span>
-              {selected === g.id && <Check className="w-3.5 h-3.5 text-amber-500 mr-auto flex-shrink-0" />}
+              {selected === g.id && <Check className="w-3.5 h-3.5 text-amber-500 mr-auto shrink-0" />}
             </button>
           ))}
         </div>
@@ -204,7 +204,7 @@ function GroupsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-start gap-2 flex-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 text-sm text-amber-700 dark:text-amber-400">
-          <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <Info className="w-4 h-4 shrink-0 mt-0.5" />
           اعلان‌های فعال برای گروه کاربری انتخاب‌شده اعمال می‌شود.
         </div>
         <div className="flex gap-2 items-center">
@@ -238,7 +238,7 @@ function GroupsTab() {
                     {items.map(n => (
                       <div key={n.key} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                         <div className="flex items-center gap-3">
-                          <Bell className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                          <Bell className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                           <span className="text-sm text-gray-700 dark:text-gray-300">{n.label}</span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -277,7 +277,7 @@ function TemplateGuide() {
       <button onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors">
         <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-          <Info className="w-4 h-4 flex-shrink-0" />
+          <Info className="w-4 h-4 shrink-0" />
           <span className="text-sm font-medium">راهنمای استفاده از قالب‌های اعلان</span>
         </div>
         <ChevronDown className={`w-4 h-4 text-amber-500 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -291,7 +291,7 @@ function TemplateGuide() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {ALL_PLACEHOLDERS.map(p => (
               <div key={p.key} className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl px-3 py-2">
-                <code className="text-xs font-mono text-amber-600 dark:text-amber-400 flex-shrink-0">{`{{${p.key}}}`}</code>
+                <code className="text-xs font-mono text-amber-600 dark:text-amber-400 shrink-0">{`{{${p.key}}}`}</code>
                 <span className="text-xs text-gray-400">←</span>
                 <span className="text-xs text-gray-700 dark:text-gray-300">{p.label}</span>
               </div>
@@ -428,7 +428,7 @@ function TemplateEditor({ template, onSave, onCancel }: {
 
       <div className="flex gap-3 pt-1">
         <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-sm">
+          className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-xs">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'ذخیره...' : 'ذخیره قالب'}
         </button>
@@ -606,7 +606,7 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomPh(); } }}
             placeholder="نام_متغیر" dir="ltr" />
           <button type="button" onClick={addCustomPh}
-            className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition flex-shrink-0">
+            className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition shrink-0">
             افزودن
           </button>
         </div>
@@ -632,7 +632,7 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
 
       <div className="flex gap-3 pt-1">
         <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-sm">
+          className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-xs">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'در حال ذخیره...' : 'ذخیره قالب'}
         </button>
@@ -712,7 +712,7 @@ function TemplatesTab() {
     return <NewTemplateForm onSave={() => { setCreating(false); load(); }} onCancel={() => setCreating(false)} />;
   }
 
-  const selBase = 'appearance-none text-sm pr-3 pl-8 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500';
+  const selBase = 'appearance-none text-sm pr-3 pl-8 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500';
 
   return (
     <div className="space-y-4">
@@ -797,13 +797,13 @@ function TemplatesTab() {
                     <div key={t.id} className="p-4 hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${COLORS.find(c => c.key === t.color)?.cls || 'bg-gray-400'}`} />
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${COLORS.find(c => c.key === t.color)?.cls || 'bg-gray-400'}`} />
                           <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2.5 py-1 rounded-full">
                             {eventLabel[t.event_type] || t.event_type}
                           </span>
                           {!t.is_active && <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-500 px-2.5 py-1 rounded-full">غیرفعال</span>}
                         </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <button onClick={() => setPreviewTemplate(t)}
                             className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl transition">
                             <Eye className="w-3 h-3" />پیش‌نمایش
@@ -890,7 +890,7 @@ function NotifPreviewModal({ template, onClose }: NotifPreviewModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-xs" onClick={onClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
@@ -928,7 +928,7 @@ function NotifPreviewModal({ template, onClose }: NotifPreviewModalProps) {
                       type="text"
                       value={customVars[key] ?? (NOTIF_SAMPLE_VALUES[key] || '')}
                       onChange={e => setCustomVars(v => ({ ...v, [key]: e.target.value }))}
-                      className="flex-1 text-xs px-2.5 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      className="flex-1 text-xs px-2.5 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
                       placeholder={`مقدار {{${key}}}`}
                     />
                   </div>
@@ -940,9 +940,9 @@ function NotifPreviewModal({ template, onClose }: NotifPreviewModalProps) {
           {/* Rendered notification card preview */}
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">خروجی اعلان:</p>
-            <div className={`rounded-xl border p-4 space-y-1.5 ${COLOR_BADGE[template.color] || ''} bg-opacity-20`}>
+            <div className={`rounded-xl border p-4 space-y-1.5 ${COLOR_BADGE[template.color] || ''}`}>
               <div className="flex items-start gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${colorDot?.cls || 'bg-gray-400'}`} />
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ${colorDot?.cls || 'bg-gray-400'}`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800 dark:text-white leading-snug">{previewTitle || '—'}</p>
                   <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 leading-relaxed whitespace-pre-wrap">{previewBody || '—'}</p>
@@ -1062,7 +1062,7 @@ function LogsTab() {
           { label: 'خوانده‌نشده', value: unreadCount, icon: Clock, color: 'text-red-500 bg-red-50 dark:bg-red-900/20' },
         ].map(s => (
           <div key={s.label} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${s.color}`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${s.color}`}>
               <s.icon className="w-4 h-4" />
             </div>
             <div>
@@ -1079,7 +1079,7 @@ function LogsTab() {
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">دسته‌بندی</label>
           <div className="relative">
             <select value={filterType} onChange={e => setFilterType(e.target.value)}
-              className="appearance-none w-full text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500">
+              className="appearance-none w-full text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500">
               <option value="all">همه دسته‌ها</option>
               {NOTIF_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
@@ -1090,7 +1090,7 @@ function LogsTab() {
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">وضعیت خواندن</label>
           <div className="relative">
             <select value={filterRead} onChange={e => setFilterRead(e.target.value)}
-              className="appearance-none w-full text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500">
+              className="appearance-none w-full text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500">
               <option value="all">همه</option>
               <option value="read">خوانده‌شده</option>
               <option value="unread">خوانده‌نشده</option>
@@ -1101,7 +1101,7 @@ function LogsTab() {
         <div className="flex-1 min-w-36">
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">تاریخ</label>
           <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
-            className="w-full text-sm px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+            className="w-full text-sm px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500" />
         </div>
         <div className="flex gap-2">
           {filterDate && (
@@ -1134,7 +1134,7 @@ function LogsTab() {
                   onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
                 >
                   {/* Read indicator */}
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-2 ${log.read ? 'bg-gray-300 dark:bg-gray-600' : 'bg-amber-400'}`} />
+                  <div className={`w-2 h-2 rounded-full shrink-0 mt-2 ${log.read ? 'bg-gray-300 dark:bg-gray-600' : 'bg-amber-400'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_COLORS[log.type] || TYPE_COLORS.system}`}>
@@ -1155,7 +1155,7 @@ function LogsTab() {
                       <span className="text-xs text-gray-300 dark:text-gray-500">{formatDate(log.created_at)}</span>
                     </div>
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 mt-1 transition-transform ${expandedId === log.id ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 mt-1 transition-transform ${expandedId === log.id ? 'rotate-180' : ''}`} />
                 </div>
 
                 {/* Expanded detail */}
@@ -1240,7 +1240,7 @@ export function NotificationsConfigPanel() {
       <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 gap-1">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key as any)}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === key ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === key ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-white shadow-xs' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
             <Icon className="w-4 h-4" />{label}
           </button>
         ))}
