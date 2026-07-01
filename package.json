@@ -30,13 +30,11 @@
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",
-    "@types/moment": "^2.13.0",
     "@types/moment-jalaali": "^0.7.9",
     "@types/react": "^19.0.0",
     "@types/react-datepicker": "7.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/simple-peer": "^9.11.8",
-    "@types/uuid": "11.0.0",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",
     "@vitejs/plugin-react": "6.0.3",
