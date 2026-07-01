@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Mic, MicOff, Video, VideoOff, Volume2, VolumeX, Loader2,
-  RefreshCw, CheckCircle2,
-} from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Volume2, VolumeX, Loader as Loader2, RefreshCw, CircleCheck as CheckCircle2 } from 'lucide-react';
 
 const LS_KEY = 'conf_device_prefs';
 

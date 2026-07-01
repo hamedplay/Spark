@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import moment from 'moment-jalaali';
-import { MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
+import { MoveVertical as MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { ConversationWithProfile } from './types';
 const STATUS_DOT: Record<string, string> = {

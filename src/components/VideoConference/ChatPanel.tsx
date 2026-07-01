@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Send, ImagePlus, MessageSquareOff, MessageSquare, Loader2, X, ChevronDown,
-} from 'lucide-react';
+import { Send, ImagePlus, MessageSquareOff, MessageSquare, Loader as Loader2, X, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';

@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Bot, Calendar, MessageSquare, ClipboardList, Navigation,
-  AlertCircle, CheckCircle2, Clock, Search, RefreshCw,
-  Sparkles, Trash2, ChevronDown, ChevronUp, XCircle, Filter,
-  Terminal, Send, Mic, BookOpen, Users, Play,
-} from 'lucide-react';
+import { Bot, Calendar, MessageSquare, ClipboardList, Navigation, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Clock, Search, RefreshCw, Sparkles, Trash2, ChevronDown, ChevronUp, Circle as XCircle, ListFilter as Filter, Terminal, Send, Mic, BookOpen, Users, Play } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { SparkLog } from './SparkAssistant';

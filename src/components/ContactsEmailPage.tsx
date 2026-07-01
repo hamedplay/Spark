@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, CreditCard as Edit2, Save, X, Plus, Loader2, Search } from 'lucide-react';
+import { Mail, CreditCard as Edit2, Save, X, Plus, Loader as Loader2, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ContactEmail } from '../types';
 import toast from 'react-hot-toast';

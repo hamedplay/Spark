@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Mail, CreditCard as Edit2, Save, X, Plus, Loader2, Search, Phone,
-  Upload, Download, Trash2, Users, Building2, Share2, Check,
-} from 'lucide-react';
+import { Mail, CreditCard as Edit2, Save, X, Plus, Loader as Loader2, Search, Phone, Upload, Download, Trash2, Users, Building2, Share2, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../context/PermissionsContext';

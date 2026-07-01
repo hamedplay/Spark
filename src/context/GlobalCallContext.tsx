@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { AlertTriangle, CheckCircle, X } from 'lucide-react';
+import { TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, X } from 'lucide-react';
 import { CallEngine, IncomingCallNotification } from '../components/Chat/CallEngine';
 import type { CallSession } from '../components/Chat/CallEngine';
 import type { UserProfile } from '../components/Chat/types';
