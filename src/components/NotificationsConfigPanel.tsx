@@ -940,7 +940,7 @@ function NotifPreviewModal({ template, onClose }: NotifPreviewModalProps) {
           {/* Rendered notification card preview */}
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">خروجی اعلان:</p>
-            <div className={`rounded-xl border p-4 space-y-1.5 ${COLOR_BADGE[template.color] || ''}`}>
+            <div className={`rounded-xl border p-4 space-y-1.5 ${COLOR_BADGE[template.color] || ''} bg-opacity-20`}>
               <div className="flex items-start gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${colorDot?.cls || 'bg-gray-400'}`} />
                 <div className="flex-1 min-w-0">

@@ -1,18 +1,6 @@
-@import "tailwindcss";
-
-/* Replicate v3 darkMode: 'class' — applies dark: utilities when an ancestor has .dark */
-@custom-variant dark (&:where(.dark, .dark *));
-
-/* Preserve v3 default border-color (was gray-200; v4 default is currentColor) */
-@layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
-  }
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @font-face {
   font-family: 'Vazirmatn';
