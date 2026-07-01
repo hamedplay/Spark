@@ -36,7 +36,6 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 // iOS Safari detection
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-const isSafari = () => /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 export function CallEngine({ currentUserId, otherUser, callType, mode, session, onEnd }: Props) {
   const [callStatus, setCallStatus] = useState<'connecting' | 'active' | 'ended'>('connecting');
@@ -351,7 +350,7 @@ export function CallEngine({ currentUserId, otherUser, callType, mode, session, 
     // Then poll every 3s until connected or ended.
     if (mode === 'caller') {
       const pollForAnswer = async () => {
-        if (endedRef.current || pc.connectionState === 'connected' || pc.connectionState === 'completed') return;
+        if (endedRef.current || pc.connectionState === 'connected' || (pc.iceConnectionState as string) === 'completed') return;
         if (pc.remoteDescription) return;
         const { data } = await supabase
           .from('call_sessions').select('answer, status').eq('id', session.id).maybeSingle();

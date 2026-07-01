@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import toast from 'react-hot-toast';
 
 interface TelegramResponse {
   success: boolean;

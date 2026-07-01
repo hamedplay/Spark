@@ -1,4 +1,3 @@
-import React from 'react';
 import { VideoTile } from './VideoTile';
 import type { TileProps, DraggableProps } from './ConferenceLayout';
 

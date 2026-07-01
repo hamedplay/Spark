@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Users, MessageSquare, Plus, Search, X, Check, Loader2, Send, ChevronDown, Trash2, CreditCard as Edit2, AlertCircle, Info, Building2, ChevronRight } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useOrgUsers, OrgUserProfile } from '../lib/useOrgUsers';
+import { useState, useEffect, useCallback } from 'react';
+import { Users, MessageSquare, Plus, Search, X, Check, Loader as Loader2, Send, ChevronDown, Trash2, CreditCard as Edit2, CircleAlert as AlertCircle, Info, Building2, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
+import { OrgUserProfile } from '../lib/useOrgUsers';
 
 interface Profile {
   user_id: string;
@@ -32,12 +32,6 @@ interface BroadcastMessage {
   target_group_ids: string[];
   sent_at: string;
   sender_name?: string;
-}
-
-interface OrgPosition {
-  id: string;
-  title: string;
-  level: number;
 }
 
 const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
@@ -505,11 +499,10 @@ function BroadcastTab({ currentUserId, isAdmin }: { currentUserId: string | null
 }
 
 // ─── Groups Tab ───────────────────────────────────────────────────────────────
-function GroupsTab({ currentUserId, isAdmin }: { currentUserId: string | null; isAdmin: boolean }) {
+function GroupsTab({ isAdmin }: { currentUserId: string | null; isAdmin: boolean }) {
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [editGroup, setEditGroup] = useState<UserGroup | null | 'new'>('new' as any);
   const [showForm, setShowForm] = useState(false);
   const [targetEdit, setTargetEdit] = useState<UserGroup | null>(null);
   const [membersGroup, setMembersGroup] = useState<UserGroup | null>(null);

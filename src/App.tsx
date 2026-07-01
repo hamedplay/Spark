@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { MeetingCard } from './components/MeetingCard';
 import { CreateMeetingForm } from './components/CreateMeetingForm';
@@ -23,7 +23,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { GroupsPage } from './components/GroupsPage';
 import { ChannelsPage } from './components/Channels/ChannelsPage';
 import { supabase, handleSupabaseError } from './lib/supabase';
-import { Search, Plus, X, Bell, Calendar, Clock, MapPin, User } from 'lucide-react';
+import { Search, Plus, X, Bell } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { Meeting } from './types';
 import toast from 'react-hot-toast';
@@ -69,7 +69,7 @@ function App() {
 
   useEffect(() => {
     const loadSparkVisible = () => {
-      supabase
+      void supabase
         .from('system_config')
         .select('value')
         .eq('section', 'spark')
@@ -311,7 +311,7 @@ function App() {
 
       if (error) throw error;
 
-      const formattedMeetings: Meeting[] = (data || []).map(meeting => ({
+      const formattedMeetings: Meeting[] = (data as unknown as Meeting[] || []).map(meeting => ({
         id: meeting.id,
         subject: meeting.subject,
         requestDate: meeting.request_date,
@@ -423,7 +423,7 @@ function App() {
         <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
         <AuthPage onSuccess={() => {
           // Show splash after login if enabled
-          supabase.from('system_config').select('value').eq('section', 'appearance').eq('key', 'splash_enabled').maybeSingle().then(({ data }) => {
+          void supabase.from('system_config').select('value').eq('section', 'appearance').eq('key', 'splash_enabled').maybeSingle().then(({ data }) => {
             const enabled = !data || data.value === 'true' || data.value === null;
             if (enabled && !sessionStorage.getItem('spark_splash_shown')) {
               sessionStorage.setItem('spark_splash_shown', '1');

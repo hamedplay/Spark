@@ -1,8 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Video, Loader2, LogIn, AlertCircle,
-  Shield, Lock, Users, ShieldOff, Clock,
-} from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Video, Loader as Loader2, CircleAlert as AlertCircle, Shield, Lock, Users, ShieldOff, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
@@ -61,11 +58,11 @@ export function GuestJoinPage({ code }: Props) {
   const [loading, setLoading] = useState(false);
   const [joinAllowed, setJoinAllowed] = useState(false);
   const [meetingStartsIn, setMeetingStartsIn] = useState<number | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [myPeerId, setMyPeerId] = useState('');
   const [waitingRequestId, setWaitingRequestId] = useState<string | null>(null);
+  const [isMuted] = useState(false);
+  const [isVideoOff] = useState(false);
 
   // Stable guest ID persisted across refreshes (prevents ban bypass)
   const [guestId] = useState(() => getOrCreateGuestId());

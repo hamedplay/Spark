@@ -1,9 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader2,
-  AlertCircle, Wifi, WifiOff, User, Phone, Smartphone,
-  ChevronRight,
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, User, Phone, Smartphone, ChevronRight } from 'lucide-react';
 import { supabase, ensureProfile, handleSupabaseError, testSupabaseConnection } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';
@@ -22,7 +18,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [siteTitle, setSiteTitle] = useState('اسپارک سامانه هوشمند مدیریت سازمانی');
   const [siteDescription, setSiteDescription] = useState('مدیریت حرفه‌ای جلسات، پیگیری اقدامات و همکاری تیمی در یک پلتفرم');
-  const [logoUrl, setLogoUrl] = useState('');
+  const [, setLogoUrl] = useState('');
 
   useEffect(() => {
     supabase.from('system_config').select('key,value,section').in('key', ['site_title', 'site_description', 'logo_url']).then(({ data }) => {

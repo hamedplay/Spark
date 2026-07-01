@@ -1,18 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
-import {
-  Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users,
-  Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2,
-  Crown, Pin, X, Copy, Check,
-  Smile, BarChart2,
-  PenTool, Volume2, VolumeX, Activity, UserPlus,
-  ShieldAlert, UserX, Mic2, ChevronUp, ChevronDown, ArrowRightLeft,
-  SlidersHorizontal, LayoutGrid, MonitorPlay, PanelRight,
-  Shield, ShieldCheck, ShieldOff, Clock,
-} from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users, Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2, Crown, Pin, X, Copy, Check, Smile, ChartBar as BarChart2, PenTool, Volume2, VolumeX, Activity, UserPlus, ShieldAlert, UserX, Mic as Mic2, ChevronUp, ChevronDown, ArrowRightLeft, SlidersHorizontal, LayoutGrid, MonitorPlay, PanelRight, ShieldCheck, ShieldOff, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { startDiagnostics, stopDiagnostics, stopAllDiagnostics, attemptICERestart } from '../../lib/webrtcDiagnostics';
-import type { PeerDiagnostics } from '../../lib/webrtcDiagnostics';
-import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
 import type {
   ConferenceRoom, ConferenceParticipant, ConferenceMessage,
@@ -150,6 +139,16 @@ const ROLE_PERMISSIONS: Record<RoleType, Set<Permission>> = {
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface HandRaiseEntry { peerId: string; name: string; time: number; }
 
+interface PeerDiagnostics {
+  peerId: string;
+  timestamp: number;
+  inboundBitrate?: number;
+  outboundBitrate?: number;
+  roundTripTime?: number;
+  packetsLost?: number;
+  jitter?: number;
+}
+
 interface Props {
   room: ConferenceRoom;
   currentUserId: string;
@@ -204,7 +203,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const fetchedAvatarUserIds = useRef<Set<string>>(new Set());
 
   // WebRTC diagnostics — peerId → latest stats snapshot
-  const [peerDiagnostics, setPeerDiagnostics] = useState<Map<string, PeerDiagnostics>>(new Map());
+  const [_peerDiagnostics, setPeerDiagnostics] = useState<Map<string, PeerDiagnostics>>(new Map());
 
   // Dynamic host — updated on transfer
   const [hostId, setHostId] = useState(room.host_id);
@@ -1162,7 +1161,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     toast.success(`${displayName} مسدود شد (${label})`);
   };
 
-  const changeRole = async (targetPeerId: string, targetUserId: string, displayName: string, newRole: RoleType) => {
+  const changeRole = async (_targetPeerId: string, targetUserId: string, displayName: string, newRole: RoleType) => {
     const { error } = await supabase.from('conference_participants')
       .update({ role: newRole })
       .eq('room_id', room.id)
@@ -1330,10 +1329,10 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             ];
 
             // DnD handlers
-            const onDragStart = (peerId: string) => { dragSrcRef.current = peerId; };
-            const onDragOver = (e: React.DragEvent, peerId: string) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
+            const onDragStart = (_peerId: string) => { dragSrcRef.current = _peerId; };
+            const onDragOver = (_e: React.DragEvent, peerId: string) => {
+              _e.preventDefault();
+              _e.dataTransfer.dropEffect = 'move';
             };
             const onDrop = (e: React.DragEvent, targetId: string) => {
               e.preventDefault();
@@ -1623,7 +1622,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                         )}
                         {/* Kick */}
                         {checkPermission('kick') && !t.isLocal && !t.isHost && (
-                          <button onClick={() => { setKickConfirm({ peerId: t.peerId, userId: t.userId, displayName: t.displayName }); setKickAndBan(false); setBanReason(''); }}
+                          <button onClick={() => { setKickConfirm({ peerId: t.peerId, userId: t.userId, displayName: t.displayName }); setPendingBan(null); setBanReason(''); }}
                             title="خارج کردن از جلسه"
                             className="p-1 rounded-lg bg-red-900/0 hover:bg-red-900/40 text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
                             <UserX className="w-3.5 h-3.5" />

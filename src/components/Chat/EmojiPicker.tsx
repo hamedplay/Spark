@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, Clock, Smile, Users, Leaf, Pizza, Car, Trophy, Hash } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, X } from 'lucide-react';
 
 const RECENT_KEY = 'chat_recent_emojis';
 

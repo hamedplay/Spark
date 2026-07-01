@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Plus, Loader2, Send, Share2, UserPlus, CalendarPlus, RotateCcw, X, Download, ChevronRight, ChevronLeft, RefreshCw, AlertTriangle, Trash2, Image, FileText, ClipboardList, UserCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Loader as Loader2, Send, Share2, UserPlus, CalendarPlus, RotateCcw, X, Download, RefreshCw, TriangleAlert as AlertTriangle, Trash2, Image, FileText, ClipboardList, UserCheck } from 'lucide-react';
 import { Meeting } from '../../types';
 import type { AgendaItem } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -17,8 +17,6 @@ interface MeetingCardMainProps {
   onUpdate: () => void;
   onScheduleInCalendar?: (meeting: Meeting) => void;
 }
-
-const JALAALI_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 
 // ─── Delete Modal ─────────────────────────────────────────────────────────────
 interface DeleteModalProps {

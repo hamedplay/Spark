@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Inbox, Check, UserCheck, X, MapPin, Clock, Calendar, Search, ChevronRight, Users, Building2, ChevronDown, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Inbox, Check, UserCheck, X, MapPin, Clock, Calendar, Search, ChevronRight, Users, Building2, ChevronDown, Circle as XCircle, CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { insertNotification } from '../lib/notifications';
 import toast from 'react-hot-toast';
-import moment from 'moment-jalaali';
 import { useOrgUsers } from '../lib/useOrgUsers';
 import { useDraggableFab, panelStyle } from '../lib/useDraggableFab';
 import { gregorianToJalali } from '../lib/sparkDateUtils';
@@ -32,10 +31,6 @@ interface Profile {
   user_id: string;
   full_name: string | null;
   email: string | null;
-}
-
-function toJalaali(dateStr: string) {
-  try { return moment(new Date(dateStr)).format('jYYYY/jMM/jDD'); } catch { return ''; }
 }
 
 export function MeetingInboxButton() {

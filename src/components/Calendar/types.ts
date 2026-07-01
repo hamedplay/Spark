@@ -64,3 +64,15 @@ export interface PendingSchedule {
   meetingId: string;
   meeting: MeetingData;
 }
+
+export interface CalendarFormState {
+  name: string;
+  type: 'private' | 'public' | 'shared';
+  description: string;
+  is_active: boolean;
+  enable_reminder: boolean;
+  create_online_link: boolean;
+  show_time_overlap: boolean;
+  free_for_all: boolean;
+  color: string;
+}

@@ -127,7 +127,7 @@ async function dispatchSms(
     }
 
     const providerId: string | null = dispatchRows[0].provider_id ?? null;
-    const phone: string = dispatchRows[0].phone?.trim() || '';
+    const phone: string = dispatchRows[0].phone?.trim() ?? '';
 
     if (!phone || phone.length < 7) {
       await supabase.from('sms_dispatch_logs').insert({
@@ -238,7 +238,7 @@ export async function insertNotification(payload: NotifyPayload): Promise<void> 
     user_id: payload.userId,
     title,
     message,
-    type: payload.category,
+    type: payload.category as 'meeting' | 'task' | 'note' | 'chat' | 'channel' | 'call' | 'system',
     read: false,
     sender_id: payload.senderId ?? null,
     sender_name: payload.senderName ?? null,

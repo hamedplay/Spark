@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, SlidersHorizontal, X, Check, ChevronDown, Tag, Clock, MessageSquare, Star, AlertCircle, Eye, AtSign } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, SlidersHorizontal, X, Check, ChevronDown, Clock, Star } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { UserAvatar } from './ChatConversationItem';
 import moment from 'moment-jalaali';

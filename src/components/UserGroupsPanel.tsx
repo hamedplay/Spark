@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Users, Search, Plus, RefreshCw, MoreVertical, CreditCard as Edit2, Trash2, UserPlus, ShieldCheck, X, Save, Check, Loader2, AlertCircle, Activity, Filter, ChevronDown, Info, AlertTriangle, Zap, Group as GroupIcon } from 'lucide-react';
+import { Users, Search, Plus, RefreshCw, MoveVertical as MoreVertical, CreditCard as Edit2, Trash2, UserPlus, ShieldCheck, X, Save, Check, Loader as Loader2, CircleAlert as AlertCircle, Activity, ListFilter as Filter, ChevronDown, Info, TriangleAlert as AlertTriangle, Zap, Group as GroupIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -692,7 +692,7 @@ export function GroupEventsPanel() {
 // ─── Main UserGroupsPanel ─────────────────────────────────────────────────────
 interface Props { currentUserId: string; }
 
-export function UserGroupsPanel({ currentUserId }: Props) {
+export function UserGroupsPanel({}: Props) {
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [panel, setPanel] = useState<Panel>('list');
   const [selected, setSelected] = useState<UserGroup | null>(null);

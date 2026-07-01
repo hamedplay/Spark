@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { insertNotification } from '../../lib/notifications';
 import toast from 'react-hot-toast';
@@ -440,7 +440,7 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
   const isDark = useDarkMode();
   const [messages, setMessages] = useState<MessageWithMeta[]>([]);
   const [reactions, setReactions] = useState<{ message_id: string; user_id: string; emoji: string }[]>([]);
-  const [stars, setStars] = useState<{ message_id: string }[]>([]);
+  const [_stars, setStars] = useState<{ message_id: string }[]>([]);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [myRole, setMyRole] = useState<MemberRole | null>(null);
   const [pinnedMsgs, setPinnedMsgs] = useState<ChannelMessage[]>([]);

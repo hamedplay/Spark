@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronRight, Search, Phone, Video, Info, AlertTriangle, Star, Bell, X, Clock, MessageCircle, AtSign, CheckCircle, Bookmark } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ChevronRight, Search, Phone, Video, Info, Star, Bell, X, Clock, MessageCircle, AtSign, CircleCheck as CheckCircle, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ChatMessage } from './ChatMessage';
 import { ChatInputBar } from './ChatInputBar';
@@ -36,7 +36,7 @@ interface StarredItem {
 
 export function ChatConversationView({
   conversation, currentUserId, currentUserProfile, onBack, onNavigateToCalendar, onNavigateToTasks,
-  onConversationUpdate, initialScrollToMessageId, onScrollToMessageConsumed, onStartCall,
+  onConversationUpdate, onStartCall,
   onOpenDirectChat,
 }: Props) {
   const { triggerUrgentAlarm: globalTriggerUrgentAlarm } = useGlobalCall();

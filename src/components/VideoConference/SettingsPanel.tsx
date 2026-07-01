@@ -1,5 +1,4 @@
-import React from 'react';
-import { Loader2, Gauge } from 'lucide-react';
+import { Loader as Loader2, Gauge } from 'lucide-react';
 
 export type VideoQuality = 'high' | 'medium' | 'low';
 
@@ -35,8 +34,6 @@ export function SettingsPanel({ videoQuality, dataSaverMode, isApplying, onChang
         <div className="space-y-2">
           {QUALITY_ORDER.map(q => {
             const preset = VIDEO_QUALITY_PRESETS[q];
-            // گزینه انتخاب‌شده توسط کاربر (برای ذخیره‌سازی تنظیمات)
-            const selected = videoQuality === q;
             // گزینه‌ای که واقعاً در حال اعمال است — در حالت data saver همیشه low
             const active = effectiveQuality === q;
             return (

@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  X, Mic, Send, Bot, Loader2, CheckCircle2, AlertCircle,
-  Sparkles, Volume2, VolumeX, Square, RefreshCw, Zap, Brain,
-  Check, X as XIcon,
-} from 'lucide-react';
+import { X, Mic, Send, Bot, Loader as Loader2, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Sparkles, Volume2, VolumeX, Square, RefreshCw, Zap, Brain, Check, X as XIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -798,12 +794,6 @@ export function SparkAssistant({
       if (last >= 0) msgs[last] = { ...msgs[last], status, ...(text ? { text } : {}) };
       return msgs;
     });
-
-  const saveMemory = useCallback(async (key: string, value: string) => {
-    try {
-      await supabase.from('spark_memory').upsert({ user_id: currentUserId, key, value, usage_count: 1, last_used_at: new Date().toISOString() }, { onConflict: 'user_id,key', ignoreDuplicates: false });
-    } catch { /* non-critical */ }
-  }, [currentUserId]);
 
   const logCmd = async (raw: string, type: string, payload: any): Promise<string | null> => {
     try {

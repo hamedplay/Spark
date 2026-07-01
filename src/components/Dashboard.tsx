@@ -1,5 +1,4 @@
-import React from 'react';
-import { BarChart3, Users, CheckCircle, Clock, Bell } from 'lucide-react';
+import { ChartBar as BarChart3, CircleCheck as CheckCircle, Clock, Bell } from 'lucide-react';
 
 interface DashboardProps {
   totalMeetings: number;

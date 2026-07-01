@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle, Clock, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CircleCheck as CheckCircle, Clock, Circle as XCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { PendingApproval } from './types';
 

@@ -1,9 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  MessageSquare, Save, Loader2, RefreshCw, CheckCircle, AlertTriangle,
-  Eye, EyeOff, Send, Inbox, CreditCard, Settings, Info, Wifi, WifiOff,
-  ChevronDown, Phone,
-} from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { MessageSquare, Save, Loader as Loader2, RefreshCw, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Eye, EyeOff, Send, Inbox, CreditCard, Settings, Info, Wifi, WifiOff, Phone } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -43,15 +39,6 @@ async function callRahyab(action: string, extra: Record<string, unknown> = {}) {
   if (error) throw new Error(error.message);
   return data as any;
 }
-
-// ── Delivery status label ─────────────────────────────────────────────────────
-const DELIVERY_LABELS: Record<number, { label: string; color: string }> = {
-  0:  { label: 'نامشخص',       color: 'text-gray-400' },
-  2:  { label: 'تحویل شده',    color: 'text-green-500' },
-  5:  { label: 'تحویل نشده',   color: 'text-red-500' },
-  9:  { label: 'بلاک شده',     color: 'text-amber-500' },
-  [-1 as any]: { label: 'نامعتبر', color: 'text-gray-400' },
-};
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
 const TABS = [

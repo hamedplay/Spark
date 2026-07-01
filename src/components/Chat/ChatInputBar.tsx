@@ -1,10 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  Send, Smile, Paperclip, Mic, AtSign, Code, Loader2, X, Reply,
-  AlertCircle, AlertTriangle, Lock, MessageCircle,
-  Bold, Italic, Quote, List, Link, Image, Undo, Redo,
-  StopCircle, MicOff, CalendarPlus, Strikethrough,
-} from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Send, Smile, Paperclip, Mic, AtSign, Code, Loader as Loader2, X, Reply, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Lock, MessageCircle, Bold, Italic, Quote, List, Link, Image, Undo, Redo, CircleStop as StopCircle, MicOff, Strikethrough } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { insertNotification } from '../../lib/notifications';
 import { EmojiPicker } from './EmojiPicker';
@@ -39,7 +34,7 @@ type RecordingState = 'idle' | 'recording' | 'recorded';
 export function ChatInputBar({
   conversationId, currentUserId, currentUserName, currentUserAvatarUrl, otherUserId,
   replyingTo, editingMessage,
-  allUsers, onSent, onCancelReply, onCancelEdit, onScheduleMeetingWithMentions,
+  allUsers, onSent, onCancelReply, onCancelEdit,
 }: Props) {
   const { hasPermission } = usePermissions();
   const [body, setBody] = useState('');
@@ -226,7 +221,7 @@ export function ChatInputBar({
         await sendVoiceMessage();
       } else {
         const mentionedIds = extractMentionedUserIds(body.trim());
-        const { data: newMsg, error } = await supabase.from('chat_messages').insert({
+        const { error } = await supabase.from('chat_messages').insert({
           conversation_id: conversationId,
           sender_id: currentUserId,
           body: body.trim(),

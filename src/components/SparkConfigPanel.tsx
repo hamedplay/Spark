@@ -1,11 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Bot, Save, Plus, X, Calendar, MessageSquare, ClipboardList,
-  BookOpen, Users, BarChart2, User, Video, Mic, ChevronDown,
-  ChevronUp, AlertCircle, Info, Trash2, Check, RefreshCw,
-  Play, CheckCircle2, XCircle, Zap, Settings, Brain, Eye, EyeOff,
-  Key,
-} from 'lucide-react';
+import { Bot, Save, Plus, X, Calendar, MessageSquare, ClipboardList, BookOpen, Users, ChartBar as BarChart2, User, Video, Mic, ChevronDown, ChevronUp, CircleAlert as AlertCircle, Info, Trash2, Check, RefreshCw, Play, CircleCheck as CheckCircle2, Circle as XCircle, Zap, Settings, Brain, Eye, EyeOff, Key } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';
@@ -51,7 +45,7 @@ function AiSettingsPanel() {
 
   useEffect(() => {
     supabase.from('spark_ai_settings').select('*').maybeSingle().then(({ data }) => {
-      if (data) { setSettings(data as SparkAiSettings); setForm({ provider: data.provider, api_key: data.api_key, model: data.model, enabled: data.enabled }); }
+      if (data) { setSettings(data as SparkAiSettings); setForm({ provider: data.provider, api_key: data.api_key ?? '', model: data.model, enabled: data.enabled }); }
       setLoading(false);
     });
   }, []);

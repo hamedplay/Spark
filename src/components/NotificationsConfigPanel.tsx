@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import moment from 'moment-jalaali';
-import { Bell, Users, Check, X, Loader2, RefreshCw, Save, Info, ChevronDown, Plus, Trash2, CreditCard as Edit2, FileText, Group as GroupIcon, AlertCircle, BarChart2, Eye, CheckCircle, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Bell, Users, Check, X, Loader as Loader2, RefreshCw, Save, Info, ChevronDown, Plus, Trash2, CreditCard as Edit2, Eye, CircleCheck as CheckCircle, Clock, ChevronLeft, ChevronRight, Group as GroupIcon, FileText, ChartBar as BarChart2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { invalidateTemplateCache, fillPlaceholders } from '../lib/notifications';
+import { invalidateTemplateCache } from '../lib/notifications';
 import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Palette, MessageSquare, Bell, LayoutGrid as Layout, ChevronLeft, Check, Moon } from 'lucide-react';
+import { useState } from 'react';
+import { X, Palette, MessageSquare, Bell, LayoutGrid as Layout, Check } from 'lucide-react';
 
 export interface ChatThemeSettings {
   // Bubble colors

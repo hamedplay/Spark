@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { X, GitFork, CheckCircle2, Clock, Archive, User, ChevronDown, ChevronUp, Plus, Send, MessageSquare } from 'lucide-react';
+import { useState } from 'react';
+import { X, GitFork, CircleCheck as CheckCircle2, Clock, Archive, User, ChevronDown, ChevronUp, Plus, Send, MessageSquare } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
-import type { GroupTask, GroupTaskAssignment, GroupTaskActivity, ChannelProfile } from './types';
+import type { GroupTask, GroupTaskAssignment, ChannelProfile } from './types';
 
 interface Props {
   tasks: GroupTask[];
@@ -333,7 +333,7 @@ function CreateTaskForm({ channelId, currentUserId, members, onCreated, onCancel
   );
 }
 
-export function WorkTopicsPanel({ tasks, members, currentUserId, channelId, allProfiles, onClose, onCompleteTask, onArchiveTask, onUpdateAssignment, onAddActivity, onTaskCreated }: Props) {
+export function WorkTopicsPanel({ tasks, members, currentUserId, channelId, onClose, onCompleteTask, onArchiveTask, onUpdateAssignment, onAddActivity, onTaskCreated }: Props) {
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'done' | 'archived'>('all');
   const [showCreateForm, setShowCreateForm] = useState(false);
 

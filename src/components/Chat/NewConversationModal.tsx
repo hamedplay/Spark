@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Search, ChevronDown, ChevronRight, Building2, Users } from 'lucide-react';
 import type { UserProfile } from './types';
 import { UserAvatar } from './ChatConversationItem';

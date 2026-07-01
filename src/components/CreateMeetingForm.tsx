@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
-import { PlusCircle, Loader2, Mail, Lock, UserPlus, Save, Users, X, Plus, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, BookUser, ChevronDown, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
+import { CirclePlus as PlusCircle, Loader as Loader2, Mail, Lock, UserPlus, Save, Users, X, Plus, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, BookUser, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail } from '../types';
@@ -217,7 +217,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const repPickerRef = useRef<HTMLDivElement>(null);
 
   // Participants (system users)
-  const [systemUsers, setSystemUsers] = useState<{ id: string; full_name: string; email: string }[]>([]);
   const [selectedParticipants, setSelectedParticipants] = useState<{ id: string; name: string }[]>([]);
 
   // Notify users
@@ -279,7 +278,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const [isSchedulingFromCalendar, setIsSchedulingFromCalendar] = useState(false);
   const [prefillMeetingId, setPrefillMeetingId] = useState<string | null>(null);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('');
-  const [userDisplayName, setUserDisplayName] = useState('');
 
   useEffect(() => {
     const getUser = async () => {
@@ -381,16 +379,10 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchSystemUsers = async (currentUserId?: string) => {
+  const fetchSystemUsers = async (_currentUserId?: string) => {
     try {
-      const { data, error } = await supabase.from('profiles').select('user_id, full_name, email').not('is_hidden', 'eq', true).order('full_name');
+      const { error } = await supabase.from('profiles').select('user_id, full_name, email').not('is_hidden', 'eq', true).order('full_name');
       if (error) throw error;
-      const users = (data || []).map((p: any) => ({ id: p.user_id, full_name: p.full_name || p.email, email: p.email }));
-      setSystemUsers(users);
-      if (currentUserId) {
-        const me = users.find(u => u.id === currentUserId);
-        if (me) setUserDisplayName(me.full_name);
-      }
     } catch (error) { console.error('Error fetching users:', error); }
   };
 
@@ -515,7 +507,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   };
 
   // ---- Repeat meeting creation (fixed) ----
-  const createRepeatMeetings = async (originalId: string, baseRecord: any) => {
+  const createRepeatMeetings = async (_originalId: string, baseRecord: any) => {
     const type = repeatType;
     const interval = repeatInterval;
     const endDate = repeatEndDate;
@@ -624,8 +616,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
     c.name.toLowerCase().includes(externalSearch.toLowerCase()) ||
     (c.email ?? '').toLowerCase().includes(externalSearch.toLowerCase())
   ).filter(c => !selectedExternal.includes(c.name));
-
-  const systemUserOptions = systemUsers.map(u => ({ id: u.id, name: u.full_name, sub: u.email }));
 
   const filteredRepContacts = allContacts.filter(c =>
     c.name.toLowerCase().includes(repPickerSearch.toLowerCase()) ||

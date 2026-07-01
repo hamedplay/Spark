@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Phone, Video, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Search, User, X, ArrowRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Phone, Video, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Search, User, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import type { UserProfile } from './types';

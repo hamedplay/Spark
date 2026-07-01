@@ -200,7 +200,7 @@ export const handleSupabaseError = (error: any) => {
 
 // Setup auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+  if (event === 'SIGNED_OUT' || (event as string) === 'USER_DELETED') {
     try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
   } else if (event === 'TOKEN_REFRESHED' && !session) {
     supabase.auth.signOut();

@@ -1,19 +1,6 @@
-import React from 'react';
 import { X } from 'lucide-react';
-import { CalendarEntry } from './types';
+import { CalendarEntry, CalendarFormState } from './types';
 import { PRESET_COLORS } from './utils';
-
-interface CalendarFormState {
-  name: string;
-  type: 'public' | 'shared';
-  description: string;
-  is_active: boolean;
-  enable_reminder: boolean;
-  create_online_link: boolean;
-  show_time_overlap: boolean;
-  free_for_all: boolean;
-  color: string;
-}
 
 interface Props {
   editingCalendar: CalendarEntry | null;

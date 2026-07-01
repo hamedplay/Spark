@@ -34,10 +34,10 @@ export function useOrgUsers(currentUserId: string | null): UseOrgUsersResult {
 
   useEffect(() => {
     if (!currentUserId) return;
-    load(currentUserId);
+    load();
   }, [currentUserId]);
 
-  const load = async (userId: string) => {
+  const load = async () => {
     setLoading(true);
     try {
       // همه پروفایل‌ها به همراه پست اصلی و واحد سازمانی آن پست

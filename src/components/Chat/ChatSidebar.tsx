@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, RefreshCw, CheckSquare, Phone, MessageCircle, Settings2, Bookmark } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Plus, RefreshCw, SquareCheck as CheckSquare, Phone, MessageCircle, Settings2, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { ConversationWithProfile } from './types';
 import { ChatConversationItem } from './ChatConversationItem';

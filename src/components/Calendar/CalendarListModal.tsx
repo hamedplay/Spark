@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Search, Share2, Trash2, CreditCard as Edit2 } from 'lucide-react';
 import { CalendarEntry, MeetingData, ProfileEntry } from './types';
 

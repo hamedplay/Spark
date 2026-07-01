@@ -1,4 +1,3 @@
-import React from 'react';
 import { Meeting } from '../../types';
 import { MeetingCardMain } from './MeetingCardMain';
 

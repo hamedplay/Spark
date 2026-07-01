@@ -1,11 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import moment from 'moment-jalaali';
-import {
-  MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy,
-  AlertCircle, AlertTriangle, Lock, Play, Pause, Eye, Check,
-  Reply, X, Smile, ClipboardList, BellRing, Pin, Download,
-  FileText, CheckCheck, Star, Users, Clock, Loader, AtSign, MessageSquare,
-} from 'lucide-react';
+import { MoveVertical as MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Lock, Play, Pause, Eye, Check, Reply, X, Smile, ClipboardList, BellRing, Pin, Download, FileText, CheckCheck, Star, Users, Clock, Loader, AtSign, MessageSquare } from 'lucide-react';
 import { EmojiPicker } from '../Chat/EmojiPicker';
 import { supabase } from '../../lib/supabase';
 import { insertNotification } from '../../lib/notifications';
@@ -290,7 +285,6 @@ function ChannelMessageItemInner({
   const reactions = msg.reactions ?? [];
   const readByExcludingSelf = (msg.read_by ?? []).filter(id => id !== msg.sender_id);
   const seenCount = readByExcludingSelf.length;
-  const memberCountExcludingSelf = Math.max(0, allMembers.length - 1);
   const anySeenByOther = isOwn && seenCount > 0;
 
   // Memoize mention extraction — only recompute when body or profiles change

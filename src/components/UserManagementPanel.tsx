@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Users, Search, Plus, RefreshCw, MoreVertical, CreditCard as CardIcon, KeyRound, UserX, UserCheck, ShieldCheck, Activity, History, MapPin, X, Save, Eye, EyeOff, AlertCircle, AlertTriangle, Camera, Loader2, CheckCircle2, User, Mail, Phone, Building, Briefcase, Hash, Globe, Calendar, CreditCard, LogIn as LoginIcon, Shield, Upload, Download, AtSign, Pencil, Link2, Trash2 } from 'lucide-react';
+import { Users, Search, Plus, RefreshCw, MoveVertical as MoreVertical, KeyRound, UserX, UserCheck, ShieldCheck, Activity, History, MapPin, X, Save, Eye, EyeOff, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Camera, Loader as Loader2, CircleCheck as CheckCircle2, User, Mail, Phone, Building, Briefcase, Hash, Globe, Calendar, LogIn as LoginIcon, Shield, Upload, Download, AtSign, Pencil, Link2, Trash2, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -158,14 +158,13 @@ function AvatarBlock({ profile, editable, onUpload }: {
 
 // ─── Edit / Add profile form ───────────────────────────────────────────────────
 function UserProfileForm({
-  title, profile, isNew, onSave, onBack, currentUserId,
+  title, profile, isNew, onSave, onBack,
 }: {
   title: string;
   profile: AdminProfile;
   isNew: boolean;
   onSave: (updated: AdminProfile, password?: string) => Promise<void>;
   onBack: () => void;
-  currentUserId: string;
 }) {
   const [form, setForm] = useState<AdminProfile>({ ...profile });
   const [password, setPassword] = useState('');
@@ -173,13 +172,11 @@ function UserProfileForm({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [section, setSection] = useState<'personal' | 'work' | 'social'>('personal');
-  const [orgName, setOrgName] = useState<string | null>(null);
 
   // Load the org name and auto-fill if user has a position assigned
   useEffect(() => {
     supabase.from('org_organizations').select('name').maybeSingle().then(({ data }) => {
       if (data?.name) {
-        setOrgName(data.name);
         if (profile.position) {
           setForm(f => ({ ...f, organization: data.name }));
         }

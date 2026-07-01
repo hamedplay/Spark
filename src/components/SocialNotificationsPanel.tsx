@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Bot, Send, CheckCircle, XCircle, Loader2, Save, RefreshCw,
-  ChevronDown, ChevronUp, Info, Eye, EyeOff, ExternalLink, AlertTriangle,
-  Shield, Database, Link2, Key, Webhook, Trash2, Radio, Clock,
-  AlertCircle, CheckCircle2, Globe, Shuffle, Zap,
-} from 'lucide-react';
+import { Bot, Send, CircleCheck as CheckCircle, Circle as XCircle, Loader as Loader2, Save, RefreshCw, ChevronDown, ChevronUp, Info, Eye, EyeOff, ExternalLink, TriangleAlert as AlertTriangle, Shield, Database, Link2, Key, Webhook, Trash2, Radio, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Globe, Shuffle, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -501,7 +496,7 @@ function ChannelCard({ channel, label, icon, accentClass }: {
       .select('*')
       .eq('channel', channel)
       .maybeSingle();
-    if (data) setConfig({ ...BLANK, channel, ...data } as ChannelConfig);
+    if (data) setConfig({ ...BLANK, ...data } as ChannelConfig);
     setLoading(false);
   }, [channel]);
 

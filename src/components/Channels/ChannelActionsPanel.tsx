@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, SlidersHorizontal, X, Check, ChevronDown, Clock, Star, AlertCircle, AlertTriangle, Eye, AtSign, GitFork, Tag } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, SlidersHorizontal, X, Check, ChevronDown, Star, GitFork } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import type { ChannelProfile, GroupTask } from './types';
@@ -311,7 +311,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
               </div>
             ) : (() => {
               let filtered = localGroupTasks;
-              if (typeFilters.has('group_task_in_progress')) filtered = filtered.filter(t => t.status === 'open' || t.status === 'in_progress');
+              if (typeFilters.has('group_task_in_progress')) filtered = filtered.filter(t => t.status === 'open');
               else if (typeFilters.has('group_task_done')) filtered = filtered.filter(t => t.status === 'done' || t.status === 'archived');
               return (
                 <>

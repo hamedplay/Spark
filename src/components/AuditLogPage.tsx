@@ -1,8 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import {
-  Activity, Search, Download, RefreshCw, X, AlertCircle, AlertTriangle,
-  Info, Globe, FileText, ChevronDown, ChevronUp, Eye,
-} from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { Activity, Search, Download, RefreshCw, X, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Info, Globe, FileText, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -424,7 +421,7 @@ export function AuditLogPage() {
                 { key: 'error' as const, label: 'خطا', color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
                 { key: 'warning' as const, label: 'هشدار', color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
                 { key: 'info' as const, label: 'اطلاع', color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-              ]).map(({ key, label, color, bg }) => (
+              ]).map(({ key, label, color }) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer select-none group">
                   <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors ${filters.eventTypes[key] ? 'bg-blue-500 border-blue-500' : 'border-gray-300 dark:border-gray-600'}`}
                     onClick={() => setEventType(key, !filters.eventTypes[key])}>
@@ -491,7 +488,6 @@ export function AuditLogPage() {
                 </tr>
               )}
               {!loading && logs.map((a, i) => {
-                const { browser } = parseUA(a.user_agent);
                 return (
                   <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                     <td className="px-3 py-2.5 text-gray-400 text-xs font-mono">{i + 1}</td>

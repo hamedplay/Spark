@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  CalendarDays, MessageSquare, CheckSquare, Users, Filter, Search,
-  MoreVertical, CreditCard as Edit2, Trash2, GitBranch, X,
-  CheckCircle, Archive, Share2, Calendar, ArrowRight, Circle,
-  Loader2, RefreshCw, XCircle, AlertTriangle, Hash, Lock, Eye, Hash as ChannelIcon,
-} from 'lucide-react';
+import { CalendarDays, MessageSquare, SquareCheck as CheckSquare, Users, ListFilter as Filter, Search, MoveVertical as MoreVertical, CreditCard as Edit2, Trash2, GitBranch, X, CircleCheck as CheckCircle, Archive, Share2, Calendar, ArrowRight, Circle, Loader as Loader2, RefreshCw, Circle as XCircle, TriangleAlert as AlertTriangle, Hash, Lock, Eye, Hash as ChannelIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -309,8 +304,8 @@ function MeetingFlowModal({ meeting, profiles, onClose }: {
 
 // ─── MeetingEditModal (full edit) ─────────────────────────────────────────────
 
-function MeetingEditModal({ meeting, profiles, onClose, onSaved }: {
-  meeting: MeetingRow; profiles: Profile[]; onClose: () => void; onSaved: () => void;
+function MeetingEditModal({ meeting, onClose, onSaved }: {
+  meeting: MeetingRow; onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
     subject: meeting.subject || '',

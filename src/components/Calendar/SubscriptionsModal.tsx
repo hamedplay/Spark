@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Plus, Search, User, Trash2, ChevronDown } from 'lucide-react';
 import { CalendarEntry, CalendarSubscription, ProfileEntry } from './types';
 

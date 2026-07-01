@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Building2, Send, X, Loader2, Search, User, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Building2, Send, X, Loader as Loader2, Search, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { Meeting } from '../../types';

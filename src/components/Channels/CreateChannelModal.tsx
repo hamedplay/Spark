@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Hash, Users, Lock, Globe } from 'lucide-react';
 import { ChannelType } from './types';
 

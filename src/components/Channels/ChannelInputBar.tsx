@@ -1,10 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  Send, Smile, Paperclip, Mic, AtSign, Code, Loader2, X, Reply,
-  AlertCircle, AlertTriangle, Lock, MessageCircle,
-  Bold, Italic, Quote, List, Link, Image, Undo, Redo,
-  StopCircle, MicOff, Strikethrough,
-} from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Send, Smile, Paperclip, Mic, AtSign, Code, Loader as Loader2, X, Reply, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Lock, MessageCircle, Bold, Italic, Quote, List, Link, Image, Undo, Redo, CircleStop as StopCircle, MicOff, Strikethrough } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { insertNotification } from '../../lib/notifications';
 import { EmojiPicker } from '../Chat/EmojiPicker';
@@ -177,7 +172,7 @@ export function ChannelInputBar({
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const notifyMembers = async (preview: string, isVoice = false) => {
+  const notifyMembers = async (preview: string) => {
     if (!currentUserId) return;
     const senderProfile = allProfiles.find(p => p.user_id === currentUserId);
     const senderName = senderProfile?.full_name || senderProfile?.email || 'کاربر';
@@ -269,7 +264,7 @@ export function ChannelInputBar({
       read_by: [currentUserId],
     });
     if (error) { toast.error('خطا در ارسال صدا: ' + error.message); return; }
-    await notifyMembers('🎤 پیام صوتی', true);
+    await notifyMembers('🎤 پیام صوتی');
     setAudioBlob(null);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null); setRecordingSeconds(0); setRecordingState('idle');

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Settings, BarChart3, Shield, UserCheck, UserX, Calendar, FileText, Database, Activity } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, Settings, ChartBar as BarChart3, Shield, UserCheck, UserX, Calendar, FileText, Database, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 

@@ -1,10 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Plus, Trash2, CreditCard as Edit2, Users, ChevronDown, ChevronRight, X, Check,
-  Building2, User, Crown, Briefcase, UserCheck, Search, Link2, Settings,
-  RefreshCw as RefreshIcon, Wifi, WifiOff, Shield, Key, Database,
-  AlertTriangle, CheckCircle2, ChevronUp
-} from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, CreditCard as Edit2, Users, ChevronDown, ChevronRight, X, Check, Building2, Crown, Briefcase, UserCheck, Search, Link2, Settings, RefreshCw as RefreshIcon, Wifi, WifiOff, Shield, Key, Database, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle2, ChevronUp, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -1932,9 +1927,6 @@ export function OrgStructurePage() {
                   {units.map(unit => {
                     const parent = units.find(u => u.id === unit.parent_id);
                     const unitPositions = positions.filter(p => p.unit_id === unit.id);
-                    const TYPE_LABELS: Record<string, string> = {
-                      company: 'شرکت', division: 'معاونت', department: 'اداره', team: 'تیم', branch: 'شعبه',
-                    };
                     return (
                       <tr key={unit.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                         <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{unit.name}</td>

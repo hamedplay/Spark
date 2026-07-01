@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageSquare, Plus, Trash2, Save, Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, Tag, ChevronDown, Info, CreditCard as Edit2, MoreVertical, Zap, Group as GroupIcon, Shield, ToggleLeft, FileText, AlertCircle, Wifi, WifiOff, Send, FlaskConical, BarChart2, CheckCircle, XCircle, MinusCircle, Clock } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, MoveVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -24,14 +24,6 @@ interface SmsProvider {
 
 interface UserGroup { id: string; name: string; display_name: string | null; }
 
-interface SmsGroupRule {
-  id?: string;
-  group_id: string;
-  sms_category: string;
-  enabled: boolean;
-  provider_id: string | null;
-}
-
 interface SmsTemplate {
   id: string;
   category: string;
@@ -51,21 +43,6 @@ const SMS_CATEGORIES = [
   { key: 'chat',     label: 'چت سازمانی' },
   { key: 'channel',  label: 'کانال‌ها' },
   { key: 'system',   label: 'سیستم' },
-];
-
-const TEMPLATE_CATALOG: { category: string; event_type: string; event_label: string; audience: string; audience_label: string }[] = [
-  { category: 'meeting', event_type: 'invite',       event_label: 'دعوت',           audience: 'participants', audience_label: 'شرکت‌کنندگان' },
-  { category: 'meeting', event_type: 'invite',       event_label: 'دعوت',           audience: 'observers',    audience_label: 'مطلعین' },
-  { category: 'meeting', event_type: 'invite',       event_label: 'دعوت',           audience: 'external',     audience_label: 'افراد خارج سازمان' },
-  { category: 'meeting', event_type: 'change',       event_label: 'تغییر',          audience: 'participants', audience_label: 'شرکت‌کنندگان' },
-  { category: 'meeting', event_type: 'change',       event_label: 'تغییر',          audience: 'observers',    audience_label: 'مطلعین' },
-  { category: 'meeting', event_type: 'cancel',       event_label: 'لغو',            audience: 'participants', audience_label: 'شرکت‌کنندگان' },
-  { category: 'meeting', event_type: 'cancel',       event_label: 'لغو',            audience: 'observers',    audience_label: 'مطلعین' },
-  { category: 'meeting', event_type: 'reminder',     event_label: 'یادآور',         audience: 'participants', audience_label: 'شرکت‌کنندگان' },
-  { category: 'task',    event_type: 'assign',       event_label: 'تخصیص',          audience: 'all',          audience_label: 'همه' },
-  { category: 'task',    event_type: 'reminder',     event_label: 'یادآور',         audience: 'all',          audience_label: 'همه' },
-  { category: 'calendar',event_type: 'event_invite', event_label: 'دعوت رویداد',    audience: 'all',          audience_label: 'همه' },
-  { category: 'chat',    event_type: 'mention',      event_label: 'منشن',           audience: 'all',          audience_label: 'همه' },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {

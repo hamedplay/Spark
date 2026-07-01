@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, User, X, Check, Loader2, AlertCircle, RefreshCw, Phone } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Calendar, Clock, MapPin, User, X, Check, Loader as Loader2, CircleAlert as AlertCircle, RefreshCw, Phone } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -129,7 +129,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
       }
       
       // Create a new meeting for the user
-      const { data: newMeeting, error } = await supabase
+      const { error } = await supabase
         .from('meetings')
         .insert([{
           subject: meetingData.subject,
@@ -243,7 +243,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
                           </p>
                         </div>
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                          priorityColors[pendingMeeting.meeting.priority]
+                          priorityColors[pendingMeeting.meeting.priority as keyof typeof priorityColors]
                         }`}>
                           {pendingMeeting.meeting.priority === 'high' ? 'اولویت بالا' : 
                           pendingMeeting.meeting.priority === 'medium' ? 'اولویت متوسط' : 'اولویت پایین'}

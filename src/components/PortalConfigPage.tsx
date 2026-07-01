@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Users, Shield, Globe, Bell, MessageSquare, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Save, Search, Plus, Trash2, CreditCard as Edit2, Check, X, Eye, EyeOff, AlertCircle, Info, AlertTriangle, Building2, RefreshCw, Download, Wifi, Mail, Phone, Lock, Image, Palette, Monitor, FileText, User, Group, BarChart2, MoreVertical, UserCog, KeyRound, UserX, UserCheck, History, MapPin, LogIn as LoginIcon, ShieldCheck, Menu, Bot } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Save, Search, Plus, Trash2, CreditCard as Edit2, X, Eye, EyeOff, CircleAlert as AlertCircle, RefreshCw, Wifi, Mail, Lock, Image, Palette, Monitor, UserCog, KeyRound, UserX, UserCheck, History, MapPin, LogIn as LoginIcon, ShieldCheck, Menu, Bot, MoveVertical as MoreVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';
@@ -18,7 +18,6 @@ import { AuditLogPage } from './AuditLogPage';
 import { BackupPanel } from './BackupPanel';
 interface ConfigEntry { id: string; section: string; key: string; value: string | null; value_type: string; label: string | null; description: string | null; }
 interface AuditEntry { id: string; user_name: string | null; ip_address: string | null; user_agent: string | null; module: string | null; entity_name: string | null; action: string; details: string | null; severity: string; created_at: string; }
-interface UserGroup { id: string; name: string; display_name: string | null; description: string | null; is_system: boolean; is_public: boolean; permissions: Record<string, boolean>; member_count?: number; }
 interface Profile { user_id: string; full_name: string | null; email: string | null; is_admin: boolean | null; is_active: boolean | null; created_at: string | null; avatar_url?: string | null; department?: string | null; position?: string | null; }
 
 // ─── Sidebar nav ──────────────────────────────────────────────────────────────
@@ -62,17 +61,6 @@ const NAV_ITEMS = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function severityColor(s: string) {
-  if (s === 'critical') return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20';
-  if (s === 'error') return 'text-red-500 dark:text-red-300 bg-red-50 dark:bg-red-900/20';
-  if (s === 'warning') return 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20';
-  return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20';
-}
-function severityIcon(s: string) {
-  if (s === 'critical' || s === 'error') return <AlertCircle className="w-3.5 h-3.5" />;
-  if (s === 'warning') return <AlertTriangle className="w-3.5 h-3.5" />;
-  return <Info className="w-3.5 h-3.5" />;
-}
 
 // ─── ConfigField ──────────────────────────────────────────────────────────────
 function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: string, value: string) => void }) {
@@ -156,15 +144,12 @@ export function PortalConfigPage({ currentUserId }: Props) {
   const [activeSection, setActiveSection] = useState('general');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [configs, setConfigs] = useState<ConfigEntry[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [auditFilter, setAuditFilter] = useState({ severity: 'all', search: '', year: '2026', month: '05' });
-  const [groupForm, setGroupForm] = useState<{ show: boolean; name: string; display_name: string; description: string }>({ show: false, name: '', display_name: '', description: '' });
   const [onlineUsers, setOnlineUsers] = useState<Profile[]>([]);
-  const [systemStats, setSystemStats] = useState({ meetings: 0, tasks: 0, notes: 0, messages: 0, users: 0 });
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+
+  // Audit log state
+  const [auditFilter] = useState<{ severity: string; search: string }>({ severity: 'all', search: '' });
 
   // User management modals
   type UserModal = 'edit' | 'password' | 'delete' | 'access' | 'activity' | 'logins' | 'urls' | 'add' | null;
@@ -223,23 +208,20 @@ export function PortalConfigPage({ currentUserId }: Props) {
     const { data } = await supabase.from('user_groups').select('*').order('name');
     if (!data) return;
     // Count members
-    const withCounts = await Promise.all(data.map(async g => {
-      const { count } = await supabase.from('user_group_members').select('id', { count: 'exact', head: true }).eq('group_id', g.id);
-      return { ...g, permissions: (g.permissions || {}) as Record<string, boolean>, member_count: count ?? 0 };
+    await Promise.all(data.map(async g => {
+      await supabase.from('user_group_members').select('id', { count: 'exact', head: true }).eq('group_id', g.id);
     }));
-    setUserGroups(withCounts);
   }, []);
 
   // Load stats
   const loadStats = useCallback(async () => {
-    const [m, t, n, msg, u] = await Promise.all([
+    await Promise.all([
       supabase.from('meetings').select('id', { count: 'exact', head: true }),
       supabase.from('tasks').select('id', { count: 'exact', head: true }),
       supabase.from('notes').select('id', { count: 'exact', head: true }),
       supabase.from('chat_messages').select('id', { count: 'exact', head: true }),
       supabase.from('profiles').select('id', { count: 'exact', head: true }),
     ]);
-    setSystemStats({ meetings: m.count ?? 0, tasks: t.count ?? 0, notes: n.count ?? 0, messages: msg.count ?? 0, users: u.count ?? 0 });
   }, []);
 
   useEffect(() => { loadConfigs(); loadProfiles(); loadGroups(); loadStats(); }, []);
@@ -297,36 +279,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
     setProfiles(prev => prev.map(p => p.user_id === uid ? { ...p, is_admin: !current } : p));
     toast.success('به‌روزرسانی شد');
     logAudit({ module: 'user_management', action: !current ? 'grant_admin' : 'revoke_admin', entity_name: target?.full_name || target?.email || uid, entity_id: uid, details: `دسترسی ادمین ${!current ? 'داده شد' : 'گرفته شد'}`, severity: 'warning' });
-  };
-
-  const toggleActive = async (uid: string, current: boolean | null) => {
-    const target = profiles.find(p => p.user_id === uid);
-    const newActive = current === false ? true : false;
-    const { error } = await supabase.from('profiles').update({ is_active: newActive }).eq('user_id', uid);
-    if (error) { toast.error('خطا'); return; }
-    setProfiles(prev => prev.map(p => p.user_id === uid ? { ...p, is_active: newActive } : p));
-    toast.success('به‌روزرسانی شد');
-    logAudit({ module: 'user_management', action: newActive ? 'activate_user' : 'deactivate_user', entity_name: target?.full_name || target?.email || uid, entity_id: uid, details: `حساب کاربر ${newActive ? 'فعال' : 'غیرفعال'} شد`, severity: 'warning' });
-  };
-
-  const createGroup = async () => {
-    if (!groupForm.name.trim()) { toast.error('نام گروه الزامی است'); return; }
-    const { error } = await supabase.from('user_groups').insert([{
-      name: groupForm.name.trim(), display_name: groupForm.display_name.trim(),
-      description: groupForm.description.trim(), is_system: false,
-      permissions: {}, created_by: currentUserId,
-    }]);
-    if (error) { toast.error('خطا در ایجاد گروه'); return; }
-    toast.success('گروه ایجاد شد');
-    setGroupForm({ show: false, name: '', display_name: '', description: '' });
-    loadGroups();
-  };
-
-  const deleteGroup = async (id: string, is_system: boolean) => {
-    if (is_system) { toast.error('گروه‌های سیستمی قابل حذف نیستند'); return; }
-    await supabase.from('user_groups').delete().eq('id', id);
-    toast.success('گروه حذف شد');
-    loadGroups();
   };
 
   // ── User management actions ────────────────────────────────────────────────
@@ -388,17 +340,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
       const isOpen = prev.has(key);
       return isOpen ? new Set<string>() : new Set<string>([key]);
     });
-  };
-
-  const exportAuditCSV = () => {
-    const header = 'ردیف,تاریخ,کاربر,IP,ماژول,نوع رویداد,سطح,جزئیات';
-    const rows = auditLogs.map((a, i) =>
-      `${i + 1},"${new Date(a.created_at).toLocaleString('fa-IR')}","${a.user_name || '—'}","${a.ip_address || '—'}","${a.module || '—'}","${a.action}","${a.severity}","${a.details || ''}"`
-    );
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'audit_log.csv'; a.click();
   };
 
   // ── Render content ──────────────────────────────────────────────────────────

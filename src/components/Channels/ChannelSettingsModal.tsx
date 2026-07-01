@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { X, Settings, Users, Trash2, Shield, Globe, Lock, Image, AlertTriangle, UserPlus, UserMinus, Crown, LogOut, Link, Copy, Check, CreditCard as Edit2, Save, BellOff, Bell, ChevronRight } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { X, Settings, Shield, Globe, Lock, Image, TriangleAlert as AlertTriangle, UserPlus, UserMinus, Crown, LogOut, Copy, Check, Save, BellOff, Bell } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { Channel, ChannelMember, ChannelProfile, MemberRole } from './types';
@@ -72,7 +72,6 @@ export function ChannelSettingsModal({
             <GeneralSection
               channel={channel}
               isAdmin={isAdmin}
-              currentUserId={currentUserId}
               onUpdated={onUpdated}
             />
           )}
@@ -108,10 +107,9 @@ export function ChannelSettingsModal({
   );
 }
 
-function GeneralSection({ channel, isAdmin, currentUserId, onUpdated }: {
+function GeneralSection({ channel, isAdmin, onUpdated }: {
   channel: Channel;
   isAdmin: boolean;
-  currentUserId: string | null;
   onUpdated: () => void;
 }) {
   const [name, setName] = useState(channel.name);
@@ -233,7 +231,7 @@ function GeneralSection({ channel, isAdmin, currentUserId, onUpdated }: {
             </div>
           </div>
           <button
-            onClick={() => setIsLocked(v => !v)}
+            onClick={() => setIsLocked((v: boolean) => !v)}
             className={`relative flex-shrink-0 rounded-full transition-colors ${isLocked ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600'}`}
             style={{ width: 40, height: 22 }}
           >
@@ -415,7 +413,6 @@ function DangerSection({ channel, isAdmin, isCreator, currentUserId, members, al
   const [deleting, setDeleting] = useState(false);
   const [transferring, setTransferring] = useState(false);
 
-  const otherAdmins = members.filter(m => m.user_id !== currentUserId && m.role === 'admin');
   const otherMembers = members.filter(m => m.user_id !== currentUserId);
 
   const handleDelete = async () => {

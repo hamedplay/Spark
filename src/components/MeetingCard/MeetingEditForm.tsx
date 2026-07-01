@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, X, Loader as Loader2, Users, ClipboardList, Plus, Pencil, Trash2, Check, UserCheck, Clock } from 'lucide-react';
 import { Meeting } from '../../types';
 import type { AgendaItem } from '../../types';

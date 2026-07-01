@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { ChannelSidebar } from './ChannelSidebar';
@@ -106,7 +106,7 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
     const newType = data.type === 'channel' ? 'channels' : 'groups';
     setActiveTab(newType);
 
-    const created = (all || []).find(c => c.id === channelId);
+    const created = (all || []).find((c: any) => c.id === channelId);
     if (created) {
       setSelectedId(created.id);
       setSelectedChannel(created);

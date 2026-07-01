@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { MessageCircle, Plus, Loader2 } from 'lucide-react';
+import { MessageCircle, Plus, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { ChatSidebar } from './ChatSidebar';

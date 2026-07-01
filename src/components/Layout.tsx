@@ -1,11 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  LayoutDashboard, CheckSquare, FileBarChart2, LogOut, StickyNote, Phone, Menu,
-  ChevronRight, Calendar, BookOpen, MessageCircle, Video, LayoutGrid, Settings,
-  X, Bot, Key, Sun, Moon, User, ChevronDown, Check, Palette, Download,
-  Smartphone, Monitor, Share2, ExternalLink, MessagesSquare, Bell, BellOff,
-  LayoutList, CalendarDays, Clock, Eye, EyeOff, LayoutGrid as LayoutCompact,
-} from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { LayoutDashboard, SquareCheck as CheckSquare, ChartBar as FileBarChart2, LogOut, StickyNote, Phone, Menu, ChevronRight, Calendar, BookOpen, MessageCircle, Video, LayoutGrid, Settings, X, Bot, Key, Sun, Moon, User, ChevronDown, Check, Palette, Download, Smartphone, Monitor, ExternalLink, MessagesSquare, Bell, LayoutList, CalendarDays, Clock, Eye, EyeOff, LayoutGrid as LayoutCompact } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import { NotificationBell } from './NotificationBell';
@@ -19,7 +13,7 @@ interface UserProfile {
   position: string | null;
 }
 
-type PageId = 'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'channels';
+type PageId = 'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'channels' | 'groups';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -40,7 +34,7 @@ const STATUS_OPTIONS = [
   { key: 'offline', label: 'آفلاین',         dot: 'bg-gray-400'  },
 ] as const;
 
-type UserStatus = typeof STATUS_OPTIONS[number]['key'];
+type UserStatus = typeof STATUS_OPTIONS[number]['key'] | 'dnd';
 
 // ── Portal button ──────────────────────────────────────────────────────────────
 function PortalButton({ activePage, onPageChange }: { activePage: PageId; onPageChange: (p: PageId) => void }) {
@@ -261,7 +255,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                   onClick={() => setAccent(c.key as AccentKey)}
                   title={c.label}
                   className={`group flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all ${accent === c.key ? 'bg-gray-100 dark:bg-gray-700 ring-2 ring-offset-1 dark:ring-offset-gray-800' : 'hover:bg-gray-50 dark:hover:bg-gray-700/60'}`}
-                  style={accent === c.key ? { ringColor: c.hex } : {}}
+                  style={accent === c.key ? ({ '--ring-color': c.hex } as React.CSSProperties) : {}}
                 >
                   <span className="w-7 h-7 rounded-full shadow-sm flex items-center justify-center transition-transform group-hover:scale-110" style={{ backgroundColor: c.hex }}>
                     {accent === c.key && <Check className="w-3 h-3 text-white" />}

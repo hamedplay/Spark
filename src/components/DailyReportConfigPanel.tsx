@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { CalendarDays, Clock, MessageSquare, Bell, Users, Save, Loader2, Plus, X, Check, Send, FileText, ChevronDown, ChevronUp, Info, Radio } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { CalendarDays, Clock, MessageSquare, Bell, Users, Save, Loader as Loader2, Plus, X, Check, Send, ChevronDown, ChevronUp, Info, Radio } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 

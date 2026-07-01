@@ -1,11 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  User, Mail, Phone, Building, MapPin, Camera, Loader2, Save,
-  Briefcase, Hash, Users, CreditCard,
-  ChevronDown, ChevronUp, CheckCircle2, Crown, Building2, Link2, MessageCircle,
-  Monitor, Download, ExternalLink, Apple, Globe, AtSign,
-  Unlink, RefreshCw,
-} from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { User, Mail, Phone, Building, MapPin, Camera, Loader as Loader2, Save, Briefcase, Hash, Users, CreditCard, ChevronDown, ChevronUp, CircleCheck as CheckCircle2, Crown, Building2, Link2, MessageCircle, AtSign, Unlink, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -151,154 +145,6 @@ function Field({ label, icon: Icon, children }: { label: string; icon: React.Ele
 
 const inp = 'w-full pr-9 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm';
 const inpDisabled = inp + ' bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed';
-
-function PwaInstallSection() {
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
-  const appUrl = window.location.origin;
-
-  useEffect(() => {
-    // Check if already installed (standalone mode)
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
-      setIsInstalled(true);
-    }
-    // Pick up deferred install prompt
-    if ((window as any).deferredInstallPrompt) {
-      setInstallPrompt((window as any).deferredInstallPrompt);
-    }
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler as EventListener);
-    window.addEventListener('appinstalled', () => setIsInstalled(true));
-    return () => window.removeEventListener('beforeinstallprompt', handler as EventListener);
-  }, []);
-
-  const handleInstall = async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setInstallPrompt(null);
-      (window as any).deferredInstallPrompt = null;
-    }
-  };
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mb-6">
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-        <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-          <Download className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-        </div>
-        <div>
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">دریافت نسخه وب (PWA)</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">نصب اسپارک روی دستگاه خود برای دسترسی سریع‌تر</p>
-        </div>
-        {isInstalled && (
-          <span className="mr-auto flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2.5 py-1 rounded-full">
-            <CheckCircle2 className="w-3.5 h-3.5" /> نصب شده
-          </span>
-        )}
-      </div>
-
-      <div className="p-6 space-y-4">
-
-        {/* Android / Desktop install button */}
-        {installPrompt && !isInstalled && (
-          <div className="flex items-center gap-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
-              <Download className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">نصب مستقیم</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">اندروید / دسکتاپ Chrome / Edge</p>
-            </div>
-            <button
-              onClick={handleInstall}
-              className="flex-shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
-            >
-              نصب
-            </button>
-          </div>
-        )}
-
-        {/* iOS instructions */}
-        <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-          <div className="flex items-center gap-2 mb-3">
-            <Apple className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-            <p className="text-sm font-semibold text-gray-800 dark:text-white">iPhone / iPad (iOS Safari)</p>
-          </div>
-          <ol className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400 mr-2">
-            <li className="flex items-start gap-2">
-              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center text-[10px] font-bold mt-0.5">۱</span>
-              <span>این صفحه را در مرورگر Safari باز کنید</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center text-[10px] font-bold mt-0.5">۲</span>
-              <span>دکمه اشتراک‌گذاری (مربع با فلش رو به بالا) را بزنید</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center text-[10px] font-bold mt-0.5">۳</span>
-              <span>گزینه «Add to Home Screen» را انتخاب کنید</span>
-            </li>
-          </ol>
-        </div>
-
-        {/* Android manual instructions */}
-        <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-          <div className="flex items-center gap-2 mb-3">
-            <Globe className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-            <p className="text-sm font-semibold text-gray-800 dark:text-white">اندروید (Chrome)</p>
-          </div>
-          <ol className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400 mr-2">
-            <li className="flex items-start gap-2">
-              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center text-[10px] font-bold mt-0.5">۱</span>
-              <span>در Chrome، منو (سه‌نقطه بالای صفحه) را باز کنید</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center text-[10px] font-bold mt-0.5">۲</span>
-              <span>«Add to Home screen» یا «Install App» را بزنید</span>
-            </li>
-          </ol>
-        </div>
-
-        {/* Desktop instructions */}
-        <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-          <div className="flex items-center gap-2 mb-3">
-            <Monitor className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-            <p className="text-sm font-semibold text-gray-800 dark:text-white">دسکتاپ (Chrome / Edge)</p>
-          </div>
-          <ol className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400 mr-2">
-            <li className="flex items-start gap-2">
-              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center text-[10px] font-bold mt-0.5">۱</span>
-              <span>در نوار آدرس مرورگر، آیکن نصب (⊕) را بزنید — یا از آیکن دانلود در نوار بالای سامانه</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center text-[10px] font-bold mt-0.5">۲</span>
-              <span>«Install» را تأیید کنید</span>
-            </li>
-          </ol>
-        </div>
-
-        {/* Web link */}
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-          <ExternalLink className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-          <span className="text-xs text-gray-500 dark:text-gray-400">لینک وب سامانه:</span>
-          <a
-            href={appUrl}
-            className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline truncate"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {appUrl}
-          </a>
-        </div>
-
-      </div>
-    </div>
-  );
-}
 
 // ─── Bale Deep-Link Connect Section ──────────────────────────────────────────
 function BaleConnectSection() {
@@ -472,7 +318,7 @@ export function ProfilePage() {
 
   useEffect(() => { fetchProfile(); }, []);
 
-  const fetchOrgInfo = async (positionId: string | null, unitId: string | null) => {
+  const fetchOrgInfo = async (positionId: string | null) => {
     const [{ data: posData }, { data: allPos }, { data: allUnits }, { data: orgData }] = await Promise.all([
       positionId
         ? supabase.from('org_positions').select('id,title,level,color,icon,unit_id,parent_position_id').eq('id', positionId).maybeSingle()
@@ -511,14 +357,14 @@ export function ProfilePage() {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        setProfile({ ...empty, ...data });
-        fetchOrgInfo(data.primary_position_id || null, data.primary_unit_id || null);
+        setProfile({ ...empty, ...data } as unknown as Profile);
+        fetchOrgInfo(data.primary_position_id || null);
       } else {
-        const newProfile = { ...empty, user_id: user.id, email: user.email || '' };
+        const newProfile = { ...empty, user_id: user.id, email: user.email ?? '' };
         const { data: created, error: ce } = await supabase
           .from('profiles').insert([newProfile]).select().single();
         if (ce) throw ce;
-        setProfile(created);
+        setProfile(created as unknown as Profile);
       }
     } catch (error: any) {
       toast.error(error.message || 'خطا در دریافت پروفایل');
@@ -535,8 +381,8 @@ export function ProfilePage() {
       // date fields: send null instead of empty string to avoid Postgres date parse error
       const payload: any = {
         ...profile,
-        birth_date: profile.birth_date || null,
-        hire_date: profile.hire_date || null,
+        birth_date: profile.birth_date ?? null,
+        hire_date: profile.hire_date ?? null,
         updated_at: new Date().toISOString(),
       };
       const { error } = await supabase.from('profiles').update(payload).eq('id', profile.id);

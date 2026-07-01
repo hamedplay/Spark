@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { insertNotification, getSmsTemplates, fillPlaceholders } from '../lib/notifications';
-import { PlusCircle, Loader2, UserPlus, Search, Bell, Repeat, MessageSquare, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, X, Plus, Users, Video, BookUser, Save, CreditCard as Edit2, Building2, ChevronDown, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
+import { CirclePlus as PlusCircle, Loader as Loader2, UserPlus, Bell, Repeat, MessageSquare, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, X, Plus, Users, Video, BookUser, Save, CreditCard as Edit2, Building2, ChevronDown, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail, AgendaItem } from '../types';
@@ -355,7 +355,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [editingAgendaIdx, setEditingAgendaIdx] = useState<number | null>(null);
 
   // Org users for grouped pickers
-  const { groups: orgGroups, allUsers: orgAllUsers } = useOrgUsers(userId);
+  const { groups: orgGroups, allUsers: _orgAllUsers } = useOrgUsers(userId);
 
   const systemUserGroups = orgGroups.map(g => ({
     label: g.unit_name,
@@ -530,7 +530,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         conference_room_id: conferenceRoomId,
       };
 
-      const allParticipantIds = [...selectedParticipants.map(p=>p.id), ...selectedNotifyUsers.map(u=>u.id)];
       const meetingDateStr = scheduleDate ? `${scheduleDate.jy}/${String(scheduleDate.jm).padStart(2, '0')}/${String(scheduleDate.jd).padStart(2, '0')}` : '';
       const meetingTimeStr = startTime && endTime ? `${startTime}-${endTime}` : startTime || '';
       const smsPlaceholders: Record<string, string> = {

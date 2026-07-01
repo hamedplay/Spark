@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BookOpen, LayoutDashboard, Calendar, CheckSquare, StickyNote, Phone, FileBarChart2, MessageCircle, Video, Shield, CircleUser as UserCircle, Hash, Bot, Search, ChevronDown, ChevronRight, ChevronLeft, Share2, Archive, Send, UserPlus, CalendarPlus, CreditCard as Edit2, Trash2, Paperclip, Smile, Mic, Image as ImageIcon, Star, Bell, BellOff, Tag, Clock, MapPin, User, Users, Lock, Settings, Plus, Minus, RefreshCw, Download, Upload, ExternalLink, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle, Info, Filter, SlidersHorizontal, MoreVertical, LogOut, Key, Sun, Moon, Volume2, VolumeX, PhoneCall, Video as VideoIcon, Zap, Brain, Sparkles, Layers, Globe, Building2, BarChart2, PieChart, TrendingUp, Table, CalendarDays, ArrowRight, ArrowLeft, Home, Menu, X, List, MessageSquare, Forward, Reply, Pin, Bookmark, Activity, Cpu, Database, Wifi, AlertTriangle, FileText, FolderOpen, Link, Copy, CheckSquare2, LayoutGrid, Newspaper, Palette, Smartphone } from 'lucide-react';
+import { useState } from 'react';
+import { BookOpen, LayoutDashboard, Calendar, SquareCheck as CheckSquare, StickyNote, Phone, ChartBar as FileBarChart2, MessageCircle, Video, CircleUser as UserCircle, Hash, Bot, Search, ChevronRight, ChevronLeft, Share2, Archive, Send, UserPlus, CalendarPlus, CreditCard as Edit2, Trash2, Paperclip, Smile, Mic, Image as ImageIcon, Star, Bell, BellOff, Tag, Clock, Users, Lock, Settings, Plus, RefreshCw, Download, Upload, ExternalLink, Eye, CircleCheck as CheckCircle2, Circle as XCircle, CircleAlert as AlertCircle, ListFilter as Filter, SlidersHorizontal, LogOut, Sun, Moon, Volume2, VolumeX, PhoneCall, Zap, Brain, Sparkles, Layers, Globe, Building2, ChartBar as BarChart2, ChartPie as PieChart, TrendingUp, Table, CalendarDays, Hop as Home, X, List, Forward, Reply, Pin, Activity, Newspaper, Palette, LayoutGrid, User } from 'lucide-react';
 
 interface TutorialPageProps {
   onAskSpark?: (command: string) => void;
@@ -41,7 +41,7 @@ const SECTIONS: GuideSection[] = [
       { icon: CalendarPlus, name: 'برنامه‌ریزی در تقویم', desc: 'جلسه تایید‌شده را به تقویم داخلی اضافه کنید', color: 'text-teal-600' },
       { icon: Archive, name: 'بایگانی', desc: 'جلسه‌های تکمیل‌شده را ببندید و بایگانی کنید', color: 'text-slate-600' },
       { icon: ExternalLink, name: 'افزودن به گوگل', desc: 'جلسه تایید‌شده را به گوگل کلندر منتقل کنید', color: 'text-red-600' },
-      { icon: CheckSquare2, name: 'اقدامات جلسه', desc: 'وظایف پیگیری جلسه را مشاهده یا اضافه کنید', color: 'text-emerald-600' },
+      { icon: CheckSquare, name: 'اقدامات جلسه', desc: 'وظایف پیگیری جلسه را مشاهده یا اضافه کنید', color: 'text-emerald-600' },
       { icon: Bell, name: 'اعلان', desc: 'اعلان پیامک یا درون‌برنامه‌ای برای شرکت‌کنندگان', color: 'text-orange-600' },
       { icon: Filter, name: 'فیلتر', desc: 'فیلتر جلسات بر اساس وضعیت، اولویت یا تاریخ', color: 'text-purple-600' },
     ],
@@ -161,7 +161,7 @@ const SECTIONS: GuideSection[] = [
       { icon: Bell, name: 'یادآور', desc: 'تنظیم یادآور برای پیام مهم', color: 'text-orange-600' },
       { icon: AlertCircle, name: 'اورژانسی', desc: 'علامت‌گذاری پیام به عنوان فوری یا مهم', color: 'text-red-600' },
       { icon: PhoneCall, name: 'تماس صوتی', desc: 'شروع تماس صوتی مستقیم', color: 'text-green-600' },
-      { icon: VideoIcon, name: 'تماس تصویری', desc: 'شروع ویدیو کال با کاربر', color: 'text-blue-600' },
+      { icon: Video, name: 'تماس تصویری', desc: 'شروع ویدیو کال با کاربر', color: 'text-blue-600' },
       { icon: Trash2, name: 'حذف پیام', desc: 'حذف پیام (فقط برای خودتان یا برای همه)', color: 'text-red-500' },
     ],
     steps: [
@@ -209,7 +209,7 @@ const SECTIONS: GuideSection[] = [
       { icon: Users, name: 'اعضا', desc: 'مدیریت اعضای کانال — دعوت یا حذف', color: 'text-blue-600' },
       { icon: Settings, name: 'تنظیمات', desc: 'تغییر نام، آیکن و رنگ کانال', color: 'text-slate-600' },
       { icon: Pin, name: 'پیام پین‌شده', desc: 'پیام‌های مهم که در بالای کانال نمایش داده می‌شوند', color: 'text-amber-600' },
-      { icon: CheckSquare2, name: 'کارهای تیمی', desc: 'مدیریت وظایف گروهی در کانال', color: 'text-emerald-600' },
+      { icon: CheckSquare, name: 'کارهای تیمی', desc: 'مدیریت وظایف گروهی در کانال', color: 'text-emerald-600' },
       { icon: Star, name: 'ستاره', desc: 'کانال‌های مورد علاقه را ستاره‌دار کنید', color: 'text-yellow-600' },
       { icon: BellOff, name: 'بی‌صدا', desc: 'غیرفعال کردن اعلان‌های کانال', color: 'text-gray-600' },
       { icon: Newspaper, name: 'موضوعات کاری', desc: 'پنل اخبار و موضوعات مرتبط با کانال', color: 'text-sky-600' },
@@ -416,7 +416,7 @@ const SECTIONS: GuideSection[] = [
     overview: 'سیستم ویدیو کنفرانس داخلی — ایجاد اتاق جلسه، دعوت شرکت‌کنندگان و کنترل دوربین/میکروفون.',
     icons: [
       { icon: Plus, name: 'اتاق جدید', desc: 'ایجاد اتاق ویدیو کنفرانس جدید', color: 'text-blue-600' },
-      { icon: VideoIcon, name: 'ورود به اتاق', desc: 'پیوستن به اتاق ویدیو کنفرانس', color: 'text-green-600' },
+      { icon: Video, name: 'ورود به اتاق', desc: 'پیوستن به اتاق ویدیو کنفرانس', color: 'text-green-600' },
       { icon: Mic, name: 'میکروفون', desc: 'روشن/خاموش کردن میکروفون', color: 'text-red-600' },
       { icon: ImageIcon, name: 'دوربین', desc: 'روشن/خاموش کردن دوربین', color: 'text-blue-600' },
       { icon: UserPlus, name: 'دعوت', desc: 'ارسال دعوت‌نامه به سایر کاربران', color: 'text-teal-600' },
@@ -562,7 +562,6 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const activeSection = SECTIONS.find(s => s.id === activeId) || SECTIONS[0];
-  const c = colorClasses[activeSection.color] || colorClasses.blue;
 
   const filtered = searchQuery.trim()
     ? SECTIONS.filter(s =>

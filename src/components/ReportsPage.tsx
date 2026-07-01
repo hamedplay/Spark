@@ -1,10 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-  BarChart3, TrendingUp, Download, Calendar, Clock,
-  Users, CheckCircle2, AlertTriangle, RefreshCw, FileText,
-  Loader2, ArrowUpRight, ArrowDownRight, Target, Activity,
-  MapPin, UserCheck, Timer, PieChart
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ChartBar as BarChart3, TrendingUp, Download, Calendar, Clock, Users, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, RefreshCw, Loader as Loader2, ArrowUpRight, ArrowDownRight, Target, Activity, MapPin, UserCheck, Timer, ChartPie as PieChart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
@@ -222,11 +217,11 @@ export function ReportsPage() {
       const rows = (data || []).map(mtg => {
         const row: Record<string, string> = {};
         selectedFields.forEach(f => {
-          if (f === 'request_date') row['تاریخ جلسه'] = moment(mtg[f]).format('jYYYY/jMM/jDD HH:mm');
-          else if (f === 'priority') row['اولویت'] = mtg[f] === 'high' ? 'بالا' : mtg[f] === 'medium' ? 'متوسط' : 'پایین';
-          else if (f === 'status') row['وضعیت'] = mtg[f] === 'open' ? 'باز' : 'بسته';
-          else if (f === 'status_type') row['نوع وضعیت'] = mtg[f] === 'requested' ? 'درخواست شده' : 'تایید شده';
-          else row[REPORT_FIELDS.find(r => r.key === f)?.label || f] = mtg[f] ?? '';
+          if (f === 'request_date') row['تاریخ جلسه'] = moment((mtg as Record<string, unknown>)[f]).format('jYYYY/jMM/jDD HH:mm');
+          else if (f === 'priority') row['اولویت'] = (mtg as Record<string, unknown>)[f] === 'high' ? 'بالا' : (mtg as Record<string, unknown>)[f] === 'medium' ? 'متوسط' : 'پایین';
+          else if (f === 'status') row['وضعیت'] = (mtg as Record<string, unknown>)[f] === 'open' ? 'باز' : 'بسته';
+          else if (f === 'status_type') row['نوع وضعیت'] = (mtg as Record<string, unknown>)[f] === 'requested' ? 'درخواست شده' : 'تایید شده';
+          else row[REPORT_FIELDS.find(r => r.key === f)?.label || f] = (mtg as Record<string, unknown>)[f] ?? '';
         });
         return row;
       });

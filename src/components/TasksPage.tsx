@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Plus, Search, Loader2, CreditCard as Edit2, Save, X, Archive,
-  GitFork, User, ChevronDown, Calendar, ArrowLeft, CheckCircle,
-  MessageSquare, ClipboardList, ChevronLeft, ChevronRight, Building2,
-} from 'lucide-react';
+import { Plus, Search, Loader as Loader2, CreditCard as Edit2, Save, X, Archive, GitFork, User, ChevronDown, Calendar, ArrowLeft, CircleCheck as CheckCircle, MessageSquare, ClipboardList, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import { Task, TaskWorkflowStep } from '../types';
@@ -62,7 +58,7 @@ async function sendTaskNotification(
 }
 
 // Collect unique recipient IDs: creator + current assignee, minus actor
-function getTaskRecipients(task: Task, actorId: string): string[] {
+function getTaskRecipients(task: Task): string[] {
   const ids = new Set<string>();
   if (task.created_by_id) ids.add(task.created_by_id);
   if (task.current_assignee_id) ids.add(task.current_assignee_id);
@@ -335,7 +331,7 @@ function AddNoteModal({ task, userId, actorName, actorAvatarUrl, onClose, onSave
         sendTaskNotification(rid, userId,
           `اقدام جدید روی: ${task.title}`,
           `${actorName} اقدام ثبت کرد: ${note.trim().slice(0, 100)}${note.length > 100 ? '…' : ''}`,
-          actorName, actorAvatarUrl,
+          actorName, actorAvatarUrl, task.title
         )
       ));
 
@@ -549,7 +545,6 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('tasks_create');
   const canEdit = hasPermission('tasks_edit');
-  const canDelete = hasPermission('tasks_delete');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -736,7 +731,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
             sendTaskNotification(rid, userId,
               `تغییر وضعیت اقدام: ${fullTask.title}`,
               `${actorName}: وضعیت اقدام «${fullTask.title}» ${statusLabel}`,
-              actorName, actorProfile?.avatar_url || undefined,
+              actorName, actorProfile?.avatar_url || undefined, fullTask.title
             )
           ));
         }

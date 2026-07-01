@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Crown, Shield, UserPlus, Trash2, User, Building2, ChevronDown, ChevronRight } from 'lucide-react';
 import { ChannelMember, ChannelProfile, MemberRole } from './types';
 import { useOrgUsers } from '../../lib/useOrgUsers';

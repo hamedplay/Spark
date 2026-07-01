@@ -1,13 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import moment from 'moment-jalaali';
-import { Star, MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, AlertCircle, AlertTriangle, Lock, Play, Pause, Eye, Tag, Send, Check, CheckCheck, Clock, Loader, Reply, X, Smile, ClipboardList, BellRing, ChevronDown, ChevronRight, Building2, Users as UsersIcon, Phone, Video, MessageSquare, Forward } from 'lucide-react';
+import { Star, MoveVertical as MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, Play, Pause, Tag, Send, Check, CheckCheck, Loader, Reply, X, Smile, ClipboardList, BellRing, MessageSquare, Forward, Eye } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
 import type { MessageWithMeta, ChatTag, MessageStatus, UserProfile } from './types';
 import { UserAvatar } from './ChatConversationItem';
 import { ForwardModal } from './ForwardModal';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
-import { useOrgUsers, OrgUserProfile } from '../../lib/useOrgUsers';
 import { loadChatTheme } from './ChatSettingsPage';
 import type { ChatThemeSettings } from './ChatSettingsPage';
 

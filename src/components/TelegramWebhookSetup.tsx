@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Bot, Check, RefreshCw, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bot, Check, RefreshCw, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface WebhookSetupProps {

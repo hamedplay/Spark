@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, CreditCard as Edit2, Save, X, Mic, Share2, Archive, Download, FileText, Image, Video, File, Trash2, Send, User, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Search, CreditCard as Edit2, Save, X, Mic, Share2, Archive, Download, Image as ImageIcon, Video, File, FileText, Trash2, Send, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../context/PermissionsContext';
@@ -20,6 +20,7 @@ interface Note {
   id: string;
   title: string;
   content: string;
+  drawing_data?: string | null;
   note_type: 'text' | 'voice';
   created_at: string;
   user_id: string;
@@ -42,13 +43,11 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   const [searchTerm, setSearchTerm] = useState('');
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [voiceTranscript, setVoiceTranscript] = useState('');
-  const [formVoiceTranscript, setFormVoiceTranscript] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('active');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [hasRecordingPermission, setHasRecordingPermission] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(false);
   const [shareNote, setShareNote] = useState<Note | null>(null);
   const [shareImageData, setShareImageData] = useState<string | null>(null);
   const [shareMenuNoteId, setShareMenuNoteId] = useState<string | null>(null);
@@ -86,7 +85,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   const getFileIcon = (fileType: string) => {
     switch (fileType) {
       case 'image':
-        return <Image className="w-5 h-5" />;
+        return <ImageIcon className="w-5 h-5" />;
       case 'pdf':
         return <FileText className="w-5 h-5" />;
       case 'video':
@@ -147,7 +146,6 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
 
   const handleShareImage = async (note: Note) => {
     setShareMenuNoteId(null);
-    setLoading(true);
     setShareNote(note);
     setShareImageData(null);
 
@@ -167,7 +165,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       // Wait for any images inside the card to finish loading
       const imgs = brandedCardRef.current.querySelectorAll('img');
       await Promise.all(Array.from(imgs).map(img =>
-        img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+        img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); })
       ));
 
       // Retry toPng up to 3 times — it can fail on first attempt on slow/busy devices
@@ -192,6 +190,13 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       if (canShareFiles) {
         const blob = await (await fetch(imageData)).blob();
         const file = new File([blob], 'note.png', { type: 'image/png' });
+        // Preload image using promise to ensure it's ready before sharing
+        const img = new window.Image();
+        img.src = URL.createObjectURL(blob);
+        await (img.complete ? Promise.resolve() : new Promise<void>(resolve => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        }));
         await navigator.share({ title: note.title, files: [file] });
         toast.success('یادداشت با موفقیت به اشتراک گذاشته شد');
         setShareNote(null);
@@ -202,8 +207,6 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       if (err?.name !== 'AbortError') toast.error('خطا در اشتراک‌گذاری تصویر');
       setShareNote(null);
       setShareImageData(null);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -246,7 +249,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
         setIsFormRecording(true);
         formLastResultRef.current = '';
         formFinalTranscriptRef.current = '';
-        setFormVoiceTranscript('');
+        setVoiceTranscript('');
       } else {
         setIsRecording(true);
         lastResultRef.current = '';
@@ -275,7 +278,6 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       if (isForm) {
         formFinalTranscriptRef.current = finalTranscript;
         const fullTranscript = (finalTranscript + ' ' + interimTranscript).trim();
-        setFormVoiceTranscript(fullTranscript);
         setNewNote(prev => ({ ...prev, content: fullTranscript }));
       } else {
         finalTranscriptRef.current = finalTranscript;
@@ -344,8 +346,6 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       setNotes(data || []);
     } catch (error: any) {
       toast.error('خطا در دریافت یادداشت‌ها');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -502,7 +502,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     }
   };
 
-  const handleSendToUser = async (note: Note, toUserId: string, toName: string) => {
+  const handleSendToUser = async (note: Note, _toUserId: string, toName: string) => {
     // Share note content by creating a notification or chat message
     // For now: copy note content to clipboard and show a message
     try {
@@ -573,7 +573,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                  <Image className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <ImageIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <h3 className="font-bold text-gray-900 dark:text-white">اشتراک‌گذاری تصویر</h3>
               </div>
@@ -773,7 +773,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
                               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
                             >
                               <div className="w-7 h-7 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                                <Image className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                <ImageIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                               </div>
                               <span className="text-sm text-gray-700 dark:text-gray-200">اشتراک تصویر</span>
                             </button>

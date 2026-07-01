@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, AlignJustify, ChevronDown, CalendarDays } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronLeft, ChevronRight, Plus, TextAlignJustify as AlignJustify, ChevronDown, CalendarDays } from 'lucide-react';
 import { CalendarEntry, MeetingData } from './types';
 import { JALAALI_MONTHS, JALAALI_WEEKDAYS_SHORT } from './utils';
 
@@ -52,14 +52,13 @@ export function CalendarSidebar({
   isToday, isSelected, getMeetingsForDay,
   calendars, subscribedCalendars, enabledCalendarIds, onToggleCalendar,
   occasionsEnabled, onToggleOccasions,
-  myGroupOpen, sharedGroupOpen, publicGroupOpen,
-  onMyGroupToggle, onSharedGroupToggle, onPublicGroupToggle,
+  sharedGroupOpen, publicGroupOpen,
+  onSharedGroupToggle, onPublicGroupToggle,
   showOnlyMine, onShowOnlyMineChange,
-  onNewCalendar, onOpenCalendarList, onShareCalendar, onEditCalendar, onDeleteCalendar,
+  onNewCalendar, onOpenCalendarList,
 }: Props) {
   const [miniCalOpen, setMiniCalOpen] = useState(true);
   const [calendarsOpen, setCalendarsOpen] = useState(true);
-  const myCalendars = calendars.filter(c => c.type === 'private' && !c.is_occasions);
   const sharedOwned = calendars.filter(c => c.type === 'shared');
   const publicOwned = calendars.filter(c => c.type === 'public');
 

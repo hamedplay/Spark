@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Video, Plus, LogIn, Copy, Check, Loader2, Mic, MicOff,
-  VideoOff, Users, Clock, Crown, Link2, UserPlus, Send,
-  Search, X, ChevronRight, RefreshCw, Globe, Calendar, Lock, Unlock, Shield,
-  ShieldOff,
-} from 'lucide-react';
+import { Video, Plus, LogIn, Copy, Check, Loader as Loader2, Mic, MicOff, VideoOff, Users, Clock, Crown, Link2, UserPlus, Send, Search, X, ChevronRight, RefreshCw, Globe, Calendar, Lock, Clock as Unlock, Shield, ShieldOff } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
@@ -473,7 +468,7 @@ export function VideoConferencePage() {
         countMap[row.room_id] = (countMap[row.room_id] || 0) + 1;
       });
 
-      setRooms(active.map(r => ({ ...r, participant_count: countMap[r.id] ?? 0 })));
+      setRooms((active || []).map(r => ({ ...r, participant_count: countMap[r.id] ?? 0 })));
     } catch (e: any) {
       console.error('fetchRooms error:', e);
       toast.error('خطا در بارگذاری اتاق‌ها: ' + (e.message || ''));

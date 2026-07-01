@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { BarChart2, Loader2, Trash2, X, Check, Download, ChevronDown, ChevronUp, Users, Lock } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ChartBar as BarChart2, Loader as Loader2, Trash2, X, Check, Download, ChevronDown, ChevronUp, Users, Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { ConferencePoll } from './types';
@@ -23,9 +23,9 @@ interface VoterInfo {
 
 // ─── Progress bar for a single option ────────────────────────────────────────
 function OptionBar({
-  label, count, total, pct, isMyVote, canVote, isVoting, onVote,
+  label, count, pct, isMyVote, canVote, isVoting, onVote,
 }: {
-  label: string; count: number; total: number; pct: number;
+  label: string; count: number; pct: number;
   isMyVote: boolean; canVote: boolean; isVoting: boolean;
   onVote: () => void;
 }) {
@@ -102,7 +102,7 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
       // Non-hosts: fetch only aggregate counts (no user_id) — voter identity is host-only
       const { data: allVotes, error: vErr } = await supabase
         .from('conference_poll_votes')
-        .select(isHost ? 'poll_id, option_index, user_id' : 'poll_id, option_index')
+        .select('poll_id, option_index, user_id')
         .in('poll_id', ids);
       if (vErr) throw vErr;
 

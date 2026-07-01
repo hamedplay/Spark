@@ -9,12 +9,12 @@ import { CalendarMeetingForm } from './CalendarMeetingForm';
 import { MeetingInboxButton } from './MeetingInboxButton';
 import { useUserPreferences } from '../context/UserPreferencesContext';
 
-import { MeetingData, CalendarEntry, CalendarSubscription, ProfileEntry, PendingSchedule } from './Calendar/types';
+import { MeetingData, CalendarEntry, CalendarSubscription, ProfileEntry, PendingSchedule, CalendarFormState } from './Calendar/types';
 import {
-  JALAALI_MONTHS, JALAALI_WEEKDAYS, JALAALI_WEEKDAYS_SHORT,
+  JALAALI_MONTHS,
   PRIORITY_COLORS, SLOT_HEIGHT, HOURS_START, HOURS_END, DEFAULT_CALENDAR_COLOR, VIEW_OPTIONS,
   toJalaali, jalaaliToDate, getJalaaliMonthDays, getJalaaliFirstDayOfWeek,
-  jsDayToWeekday, jalaaliToYYYYMMDD, parseRequestDateToDateStr,
+  jalaaliToYYYYMMDD, parseRequestDateToDateStr,
   timeToMinutes, minutesToTime, minutesToSlotIndex,
 } from './Calendar/utils';
 import { CalendarSidebar } from './Calendar/CalendarSidebar';
@@ -24,18 +24,6 @@ import { SubscriptionsModal } from './Calendar/SubscriptionsModal';
 import { CalendarListModal } from './Calendar/CalendarListModal';
 
 type ViewMode = 'month' | 'week' | 'day' | 'list-week' | 'list-month';
-
-interface CalendarFormState {
-  name: string;
-  type: 'private' | 'public' | 'shared';
-  description: string;
-  is_active: boolean;
-  enable_reminder: boolean;
-  create_online_link: boolean;
-  show_time_overlap: boolean;
-  free_for_all: boolean;
-  color: string;
-}
 
 interface CalendarPageProps {
   pendingSchedule?: PendingSchedule | null;
@@ -103,7 +91,6 @@ export function CalendarPage({
   const [publicGroupOpen, setPublicGroupOpen] = useState(true);
 
   const [detailMeeting, setDetailMeeting] = useState<MeetingData | null>(null);
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // New-meeting drag
   const [isDragging, setIsDragging] = useState(false);
@@ -464,18 +451,6 @@ export function CalendarPage({
         placeholders: placeholders || { meeting_subject: message },
         senderId: currentUserId || null, actionUrl: type,
       });
-    } catch {}
-  }, [currentUserId]);
-
-  const notifyUsers = useCallback(async (userIds: string[], title: string, message: string, type = 'meeting', eventType = 'invite', placeholders?: Record<string, string>) => {
-    if (!userIds.length) return;
-    try {
-      await Promise.all(userIds.map(uid => insertNotificationFromTemplate({
-        userId: uid, category: type, eventType,
-        fallbackTitle: title, fallbackMessage: message,
-        placeholders: placeholders || { meeting_subject: message },
-        senderId: currentUserId || null, actionUrl: type,
-      })));
     } catch {}
   }, [currentUserId]);
 

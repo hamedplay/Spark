@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Clock, MapPin, Users, User, Phone, Bell, RefreshCw, UserPlus, Share2, ExternalLink, Trash2, CreditCard as Edit2, Video, Copy, Check, Link, FileText, Image, CalendarDays, CheckCircle2, XCircle, HelpCircle, UserCheck, ClipboardList } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Clock, MapPin, Users, User, Phone, Bell, RefreshCw, UserPlus, Share2, ExternalLink, Trash2, CreditCard as Edit2, Video, Copy, Check, FileText, Image, CalendarDays, CircleCheck as CheckCircle2, Circle as XCircle, Circle as HelpCircle, UserCheck, ClipboardList } from 'lucide-react';
 import { MeetingData, CalendarEntry, ProfileEntry } from './types';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -30,7 +30,7 @@ interface Props {
 
 export function MeetingDetailModal({
   meeting: m, currentUserId, allProfiles, calendars, subscribedCalendars,
-  getMeetingColor, onClose, onEdit, onDelete, onShare, onGoogleCalendar,
+  getMeetingColor, onClose, onEdit, onDelete, onGoogleCalendar,
 }: Props) {
   const isOwner = m.user_id === currentUserId;
   const isManager = m.meeting_manager === currentUserId;
