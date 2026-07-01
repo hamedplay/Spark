@@ -59,7 +59,7 @@ function DeleteModal({ meeting, onClose, onPermanentDelete, onDeleteAndRevert, l
               disabled={loading}
               className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group disabled:opacity-50"
             >
-              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0 group-hover:bg-blue-500 transition-colors">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 transition-colors">
                 <RotateCcw className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:text-white" />
               </div>
               <div>
@@ -76,7 +76,7 @@ function DeleteModal({ meeting, onClose, onPermanentDelete, onDeleteAndRevert, l
               disabled={loading}
               className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-400 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group disabled:opacity-50"
             >
-              <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0 group-hover:bg-red-500 transition-colors">
+              <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
                 <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
               </div>
               <div>
@@ -634,7 +634,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
                       onClick={handleShareImage}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
                     >
-                      <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
                         <Image className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       </div>
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-200">اشتراک‌گذاری تصویر</span>
@@ -644,7 +644,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
                       onClick={handleShareText}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
                     >
-                      <div className="w-8 h-8 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
                         <FileText className="w-4 h-4 text-green-600 dark:text-green-400" />
                       </div>
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-200">اشتراک‌گذاری متن</span>
@@ -677,7 +677,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
 
       {meeting.status_type === 'rejected' && (
         <div className="mb-4 flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-700 dark:text-red-400">
             یک یا چند شرکت‌کننده این دعوت را رد کرده‌اند. می‌توانید دعوت‌نامه را مجدداً ارسال کنید یا ابتدا جلسه را ویرایش نمایید.
           </p>
@@ -687,25 +687,25 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       <div className="flex-1">
         <div className="space-y-3">
           <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <CalendarIcon className="w-5 h-5 ml-2 shrink-0" />
+            <CalendarIcon className="w-5 h-5 ml-2 flex-shrink-0" />
             <span>{new Date(meeting.requestDate).toLocaleDateString('fa-IR')}</span>
           </div>
           <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <Clock className="w-5 h-5 ml-2 shrink-0" />
+            <Clock className="w-5 h-5 ml-2 flex-shrink-0" />
             {meeting.start_time && meeting.end_time
               ? <span>{meeting.start_time} - {meeting.end_time}</span>
               : <span>{meeting.duration}</span>}
           </div>
           <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <MapPin className="w-5 h-5 ml-2 shrink-0" />
+            <MapPin className="w-5 h-5 ml-2 flex-shrink-0" />
             <span>{meeting.location}</span>
           </div>
           <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <User className="w-5 h-5 ml-2 shrink-0" />
+            <User className="w-5 h-5 ml-2 flex-shrink-0" />
             <span>{meeting.representative}</span>
           </div>
           <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <Phone className="w-5 h-5 ml-2 shrink-0" />
+            <Phone className="w-5 h-5 ml-2 flex-shrink-0" />
             <span>{meeting.phone}</span>
           </div>
           {meeting.notes && (
@@ -723,7 +723,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
               <div className="space-y-1.5">
                 {agendaItems.map((item, idx) => (
                   <div key={item.id} className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-700 text-sm">
-                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-center font-bold shrink-0 mt-0.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-center font-bold flex-shrink-0 mt-0.5">
                       {idx + 1}
                     </span>
                     <div className="flex-1 min-w-0">
@@ -777,7 +777,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
             <div className="flex flex-wrap gap-2">
               {meeting.participants.map((participant, index) => (
                 <span key={index} className="inline-flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-sm">
-                  <User className="w-4 h-4 ml-1 shrink-0" />
+                  <User className="w-4 h-4 ml-1 flex-shrink-0" />
                   {participant}
                 </span>
               ))}

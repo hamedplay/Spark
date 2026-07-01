@@ -59,7 +59,7 @@ function KpiCard({
     slate: 'bg-slate-50 dark:bg-slate-900/20 text-slate-600 dark:text-slate-400',
   };
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 p-5">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
@@ -264,7 +264,7 @@ export function ReportsPage() {
           <select
             value={range}
             onChange={e => setRange(e.target.value as DateRange)}
-            className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="1month">ماه جاری</option>
             <option value="3months">۳ ماه اخیر</option>
@@ -309,7 +309,7 @@ export function ReportsPage() {
       {/* Charts row */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* Meetings by month */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex items-center gap-2 mb-5">
             <BarChart3 className="w-5 h-5 text-blue-500" />
             <h3 className="font-semibold text-gray-800 dark:text-white">روند ماهانه جلسات</h3>
@@ -318,7 +318,7 @@ export function ReportsPage() {
         </div>
 
         {/* Tasks by month */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex items-center gap-2 mb-5">
             <TrendingUp className="w-5 h-5 text-teal-500" />
             <h3 className="font-semibold text-gray-800 dark:text-white">روند ماهانه اقدامات</h3>
@@ -330,7 +330,7 @@ export function ReportsPage() {
       {/* Priority + Status */}
       <div className="grid md:grid-cols-3 gap-6">
         {/* Priority donut */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex items-center gap-2 mb-5">
             <PieChart className="w-5 h-5 text-rose-500" />
             <h3 className="font-semibold text-gray-800 dark:text-white">توزیع اولویت جلسات</h3>
@@ -367,7 +367,7 @@ export function ReportsPage() {
         </div>
 
         {/* Approval rate */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex items-center gap-2 mb-5">
             <CheckCircle2 className="w-5 h-5 text-green-500" />
             <h3 className="font-semibold text-gray-800 dark:text-white">نرخ تأیید درخواست‌ها</h3>
@@ -401,7 +401,7 @@ export function ReportsPage() {
         </div>
 
         {/* Task completion */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex items-center gap-2 mb-5">
             <Activity className="w-5 h-5 text-orange-500" />
             <h3 className="font-semibold text-gray-800 dark:text-white">وضعیت اقدامات</h3>
@@ -431,7 +431,7 @@ export function ReportsPage() {
       </div>
 
       {/* Insights */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
         <h3 className="font-semibold text-gray-800 dark:text-white mb-5">اطلاعات تکمیلی</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {[
@@ -443,7 +443,7 @@ export function ReportsPage() {
             const Icon = item.icon;
             return (
               <div key={item.label} className="flex items-start gap-3">
-                <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${item.color}`} />
+                <Icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${item.color}`} />
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
                   <p className="font-semibold text-gray-800 dark:text-white text-sm mt-0.5">{item.value || '—'}</p>

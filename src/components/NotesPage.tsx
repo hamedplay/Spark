@@ -568,7 +568,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
 
       {/* Share Image Modal — shown when native share is unavailable */}
       {shareNote && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs" dir="rtl" onClick={() => { setShareNote(null); setShareImageData(null); }}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" dir="rtl" onClick={() => { setShareNote(null); setShareImageData(null); }}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-3">
@@ -702,13 +702,13 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="جستجو در یادداشت‌ها..."
-              className="w-full pl-4 pr-10 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              className="w-full pl-4 pr-10 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'archived')}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
           >
             <option value="all">همه یادداشت‌ها</option>
             <option value="active">یادداشت‌های فعال</option>
@@ -724,7 +724,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
             <div
               key={note.id}
               id={`note-${note.id}`}
-              className={`rounded-2xl border shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col ${colors.bg} ${colors.border} ${
+              className={`rounded-2xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col ${colors.bg} ${colors.border} ${
                 note.status === 'archived' ? 'opacity-60' : ''
               } ${editingNoteId === note.id || isExpanded ? '' : 'h-52'}`}
             >
@@ -754,9 +754,9 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
               ) : (
                 <>
                   {/* Card header */}
-                  <div className={`flex items-start justify-between px-4 pt-3 pb-2 shrink-0 ${colors.header}`}>
+                  <div className={`flex items-start justify-between px-4 pt-3 pb-2 flex-shrink-0 ${colors.header}`}>
                     <h3 className="text-sm font-semibold text-gray-800 dark:text-white leading-tight flex-1 min-w-0 truncate ml-2">{note.title}</h3>
-                    <div className="flex items-center gap-0.5 shrink-0">
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
                       {note.note_type === 'voice' && <Mic className="w-3.5 h-3.5 text-gray-400 ml-1" />}
                       <div className="relative" ref={shareMenuNoteId === note.id ? shareMenuRef : undefined}>
                         <button
@@ -767,12 +767,12 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
                           <Share2 className="w-3.5 h-3.5" />
                         </button>
                         {shareMenuNoteId === note.id && (
-                          <div className="absolute left-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 z-50 overflow-hidden" dir="rtl">
+                          <div className="absolute left-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden" dir="rtl">
                             <button
                               onClick={() => handleShareImage(note)}
                               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
                             >
-                              <div className="w-7 h-7 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                              <div className="w-7 h-7 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
                                 <ImageIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                               </div>
                               <span className="text-sm text-gray-700 dark:text-gray-200">اشتراک تصویر</span>
@@ -782,7 +782,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
                               onClick={() => handleShareText(note)}
                               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
                             >
-                              <div className="w-7 h-7 rounded-xl bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center shrink-0">
+                              <div className="w-7 h-7 rounded-xl bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center flex-shrink-0">
                                 <FileText className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                               </div>
                               <span className="text-sm text-gray-700 dark:text-gray-200">اشتراک متن</span>
@@ -824,18 +824,18 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
                     {note.file_url && (
                       <div
                         onClick={() => handleFileClick(note)}
-                        className="mt-2 p-2.5 bg-white/60 dark:bg-gray-800/40 rounded-xl cursor-pointer hover:bg-white/90 dark:hover:bg-gray-700/60 transition-colors flex items-center gap-2 border border-white/80 dark:border-gray-600/30 shrink-0"
+                        className="mt-2 p-2.5 bg-white/60 dark:bg-gray-800/40 rounded-xl cursor-pointer hover:bg-white/90 dark:hover:bg-gray-700/60 transition-colors flex items-center gap-2 border border-white/80 dark:border-gray-600/30 flex-shrink-0"
                       >
                         <span className="text-gray-500 dark:text-gray-400">{getFileIcon(note.file_type || '')}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{note.file_name}</p>
                           {note.file_size && <p className="text-[10px] text-gray-400">{formatFileSize(note.file_size)}</p>}
                         </div>
-                        <Download className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        <Download className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between mt-2 shrink-0">
+                    <div className="flex items-center justify-between mt-2 flex-shrink-0">
                       <p className="text-[10px] text-gray-400 dark:text-gray-500">
                         {new Date(note.created_at).toLocaleString('fa-IR')}
                       </p>
@@ -921,7 +921,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
                   onChange={e => setAssignSearch(e.target.value)}
                   placeholder="جستجوی کاربر..."
                   autoFocus
-                  className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-hidden focus:ring-2 focus:ring-teal-400 dark:text-white"
+                  className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-teal-400 dark:text-white"
                 />
               </div>
             </div>
@@ -937,14 +937,14 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
                     onClick={() => handleSendToUser(assignNote, u.user_id, u.full_name || u.email || 'کاربر')}
                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-right"
                   >
-                    <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center shrink-0 text-white text-xs font-bold">
+                    <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
                       {(u.full_name || u.email || 'U').charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{u.full_name || u.email}</p>
                       {u.full_name && <p className="text-[11px] text-gray-400 truncate">{u.email}</p>}
                     </div>
-                    <Send className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                    <Send className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                   </button>
                 ))}
               {orgUsers.filter(u => u.user_id !== userId && (

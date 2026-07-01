@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, CreditCard as Edit2, Save, X, Plus, Loader as Loader2, Search } from 'lucide-react';
+import { Mail, CreditCard as Edit2, Save, X, Plus, Loader2, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ContactEmail } from '../types';
 import toast from 'react-hot-toast';
@@ -196,7 +196,7 @@ export function ContactsEmailPage({ currentUserId: propUserId }: { currentUserId
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="جستجو در مخاطبین..."
-          className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+          className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
         />
       </div>
 

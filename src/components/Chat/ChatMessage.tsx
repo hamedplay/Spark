@@ -208,17 +208,17 @@ export function ChatMessage({
     const s = message.status || 'pending';
     if (s === 'pending') return (
       <button onClick={cycleStatus} title="در انتظار — کلیک"
-        className={`w-5 h-5 rounded border-2 shrink-0 transition-colors ${isOwn ? 'border-emerald-300 hover:border-white' : 'border-gray-300 dark:border-gray-500 hover:border-gray-500'}`} />
+        className={`w-5 h-5 rounded border-2 flex-shrink-0 transition-colors ${isOwn ? 'border-emerald-300 hover:border-white' : 'border-gray-300 dark:border-gray-500 hover:border-gray-500'}`} />
     );
     if (s === 'in_progress') return (
       <button onClick={cycleStatus} title="در حال رسیدگی — کلیک"
-        className="w-5 h-5 rounded border-2 border-amber-400 bg-amber-400 flex items-center justify-center shrink-0">
+        className="w-5 h-5 rounded border-2 border-amber-400 bg-amber-400 flex items-center justify-center flex-shrink-0">
         <Loader className="w-3 h-3 text-white animate-spin" />
       </button>
     );
     return (
       <button onClick={cycleStatus} title="رسیدگی شده — کلیک"
-        className="w-5 h-5 rounded border-2 border-teal-500 bg-teal-500 flex items-center justify-center shrink-0">
+        className="w-5 h-5 rounded border-2 border-teal-500 bg-teal-500 flex items-center justify-center flex-shrink-0">
         <Check className="w-3 h-3 text-white" />
       </button>
     );
@@ -271,13 +271,13 @@ export function ChatMessage({
 
           {/* Avatar for received */}
           {!isOwn && (
-            <div className="shrink-0 mb-1">
+            <div className="flex-shrink-0 mb-1">
               <UserAvatar name={message.senderProfile?.full_name || 'U'} size="sm" avatarUrl={message.senderProfile?.avatar_url} />
             </div>
           )}
           {/* Avatar for sent */}
           {isOwn && (
-            <div className="shrink-0 mb-1">
+            <div className="flex-shrink-0 mb-1">
               <UserAvatar name={message.senderProfile?.full_name || 'U'} size="sm" avatarUrl={message.senderProfile?.avatar_url} />
             </div>
           )}
@@ -293,7 +293,7 @@ export function ChatMessage({
 
             {/* Card — NO overflow-hidden so menus can escape */}
             <div
-              className={`relative ${bubbleRadiusClass} ${message.replyTarget ? 'rounded-tr-none' : ''} ${cardBg} shadow-xs border ${borderClass} ${TYPE_BORDER_CLASS[message.message_type]}`}
+              className={`relative ${bubbleRadiusClass} ${message.replyTarget ? 'rounded-tr-none' : ''} ${cardBg} shadow-sm border ${borderClass} ${TYPE_BORDER_CLASS[message.message_type]}`}
               style={{ ...cardStyle, ...typeBorderStyle, fontSize }}
             >
 
@@ -306,16 +306,16 @@ export function ChatMessage({
                     </span>
                   )}
                   {typeLabel && (
-                    <span className="text-[11px] shrink-0 font-semibold" style={typeLabel.style}>{typeLabel.text}</span>
+                    <span className="text-[11px] flex-shrink-0 font-semibold" style={typeLabel.style}>{typeLabel.text}</span>
                   )}
                 </div>
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{timeStr}</span>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0">{timeStr}</span>
               </div>
 
               {/* Forwarded indicator */}
               {message.is_forwarded && (
                 <div className="flex items-center gap-1.5 px-3 pt-2 pb-0.5">
-                  <Forward className="w-3 h-3 text-teal-500 shrink-0" />
+                  <Forward className="w-3 h-3 text-teal-500 flex-shrink-0" />
                   <span className="text-[11px] text-teal-600 dark:text-teal-400 font-medium truncate">
                     ارسال‌شده از {message.forwarded_from_name || 'کاربر'}
                   </span>
@@ -327,7 +327,7 @@ export function ChatMessage({
                 {message.voice_url && (
                   <div className="flex items-center gap-2 min-w-[150px] py-1">
                     <button onClick={toggleVoice}
-                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 transition-colors">
+                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 transition-colors">
                       {isPlayingVoice ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                     </button>
                     <div className="flex-1 flex flex-col gap-1">
@@ -341,9 +341,9 @@ export function ChatMessage({
 
                 {shouldBlur ? (
                   <div className="relative py-1">
-                    <p className="text-sm blur-xs select-none pointer-events-none">{message.body}</p>
+                    <p className="text-sm blur-sm select-none pointer-events-none">{message.body}</p>
                     <button onClick={() => setConfidentialRevealed(true)}
-                      className="absolute inset-0 flex items-center justify-center gap-1.5 text-xs text-gray-700 dark:text-gray-200 bg-white/80 dark:bg-gray-700/80 rounded-lg backdrop-blur-xs hover:bg-white/95 transition-colors">
+                      className="absolute inset-0 flex items-center justify-center gap-1.5 text-xs text-gray-700 dark:text-gray-200 bg-white/80 dark:bg-gray-700/80 rounded-lg backdrop-blur-sm hover:bg-white/95 transition-colors">
                       <Eye className="w-3.5 h-3.5" /> نمایش پیام محرمانه
                     </button>
                   </div>
@@ -430,7 +430,7 @@ export function ChatMessage({
                 {isOwn && (
                   <button
                     onClick={() => setShowViewersModal(true)}
-                    className="shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                    className="flex-shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                     title={seenByOther ? 'دیده شده — کلیک برای جزئیات' : 'دیده نشده'}
                   >
                     <Eye className={`w-3.5 h-3.5 ${seenByOther ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-600'}`} />
@@ -664,9 +664,9 @@ function MentionProfilePopup({ user, currentUserId, onClose, onOpenDirectChat }:
         {/* Profile card */}
         <div className="px-5 py-4 flex items-center gap-4">
           {user.avatar_url ? (
-            <img src={user.avatar_url} alt={name} className="w-16 h-16 rounded-2xl object-cover shrink-0" />
+            <img src={user.avatar_url} alt={name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0" />
           ) : (
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white text-2xl font-bold shrink-0">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
               {initial}
             </div>
           )}
@@ -692,7 +692,7 @@ function MentionProfilePopup({ user, currentUserId, onClose, onOpenDirectChat }:
               onClick={handleDM}
               className="w-full flex items-center gap-3 px-4 py-3 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-xl transition-colors font-medium"
             >
-              <MessageSquare className="w-4 h-4 shrink-0" />
+              <MessageSquare className="w-4 h-4 flex-shrink-0" />
               <span className="text-sm">پیام خصوصی</span>
             </button>
           )}
@@ -764,13 +764,13 @@ function ReminderModal({ messageId, messageBody, currentUserId, onClose, onSaved
               ))}
               <input type="number" placeholder="دقیقه دلخواه" value={customMinutes}
                 onChange={e => { setCustomMinutes(e.target.value); setSelectedPreset(null); }}
-                className="col-span-2 py-2 px-3 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-white outline-hidden focus:border-amber-400 text-center" />
+                className="col-span-2 py-2 px-3 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-white outline-none focus:border-amber-400 text-center" />
             </div>
           </div>
           <div>
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">توضیحات</p>
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="توضیحات اختیاری..."
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 dark:text-white outline-hidden focus:border-amber-400 resize-none" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 dark:text-white outline-none focus:border-amber-400 resize-none" />
           </div>
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">لغو</button>
@@ -848,7 +848,7 @@ function TagModal({ messageId, currentTags, currentUserId, onClose, onChanged }:
             </div>
             <div className="flex gap-2">
               <input value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()}
-                placeholder="نام تگ..." className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 dark:text-white outline-hidden focus:border-blue-400" />
+                placeholder="نام تگ..." className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 dark:text-white outline-none focus:border-blue-400" />
               <button onClick={addTag} disabled={loading} className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-medium disabled:opacity-50">افزودن</button>
             </div>
           </div>
@@ -861,7 +861,7 @@ function TagModal({ messageId, currentTags, currentUserId, onClose, onChanged }:
 function MI({ icon, label, labelClass, onClick }: { icon: React.ReactNode; label: string; labelClass?: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-right">
-      <span className="text-gray-400 dark:text-gray-500 shrink-0">{icon}</span>
+      <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{icon}</span>
       <span className={labelClass || 'text-gray-700 dark:text-gray-300'}>{label}</span>
     </button>
   );
@@ -938,9 +938,9 @@ function ChatViewersModal({ messageId, conversationId, messageCreatedAt, current
               {viewers.map(({ uid, profile, seen_at }) => (
                 <div key={uid} className="flex items-center gap-3 py-2">
                   {profile?.avatar_url ? (
-                    <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                    <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                       {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
                     </div>
                   )}
@@ -956,7 +956,7 @@ function ChatViewersModal({ messageId, conversationId, messageCreatedAt, current
                       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">زمان نامشخص</p>
                     )}
                   </div>
-                  <CheckCheck className="w-4 h-4 text-teal-400 shrink-0" />
+                  <CheckCheck className="w-4 h-4 text-teal-400 flex-shrink-0" />
                 </div>
               ))}
             </div>

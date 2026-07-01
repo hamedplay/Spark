@@ -328,9 +328,9 @@ export function MeetingInboxButton() {
           dir="rtl"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: 'linear-gradient(135deg,#059669,#0d9488)' }}>
+          <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" style={{ background: 'linear-gradient(135deg,#059669,#0d9488)' }}>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
                 <Inbox className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -343,14 +343,14 @@ export function MeetingInboxButton() {
             <div className="flex items-center gap-1">
               <button
                 onClick={() => fetchData()}
-                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white shrink-0 transition-colors"
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white flex-shrink-0 transition-colors"
                 title="بارگذاری مجدد"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => { setOpen(false); setDelegateForEntry(null); setDeclineConfirmEntry(null); }}
-                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white shrink-0 transition-colors"
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white flex-shrink-0 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -363,10 +363,10 @@ export function MeetingInboxButton() {
             {/* Delegate picker sub-panel */}
             {delegateForEntry ? (
               <div className="flex flex-col flex-1 min-h-0">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20 shrink-0">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20 flex-shrink-0">
                   <button
                     onClick={() => setDelegateForEntry(null)}
-                    className="p-1 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 shrink-0"
+                    className="p-1 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 flex-shrink-0"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -377,15 +377,15 @@ export function MeetingInboxButton() {
                     </p>
                   </div>
                 </div>
-                <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 shrink-0">
+                <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
                   <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-xl px-3 py-2">
-                    <Search className="w-4 h-4 text-gray-400 shrink-0" />
+                    <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
                     <input
                       type="text"
                       value={delegateSearch}
                       onChange={e => setDelegateSearch(e.target.value)}
                       placeholder="جستجوی کاربر..."
-                      className="flex-1 bg-transparent text-sm text-gray-700 dark:text-white outline-hidden placeholder-gray-400"
+                      className="flex-1 bg-transparent text-sm text-gray-700 dark:text-white outline-none placeholder-gray-400"
                       autoFocus
                     />
                   </div>
@@ -401,7 +401,7 @@ export function MeetingInboxButton() {
                         disabled={loading}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-b border-gray-50 dark:border-gray-700/50 last:border-0 disabled:opacity-50 text-right"
                       >
-                        <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
                           <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
                             {(u.full_name || u.email || '?').charAt(0)}
                           </span>
@@ -424,10 +424,10 @@ export function MeetingInboxButton() {
                             onClick={() => toggleUnit(key)}
                             className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 dark:bg-gray-700/60 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-right border-b border-gray-100 dark:border-gray-700"
                           >
-                            {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
-                            <Building2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
+                            <Building2 className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
                             <span className="flex-1 text-xs font-semibold text-gray-600 dark:text-gray-300 truncate">{group.unit_name}</span>
-                            <span className="text-xs text-gray-400 bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded-full shrink-0">{group.users.length}</span>
+                            <span className="text-xs text-gray-400 bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded-full flex-shrink-0">{group.users.length}</span>
                           </button>
                           {isOpen && group.users.map(u => (
                             <button
@@ -436,7 +436,7 @@ export function MeetingInboxButton() {
                               disabled={loading}
                               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-b border-gray-50 dark:border-gray-700/50 last:border-0 disabled:opacity-50 text-right"
                             >
-                              <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+                              <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
                                 <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
                                   {(u.full_name || u.email || '?').charAt(0)}
                                 </span>
@@ -456,10 +456,10 @@ export function MeetingInboxButton() {
             ) : declineConfirmEntry ? (
               /* Decline confirmation sub-panel */
               <div className="flex flex-col flex-1 min-h-0">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-red-50 dark:bg-red-900/20 shrink-0">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-red-50 dark:bg-red-900/20 flex-shrink-0">
                   <button
                     onClick={() => setDeclineConfirmEntry(null)}
-                    className="p-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 shrink-0"
+                    className="p-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 flex-shrink-0"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -536,7 +536,7 @@ export function MeetingInboxButton() {
                       <div key={entry.id} className="border-b border-gray-100 dark:border-gray-700 last:border-0 p-4">
                         {/* Creator badge */}
                         <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+                          <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
                             <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">
                               {creatorName.charAt(0)}
                             </span>
@@ -551,18 +551,18 @@ export function MeetingInboxButton() {
                         {/* Details */}
                         <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-2">
                           <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                            <Calendar className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+                            <Calendar className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
                             {gregorianToJalali(meeting.request_date) || meeting.request_date}
                           </span>
                           {meeting.start_time && (
                             <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                              <Clock className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+                              <Clock className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
                               {meeting.start_time}{meeting.end_time ? ` — ${meeting.end_time}` : ''}
                             </span>
                           )}
                           {meeting.location && (
                             <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 col-span-2">
-                              <MapPin className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+                              <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
                               <span className="truncate">{meeting.location}</span>
                             </span>
                           )}
@@ -571,7 +571,7 @@ export function MeetingInboxButton() {
                         {/* Other participants */}
                         {participantNames.length > 0 && (
                           <div className="flex items-start gap-1.5 mb-3">
-                            <Users className="w-3.5 h-3.5 shrink-0 text-gray-400 mt-0.5" />
+                            <Users className="w-3.5 h-3.5 flex-shrink-0 text-gray-400 mt-0.5" />
                             <span className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                               {participantNames.join('، ')}
                             </span>

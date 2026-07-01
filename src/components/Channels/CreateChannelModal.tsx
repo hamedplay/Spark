@@ -50,7 +50,7 @@ export function CreateChannelModal({ type, onClose, onCreate }: Props) {
               onChange={e => setName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSubmit()}
               placeholder={`نام ${isChannel ? 'کانال' : 'گروه'}...`}
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500"
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500"
             />
           </div>
 
@@ -61,21 +61,21 @@ export function CreateChannelModal({ type, onClose, onCreate }: Props) {
               onChange={e => setDescription(e.target.value)}
               rows={2}
               placeholder="توضیحات..."
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 resize-none"
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 resize-none"
             />
           </div>
 
           <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
             <button
               onClick={() => setIsPrivate(false)}
-              className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${!isPrivate ? 'bg-white dark:bg-gray-600 shadow-xs text-teal-600 dark:text-teal-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}
+              className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${!isPrivate ? 'bg-white dark:bg-gray-600 shadow-sm text-teal-600 dark:text-teal-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}
             >
               <Globe className="w-4 h-4" />
               عمومی
             </button>
             <button
               onClick={() => setIsPrivate(true)}
-              className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${isPrivate ? 'bg-white dark:bg-gray-600 shadow-xs text-teal-600 dark:text-teal-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}
+              className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${isPrivate ? 'bg-white dark:bg-gray-600 shadow-sm text-teal-600 dark:text-teal-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}
             >
               <Lock className="w-4 h-4" />
               خصوصی

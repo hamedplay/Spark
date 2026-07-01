@@ -30,21 +30,21 @@ export function CalendarListModal({
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <h3 className="text-base font-bold dark:text-white">لیست تقویم‌ها</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-red-500">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
               onChange={e => onSearchChange(e.target.value)}
               placeholder="جستجو..."
-              className="w-full pl-4 pr-10 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-4 pr-10 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -70,7 +70,7 @@ export function CalendarListModal({
                     <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full shrink-0" style={{ background: cal.color }} />
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: cal.color }} />
                         <span className="text-sm dark:text-white font-medium">{cal.name}</span>
                       </div>
                     </td>

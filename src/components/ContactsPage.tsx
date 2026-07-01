@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, CreditCard as Edit2, Save, X, Plus, Loader as Loader2, Search, Phone, Upload, Download, Trash2, Users, Building2, Share2, Check } from 'lucide-react';
+import {
+  Mail, CreditCard as Edit2, Save, X, Plus, Loader2, Search, Phone,
+  Upload, Download, Trash2, Users, Building2, Share2, Check,
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../context/PermissionsContext';
@@ -74,7 +77,7 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" dir="rtl">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" dir="rtl">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
           <div>
@@ -95,7 +98,7 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
               onChange={e => setSearch(e.target.value)}
               placeholder="جستجوی همکار..."
               autoFocus
-              className="w-full pr-9 pl-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-800 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              className="w-full pr-9 pl-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="max-h-72 overflow-y-auto space-y-2">
@@ -103,7 +106,7 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
               <p className="text-center text-gray-400 text-sm py-6">کاربری یافت نشد</p>
             ) : filtered.map(u => (
               <div key={u.user_id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                   {(u.full_name || u.email || '?')[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -305,7 +308,7 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
 
       {/* Add Panel */}
       {showAddPanel && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xs border border-gray-200 dark:border-gray-700 p-5">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-center gap-2 mb-4">
             {(['single', 'bulk'] as AddMode[]).map(m => (
               <button key={m} onClick={() => setAddMode(m)}
@@ -359,7 +362,7 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
       <div className="relative">
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="جستجو بر اساس نام، ایمیل یا موبایل..."
-          className="w-full pr-9 pl-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
+          className="w-full pr-9 pl-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
 
       {loading && (
@@ -377,7 +380,7 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map(contact => (
-          <div key={contact.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-xs border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
+          <div key={contact.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
             {editingId === contact.id ? (
               <div className="space-y-2">
                 <input value={editingContact?.name || ''} onChange={e => setEditingContact(p => p ? { ...p, name: e.target.value } : null)} placeholder="نام"
@@ -432,13 +435,13 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
                 <div className="space-y-1.5">
                   {contact.phone && (
                     <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
-                      <Phone className="w-4 h-4 shrink-0 text-gray-400" />
+                      <Phone className="w-4 h-4 flex-shrink-0 text-gray-400" />
                       <span>{contact.phone}</span>
                     </a>
                   )}
                   {contact.email && (
                     <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
-                      <Mail className="w-4 h-4 shrink-0 text-gray-400" />
+                      <Mail className="w-4 h-4 flex-shrink-0 text-gray-400" />
                       <span className="truncate">{contact.email}</span>
                     </a>
                   )}

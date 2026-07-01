@@ -604,7 +604,7 @@ export function IncomingCallNotification({ session, callerProfile, onAccept, onD
   const name = callerProfile?.full_name || callerProfile?.email || 'کاربر';
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-xs" dir="rtl">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm" dir="rtl">
       <div className="bg-gray-900 rounded-3xl shadow-2xl w-full max-w-xs mx-4 overflow-hidden border border-gray-700">
         <div className="px-6 py-8 flex flex-col items-center gap-5">
           <div className="relative">

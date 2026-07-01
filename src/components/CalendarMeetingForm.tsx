@@ -219,7 +219,7 @@ function MultiSelectField({
         <div key={g.label}>
           <button type="button" onClick={() => toggleUnit(g.label)}
             className="w-full flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-600/60 text-right hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors sticky top-0 z-10">
-            <Building2 className="w-3 h-3 text-blue-400 shrink-0" />
+            <Building2 className="w-3 h-3 text-blue-400 flex-shrink-0" />
             <span className="flex-1 text-xs font-semibold text-gray-500 dark:text-gray-300 truncate">{g.label}</span>
             <span className="text-xs text-gray-400">{groupOptions.length}</span>
             {expanded ? <ChevronDown className="w-3 h-3 text-gray-400" /> : <ChevronRight className="w-3 h-3 text-gray-400" />}
@@ -267,7 +267,7 @@ function MultiSelectField({
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={selected.length === 0 ? placeholder : ''}
-          className="flex-1 min-w-[120px] outline-hidden bg-transparent text-sm dark:text-white placeholder-gray-400"
+          className="flex-1 min-w-[120px] outline-none bg-transparent text-sm dark:text-white placeholder-gray-400"
         />
       </div>
       {open && hasItems && (
@@ -893,7 +893,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0 bg-teal-600">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 bg-teal-600">
         <h2 className="text-base font-bold text-white">تنظیم جلسه در تقویم</h2>
         <button type="button" onClick={onCancel} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30">
           <X className="w-5 h-5 text-white" />
@@ -906,7 +906,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           <div>
             <label className="block text-sm font-medium text-teal-700 dark:text-teal-300 mb-1.5">نوع تقویم</label>
             <select value={selectedCalendarId} onChange={e => { setSelectedCalendarId(e.target.value); if (!e.target.value) setMembersOnly(false); }}
-              className="w-full p-2 border border-teal-200 dark:border-teal-600 rounded-lg bg-white dark:bg-gray-800 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500">
+              className="w-full p-2 border border-teal-200 dark:border-teal-600 rounded-lg bg-white dark:bg-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
               {calendars.filter(c => c.type !== 'private').map(c => <option key={c.id} value={c.id}>{c.name} ({c.type === 'shared' ? 'اشتراکی' : 'عمومی'})</option>)}
             </select>
             {selectedCalendarId && selectedCalendar && (
@@ -931,7 +931,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
               <button
                 type="button"
                 onClick={() => setMembersOnly(v => !v)}
-                className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${membersOnly ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${membersOnly ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'}`}
               >
                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${membersOnly ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
@@ -950,7 +950,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
                 </p>
               </div>
               <div className="p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-500 shrink-0" />
+                <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />
                 <div>
                   <p className="text-xs text-blue-500 mb-0.5">زمان جلسه</p>
                   <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
@@ -1024,7 +1024,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
                 <div className="p-2 border-b border-gray-100 dark:border-gray-700">
                   <input autoFocus type="text" value={repPickerSearch} onChange={e => setRepPickerSearch(e.target.value)}
                     placeholder="جستجو در مخاطبین..."
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div className="max-h-48 overflow-y-auto">
                   {allContacts.filter(c => c.name.toLowerCase().includes(repPickerSearch.toLowerCase()) || ((c as any).phone || '').includes(repPickerSearch)).length === 0
@@ -1125,7 +1125,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
                 }
               }}
               placeholder={selectedExternal.length === 0 ? 'جستجوی مخاطبین...' : ''}
-              className="flex-1 min-w-[120px] outline-hidden bg-transparent text-sm dark:text-white placeholder-gray-400"
+              className="flex-1 min-w-[120px] outline-none bg-transparent text-sm dark:text-white placeholder-gray-400"
             />
           </div>
           {showExternalDropdown && (
@@ -1362,7 +1362,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             <div className="space-y-2 mt-3">
               {agendaItems.map((item, idx) => (
                 <div key={idx} className="flex items-start gap-2 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-                  <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{idx + 1}</span>
+                  <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{idx + 1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
                     <div className="flex items-center gap-3 mt-0.5 flex-wrap">
@@ -1378,7 +1378,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
+                  <div className="flex gap-1 flex-shrink-0">
                     <button type="button" onClick={() => { setAgendaForm({ title: item.title, presenter: item.presenter || '', duration_minutes: item.duration_minutes ? String(item.duration_minutes) : '' }); setEditingAgendaIdx(idx); setShowAgendaForm(true); }}
                       className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
                       <Pencil className="w-3.5 h-3.5" />
@@ -1471,7 +1471,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           <button
             type="button"
             onClick={() => setIsOnline(v => !v)}
-            className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${isOnline ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${isOnline ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-600'}`}
           >
             <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${isOnline ? 'translate-x-6' : 'translate-x-0.5'}`} />
           </button>
@@ -1493,7 +1493,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       </div>
 
       {/* Footer */}
-      <div className="flex gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-700 shrink-0">
+      <div className="flex gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
         <button type="submit" disabled={loading}
           className="flex-1 flex items-center justify-center gap-2 bg-teal-600 text-white py-2.5 rounded-xl hover:bg-teal-700 disabled:opacity-50 font-medium text-sm transition-colors">
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}

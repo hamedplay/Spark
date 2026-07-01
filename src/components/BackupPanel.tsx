@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Download, Upload, Database, Loader as Loader2, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Shield, FileText, Calendar, ClipboardList, MessageSquare, BookOpen, FolderOpen, Table2, RefreshCw, ChevronDown, ChevronUp, Info, Video, Send, Link } from 'lucide-react';
+import { Download, Upload, Database, Loader2, CheckCircle, AlertTriangle, Shield, FileText, Calendar, ClipboardList, MessageSquare, BookOpen, FolderOpen, Table2, RefreshCw, ChevronDown, ChevronUp, Info, Video, Send, Link } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -137,14 +137,14 @@ function TableRow({ cfg, selected, onToggle, status }: {
       onClick={onToggle}
       className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${selected ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'}`}
     >
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${selected ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${selected ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
         <Icon className={`w-4 h-4 ${selected ? 'text-blue-500' : cfg.color}`} />
       </div>
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium ${selected ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-white'}`}>{cfg.label}</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{cfg.description}</p>
       </div>
-      <div className="shrink-0">
+      <div className="flex-shrink-0">
         {status === 'loading' && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
         {status === 'done' && <CheckCircle className="w-4 h-4 text-green-500" />}
         {status === 'error' && <AlertTriangle className="w-4 h-4 text-red-400" />}
@@ -174,14 +174,14 @@ function RestoreTableRow({ tableKey, rowCount, selected, onToggle, status }: {
       onClick={onToggle}
       className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${selected ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'}`}
     >
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${selected ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${selected ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
         <Icon className={`w-4 h-4 ${selected ? 'text-emerald-600' : color}`} />
       </div>
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium ${selected ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-800 dark:text-white'}`}>{label}</p>
         <p className="text-xs text-gray-400 dark:text-gray-500">{rowCount.toLocaleString('fa-IR')} ردیف</p>
       </div>
-      <div className="shrink-0">
+      <div className="flex-shrink-0">
         {status === 'loading' && <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />}
         {status === 'done' && <CheckCircle className="w-4 h-4 text-green-500" />}
         {status === 'error' && <AlertTriangle className="w-4 h-4 text-red-400" />}
@@ -359,7 +359,7 @@ function RestorePanel() {
 
       {parseError && (
         <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl">
-          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
           <p className="text-xs text-red-700 dark:text-red-300">{parseError}</p>
         </div>
       )}
@@ -444,9 +444,9 @@ function RestorePanel() {
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{TABLE_LABEL[key] ?? key}</span>
-                      <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">کل: {(r.total ?? 0).toLocaleString('fa-IR')}</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">کل: {(r.total ?? 0).toLocaleString('fa-IR')}</span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 text-xs">
+                    <div className="flex items-center gap-2 flex-shrink-0 text-xs">
                       {(r.inserted ?? 0) > 0 && <span className="font-medium text-green-600 dark:text-green-400">+{(r.inserted).toLocaleString('fa-IR')}</span>}
                       {(r.updated ?? 0) > 0 && <span className="font-medium text-blue-600 dark:text-blue-400">↑{(r.updated).toLocaleString('fa-IR')}</span>}
                       {(r.skipped ?? 0) > 0 && <span className="font-medium text-amber-600 dark:text-amber-400">○{(r.skipped).toLocaleString('fa-IR')}</span>}
@@ -462,7 +462,7 @@ function RestorePanel() {
                     <div className="border-t border-gray-100 dark:border-gray-700 max-h-52 overflow-y-auto">
                       {r.errors.slice(0, 100).map((e: any, ei: number) => (
                         <div key={ei} className="flex items-start gap-2 px-3 py-2 border-b border-gray-50 dark:border-gray-700/50 last:border-0 bg-gray-50/50 dark:bg-gray-800/50">
-                          <span className="shrink-0 w-6 h-6 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium text-gray-500 dark:text-gray-400">
                             {e.row || '—'}
                           </span>
                           <div className="min-w-0 flex-1">
@@ -470,7 +470,7 @@ function RestorePanel() {
                             {e.dependency && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono truncate">{e.dependency}</p>}
                             {e.id && <p className="text-xs text-gray-300 dark:text-gray-600 font-mono truncate">{e.id}</p>}
                           </div>
-                          {e.code && <span className="shrink-0 text-xs text-gray-300 dark:text-gray-600 font-mono">{e.code}</span>}
+                          {e.code && <span className="flex-shrink-0 text-xs text-gray-300 dark:text-gray-600 font-mono">{e.code}</span>}
                         </div>
                       ))}
                       {r.errors.length > 100 && (
@@ -492,7 +492,7 @@ function RestorePanel() {
 
           {strategy === 'replace' && (
             <div className="flex items-start gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl">
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed font-medium mb-2">
                   حالت جایگزینی: تمام داده‌های فعلی جداول انتخاب‌شده حذف خواهند شد. این عملیات برگشت‌پذیر نیست.
@@ -508,7 +508,7 @@ function RestorePanel() {
           <button
             onClick={runRestore}
             disabled={running || selectedTables.size === 0 || (strategy === 'replace' && !confirmed)}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white rounded-2xl font-medium transition-colors shadow-xs"
+            className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white rounded-2xl font-medium transition-colors shadow-sm"
           >
             {running
               ? <><Loader2 className="w-4 h-4 animate-spin" /> در حال بازیابی...</>
@@ -608,7 +608,7 @@ export function BackupPanel() {
 
       {/* ── Export / Backup section ─────────────────────────────────────── */}
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
           <Database className="w-5 h-5 text-blue-500" />
         </div>
         <div>
@@ -631,7 +631,7 @@ export function BackupPanel() {
           ))}
         </div>
         <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-          <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+          <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
             {format === 'json'
               ? 'JSON تمام انواع داده (JSONB، آرایه، null) را بدون محدودیت تعداد ردیف حفظ می‌کند و برای مهاجرت به دیتابیس جدید توصیه می‌شود.'
@@ -683,7 +683,7 @@ export function BackupPanel() {
 
       {/* Warning */}
       <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
-        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
           فایل پشتیبان حاوی داده‌های واقعی سازمان است. در مکان امن ذخیره کنید و به اشخاص غیرمجاز دسترسی ندهید.
         </p>
@@ -693,7 +693,7 @@ export function BackupPanel() {
       <button
         onClick={runBackup}
         disabled={running || selected.size === 0}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white rounded-2xl font-medium transition-colors shadow-xs"
+        className="w-full flex items-center justify-center gap-2 py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white rounded-2xl font-medium transition-colors shadow-sm"
       >
         {running
           ? <><Loader2 className="w-4 h-4 animate-spin" /> در حال پشتیبان‌گیری...</>
@@ -707,7 +707,7 @@ export function BackupPanel() {
           onClick={() => setShowRestore(v => !v)}
           className="w-full flex items-center gap-3 text-right"
         >
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
             <Upload className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="flex-1">
@@ -717,8 +717,8 @@ export function BackupPanel() {
             </p>
           </div>
           {showRestore
-            ? <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" />
-            : <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+            ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
           }
         </button>
 

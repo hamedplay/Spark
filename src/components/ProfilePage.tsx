@@ -56,7 +56,7 @@ function JalaaliDateInput({ value, onChange, className }: { value: string; onCha
       <select
         value={jy || ''}
         onChange={e => { const v = Number(e.target.value); setJy(v); handleChange(v, jm, jd); }}
-        className="flex-1 py-2.5 px-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+        className="flex-1 py-2.5 px-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
       >
         <option value="">سال</option>
         {years.map(y => <option key={y} value={y}>{y}</option>)}
@@ -64,7 +64,7 @@ function JalaaliDateInput({ value, onChange, className }: { value: string; onCha
       <select
         value={jm || ''}
         onChange={e => { const v = Number(e.target.value); setJm(v); handleChange(jy, v, jd); }}
-        className="flex-1 py-2.5 px-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+        className="flex-1 py-2.5 px-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
       >
         <option value="">ماه</option>
         {JALAALI_MONTHS_FA.map((name, i) => <option key={i + 1} value={i + 1}>{name}</option>)}
@@ -72,7 +72,7 @@ function JalaaliDateInput({ value, onChange, className }: { value: string; onCha
       <select
         value={jd || ''}
         onChange={e => { const v = Number(e.target.value); setJd(v); handleChange(jy, jm, v); }}
-        className="flex-1 py-2.5 px-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+        className="flex-1 py-2.5 px-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
       >
         <option value="">روز</option>
         {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
@@ -143,7 +143,7 @@ function Field({ label, icon: Icon, children }: { label: string; icon: React.Ele
   );
 }
 
-const inp = 'w-full pr-9 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm';
+const inp = 'w-full pr-9 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm';
 const inpDisabled = inp + ' bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed';
 
 // ─── Bale Deep-Link Connect Section ──────────────────────────────────────────
@@ -260,11 +260,11 @@ function BaleConnectSection() {
       {connected ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2 px-3 py-2.5 bg-teal-100 dark:bg-teal-900/30 rounded-xl">
-            <div className="w-2.5 h-2.5 rounded-full bg-teal-500 shrink-0" />
+            <div className="w-2.5 h-2.5 rounded-full bg-teal-500 flex-shrink-0" />
             <span className="text-sm text-teal-700 dark:text-teal-300 font-medium flex-1">
               به بله متصل هستید
             </span>
-            <CheckCircle2 className="w-4 h-4 text-teal-500 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0" />
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             اعلان‌های جلسه به طور خودکار در بله برای شما ارسال می‌شوند.
@@ -283,7 +283,7 @@ function BaleConnectSection() {
           <button
             onClick={handleConnect}
             disabled={connecting}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-xs"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-sm"
           >
             {connecting
               ? <><RefreshCw className="w-4 h-4 animate-spin" /> در انتظار اتصال...</>
@@ -295,7 +295,7 @@ function BaleConnectSection() {
           </p>
           {connecting && (
             <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 shrink-0" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 flex-shrink-0" />
               <p className="text-xs text-blue-600 dark:text-blue-400">
                 پس از زدن «شروع» در بله، اتصال به صورت خودکار تأیید می‌شود...
               </p>
@@ -460,9 +460,9 @@ export function ProfilePage() {
       </div>
 
       {/* Avatar card */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 p-6 mb-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-4">
         <div className="flex items-center gap-6">
-          <div className="relative shrink-0">
+          <div className="relative flex-shrink-0">
             <div className="w-24 h-24 rounded-2xl overflow-hidden bg-teal-100 dark:bg-teal-900/30">
               {profile.avatar_url ? (
                 <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
@@ -499,7 +499,7 @@ export function ProfilePage() {
       <form onSubmit={handleSave} className="space-y-4">
 
         {/* Personal info */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <SectionHeader id="personal" title="اطلاعات شخصی" subtitle="نام، مشخصات فردی، ارتباطی" />
           {openSection === 'personal' && (
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -552,7 +552,7 @@ export function ProfilePage() {
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">درباره من</label>
                 <textarea value={profile.bio} onChange={e => set('bio', e.target.value)} rows={3}
-                  className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm resize-none"
+                  className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm resize-none"
                   placeholder="چند جمله درباره خودتان بنویسید..." />
               </div>
             </div>
@@ -560,7 +560,7 @@ export function ProfilePage() {
         </div>
 
         {/* Work/org section */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <SectionHeader id="work" title="اطلاعات سازمانی" subtitle="سازمان، سمت، واحد و مشخصات شغلی" />
           {openSection === 'work' && (
             <div className="p-6 space-y-5">
@@ -569,7 +569,7 @@ export function ProfilePage() {
               {orgPositionInfo ? (
                 <div className="flex items-center gap-4 p-4 rounded-2xl border-2"
                   style={{ borderColor: orgPositionInfo.color + '60', backgroundColor: orgPositionInfo.color + '0d' }}>
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0"
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
                     style={{ backgroundColor: orgPositionInfo.color + '20' }}>
                     {orgPositionInfo.icon || '💼'}
                   </div>
@@ -594,13 +594,13 @@ export function ProfilePage() {
                       )}
                     </div>
                   </div>
-                  <div className="text-xs text-gray-400 flex items-center gap-1 shrink-0">
+                  <div className="text-xs text-gray-400 flex items-center gap-1 flex-shrink-0">
                     <Link2 className="w-3 h-3" /> از چارت سازمانی
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-3 p-4 rounded-2xl border border-dashed border-gray-200 dark:border-gray-600 text-sm text-gray-400 dark:text-gray-500">
-                  <Building2 className="w-5 h-5 shrink-0" />
+                  <Building2 className="w-5 h-5 flex-shrink-0" />
                   <span>سمت سازمانی از طریق ساختار سازمانی تخصیص نیافته است. ادمین می‌تواند از پنل پیکربندی → ساختار سازمانی سمت تخصیص دهد.</span>
                 </div>
               )}
@@ -645,7 +645,7 @@ export function ProfilePage() {
 
               {(profile.position || profile.department) && (
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
-                  <Building2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <Building2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                   فیلدهای سمت و واحد توسط ادمین از طریق ساختار سازمانی تنظیم می‌شوند و قابل ویرایش نیستند.
                 </div>
               )}
@@ -654,7 +654,7 @@ export function ProfilePage() {
         </div>
 
         {/* Social / links */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xs border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <SectionHeader id="social" title="شبکه‌های اجتماعی و پیام‌رسان" subtitle="شناسه پیام‌رسان بله" />
           {openSection === 'social' && (
             <div className="p-6 space-y-5">
@@ -667,7 +667,7 @@ export function ProfilePage() {
         {/* Save */}
         <div className="flex justify-end pb-4">
           <button type="submit" disabled={saving}
-            className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-8 py-2.5 rounded-xl font-medium transition disabled:opacity-60 shadow-xs">
+            className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-8 py-2.5 rounded-xl font-medium transition disabled:opacity-60 shadow-sm">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" />
               : saved ? <CheckCircle2 className="w-4 h-4" />
               : <Save className="w-4 h-4" />}

@@ -619,7 +619,7 @@ export function ChatConversationView({
       {/* Reminder alarm — full-screen call-like modal */}
       {reminderAlarm && (
         <div
-          className="fixed inset-0 flex items-center justify-center bg-black/75 backdrop-blur-xs"
+          className="fixed inset-0 flex items-center justify-center bg-black/75 backdrop-blur-sm"
           style={{ zIndex: 9998 }}
           onMouseDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
@@ -630,7 +630,7 @@ export function ChatConversationView({
           </div>
           <div className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border-4 border-amber-400">
             <div className="bg-amber-400 px-6 py-5 flex items-center gap-3">
-              <Bell className="w-9 h-9 text-white animate-bounce shrink-0" />
+              <Bell className="w-9 h-9 text-white animate-bounce flex-shrink-0" />
               <div>
                 <p className="text-white font-bold text-xl">یادآوری!</p>
                 <p className="text-amber-900 text-sm mt-0.5 font-medium">
@@ -664,12 +664,12 @@ export function ChatConversationView({
       )}
 
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 shrink-0 min-w-0">
-        <button onClick={onBack} className="lg:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex-shrink-0 min-w-0">
+        <button onClick={onBack} className="lg:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg flex-shrink-0">
           <ChevronRight className="w-5 h-5 dark:text-white" />
         </button>
         {/* Avatar with status dot */}
-        <div className="relative shrink-0">
+        <div className="relative flex-shrink-0">
           {isSavedMessages ? (
             <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center">
               <Bookmark className="w-4 h-4 text-white" />
@@ -705,7 +705,7 @@ export function ChatConversationView({
         <div className="flex-1 sm:hidden" />
 
         {/* Action icons — all visible on all screen sizes */}
-        <div className="flex items-center gap-0.5 shrink-0">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           {/* Starred messages */}
           <button
             onClick={() => { setShowStarredModal(true); fetchGlobalStarred(); }}
@@ -768,7 +768,7 @@ export function ChatConversationView({
 
       {/* Search bar */}
       {showSearch && (
-        <div className="shrink-0 px-4 py-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex-shrink-0 px-4 py-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
@@ -776,7 +776,7 @@ export function ChatConversationView({
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="جستجو در پیام‌های این گفتگو..."
-              className="w-full pr-9 pl-8 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-hidden focus:border-teal-400 dark:text-white placeholder-gray-400"
+              className="w-full pr-9 pl-8 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-teal-400 dark:text-white placeholder-gray-400"
               dir="rtl"
             />
             {searchQuery && (
@@ -830,7 +830,7 @@ export function ChatConversationView({
         {grouped.map(group => (
           <div key={group.date}>
             <div className="flex items-center justify-center my-3">
-              <span className="px-3 py-1 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs rounded-full shadow-xs border border-gray-100 dark:border-gray-700">
+              <span className="px-3 py-1 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs rounded-full shadow-sm border border-gray-100 dark:border-gray-700">
                 {formatDate(group.date)} — {group.date}
               </span>
             </div>
@@ -912,7 +912,7 @@ export function ChatConversationView({
                   }}
                   className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-b border-gray-50 dark:border-gray-800 cursor-pointer group transition-colors"
                 >
-                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 shrink-0 mt-1" />
+                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 flex-shrink-0 mt-1" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{item.otherUserName}</span>
@@ -959,7 +959,7 @@ export function ChatConversationView({
                 const msgConvId = r.chat_messages?.conversation_id;
                 return (
                   <div key={r.id} className="flex items-start gap-4 px-6 py-4 border-b border-gray-50 dark:border-gray-800">
-                    <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-1" />
+                    <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-1" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
@@ -980,7 +980,7 @@ export function ChatConversationView({
                       )}
                       {r.note && <p className="text-sm text-gray-800 dark:text-white">{r.note}</p>}
                     </div>
-                    <button onClick={() => dismissReminder(r.id)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 shrink-0 transition-colors">
+                    <button onClick={() => dismissReminder(r.id)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -1008,7 +1008,7 @@ export function ChatConversationView({
                   <Bookmark className="w-9 h-9 text-white" />
                 </div>
               ) : (
-                <div className="w-20 h-20 rounded-full overflow-hidden shrink-0">
+                <div className="w-20 h-20 rounded-full overflow-hidden flex-shrink-0">
                   {conversation.otherUser.avatar_url ? (
                     <img src={conversation.otherUser.avatar_url} alt={otherName} className="w-full h-full object-cover" />
                   ) : (
@@ -1071,10 +1071,10 @@ function MentionsBar({
   const current = items[0];
   return (
     <div
-      className="shrink-0 flex items-center gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-900/20 border-b border-teal-200 dark:border-teal-800"
+      className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-900/20 border-b border-teal-200 dark:border-teal-800"
       dir="rtl"
     >
-      <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center shrink-0">
+      <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">
         <AtSign className="w-3.5 h-3.5 text-white" />
       </div>
       <button
@@ -1091,20 +1091,20 @@ function MentionsBar({
         )}
       </button>
       {items.length > 1 && (
-        <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold bg-teal-100 dark:bg-teal-900/40 px-1.5 py-0.5 rounded-full shrink-0">
+        <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold bg-teal-100 dark:bg-teal-900/40 px-1.5 py-0.5 rounded-full flex-shrink-0">
           {items.length}
         </span>
       )}
       <button
         onClick={() => { onScrollTo(current.id); onDismiss(current.id); }}
-        className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold hover:underline shrink-0"
+        className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold hover:underline flex-shrink-0"
       >
         رفتن
       </button>
       <button
         onClick={() => onDismiss(current.id)}
         title="بستن این منشن"
-        className="p-1 text-teal-500 hover:text-teal-700 shrink-0"
+        className="p-1 text-teal-500 hover:text-teal-700 flex-shrink-0"
       >
         <X className="w-3.5 h-3.5" />
       </button>
@@ -1112,7 +1112,7 @@ function MentionsBar({
         <button
           onClick={onDismissAll}
           title="بستن همه"
-          className="text-[10px] text-teal-500 hover:text-teal-700 shrink-0"
+          className="text-[10px] text-teal-500 hover:text-teal-700 flex-shrink-0"
         >
           همه
         </button>

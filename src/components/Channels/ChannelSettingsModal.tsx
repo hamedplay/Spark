@@ -44,7 +44,7 @@ export function ChannelSettingsModal({
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center gap-3">
             <Settings className="w-5 h-5 text-teal-500" />
             <div>
@@ -58,7 +58,7 @@ export function ChannelSettingsModal({
         </div>
 
         {/* Section nav */}
-        <div className="flex border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="flex border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           {(Object.keys(SECTION_LABELS) as Section[]).map(s => (
             <button key={s} onClick={() => setSection(s)}
               className={`flex-1 py-2.5 text-xs font-medium transition-colors ${section === s ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-500' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}>
@@ -153,7 +153,7 @@ function GeneralSection({ channel, isAdmin, onUpdated }: {
     setTimeout(() => setInviteCopied(false), 2000);
   };
 
-  const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500/40 disabled:opacity-50 disabled:cursor-not-allowed';
+  const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40 disabled:opacity-50 disabled:cursor-not-allowed';
 
   return (
     <div className="p-5 space-y-5">
@@ -211,7 +211,7 @@ function GeneralSection({ channel, isAdmin, onUpdated }: {
           </div>
           <button
             onClick={() => setIsPrivate(v => !v)}
-            className={`w-10 h-5.5 rounded-full transition-colors relative shrink-0 ${isPrivate ? 'bg-gray-400' : 'bg-teal-500'}`}
+            className={`w-10 h-5.5 rounded-full transition-colors relative flex-shrink-0 ${isPrivate ? 'bg-gray-400' : 'bg-teal-500'}`}
             style={{ width: 40, height: 22 }}
           >
             <span className={`absolute top-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform ${isPrivate ? 'right-0.5' : 'left-0.5'}`}
@@ -232,7 +232,7 @@ function GeneralSection({ channel, isAdmin, onUpdated }: {
           </div>
           <button
             onClick={() => setIsLocked((v: boolean) => !v)}
-            className={`relative shrink-0 rounded-full transition-colors ${isLocked ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+            className={`relative flex-shrink-0 rounded-full transition-colors ${isLocked ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600'}`}
             style={{ width: 40, height: 22 }}
           >
             <span className={`absolute top-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform`}
@@ -248,7 +248,7 @@ function GeneralSection({ channel, isAdmin, onUpdated }: {
           <input readOnly value={`${window.location.origin}?invite=${channel.id}`}
             className="flex-1 text-xs px-3 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white" dir="ltr" />
           <button onClick={copyInviteLink}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors shrink-0 ${inviteCopied ? 'bg-green-500 text-white' : 'bg-teal-500 hover:bg-teal-600 text-white'}`}>
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${inviteCopied ? 'bg-green-500 text-white' : 'bg-teal-500 hover:bg-teal-600 text-white'}`}>
             {inviteCopied ? <><Check className="w-3.5 h-3.5" />کپی شد</> : <><Copy className="w-3.5 h-3.5" />کپی</>}
           </button>
         </div>
@@ -312,14 +312,14 @@ function MembersSection({ channel, members, allProfiles, currentUserId, isAdmin,
           <div className="p-3 border-b border-teal-100 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-900/10">
             <input value={addSearch} onChange={e => setAddSearch(e.target.value)} autoFocus
               placeholder="جستجوی کاربر برای افزودن..."
-              className="w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-hidden focus:ring-1 focus:ring-teal-500/40" />
+              className="w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500/40" />
           </div>
           <div className="max-h-48 overflow-y-auto">
             {addCandidates.slice(0, 20).map(p => (
               <button key={p.user_id}
                 onClick={async () => { await onAddMember(p.user_id); setShowAdd(false); setAddSearch(''); }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors text-right">
-                <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                   {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div>
@@ -338,7 +338,7 @@ function MembersSection({ channel, members, allProfiles, currentUserId, isAdmin,
       {/* Search existing members */}
       <input value={search} onChange={e => setSearch(e.target.value)}
         placeholder="جستجو در اعضا..."
-        className="w-full text-sm px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl dark:text-white focus:outline-hidden focus:ring-1 focus:ring-teal-500/40" />
+        className="w-full text-sm px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500/40" />
 
       {/* Member list */}
       <div className="space-y-2">
@@ -347,7 +347,7 @@ function MembersSection({ channel, members, allProfiles, currentUserId, isAdmin,
           const isOwner = m.user_id === channel.created_by;
           return (
             <div key={m.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-              <div className="w-9 h-9 rounded-full bg-teal-500 flex items-center justify-center text-white text-sm font-bold shrink-0 relative">
+              <div className="w-9 h-9 rounded-full bg-teal-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 relative">
                 {(m.profile?.full_name || m.profile?.email || 'U').charAt(0).toUpperCase()}
                 {isOwner && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center">
@@ -363,7 +363,7 @@ function MembersSection({ channel, members, allProfiles, currentUserId, isAdmin,
                 <p className="text-xs text-gray-400">{m.role === 'admin' ? 'مدیر' : 'عضو'}</p>
               </div>
               {isAdmin && !isSelf && (
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1 flex-shrink-0">
                   {/* Promote/demote */}
                   <button
                     onClick={() => onChangeRole(m.user_id, m.role === 'admin' ? 'member' : 'admin')}
@@ -453,13 +453,13 @@ function DangerSection({ channel, isAdmin, isCreator, currentUserId, members, al
       {isCreator && (
         <div className="border border-amber-200 dark:border-amber-700 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/10 flex items-center gap-2">
-            <Crown className="w-4 h-4 text-amber-500 shrink-0" />
+            <Crown className="w-4 h-4 text-amber-500 flex-shrink-0" />
             <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">انتقال مالکیت</p>
           </div>
           <div className="p-4 space-y-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">مالکیت {channel.type === 'channel' ? 'کانال' : 'گروه'} را به فرد دیگری منتقل کنید. این عمل برگشت‌پذیر نیست.</p>
             <select value={transferTo} onChange={e => setTransferTo(e.target.value)}
-              className="w-full text-sm px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-800 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-amber-500/40">
+              className="w-full text-sm px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500/40">
               <option value="">انتخاب کاربر...</option>
               {otherMembers.map(m => {
                 const p = allProfiles.find(pr => pr.user_id === m.user_id);
@@ -478,7 +478,7 @@ function DangerSection({ channel, isAdmin, isCreator, currentUserId, members, al
       {isCreator && (
         <div className="border border-red-200 dark:border-red-800 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-red-50 dark:bg-red-900/10 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
             <p className="text-sm font-semibold text-red-700 dark:text-red-400">
               حذف کامل {channel.type === 'channel' ? 'کانال' : 'گروه'}
             </p>

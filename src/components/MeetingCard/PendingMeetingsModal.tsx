@@ -194,7 +194,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold dark:text-white">جلسات در انتظار تایید</h3>
@@ -252,24 +252,24 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
                       
                       <div className="grid grid-cols-2 gap-3 mb-4">
                         <div className="flex items-center text-gray-600 dark:text-gray-300">
-                          <Calendar className="w-4 h-4 ml-2 shrink-0" />
+                          <Calendar className="w-4 h-4 ml-2 flex-shrink-0" />
                           <span className="text-sm">{new Date(pendingMeeting.meeting.request_date).toLocaleString('fa-IR')}</span>
                         </div>
                         <div className="flex items-center text-gray-600 dark:text-gray-300">
-                          <Clock className="w-4 h-4 ml-2 shrink-0" />
+                          <Clock className="w-4 h-4 ml-2 flex-shrink-0" />
                           <span className="text-sm">{pendingMeeting.meeting.duration}</span>
                         </div>
                         <div className="flex items-center text-gray-600 dark:text-gray-300">
-                          <MapPin className="w-4 h-4 ml-2 shrink-0" />
+                          <MapPin className="w-4 h-4 ml-2 flex-shrink-0" />
                           <span className="text-sm">{pendingMeeting.meeting.location}</span>
                         </div>
                         <div className="flex items-center text-gray-600 dark:text-gray-300">
-                          <User className="w-4 h-4 ml-2 shrink-0" />
+                          <User className="w-4 h-4 ml-2 flex-shrink-0" />
                           <span className="text-sm">{pendingMeeting.meeting.representative}</span>
                         </div>
                         {pendingMeeting.meeting.phone && (
                           <div className="flex items-center text-gray-600 dark:text-gray-300">
-                            <Phone className="w-4 h-4 ml-2 shrink-0" />
+                            <Phone className="w-4 h-4 ml-2 flex-shrink-0" />
                             <span className="text-sm">{pendingMeeting.meeting.phone}</span>
                           </div>
                         )}

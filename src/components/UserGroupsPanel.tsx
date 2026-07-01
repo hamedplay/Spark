@@ -47,7 +47,7 @@ interface AllProfile {
 type Panel = 'list' | 'add' | 'edit' | 'delete' | 'members' | 'access' | 'events';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
-const inp = 'w-full pr-10 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
+const inp = 'w-full pr-10 pl-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm';
 
 function BackHeader({ title, icon: Icon, color, onBack }: { title: string; icon: React.ElementType; color: string; onBack: () => void }) {
   return (
@@ -64,14 +64,14 @@ function BackHeader({ title, icon: Icon, color, onBack }: { title: string; icon:
 function GroupBadge({ group }: { group: UserGroup }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 flex items-center gap-3 mb-4">
-      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shrink-0">
+      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0">
         <GroupIcon className="w-5 h-5 text-white" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-gray-800 dark:text-white">{group.display_name || group.name}</p>
         <p className="text-xs text-gray-400 font-mono">{group.name}</p>
       </div>
-      <div className="flex gap-2 shrink-0">
+      <div className="flex gap-2 flex-shrink-0">
         {group.is_system && <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-1 rounded-full">سیستمی</span>}
         {group.is_public && <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded-full">عمومی</span>}
         <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-full">{group.member_count ?? 0} عضو</span>
@@ -134,7 +134,7 @@ function GroupForm({ group, onBack, onDone }: {
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">توضیحات</label>
           <textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition text-sm resize-none"
+            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm resize-none"
             placeholder="توضیح کوتاه درباره گروه" />
         </div>
         <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-gray-50 dark:bg-gray-700">
@@ -178,7 +178,7 @@ function DeletePanel({ group, onBack, onDone }: { group: UserGroup; onBack: () =
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-6">
         {group.is_system ? (
           <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4 text-sm text-amber-700 dark:text-amber-400">
-            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             گروه‌های سیستمی قابل حذف نیستند. این گروه برای عملکرد سامانه ضروری است.
           </div>
         ) : (
@@ -279,12 +279,12 @@ function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () => void 
             <div className="relative mb-3">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <input value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="جستجوی کاربر..."
-                className="w-full pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
+                className="w-full pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="max-h-52 overflow-y-auto space-y-1">
               {addFiltered.slice(0, 20).map(p => (
                 <div key={p.user_id} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-gradient-to-br from-teal-400 to-blue-500">
+                  <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-teal-400 to-blue-500">
                     {p.avatar_url
                       ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
@@ -296,7 +296,7 @@ function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () => void 
                     <p className="text-xs text-gray-400 truncate">{p.email}</p>
                   </div>
                   <button onClick={() => addMember(p.user_id)}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-medium hover:bg-blue-200 dark:hover:bg-blue-900/50 transition shrink-0">
+                    className="flex items-center gap-1 px-2.5 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-medium hover:bg-blue-200 dark:hover:bg-blue-900/50 transition flex-shrink-0">
                     <Plus className="w-3 h-3" />افزودن
                   </button>
                 </div>
@@ -314,7 +314,7 @@ function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () => void 
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو..."
-              className="pr-9 pl-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-40" />
+              className="pr-9 pl-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-40" />
           </div>
         </div>
         {loading && <div className="py-10 text-center text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></div>}
@@ -322,7 +322,7 @@ function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () => void 
         <div className="divide-y divide-gray-100 dark:divide-gray-700">
           {filtered.map(m => (
             <div key={m.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-              <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 bg-gradient-to-br from-teal-400 to-blue-500">
+              <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-teal-400 to-blue-500">
                 {m.avatar_url
                   ? <img src={m.avatar_url} alt="" className="w-full h-full object-cover" />
                   : <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">{initials(m)}</div>}
@@ -331,9 +331,9 @@ function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () => void 
                 <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{m.full_name || '—'}</p>
                 <p className="text-xs text-gray-400 truncate">{m.email}</p>
               </div>
-              <span className="text-xs text-gray-400 shrink-0">{new Date(m.joined_at).toLocaleDateString('fa-IR')}</span>
+              <span className="text-xs text-gray-400 flex-shrink-0">{new Date(m.joined_at).toLocaleDateString('fa-IR')}</span>
               <button onClick={() => removeMember(m.id)}
-                className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0">
+                className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -516,7 +516,7 @@ function AccessPanel({ group, onBack }: { group: UserGroup; onBack: () => void }
                   </div>
                   <button
                     onClick={() => mainModuleKeys.has(key) ? toggleModule(key) : toggle(key)}
-                    className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${perms[key] ? 'bg-teal-500' : 'bg-gray-200 dark:bg-gray-600'}`}>
+                    className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${perms[key] ? 'bg-teal-500' : 'bg-gray-200 dark:bg-gray-600'}`}>
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${perms[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
@@ -588,7 +588,7 @@ export function GroupEventsPanel() {
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو..."
-              className="pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-44" />
+              className="pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-44" />
           </div>
           <button onClick={() => setShowFilters(v => !v)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-colors border ${showFilters ? 'bg-blue-500 text-white border-blue-500' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-400'}`}>
@@ -607,7 +607,7 @@ export function GroupEventsPanel() {
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1.5">سطح رویداد</label>
             <div className="relative">
               <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value)}
-                className="w-full appearance-none pr-3 pl-8 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
+                className="w-full appearance-none pr-3 pl-8 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">همه سطوح</option>
                 <option value="info">اطلاع</option>
                 <option value="success">موفق</option>
@@ -622,7 +622,7 @@ export function GroupEventsPanel() {
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1.5">ماژول</label>
             <div className="relative">
               <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
-                className="w-full appearance-none pr-3 pl-8 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500">
+                className="w-full appearance-none pr-3 pl-8 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">همه ماژول‌ها</option>
                 {modules.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -659,11 +659,11 @@ export function GroupEventsPanel() {
         <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[65vh] overflow-y-auto">
           {filtered.map(log => (
             <div key={log.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-              <div className="mt-0.5 shrink-0">{sevIcon(log.severity)}</div>
+              <div className="mt-0.5 flex-shrink-0">{sevIcon(log.severity)}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <span className="text-sm font-medium text-gray-800 dark:text-white">{log.action}</span>
-                  <span className="text-xs text-gray-400 shrink-0">{new Date(log.created_at).toLocaleString('fa-IR')}</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">{new Date(log.created_at).toLocaleString('fa-IR')}</span>
                 </div>
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                   {log.user_name && (
@@ -678,7 +678,7 @@ export function GroupEventsPanel() {
                   {log.details && <span className="text-xs text-gray-400 truncate max-w-xs">{log.details}</span>}
                 </div>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${sevBadge(log.severity)}`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${sevBadge(log.severity)}`}>
                 {sevLabel[log.severity] || log.severity}
               </span>
             </div>
@@ -760,7 +760,7 @@ export function UserGroupsPanel({}: Props) {
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو..."
-              className="pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-40" />
+              className="pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-40" />
           </div>
           <button onClick={load} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors">
             <RefreshCw className="w-4 h-4" />
@@ -789,7 +789,7 @@ export function UserGroupsPanel({}: Props) {
                 <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0">
                         <GroupIcon className="w-4 h-4 text-white" />
                       </div>
                       <div>
@@ -828,7 +828,7 @@ export function UserGroupsPanel({}: Props) {
                           {menuItems(g).map(({ icon: Icon, label, panel: target, color }) => (
                             <button key={target} onClick={() => openPanel(target, g)}
                               className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-right">
-                              <Icon className={`w-4 h-4 shrink-0 ${color}`} />
+                              <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
                               <span className="text-sm text-gray-700 dark:text-gray-200">{label}</span>
                             </button>
                           ))}

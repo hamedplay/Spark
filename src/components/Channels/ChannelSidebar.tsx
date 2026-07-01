@@ -24,11 +24,11 @@ function ChannelItem({ ch, selected, onClick }: { ch: ChannelWithMeta; selected:
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-right ${
         selected
-          ? 'bg-teal-500 text-white shadow-xs'
+          ? 'bg-teal-500 text-white shadow-sm'
           : 'hover:bg-gray-100 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-200'
       }`}
     >
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold ${
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold ${
         selected ? 'bg-teal-400/40 text-white' : 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400'
       }`}>
         {ch.name.charAt(0)}
@@ -37,13 +37,13 @@ function ChannelItem({ ch, selected, onClick }: { ch: ChannelWithMeta; selected:
         <div className="flex items-center justify-between gap-1">
           <span className="text-sm font-semibold truncate">{ch.name}</span>
           {ch.unreadCount > 0 && (
-            <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${selected ? 'bg-white/20 text-white' : 'bg-teal-500 text-white'}`}>
+            <span className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${selected ? 'bg-white/20 text-white' : 'bg-teal-500 text-white'}`}>
               {ch.unreadCount > 99 ? '99+' : ch.unreadCount}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Users className={`w-3 h-3 shrink-0 ${selected ? 'text-teal-200' : 'text-gray-400'}`} />
+          <Users className={`w-3 h-3 flex-shrink-0 ${selected ? 'text-teal-200' : 'text-gray-400'}`} />
           <span className={`text-[11px] truncate ${selected ? 'text-teal-100' : 'text-gray-400 dark:text-gray-500'}`}>
             {ch.member_count} عضو
             {ch.last_message_preview && ` · ${ch.last_message_preview}`}
@@ -69,7 +69,7 @@ export function ChannelSidebar({
   return (
     <div className="w-full md:w-72 flex flex-col h-full bg-white dark:bg-gray-800 border-l border-gray-100 dark:border-gray-700">
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-gray-800 dark:text-white">کانال‌ها</h2>
           <div className="flex items-center gap-1">
@@ -107,7 +107,7 @@ export function ChannelSidebar({
               onClick={() => onTabChange(tab)}
               className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 activeTab === tab
-                  ? 'bg-teal-500 text-white shadow-xs'
+                  ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm'
                   : 'text-gray-500 dark:text-gray-400'
               }`}
             >
@@ -123,7 +123,7 @@ export function ChannelSidebar({
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="جستجو..."
-            className="w-full pr-8 pl-3 py-1.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500/40"
+            className="w-full pr-8 pl-3 py-1.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40"
           />
         </div>
       </div>

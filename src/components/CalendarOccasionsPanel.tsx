@@ -19,13 +19,13 @@ interface Occasion {
 const SHAMSI_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const GHAMARI_MONTHS = ['محرم','صفر','ربیع‌الاول','ربیع‌الثانی','جمادی‌الاول','جمادی‌الثانی','رجب','شعبان','رمضان','شوال','ذیقعده','ذیحجه'];
 
-const inp = 'w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm';
+const inp = 'w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm';
 const sel = 'appearance-none ' + inp;
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button type="button" onClick={() => onChange(!value)}
-      className={`w-9 h-[18px] rounded-full relative transition-colors shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-600'}`}>
+      className={`w-9 h-[18px] rounded-full relative transition-colors flex-shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-600'}`}>
       <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0.5'}`} />
     </button>
   );
@@ -64,7 +64,7 @@ function OccasionForm({ initial, onSave, onCancel }: {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-blue-200 dark:border-blue-700 p-5 space-y-4" dir="rtl">
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+        <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
           {form.id ? <Edit2 className="w-4 h-4 text-blue-600" /> : <Plus className="w-4 h-4 text-blue-600" />}
         </div>
         <div>
@@ -112,21 +112,21 @@ function OccasionForm({ initial, onSave, onCancel }: {
       <div className="grid grid-cols-3 gap-3">
         <label className="flex items-center justify-between gap-2 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2.5 cursor-pointer">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+            <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
             <span className="text-xs text-gray-700 dark:text-gray-300">تعطیل است؟</span>
           </div>
           <Toggle value={!!form.is_holiday} onChange={v => s('is_holiday', v)} />
         </label>
         <label className="flex items-center justify-between gap-2 bg-amber-50 dark:bg-amber-900/20 rounded-xl px-3 py-2.5 cursor-pointer">
           <div className="flex items-center gap-2">
-            <Star className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <Star className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
             <span className="text-xs text-gray-700 dark:text-gray-300">جشن است؟</span>
           </div>
           <Toggle value={!!form.is_celebration} onChange={v => s('is_celebration', v)} />
         </label>
         <label className="flex items-center justify-between gap-2 bg-green-50 dark:bg-green-900/20 rounded-xl px-3 py-2.5 cursor-pointer">
           <div className="flex items-center gap-2">
-            <Check className="w-3.5 h-3.5 text-green-500 shrink-0" />
+            <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
             <span className="text-xs text-gray-700 dark:text-gray-300">فعال</span>
           </div>
           <Toggle value={!!form.is_active} onChange={v => s('is_active', v)} />
@@ -135,7 +135,7 @@ function OccasionForm({ initial, onSave, onCancel }: {
 
       <div className="flex gap-3 pt-1">
         <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-xs">
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-sm">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'ذخیره...' : 'ذخیره'}
         </button>
@@ -281,12 +281,12 @@ export function CalendarOccasionsPanel() {
         <div className="flex flex-wrap gap-2 flex-1 min-w-0">
           <div className="relative flex-1 min-w-40 max-w-xs">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input className="w-full pr-9 pl-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm"
+            <input className="w-full pr-9 pl-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               placeholder="جستجو..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div className="relative">
             <select value={filterType} onChange={e => setFilterType(e.target.value as any)}
-              className="appearance-none text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500">
+              className="appearance-none text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="all">همه</option>
               <option value="shamsi">شمسی</option>
               <option value="ghamari">قمری</option>
@@ -295,7 +295,7 @@ export function CalendarOccasionsPanel() {
           </div>
           <div className="relative">
             <select value={filterHoliday} onChange={e => setFilterHoliday(e.target.value as any)}
-              className="appearance-none text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500">
+              className="appearance-none text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="all">همه روزها</option>
               <option value="yes">تعطیل</option>
               <option value="no">غیرتعطیل</option>
@@ -351,7 +351,7 @@ export function CalendarOccasionsPanel() {
               <div key={o.id} className={`grid grid-cols-[28px_1fr_80px_100px_64px_64px_64px_40px] gap-x-2 px-4 py-2.5 items-center hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${!o.is_active ? 'opacity-50' : ''}`}>
                 <span className="text-xs text-gray-300 dark:text-gray-600">{idx + 1}</span>
                 <div className="flex items-center gap-2 min-w-0">
-                  {o.calendar_type === 'shamsi' ? <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <Moon className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                  {o.calendar_type === 'shamsi' ? <Sun className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" /> : <Moon className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
                   <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{o.title}</span>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium text-center ${o.calendar_type === 'shamsi' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'}`}>

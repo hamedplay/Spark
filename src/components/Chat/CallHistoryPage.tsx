@@ -86,7 +86,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
   return (
     <div className="flex flex-col h-full" dir="rtl">
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-gray-900 dark:text-white">تماس‌ها</h2>
           {onClose && (
@@ -107,7 +107,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="جستجوی مخاطب..."
-            className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-hidden focus:ring-2 focus:ring-teal-400 dark:text-white placeholder-gray-400"
+            className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-teal-400 dark:text-white placeholder-gray-400"
           />
         </div>
 
@@ -117,7 +117,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
             <button
               key={t.key}
               onClick={() => setTab(t.key as any)}
-              className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${tab === t.key ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs' : 'text-gray-500 dark:text-gray-400'}`}
+              className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${tab === t.key ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
             >
               {t.label}
             </button>
@@ -141,7 +141,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
               className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-50 dark:border-gray-800"
             >
               {/* Avatar */}
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                 {otherName(r)[0]?.toUpperCase() || <User className="w-5 h-5" />}
               </div>
 
@@ -168,7 +168,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
 
               {/* Call back buttons */}
               {r.otherUser && (
-                <div className="flex gap-1.5 shrink-0">
+                <div className="flex gap-1.5 flex-shrink-0">
                   <button
                     onClick={() => onStartCall(r.otherUser!, 'audio')}
                     className="w-9 h-9 rounded-full bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/40 flex items-center justify-center text-teal-600 dark:text-teal-400 transition-colors"

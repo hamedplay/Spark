@@ -117,7 +117,7 @@ function InviteModal({ room, currentUserId, onClose }: {
       role="dialog"
       aria-modal="true"
       aria-label="دعوت از شرکت‌کنندگان"
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       dir="rtl"
     >
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md">
@@ -134,13 +134,13 @@ function InviteModal({ room, currentUserId, onClose }: {
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">لینک دعوت (بدون نیاز به لاگین)</p>
             <div className="flex gap-2">
               <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-                <Link2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <Link2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                 <span className="text-xs text-gray-500 dark:text-gray-400 truncate font-mono">{joinLink}</span>
               </div>
               <button
                 onClick={copyLink}
                 aria-label="کپی لینک"
-                className="flex items-center gap-1.5 px-3 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors shrink-0"
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors flex-shrink-0"
               >
                 {linkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 {linkCopied ? 'کپی شد' : 'کپی'}
@@ -172,7 +172,7 @@ function InviteModal({ room, currentUserId, onClose }: {
               ) : (
                 users.map(u => (
                   <div key={u.user_id} className="flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                    <div className="w-9 h-9 rounded-full bg-teal-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-teal-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                       {(u.full_name || u.email || '?')[0].toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -242,7 +242,7 @@ function RoomCard({ room, currentUserId, onJoin, onInvite, joining }: {
             )}
           </div>
         </div>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isHost ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-teal-100 dark:bg-teal-900/30'}`}>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isHost ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-teal-100 dark:bg-teal-900/30'}`}>
           {isHost ? <Crown className="w-4 h-4 text-amber-600 dark:text-amber-400" /> : <Users className="w-4 h-4 text-teal-600 dark:text-teal-400" />}
         </div>
       </div>
@@ -723,10 +723,10 @@ export function VideoConferencePage() {
           <InviteModal room={inviteRoom} currentUserId={userId} onClose={() => setInviteRoom(null)} />
         )}
         {banDetail && (
-          <div role="dialog" aria-modal="true" aria-label="مسدودیت" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+          <div role="dialog" aria-modal="true" aria-label="مسدودیت" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
             <div className="bg-gray-900 border border-red-800/60 rounded-2xl p-6 w-full max-w-sm space-y-4" dir="rtl">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center flex-shrink-0">
                   <ShieldOff className="w-5 h-5 text-red-400" />
                 </div>
                 <div>
@@ -741,7 +741,7 @@ export function VideoConferencePage() {
                 </div>
               )}
               <div className={`flex items-center gap-2 text-xs rounded-xl px-3 py-2 ${banDetail.expiresAt ? 'bg-amber-950/40 text-amber-400' : 'bg-red-950/40 text-red-400'}`}>
-                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <Clock className="w-3.5 h-3.5 flex-shrink-0" />
                 {banDetail.expiresAt ? (() => {
                   const diff = Math.ceil((new Date(banDetail.expiresAt).getTime() - Date.now()) / 60000);
                   if (diff <= 0) return 'مسدودیت منقضی شده — لطفاً دوباره تلاش کنید';
@@ -819,7 +819,7 @@ export function VideoConferencePage() {
             {!showCreate ? (
               <button
                 onClick={() => setShowCreate(true)}
-                className="w-full py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-xs"
+                className="w-full py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
               >
                 <Video className="w-4 h-4" /> شروع جلسه
               </button>
@@ -837,7 +837,7 @@ export function VideoConferencePage() {
                 <label className="flex items-center gap-2 cursor-pointer group select-none">
                   <div
                     onClick={() => setRequireApproval(v => !v)}
-                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${requireApproval ? 'bg-teal-600 border-teal-600' : 'border-gray-400 dark:border-gray-500 group-hover:border-teal-500'}`}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${requireApproval ? 'bg-teal-600 border-teal-600' : 'border-gray-400 dark:border-gray-500 group-hover:border-teal-500'}`}
                   >
                     {requireApproval && <Check className="w-2.5 h-2.5 text-white" />}
                   </div>
@@ -902,7 +902,7 @@ export function VideoConferencePage() {
             <div className="grid grid-cols-2 gap-1.5 text-xs text-gray-600 dark:text-gray-400">
               {['ویدیو چندنفره', 'رمزنگاری E2E', 'اشتراک صفحه', 'چت داخلی', 'نظرسنجی زنده', 'وایت‌بورد', 'واکنش Emoji', 'لینک مهمان'].map(label => (
                 <div key={label} className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 flex-shrink-0" />
                   <span>{label}</span>
                 </div>
               ))}
@@ -969,10 +969,10 @@ export function VideoConferencePage() {
 
       {/* Ban detail modal */}
       {banDetail && (
-        <div role="dialog" aria-modal="true" aria-label="مسدودیت" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+        <div role="dialog" aria-modal="true" aria-label="مسدودیت" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-gray-900 border border-red-800/60 rounded-2xl p-6 w-full max-w-sm space-y-4" dir="rtl">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center flex-shrink-0">
                 <ShieldOff className="w-5 h-5 text-red-400" />
               </div>
               <div>
@@ -989,7 +989,7 @@ export function VideoConferencePage() {
             )}
 
             <div className={`flex items-center gap-2 text-xs rounded-xl px-3 py-2 ${banDetail.expiresAt ? 'bg-amber-950/40 text-amber-400' : 'bg-red-950/40 text-red-400'}`}>
-              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <Clock className="w-3.5 h-3.5 flex-shrink-0" />
               {banDetail.expiresAt ? (() => {
                 const diff = Math.ceil((new Date(banDetail.expiresAt).getTime() - Date.now()) / 60000);
                 if (diff <= 0) return 'مسدودیت منقضی شده — لطفاً دوباره تلاش کنید';
@@ -1016,7 +1016,7 @@ export function VideoConferencePage() {
           role="dialog"
           aria-modal="true"
           aria-label="تنظیم دستگاه قبل از ورود"
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           dir="rtl"
         >
           <div className="bg-gray-950 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">

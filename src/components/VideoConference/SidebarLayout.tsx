@@ -15,9 +15,9 @@ export function SidebarLayout({ tiles, tileReactions, makeDraggable, onPinMain, 
 
   return (
     <div className="flex flex-1 gap-2 min-h-0 flex-row-reverse">
-      <div className="w-32 sm:w-44 shrink flex flex-col gap-2 overflow-y-auto">
+      <div className="w-32 sm:w-44 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
         {others.map(t => (
-          <div key={t.peerId} className="shrink aspect-video" {...makeDraggable(t.peerId)}>
+          <div key={t.peerId} className="flex-shrink-0 aspect-video" {...makeDraggable(t.peerId)}>
             <VideoTile
               {...t}
               isPinned={false}

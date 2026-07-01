@@ -54,13 +54,13 @@ const CATEGORY_COLORS: Record<string, string> = {
   system:  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
 };
 
-const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-sm [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white';
+const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-sm [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white';
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ value, onChange, color = 'bg-green-500' }: { value: boolean; onChange: (v: boolean) => void; color?: string }) {
   return (
     <button type="button" onClick={() => onChange(!value)}
-      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${value ? color : 'bg-gray-200 dark:bg-gray-600'}`}>
+      className={`w-10 h-5 rounded-full relative transition-colors flex-shrink-0 ${value ? color : 'bg-gray-200 dark:bg-gray-600'}`}>
       <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
     </button>
   );
@@ -223,7 +223,7 @@ function ProviderForm({ provider, onSave, onCancel }: {
       {isRahyab && (
         <div className="space-y-4">
           <div className="flex items-start gap-3 px-4 py-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-2xl">
-            <Info className="w-4 h-4 text-teal-500 shrink-0 mt-0.5" />
+            <Info className="w-4 h-4 text-teal-500 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-teal-700 dark:text-teal-300 leading-relaxed">
               برای امنیت بیشتر از <strong>توکن</strong> به جای نام کاربری استفاده کنید. در صورت وجود توکن، نام کاربری نادیده گرفته می‌شود.
             </p>
@@ -367,7 +367,7 @@ function ProvidersTab() {
           <div key={p.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${p.is_active ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${p.is_active ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
                   <MessageSquare className={`w-5 h-5 ${p.is_active ? 'text-green-500' : 'text-gray-400'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -375,7 +375,7 @@ function ProvidersTab() {
                   <p className="text-xs text-gray-400 font-mono">{p.provider_type === 'rahyab' ? 'رهیاب رایان — SOAP' : (p.provider_name || 'REST API')}</p>
                 </div>
               </div>
-              <div className="relative shrink-0" ref={menuOpen === p.id ? menuRef : undefined}>
+              <div className="relative flex-shrink-0" ref={menuOpen === p.id ? menuRef : undefined}>
                 <button onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id); }}
                   className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors">
                   <MoreVertical className="w-4 h-4" />
@@ -396,10 +396,10 @@ function ProvidersTab() {
             </div>
 
             <div className="space-y-2 text-xs text-gray-500 dark:text-gray-400">
-              {p.line_number && <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 shrink-0" /><span className="font-mono">خط: {p.line_number}</span></div>}
-              {p.api_url && <div className="flex items-center gap-2 truncate"><Globe className="w-3.5 h-3.5 shrink-0" /><span className="truncate font-mono">{p.api_url}</span></div>}
-              {p.api_key && <div className="flex items-center gap-2"><Lock className="w-3.5 h-3.5 shrink-0" /><span className="font-mono">{'*'.repeat(12)}{p.api_key.slice(-4)}</span></div>}
-              {p.username && <div className="flex items-center gap-2"><User className="w-3.5 h-3.5 shrink-0" />{p.username}</div>}
+              {p.line_number && <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 flex-shrink-0" /><span className="font-mono">خط: {p.line_number}</span></div>}
+              {p.api_url && <div className="flex items-center gap-2 truncate"><Globe className="w-3.5 h-3.5 flex-shrink-0" /><span className="truncate font-mono">{p.api_url}</span></div>}
+              {p.api_key && <div className="flex items-center gap-2"><Lock className="w-3.5 h-3.5 flex-shrink-0" /><span className="font-mono">{'*'.repeat(12)}{p.api_key.slice(-4)}</span></div>}
+              {p.username && <div className="flex items-center gap-2"><User className="w-3.5 h-3.5 flex-shrink-0" />{p.username}</div>}
             </div>
 
             <div className="flex flex-wrap gap-2 mt-3">
@@ -429,18 +429,18 @@ function GroupSelector({ groups, selected, onSelect }: { groups: UserGroup[]; se
     <div className="relative">
       <button onClick={() => setOpen(v => !v)}
         className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-200 hover:border-green-400 transition-colors min-w-52">
-        <GroupIcon className="w-4 h-4 text-green-500 shrink-0" />
+        <GroupIcon className="w-4 h-4 text-green-500 flex-shrink-0" />
         <span className="flex-1 text-right truncate">{current ? (current.display_name || current.name) : 'انتخاب گروه کاربری'}</span>
-        <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden py-1">
           {groups.map(g => (
             <button key={g.id} onClick={() => { onSelect(g.id); setOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-right transition-colors ${selected === g.id ? 'bg-green-50 dark:bg-green-900/20' : ''}`}>
-              <GroupIcon className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              <GroupIcon className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
               <span className="text-sm text-gray-700 dark:text-gray-200">{g.display_name || g.name}</span>
-              {selected === g.id && <Check className="w-3.5 h-3.5 text-green-500 mr-auto shrink-0" />}
+              {selected === g.id && <Check className="w-3.5 h-3.5 text-green-500 mr-auto flex-shrink-0" />}
             </button>
           ))}
         </div>
@@ -531,7 +531,7 @@ function GroupsTab() {
                           <select
                             value={rule.provider_id || ''}
                             onChange={e => setRule(cat.key, 'provider_id', e.target.value || null)}
-                            className="appearance-none text-xs pr-2 pl-6 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-1 focus:ring-green-500 max-w-36 [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white"
+                            className="appearance-none text-xs pr-2 pl-6 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500 max-w-36 [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white"
                           >
                             <option value="">پیش‌فرض (سرویس‌دهنده اصلی)</option>
                             {providers.map(p => (
@@ -593,7 +593,7 @@ function TemplateGuide() {
       <button onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors">
         <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
-          <Info className="w-4 h-4 shrink-0" />
+          <Info className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm font-medium">راهنمای استفاده از قالب‌های پیامک</span>
         </div>
         <ChevronDown className={`w-4 h-4 text-blue-500 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -607,8 +607,8 @@ function TemplateGuide() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {ALL_PLACEHOLDERS.map(p => (
               <div key={p.key} className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl px-3 py-2">
-                <code className="text-xs font-mono text-green-600 dark:text-green-400 shrink-0">{`{{${p.key}}}`}</code>
-                <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">←</span>
+                <code className="text-xs font-mono text-green-600 dark:text-green-400 flex-shrink-0">{`{{${p.key}}}`}</code>
+                <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">←</span>
                 <span className="text-xs text-gray-700 dark:text-gray-300">{p.label}</span>
                 <span className="text-xs text-gray-400 mr-auto truncate hidden sm:block">مثال: {p.example}</span>
               </div>
@@ -792,7 +792,7 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomPh(); } }}
             placeholder="نام_متغیر (بدون فاصله)" dir="ltr" />
           <button type="button" onClick={addCustomPh}
-            className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition shrink-0">
+            className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition flex-shrink-0">
             افزودن
           </button>
         </div>
@@ -819,7 +819,7 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
       {/* Actions */}
       <div className="flex gap-3 pt-1">
         <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-xs">
+          className="flex items-center gap-2 px-6 py-2.5 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition shadow-sm">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'در حال ذخیره...' : 'ذخیره قالب'}
         </button>
@@ -963,7 +963,7 @@ function TemplatePreviewModal({ template, onClose }: TemplatePreviewModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-xs" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
@@ -1002,7 +1002,7 @@ function TemplatePreviewModal({ template, onClose }: TemplatePreviewModalProps) 
                       type="text"
                       value={customVars[key] ?? (SAMPLE_VALUES[key] || '')}
                       onChange={e => setCustomVars(v => ({ ...v, [key]: e.target.value }))}
-                      className="flex-1 text-xs px-2.5 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-green-500"
+                      className="flex-1 text-xs px-2.5 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                       placeholder={`مقدار {{${key}}}`}
                     />
                   </div>
@@ -1080,7 +1080,7 @@ function TemplatesTab() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="relative">
           <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
-            className="appearance-none text-sm pr-3 pl-8 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-green-500">
+            className="appearance-none text-sm pr-3 pl-8 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500">
             <option value="all">همه دسته‌ها</option>
             {SMS_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
           </select>
@@ -1120,7 +1120,7 @@ function TemplatesTab() {
                   <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-500 px-2.5 py-1 rounded-full">غیرفعال</span>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button onClick={() => setPreviewTemplate(t)}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 rounded-xl transition">
                   <Eye className="w-3 h-3" />پیش‌نمایش
@@ -1399,7 +1399,7 @@ function TestTab() {
         </div>
         {providers.length === 0 ? (
           <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
             هیچ سرویس‌دهنده فعالی یافت نشد. ابتدا در تب «سرویس‌دهندگان» یک سرویس‌دهنده فعال تعریف کنید.
           </div>
         ) : (
@@ -1488,7 +1488,7 @@ function TestTab() {
           {/* Rahyab troubleshooting */}
           <div className="bg-teal-50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-800 rounded-2xl p-4 space-y-2">
             <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+              <Info className="w-4 h-4 text-teal-600 dark:text-teal-400 flex-shrink-0" />
               <p className="text-sm font-semibold text-teal-700 dark:text-teal-300">راهنمای رفع مشکل رهیاب رایان</p>
             </div>
             <ul className="text-xs text-teal-700 dark:text-teal-400 space-y-1.5 list-disc list-inside leading-relaxed">
@@ -1554,7 +1554,7 @@ function TestTab() {
 
           <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 space-y-2">
             <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">راهنمای رفع مشکل</p>
             </div>
             <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1.5 list-disc list-inside leading-relaxed">
@@ -1686,7 +1686,7 @@ function ReportsTab() {
           {/* Status filter */}
           <div className="relative">
             <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(0); }}
-              className="appearance-none text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-green-500">
+              className="appearance-none text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500">
               <option value="all">همه وضعیت‌ها</option>
               <option value="sent">ارسال شده</option>
               <option value="failed">خطا</option>
@@ -1698,7 +1698,7 @@ function ReportsTab() {
           {/* Category filter */}
           <div className="relative">
             <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setPage(0); }}
-              className="appearance-none text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-hidden focus:ring-2 focus:ring-green-500">
+              className="appearance-none text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500">
               <option value="all">همه دسته‌ها</option>
               {SMS_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
@@ -1855,7 +1855,7 @@ export function SmsConfigPanel() {
       <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 gap-1">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key as any)}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === key ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-white shadow-xs' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === key ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
             <Icon className="w-4 h-4" />{label}
           </button>
         ))}

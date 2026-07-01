@@ -26,7 +26,7 @@ export function CreateEditCalendarModal({ editingCalendar, form, onChange, onSav
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <h3 className="text-base font-bold dark:text-white">{editingCalendar ? 'ویرایش تقویم' : 'تقویم جدید'}</h3>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
             <X className="w-5 h-5 dark:text-white" />
@@ -40,12 +40,12 @@ export function CreateEditCalendarModal({ editingCalendar, form, onChange, onSav
               value={form.name}
               onChange={e => onChange({ ...form, name: e.target.value })}
               placeholder="عنوان تقویم"
-              className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <select
               value={form.type}
               onChange={e => onChange({ ...form, type: e.target.value as any })}
-              className="w-32 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              className="w-32 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="shared">اشتراکی</option>
               <option value="public">عمومی</option>
@@ -58,7 +58,7 @@ export function CreateEditCalendarModal({ editingCalendar, form, onChange, onSav
             onChange={e => onChange({ ...form, description: e.target.value })}
             placeholder="توضیحات تقویم"
             rows={3}
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-sm resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
           {/* Toggles */}

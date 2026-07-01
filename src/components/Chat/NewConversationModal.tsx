@@ -46,7 +46,7 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: Props
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" dir="rtl">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <h3 className="font-bold text-gray-900 dark:text-white">گفتگوی جدید</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
             <X className="w-5 h-5 text-gray-500" />
@@ -54,7 +54,7 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: Props
         </div>
 
         {/* Search */}
-        <div className="px-4 pt-4 pb-2 shrink-0">
+        <div className="px-4 pt-4 pb-2 flex-shrink-0">
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -62,7 +62,7 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: Props
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="جستجوی نام یا ایمیل..."
-              className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-hidden focus:ring-2 focus:ring-blue-500 dark:text-white"
+              className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
             />
           </div>
         </div>
@@ -97,19 +97,19 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: Props
                       className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 dark:bg-gray-700/60 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-right"
                     >
                       {isOpen ? (
-                        <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       ) : (
-                        <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                        <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       )}
                       {group.unit_id ? (
-                        <Building2 className="w-4 h-4 text-blue-500 shrink-0" />
+                        <Building2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
                       ) : (
-                        <Users className="w-4 h-4 text-gray-400 shrink-0" />
+                        <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       )}
                       <span className="flex-1 text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">
                         {typeLabel ? `${typeLabel} ` : ''}{group.unit_name}
                       </span>
-                      <span className="text-xs text-gray-400 bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded-full shrink-0">
+                      <span className="text-xs text-gray-400 bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded-full flex-shrink-0">
                         {group.users.length}
                       </span>
                     </button>

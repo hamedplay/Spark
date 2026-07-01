@@ -140,7 +140,7 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
   return (
     <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
       {/* Sidebar column — always w-72 on desktop; hides when conversation open on mobile */}
-      <div className={`${showConversation ? 'hidden md:flex md:w-72' : 'flex w-full md:w-72'} flex-col h-full shrink-0 border-l border-gray-100 dark:border-gray-700`}>
+      <div className={`${showConversation ? 'hidden md:flex md:w-72' : 'flex w-full md:w-72'} flex-col h-full flex-shrink-0 border-l border-gray-100 dark:border-gray-700`}>
         {sidebarPanel === 'settings' ? (
           <ChatSettingsPage onClose={() => setSidebarPanel(null)} />
         ) : sidebarPanel === 'actions' ? (

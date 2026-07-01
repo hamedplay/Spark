@@ -239,7 +239,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="جستجو در همه پیام‌ها..."
-            className="w-full pr-9 pl-9 py-2.5 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-hidden focus:border-teal-400 dark:text-white placeholder-gray-400 transition-colors"
+            className="w-full pr-9 pl-9 py-2.5 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-teal-400 dark:text-white placeholder-gray-400 transition-colors"
           />
           <button
             onClick={() => setShowFilters(v => !v)}
@@ -269,7 +269,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
                     <button key={opt.key} onClick={() => toggleTypeFilter(opt.key)}
                       className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300">
                       <span>{opt.label}</span>
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${typeFilters.has(opt.key) ? 'bg-teal-500 border-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${typeFilters.has(opt.key) ? 'bg-teal-500 border-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
                         {typeFilters.has(opt.key) && <Check className="w-2.5 h-2.5 text-white" />}
                       </div>
                     </button>
@@ -299,7 +299,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
                       {opt.key === 'custom' && dateFilter === 'custom' && (
                         <div className="px-3 pb-2">
                           <input type="date" value={customDate} onChange={e => setCustomDate(e.target.value)}
-                            className="w-full px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white outline-hidden focus:border-teal-400" />
+                            className="w-full px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white outline-none focus:border-teal-400" />
                         </div>
                       )}
                     </div>
@@ -325,10 +325,10 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
                     <button key={tag.id} onClick={() => toggleTagFilter(tag.id)}
                       className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                       <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: tag.color }} />
                         <span className="text-gray-700 dark:text-gray-300">{tag.name}</span>
                       </div>
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${tagFilters.has(tag.id) ? 'bg-teal-500 border-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${tagFilters.has(tag.id) ? 'bg-teal-500 border-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
                         {tagFilters.has(tag.id) && <Check className="w-2.5 h-2.5 text-white" />}
                       </div>
                     </button>
@@ -403,7 +403,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
                       <span className="text-gray-400">›</span>
                       <span className="text-gray-500 truncate">{r.otherUserName}</span>
                     </div>
-                    <span className="text-[10px] text-gray-400 shrink-0">{moment(r.created_at).format('HH:mm')}</span>
+                    <span className="text-[10px] text-gray-400 flex-shrink-0">{moment(r.created_at).format('HH:mm')}</span>
                   </div>
                   {/* Body */}
                   <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2 leading-relaxed">{r.body || '📎 فایل'}</p>

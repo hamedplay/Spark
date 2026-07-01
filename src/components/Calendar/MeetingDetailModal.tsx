@@ -252,9 +252,9 @@ const getJalaliDate = (): string => {
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 text-white shrink-0" style={{ backgroundColor: getMeetingColor(m) }}>
+        <div className="flex items-center justify-between px-5 py-4 text-white flex-shrink-0" style={{ backgroundColor: getMeetingColor(m) }}>
           <h3 className="text-lg font-bold leading-tight flex-1 ml-2">{m.subject}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 shrink-0">
+          <button onClick={onClose} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 flex-shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -263,7 +263,7 @@ const getJalaliDate = (): string => {
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Creator */}
           <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-            <User className="w-5 h-5 text-gray-400 shrink-0" />
+            <User className="w-5 h-5 text-gray-400 flex-shrink-0" />
             <div>
               <p className="text-xs text-gray-400 mb-0.5">ایجاد کننده جلسه</p>
               <p className="text-sm font-semibold dark:text-white">
@@ -275,7 +275,7 @@ const getJalaliDate = (): string => {
           {/* Date */}
           {m.request_date && getJalaliDate() && (
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-              <CalendarDays className="w-5 h-5 text-gray-400 shrink-0" />
+              <CalendarDays className="w-5 h-5 text-gray-400 flex-shrink-0" />
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">تاریخ جلسه</p>
                 <p className="text-sm font-semibold dark:text-white">{getJalaliDate()}</p>
@@ -286,7 +286,7 @@ const getJalaliDate = (): string => {
           {/* Time */}
           {(m.start_time || m.end_time) && (
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-              <Clock className="w-5 h-5 text-gray-400 shrink-0" />
+              <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">زمان جلسه</p>
                 <p className="text-sm font-semibold dark:text-white">{m.start_time} — {m.end_time}</p>
@@ -297,7 +297,7 @@ const getJalaliDate = (): string => {
           {/* Calendar */}
           {cal && (
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-              <div className="w-5 h-5 rounded-full shrink-0" style={{ backgroundColor: cal.color }} />
+              <div className="w-5 h-5 rounded-full flex-shrink-0" style={{ backgroundColor: cal.color }} />
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">تقویم</p>
                 <p className="text-sm font-semibold dark:text-white">{cal.name}</p>
@@ -308,7 +308,7 @@ const getJalaliDate = (): string => {
           {/* Location */}
           {m.location && (
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-              <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
+              <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0" />
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">محل برگزاری</p>
                 <p className="text-sm font-semibold dark:text-white">{m.location}</p>
@@ -319,7 +319,7 @@ const getJalaliDate = (): string => {
           {/* Representative */}
           {m.representative && (
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-              <User className="w-5 h-5 text-gray-400 shrink-0" />
+              <User className="w-5 h-5 text-gray-400 flex-shrink-0" />
               <div className="flex-1">
                 <p className="text-xs text-gray-400 mb-0.5">نماینده</p>
                 <p className="text-sm font-semibold dark:text-white">{m.representative}</p>
@@ -336,7 +336,7 @@ const getJalaliDate = (): string => {
           {m.participant_user_ids && m.participant_user_ids.length > 0 && (
             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
               <div className="flex items-center gap-2 mb-2">
-                  <Users className="w-4 h-4 text-gray-400" />
+                <Users className="w-4 h-4 text-gray-400" />
                 <p className="text-xs text-gray-400 font-medium">شرکت‌کنندگان ({m.participant_user_ids.length})</p>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -345,30 +345,30 @@ const getJalaliDate = (): string => {
                   const status = participantStatuses[uid];
                   const statusBadge = isOwner && status ? (() => {
                     if (status === 'accepted') return (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded-full shrink-0">
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded-full flex-shrink-0">
                         <CheckCircle2 className="w-2.5 h-2.5" />قبول
                       </span>
                     );
                     if (status === 'declined') return (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded-full shrink-0">
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded-full flex-shrink-0">
                         <XCircle className="w-2.5 h-2.5" />رد
                       </span>
                     );
                     if (status === 'delegated') return (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full shrink-0">
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full flex-shrink-0">
                         <UserCheck className="w-2.5 h-2.5" />جانشین
                       </span>
                     );
                     return (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full shrink-0">
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded-full flex-shrink-0">
                         <HelpCircle className="w-2.5 h-2.5" />در انتظار
                       </span>
                     );
                   })() : null;
                   return (
                     <div key={uid} className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 min-w-0">
-                        <User className="w-3 h-3 shrink-0" />
+                      <span className="inline-flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 px-2.5 py-1 rounded-full text-xs font-medium flex-1 min-w-0">
+                        <User className="w-3 h-3 flex-shrink-0" />
                         <span className="truncate">{p?.full_name || p?.email || uid.slice(0, 8)}</span>
                       </span>
                       {statusBadge}
@@ -383,7 +383,7 @@ const getJalaliDate = (): string => {
           {m.external_participants && m.external_participants.length > 0 && (
             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
               <div className="flex items-center gap-2 mb-2">
-                  <UserPlus className="w-4 h-4 text-gray-400" />
+                <UserPlus className="w-4 h-4 text-gray-400" />
                 <p className="text-xs text-gray-400 font-medium">افراد خارج سازمان</p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -398,7 +398,7 @@ const getJalaliDate = (): string => {
           {m.notify_users && m.notify_users.length > 0 && (
             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
               <div className="flex items-center gap-2 mb-2">
-                  <Bell className="w-4 h-4 text-gray-400" />
+                <Bell className="w-4 h-4 text-gray-400" />
                 <p className="text-xs text-gray-400 font-medium">مطلعین</p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -417,7 +417,7 @@ const getJalaliDate = (): string => {
           {/* Reminder */}
           {m.reminder_minutes && m.reminder_minutes > 0 && (
             <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
-              <Bell className="w-5 h-5 text-amber-500 shrink-0" />
+              <Bell className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <div>
                 <p className="text-xs text-amber-600 dark:text-amber-400 mb-0.5">یادآوری</p>
                 <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
@@ -430,7 +430,7 @@ const getJalaliDate = (): string => {
           {/* Repeat */}
           {m.repeat_type && m.repeat_type !== 'none' && (
             <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-              <RefreshCw className="w-5 h-5 text-blue-500 shrink-0" />
+              <RefreshCw className="w-5 h-5 text-blue-500 flex-shrink-0" />
               <div>
                 <p className="text-xs text-blue-500 mb-0.5">تکرار</p>
                 <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">
@@ -452,13 +452,13 @@ const getJalaliDate = (): string => {
           {agendaItems.length > 0 && (
             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
               <div className="flex items-center gap-2 mb-2.5">
-                  <ClipboardList className="w-4 h-4 text-gray-400" />
+                <ClipboardList className="w-4 h-4 text-gray-400" />
                 <p className="text-xs text-gray-400 font-medium">دستور جلسه ({agendaItems.length} آیتم)</p>
               </div>
               <div className="space-y-2">
                 {agendaItems.map((item, idx) => (
                   <div key={item.id} className="flex items-start gap-2.5 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-100 dark:border-gray-600">
-                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{idx + 1}</span>
+                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{idx + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
                       <div className="flex items-center gap-3 mt-0.5 flex-wrap">
@@ -484,7 +484,7 @@ const getJalaliDate = (): string => {
           {m.is_online && isParticipant && (
             <div className="p-4 bg-sky-50 dark:bg-sky-900/20 rounded-xl border border-sky-200 dark:border-sky-700 space-y-3">
               <div className="flex items-center gap-2">
-                <Video className="w-5 h-5 text-sky-600 dark:text-sky-400 shrink-0" />
+                <Video className="w-5 h-5 text-sky-600 dark:text-sky-400 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">جلسه آنلاین</p>
                   {!joinAllowed && getMeetingTimeInfo() && (
@@ -512,7 +512,7 @@ const getJalaliDate = (): string => {
                     </div>
                     <button
                       onClick={copyGuestLink}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium shrink-0 transition-colors bg-sky-100 dark:bg-sky-800/60 text-sky-700 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-700/60"
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium flex-shrink-0 transition-colors bg-sky-100 dark:bg-sky-800/60 text-sky-700 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-700/60"
                     >
                       {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       {copiedLink ? 'کپی شد' : 'لینک مهمان'}
@@ -527,7 +527,7 @@ const getJalaliDate = (): string => {
         </div>
 
         {/* Actions */}
-        <div className="border-t border-gray-100 dark:border-gray-700 p-4 grid grid-cols-2 gap-2 shrink-0">
+        <div className="border-t border-gray-100 dark:border-gray-700 p-4 grid grid-cols-2 gap-2 flex-shrink-0">
           {canEdit && (
             <button onClick={() => onEdit(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
               <Edit2 className="w-4 h-4" />ویرایش
@@ -564,7 +564,7 @@ const getJalaliDate = (): string => {
             <p className="text-sm text-gray-500 dark:text-gray-400">نوع اشتراک‌گذاری را انتخاب کنید:</p>
             <button onClick={handleShareAsText}
               className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
                 <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
@@ -574,7 +574,7 @@ const getJalaliDate = (): string => {
             </button>
             <button onClick={handleShareAsImage}
               className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right">
-              <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
                 <Image className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>

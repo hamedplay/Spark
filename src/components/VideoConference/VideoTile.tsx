@@ -7,7 +7,7 @@ function QualityDot({ quality, pingMs }: { quality: PeerConnection['networkQuali
   const title = pingMs !== undefined ? `تأخیر: ${Math.round(pingMs)}ms` : undefined;
   return (
     <span
-      className={`w-2 h-2 rounded-full shrink-0 ${c[quality] ?? 'bg-gray-400'}`}
+      className={`w-2 h-2 rounded-full flex-shrink-0 ${c[quality] ?? 'bg-gray-400'}`}
       title={title}
       aria-label={title}
     />
@@ -250,7 +250,7 @@ export const VideoTile = memo(function VideoTile({
             ${isPinned
               ? 'bg-teal-500/90 opacity-100'
               : 'bg-black/40 opacity-0 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100'}
-            focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-teal-400`}
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400`}
         >
           <Pin className="w-3 h-3 text-white" />
         </button>
@@ -269,10 +269,10 @@ export const VideoTile = memo(function VideoTile({
           <span className={`text-white font-medium truncate flex-1 ${small ? 'text-xs' : 'text-sm'}`}>
             {isLocal ? `${displayName} (شما)` : displayName}
           </span>
-          {isHost && <Crown className={`text-amber-400 shrink ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
-          {isHandRaised && <Hand className={`text-yellow-400 animate-bounce shrink ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
-          {isMuted && <MicOff className={`text-red-400 shrink ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
-          {isVideoOff && <VideoOff className={`text-red-400 shrink ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
+          {isHost && <Crown className={`text-amber-400 flex-shrink-0 ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
+          {isHandRaised && <Hand className={`text-yellow-400 animate-bounce flex-shrink-0 ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
+          {isMuted && <MicOff className={`text-red-400 flex-shrink-0 ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
+          {isVideoOff && <VideoOff className={`text-red-400 flex-shrink-0 ${small ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />}
         </div>
       </div>
     </div>

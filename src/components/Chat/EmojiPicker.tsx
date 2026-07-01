@@ -176,7 +176,7 @@ export function EmojiPicker({ onSelect, onClose }: Props) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="جستجوی ایموجی..."
-            className="w-full pr-8 pl-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-hidden focus:ring-2 focus:ring-teal-500 dark:text-white dark:placeholder-gray-400"
+            className="w-full pr-8 pl-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 dark:text-white dark:placeholder-gray-400"
           />
         </div>
       </div>
@@ -189,7 +189,7 @@ export function EmojiPicker({ onSelect, onClose }: Props) {
               key={cat.id}
               onClick={() => setActiveCategory(i)}
               title={cat.label}
-              className={`shrink-0 w-9 h-8 flex items-center justify-center text-base rounded-lg transition-colors ${
+              className={`flex-shrink-0 w-9 h-8 flex items-center justify-center text-base rounded-lg transition-colors ${
                 activeCategory === i
                   ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600'
                   : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200'

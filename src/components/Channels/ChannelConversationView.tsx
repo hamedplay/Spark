@@ -177,7 +177,7 @@ function JalaliCalendarPicker({ value, onChange }: { value: Date | null; onChang
         <select
           value={hour}
           onChange={e => changeTime(Number(e.target.value), minute)}
-          className="px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/40"
+          className="px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
         >
           {hours.map(h => <option key={h} value={h}>{String(h).padStart(2, '0')}</option>)}
         </select>
@@ -185,7 +185,7 @@ function JalaliCalendarPicker({ value, onChange }: { value: Date | null; onChang
         <select
           value={minute}
           onChange={e => changeTime(hour, Number(e.target.value))}
-          className="px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/40"
+          className="px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
         >
           {minutes.map(m => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
         </select>
@@ -302,7 +302,7 @@ function GroupTaskModal({ msg, mentionedUsers, channelId, currentUserId, onClose
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">عنوان اقدام</label>
             <input value={title} onChange={e => setTitle(e.target.value)} autoFocus
               placeholder="عنوان اقدام گروهی..."
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/40" />
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">تاریخ سررسید شمسی *</label>
@@ -313,7 +313,7 @@ function GroupTaskModal({ msg, mentionedUsers, channelId, currentUserId, onClose
             <div className="space-y-1.5">
               {mentionedUsers.map(u => (
                 <div key={u.user_id} className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
                     {(u.full_name || u.email || 'U').charAt(0).toUpperCase()}
                   </div>
                   <span className="text-sm text-gray-700 dark:text-gray-300">{u.full_name || u.email}</span>
@@ -347,7 +347,7 @@ function PinnedPopup({ pinnedMsgs, privatePins, profiles, onScrollTo, onClose }:
 
   return (
     <div className="absolute top-14 left-2 right-2 sm:left-4 sm:right-4 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-600 z-50 overflow-hidden max-h-72 flex flex-col" dir="rtl">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 shrink-0">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <Pin className="w-4 h-4 text-amber-500" />
           <span className="text-sm font-semibold text-gray-700 dark:text-white">پیام‌های پین شده ({totalCount})</span>
@@ -364,7 +364,7 @@ function PinnedPopup({ pinnedMsgs, privatePins, profiles, onScrollTo, onClose }:
               return (
                 <button key={m.id} onClick={() => { onScrollTo(m.id); onClose(); }}
                   className="w-full flex items-start gap-2 px-4 py-2.5 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-right transition-colors border-b border-gray-50 dark:border-gray-700/50 last:border-0">
-                  <Pin className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                  <Pin className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     {pinner && (
                       <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-0.5">
@@ -379,7 +379,7 @@ function PinnedPopup({ pinnedMsgs, privatePins, profiles, onScrollTo, onClose }:
             {privatePins.map(m => (
               <button key={`priv-${m.id}`} onClick={() => { onScrollTo(m.id); onClose(); }}
                 className="w-full flex items-start gap-2 px-4 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-right transition-colors border-b border-gray-50 dark:border-gray-700/50 last:border-0">
-                <Pin className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                <Pin className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-blue-500 dark:text-blue-400 mb-0.5">پین خصوصی</p>
                   <p className="text-xs text-gray-700 dark:text-gray-300 truncate">{m.body || '📎 فایل'}</p>
@@ -403,7 +403,7 @@ function StarredPanel({ starredMsgs, onScrollTo, onClose }: {
     <div className="fixed inset-0 bg-black/50 z-[70]" onClick={onClose} dir="rtl">
       <div className="absolute inset-y-0 left-0 w-full max-w-sm bg-white dark:bg-gray-900 shadow-2xl flex flex-col"
         onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center gap-2">
             <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
             <h3 className="text-base font-bold dark:text-white">پیام‌های نشان‌دار</h3>
@@ -421,7 +421,7 @@ function StarredPanel({ starredMsgs, onScrollTo, onClose }: {
             starredMsgs.map(m => (
               <button key={m.id} onClick={() => { onScrollTo(m.id); onClose(); }}
                 className="w-full flex items-start gap-3 px-4 py-3 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 text-right transition-colors border-b border-gray-50 dark:border-gray-800">
-                <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 shrink-0 mt-0.5" />
+                <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{m.senderProfile?.full_name || m.senderProfile?.email || 'کاربر'}</p>
                   <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{m.body || '📎 فایل'}</p>
@@ -781,20 +781,20 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-800 relative" dir="rtl">
         {/* Header */}
-        <div className="flex items-center gap-2 px-2 sm:px-4 py-2.5 sm:py-3 border-b border-gray-100 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-800">
+        <div className="flex items-center gap-2 px-2 sm:px-4 py-2.5 sm:py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-800">
           {isMobile && (
-            <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 shrink-0">
+            <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 flex-shrink-0">
               <ArrowRight className="w-5 h-5" />
             </button>
           )}
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center shrink-0 text-sm font-bold text-teal-600 dark:text-teal-400">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center flex-shrink-0 text-sm font-bold text-teal-600 dark:text-teal-400">
             {channel.name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-bold text-gray-800 dark:text-white truncate">{channel.name}</h2>
             <p className="text-[11px] text-gray-400">{channel.member_count} عضو</p>
           </div>
-          <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+          <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             {/* Search */}
             <button onClick={() => setShowSearch(v => !v)}
               className={`p-1.5 sm:p-2 rounded-xl transition-colors ${showSearch ? 'bg-teal-100 dark:bg-teal-900/30 text-teal-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400'}`}>
@@ -828,12 +828,12 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
 
         {/* Search bar */}
         {showSearch && (
-          <div className="px-3 sm:px-4 py-2 border-b border-gray-100 dark:border-gray-700 shrink-0 bg-gray-50 dark:bg-gray-700/50">
+          <div className="px-3 sm:px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 bg-gray-50 dark:bg-gray-700/50">
             <div className="relative">
               <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                 placeholder="جستجو در پیام‌ها..."
-                className="w-full pr-9 pl-3 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500/40" />
+                className="w-full pr-9 pl-3 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40" />
               {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>}
             </div>
           </div>
@@ -841,8 +841,8 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
 
         {/* Description */}
         {channel.description && (
-          <div className="px-3 sm:px-4 py-2 bg-gray-50 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700 shrink-0">
-            <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5"><Info className="w-3 h-3 shrink-0" />{channel.description}</p>
+          <div className="px-3 sm:px-4 py-2 bg-gray-50 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+            <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5"><Info className="w-3 h-3 flex-shrink-0" />{channel.description}</p>
           </div>
         )}
 
@@ -1054,10 +1054,10 @@ function ChannelMentionsBar({
   const current = items[0];
   return (
     <div
-      className="shrink-0 flex items-center gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-900/20 border-t border-teal-200 dark:border-teal-800"
+      className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-900/20 border-t border-teal-200 dark:border-teal-800"
       dir="rtl"
     >
-      <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center shrink-0">
+      <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">
         <AtSign className="w-3.5 h-3.5 text-white" />
       </div>
       <button
@@ -1074,27 +1074,27 @@ function ChannelMentionsBar({
         )}
       </button>
       {items.length > 1 && (
-        <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold bg-teal-100 dark:bg-teal-900/40 px-1.5 py-0.5 rounded-full shrink-0">
+        <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold bg-teal-100 dark:bg-teal-900/40 px-1.5 py-0.5 rounded-full flex-shrink-0">
           {items.length}
         </span>
       )}
       <button
         onClick={() => { onScrollTo(current.id); onDismiss(current.id); }}
-        className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold hover:underline shrink-0"
+        className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold hover:underline flex-shrink-0"
       >
         رفتن
       </button>
       <button
         onClick={() => onDismiss(current.id)}
         title="بستن این منشن"
-        className="p-1 text-teal-500 hover:text-teal-700 shrink-0"
+        className="p-1 text-teal-500 hover:text-teal-700 flex-shrink-0"
       >
         <X className="w-3.5 h-3.5" />
       </button>
       {items.length > 1 && (
         <button
           onClick={onDismissAll}
-          className="text-[10px] text-teal-500 hover:text-teal-700 shrink-0"
+          className="text-[10px] text-teal-500 hover:text-teal-700 flex-shrink-0"
         >
           همه
         </button>

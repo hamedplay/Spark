@@ -63,9 +63,9 @@ export function CalendarSidebar({
   const publicOwned = calendars.filter(c => c.type === 'public');
 
   return (
-    <div className="w-64 shrink-0 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden shadow-xs" dir="rtl">
+    <div className="w-64 flex-shrink-0 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden shadow-sm" dir="rtl">
       {/* Mini calendar */}
-      <div className="border-b border-gray-100 dark:border-gray-700 shrink-0">
+      <div className="border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
         <button onClick={() => setMiniCalOpen(v => !v)}
           className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">تقویم ماهانه</span>
@@ -111,7 +111,7 @@ export function CalendarSidebar({
       </div>
 
       {/* Show only mine */}
-      <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 shrink-0">
+      <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
         <label className="flex items-center gap-2 cursor-pointer text-sm dark:text-white">
           <input type="checkbox" checked={showOnlyMine} onChange={e => onShowOnlyMineChange(e.target.checked)} className="w-4 h-4 rounded accent-blue-500" />
           نمایش رویدادهای مرتبط با من
@@ -121,7 +121,7 @@ export function CalendarSidebar({
       {/* Calendars section with collapsible toggle */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <button onClick={() => setCalendarsOpen(v => !v)}
-          className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shrink-0">
+          className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex-shrink-0">
           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">تقویم‌های موجود</span>
           <div className="flex items-center gap-1">
             <button onClick={e => { e.stopPropagation(); onOpenCalendarList(); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" title="لیست تقویم‌ها">
@@ -143,10 +143,10 @@ export function CalendarSidebar({
                   type="checkbox"
                   checked={occasionsEnabled}
                   onChange={onToggleOccasions}
-                  className="w-4 h-4 rounded shrink-0"
+                  className="w-4 h-4 rounded flex-shrink-0"
                   style={{ accentColor: '#f59e0b' }}
                 />
-                <CalendarDays className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <CalendarDays className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                 <span className="flex-1 text-sm dark:text-gray-300 font-medium text-amber-700 dark:text-amber-400">مناسبت‌ها</span>
               </div>
               <p className="text-[10px] text-gray-400 px-2 pb-1 leading-tight">تعطیلات و مناسبت‌های شمسی و قمری</p>
@@ -165,7 +165,7 @@ export function CalendarSidebar({
                   <div className="space-y-0.5 mt-1">
                     {[...sharedOwned, ...subscribedCalendars].map(cal => (
                       <div key={cal.id} className="flex items-center gap-2 px-1 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 group/cal">
-                        <input type="checkbox" checked={enabledCalendarIds.has(cal.id)} onChange={() => onToggleCalendar(cal.id)} className="w-4 h-4 rounded shrink-0" style={{ accentColor: cal.color }} />
+                        <input type="checkbox" checked={enabledCalendarIds.has(cal.id)} onChange={() => onToggleCalendar(cal.id)} className="w-4 h-4 rounded flex-shrink-0" style={{ accentColor: cal.color }} />
                         <span className="flex-1 text-sm dark:text-gray-300 truncate">{cal.name}</span>
                       </div>
                     ))}
@@ -185,7 +185,7 @@ export function CalendarSidebar({
                   <div className="space-y-0.5 mt-1">
                     {publicOwned.map(cal => (
                       <div key={cal.id} className="flex items-center gap-2 px-1 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 group/cal">
-                        <input type="checkbox" checked={enabledCalendarIds.has(cal.id)} onChange={() => onToggleCalendar(cal.id)} className="w-4 h-4 rounded shrink-0" style={{ accentColor: cal.color }} />
+                        <input type="checkbox" checked={enabledCalendarIds.has(cal.id)} onChange={() => onToggleCalendar(cal.id)} className="w-4 h-4 rounded flex-shrink-0" style={{ accentColor: cal.color }} />
                         <span className="flex-1 text-sm dark:text-gray-300 truncate">{cal.name}</span>
                       </div>
                     ))}

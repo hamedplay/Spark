@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, X } from 'lucide-react';
 import { CallEngine, IncomingCallNotification } from '../components/Chat/CallEngine';
 import type { CallSession } from '../components/Chat/CallEngine';
 import type { UserProfile } from '../components/Chat/types';
@@ -68,7 +68,7 @@ function showUrgentMessageToast(
         dir="rtl"
       >
         <div
-          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+          className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
             isUrgent ? 'bg-red-500 animate-pulse' : 'bg-orange-500'
           }`}
         >
@@ -100,7 +100,7 @@ function showUrgentMessageToast(
             e.stopPropagation();
             toast.dismiss(t.id);
           }}
-          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 flex-shrink-0"
         >
           <X size={14} />
         </button>
@@ -402,7 +402,7 @@ export function GlobalCallProvider({
       {/* Global urgent alarm — visible on EVERY page */}
       {alarmVisible && urgentAlarm && (
         <div
-          className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-xs overflow-y-auto"
+          className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto"
           style={{ zIndex: 9999, paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
@@ -412,7 +412,7 @@ export function GlobalCallProvider({
           </div>
           <div className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border-4 border-red-500">
             <div className="bg-red-500 px-6 py-5 flex items-center gap-3">
-              <AlertTriangle className="w-9 h-9 text-white animate-bounce shrink-0" />
+              <AlertTriangle className="w-9 h-9 text-white animate-bounce flex-shrink-0" />
               <div>
                 <p className="text-white font-bold text-xl">پیام اورژانسی!</p>
                 <p className="text-red-100 text-sm mt-0.5">از طرف: {urgentAlarm.sender_name}</p>

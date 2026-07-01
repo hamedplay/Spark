@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import moment from 'moment-jalaali';
-import { MoveVertical as MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
+import { MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { ConversationWithProfile } from './types';
 const STATUS_DOT: Record<string, string> = {
@@ -36,7 +36,7 @@ function Avatar({ name, size = 'md', avatarUrl, status, isOnline }: {
   const dotColor = STATUS_DOT[resolvedStatus] ?? STATUS_DOT.offline;
 
   return (
-    <div className="relative shrink-0">
+    <div className="relative flex-shrink-0">
       {avatarUrl ? (
         <img src={avatarUrl} alt={name} className={`${sz} rounded-full object-cover`} />
       ) : (
@@ -51,7 +51,7 @@ function Avatar({ name, size = 'md', avatarUrl, status, isOnline }: {
 
 export function UserAvatar({ name, size = 'md', avatarUrl }: { name: string; size?: 'sm' | 'md'; avatarUrl?: string | null }) {
   return (
-    <div className={`relative shrink-0 ${size === 'sm' ? 'w-8 h-8' : 'w-11 h-11'}`}>
+    <div className={`relative flex-shrink-0 ${size === 'sm' ? 'w-8 h-8' : 'w-11 h-11'}`}>
       {avatarUrl ? (
         <img src={avatarUrl} alt={name} className="w-full h-full rounded-full object-cover" />
       ) : (
@@ -124,7 +124,7 @@ export function ChatConversationItem({ conversation: c, isActive, currentUserId,
         onClick={onClick}
         className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-50 dark:border-gray-700/50 text-right ${isActive ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
       >
-        <div className="relative shrink-0">
+        <div className="relative flex-shrink-0">
           {isSavedMessages ? (
             <div className="w-11 h-11 rounded-full bg-teal-500 flex items-center justify-center">
               <Bookmark className="w-5 h-5 text-white" />
@@ -146,9 +146,9 @@ export function ChatConversationItem({ conversation: c, isActive, currentUserId,
         <div className="flex-1 min-w-0 text-right">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{name}</span>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               {c.isPinned && (
-                <Pin className="w-3 h-3 text-blue-400 shrink-0" style={{ transform: 'rotate(45deg)' }} />
+                <Pin className="w-3 h-3 text-blue-400 flex-shrink-0" style={{ transform: 'rotate(45deg)' }} />
               )}
               {c.hasMention && c.mentionMessageId && (
                 <button
@@ -169,7 +169,7 @@ export function ChatConversationItem({ conversation: c, isActive, currentUserId,
       {/* 3-dot menu trigger — visible on hover */}
       <button
         onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
-        className="absolute left-2 top-1/2 -translate-y-1/2 p-1 rounded-lg opacity-0 group-hover:opacity-100 focus:opacity-100 bg-white dark:bg-gray-800 shadow-xs border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all z-10"
+        className="absolute left-2 top-1/2 -translate-y-1/2 p-1 rounded-lg opacity-0 group-hover:opacity-100 focus:opacity-100 bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all z-10"
         title="گزینه‌ها"
       >
         <MoreVertical className="w-3.5 h-3.5" />
@@ -187,7 +187,7 @@ export function ChatConversationItem({ conversation: c, isActive, currentUserId,
               onClick={handlePin}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
             >
-              <Pin className="w-4 h-4 text-blue-500 shrink-0" />
+              <Pin className="w-4 h-4 text-blue-500 flex-shrink-0" />
               {c.isPinned ? 'برداشتن پین' : 'پین کردن'}
             </button>
           )}
@@ -195,7 +195,7 @@ export function ChatConversationItem({ conversation: c, isActive, currentUserId,
             onClick={handleClear}
             className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right ${!isSavedMessages ? 'border-t border-gray-50 dark:border-gray-700' : ''}`}
           >
-            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+            <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
             پاک کردن تاریخچه
           </button>
           {!isSavedMessages && (
@@ -203,7 +203,7 @@ export function ChatConversationItem({ conversation: c, isActive, currentUserId,
               onClick={handleDelete}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-right border-t border-gray-50 dark:border-gray-700"
             >
-              <Trash2 className="w-4 h-4 shrink-0" />
+              <Trash2 className="w-4 h-4 flex-shrink-0" />
               حذف چت
             </button>
           )}

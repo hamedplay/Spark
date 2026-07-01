@@ -1230,22 +1230,22 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const coreControls = (
     <>
       <button onClick={toggleMute} title={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-pressed={isMuted}
-        className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
+        className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
         {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
       </button>
       <button onClick={toggleVideo} title={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-pressed={isVideoOff}
-        className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
+        className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
         {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
       </button>
       {room.allow_chat && (
         <button onClick={() => togglePanel('chat')} title="چت"
-          className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${sidePanel === 'chat' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+          className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'chat' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
           <MessageSquare className="w-5 h-5" />
           {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>}
         </button>
       )}
       <button onClick={leaveRoom} title="پایان جلسه"
-        className="w-12 h-11 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-xs shrink-0">
+        className="w-12 h-11 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
         <PhoneOff className="w-5 h-5" />
       </button>
     </>
@@ -1261,21 +1261,21 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       `}</style>
 
       {/* Top bar */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-900/95 border-b border-gray-800 shrink-0 gap-2">
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-900/95 border-b border-gray-800 flex-shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
           <span className="font-bold text-sm truncate max-w-[120px] sm:max-w-xs">{room.name || 'جلسه ویدیویی'}</span>
           {/* Meeting duration / countdown */}
           {secondsLeft !== null ? (
-            <span className={`text-xs font-mono shrink-0 flex items-center gap-1 ${
+            <span className={`text-xs font-mono flex-shrink-0 flex items-center gap-1 ${
               secondsLeft <= 300 ? 'text-red-400 animate-pulse' : 'text-amber-400'
             }`}>
               ⏱ {secondsLeft > 0 ? fmt(secondsLeft) : 'تمام شد'}
             </span>
           ) : (
-            <span className="text-gray-400 text-xs font-mono shrink-0">{fmt(duration)}</span>
+            <span className="text-gray-400 text-xs font-mono flex-shrink-0">{fmt(duration)}</span>
           )}
-          <span className={`hidden sm:flex items-center gap-1 text-xs shrink-0 ${qualityColor[myQuality]}`}>
+          <span className={`hidden sm:flex items-center gap-1 text-xs flex-shrink-0 ${qualityColor[myQuality]}`}>
             <Activity className="w-3 h-3" />{myQuality}
           </span>
         </div>
@@ -1310,7 +1310,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           <button onClick={() => setIsFullscreen(v => !v)} title="تمام‌صفحه" className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors">
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
-          <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 rounded-lg text-xs shrink-0">
+          <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 rounded-lg text-xs flex-shrink-0">
             <Users className="w-3.5 h-3.5 text-teal-400" /><span>{allTiles.length}</span>
           </div>
         </div>
@@ -1365,9 +1365,9 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       <VideoTile key={t.peerId} {...t} isPinned isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(null)} />
                     ))}
                   </div>
-                  <div className="flex gap-2 shrink-0 overflow-x-auto pb-1">
+                  <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
                     {orderedTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
-                      <div key={t.peerId} className="w-36 sm:w-44 shrink-0 aspect-video" {...makeDraggable(t.peerId)}>
+                      <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0 aspect-video" {...makeDraggable(t.peerId)}>
                         <VideoTile {...t} isPinned={false} isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(t.peerId)} small />
                       </div>
                     ))}
@@ -1442,20 +1442,20 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               bg-gray-900 border-gray-800 flex flex-col z-40
               ${isMobile
                 ? 'absolute bottom-0 left-0 right-0 h-[70vh] rounded-t-2xl border-t conf-panel-mobile'
-                : 'w-64 md:w-72 shrink-0 border-r relative'
+                : 'w-64 md:w-72 flex-shrink-0 border-r relative'
               }
             `}>
-              <div className="flex border-b border-gray-800 shrink-0">
+              <div className="flex border-b border-gray-800 flex-shrink-0">
                 {isMobile && (
                   <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-gray-600 rounded-full" />
                 )}
                 {sidePanel === 'settings' ? (
                   <>
                     <div className="flex-1 flex items-center px-3 py-2.5 gap-2">
-                      <SlidersHorizontal className="w-4 h-4 text-teal-400 shrink-0" />
+                      <SlidersHorizontal className="w-4 h-4 text-teal-400 flex-shrink-0" />
                       <span className="text-sm font-medium text-teal-400">تنظیمات</span>
                     </div>
-                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors shrink-0">
+                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
                       <X className="w-4 h-4" />
                     </button>
                   </>
@@ -1481,7 +1481,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                         ) : p === 'polls' ? 'نظرسنجی' : 'وایت‌بورد'}
                       </button>
                     ))}
-                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors shrink-0">
+                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
                       <X className="w-4 h-4" />
                     </button>
                   </>
@@ -1511,13 +1511,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       </p>
                       {sortedQueue.map((entry, i) => (
                         <div key={entry.peerId} className="flex items-center gap-2 py-1">
-                          <span className="w-4 h-4 rounded-full bg-yellow-600/40 text-yellow-300 text-[10px] flex items-center justify-center font-bold shrink-0">{i + 1}</span>
+                          <span className="w-4 h-4 rounded-full bg-yellow-600/40 text-yellow-300 text-[10px] flex items-center justify-center font-bold flex-shrink-0">{i + 1}</span>
                           <span className="text-sm text-gray-200 flex-1 truncate">{entry.name}</span>
-                          <span className="text-xs text-gray-500 shrink-0">{Math.round((Date.now() - entry.time) / 1000)}ث پیش</span>
+                          <span className="text-xs text-gray-500 flex-shrink-0">{Math.round((Date.now() - entry.time) / 1000)}ث پیش</span>
                           <button onClick={() => lowerHand(entry.peerId)}
                             title="پایین آوردن دست"
                             aria-label={`پایین آوردن دست ${entry.name}`}
-                            className="p-1 rounded-lg bg-yellow-900/40 hover:bg-yellow-900/70 text-yellow-400 transition-colors shrink-0">
+                            className="p-1 rounded-lg bg-yellow-900/40 hover:bg-yellow-900/70 text-yellow-400 transition-colors flex-shrink-0">
                             <Hand className="w-3 h-3" />
                           </button>
                         </div>
@@ -1565,7 +1565,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       (checkPermission('manage_roles') ? (['admin','moderator','member','guest'] as RoleType[]).filter(r => r !== effectiveRole) : []);
                     return (
                     <div key={t.peerId} className="flex items-center gap-2 p-2 bg-gray-800 rounded-xl group relative">
-                      <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center text-xs font-bold shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
                         {t.displayName[0]?.toUpperCase() || '?'}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1578,7 +1578,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1 flex-shrink-0">
                         {t.isMuted && <MicOff className="w-3 h-3 text-red-400" />}
                         {t.isVideoOff && <VideoOff className="w-3 h-3 text-red-400" />}
                         {t.isHandRaised && <Hand className="w-3.5 h-3.5 text-yellow-400 animate-bounce" />}
@@ -1650,7 +1650,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                                     max={600}
                                     value={limitInputs[t.peerId] ?? '60'}
                                     onChange={e => setLimitInputs(prev => ({ ...prev, [t.peerId]: e.target.value }))}
-                                    className="flex-1 bg-gray-800 text-white text-xs rounded-lg px-2 py-1 outline-hidden focus:ring-1 focus:ring-teal-600 w-0"
+                                    className="flex-1 bg-gray-800 text-white text-xs rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-teal-600 w-0"
                                   />
                                   <button
                                     onClick={() => {
@@ -1659,7 +1659,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                                       setLimitEditor(null);
                                       toast.success(`محدودیت صحبت ${t.displayName}: ${secs}ث`);
                                     }}
-                                    className="px-2 py-1 bg-teal-600 hover:bg-teal-500 rounded-lg text-xs text-white transition-colors shrink-0"
+                                    className="px-2 py-1 bg-teal-600 hover:bg-teal-500 rounded-lg text-xs text-white transition-colors flex-shrink-0"
                                   >
                                     ثبت
                                   </button>
@@ -1711,7 +1711,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   />
                   {/* Speaking limit toggle — host/admin only */}
                   {checkPermission('mute_all') && (
-                    <div className="px-4 py-3 border-t border-gray-800 flex items-center justify-between gap-3 shrink-0">
+                    <div className="px-4 py-3 border-t border-gray-800 flex items-center justify-between gap-3 flex-shrink-0">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-200">محدودیت زمان صحبت</p>
                         <p className="text-xs text-gray-500 mt-0.5">محدودیت پیش‌فرض ۶۰ ثانیه — قابل تنظیم برای هر کاربر</p>
@@ -1719,7 +1719,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       <button
                         onClick={toggleSpeakingLimit}
                         aria-pressed={speakingLimitEnabled}
-                        className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${speakingLimitEnabled ? 'bg-teal-600' : 'bg-gray-700'}`}
+                        className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${speakingLimitEnabled ? 'bg-teal-600' : 'bg-gray-700'}`}
                       >
                         <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${speakingLimitEnabled ? 'right-0.5' : 'left-0.5'}`} />
                       </button>
@@ -1734,11 +1734,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       {/* Kick / Ban action menu */}
       {kickConfirm && (
-        <div role="dialog" aria-modal="true" aria-label="مدیریت کاربر" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+        <div role="dialog" aria-modal="true" aria-label="مدیریت کاربر" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 w-full max-w-sm space-y-3" dir="rtl">
             {/* Header */}
             <div className="flex items-center gap-3 pb-2 border-b border-gray-800">
-              <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white shrink-0">
+              <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
                 {kickConfirm.displayName[0]?.toUpperCase() || '?'}
               </div>
               <div>
@@ -1763,7 +1763,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                     rows={2}
                     maxLength={200}
                     autoFocus
-                    className="w-full p-2.5 bg-gray-800 border border-gray-700 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-hidden focus:border-red-600 resize-none"
+                    className="w-full p-2.5 bg-gray-800 border border-gray-700 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-600 resize-none"
                   />
                 </div>
                 <div className="flex gap-2">
@@ -1791,7 +1791,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   onClick={async () => { await kickParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName); setKickConfirm(null); }}
                   className="w-full flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-200 transition-colors text-right"
                 >
-                  <UserX className="w-4 h-4 text-amber-400 shrink-0" />
+                  <UserX className="w-4 h-4 text-amber-400 flex-shrink-0" />
                   <div>
                     <p className="font-medium">اخراج (بدون مسدودی)</p>
                     <p className="text-xs text-gray-500">کاربر می‌تواند دوباره وارد شود</p>
@@ -1812,7 +1812,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                       onClick={() => setPendingBan({ durationMinutes: min, label })}
                       className="w-full flex items-center gap-3 p-3 bg-gray-800 hover:bg-red-900/30 rounded-xl text-sm text-gray-200 hover:text-red-300 transition-colors text-right"
                     >
-                      <ShieldOff className="w-4 h-4 text-red-400 shrink-0" />
+                      <ShieldOff className="w-4 h-4 text-red-400 flex-shrink-0" />
                       <span>مسدودی {label}</span>
                     </button>
                   ))}
@@ -1832,7 +1832,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       {/* Host leave confirm */}
       {showLeaveConfirm && (
-        <div role="dialog" aria-modal="true" aria-label="خروج از جلسه" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+        <div role="dialog" aria-modal="true" aria-label="خروج از جلسه" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm text-center space-y-4" dir="rtl">
             <div className="w-14 h-14 rounded-full bg-red-900/40 flex items-center justify-center mx-auto">
               <PhoneOff className="w-7 h-7 text-red-400" />
@@ -1880,7 +1880,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       ))}
 
       {/* Bottom controls */}
-      <div className="bg-gray-900/95 border-t border-gray-800 shrink-0 relative" dir="rtl">
+      <div className="bg-gray-900/95 border-t border-gray-800 flex-shrink-0 relative" dir="rtl">
         {/* Speaking progress bar — shown when user is actively speaking and limit is on */}
         {speakingLimitEnabled && speakingSecs > 0 && !isMuted && myLimitSecs > 0 && (
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-gray-800">
@@ -1907,7 +1907,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             <div className="flex items-center justify-center gap-2 px-3 py-2.5">
               {coreControls}
               <button onClick={() => setShowAllControls(v => !v)} aria-label="بیشتر"
-                className="w-11 h-11 rounded-full flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-all shrink-0">
+                className="w-11 h-11 rounded-full flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-all flex-shrink-0">
                 {showAllControls ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
               </button>
             </div>
@@ -1965,25 +1965,25 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         ) : (
           <div role="toolbar" aria-label="کنترل‌های جلسه" className="flex items-center justify-center gap-2 px-3 py-3 overflow-x-auto">
             <button onClick={toggleMute} aria-label={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-pressed={isMuted}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
             <button onClick={toggleVideo} aria-label={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-pressed={isVideoOff}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
             </button>
             {room.allow_screen_share && (
               <button onClick={isScreenSharing ? stopScreenShare : startScreenShare} aria-label={isScreenSharing ? 'توقف اشتراک صفحه' : 'شروع اشتراک صفحه'} aria-pressed={isScreenSharing}
-                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${isScreenSharing ? 'bg-teal-600 hover:bg-teal-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isScreenSharing ? 'bg-teal-600 hover:bg-teal-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
                 {isScreenSharing ? <ScreenShareOff className="w-5 h-5" /> : <ScreenShare className="w-5 h-5" />}
               </button>
             )}
             <button onClick={toggleHand} aria-label={isHandRaised ? 'پایین آوردن دست' : 'بلند کردن دست'} aria-pressed={isHandRaised}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${isHandRaised ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isHandRaised ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <Hand className="w-5 h-5" />
             </button>
             {room.allow_reactions && (
-              <div className="shrink">
+              <div className="flex-shrink-0">
                 <button onClick={() => setShowEmojiPicker(v => !v)} aria-label="ارسال واکنش ایموجی" aria-expanded={showEmojiPicker}
                   aria-pressed={showEmojiPicker}
                   className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg ${showEmojiPicker ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
@@ -1993,43 +1993,43 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             )}
             {room.allow_chat && (
               <button onClick={() => togglePanel('chat')} aria-label="باز کردن پنل چت" aria-pressed={sidePanel === 'chat'}
-                className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${sidePanel === 'chat' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'chat' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
                 <MessageSquare className="w-5 h-5" />
                 {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>}
               </button>
             )}
             <button onClick={() => togglePanel('participants')} aria-label="باز کردن لیست شرکت‌کنندگان" aria-pressed={sidePanel === 'participants'}
-              className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <Users className="w-5 h-5" />
               {(sortedQueue.length + pendingApprovals.length) > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full text-xs text-black flex items-center justify-center font-bold">{sortedQueue.length + pendingApprovals.length}</span>
               )}
             </button>
             <button onClick={() => togglePanel('polls')} aria-label="باز کردن نظرسنجی" aria-pressed={sidePanel === 'polls'}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${sidePanel === 'polls' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'polls' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <BarChart2 className="w-5 h-5" />
             </button>
             <button onClick={() => togglePanel('whiteboard')} aria-label="باز کردن وایت‌بورد" aria-pressed={sidePanel === 'whiteboard'}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <PenTool className="w-5 h-5" />
             </button>
             <button onClick={() => togglePanel('settings')} aria-label="تنظیمات" aria-pressed={sidePanel === 'settings'}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${sidePanel === 'settings' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'settings' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
               <SlidersHorizontal className="w-5 h-5" />
             </button>
-            <div className="w-px h-8 bg-gray-700 shrink-0" />
+            <div className="w-px h-8 bg-gray-700 flex-shrink-0" />
             <button onClick={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })} aria-label={isSpeakerMuted ? 'فعال کردن صدای اسپیکر' : 'قطع صدای اسپیکر'} aria-pressed={isSpeakerMuted}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xs shrink-0 ${isSpeakerMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isSpeakerMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
               {isSpeakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
             </button>
             {checkPermission('mute_all') && peers.size > 0 && (
               <button onClick={muteAll} aria-label="قطع میکروفون همه شرکت‌کنندگان"
-                className="w-12 h-12 rounded-full bg-amber-700 hover:bg-amber-600 flex items-center justify-center transition-all shadow-xs shrink-0">
+                className="w-12 h-12 rounded-full bg-amber-700 hover:bg-amber-600 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
                 <ShieldAlert className="w-5 h-5" />
               </button>
             )}
             <button onClick={leaveRoom} aria-label="ترک یا پایان جلسه"
-              className="w-14 h-12 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-xs shrink-0">
+              className="w-14 h-12 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
               <PhoneOff className="w-5 h-5" />
             </button>
           </div>

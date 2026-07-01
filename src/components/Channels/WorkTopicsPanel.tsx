@@ -67,7 +67,7 @@ function FlowchartView({ task, members, currentUserId, onUpdateAssignment, onAdd
         <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
           <div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: total > 0 ? `${(doneCount / total) * 100}%` : '0%' }} />
         </div>
-        <span className="text-[11px] text-gray-500 shrink-0">{doneCount}/{total}</span>
+        <span className="text-[11px] text-gray-500 flex-shrink-0">{doneCount}/{total}</span>
       </div>
 
       {/* Assignment nodes */}
@@ -82,8 +82,8 @@ function FlowchartView({ task, members, currentUserId, onUpdateAssignment, onAdd
           return (
             <div key={a.id} className="flex items-start gap-2">
               {/* Timeline dot + line */}
-              <div className="flex flex-col items-center shrink-0 pt-1">
-                <div className={`w-3 h-3 rounded-full border-2 shrink-0 ${
+              <div className="flex flex-col items-center flex-shrink-0 pt-1">
+                <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 ${
                   a.status === 'done' || a.status === 'archived'
                     ? 'bg-teal-500 border-teal-500'
                     : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-500'
@@ -96,7 +96,7 @@ function FlowchartView({ task, members, currentUserId, onUpdateAssignment, onAdd
                 {/* Header row */}
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${statusMeta.cls}`}>
                   <div className="flex items-center gap-1.5">
-                    <User className="w-3 h-3 shrink-0" />
+                    <User className="w-3 h-3 flex-shrink-0" />
                     <span className="font-medium">{name}</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -117,7 +117,7 @@ function FlowchartView({ task, members, currentUserId, onUpdateAssignment, onAdd
                   <div className="mt-1.5 mr-2 space-y-1">
                     {userActivities.map(act => (
                       <div key={act.id} className="flex items-start gap-2 px-2.5 py-1.5 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600">
-                        <MessageSquare className="w-3 h-3 text-teal-500 shrink-0 mt-0.5" />
+                        <MessageSquare className="w-3 h-3 text-teal-500 flex-shrink-0 mt-0.5" />
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] text-gray-700 dark:text-gray-300">{act.note}</p>
                           <span className="text-[10px] text-gray-400">{formatTime(act.created_at)}</span>
@@ -135,12 +135,12 @@ function FlowchartView({ task, members, currentUserId, onUpdateAssignment, onAdd
                       onChange={e => setNoteInputs(n => ({ ...n, [a.assignee_id]: e.target.value }))}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitActivity(a.assignee_id); } }}
                       placeholder="ثبت اقدام..."
-                      className="flex-1 text-xs px-2.5 py-1.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-hidden focus:ring-1 focus:ring-teal-500/40"
+                      className="flex-1 text-xs px-2.5 py-1.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500/40"
                     />
                     <button
                       onClick={() => submitActivity(a.assignee_id)}
                       disabled={!noteInputs[a.assignee_id]?.trim() || saving[a.assignee_id]}
-                      className="p-1.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white rounded-lg transition-colors shrink-0"
+                      className="p-1.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white rounded-lg transition-colors flex-shrink-0"
                     >
                       <Send className="w-3 h-3" />
                     </button>
@@ -183,7 +183,7 @@ function TaskCard({ task, members, currentUserId, onComplete, onArchive, onUpdat
             <p className="text-sm font-semibold text-gray-800 dark:text-white">{task.title}</p>
             {task.body && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{task.body}</p>}
           </div>
-          <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${status.cls}`}>
+          <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${status.cls}`}>
             {status.icon} {status.label}
           </span>
         </div>
@@ -285,14 +285,14 @@ function CreateTaskForm({ channelId, currentUserId, members, onCreated, onCancel
           value={title}
           onChange={e => setTitle(e.target.value)}
           placeholder="عنوان اقدام..."
-          className="w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500/40"
+          className="w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40"
         />
         <textarea
           value={body}
           onChange={e => setBody(e.target.value)}
           rows={2}
           placeholder="توضیحات (اختیاری)..."
-          className="w-full text-xs px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500/40 resize-none"
+          className="w-full text-xs px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40 resize-none"
         />
         <div>
           <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">مسئولان (انتخاب کنید)</p>
@@ -309,7 +309,7 @@ function CreateTaskForm({ channelId, currentUserId, members, onCreated, onCancel
                       : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-teal-300'
                   }`}
                 >
-                  <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${selected ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-500'}`}>
+                  <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${selected ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-500'}`}>
                     {(m.full_name || m.email || 'U').charAt(0).toUpperCase()}
                   </div>
                   {m.full_name || m.email}
@@ -346,7 +346,7 @@ export function WorkTopicsPanel({ tasks, members, currentUserId, channelId, onCl
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center gap-3">
             <GitFork className="w-5 h-5 text-teal-500" />
             <h3 className="text-base font-bold dark:text-white">اقدامات گروهی</h3>
@@ -363,7 +363,7 @@ export function WorkTopicsPanel({ tasks, members, currentUserId, channelId, onCl
           </div>
         </div>
 
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center gap-2">
             {(['all', 'open', 'done', 'archived'] as const).map(s => (
               <button key={s} onClick={() => setFilterStatus(s)}
