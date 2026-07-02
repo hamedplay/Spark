@@ -39,11 +39,11 @@ function useChatTheme(): ChatThemeSettings {
 }
 
 // Static border width class — color overridden via inline style
-const TYPE_BORDER_CLASS: Record<string, string> = {
-  normal: '',
-  important: 'border-r-4',
-  urgent: 'border-r-4',
-  confidential: 'border-r-4',
+const TYPE_BORDER_CLASSES: Record<string, { own: string; other: string }> = {
+  normal:       { own: '', other: '' },
+  important:    { own: 'border-l-4', other: 'border-r-4' },
+  urgent:       { own: 'border-l-4', other: 'border-r-4' },
+  confidential: { own: 'border-l-4', other: 'border-r-4' },
 };
 
 
@@ -244,9 +244,9 @@ export function ChatMessage({
 
   // Dynamic type border colors from theme
   const typeBorderStyle: React.CSSProperties = {};
-  if (message.message_type === 'important') typeBorderStyle.borderRightColor = theme.importantColor;
-  else if (message.message_type === 'urgent') typeBorderStyle.borderRightColor = theme.urgentColor;
-  else if (message.message_type === 'confidential') typeBorderStyle.borderRightColor = theme.confidentialColor;
+  if (message.message_type === 'important') typeBorderStyle[isOwn ? 'borderLeftColor' : 'borderRightColor'] = theme.importantColor;
+  else if (message.message_type === 'urgent') typeBorderStyle[isOwn ? 'borderLeftColor' : 'borderRightColor'] = theme.urgentColor;
+  else if (message.message_type === 'confidential') typeBorderStyle[isOwn ? 'borderLeftColor' : 'borderRightColor'] = theme.confidentialColor;
 
   const typeLabel = message.message_type !== 'normal' ? {
     text: message.message_type === 'important' ? 'پیام مهم!' : message.message_type === 'urgent' ? 'پیام اورژانسی!' : 'محرمانه',
@@ -293,7 +293,7 @@ export function ChatMessage({
 
             {/* Card — NO overflow-hidden so menus can escape */}
             <div
-              className={`relative ${bubbleRadiusClass} ${message.replyTarget ? 'rounded-tr-none' : ''} ${cardBg} shadow-sm border ${borderClass} ${TYPE_BORDER_CLASS[message.message_type]}`}
+              className={`relative ${bubbleRadiusClass} ${message.replyTarget ? 'rounded-tr-none' : ''} ${cardBg} shadow-sm border ${borderClass} ${TYPE_BORDER_CLASSES[message.message_type]?.[isOwn ? 'own' : 'other'] ?? ''}`}
               style={{ ...cardStyle, ...typeBorderStyle, fontSize }}
             >
 
@@ -380,7 +380,7 @@ export function ChatMessage({
 
               {/* Bottom action bar */}
               {!isDeleted && (
-                <div className={`flex items-center gap-1 px-2 pb-2 pt-1 border-t ${dividerClass}`}>
+                <div className={`flex items-center gap-1 px-2 pb-2 pt-1 border-t ${dividerClass} ${isOwn ? 'flex-row-reverse' : ''}`}>
                 {/* Status square */}
                 <StatusSquare />
 

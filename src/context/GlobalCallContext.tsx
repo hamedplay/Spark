@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { AlertTriangle, CheckCircle, X } from 'lucide-react';
+import { TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, X } from 'lucide-react';
 import { CallEngine, IncomingCallNotification } from '../components/Chat/CallEngine';
 import type { CallSession } from '../components/Chat/CallEngine';
 import type { UserProfile } from '../components/Chat/types';
@@ -224,6 +224,40 @@ export function GlobalCallProvider({
     if (alarmIntervalRef.current) clearInterval(alarmIntervalRef.current);
     alarmIntervalRef.current = setInterval(playBeep, 1500);
   };
+
+  // ── On login: check for existing unread urgent messages ──────────────────
+  useEffect(() => {
+    if (!currentUserId) return;
+    (async () => {
+      const { data: msgs } = await supabase
+        .from('chat_messages')
+        .select('id, body, sender_id, created_at, conversation_id, message_type')
+        .eq('message_type', 'urgent')
+        .neq('sender_id', currentUserId)
+        .not('read_by', 'cs', `{${currentUserId}}`)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (!msgs?.length) return;
+      const senderIds = [...new Set(msgs.map((m: any) => m.sender_id))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, full_name')
+        .in('user_id', senderIds);
+      const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name]));
+      for (const msg of msgs) {
+        const senderName = profileMap.get(msg.sender_id) || 'کاربر';
+        triggerUrgentAlarm({
+          id: msg.id,
+          body: msg.body,
+          sender_name: senderName,
+          created_at: msg.created_at,
+          conversation_id: msg.conversation_id,
+        });
+        break; // Show one alarm at a time; user dismisses to see next
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
 
   // ── Incoming call listener ────────────────────────────────────────────────
   useEffect(() => {

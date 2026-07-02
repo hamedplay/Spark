@@ -123,6 +123,7 @@ export function ChatInputBar({
     if (historyIndexRef.current > 0) {
       historyIndexRef.current--;
       setBody(historyRef.current[historyIndexRef.current]);
+      setTimeout(adjustHeight, 0);
     }
   };
 
@@ -130,6 +131,7 @@ export function ChatInputBar({
     if (historyIndexRef.current < historyRef.current.length - 1) {
       historyIndexRef.current++;
       setBody(historyRef.current[historyIndexRef.current]);
+      setTimeout(adjustHeight, 0);
     }
   };
 
@@ -145,6 +147,7 @@ export function ChatInputBar({
     setTimeout(() => {
       ta.focus();
       ta.setSelectionRange(start + prefix.length, end + prefix.length);
+      adjustHeight();
     }, 0);
   };
 
@@ -156,7 +159,7 @@ export function ChatInputBar({
     const newVal = body.slice(0, lineStart) + prefix + body.slice(lineStart);
     setBody(newVal);
     pushHistory(newVal);
-    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + prefix.length, start + prefix.length); }, 0);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + prefix.length, start + prefix.length); adjustHeight(); }, 0);
   };
 
   const insertEmoji = (emoji: string) => {
@@ -580,8 +583,8 @@ export function ChatInputBar({
       resetText();
       onCancelReply();
       onSent();
-    } catch {
-      toast.error('خطا در ارسال فایل');
+    } catch (err: any) {
+      toast.error('خطا در ارسال فایل: ' + (err?.message || String(err)));
     } finally {
       setSending(false);
       e.target.value = '';

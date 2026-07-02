@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronRight, Search, Phone, Video, Info, Star, Bell, X, Clock, MessageCircle, AtSign, CircleCheck as CheckCircle, Bookmark } from 'lucide-react';
+import { ChevronRight, Search, Phone, Video, Info, Star, Bell, X, Clock, MessageCircle, AtSign, CircleCheck as CheckCircle, Bookmark, CalendarDays } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ChatMessage } from './ChatMessage';
 import { ChatInputBar } from './ChatInputBar';
@@ -98,6 +98,7 @@ export function ChatConversationView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [jumpPickerDate, setJumpPickerDate] = useState<{ jy: number; jm: number; jd: number } | null>(null);
 
   useEffect(() => {
     fetchMessages();
@@ -329,6 +330,7 @@ export function ChatConversationView({
 
     const enriched: MessageWithMeta[] = msgs
       .filter(m => !(m.deleted_for_sender && m.sender_id === currentUserId))
+      .filter(m => !(m.deleted_for_receiver && m.sender_id !== currentUserId))
       .map(m => ({
         ...m,
         status: m.status || 'pending',
@@ -518,14 +520,81 @@ export function ChatConversationView({
   };
 
 
-  const scrollToMessage = (messageId: string) => {
-    const el = messageRefs.current.get(messageId);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('ring-2', 'ring-amber-400', 'ring-offset-1');
-      setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400', 'ring-offset-1'), 2000);
+  const scrollToMessage = async (messageId: string) => {
+    const tryScroll = () => {
+      const el = messageRefs.current.get(messageId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-amber-400', 'ring-offset-1');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400', 'ring-offset-1'), 2000);
+        return true;
+      }
+      return false;
+    };
+
+    if (tryScroll()) return;
+
+    // Message not in DOM — fetch it from DB and inject into messages list
+    const { data: msg } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('id', messageId)
+      .maybeSingle();
+    if (!msg) return;
+
+    const senderIds = [...new Set([msg.sender_id])];
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, email, avatar_url')
+      .in('user_id', senderIds);
+    const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+
+    const injected: MessageWithMeta = {
+      ...msg,
+      status: msg.status || 'pending',
+      read_by: msg.read_by || [],
+      senderProfile: profileMap.get(msg.sender_id) || null,
+      reactions: [],
+      isStarred: false,
+      replyTarget: null,
+      tags: [],
+    };
+
+    setMessages(prev => {
+      if (prev.some(m => m.id === messageId)) return prev;
+      const insertIdx = prev.findIndex(m => m.created_at > msg.created_at);
+      if (insertIdx === -1) return [...prev, injected];
+      return [...prev.slice(0, insertIdx), injected, ...prev.slice(insertIdx)];
+    });
+
+    // Wait for render then scroll
+    setTimeout(() => tryScroll(), 150);
+  };
+
+  const jumpToDate = async (jy: number, jm: number, jd: number) => {
+    setJumpPickerDate(null);
+    const startIso = moment(`${jy}/${jm}/${jd}`, 'jYYYY/jMM/jDD').toISOString();
+    const endIso = moment(`${jy}/${jm}/${jd}`, 'jYYYY/jMM/jDD').endOf('day').toISOString();
+    // Try to find first message on that day in current loaded messages
+    const inMem = messages.find(m => m.created_at >= startIso && m.created_at <= endIso);
+    if (inMem) { scrollToMessage(inMem.id); return; }
+    // Fetch from DB
+    const { data } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('conversation_id', conversation.id)
+      .eq('deleted_for_all', false)
+      .gte('created_at', startIso)
+      .lte('created_at', endIso)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (data?.length) {
+      scrollToMessage(data[0].id);
+    } else {
+      toast('پیامی در این تاریخ یافت نشد', { icon: '📅' });
     }
   };
+
 
   const handleReact = async (messageId: string, emoji: string) => {
     const msg = messages.find(m => m.id === messageId);
@@ -827,12 +896,21 @@ export function ChatConversationView({
           return {};
         })()}
       >
-        {grouped.map(group => (
+        {grouped.map(group => {
+          const jDate = moment(group.date, 'jYYYY/jMM/jDD');
+          const jy = jDate.jYear();
+          const jm = jDate.jMonth() + 1;
+          const jd = jDate.jDate();
+          return (
           <div key={group.date}>
             <div className="flex items-center justify-center my-3">
-              <span className="px-3 py-1 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs rounded-full shadow-sm border border-gray-100 dark:border-gray-700">
+              <button
+                onClick={() => setJumpPickerDate({ jy, jm, jd })}
+                className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs rounded-full shadow-sm border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <CalendarDays className="w-3 h-3 flex-shrink-0" />
                 {formatDate(group.date)} — {group.date}
-              </span>
+              </button>
             </div>
             {group.messages.map(msg => (
               <div key={msg.id} ref={el => { if (el) messageRefs.current.set(msg.id, el); else messageRefs.current.delete(msg.id); }} className="transition-all duration-300 rounded-xl">
@@ -857,7 +935,8 @@ export function ChatConversationView({
               </div>
             ))}
           </div>
-        ))}
+          );
+        })}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 opacity-50">
             <MessageCircle className="w-12 h-12 text-gray-300" />
@@ -1052,6 +1131,15 @@ export function ChatConversationView({
           </div>
         </div>
       )}
+
+      {/* Jump-to-date picker */}
+      {jumpPickerDate && (
+        <JumpToDatePicker
+          initial={jumpPickerDate}
+          onConfirm={(jy, jm, jd) => jumpToDate(jy, jm, jd)}
+          onClose={() => setJumpPickerDate(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1117,6 +1205,76 @@ function MentionsBar({
           همه
         </button>
       )}
+    </div>
+  );
+}
+// ─── Jump-to-date picker ──────────────────────────────────────────────────────
+function JumpToDatePicker({
+  initial,
+  onConfirm,
+  onClose,
+}: {
+  initial: { jy: number; jm: number; jd: number };
+  onConfirm: (jy: number, jm: number, jd: number) => void;
+  onClose: () => void;
+}) {
+  const [jy, setJy] = useState(initial.jy);
+  const [jm, setJm] = useState(initial.jm);
+  const [jd, setJd] = useState(initial.jd);
+
+  const MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+  const daysInMonth = jm <= 6 ? 31 : jm <= 11 ? 30 : (moment.jIsLeapYear(jy) ? 30 : 29);
+  const years = Array.from({ length: 10 }, (_, i) => initial.jy - 5 + i);
+
+  return (
+    <div
+      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+      dir="rtl"
+    >
+      <div
+        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-5 w-72"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-blue-500" />
+            رفتن به تاریخ
+          </h3>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex gap-2 mb-4">
+          <select
+            value={jy}
+            onChange={e => setJy(Number(e.target.value))}
+            className="flex-1 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select
+            value={jm}
+            onChange={e => setJm(Number(e.target.value))}
+            className="flex-1 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            {MONTHS.map((name, i) => <option key={i+1} value={i+1}>{name}</option>)}
+          </select>
+          <select
+            value={jd}
+            onChange={e => setJd(Number(e.target.value))}
+            className="w-16 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            {Array.from({ length: daysInMonth }, (_, i) => i+1).map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <button
+          onClick={() => onConfirm(jy, jm, jd)}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm py-2 rounded-xl transition-colors"
+        >
+          رفتن به این تاریخ
+        </button>
+      </div>
     </div>
   );
 }

@@ -601,6 +601,40 @@ export function IncomingCallNotification({ session, callerProfile, onAccept, onD
     return () => clearTimeout(t);
   }, []);
 
+  // Ringtone: repeating beep using Web AudioContext
+  useEffect(() => {
+    let ctx: AudioContext | null = null;
+    let stopped = false;
+
+    const playBeep = () => {
+      if (stopped || !ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+      osc.onended = () => {
+        if (!stopped) setTimeout(playBeep, 600);
+      };
+    };
+
+    try {
+      ctx = new AudioContext();
+      playBeep();
+    } catch {
+      // AudioContext not available
+    }
+
+    return () => {
+      stopped = true;
+      ctx?.close();
+    };
+  }, []);
+
   const name = callerProfile?.full_name || callerProfile?.email || 'کاربر';
 
   return (
