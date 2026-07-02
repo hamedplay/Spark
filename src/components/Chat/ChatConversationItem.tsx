@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import moment from 'moment-jalaali';
-import { MoveVertical as MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
+import { EllipsisVertical as MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { ConversationWithProfile } from './types';
