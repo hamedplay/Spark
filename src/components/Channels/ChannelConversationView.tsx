@@ -520,11 +520,11 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
   }, [channel.id, allProfiles, currentUserId]);
 
   const fetchMembers = useCallback(async () => {
-    const { data: memberRows } = await supabase
+    const { data: memberRows, error: membErr } = await supabase
       .from('channel_members')
-      .select('id, channel_id, user_id, role, joined_at')
+      .select('channel_id, user_id, role, joined_at')
       .eq('channel_id', channel.id);
-    if (!memberRows) return;
+    if (membErr || !memberRows) return;
 
     const userIds = memberRows.map((m: any) => m.user_id);
     const { data: profileRows } = userIds.length
@@ -534,7 +534,9 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
     const freshProfileMap = new Map((profileRows || []).map((p: any) => [p.user_id, p]));
 
     const withProfiles: MemberWithProfile[] = memberRows.map((m: any) => ({
-      ...m, profile: freshProfileMap.get(m.user_id) || null,
+      ...m,
+      id: m.user_id,
+      profile: freshProfileMap.get(m.user_id) || null,
     }));
     setMembers(withProfiles);
     const me = memberRows.find((m: any) => m.user_id === currentUserId);
