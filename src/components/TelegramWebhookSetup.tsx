@@ -1,135 +1,95 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Bot, Check, RefreshCw, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 interface WebhookSetupProps {
-  token: string;
-  chatId: string;
   webhookUrl: string;
 }
 
-export function TelegramWebhookSetup({ token, chatId, webhookUrl }: WebhookSetupProps) {
+async function callTelegramProxy(method: string, params?: Record<string, unknown>) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('احراز هویت لازم است');
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/messenger-proxy`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ channel: 'telegram', method, params: params ?? {} }),
+    },
+  );
+  return res.json();
+}
+
+export function TelegramWebhookSetup({ webhookUrl }: WebhookSetupProps) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'pending' | 'success' | 'error'>('pending');
   const [webhookInfo, setWebhookInfo] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
-  useEffect(() => {
-    checkWebhookStatus();
-  }, [token, webhookUrl]);
-
-  const checkWebhookStatus = async () => {
-    if (!token || !webhookUrl) return;
-
+  const checkWebhookStatus = useCallback(async () => {
+    if (!webhookUrl) return;
     try {
       setLoading(true);
       setErrorMessage('');
-      
-      const response = await fetch(
-        `https://api.telegram.org/bot${token}/getWebhookInfo`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
+      const data = await callTelegramProxy('getWebhookInfo');
+      if (data.ok && data.result) {
+        setWebhookInfo(data.result);
+        if (data.result.url === webhookUrl && !data.result.last_error_date) {
+          setStatus('success');
+        } else {
+          setStatus('pending');
+          if (data.result?.last_error_message) {
+            setErrorMessage(data.result.last_error_message);
           }
         }
-      );
-
-      if (!response.ok) {
-        throw new Error('خطا در دریافت اطلاعات وب‌هوک');
-      }
-
-      const data = await response.json();
-      setWebhookInfo(data.result);
-
-      if (data.ok && data.result.url === webhookUrl && !data.result.last_error_date) {
-        setStatus('success');
       } else {
-        setStatus('pending');
-        if (data.result?.last_error_message) {
-          setErrorMessage(data.result.last_error_message);
-        }
+        setStatus('error');
+        setErrorMessage(data.description || 'خطا در بررسی وضعیت وب‌هوک');
       }
     } catch (error: any) {
-      console.error('Error checking webhook status:', error);
       setStatus('error');
       setErrorMessage(error.message || 'خطا در بررسی وضعیت وب‌هوک');
     } finally {
       setLoading(false);
     }
-  };
+  }, [webhookUrl]);
+
+  useEffect(() => {
+    checkWebhookStatus();
+  }, [checkWebhookStatus]);
 
   const setupWebhook = async () => {
-    if (!token || !chatId || !webhookUrl) {
-      toast.error('لطفاً تمام اطلاعات مورد نیاز را وارد کنید');
+    if (!webhookUrl) {
+      toast.error('لطفاً Webhook URL را وارد و ذخیره کنید');
       return;
     }
-
     setLoading(true);
     setErrorMessage('');
-    
     try {
-      // بررسی اعتبار توکن
-      const tokenCheck = await fetch(
-        `https://api.telegram.org/bot${token}/getMe`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      const tokenData = await tokenCheck.json();
-
-      if (!tokenData.ok) {
-        throw new Error('توکن تلگرام نامعتبر است');
+      const botData = await callTelegramProxy('getMe');
+      if (!botData.ok) {
+        throw new Error(botData.description || 'توکن تلگرام نامعتبر است');
       }
 
-      // حذف webhook قبلی
-      await fetch(
-        `https://api.telegram.org/bot${token}/deleteWebhook`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            drop_pending_updates: true
-          })
-        }
-      );
+      await callTelegramProxy('deleteWebhook', { drop_pending_updates: true });
 
-      // تنظیم webhook جدید
-      const webhookSetup = await fetch(
-        `https://api.telegram.org/bot${token}/setWebhook`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: webhookUrl,
-            allowed_updates: ['message', 'callback_query'],
-            drop_pending_updates: true
-          })
-        }
-      );
-      
-      const webhookData = await webhookSetup.json();
-
-      if (!webhookData.ok) {
+      const webhookData = await callTelegramProxy('setWebhook', {
+        url: webhookUrl,
+        allowed_updates: ['message', 'callback_query'],
+        drop_pending_updates: true,
+      });
+      if (!webhookData.ok && webhookData.result !== true) {
         throw new Error(webhookData.description || 'خطا در تنظیم webhook');
       }
 
-      // بررسی وضعیت نهایی
       await checkWebhookStatus();
-      
-      if (status !== 'error') {
-        toast.success('Webhook با موفقیت تنظیم شد');
-      }
+      toast.success('Webhook با موفقیت تنظیم شد');
     } catch (error: any) {
-      console.error('Webhook setup error:', error);
       setStatus('error');
       setErrorMessage(error.message || 'خطا در تنظیم webhook');
       toast.error(error.message || 'خطا در تنظیم webhook');
@@ -187,7 +147,7 @@ export function TelegramWebhookSetup({ token, chatId, webhookUrl }: WebhookSetup
             )}
             <p className="dark:text-gray-300">
               <span className="font-medium">آخرین به‌روزرسانی: </span>
-              {webhookInfo.last_error_date ? 
+              {webhookInfo.last_error_date ?
                 new Date(webhookInfo.last_error_date * 1000).toLocaleString('fa-IR') :
                 'بدون خطا'}
             </p>
