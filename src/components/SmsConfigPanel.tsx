@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, MoveVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, EllipsisVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
