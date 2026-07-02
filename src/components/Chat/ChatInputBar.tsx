@@ -69,7 +69,10 @@ export function ChatInputBar({
 
   useEffect(() => {
     if (editingMessage) {
-      setBody(editingMessage.body || '');
+      const val = editingMessage.body || '';
+      setBody(val);
+      historyRef.current = [val];
+      historyIndexRef.current = 0;
       textareaRef.current?.focus();
     }
   }, [editingMessage]);
@@ -160,6 +163,24 @@ export function ChatInputBar({
     setBody(newVal);
     pushHistory(newVal);
     setTimeout(() => { ta.focus(); ta.setSelectionRange(start + prefix.length, start + prefix.length); adjustHeight(); }, 0);
+  };
+
+  const insertLink = () => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = body.slice(start, end);
+    const linkText = selected || 'متن لینک';
+    const newVal = body.slice(0, start) + `[${linkText}](url)` + body.slice(end);
+    setBody(newVal);
+    pushHistory(newVal);
+    setTimeout(() => {
+      ta.focus();
+      const urlStart = start + 1 + linkText.length + 2;
+      ta.setSelectionRange(urlStart, urlStart + 3);
+      adjustHeight();
+    }, 0);
   };
 
   const insertEmoji = (emoji: string) => {
@@ -672,7 +693,7 @@ export function ChatInputBar({
             <span className="text-[11px] font-bold leading-none">1.</span>
           </EditorBtn>
           <Sep />
-          <EditorBtn title="لینک" onClick={() => wrapSelection('[', '](url)')}><Link className="w-3.5 h-3.5" /></EditorBtn>
+          <EditorBtn title="لینک" onClick={insertLink}><Link className="w-3.5 h-3.5" /></EditorBtn>
           <EditorBtn title="تصویر (از فایل)" onClick={() => fileInputRef.current?.click()}><Image className="w-3.5 h-3.5" /></EditorBtn>
           <Sep />
           <EditorBtn title="بازگشت (Ctrl+Z)" onClick={handleUndo}><Undo className="w-3.5 h-3.5" /></EditorBtn>

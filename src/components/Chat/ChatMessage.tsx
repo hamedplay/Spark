@@ -68,56 +68,165 @@ interface Props {
   onOpenDirectChat?: (userId: string) => void;
 }
 
-// Renders message body with @mentions highlighted and clickable
-function renderBodyWithMentions(
+type InlineToken =
+  | { type: 'bold'; content: string }
+  | { type: 'italic'; content: string }
+  | { type: 'strike'; content: string }
+  | { type: 'code'; content: string }
+  | { type: 'link'; text: string; url: string }
+  | { type: 'mention'; user: UserProfile }
+  | { type: 'text'; content: string };
+
+const INLINE_PATTERNS: Array<{ name: string; regex: RegExp }> = [
+  { name: 'bold',   regex: /\*\*(.+?)\*\*/ },
+  { name: 'italic', regex: /_([^_\n]+?)_/ },
+  { name: 'strike', regex: /~~(.+?)~~/ },
+  { name: 'code',   regex: /`([^`\n]+)`/ },
+  { name: 'link',   regex: /\[([^\]\n]+)\]\((https?:\/\/[^)\n]+)\)/ },
+];
+
+function renderInline(
+  text: string,
+  currentUserId: string,
+  allUsers: UserProfile[],
+  onMentionClick?: (user: UserProfile) => void,
+  keyOffset = 0
+): React.ReactNode {
+  if (!text) return null;
+
+  const sortedUsers = allUsers
+    .filter(u => u.full_name || u.email)
+    .sort((a, b) => ((b.full_name || b.email || '').length) - ((a.full_name || a.email || '').length));
+
+  const tokens: InlineToken[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    let earliest: { index: number; length: number; token: InlineToken } | null = null;
+
+    for (const { name, regex } of INLINE_PATTERNS) {
+      const match = regex.exec(remaining);
+      if (match !== null && (earliest === null || match.index < earliest.index)) {
+        let token: InlineToken;
+        if (name === 'bold')        token = { type: 'bold',   content: match[1] };
+        else if (name === 'italic') token = { type: 'italic', content: match[1] };
+        else if (name === 'strike') token = { type: 'strike', content: match[1] };
+        else if (name === 'code')   token = { type: 'code',   content: match[1] };
+        else                        token = { type: 'link',   text: match[1], url: match[2] };
+        earliest = { index: match.index, length: match[0].length, token };
+      }
+    }
+
+    const atIdx = remaining.indexOf('@');
+    if (atIdx >= 0) {
+      const afterAt = remaining.slice(atIdx + 1);
+      const matched = sortedUsers.find(u => {
+        const name = u.full_name || u.email || '';
+        return name && afterAt.startsWith(name);
+      });
+      if (matched && (earliest === null || atIdx < earliest.index)) {
+        const name = matched.full_name || matched.email || '';
+        earliest = { index: atIdx, length: 1 + name.length, token: { type: 'mention', user: matched } };
+      }
+    }
+
+    if (earliest === null) { tokens.push({ type: 'text', content: remaining }); break; }
+    if (earliest.index > 0) tokens.push({ type: 'text', content: remaining.slice(0, earliest.index) });
+    tokens.push(earliest.token);
+    remaining = remaining.slice(earliest.index + earliest.length);
+  }
+
+  return tokens.map((token, i) => {
+    const key = keyOffset + i;
+    switch (token.type) {
+      case 'bold':
+        return <strong key={key} className="font-semibold">{token.content}</strong>;
+      case 'italic':
+        return <em key={key} className="italic">{token.content}</em>;
+      case 'strike':
+        return <s key={key} className="line-through opacity-75">{token.content}</s>;
+      case 'code':
+        return (
+          <code key={key} className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-[0.85em] font-mono">
+            {token.content}
+          </code>
+        );
+      case 'link':
+        return (
+          <a key={key} href={token.url} target="_blank" rel="noopener noreferrer"
+            className="text-blue-500 dark:text-blue-400 hover:underline break-all"
+            onClick={e => e.stopPropagation()}>
+            {token.text}
+          </a>
+        );
+      case 'mention': {
+        const isMe = token.user.user_id === currentUserId;
+        const name = token.user.full_name || token.user.email || '';
+        return (
+          <span key={key}
+            onClick={onMentionClick ? (e) => { e.stopPropagation(); onMentionClick(token.user); } : undefined}
+            className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded font-semibold text-xs cursor-pointer hover:opacity-80 transition-opacity ${
+              isMe ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300'
+                   : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+            }`}>
+            @{name}
+          </span>
+        );
+      }
+      case 'text':
+        return <span key={key}>{token.content}</span>;
+    }
+  });
+}
+
+function renderMarkdownBody(
   body: string,
   currentUserId: string,
   allUsers: UserProfile[],
   onMentionClick?: (user: UserProfile) => void
 ): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  let remaining = body;
-  let key = 0;
+  const lines = body.split('\n');
+  return (
+    <>
+      {lines.map((line, lineIdx) => {
+        const baseKey = lineIdx * 10000;
 
-  while (remaining.length > 0) {
-    const atIdx = remaining.indexOf('@');
-    if (atIdx === -1) { parts.push(remaining); break; }
+        if (line === '') return <div key={lineIdx} className="h-[1em]" />;
 
-    if (atIdx > 0) parts.push(remaining.slice(0, atIdx));
+        // Blockquote
+        if (line.startsWith('> ')) {
+          return (
+            <div key={lineIdx} className="border-r-2 border-gray-400 dark:border-gray-500 pr-2 my-0.5 italic text-gray-600 dark:text-gray-400">
+              {renderInline(line.slice(2), currentUserId, allUsers, onMentionClick, baseKey)}
+            </div>
+          );
+        }
 
-    const afterAt = remaining.slice(atIdx + 1);
-    const matched = allUsers
-      .filter(u => u.full_name || u.email)
-      .sort((a, b) => ((b.full_name || b.email || '').length) - ((a.full_name || a.email || '').length))
-      .find(u => {
-        const name = u.full_name || u.email || '';
-        return afterAt.startsWith(name);
-      });
+        // Bullet list (Unicode bullet • U+2022)
+        if (line.startsWith('\u2022 ')) {
+          return (
+            <div key={lineIdx} className="flex items-start gap-1.5">
+              <span className="text-gray-500 dark:text-gray-400 flex-shrink-0 mt-[0.15em] text-xs leading-5">●</span>
+              <span className="flex-1 min-w-0">{renderInline(line.slice(2), currentUserId, allUsers, onMentionClick, baseKey)}</span>
+            </div>
+          );
+        }
 
-    if (matched) {
-      const name = matched.full_name || matched.email || '';
-      const isMe = matched.user_id === currentUserId;
-      parts.push(
-        <span
-          key={key++}
-          onClick={onMentionClick ? (e) => { e.stopPropagation(); onMentionClick(matched); } : undefined}
-          className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded font-semibold text-xs cursor-pointer hover:opacity-80 transition-opacity ${
-            isMe
-              ? 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300'
-              : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-          }`}
-        >
-          @{name}
-        </span>
-      );
-      remaining = afterAt.slice(name.length);
-    } else {
-      parts.push('@');
-      remaining = afterAt;
-    }
-  }
+        // Numbered list
+        const numMatch = line.match(/^(\d+)\. (.*)/);
+        if (numMatch) {
+          return (
+            <div key={lineIdx} className="flex items-start gap-1.5">
+              <span className="text-gray-500 dark:text-gray-400 flex-shrink-0 text-xs font-semibold min-w-[1.4rem] mt-[0.15em]">{numMatch[1]}.</span>
+              <span className="flex-1 min-w-0">{renderInline(numMatch[2], currentUserId, allUsers, onMentionClick, baseKey)}</span>
+            </div>
+          );
+        }
 
-  return <>{parts}</>;
+        return <div key={lineIdx}>{renderInline(line, currentUserId, allUsers, onMentionClick, baseKey)}</div>;
+      })}
+    </>
+  );
 }
 
 export function ChatMessage({
@@ -354,12 +463,12 @@ export function ChatMessage({
                       <span>این پیام حذف شده است</span>
                     </div>
                   ) : (
-                    <p className="text-sm whitespace-pre-wrap break-words leading-relaxed py-0.5">
-                      {renderBodyWithMentions(message.body, currentUserId, allUsers, (user) => {
+                    <div className="text-sm leading-relaxed py-0.5 break-words">
+                      {renderMarkdownBody(message.body, currentUserId, allUsers, (user) => {
                         if (onMentionClick) onMentionClick(user);
                         else setMentionPopupUser(user);
                       })}
-                    </p>
+                    </div>
                   )
                 )}
 
