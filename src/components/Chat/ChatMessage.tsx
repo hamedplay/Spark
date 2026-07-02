@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import moment from 'moment-jalaali';
-import { Star, MoveVertical as MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, Play, Pause, Tag, Send, Check, CheckCheck, Loader, Reply, X, Smile, ClipboardList, BellRing, MessageSquare, Forward, Eye } from 'lucide-react';
+import { Star, MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, Play, Pause, Tag, Send, Check, CheckCheck, Loader, Reply, X, Smile, ClipboardList, BellRing, MessageSquare, Forward, Eye } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
 import type { MessageWithMeta, ChatTag, MessageStatus, UserProfile } from './types';
 import { UserAvatar } from './ChatConversationItem';
