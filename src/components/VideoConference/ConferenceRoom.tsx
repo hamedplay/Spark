@@ -1253,12 +1253,25 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className={`flex flex-col bg-gray-950 text-white select-none ${isFullscreen ? 'fixed inset-0 z-[9999]' : 'h-full'}`} dir="rtl">
+    <div className={`flex flex-col bg-gray-950 text-white select-none relative ${isFullscreen ? 'fixed inset-0 z-[9999]' : 'h-full'}`} dir="rtl">
       <style>{`
         @keyframes float-up{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-120px) scale(1.5)}}
         @keyframes tile-reaction{0%{opacity:0;transform:scale(0.5)}15%{opacity:1;transform:scale(1.2)}30%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(0.8)}}
         .conf-panel-mobile{transition:transform 0.3s cubic-bezier(.4,0,.2,1)}
       `}</style>
+      {/* Background image — pointer-events-none so it never interferes with video tiles or controls */}
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
+        <img
+          src="https://images.pexels.com/photos/4226140/pexels-photo-4226140.jpeg?auto=compress&cs=tinysrgb&w=1200"
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-cover opacity-[0.07] blur-sm"
+        />
+        <div className="absolute inset-0 bg-gray-950/80" />
+      </div>
+      {/* All content is above z-0 */}
+      <div className="relative z-10 flex flex-col h-full">
 
       {/* Top bar */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-900/95 border-b border-gray-800 flex-shrink-0 gap-2">
@@ -1328,6 +1341,13 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               ...rawTiles.filter(t => !tileOrder.includes(t.peerId)),
             ];
 
+            // When someone is screen sharing, elevate their tile to the front
+            // (only when no explicit pin is active and no manual drag order includes them)
+            const screenShareTile = orderedTiles.find(t => t.isScreenSharing);
+            const displayTiles = screenShareTile && !pinnedPeerId
+              ? [screenShareTile, ...orderedTiles.filter(t => t.peerId !== screenShareTile.peerId)]
+              : orderedTiles;
+
             // DnD handlers
             const onDragStart = (_peerId: string) => { dragSrcRef.current = _peerId; };
             const onDragOver = (_e: React.DragEvent, peerId: string) => {
@@ -1361,12 +1381,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               return (
                 <div className="flex flex-col flex-1 gap-2 min-h-0">
                   <div className="flex-1 min-h-0">
-                    {orderedTiles.filter(t => t.peerId === pinnedPeerId).map(t => (
+                    {displayTiles.filter(t => t.peerId === pinnedPeerId).map(t => (
                       <VideoTile key={t.peerId} {...t} isPinned isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(null)} />
                     ))}
                   </div>
                   <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
-                    {orderedTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
+                    {displayTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
                       <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0 aspect-video" {...makeDraggable(t.peerId)}>
                         <VideoTile {...t} isPinned={false} isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(t.peerId)} small />
                       </div>
@@ -1380,7 +1400,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             if (layoutMode === 'gallery') {
               return (
                 <GalleryLayout
-                  tiles={orderedTiles}
+                  tiles={displayTiles}
                   pinnedPeerId={pinnedPeerId}
                   tileReactions={tileReactions}
                   makeDraggable={makeDraggable}
@@ -1393,7 +1413,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             if (layoutMode === 'speaker') {
               return (
                 <SpeakerLayout
-                  tiles={orderedTiles}
+                  tiles={displayTiles}
                   tileReactions={tileReactions}
                   makeDraggable={makeDraggable}
                   onPinSpeaker={peerId => setPinnedPeerId(peerId)}
@@ -1413,7 +1433,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             // ── Sidebar ────────────────────────────────────────────────────────
             return (
               <SidebarLayout
-                tiles={orderedTiles}
+                tiles={displayTiles}
                 tileReactions={tileReactions}
                 makeDraggable={makeDraggable}
                 onPinMain={peerId => setPinnedPeerId(p => p === peerId ? null : peerId)}
@@ -2034,6 +2054,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
             </button>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
