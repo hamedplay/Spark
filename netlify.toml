@@ -1,0 +1,129 @@
+# ── Build ─────────────────────────────────────────────────────────────────────
+# Mirrors what Vite outputs. SPA routing is handled by public/_redirects.
+[build]
+  publish = "dist"
+
+# ── Security response headers ─────────────────────────────────────────────────
+# Applied to every HTTP response served by Netlify.
+[[headers]]
+  for = "/*"
+  [headers.values]
+
+    # Prevent MIME-type confusion attacks (e.g. browser sniffing a JS response as HTML).
+    X-Content-Type-Options = "nosniff"
+
+    # For cross-origin navigations, send only the origin (no path/query).
+    # For same-origin navigations, send the full URL.
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+    # Deny embedding this app inside any external <iframe>.
+    # Safe: the app is never intentionally embedded by a third-party site.
+    # CSP frame-ancestors 'none' (below) enforces the same policy for CSP-aware browsers.
+    X-Frame-Options = "DENY"
+
+    # Instruct browsers to use HTTPS for 1 year, including all subdomains.
+    # Safe to enable here because:
+    #   - Supabase REST, Realtime, Storage and Edge Functions are all TLS-only.
+    #   - Google OAuth (accounts.google.com), ipify.org are all HTTPS.
+    #   - The only plain-HTTP reference in the codebase (http://RahyabBulk.ir SOAP)
+    #     is a server-side Deno call inside an Edge Function — never made by a browser.
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+    # Permissions Policy: grant only the capabilities this app actually needs.
+    #   camera / microphone  — required by WebRTC video conferencing and voice messages
+    #   display-capture      — required for screen-sharing in the conference room
+    #   fullscreen           — required for full-screen video tile mode
+    # All other powerful features (geolocation, payment, usb, …) are implicitly denied
+    # by omitting them (modern syntax default = deny).
+    Permissions-Policy = "camera=*, microphone=*, display-capture=*, fullscreen=*"
+
+    # ── Content-Security-Policy (Report-Only) ─────────────────────────────────
+    #
+    # MODE: report-only — violations are LOGGED, never blocked.
+    # PURPOSE: collect real-world violations before switching to enforcing mode.
+    #
+    # ── Known violations this policy will surface ────────────────────────────
+    # [1] TWO inline <script> blocks in index.html violate script-src 'self':
+    #       • PWA beforeinstallprompt / appinstalled handler
+    #       • Service Worker registration
+    #     Resolution before enforcement: extract both blocks to
+    #     /public/pwa-init.js and reference them with <script src="/pwa-init.js">.
+    #     After extraction, 'unsafe-inline' is NOT needed in script-src.
+    #
+    # ── Steps to switch to enforcing mode ───────────────────────────────────
+    # 1. Violations are collected automatically by the csp-report Edge Function
+    #    (report-uri is wired into the CSP value below) and stored in the
+    #    csp_violations Supabase table. Admins can query that table to review.
+    # 2. Fix the two inline-script violations noted above.
+    # 3. Rename the header to Content-Security-Policy.
+    #
+    # ── Directive rationale ──────────────────────────────────────────────────
+    #
+    # default-src 'none'
+    #   Deny everything not explicitly listed. Belt-and-suspenders baseline.
+    #
+    # script-src 'self' https://accounts.google.com
+    #   'self'                     Vite-bundled JS in /assets/*.js
+    #   accounts.google.com        @react-oauth/google injects
+    #                              https://accounts.google.com/gsi/client
+    #   NOTE: 'unsafe-inline' deliberately OMITTED so the two inline <script>
+    #   blocks in index.html generate violations we can track and fix.
+    #
+    # style-src 'self' 'unsafe-inline'
+    #   'self'           Vite-bundled Tailwind CSS in /assets/*.css
+    #   'unsafe-inline'  React components use inline style={{ ... }} props
+    #                    extensively for dynamic widths, theme switching, etc.
+    #                    Removing this would require converting every dynamic
+    #                    inline style to a CSS variable — deferred.
+    #
+    # img-src 'self' data: blob: https://images.pexels.com https://zjmozuivykubdqnizhob.supabase.co
+    #   'self'                       Icons, logo, local static assets
+    #   data:                        html-to-image toPng() returns data URIs
+    #   blob:                        URL.createObjectURL() in NotesPage + BackupPanel
+    #   images.pexels.com            GuestJoinPage hardcoded background photo
+    #   zjmozuivykubdqnizhob…        Supabase Storage — user avatar uploads
+    #
+    # font-src 'self'
+    #   Vazirmatn .woff2 fonts served from /fonts/ (same origin).
+    #
+    # connect-src 'self' https://zjmozuivykubdqnizhob.supabase.co wss://zjmozuivykubdqnizhob.supabase.co https://api.ipify.org https://accounts.google.com
+    #   'self'                       Service Worker fetch interception
+    #   https://zjmozuivykubdqnizhob…  Supabase REST API, Auth, Edge Functions, Storage
+    #   wss://zjmozuivykubdqnizhob…    Supabase Realtime WebSocket subscriptions
+    #   api.ipify.org                audit.ts fetches public IP for audit log entries
+    #   accounts.google.com          @react-oauth/google token exchange + GSI requests
+    #
+    #   NOTE: Telegram, Bale, SMS provider, and Rahyab SOAP URLs do NOT appear here
+    #   because those requests are made server-side by Deno Edge Functions, never by
+    #   the browser. Same applies to OpenAI/Groq (spark-ai edge function).
+    #
+    #   NOTE: WebRTC ICE connections (STUN stun.l.google.com, custom TURN from
+    #   VITE_TURN_HOST) are exempt from CSP connect-src per the W3C spec and do
+    #   not need to be listed.
+    #
+    # frame-src https://accounts.google.com
+    #   @react-oauth/google One-Tap sign-in renders an iframe from accounts.google.com.
+    #
+    # media-src 'self' blob:
+    #   'self'    Reserved for any future same-origin audio/video assets
+    #   blob:     Voice message recordings use URL.createObjectURL(MediaRecorder blob)
+    #             in ChatInputBar and ChannelInputBar; WebRTC local streams use blob:
+    #
+    # worker-src 'self'
+    #   Service Worker registered at /sw.js (same origin).
+    #
+    # object-src 'none'
+    #   Deny <object>, <embed>, <applet>. No plugins used or needed.
+    #
+    # base-uri 'self'
+    #   Prevent base-tag injection attacks that rewrite all relative URLs.
+    #
+    # form-action 'self'
+    #   Prevent cross-origin form submission hijacking.
+    #
+    # frame-ancestors 'none'
+    #   Belt-and-suspenders with X-Frame-Options: DENY for CSP-aware browsers.
+    #
+    # manifest-src 'self'
+    #   PWA manifest.json served from / (same origin).
+    Content-Security-Policy-Report-Only = "default-src 'none'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.pexels.com https://zjmozuivykubdqnizhob.supabase.co; font-src 'self'; connect-src 'self' https://zjmozuivykubdqnizhob.supabase.co wss://zjmozuivykubdqnizhob.supabase.co https://api.ipify.org https://accounts.google.com; frame-src https://accounts.google.com; media-src 'self' blob:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; manifest-src 'self'; report-uri https://zjmozuivykubdqnizhob.supabase.co/functions/v1/csp-report"

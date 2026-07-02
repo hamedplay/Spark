@@ -46,6 +46,9 @@ export default defineConfig({
     // Disable Vite's built-in public dir copy; safeCopyPublicDir handles it
     // with per-file error handling so locked sandbox files don't abort builds.
     copyPublicDir: false,
+    // Explicitly disable sourcemaps in production. Without this, a future
+    // accidental change to sourcemap: true would expose original source code.
+    sourcemap: false,
   },
   optimizeDeps: {
     exclude: ['lucide-react'],
