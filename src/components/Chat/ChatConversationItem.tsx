@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
-import { MoveVertical as MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
+import { MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { ConversationWithProfile } from './types';
 const STATUS_DOT: Record<string, string> = {
@@ -108,13 +107,7 @@ export function ChatConversationItem({ conversation: c, isActive, currentUserId,
   const handleClear = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setMenuOpen(false);
-    const { error } = await supabase.rpc('clear_chat_for_user', { p_conversation_id: c.id });
-    if (error) {
-      toast.error('خطا در پاک کردن تاریخچه');
-      return;
-    }
-    toast.success('تاریخچه پاک شد');
-    window.dispatchEvent(new CustomEvent('chat-messages-cleared', { detail: { conversationId: c.id } }));
+    await supabase.rpc('clear_chat_for_user', { p_conversation_id: c.id });
     onAction?.();
   };
 
