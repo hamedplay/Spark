@@ -233,7 +233,7 @@ export function ChatMessage({
   message, isOwn, currentUserId, allUsers,
   onReply, onEdit, onStar, onDeleteForMe, onDeleteForAll,
   onReact, onStatusChange, onScheduleMeeting, onTagsChanged, onReminderSet,
-  onRegisterAsTask, onMentionClick, onOpenDirectChat,
+  onScrollToMessage, onRegisterAsTask, onMentionClick, onOpenDirectChat,
 }: Props) {
   const [showMenu, setShowMenu] = useState(false);
   const [showReactPicker, setShowReactPicker] = useState(false);
@@ -395,9 +395,12 @@ export function ChatMessage({
           <div className="flex-1 flex flex-col">
             {/* Reply preview */}
             {message.replyTarget && (
-              <div className="text-xs px-3 py-1.5 rounded-t-xl border-r-2 border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-gray-600 dark:text-gray-300 truncate">
+              <button
+                onClick={() => onScrollToMessage?.(message.replyTarget!.id)}
+                className="w-full text-right text-xs px-3 py-1.5 rounded-t-xl border-r-2 border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-gray-600 dark:text-gray-300 truncate hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors cursor-pointer"
+              >
                 {message.replyTarget.body || '📎 فایل'}
-              </div>
+              </button>
             )}
 
             {/* Card — NO overflow-hidden so menus can escape */}
