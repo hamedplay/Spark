@@ -103,17 +103,31 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
 
   const isSearching = searchTerm.trim().length > 0;
 
+  const isAllowedUser = (u: { position_title?: string | null; unit_name?: string | null }) => {
+    const pt = u.position_title || '';
+    const un = u.unit_name || '';
+    return (
+      pt.startsWith('رییس دایره') ||
+      pt.startsWith('متصدی اداری') ||
+      pt.includes('دفتر') ||
+      un.includes('دفتر')
+    );
+  };
+
   const filteredAll = isSearching
     ? allUsers.filter(u =>
-        (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (u.unit_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+        isAllowedUser(u) && (
+          (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (u.unit_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+        )
       )
     : [];
 
-  const visibleGroups: OrgUnitGroup[] = selectedUnitId === 'all'
+  const visibleGroups: OrgUnitGroup[] = (selectedUnitId === 'all'
     ? groups
-    : groups.filter(g => (g.unit_id || '__no_unit__') === selectedUnitId);
+    : groups.filter(g => (g.unit_id || '__no_unit__') === selectedUnitId)
+  ).map(g => ({ ...g, users: g.users.filter(isAllowedUser) })).filter(g => g.users.length > 0);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
@@ -136,7 +150,7 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
               className="flex-1 p-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">همه واحدهای سازمانی</option>
-              {groups.map(g => (
+              {groups.filter(g => g.users.some(isAllowedUser)).map(g => (
                 <option key={g.unit_id || '__no_unit__'} value={g.unit_id || '__no_unit__'}>
                   {g.unit_name} ({g.users.length} نفر)
                 </option>

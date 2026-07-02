@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Loader as Loader2, Send, Share2, UserPlus, CalendarPlus, RotateCcw, X, Download, RefreshCw, TriangleAlert as AlertTriangle, Trash2, Image, FileText, ClipboardList, UserCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Loader as Loader2, Send, Share2, UserPlus, CalendarPlus, X, Download, RefreshCw, TriangleAlert as AlertTriangle, Trash2, Image, FileText, ClipboardList, UserCheck } from 'lucide-react';
 import { Meeting } from '../../types';
 import type { AgendaItem } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -23,11 +23,10 @@ interface DeleteModalProps {
   meeting: Meeting;
   onClose: () => void;
   onPermanentDelete: () => void;
-  onDeleteAndRevert: () => void;
   loading: boolean;
 }
 
-function DeleteModal({ meeting, onClose, onPermanentDelete, onDeleteAndRevert, loading }: DeleteModalProps) {
+function DeleteModal({ meeting, onClose, onPermanentDelete, loading }: DeleteModalProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
@@ -50,27 +49,10 @@ function DeleteModal({ meeting, onClose, onPermanentDelete, onDeleteAndRevert, l
         {!confirmDelete ? (
           <div className="p-5 space-y-3">
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center pb-1">
-              نوع حذف جلسه «{meeting.subject}» را انتخاب کنید
+              آیا می‌خواهید جلسه «{meeting.subject}» را حذف کنید؟
             </p>
 
-            {/* Option 1: Delete and revert to request */}
-            <button
-              onClick={() => { onDeleteAndRevert(); onClose(); }}
-              disabled={loading}
-              className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group disabled:opacity-50"
-            >
-              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 transition-colors">
-                <RotateCcw className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-white">حذف و برگشت به درخواست جلسه</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  جلسه حذف شده و یک درخواست جدید بدون زمان‌بندی برای شما ایجاد می‌شود
-                </p>
-              </div>
-            </button>
-
-            {/* Option 2: Permanent delete */}
+            {/* Permanent delete */}
             <button
               onClick={() => setConfirmDelete(true)}
               disabled={loading}
@@ -818,7 +800,6 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
           meeting={meeting}
           onClose={() => setShowDeleteModal(false)}
           onPermanentDelete={handlePermanentDelete}
-          onDeleteAndRevert={handleDeleteAndRevert}
           loading={loading}
         />
       )}

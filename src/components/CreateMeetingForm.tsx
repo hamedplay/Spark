@@ -329,15 +329,24 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
           }
         })();
       }
-      // Load participants from existing meeting record (when scheduling from pending)
+      // Load participants, notify users and external participants from existing meeting record (when scheduling from pending)
       if (prefillData.meetingId && (!prefillData.participantUserIds || prefillData.participantUserIds.length === 0)) {
         (async () => {
-          const { data: mtg } = await supabase.from('meetings').select('participant_user_ids').eq('id', prefillData.meetingId!).maybeSingle();
+          const { data: mtg } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants').eq('id', prefillData.meetingId!).maybeSingle();
           if (mtg?.participant_user_ids?.length) {
             const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', mtg.participant_user_ids);
             if (profiles) {
               setSelectedParticipants(profiles.map((p: any) => ({ id: p.user_id, name: p.full_name || p.email || p.user_id })));
             }
+          }
+          if (mtg?.notify_users?.length) {
+            const { data: notifyProfiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', mtg.notify_users);
+            if (notifyProfiles) {
+              setSelectedNotifyUsers(notifyProfiles.map((p: any) => ({ id: p.user_id, name: p.full_name || p.email || p.user_id })));
+            }
+          }
+          if (mtg?.external_participants?.length) {
+            setSelectedExternal(mtg.external_participants);
           }
         })();
       }
