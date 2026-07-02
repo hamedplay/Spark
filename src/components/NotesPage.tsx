@@ -505,13 +505,12 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
 
   const handleSendToUser = async (note: Note, toUserId: string, toName: string) => {
     try {
-      // Insert a copy of the note owned by the recipient
-      const { error: insertError } = await supabase.from('notes').insert({
-        title: note.title,
-        content: note.content,
-        note_type: note.note_type,
-        status: 'active',
-        user_id: toUserId,
+      const { error: insertError } = await supabase.rpc('share_note_to_user', {
+        p_title: note.title,
+        p_content: note.content,
+        p_note_type: note.note_type,
+        p_recipient_id: toUserId,
+        p_sender_id: userId,
       });
       if (insertError) throw insertError;
 
