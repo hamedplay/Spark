@@ -838,6 +838,17 @@ export function ChatConversationView({
               <Video className="w-4 h-4" />
             </button>
           )}
+          {/* Jump to date */}
+          <button
+            onClick={() => {
+              const now = moment();
+              setJumpPickerDate({ jy: now.jYear(), jm: now.jMonth() + 1, jd: now.jDate() });
+            }}
+            className="p-2 rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"
+            title="رفتن به تاریخ"
+          >
+            <CalendarDays className="w-4 h-4" />
+          </button>
           <button onClick={() => setShowInfoPanel(v => !v)} className={`hidden sm:flex p-2 rounded-xl text-gray-500 transition-colors items-center justify-center ${showInfoPanel ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-600' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`} title="اطلاعات">
             <Info className="w-4 h-4" />
           </button>
