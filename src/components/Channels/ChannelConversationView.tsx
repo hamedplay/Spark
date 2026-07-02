@@ -806,7 +806,7 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-bold text-gray-800 dark:text-white truncate">{channel.name}</h2>
-            <p className="text-[11px] text-gray-400">{channel.member_count} عضو</p>
+            <p className="text-[11px] text-gray-400">{members.length || channel.member_count} عضو</p>
           </div>
           <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             {/* Search */}
