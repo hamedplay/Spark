@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import moment from 'moment-jalaali';
-import { MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
+import { MoveVertical as MoreVertical, Pin, Trash2, Clock, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import toast from 'react-hot-toast';
 import type { ConversationWithProfile } from './types';
 const STATUS_DOT: Record<string, string> = {
   online:  'bg-green-500',
@@ -20,6 +21,7 @@ interface Props {
   onMentionClick?: (messageId: string) => void;
   onTogglePin?: (convId: string) => void;
   onAction?: () => void;
+  onClearHistory?: () => void;
 }
 
 function Avatar({ name, size = 'md', avatarUrl, status, isOnline }: {
@@ -72,7 +74,7 @@ function formatTime(iso: string | null) {
   return m.format('jYYYY/jMM/jDD');
 }
 
-export function ChatConversationItem({ conversation: c, isActive, currentUserId, lastSeen, onClick, onMentionClick, onTogglePin, onAction }: Props) {
+export function ChatConversationItem({ conversation: c, isActive, currentUserId, lastSeen, onClick, onMentionClick, onTogglePin, onAction, onClearHistory }: Props) {
   const isSavedMessages = c.otherUser.user_id === currentUserId;
   const name = isSavedMessages ? 'پیام‌های ذخیره‌شده' : (c.otherUser.full_name || c.otherUser.email || 'کاربر');
   const isMine = c.last_message_sender_id === currentUserId;
@@ -107,8 +109,10 @@ export function ChatConversationItem({ conversation: c, isActive, currentUserId,
   const handleClear = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setMenuOpen(false);
-    await supabase.rpc('clear_chat_for_user', { p_conversation_id: c.id });
+    const { error } = await supabase.rpc('clear_chat_for_user', { p_conversation_id: c.id });
+    if (error) { toast.error('خطا در پاک کردن تاریخچه'); return; }
     onAction?.();
+    onClearHistory?.();
   };
 
   const handleDelete = async (e: React.MouseEvent) => {

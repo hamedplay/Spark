@@ -26,6 +26,7 @@ interface Props {
   onScrollToMessageConsumed?: () => void;
   onStartCall?: (callType: 'audio' | 'video') => void;
   onOpenDirectChat?: (userId: string) => void;
+  msgRefreshKey?: number;
 }
 
 interface StarredItem {
@@ -37,7 +38,7 @@ interface StarredItem {
 export function ChatConversationView({
   conversation, currentUserId, currentUserProfile, onBack, onNavigateToCalendar, onNavigateToTasks,
   onConversationUpdate, onStartCall,
-  onOpenDirectChat,
+  onOpenDirectChat, msgRefreshKey,
 }: Props) {
   const { triggerUrgentAlarm: globalTriggerUrgentAlarm } = useGlobalCall();
 
@@ -115,6 +116,14 @@ export function ChatConversationView({
       if (reminderCheckRef.current) clearInterval(reminderCheckRef.current);
     };
   }, [conversation.id]);
+
+  // Re-fetch messages after the user clears their chat history.
+  // Realtime UPDATE events are suppressed by RLS for the clearing user, so
+  // we drive the refresh explicitly via msgRefreshKey.
+  useEffect(() => {
+    if (!msgRefreshKey) return;
+    fetchMessages();
+  }, [msgRefreshKey]);
 
   useEffect(() => {
     if (!currentUserId) return;

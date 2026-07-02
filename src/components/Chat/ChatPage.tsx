@@ -31,6 +31,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
   const [showActions, setShowActions] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chats');
+  const [msgRefreshKey, setMsgRefreshKey] = useState(0);
 
   // Navigation from actions panel
   const [navToConvId, setNavToConvId] = useState<string | null>(null);
@@ -335,6 +336,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
               setNavToMsgId(msgId);
               setShowSidebar(false);
             }}
+            onClearHistory={() => setMsgRefreshKey(k => k + 1)}
           />
         )}
       </div>
@@ -356,6 +358,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
               initialScrollToMessageId={navToConvId === activeConv.id ? navToMsgId : null}
               onScrollToMessageConsumed={() => { setNavToConvId(null); setNavToMsgId(null); }}
               onStartCall={startCall}
+              msgRefreshKey={msgRefreshKey}
               onOpenDirectChat={async (userId) => {
                 const { data: convId, error } = await supabase.rpc('find_or_create_direct_conversation', {
                   user_a: currentUserId,

@@ -21,6 +21,7 @@ interface Props {
   onTabChange: (tab: SidebarTab) => void;
   onOpenSettings?: () => void;
   onMentionClick?: (convId: string, messageId: string) => void;
+  onClearHistory?: () => void;
 }
 
 export function ChatSidebar({
@@ -38,6 +39,7 @@ export function ChatSidebar({
   onTabChange,
   onOpenSettings,
   onMentionClick,
+  onClearHistory,
 }: Props) {
 
   const [search, setSearch] = useState('');
@@ -234,6 +236,7 @@ export function ChatSidebar({
                   onMentionClick={msgId => onMentionClick?.(c.id, msgId)}
                   onTogglePin={onTogglePin}
                   onAction={onRefresh}
+                  onClearHistory={onClearHistory}
                 />
               ))}
               {unpinned.length > 0 && (
@@ -259,6 +262,7 @@ export function ChatSidebar({
               onMentionClick={msgId => onMentionClick?.(c.id, msgId)}
               onTogglePin={onTogglePin}
               onAction={onRefresh}
+              onClearHistory={onClearHistory}
             />
           ))}
 
