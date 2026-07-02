@@ -520,15 +520,26 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
   }, [channel.id, allProfiles, currentUserId]);
 
   const fetchMembers = useCallback(async () => {
-    const { data } = await supabase.from('channel_members').select('*').eq('channel_id', channel.id);
-    if (!data) return;
-    const withProfiles: MemberWithProfile[] = data.map((m: any) => ({
-      ...m, profile: profileMap.get(m.user_id) || null,
+    const { data: memberRows } = await supabase
+      .from('channel_members')
+      .select('id, channel_id, user_id, role, joined_at')
+      .eq('channel_id', channel.id);
+    if (!memberRows) return;
+
+    const userIds = memberRows.map((m: any) => m.user_id);
+    const { data: profileRows } = userIds.length
+      ? await supabase.from('profiles').select('user_id, full_name, email, avatar_url').in('user_id', userIds)
+      : { data: [] as any[] };
+
+    const freshProfileMap = new Map((profileRows || []).map((p: any) => [p.user_id, p]));
+
+    const withProfiles: MemberWithProfile[] = memberRows.map((m: any) => ({
+      ...m, profile: freshProfileMap.get(m.user_id) || null,
     }));
     setMembers(withProfiles);
-    const me = data.find((m: any) => m.user_id === currentUserId);
+    const me = memberRows.find((m: any) => m.user_id === currentUserId);
     setMyRole(me?.role || null);
-  }, [channel.id, currentUserId, allProfiles]);
+  }, [channel.id, currentUserId]);
 
   const fetchPinned = useCallback(async () => {
     const { data: adminPinned } = await supabase.from('channel_messages').select('*')
