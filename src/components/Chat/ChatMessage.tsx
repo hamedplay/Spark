@@ -393,11 +393,17 @@ export function ChatMessage({
 
           {/* Full-width card inside 50% container */}
           <div className="flex-1 flex flex-col">
-            {/* Reply preview */}
+            {/* Reply preview — clickable to scroll to original message */}
             {message.replyTarget && (
-              <div className="text-xs px-3 py-1.5 rounded-t-xl border-r-2 border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-gray-600 dark:text-gray-300 truncate">
-                {message.replyTarget.body || '📎 فایل'}
-              </div>
+              <button
+                onClick={() => message.reply_to_id && onScrollToMessage?.(message.reply_to_id)}
+                className="w-full text-right text-xs px-3 py-1.5 rounded-t-xl border-r-2 border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-gray-600 dark:text-gray-300 truncate hover:bg-blue-100 dark:hover:bg-blue-800/40 transition-colors cursor-pointer"
+              >
+                <span className="font-semibold text-blue-500 dark:text-blue-400 text-[10px] block mb-0.5">
+                  {message.replyTarget.sender_id === currentUserId ? 'شما' : (message.replyTarget as any).senderProfile?.full_name || 'کاربر'}
+                </span>
+                <span className="truncate block">{message.replyTarget.body || '📎 فایل'}</span>
+              </button>
             )}
 
             {/* Card — NO overflow-hidden so menus can escape */}
