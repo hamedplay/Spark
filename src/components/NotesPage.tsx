@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { usePermissions } from '../context/PermissionsContext';
 import { toPng } from 'html-to-image';
 import { useOrgUsers } from '../lib/useOrgUsers';
+import { insertNotification } from '../lib/notifications';
 
 // Pastel note colors cycling deterministically by index
 const NOTE_COLORS = [
@@ -502,16 +503,36 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     }
   };
 
-  const handleSendToUser = async (note: Note, _toUserId: string, toName: string) => {
-    // Share note content by creating a notification or chat message
-    // For now: copy note content to clipboard and show a message
+  const handleSendToUser = async (note: Note, toUserId: string, toName: string) => {
     try {
-      const text = `📝 ${note.title}\n\n${note.content}`;
-      await navigator.clipboard.writeText(text);
+      // Insert a copy of the note owned by the recipient
+      const { error: insertError } = await supabase.from('notes').insert({
+        title: note.title,
+        content: note.content,
+        note_type: note.note_type,
+        status: 'active',
+        user_id: toUserId,
+      });
+      if (insertError) throw insertError;
+
+      // Send in-app notification to recipient
+      const senderProfile = orgUsers.find(u => u.user_id === userId);
+      const senderName = senderProfile?.full_name || senderProfile?.email || 'کاربر';
+      await insertNotification({
+        userId: toUserId,
+        category: 'note',
+        eventType: 'share',
+        fallbackTitle: 'یادداشت جدید دریافت شد',
+        fallbackMessage: `«${senderName}» یادداشت «${note.title}» را برای شما ارسال کرد`,
+        placeholders: { senderName, noteTitle: note.title },
+        senderId: userId,
+        senderName,
+      });
+
       setAssignNote(null);
-      toast.success(`یادداشت برای ${toName} کپی شد`);
-    } catch {
-      toast.error('خطا در ارجاع یادداشت');
+      toast.success(`یادداشت برای ${toName} ارسال شد`);
+    } catch (err: any) {
+      toast.error('خطا در ارسال یادداشت: ' + (err?.message || ''));
     }
   };
 

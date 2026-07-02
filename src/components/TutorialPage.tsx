@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, LayoutDashboard, Calendar, SquareCheck as CheckSquare, StickyNote, Phone, ChartBar as FileBarChart2, MessageCircle, Video, CircleUser as UserCircle, Hash, Bot, Search, ChevronRight, ChevronLeft, Share2, Archive, Send, UserPlus, CalendarPlus, CreditCard as Edit2, Trash2, Paperclip, Smile, Mic, Image as ImageIcon, Star, Bell, BellOff, Tag, Clock, Users, Lock, Settings, Plus, RefreshCw, Download, Upload, ExternalLink, Eye, CircleCheck as CheckCircle2, Circle as XCircle, CircleAlert as AlertCircle, ListFilter as Filter, SlidersHorizontal, LogOut, Sun, Moon, Volume2, VolumeX, PhoneCall, Zap, Brain, Sparkles, Layers, Globe, Building2, ChartBar as BarChart2, ChartPie as PieChart, TrendingUp, Table, CalendarDays, Hop as Home, X, List, Forward, Reply, Pin, Activity, Newspaper, Palette, LayoutGrid, User } from 'lucide-react';
+import { BookOpen, LayoutDashboard, Calendar, SquareCheck as CheckSquare, StickyNote, Phone, ChartBar as FileBarChart2, MessageCircle, Video, CircleUser as UserCircle, Hash, Bot, Search, ChevronRight, ChevronLeft, Share2, Archive, Send, UserPlus, CalendarPlus, CreditCard as Edit2, Trash2, Paperclip, Smile, Mic, Image as ImageIcon, Star, Bell, BellOff, Tag, Clock, Users, Lock, Settings, Plus, RefreshCw, Download, Upload, ExternalLink, Eye, CircleCheck as CheckCircle2, Circle as XCircle, CircleAlert as AlertCircle, ListFilter as Filter, SlidersHorizontal, LogOut, Sun, Moon, Volume2, VolumeX, PhoneCall, Zap, Brain, Sparkles, Layers, Globe, Building2, ChartBar as BarChart2, ChartPie as PieChart, TrendingUp, Table, CalendarDays, Hop as Home, X, List, Forward, Reply, Pin, Activity, Newspaper, Palette, LayoutGrid, User, MonitorPlay, Video as Sidebar, LayoutTemplate } from 'lucide-react';
 
 interface TutorialPageProps {
   onAskSpark?: (command: string) => void;
@@ -228,9 +228,10 @@ const SECTIONS: GuideSection[] = [
         title: 'کارهای تیمی در کانال',
         items: [
           'پنل «کارهای تیمی» در سایدبار کانال',
-          'ایجاد کار، تعیین مسئول و ددلاین',
+          'ایجاد کار، تعیین مسئول و تاریخ سررسید (ددلاین)',
           'وضعیت کارها: در انتظار / در حال انجام / تکمیل',
           'اعضا می‌توانند کارها را به خود اختصاص دهند',
+          'کارهای دیرکرده با رنگ قرمز در پنل کانال نمایش داده می‌شوند',
         ],
       },
     ],
@@ -281,11 +282,21 @@ const SECTIONS: GuideSection[] = [
           'اقدام در کارتابل مسئول نمایش داده می‌شود',
         ],
       },
+      {
+        title: 'حذف وظیفه',
+        items: [
+          'دکمه حذف (آیکن سطل آشغال) در کارت اقدام نمایش داده می‌شود',
+          'فقط سازنده یا مسئول اقدام می‌توانند آن را حذف کنند',
+          'قبل از حذف، تأییدیه دریافت می‌شود',
+          'اقدام‌های حذف‌شده از کارتابل حذف می‌شوند',
+        ],
+      },
     ],
     tips: [
       'وظایف دیر‌کرده با رنگ قرمز مشخص می‌شوند',
       'اسپارک می‌تواند وظیفه جدید ایجاد کند',
       'وظایف ارجاع‌شده با برچسب آبی «ارجاع به من» مشخص هستند',
+      'فقط سازنده یا مسئول اقدام می‌توانند آن را حذف کنند',
     ],
     sparkQuestions: [
       'چند تا اقدام دارم؟',
@@ -308,6 +319,7 @@ const SECTIONS: GuideSection[] = [
       { icon: Mic, name: 'دیکته', desc: 'تبدیل صدا به متن در یادداشت', color: 'text-blue-600' },
       { icon: Paperclip, name: 'پیوست', desc: 'افزودن فایل یا تصویر به یادداشت', color: 'text-teal-600' },
       { icon: Share2, name: 'اشتراک‌گذاری', desc: 'ارسال یادداشت به واتساپ یا بله', color: 'text-green-600' },
+      { icon: Send, name: 'ارسال به دیگران', desc: 'ارسال یادداشت به کاربر دیگر — یادداشت در کارتابل او ثبت می‌شود', color: 'text-sky-600' },
       { icon: Download, name: 'دانلود', desc: 'دانلود یادداشت به عنوان تصویر', color: 'text-purple-600' },
     ],
     steps: [
@@ -324,6 +336,7 @@ const SECTIONS: GuideSection[] = [
     ],
     tips: [
       'یادداشت‌ها می‌توانند به عنوان تصویر دانلود یا در شبکه‌های اجتماعی به اشتراک گذاشته شوند',
+      'با «ارسال به دیگران» یادداشت برای کاربر دیگری کپی می‌شود و اعلان دریافت می‌کند',
       'اسپارک می‌تواند یادداشت جدید ثبت کند',
     ],
     sparkQuestions: [
@@ -419,11 +432,14 @@ const SECTIONS: GuideSection[] = [
       { icon: Video, name: 'ورود به اتاق', desc: 'پیوستن به اتاق ویدیو کنفرانس', color: 'text-green-600' },
       { icon: Mic, name: 'میکروفون', desc: 'روشن/خاموش کردن میکروفون', color: 'text-red-600' },
       { icon: ImageIcon, name: 'دوربین', desc: 'روشن/خاموش کردن دوربین', color: 'text-blue-600' },
+      { icon: LayoutGrid, name: 'نمای گالری', desc: 'نمایش همه شرکت‌کنندگان به صورت شبکه‌ای مساوی', color: 'text-teal-600' },
+      { icon: MonitorPlay, name: 'نمای اسپیکر', desc: 'بزرگ‌نمایی گوینده فعال — مناسب برای ارائه', color: 'text-purple-600' },
+      { icon: Sidebar, name: 'نمای سایدبار', desc: 'گوینده اصلی در مرکز + سایرین در کنار', color: 'text-amber-600' },
+      { icon: Pin, name: 'پین کاربر', desc: 'نمایش دائمی یک کاربر بدون تغییر خودکار', color: 'text-rose-600' },
       { icon: UserPlus, name: 'دعوت', desc: 'ارسال دعوت‌نامه به سایر کاربران', color: 'text-teal-600' },
-      { icon: ExternalLink, name: 'لینک مهمان', desc: 'لینک اتاق برای مهمانان بدون حساب کاربری', color: 'text-purple-600' },
+      { icon: ExternalLink, name: 'لینک مهمان', desc: 'لینک اتاق برای مهمانان بدون حساب کاربری', color: 'text-sky-600' },
       { icon: LogOut, name: 'خروج', desc: 'خروج از اتاق بدون بستن جلسه', color: 'text-amber-600' },
       { icon: XCircle, name: 'پایان جلسه', desc: 'بستن اتاق برای همه شرکت‌کنندگان', color: 'text-red-600' },
-      { icon: SlidersHorizontal, name: 'اندازه تایل', desc: 'تنظیم اندازه نمایش تصاویر شرکت‌کنندگان', color: 'text-slate-600' },
     ],
     steps: [
       {
@@ -436,11 +452,23 @@ const SECTIONS: GuideSection[] = [
           'هنگام پایان، «پایان جلسه» را فشار دهید تا همه خارج شوند',
         ],
       },
+      {
+        title: 'حالت‌های نمایش',
+        items: [
+          'نمای گالری: همه شرکت‌کنندگان با اندازه مساوی — مناسب برای جلسات چندنفره',
+          'نمای اسپیکر: بزرگ‌نمایی خودکار گوینده فعال — مناسب برای سخنرانی',
+          'نمای سایدبار: گوینده اصلی در مرکز + لیست سایرین در کنار',
+          'پین کاربر: کلیک روی آیکن پین در تایل هر کاربر برای ثابت نگه داشتن او',
+          'اشتراک صفحه: نمایش صفحه کامپیوتر در کنفرانس با اولویت نمایش',
+        ],
+      },
     ],
     tips: [
       'میزبان می‌تواند بدون پایان دادن جلسه از اتاق خارج شود',
       'لینک مهمان نیاز به ثبت‌نام ندارد',
       'جلسات تقویم می‌توانند اتاق کنفرانس مرتبط داشته باشند',
+      'در هنگام اشتراک صفحه، تایل مربوطه با اولویت بالاتر نمایش داده می‌شود',
+      'می‌توانید تایل‌های شرکت‌کنندگان را با کشیدن جابجا کنید',
     ],
     sparkQuestions: [
       'برو به صفحه ویدیو کنفرانس',

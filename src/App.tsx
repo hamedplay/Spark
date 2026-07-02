@@ -23,7 +23,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { GroupsPage } from './components/GroupsPage';
 import { ChannelsPage } from './components/Channels/ChannelsPage';
 import { supabase, handleSupabaseError } from './lib/supabase';
-import { Search, Plus, X, Bell } from 'lucide-react';
+import { Search, Plus, X, Bell, Server, Wrench } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { Meeting } from './types';
 import toast from 'react-hot-toast';
@@ -66,6 +66,30 @@ function App() {
   const { prefs, loading: prefsLoading } = useUserPreferences();
 
   const [sparkVisible, setSparkVisible] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  useEffect(() => {
+    const loadMaintenance = () => {
+      void supabase
+        .from('system_config')
+        .select('value')
+        .eq('section', 'security')
+        .eq('key', 'maintenance_mode')
+        .maybeSingle()
+        .then(({ data }) => setMaintenanceMode(data?.value === 'true'))
+        .catch(() => {});
+    };
+    loadMaintenance();
+    const ch = supabase
+      .channel(`maintenance-rt-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, (payload: any) => {
+        if (payload.new?.section === 'security' && payload.new?.key === 'maintenance_mode') {
+          setMaintenanceMode(payload.new.value === 'true');
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   useEffect(() => {
     const loadSparkVisible = () => {
@@ -441,6 +465,31 @@ function App() {
   // If admin page is active and user is admin, show admin dashboard
   if (activePage === 'admin' && isAdmin) {
     return <AdminDashboard />;
+  }
+
+  // Maintenance mode — block non-admin users
+  if (maintenanceMode && !isAdmin) {
+    return (
+      <>
+        <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900" dir="rtl">
+          <div className="flex flex-col items-center gap-6 text-center max-w-md px-6">
+            <div className="w-20 h-20 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <Wrench className="w-10 h-10 text-amber-500" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold text-gray-800 dark:text-white">سیستم در حال تعمیر است</h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+                در حال حاضر سیستم به دلیل عملیات نگهداری در دسترس نیست. لطفاً کمی بعد مجدداً تلاش کنید.
+              </p>
+            </div>
+            <button onClick={() => supabase.auth.signOut()} className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors">
+              خروج از حساب
+            </button>
+          </div>
+        </div>
+      </>
+    );
   }
 
   const filteredMeetings = meetings.filter(meeting => {
