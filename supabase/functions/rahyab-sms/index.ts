@@ -83,14 +83,12 @@ async function callSoap(
 // ── Parse helpers ─────────────────────────────────────────────────────────────
 
 function parseGetInfo(result: string): { ok: boolean; credit: string; expireDate: string; error?: string } {
-  // Response: OK;Credit;ExpireDate; e.g. OK;8546525;2022-02-22;
   if (!result.startsWith("OK")) return { ok: false, credit: "", expireDate: "", error: result };
   const parts = result.split(";");
   return { ok: true, credit: parts[1] ?? "", expireDate: parts[2] ?? "" };
 }
 
 function parseSendOk(result: string): { ok: boolean; returnIds: string[]; error?: string } {
-  // Response: "Send OK.<ReturnIDs>id1;id2;-1</ReturnIDs>"
   if (!result.startsWith("Send OK")) {
     return { ok: false, returnIds: [], error: result };
   }
@@ -100,7 +98,6 @@ function parseSendOk(result: string): { ok: boolean; returnIds: string[]; error?
 }
 
 function getCdata(inner: string, tag: string): string {
-  // Handles both CDATA and plain text values
   const m = inner.match(new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))<\\/${tag}>`));
   if (!m) return "";
   return (m[1] ?? m[2] ?? "")
@@ -111,7 +108,6 @@ function getCdata(inner: string, tag: string): string {
 }
 
 function parseReceiveXml(xml: string): { rowId: string; dateTime: string; sender: string; receiver: string; message: string }[] {
-  // Per API docs, doReceiveSMS returns <smsBatch><sms><rowID/><origAddr/><destAddr/><time/><message/>
   const items: { rowId: string; dateTime: string; sender: string; receiver: string; message: string }[] = [];
   const blocks = xml.matchAll(/<sms[^>]*>([\s\S]*?)<\/sms>/g);
   for (const b of blocks) {
@@ -128,8 +124,6 @@ function parseReceiveXml(xml: string): { rowId: string; dateTime: string; sender
 }
 
 function parseDelivery(returnIds: string[], result: string): Record<string, number> {
-  // doGetDelivery returns plain status codes in order: "0;2;-1"
-  // We map each status back to the corresponding returnId by position
   const statuses = result.split(";");
   const map: Record<string, number> = {};
   returnIds.forEach((id, i) => {
@@ -141,32 +135,77 @@ function parseDelivery(returnIds: string[], result: string): Record<string, numb
   return map;
 }
 
+function adminClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
+
+/**
+ * Validates the caller. Accepts two token forms:
+ *  1. SUPABASE_SERVICE_ROLE_KEY — trusted internal service-to-service call
+ *     (used when send-sms proxies here on behalf of an authenticated admin).
+ *  2. A valid Supabase user JWT belonging to an active admin.
+ *
+ * Returns the authorization level or null if unauthorised.
+ */
+async function authorize(authHeader: string | null): Promise<"service" | "admin" | null> {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+
+  // 1. Constant-time compare against the service role key
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (serviceKey.length > 0) {
+    const enc = new TextEncoder();
+    const a = enc.encode(token);
+    const b = enc.encode(serviceKey);
+    if (a.length === b.length) {
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+      if (diff === 0) return "service";
+    }
+  }
+
+  // 2. Validate as an admin user JWT
+  const supabase = adminClient();
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin, is_active")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!profile?.is_active || !profile?.is_admin) return null;
+  return "admin";
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return json({ ok: false, error: "Unauthorized" }, 401);
+    // ── Authentication & authorisation ──────────────────────────────────────
+    const callerType = await authorize(req.headers.get("Authorization"));
+    if (!callerType) return json({ ok: false, error: "Unauthorized" }, 401);
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+    const supabase = adminClient();
 
     const body = await req.json();
-    const action: string = body.action; // send | get_info | receive | get_delivery | test | save_settings | load_settings | inbox
+    const action: string = body.action;
 
-    // ── load_settings ────────────────────────────────────────────────
+    // ── load_settings (admin only — not for internal service calls) ──────────
     if (action === "load_settings") {
+      if (callerType !== "admin") return json({ ok: false, error: "Forbidden" }, 403);
       const { data } = await supabase.from("rahyab_settings").select("*").limit(1).maybeSingle();
       return json({ ok: true, settings: data });
     }
 
-    // ── save_settings ────────────────────────────────────────────────
+    // ── save_settings (admin only) ───────────────────────────────────────────
     if (action === "save_settings") {
+      if (callerType !== "admin") return json({ ok: false, error: "Forbidden" }, 403);
       const s = body.settings ?? {};
       const existing = await supabase.from("rahyab_settings").select("id").limit(1).maybeSingle();
       if (existing.data?.id) {
@@ -192,8 +231,9 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-    // ── inbox (list received messages from DB) ────────────────────────
+    // ── inbox (admin only) ───────────────────────────────────────────────────
     if (action === "inbox") {
+      if (callerType !== "admin") return json({ ok: false, error: "Forbidden" }, 403);
       const { data } = await supabase
         .from("rahyab_inbox")
         .select("*")
@@ -202,9 +242,7 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, messages: data ?? [] });
     }
 
-    // ── Resolve credentials: _providerOverride takes priority over DB ──
-    // When called from send-sms with a rahyab-type provider, credentials
-    // are passed directly so we don't need the legacy rahyab_settings table.
+    // ── Resolve credentials: _providerOverride takes priority over DB ────────
     const override = body._providerOverride as Record<string, string> | undefined;
 
     let soapUrl: string;
@@ -215,7 +253,6 @@ Deno.serve(async (req: Request) => {
     if (override) {
       soapUrl   = override.soap_url   || "http://RahyabBulk.ir/WebService/sms.asmx";
       uUsername = override.token      || override.username || "";
-      // Per API docs: when using token, password can be any string of ≥5 chars
       uPassword = override.password   || "12345";
       uNumber   = override.short_code || "";
     } else {
@@ -235,18 +272,16 @@ Deno.serve(async (req: Request) => {
 
     if (!uUsername) return json({ ok: false, error: "نام کاربری یا توکن پیکربندی نشده است" }, 400);
 
-    // ── get_info / test ───────────────────────────────────────────────
+    // ── get_info / test ───────────────────────────────────────────────────────
     if (action === "get_info" || action === "test") {
-      const soap = await callSoap(soapUrl, "doGetInfo", {
-        uUsername, uPassword,
-      });
+      const soap = await callSoap(soapUrl, "doGetInfo", { uUsername, uPassword });
       if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP" });
       const info = parseGetInfo(soap.result);
       if (!info.ok) return json({ ok: false, error: info.error ?? "احراز هویت ناموفق" });
       return json({ ok: true, credit: info.credit, expireDate: info.expireDate });
     }
 
-    // ── send ──────────────────────────────────────────────────────────
+    // ── send ──────────────────────────────────────────────────────────────────
     if (action === "send") {
       const mobiles: string[] = body.mobiles ?? [];
       const message: string = body.message ?? "";
@@ -264,9 +299,7 @@ Deno.serve(async (req: Request) => {
       for (let i = 0; i < mobiles.length; i += CHUNK) {
         const chunk = mobiles.slice(i, i + CHUNK);
         const soap = await callSoap(soapUrl, "doSendSMS", {
-          uUsername,
-          uPassword,
-          uNumber,
+          uUsername, uPassword, uNumber,
           uCellphones: chunk.join(";"),
           uMessage: message,
           uFarsi: isFarsi ? "true" : "false",
@@ -280,7 +313,6 @@ Deno.serve(async (req: Request) => {
         if (!parsed.ok) { errors.push(parsed.error ?? "ارسال ناموفق"); continue; }
         allIds.push(...parsed.returnIds);
 
-        // API requires ≥3s between requests
         if (i + CHUNK < mobiles.length) {
           await new Promise(r => setTimeout(r, 3100));
         }
@@ -289,7 +321,7 @@ Deno.serve(async (req: Request) => {
       return json({ ok: errors.length === 0, sent: allIds.length, returnIds: allIds, errors });
     }
 
-    // ── receive ───────────────────────────────────────────────────────
+    // ── receive ───────────────────────────────────────────────────────────────
     if (action === "receive") {
       const lastRowId: number = body.lastRowId ?? 0;
 
@@ -302,7 +334,6 @@ Deno.serve(async (req: Request) => {
 
       for (const m of messages) {
         if (!m.rowId) continue;
-        // time format from API: "2011/06/13 00:00:14"
         const received_at = m.dateTime
           ? new Date(m.dateTime.replace(/(\d{4})\/(\d{2})\/(\d{2})/, "$1-$2-$3")).toISOString()
           : new Date().toISOString();
@@ -316,39 +347,33 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, count: messages.length, messages, nextRowId: maxRowId });
     }
 
-    // ── hello_world ───────────────────────────────────────────────────
+    // ── hello_world ───────────────────────────────────────────────────────────
     if (action === "hello_world") {
       const soap = await callSoap(soapUrl, "HelloWorld", {});
       if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP" });
       return json({ ok: true, result: soap.result });
     }
 
-    // ── receive_by_flag ───────────────────────────────────────────────
+    // ── receive_by_flag ───────────────────────────────────────────────────────
     if (action === "receive_by_flag") {
-      const soap = await callSoap(soapUrl, "doReceiveSMSByFlag", {
-        uUsername, uPassword,
-      });
+      const soap = await callSoap(soapUrl, "doReceiveSMSByFlag", { uUsername, uPassword });
       if (!soap.ok) return json({ ok: false, error: soap.error });
       const messages = parseReceiveXml(soap.result || soap.rawXml || "");
       return json({ ok: true, count: messages.length, messages });
     }
 
-    // ── get_info_xml ──────────────────────────────────────────────────
+    // ── get_info_xml ──────────────────────────────────────────────────────────
     if (action === "get_info_xml") {
-      const soap = await callSoap(soapUrl, "getInfoXML", {
-        uUsername, uPassword,
-      });
+      const soap = await callSoap(soapUrl, "getInfoXML", { uUsername, uPassword });
       if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP" });
       return json({ ok: true, rawXml: soap.rawXml, result: soap.result });
     }
 
-    // ── get_delivery ──────────────────────────────────────────────────
+    // ── get_delivery ──────────────────────────────────────────────────────────
     if (action === "get_delivery") {
       const returnIds: string[] = body.returnIds ?? [];
       if (!returnIds.length) return json({ ok: false, error: "شناسه پیام وارد نشده" }, 400);
 
-      // doGetDelivery returns plain ordered status codes: "0;2;-1"
-      // API requires ≥1s between requests, username only (no password)
       const CHUNK = 100;
       const deliveryMap: Record<string, number> = {};
 

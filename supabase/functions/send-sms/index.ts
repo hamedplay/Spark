@@ -7,6 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+// Accepts 09xxxxxxxxx, 9xxxxxxxxx, +98xxxxxxxxx, 0098xxxxxxxxx
+const PHONE_RE = /^(\+?98|0098|0)?9[0-9]{9}$/;
+
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
   if (digits.startsWith("0098")) return digits.slice(2);
@@ -14,6 +17,36 @@ function normalizePhone(phone: string): string {
   if (digits.startsWith("0") && digits.length === 11) return "98" + digits.slice(1);
   if (digits.length === 10) return "98" + digits;
   return digits;
+}
+
+function isValidPhone(raw: string): boolean {
+  return PHONE_RE.test(raw.replace(/\s/g, ""));
+}
+
+function adminClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
+
+/** Validates the Bearer JWT and returns the caller's profile, or null on failure. */
+async function authenticate(
+  authHeader: string | null,
+): Promise<{ userId: string; isAdmin: boolean } | null> {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+  const supabase = adminClient();
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin, is_active")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!profile?.is_active) return null;
+  return { userId: user.id, isAdmin: profile?.is_admin === true };
 }
 
 Deno.serve(async (req: Request) => {
@@ -27,11 +60,13 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
+  // ── Authentication ──────────────────────────────────────────────────────────
+  const caller = await authenticate(req.headers.get("Authorization"));
+  if (!caller) return json({ ok: false, error: "Unauthorized" }, 401);
+  if (!caller.isAdmin) return json({ ok: false, error: "Forbidden: admin access required" }, 403);
+
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabase = adminClient();
 
     const body = await req.json();
     const mode: string = body.mode || "send";
@@ -66,12 +101,12 @@ Deno.serve(async (req: Request) => {
       if (mode === "test_connection") {
         rahyabBody = { action: "test", _providerOverride: providerOverride };
       } else if (mode === "rahyab_test") {
-        // Forward any raw Rahyab test action (hello_world, get_info, receive_by_flag, etc.)
         rahyabBody = { ...body.rahyabPayload, _providerOverride: providerOverride };
       } else {
         rahyabBody = { action: "send", mobiles: body.mobiles, message: body.message, isFarsi: true, _providerOverride: providerOverride };
       }
 
+      // Internal service-to-service call; service key is the correct credential here.
       const resp = await fetch(`${supabaseUrl}/functions/v1/rahyab-sms`, {
         method: "POST",
         headers: {
@@ -121,15 +156,21 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── MODE: send (likeToLike) ───────────────────────────────────────
-    const mobiles: string[] = body.mobiles || [];
+    const rawMobiles: string[] = body.mobiles || [];
     const message: string = body.message || "";
     const messageTextsInput: string[] | undefined = body.messageTexts;
     const sendDateTime: number | null = body.sendDateTime ?? null;
 
-    if (!mobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
+    if (!rawMobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
     if (!lineNumber) return json({ ok: false, error: "شماره خط ارسال تنظیم نشده است" }, 400);
 
-    const pairs: { mobile: string; text: string }[] = mobiles
+    // Validate each destination number before any external call
+    const invalidNumbers = rawMobiles.filter(m => !isValidPhone(m.replace(/\s/g, "")));
+    if (invalidNumbers.length > 0) {
+      return json({ ok: false, error: `شماره موبایل نامعتبر: ${invalidNumbers.slice(0, 3).join(", ")}` }, 400);
+    }
+
+    const pairs: { mobile: string; text: string }[] = rawMobiles
       .map((m, i) => ({ mobile: m, text: messageTextsInput?.[i] ?? message }))
       .filter(({ mobile }) => mobile?.trim().length >= 7)
       .map(({ mobile, text }) => ({ mobile: normalizePhone(mobile), text }));

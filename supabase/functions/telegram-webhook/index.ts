@@ -64,36 +64,59 @@ Deno.serve(async (req: Request) => {
   if (text?.startsWith("/start")) {
     const linkToken = text.split(" ")[1]?.trim();
 
-    if (linkToken) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("user_id, full_name")
-        .eq("user_id", linkToken)
+    if (linkToken && chatId) {
+      // ── Secure token lookup ──────────────────────────────────────────────────
+      // Tokens are cryptographically random 32-hex-char strings stored in
+      // telegram_link_tokens. We never accept raw user UUIDs as linking tokens.
+      const now = new Date().toISOString();
+
+      const { data: tokenRow, error: tokenErr } = await supabase
+        .from("telegram_link_tokens")
+        .select("id, user_id")
+        .eq("token", linkToken)
+        .eq("used", false)
+        .gt("expires_at", now)
         .maybeSingle();
 
-      if (profile && chatId) {
-        await supabase
-          .from("profiles")
-          .update({ telegram_chat_id: String(chatId) })
-          .eq("user_id", profile.user_id);
-
+      if (tokenErr || !tokenRow) {
+        // Token invalid, expired, already used, or not found — refuse to link
         await sendTelegramMessage(
           channelConfig.bot_token,
           chatId,
-          `✅ حساب تلگرام شما با موفقیت به سامانه متصل شد.\n\nسلام ${profile.full_name || "کاربر"}! از این پس اعلان‌های سامانه برای شما ارسال خواهد شد.`
+          "لینک اتصال نامعتبر یا منقضی شده است.\n\nلطفاً از پروفایل خود لینک جدیدی دریافت کنید."
         );
-      } else {
-        await sendTelegramMessage(
-          channelConfig.bot_token,
-          chatId,
-          "سلام! برای اتصال حساب تلگرام خود، لطفاً از طریق پروفایل در سامانه اقدام کنید."
-        );
+        return json({ ok: true });
       }
+
+      // Fetch the user's display name for the confirmation message
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("user_id", tokenRow.user_id)
+        .maybeSingle();
+
+      // Mark the token as used (single-use)
+      await supabase
+        .from("telegram_link_tokens")
+        .update({ used: true })
+        .eq("id", tokenRow.id);
+
+      // Link Telegram chat ID to the user
+      await supabase
+        .from("profiles")
+        .update({ telegram_chat_id: String(chatId) })
+        .eq("user_id", tokenRow.user_id);
+
+      await sendTelegramMessage(
+        channelConfig.bot_token,
+        chatId,
+        `✅ حساب تلگرام شما با موفقیت به سامانه متصل شد.\n\nسلام ${profile?.full_name || "کاربر"}! از این پس اعلان‌های سامانه برای شما ارسال خواهد شد.`
+      );
     } else {
       await sendTelegramMessage(
         channelConfig.bot_token,
         chatId,
-        "سلام! برای دریافت اعلان‌های سامانه، Chat ID خود را در پروفایل وارد کنید."
+        "سلام! برای اتصال حساب تلگرام خود، از پروفایل در سامانه لینک اتصال دریافت کنید."
       );
     }
   }

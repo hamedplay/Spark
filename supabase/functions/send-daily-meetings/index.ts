@@ -46,7 +46,6 @@ function renderTemplate(tpl: string, vars: Record<string, string>): string {
 function validLocation(loc: string | null | undefined): string {
   if (!loc) return '';
   const t = loc.trim();
-  // treat "0" or single zeros as empty (common placeholder in form)
   if (t === '0' || t === '') return '';
   return t;
 }
@@ -65,6 +64,56 @@ const DEFAULT_NOTIF_BODY = 'برنامه جلسات روز {{weekday}} {{date}}:
 const DEFAULT_SMS_LINE = '{{time}} | {{subject}}{{location_part}}';
 const DEFAULT_SMS_BODY = 'جلسات {{weekday}} {{date}}:\n{{meetings_list}}';
 
+function adminClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
+
+/**
+ * Authorises the caller. Accepts two mechanisms:
+ *  1. Scheduled cron job: `Authorization: Bearer <CRON_SECRET>` where the
+ *     secret is stored in the CRON_SECRET edge-function secret.
+ *  2. Manual admin invocation: a valid Supabase user JWT whose profile has
+ *     is_admin = true.
+ *
+ * Returns the caller type, or null if the request is unauthorised.
+ */
+async function authorize(
+  authHeader: string | null,
+): Promise<"cron" | "admin" | null> {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+
+  // 1. Cron-secret check (constant-time comparison via crypto)
+  const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
+  if (cronSecret.length > 0) {
+    const enc = new TextEncoder();
+    const a = enc.encode(token);
+    const b = enc.encode(cronSecret);
+    if (a.length === b.length) {
+      // Constant-time compare to prevent timing attacks
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+      if (diff === 0) return "cron";
+    }
+  }
+
+  // 2. Admin JWT check
+  const supabase = adminClient();
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin, is_active")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!profile?.is_active || !profile?.is_admin) return null;
+  return "admin";
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -76,19 +125,29 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
+  // ── Authentication & authorisation ──────────────────────────────────────────
+  const callerType = await authorize(req.headers.get("Authorization"));
+  if (!callerType) return json({ ok: false, error: "Unauthorized" }, 401);
+
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabase = adminClient();
 
     let force = false;
     let scheduled = false;
     try {
       const body = await req.json().catch(() => ({}));
       force = !!body?.force;
-      scheduled = !!body?.scheduled;
+      // Only a cron caller is allowed to set scheduled=true
+      scheduled = callerType === "cron" && !!body?.scheduled;
     } catch { /* ignore */ }
+
+    // Audit log the invocation
+    try {
+      await supabase.from("audit_logs").insert({
+        action: "send_daily_meetings_triggered",
+        details: { caller_type: callerType, force, scheduled },
+      });
+    } catch { /* non-critical */ }
 
     // Load daily report config
     const { data: config, error: cfgErr } = await supabase
@@ -107,8 +166,6 @@ Deno.serve(async (req: Request) => {
     const istMonth = istNow.getUTCMonth();
     const istDate = istNow.getUTCDate();
 
-    // meetings.request_date stores ISO strings representing midnight IST in UTC
-    // e.g. June 7 IST midnight = "2026-06-06T20:30:00.000Z"
     const todayStart = new Date(Date.UTC(istYear, istMonth, istDate, 0, 0, 0) - IST_OFFSET_MINUTES * 60 * 1000);
     const todayEnd = new Date(Date.UTC(istYear, istMonth, istDate, 23, 59, 59) - IST_OFFSET_MINUTES * 60 * 1000);
     const istDayForDisplay = new Date(Date.UTC(istYear, istMonth, istDate));
@@ -119,7 +176,6 @@ Deno.serve(async (req: Request) => {
       if (istTimeStr !== config.send_time) {
         return json({ ok: false, reason: "not_time_yet", time: istTimeStr, expected: config.send_time });
       }
-      // Check day of week: (getUTCDay() + 1) % 7 maps to Jalaali weekday index
       const istDayIndex = (istNow.getUTCDay() + 1) % 7;
       const allowedDays: number[] = config.send_days ?? [0, 1, 2, 3, 4, 5, 6];
       if (!allowedDays.includes(istDayIndex)) {
@@ -132,7 +188,7 @@ Deno.serve(async (req: Request) => {
     const jalaaliShort = formatJalaaliShort(istDayForDisplay);
     const weekday = jalaaliLong.split(' ')[0];
 
-    // Fetch today's scheduled meetings (status_type: scheduled or approved, not cancelled)
+    // Fetch today's scheduled meetings
     const { data: meetings, error: meetingsErr } = await supabase
       .from("meetings")
       .select("id, subject, start_time, end_time, location, representative, duration, request_date, participant_user_ids, notify_users")
@@ -231,7 +287,6 @@ Deno.serve(async (req: Request) => {
       if (meetingCount === 0) {
         meetingsListForNotif = "امروز هیچ جلسه‌ای برنامه‌ریزی نشده است.";
       } else {
-        // One line per meeting: "- HH:MM تا HH:MM | موضوع | مکان"
         meetingsListForNotif = rows.map(r => {
           const parts = [r.time, r.subject];
           if (r.location) parts.push(r.location);
@@ -279,12 +334,10 @@ Deno.serve(async (req: Request) => {
 
       const smsBody = renderTemplate(DEFAULT_SMS_BODY, { ...globalVars, meetings_list: smsMeetingLines });
 
-      // Collect valid phone numbers
       const rawMobiles = recipientIds.map((uid: string) => phoneMap[uid]).filter(Boolean);
       const mobiles = rawMobiles.map(normalizePhone);
 
       if (mobiles.length > 0) {
-        // Fetch SMS provider directly to avoid inter-function JWT issues
         const { data: providers } = await supabase
           .from("sms_providers")
           .select("*")
@@ -373,7 +426,6 @@ Deno.serve(async (req: Request) => {
         if (!botToken) {
           baleError = "توکن ربات بله تنظیم نشده";
         } else {
-          // Build message text (reuse notification body)
           const titleTpl = config.notification_title_tpl || DEFAULT_NOTIF_TITLE;
           const bodyTpl = config.notification_body_tpl || DEFAULT_NOTIF_BODY;
           const notifTitle = renderTemplate(titleTpl, globalVars);
@@ -389,7 +441,6 @@ Deno.serve(async (req: Request) => {
           }
           const baleMessage = `${notifTitle}\n\n${renderTemplate(bodyTpl, { ...globalVars, meetings_list: meetingsListForBale })}`;
 
-          // Fetch Bale mappings for all recipients
           const { data: mappings } = await supabase
             .from("user_bale_mapping")
             .select("user_id, bale_chat_id")

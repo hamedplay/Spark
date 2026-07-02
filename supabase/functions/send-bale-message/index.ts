@@ -17,6 +17,7 @@ function json(body: unknown, status = 200) {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
+  // ── Authentication ──────────────────────────────────────────────────────────
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return json({ ok: false, error: "احراز هویت لازم است" }, 401);
 
@@ -30,6 +31,7 @@ Deno.serve(async (req: Request) => {
   const { data: { user }, error: authErr } = await userClient.auth.getUser();
   if (authErr || !user) return json({ ok: false, error: "دسترسی غیرمجاز" }, 401);
 
+  // ── Parse body ──────────────────────────────────────────────────────────────
   let body: { userId?: string; text?: string };
   try {
     body = await req.json();
@@ -43,7 +45,46 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(supabaseUrl, serviceKey);
 
-  // Check bot config
+  // ── Authorization: caller must be admin OR in the same organization ─────────
+  // Fetch caller's profile
+  const { data: callerProfile, error: callerErr } = await admin
+    .from("profiles")
+    .select("is_admin, is_active, organization")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (callerErr || !callerProfile) {
+    return json({ ok: false, error: "دسترسی غیرمجاز" }, 401);
+  }
+  if (!callerProfile.is_active) {
+    return json({ ok: false, error: "حساب کاربری غیرفعال است" }, 403);
+  }
+
+  if (!callerProfile.is_admin) {
+    // Non-admin: target must be in the same organization and be active
+    const { data: targetProfile, error: targetErr } = await admin
+      .from("profiles")
+      .select("is_active, organization")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (targetErr || !targetProfile) {
+      return json({ ok: false, error: "کاربر مورد نظر یافت نشد" }, 403);
+    }
+    if (!targetProfile.is_active) {
+      return json({ ok: false, error: "کاربر مورد نظر غیرفعال است" }, 403);
+    }
+
+    const callerOrg = (callerProfile.organization ?? "").trim();
+    const targetOrg = (targetProfile.organization ?? "").trim();
+
+    // Reject cross-organization messaging
+    if (!callerOrg || !targetOrg || callerOrg !== targetOrg) {
+      return json({ ok: false, error: "دسترسی غیرمجاز: کاربران باید در یک سازمان باشند" }, 403);
+    }
+  }
+
+  // ── Check bot config ────────────────────────────────────────────────────────
   const { data: cfg, error: cfgErr } = await admin
     .from("social_channel_configs")
     .select("bot_token, is_active")
@@ -64,7 +105,7 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, skipped: true, reason: "توکن بات تنظیم نشده" });
   }
 
-  // Look up user's Bale chat ID from mapping table
+  // ── Look up target user's Bale chat ID ──────────────────────────────────────
   const { data: mapping, error: mapErr } = await admin
     .from("user_bale_mapping")
     .select("bale_chat_id")
@@ -80,7 +121,7 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, skipped: true, reason: "کاربر به بله متصل نیست" });
   }
 
-  // Send message via Bale API
+  // ── Send message via Bale API ───────────────────────────────────────────────
   try {
     const res = await fetch(`https://tapi.bale.ai/bot${botToken}/sendMessage`, {
       method: "POST",
