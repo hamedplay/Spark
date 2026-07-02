@@ -1595,11 +1595,11 @@ interface DispatchLog {
   cost: number | null;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-  sent:    { label: 'ارسال شد',    icon: <CheckCircle  className="w-4 h-4" />, cls: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30' },
-  failed:  { label: 'خطا',         icon: <XCircle      className="w-4 h-4" />, cls: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' },
-  skipped: { label: 'رد شد',       icon: <MinusCircle  className="w-4 h-4" />, cls: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30' },
-  pending: { label: 'در انتظار',   icon: <Clock        className="w-4 h-4" />, cls: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' },
+const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; cls: string }> = {
+  sent:    { label: 'ارسال شد',    icon: CheckCircle,  cls: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30' },
+  failed:  { label: 'خطا',         icon: XCircle,      cls: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' },
+  skipped: { label: 'رد شد',       icon: MinusCircle,  cls: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30' },
+  pending: { label: 'در انتظار',   icon: Clock,        cls: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' },
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -1764,7 +1764,7 @@ function ReportsTab() {
                       </span>
                       {/* Status */}
                       <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium self-center ${st.cls}`}>
-                        {st.icon}{st.label}
+                        <st.icon className="w-4 h-4" />{st.label}
                       </span>
                       {/* Date */}
                       <span className="text-xs text-gray-400 self-center text-center whitespace-nowrap">

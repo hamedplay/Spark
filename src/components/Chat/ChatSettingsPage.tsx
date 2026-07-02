@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { X, Palette, MessageSquare, Bell, LayoutGrid as Layout, Check } from 'lucide-react';
 
 export interface ChatThemeSettings {
@@ -59,11 +59,11 @@ const SECTION_LABELS: Record<Section, string> = {
   display: 'نمایش',
 };
 
-const SECTION_ICONS: Record<Section, React.ReactNode> = {
-  bubbles: <MessageSquare className="w-4 h-4" />,
-  background: <Layout className="w-4 h-4" />,
-  types: <Bell className="w-4 h-4" />,
-  display: <Palette className="w-4 h-4" />,
+const SECTION_ICONS: Record<Section, React.ElementType> = {
+  bubbles: MessageSquare,
+  background: Layout,
+  types: Bell,
+  display: Palette,
 };
 
 const PRESET_SENT_COLORS = ['#e8f5ee', '#dbeafe', '#fef3c7', '#fce7f3', '#ede9fe', '#f1f5f9'];
@@ -119,7 +119,7 @@ export function ChatSettingsPage({ onClose }: Props) {
             onClick={() => setActiveSection(s)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${activeSection === s ? 'bg-teal-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
           >
-            <span>{SECTION_ICONS[s]}</span>
+            <span>{React.createElement(SECTION_ICONS[s], { className: 'w-4 h-4' })}</span>
             {SECTION_LABELS[s]}
           </button>
         ))}
