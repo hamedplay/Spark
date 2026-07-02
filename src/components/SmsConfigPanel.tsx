@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, EllipsisVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, MoveVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -1595,11 +1595,11 @@ interface DispatchLog {
   cost: number | null;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; cls: string }> = {
-  sent:    { label: 'ارسال شد',    icon: CheckCircle,  cls: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30' },
-  failed:  { label: 'خطا',         icon: XCircle,      cls: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' },
-  skipped: { label: 'رد شد',       icon: MinusCircle,  cls: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30' },
-  pending: { label: 'در انتظار',   icon: Clock,        cls: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' },
+const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
+  sent:    { label: 'ارسال شد',    icon: <CheckCircle  className="w-4 h-4" />, cls: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30' },
+  failed:  { label: 'خطا',         icon: <XCircle      className="w-4 h-4" />, cls: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' },
+  skipped: { label: 'رد شد',       icon: <MinusCircle  className="w-4 h-4" />, cls: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30' },
+  pending: { label: 'در انتظار',   icon: <Clock        className="w-4 h-4" />, cls: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' },
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -1764,7 +1764,7 @@ function ReportsTab() {
                       </span>
                       {/* Status */}
                       <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium self-center ${st.cls}`}>
-                        <st.icon className="w-4 h-4" />{st.label}
+                        {st.icon}{st.label}
                       </span>
                       {/* Date */}
                       <span className="text-xs text-gray-400 self-center text-center whitespace-nowrap">

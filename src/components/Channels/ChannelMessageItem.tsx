@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import moment from 'moment-jalaali';
-import { EllipsisVertical as MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Lock, Play, Pause, Eye, Check, Reply, X, Smile, ClipboardList, BellRing, Pin, Download, FileText, CheckCheck, Star, Users, Clock, Loader, AtSign, MessageSquare } from 'lucide-react';
+import { MoveVertical as MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Lock, Play, Pause, Eye, Check, Reply, X, Smile, ClipboardList, BellRing, Pin, Download, FileText, CheckCheck, Star, Users, Clock, Loader, AtSign, MessageSquare } from 'lucide-react';
 import { EmojiPicker } from '../Chat/EmojiPicker';
 import { supabase } from '../../lib/supabase';
 import { insertNotification } from '../../lib/notifications';

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Save, Search, Plus, Trash2, CreditCard as Edit2, X, Eye, EyeOff, CircleAlert as AlertCircle, RefreshCw, Wifi, Mail, Lock, Image, Palette, Monitor, UserCog, KeyRound, UserX, UserCheck, History, MapPin, LogIn as LoginIcon, ShieldCheck, Menu, Bot, EllipsisVertical as MoreVertical } from 'lucide-react';
+import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Save, Search, Plus, Trash2, CreditCard as Edit2, X, Eye, EyeOff, CircleAlert as AlertCircle, RefreshCw, Wifi, Mail, Lock, Image, Palette, Monitor, UserCog, KeyRound, UserX, UserCheck, History, MapPin, LogIn as LoginIcon, ShieldCheck, Menu, Bot, MoveVertical as MoreVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';

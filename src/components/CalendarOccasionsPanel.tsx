@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { CalendarDays, Plus, Trash2, CreditCard as Edit2, Download, Upload, ChevronDown, Check, Loader as Loader2, Save, RefreshCw, Sun, Moon, Star, CircleAlert as AlertCircle, EllipsisVertical as MoreVertical, Copy, Search } from 'lucide-react';
+import { CalendarDays, Plus, Trash2, CreditCard as Edit2, Download, Upload, ChevronDown, Check, Loader as Loader2, Save, RefreshCw, Sun, Moon, Star, CircleAlert as AlertCircle, MoveVertical as MoreVertical, Copy, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';

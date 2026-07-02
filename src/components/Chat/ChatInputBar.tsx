@@ -22,11 +22,11 @@ interface Props {
   onScheduleMeetingWithMentions?: (mentionedUserIds: string[]) => void;
 }
 
-const MESSAGE_TYPES: { key: ChatMessageType; label: string; icon: React.ElementType; color: string; desc: string }[] = [
-  { key: 'normal', label: 'پیام عادی', icon: MessageCircle, color: 'text-gray-500', desc: '' },
-  { key: 'important', label: 'پیام مهم', icon: AlertCircle, color: 'text-amber-500', desc: 'اعلان روی صفحه نمایش داده می‌شود' },
-  { key: 'urgent', label: 'پیام اورژانسی', icon: AlertTriangle, color: 'text-red-500', desc: 'زنگ اعلان پخش می‌شود' },
-  { key: 'confidential', label: 'پیام محرمانه', icon: Lock, color: 'text-gray-600', desc: 'پیام تا کلیک گیرنده مخفی می‌ماند' },
+const MESSAGE_TYPES: { key: ChatMessageType; label: string; icon: React.ReactNode; color: string; desc: string }[] = [
+  { key: 'normal', label: 'پیام عادی', icon: <MessageCircle className="w-4 h-4" />, color: 'text-gray-500', desc: '' },
+  { key: 'important', label: 'پیام مهم', icon: <AlertCircle className="w-4 h-4" />, color: 'text-amber-500', desc: 'اعلان روی صفحه نمایش داده می‌شود' },
+  { key: 'urgent', label: 'پیام اورژانسی', icon: <AlertTriangle className="w-4 h-4" />, color: 'text-red-500', desc: 'زنگ اعلان پخش می‌شود' },
+  { key: 'confidential', label: 'پیام محرمانه', icon: <Lock className="w-4 h-4" />, color: 'text-gray-600', desc: 'پیام تا کلیک گیرنده مخفی می‌ماند' },
 ];
 
 type RecordingState = 'idle' | 'recording' | 'recorded';
@@ -786,7 +786,7 @@ export function ChatInputBar({
                 activeColor={currentType.color}
                 onClick={() => setShowTypeMenu(v => !v)}
               >
-                <span className={messageType !== 'normal' ? currentType.color : ''}><currentType.icon className="w-4 h-4" /></span>
+                <span className={messageType !== 'normal' ? currentType.color : ''}>{currentType.icon}</span>
               </ToolBtn>
               {showTypeMenu && (
                 <div
@@ -801,7 +801,7 @@ export function ChatInputBar({
                     <button key={t.key}
                       onClick={() => { setMessageType(t.key); setShowTypeMenu(false); }}
                       className={`w-full flex items-start gap-3 px-3 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${messageType === t.key ? 'bg-gray-50 dark:bg-gray-700' : ''}`}>
-                      <span className={`mt-0.5 flex-shrink-0 ${t.color}`}><t.icon className="w-4 h-4" /></span>
+                      <span className={`mt-0.5 flex-shrink-0 ${t.color}`}>{t.icon}</span>
                       <div className="text-right flex-1 min-w-0">
                         <p className={`font-medium ${t.color}`}>{t.label}</p>
                         {t.desc && <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{t.desc}</p>}

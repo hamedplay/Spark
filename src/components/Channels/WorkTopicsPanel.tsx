@@ -18,10 +18,10 @@ interface Props {
   onTaskCreated: () => void;
 }
 
-const TASK_STATUS_META: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
-  open: { label: 'باز', cls: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400', icon: Clock },
-  done: { label: 'انجام شد', cls: 'text-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400', icon: CheckCircle2 },
-  archived: { label: 'بایگانی', cls: 'text-gray-500 bg-gray-100 dark:bg-gray-700 dark:text-gray-400', icon: Archive },
+const TASK_STATUS_META = {
+  open: { label: 'باز', cls: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400', icon: <Clock className="w-3.5 h-3.5" /> },
+  done: { label: 'انجام شد', cls: 'text-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+  archived: { label: 'بایگانی', cls: 'text-gray-500 bg-gray-100 dark:bg-gray-700 dark:text-gray-400', icon: <Archive className="w-3.5 h-3.5" /> },
 };
 
 const ASSIGN_STATUS_META = {
@@ -184,7 +184,7 @@ function TaskCard({ task, members, currentUserId, onComplete, onArchive, onUpdat
             {task.body && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{task.body}</p>}
           </div>
           <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${status.cls}`}>
-            <status.icon className="w-3.5 h-3.5" /> {status.label}
+            {status.icon} {status.label}
           </span>
         </div>
 
