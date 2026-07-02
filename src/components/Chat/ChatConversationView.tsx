@@ -938,7 +938,6 @@ export function ChatConversationView({
                   onScheduleMeeting={handleScheduleMeeting}
                   onTagsChanged={fetchMessages}
                   onReminderSet={fetchReminders}
-                  onScrollToMessage={scrollToMessage}
                   onRegisterAsTask={onNavigateToTasks}
                   onOpenDirectChat={onOpenDirectChat}
                 />
