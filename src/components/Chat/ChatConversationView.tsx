@@ -192,6 +192,16 @@ export function ChatConversationView({
     return () => window.removeEventListener('chatThemeChanged', handler);
   }, []);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      if ((e as CustomEvent).detail?.conversationId === conversation.id) {
+        fetchMessages();
+      }
+    };
+    window.addEventListener('chat-messages-cleared', handler);
+    return () => window.removeEventListener('chat-messages-cleared', handler);
+  }, [conversation.id, fetchMessages]);
+
   const fetchAllUsers = async () => {
     const { data } = await supabase
       .from('profiles')
