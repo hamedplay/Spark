@@ -128,6 +128,7 @@ export interface CalendarViewProps {
   // List view
   expandedMeetingId: string | null;
   setExpandedMeetingId: (v: string | null) => void;
+  listScrollRef?: React.MutableRefObject<HTMLDivElement | null>;
 }
 
 // ─── Overlap computation ───────────────────────────────────────────────────────
@@ -227,7 +228,7 @@ export function CalendarViews(p: CalendarViewProps) {
     expandedMeetingId, setExpandedMeetingId,
     selectedJy, selectedJm, selectedJd, currentJy, currentJm,
     getOccasionsForDay, getAllDayEventsForDay, fetchAllDayEvents, isInAllDayDragRange,
-    weekDays, mainMonthDays, listMeetings,
+    weekDays, mainMonthDays, listMeetings, listScrollRef,
   } = p;
 
   // ── Slot lines ───────────────────────────────────────────────────────────────
@@ -769,11 +770,11 @@ export function CalendarViews(p: CalendarViewProps) {
 
   // ── List view ─────────────────────────────────────────────────────────────────
   const renderListView = () => (
-    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+    <div ref={listScrollRef} className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
       {listMeetings.length === 0 ? (
         <div className="text-center py-16 text-gray-400"><Calendar className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>جلسه‌ای وجود ندارد</p></div>
       ) : listMeetings.map(group => (
-        <div key={group.date} className="mb-4">
+        <div key={group.date} {...(isToday(group.jy, group.jm, group.jd) ? { 'data-today': 'true' } : {})} className="mb-4">
           <div className="flex items-center gap-3 mb-2 sticky top-0 bg-gray-50 dark:bg-gray-900 py-1 z-10">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0 ${isToday(group.jy, group.jm, group.jd) ? 'bg-blue-500 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-600'}`}>{group.jd}</div>
             <div>

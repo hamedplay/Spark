@@ -63,7 +63,6 @@ Deno.serve(async (req: Request) => {
   // ── Authentication ──────────────────────────────────────────────────────────
   const caller = await authenticate(req.headers.get("Authorization"));
   if (!caller) return json({ ok: false, error: "Unauthorized" }, 401);
-  if (!caller.isAdmin) return json({ ok: false, error: "Forbidden: admin access required" }, 403);
 
   try {
     const supabase = adminClient();
@@ -71,6 +70,11 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const mode: string = body.mode || "send";
     const providerId: string | undefined = body.providerId;
+
+    // test_connection and provider management require admin
+    if (mode === "test_connection" && !caller.isAdmin) {
+      return json({ ok: false, error: "Forbidden: admin access required" }, 403);
+    }
 
     // ── Fetch provider ────────────────────────────────────────────────
     let q = supabase.from("sms_providers").select("*").eq("is_active", true);

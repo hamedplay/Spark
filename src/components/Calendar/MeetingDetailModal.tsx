@@ -175,7 +175,7 @@ const getJalaliDate = (): string => {
       .map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0, 8))
       .join('، ');
     const externalNames = (m.external_participants || []).join('، ');
-    const creatorName = isOwner ? 'شما' : (creator?.full_name || creator?.email || 'کاربر ناشناس');
+    const creatorName = creator?.full_name || creator?.email || 'کاربر ناشناس';
     const timeStr = m.start_time && m.end_time ? `${m.start_time} - ${m.end_time}` : '';
     const dateStr = getJalaliDate();
 
@@ -267,7 +267,7 @@ const getJalaliDate = (): string => {
             <div>
               <p className="text-xs text-gray-400 mb-0.5">ایجاد کننده جلسه</p>
               <p className="text-sm font-semibold dark:text-white">
-                {isOwner ? 'شما' : (creator?.full_name || creator?.email || 'کاربر ناشناس')}
+                {creator?.full_name || creator?.email || 'کاربر ناشناس'}
               </p>
             </div>
           </div>

@@ -35,8 +35,8 @@ interface Props {
   onPublicGroupToggle: () => void;
 
   // Filter
-  showOnlyMine: boolean;
-  onShowOnlyMineChange: (v: boolean) => void;
+  showOnlyMine?: boolean;
+  onShowOnlyMineChange?: (v: boolean) => void;
 
   // Actions
   onNewCalendar: () => void;
@@ -54,7 +54,6 @@ export function CalendarSidebar({
   occasionsEnabled, onToggleOccasions,
   sharedGroupOpen, publicGroupOpen,
   onSharedGroupToggle, onPublicGroupToggle,
-  showOnlyMine, onShowOnlyMineChange,
   onNewCalendar, onOpenCalendarList,
 }: Props) {
   const [miniCalOpen, setMiniCalOpen] = useState(true);
@@ -108,14 +107,6 @@ export function CalendarSidebar({
             </div>
           </div>
         )}
-      </div>
-
-      {/* Show only mine */}
-      <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-        <label className="flex items-center gap-2 cursor-pointer text-sm dark:text-white">
-          <input type="checkbox" checked={showOnlyMine} onChange={e => onShowOnlyMineChange(e.target.checked)} className="w-4 h-4 rounded accent-blue-500" />
-          نمایش رویدادهای مرتبط با من
-        </label>
       </div>
 
       {/* Calendars section with collapsible toggle */}

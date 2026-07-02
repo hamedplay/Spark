@@ -99,6 +99,7 @@ export function CalendarPage({
   const [dragDate, setDragDate] = useState<{ jy: number; jm: number; jd: number } | null>(null);
   const timeGridRef = useRef<HTMLDivElement | null>(null);
   const timeScrollRef = useRef<HTMLDivElement | null>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [showMeetingForm, setShowMeetingForm] = useState(false);
   const [prefillData, setPrefillData] = useState<any>(null);
@@ -566,6 +567,21 @@ export function CalendarPage({
     }, 50);
     return () => clearTimeout(timer);
   }, [hideOffHours]);
+
+  // Scroll to today in list-month view
+  useEffect(() => {
+    if (viewMode !== 'list-month') return;
+    const timer = setTimeout(() => {
+      if (!listScrollRef.current) return;
+      const todayEl = listScrollRef.current.querySelector('[data-today="true"]') as HTMLElement | null;
+      if (todayEl) {
+        const containerTop = listScrollRef.current.getBoundingClientRect().top;
+        const elTop = todayEl.getBoundingClientRect().top;
+        listScrollRef.current.scrollTop += elTop - containerTop - 16;
+      }
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [viewMode, currentJy, currentJm]);
 
   // ---- Fetch ----
   // Ref so real-time callback always calls the latest version (avoids stale closure)
@@ -2038,6 +2054,7 @@ export function CalendarPage({
               setDetailMeeting={setDetailMeeting}
               expandedMeetingId={expandedMeetingId}
               setExpandedMeetingId={setExpandedMeetingId}
+              listScrollRef={listScrollRef}
             />
           </div>
         </div>
