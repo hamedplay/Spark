@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Loader as Loader2, CreditCard as Edit2, Save, X, Archive, GitFork, User, ChevronDown, Calendar, ArrowLeft, CircleCheck as CheckCircle, MessageSquare, ClipboardList, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
+import { Plus, Search, Loader as Loader2, CreditCard as Edit2, Save, X, Archive, GitFork, User, ChevronDown, Calendar, ArrowLeft, CircleCheck as CheckCircle, MessageSquare, ClipboardList, ChevronLeft, ChevronRight, Building2, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import { Task, TaskWorkflowStep } from '../types';
@@ -564,6 +564,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [workflowSteps, setWorkflowSteps] = useState<TaskWorkflowStep[]>([]);
   const [referTask, setReferTask] = useState<Task | null>(null);
   const [addNoteTask, setAddNoteTask] = useState<Task | null>(null);
+  const [deleteConfirmTask, setDeleteConfirmTask] = useState<Task | null>(null);
 
   // New task form
   const [newTask, setNewTask] = useState({
@@ -757,8 +758,21 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     });
   };
 
-  const handleExportToExcel = () => {
-    const exportData = tasks.map(task => ({
+  const handleDeleteTask = async (task: Task) => {
+    try {
+      const { error } = await supabase.from('tasks').delete().eq('id', task.id);
+      if (error) { toast.error('خطا در حذف اقدام: ' + error.message); return; }
+      toast.success('اقدام حذف شد');
+      logAudit({ module: 'tasks', action: 'task_deleted', entity_name: task.title, entity_id: task.id, details: `اقدام "${task.title}" حذف شد`, severity: 'warn' });
+      fetchTasks();
+    } catch (e: any) {
+      toast.error('خطا در حذف اقدام: ' + (e?.message || ''));
+    } finally {
+      setDeleteConfirmTask(null);
+    }
+  };
+
+  const handleExportToExcel = () => {    const exportData = tasks.map(task => ({
       'عنوان': task.title,
       'توضیحات': task.description,
       'وضعیت': task.status === 'pending' ? 'در انتظار' : task.status === 'in_progress' ? 'در حال انجام' : 'تکمیل شده',
@@ -1009,6 +1023,14 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
                           <Edit2 className="w-4 h-4" />
                         </button>
                       )}
+                      {(task.user_id === userId || task.created_by_id === userId) && (
+                        <button
+                          onClick={() => setDeleteConfirmTask(task)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          title="حذف اقدام">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1131,6 +1153,40 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
           />
         );
       })()}
+
+      {/* Delete confirmation modal */}
+      {deleteConfirmTask && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" dir="rtl">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-bold dark:text-white">حذف اقدام</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">این عملیات قابل بازگشت نیست</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              آیا از حذف اقدام <span className="font-semibold">«{deleteConfirmTask.title}»</span> اطمینان دارید؟
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleDeleteTask(deleteConfirmTask)}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                حذف
+              </button>
+              <button
+                onClick={() => setDeleteConfirmTask(null)}
+                className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors"
+              >
+                انصراف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

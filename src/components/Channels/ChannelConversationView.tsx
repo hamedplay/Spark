@@ -692,7 +692,8 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
   };
 
   const handleDelete = async (msgId: string) => {
-    await supabase.rpc('delete_channel_message', { p_message_id: msgId });
+    const { error } = await supabase.rpc('delete_channel_message', { p_message_id: msgId });
+    if (error) { toast.error('خطا در حذف پیام: ' + error.message); return; }
     fetchMessages(); fetchPinned();
   };
 

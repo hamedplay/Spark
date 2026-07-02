@@ -62,7 +62,7 @@ export function ChannelMembersModal({ members, currentUserId, myRole, onClose, o
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold dark:text-white">اعضا</h3>
-            <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 px-2 py-0.5 rounded-full">{members.length}</span>
+            <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 px-2 py-0.5 rounded-full">{members.filter(m => m.profile !== null).length}</span>
           </div>
           <div className="flex items-center gap-2">
             {isAdmin && (
@@ -133,7 +133,7 @@ export function ChannelMembersModal({ members, currentUserId, myRole, onClose, o
         )}
 
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          {members.map(m => {
+          {members.filter(m => m.profile !== null).map(m => {
             const p = m.profile;
             const isMe = m.user_id === currentUserId;
             return (

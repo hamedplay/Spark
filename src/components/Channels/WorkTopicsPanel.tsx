@@ -238,6 +238,7 @@ function CreateTaskForm({ channelId, currentUserId, members, onCreated, onCancel
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [dueDate, setDueDate] = useState('');
   const [saving, setSaving] = useState(false);
 
   const toggle = (id: string) => setSelectedIds(prev =>
@@ -254,6 +255,7 @@ function CreateTaskForm({ channelId, currentUserId, members, onCreated, onCancel
         body: body.trim() || null,
         created_by: currentUserId,
         status: 'open',
+        due_date: dueDate || null,
       }).select().maybeSingle();
       if (error || !task) { toast.error('خطا: ' + error?.message); return; }
 
@@ -294,6 +296,15 @@ function CreateTaskForm({ channelId, currentUserId, members, onCreated, onCancel
           placeholder="توضیحات (اختیاری)..."
           className="w-full text-xs px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40 resize-none"
         />
+        <div>
+          <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">مهلت اقدام (اختیاری)</p>
+          <input
+            type="date"
+            value={dueDate}
+            onChange={e => setDueDate(e.target.value)}
+            className="w-full text-xs px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40"
+          />
+        </div>
         <div>
           <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">مسئولان (انتخاب کنید)</p>
           <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">

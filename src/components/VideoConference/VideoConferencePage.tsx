@@ -761,7 +761,17 @@ export function VideoConferencePage() {
 
   // ── Lobby ──────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6 relative" dir="rtl">
+      <div
+        className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden opacity-[0.06] dark:opacity-[0.04]"
+        aria-hidden="true"
+      >
+        <img
+          src="https://images.pexels.com/photos/4226140/pexels-photo-4226140.jpeg?auto=compress&cs=tinysrgb&w=1200"
+          alt=""
+          className="w-full h-full object-cover"
+        />
+      </div>
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

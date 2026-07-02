@@ -39,7 +39,7 @@ const TYPE_OPTIONS: { key: TypeFilter; label: string }[] = [
   { key: 'starred', label: 'نشان‌دار' },
   { key: 'pinned', label: 'پین شده' },
   { key: 'group_task', label: 'اقدامات گروهی' },
-  { key: 'group_task_in_progress', label: 'در حال رسیدگی' },
+  { key: 'group_task_in_progress', label: 'باز' },
   { key: 'group_task_done', label: 'رسیدگی شده' },
 ];
 
@@ -325,7 +325,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
                     const assignments = task.assignments || [];
                     const doneCount = assignments.filter(a => a.status === 'done' || a.status === 'archived').length;
                     const statusCls = task.status === 'done' ? 'text-green-600 bg-green-50' : task.status === 'archived' ? 'text-gray-500 bg-gray-100' : 'text-blue-600 bg-blue-50 dark:bg-blue-900/20';
-                    const statusLabel = task.status === 'done' ? 'رسیدگی شده' : task.status === 'archived' ? 'بایگانی' : 'در حال رسیدگی';
+                    const statusLabel = task.status === 'done' ? 'رسیدگی شده' : task.status === 'archived' ? 'بایگانی' : 'باز';
                     return (
                       <div key={task.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3">
                         <div className="flex items-start justify-between gap-2 mb-2">

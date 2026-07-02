@@ -541,7 +541,7 @@ function ChannelMessageItemInner({
 
               {/* Bottom action bar */}
               {isChannelType ? (
-                <div className="flex items-center gap-0 sm:gap-0.5 px-1.5 sm:px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-gray-600">
+                <div className={`flex items-center gap-0 sm:gap-0.5 px-1.5 sm:px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-gray-600 ${isOwn ? 'flex-row-reverse' : ''}`}>
                   <div ref={reactRef}>
                     <ActionBtn onClick={openEmojiPicker} title="واکنش">
                       <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -560,7 +560,7 @@ function ChannelMessageItemInner({
                   <ReadTick />
                 </div>
               ) : (
-                <div className="flex items-center gap-0 sm:gap-0.5 px-1.5 sm:px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-gray-600">
+                <div className={`flex items-center gap-0 sm:gap-0.5 px-1.5 sm:px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-gray-600 ${isOwn ? 'flex-row-reverse' : ''}`}>
                   <StatusSquare />
                   <div ref={reactRef}>
                     <ActionBtn onClick={openEmojiPicker} title="واکنش">
