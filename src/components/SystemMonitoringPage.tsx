@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { CalendarDays, MessageSquare, SquareCheck as CheckSquare, Users, ListFilter as Filter, Search, MoveVertical as MoreVertical, CreditCard as Edit2, Trash2, GitBranch, X, CircleCheck as CheckCircle, Archive, Share2, Calendar, ArrowRight, Circle, Loader as Loader2, RefreshCw, Circle as XCircle, TriangleAlert as AlertTriangle, Hash, Lock, Eye, Hash as ChannelIcon } from 'lucide-react';
+import { CalendarDays, MessageSquare, SquareCheck as CheckSquare, Users, ListFilter as Filter, Search, EllipsisVertical as MoreVertical, CreditCard as Edit2, Trash2, GitBranch, X, CircleCheck as CheckCircle, Archive, Share2, Calendar, ArrowRight, Circle, Loader as Loader2, RefreshCw, Circle as XCircle, TriangleAlert as AlertTriangle, Hash, Lock, Eye, Hash as ChannelIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
