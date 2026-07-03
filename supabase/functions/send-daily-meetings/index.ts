@@ -338,73 +338,64 @@ Deno.serve(async (req: Request) => {
       const mobiles = rawMobiles.map(normalizePhone);
 
       if (mobiles.length > 0) {
-        const { data: providers } = await supabase
-          .from("sms_providers")
-          .select("*")
-          .eq("is_active", true)
-          .eq("is_default", true)
-          .limit(1);
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-        const provider = providers?.[0];
-        if (!provider) {
-          smsError = "سرویس‌دهنده SMS فعالی یافت نشد";
-        } else if (!provider.api_key) {
-          smsError = "کلید API تنظیم نشده است";
-        } else if (!provider.line_number) {
-          smsError = "شماره خط ارسال تنظیم نشده است";
-        } else {
-          const baseUrl = (provider.api_url || "https://api.sms.ir").replace(/\/$/, "");
-          const lineNumber = Number(provider.line_number.replace(/\D/g, ""));
-          const messageTexts = mobiles.map(() => smsBody);
+        try {
+          const smsResp = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${serviceKey}`,
+            },
+            body: JSON.stringify({ mobiles, message: smsBody }),
+          });
 
-          try {
-            const smsRaw = await fetch(`${baseUrl}/v1/send/likeToLike`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "X-API-KEY": provider.api_key,
-              },
-              body: JSON.stringify({ lineNumber, messageTexts, mobiles, sendDateTime: null }),
-            });
+          const smsData = await smsResp.json().catch(() => ({}));
 
-            const smsData = await smsRaw.json().catch(() => ({}));
+          // Fetch provider info for logging
+          const { data: providers } = await supabase
+            .from("sms_providers")
+            .select("id, title, provider_name")
+            .eq("is_active", true)
+            .eq("is_default", true)
+            .limit(1);
+          const provider = providers?.[0];
 
-            if (smsData?.status === 1) {
-              smsSent = mobiles.length;
-              await supabase.from("sms_dispatch_logs").insert(
-                rawMobiles.map((phone: string) => ({
-                  target_phone: phone,
-                  category: "daily_report",
-                  event_type: "daily_meetings",
-                  message: smsBody,
-                  provider_id: provider.id,
-                  provider_name: provider.title || provider.provider_name,
-                  status: "sent",
-                  pack_id: smsData.data?.packId ? String(smsData.data.packId) : null,
-                  cost: smsData.data?.cost || null,
-                  raw_response: smsData,
-                }))
-              );
-            } else {
-              smsError = smsData?.message || "ارسال ناموفق";
-              await supabase.from("sms_dispatch_logs").insert(
-                rawMobiles.map((phone: string) => ({
-                  target_phone: phone,
-                  category: "daily_report",
-                  event_type: "daily_meetings",
-                  message: smsBody,
-                  provider_id: provider.id,
-                  provider_name: provider.title || provider.provider_name,
-                  status: "failed",
-                  error_text: smsError,
-                  raw_response: smsData,
-                }))
-              );
-            }
-          } catch (e: any) {
-            smsError = e.message;
+          if (smsData?.ok) {
+            smsSent = mobiles.length;
+            await supabase.from("sms_dispatch_logs").insert(
+              rawMobiles.map((phone: string) => ({
+                target_phone: phone,
+                category: "daily_report",
+                event_type: "daily_meetings",
+                message: smsBody,
+                provider_id: provider?.id ?? null,
+                provider_name: provider?.title || provider?.provider_name || null,
+                status: "sent",
+                pack_id: smsData.packId ? String(smsData.packId) : null,
+                cost: smsData.cost ?? null,
+                raw_response: smsData,
+              }))
+            );
+          } else {
+            smsError = smsData?.error || "ارسال ناموفق";
+            await supabase.from("sms_dispatch_logs").insert(
+              rawMobiles.map((phone: string) => ({
+                target_phone: phone,
+                category: "daily_report",
+                event_type: "daily_meetings",
+                message: smsBody,
+                provider_id: provider?.id ?? null,
+                provider_name: provider?.title || provider?.provider_name || null,
+                status: "failed",
+                error_text: smsError,
+                raw_response: smsData,
+              }))
+            );
           }
+        } catch (e: any) {
+          smsError = e.message;
         }
       }
     }
