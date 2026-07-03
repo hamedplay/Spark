@@ -96,8 +96,23 @@ const TABLES: TableConfig[] = [
   { key: 'daily_report_config',           label: 'پیکربندی گزارش روزانه',         icon: FileText,      color: 'text-lime-600',    description: 'تنظیمات ارسال گزارش روزانه' },
   { key: 'rahyab_settings',               label: 'تنظیمات رهیاب',                 icon: FileText,      color: 'text-emerald-600', description: 'پیکربندی سرویس پیامک رهیاب' },
   { key: 'bale_link_tokens',              label: 'توکن‌های لینک بله',             icon: Link,          color: 'text-blue-300',    description: 'توکن‌های لینک‌دهی پیام‌رسان بله' },
+  { key: 'telegram_link_tokens',          label: 'توکن‌های لینک تلگرام',          icon: Link,          color: 'text-sky-300',     description: 'توکن‌های لینک‌دهی پیام‌رسان تلگرام' },
   { key: 'hr_sso_config',                 label: 'پیکربندی SSO',                  icon: Shield,        color: 'text-slate-400',   description: 'پیکربندی ورود یکپارچه SSO' },
+  { key: 'rahyab_inbox',                  label: 'صندوق ورودی رهیاب',             icon: MessageSquare, color: 'text-emerald-400', description: 'پیام‌های دریافتی سرویس رهیاب' },
+  { key: 'spark_assistant_logs',          label: 'لاگ دستیار اسپارک',             icon: Database,      color: 'text-purple-300',  description: 'تاریخچه دستورات دستیار اسپارک' },
   { key: 'audit_log',                     label: 'لاگ رخدادها',                   icon: Shield,        color: 'text-slate-500',   description: 'تاریخچه تمام رخدادها' },
+  // ── Chat read/tag logs ──────────────────────────────────────────────────────
+  { key: 'chat_message_read_log',         label: 'لاگ خواندن پیام چت',            icon: MessageSquare, color: 'text-rose-100',    description: 'وضعیت خواندن پیام‌های چت' },
+  { key: 'chat_message_read_receipts',    label: 'رسیدهای خواندن چت',             icon: MessageSquare, color: 'text-rose-100',    description: 'آخرین رسید خواندن مکالمات چت' },
+  { key: 'chat_message_tag_assignments',  label: 'برچسب‌های پیام چت',             icon: MessageSquare, color: 'text-rose-200',    description: 'انتساب برچسب به پیام‌های چت' },
+  // ── Channel read log ────────────────────────────────────────────────────────
+  { key: 'channel_message_read_log',      label: 'لاگ خواندن پیام کانال',         icon: MessageSquare, color: 'text-indigo-200',  description: 'وضعیت خواندن پیام‌های کانال' },
+  // ── Call history ────────────────────────────────────────────────────────────
+  { key: 'call_sessions',                 label: 'تاریخچه تماس‌ها',               icon: Video,         color: 'text-sky-400',     description: 'تاریخچه تماس‌های صوتی و تصویری' },
+  // ── Video Conference (additional) ──────────────────────────────────────────
+  { key: 'conference_whiteboard',         label: 'تخته سفید کنفرانس',             icon: Video,         color: 'text-sky-200',     description: 'داده‌های تخته سفید جلسات ویدئو' },
+  { key: 'conference_waiting_room',       label: 'اتاق انتظار کنفرانس',           icon: Video,         color: 'text-sky-100',     description: 'درخواست‌های اتاق انتظار ویدئوکنفرانس' },
+  { key: 'conference_quality_metrics',    label: 'متریک‌های کیفیت کنفرانس',       icon: Video,         color: 'text-sky-100',     description: 'معیارهای کیفیت شبکه در جلسات ویدئو' },
 ];
 
 const TABLE_LABEL: Record<string, string> = Object.fromEntries(TABLES.map(t => [t.key, t.label]));

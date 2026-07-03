@@ -55,15 +55,20 @@ const ALLOWED_TABLES = new Set([
   // Chat
   "chat_conversations", "chat_messages", "chat_group_members", "chat_tags",
   "chat_message_reactions", "chat_message_stars", "chat_reminders",
+  "chat_message_read_log", "chat_message_read_receipts", "chat_message_tag_assignments",
   // Channels
   "channels", "channel_members", "channel_messages", "channel_work_topics",
   "channel_broadcasts", "channel_group_tasks", "channel_group_task_assignments",
   "channel_group_task_activities", "channel_notification_rules", "channel_sms_rules",
   "channel_message_reactions", "channel_message_stars", "channel_message_private_pins",
+  "channel_message_read_log",
+  // Call history
+  "call_sessions",
   // Video Conference
   "conference_rooms", "conference_participants", "conference_messages",
   "conference_polls", "conference_poll_votes", "conference_breakout_rooms",
   "conference_reactions", "room_mod_actions", "pending_approvals", "banned_users",
+  "conference_whiteboard", "conference_waiting_room", "conference_quality_metrics",
   // Notifications
   "notifications", "notification_templates", "notification_group_rules",
   // Broadcasts
@@ -76,8 +81,11 @@ const ALLOWED_TABLES = new Set([
   "org_level_definitions", "org_level_permissions", "org_position_permissions",
   // Config & Logs
   "system_config", "spark_config", "spark_ai_settings", "spark_field_keywords", "spark_memory",
+  "spark_assistant_logs",
   "social_channel_configs", "sms_providers", "sms_templates", "sms_group_rules", "sms_dispatch_logs",
-  "daily_report_config", "rahyab_settings", "bale_link_tokens", "hr_sso_config", "audit_log",
+  "daily_report_config", "rahyab_settings", "rahyab_inbox",
+  "bale_link_tokens", "telegram_link_tokens",
+  "hr_sso_config", "audit_log",
 ]);
 
 // Dependency-ordered restore sequence (parents before children).
@@ -107,6 +115,7 @@ const RESTORE_ORDER = [
   "user_bale_mapping",
   "user_access_relations",
   "bale_link_tokens",
+  "telegram_link_tokens",
   "calendars",
   "calendar_occasions",
   "all_day_events",
@@ -116,6 +125,7 @@ const RESTORE_ORDER = [
   "task_workflow_steps",
   "chat_tags",
   "spark_memory",
+  "spark_assistant_logs",
   // Meetings and children
   "meetings",
   "shared_meetings",
@@ -136,6 +146,7 @@ const RESTORE_ORDER = [
   "channel_message_reactions",
   "channel_message_stars",
   "channel_message_private_pins",
+  "channel_message_read_log",
   // Calendar subscriptions (depends on calendars)
   "calendar_subscriptions",
   // Org position members (depends on org_positions + users)
@@ -150,6 +161,11 @@ const RESTORE_ORDER = [
   "chat_message_reactions",
   "chat_message_stars",
   "chat_reminders",
+  "chat_message_read_log",
+  "chat_message_read_receipts",
+  "chat_message_tag_assignments",
+  // Call history
+  "call_sessions",
   // Video conference (rooms first, then children)
   "conference_rooms",
   "conference_polls",
@@ -158,14 +174,18 @@ const RESTORE_ORDER = [
   "conference_reactions",
   "conference_poll_votes",
   "conference_breakout_rooms",
+  "conference_whiteboard",
+  "conference_waiting_room",
+  "conference_quality_metrics",
   "room_mod_actions",
   "pending_approvals",
   "banned_users",
   // Broadcasts
   "broadcast_messages",
   "broadcast_recipients",
-  // SMS logs
+  // SMS logs and rahyab inbox
   "sms_dispatch_logs",
+  "rahyab_inbox",
   // Notifications and logs last
   "notifications",
   "audit_log",
@@ -185,20 +205,26 @@ const CONFLICT_COLUMN: Record<string, string> = {
   sms_templates:                   "category,event_type,audience",
   spark_config:                    "module",
   chat_tags:                       "user_id,name",
-  // New
+  // Composite-key tables
   broadcast_recipients:            "message_id,user_id",
   calendar_subscriptions:          "calendar_id,user_id",
   channel_group_task_assignments:  "group_task_id,assignee_id",
   channel_message_private_pins:    "message_id,user_id",
   channel_message_reactions:       "message_id,user_id,emoji",
   channel_message_stars:           "message_id,user_id",
+  channel_message_read_log:        "message_id,user_id",
   channel_notification_rules:      "channel_id,notification_type",
   channel_sms_rules:               "channel_id,sms_category",
   chat_group_members:              "conversation_id,user_id",
   chat_message_reactions:          "message_id,user_id,emoji",
   chat_message_stars:              "message_id,user_id",
+  chat_message_read_log:           "message_id,user_id",
+  chat_message_read_receipts:      "conversation_id,user_id",
+  chat_message_tag_assignments:    "message_id,tag_id,user_id",
   conference_participants:         "room_id,user_id",
   conference_poll_votes:           "poll_id,user_id",
+  conference_quality_metrics:      "room_id,user_id,measured_at",
+  conference_waiting_room:         "room_id,user_id",
   notification_group_rules:        "group_id,notification_type",
   org_level_definitions:           "level",
   org_level_permissions:           "level,permission_key",
@@ -208,7 +234,6 @@ const CONFLICT_COLUMN: Record<string, string> = {
   spark_memory:                    "user_id,key",
   user_access_relations:           "user_id,related_user_id",
   user_bale_mapping:               "user_id",
-  // New conference tables with composite unique constraints
   banned_users:                    "room_id,user_id",
 };
 
@@ -216,12 +241,12 @@ const CONFLICT_COLUMN: Record<string, string> = {
 const TABLE_PK: Record<string, string> = {
   user_preferences: "user_id",
   bale_link_tokens: "token",
+  telegram_link_tokens: "token",
 };
 
 // Required user FK columns per table.
 // Rows where any of these reference a non-existent profile are skipped entirely.
 const REQUIRED_USER_FKS: Record<string, string[]> = {
-  // Existing
   meetings:                    ["user_id"],
   tasks:                       ["user_id"],
   notes:                       ["user_id"],
@@ -237,21 +262,30 @@ const REQUIRED_USER_FKS: Record<string, string[]> = {
   notifications:               ["user_id"],
   audit_log:                   ["user_id"],
   chat_tags:                   ["user_id"],
-  // New
   all_day_events:              ["user_id"],
   bale_link_tokens:            ["user_id"],
+  telegram_link_tokens:        ["user_id"],
   broadcast_recipients:        ["user_id"],
   calendar_subscriptions:      ["user_id"],
   channel_message_private_pins:["user_id"],
   channel_message_reactions:   ["user_id"],
+  channel_message_read_log:    ["user_id"],
   channel_message_stars:       ["user_id"],
   chat_group_members:          ["user_id"],
   chat_message_reactions:      ["user_id"],
+  chat_message_read_log:       ["user_id"],
+  chat_message_read_receipts:  ["user_id"],
   chat_message_stars:          ["user_id"],
+  chat_message_tag_assignments:["user_id"],
   chat_reminders:              ["user_id"],
+  call_sessions:               ["caller_id", "callee_id"],
   conference_participants:     ["user_id"],
   conference_poll_votes:       ["user_id"],
+  conference_quality_metrics:  ["user_id"],
+  conference_waiting_room:     ["user_id"],
+  conference_whiteboard:       ["user_id"],
   meeting_inbox:               ["user_id"],
+  spark_assistant_logs:        ["user_id"],
   spark_memory:                ["user_id"],
   user_access_relations:       ["user_id", "related_user_id"],
   user_bale_mapping:           ["user_id"],
@@ -260,7 +294,6 @@ const REQUIRED_USER_FKS: Record<string, string[]> = {
 // Nullable user FK columns per table.
 // These are nullified (row is kept) when the referenced user no longer exists.
 const NULLABLE_USER_FKS: Record<string, string[]> = {
-  // Existing
   user_groups:                    ["created_by"],
   system_config:                  ["updated_by"],
   notifications:                  ["sender_id"],
@@ -269,7 +302,6 @@ const NULLABLE_USER_FKS: Record<string, string[]> = {
   channel_work_topics:            ["created_by", "assignee_id"],
   org_position_members:           ["assigned_by"],
   daily_report_config:            ["updated_by"],
-  // New
   broadcast_messages:             ["sender_id"],
   channel_group_task_activities:  ["user_id"],
   channel_group_task_assignments: ["assignee_id"],
@@ -279,7 +311,6 @@ const NULLABLE_USER_FKS: Record<string, string[]> = {
   sms_dispatch_logs:              ["target_user_id", "triggered_by_user_id"],
   task_workflow_steps:            ["from_user_id", "to_user_id"],
   user_access_relations:          ["created_by"],
-  // Conference tables — banned_by / approved_by are nullable admin UUIDs
   banned_users:                   ["banned_by"],
   pending_approvals:              ["approved_by"],
 };
@@ -368,6 +399,7 @@ function preFilterRows(
       "channel_members", "channel_messages", "channel_work_topics",
       "channel_broadcasts", "channel_group_tasks",
       "channel_notification_rules", "channel_sms_rules",
+      "channel_message_read_log",
     ].includes(tableKey)) {
       const cid = String(row.channel_id ?? "");
       if (cid && !existingChannelIds.has(cid)) {
@@ -376,8 +408,12 @@ function preFilterRows(
       }
     }
 
-    // chat_messages, chat_group_members: check the conversation exists
-    if (tableKey === "chat_messages" || tableKey === "chat_group_members") {
+    // chat_messages, chat_group_members, chat_message_read_log, chat_message_read_receipts,
+    // chat_message_tag_assignments: check the conversation exists
+    if ([
+      "chat_messages", "chat_group_members",
+      "chat_message_read_log", "chat_message_read_receipts", "chat_message_tag_assignments",
+    ].includes(tableKey)) {
       const cid = String(row.conversation_id ?? "");
       if (cid && !existingConvIds.has(cid)) {
         skipped.push({ row: rowNum, id: rowId, reason: "مکالمه مرجع بازیابی نشد یا وجود ندارد", dependency: `conversation_id=${cid.slice(0, 8)}…` });
@@ -398,6 +434,7 @@ function preFilterRows(
     if ([
       "conference_participants", "conference_messages", "conference_polls",
       "conference_reactions", "room_mod_actions", "pending_approvals", "banned_users",
+      "conference_whiteboard", "conference_waiting_room", "conference_quality_metrics",
     ].includes(tableKey)) {
       const rid = String(row.room_id ?? "");
       if (rid && !existingRoomIds.has(rid)) {
@@ -579,6 +616,7 @@ Deno.serve(async (req: Request) => {
         "channel_members", "channel_messages", "channel_work_topics",
         "channel_broadcasts", "channel_group_tasks",
         "channel_notification_rules", "channel_sms_rules",
+        "channel_message_read_log",
       ].includes(tableKey)) {
         existingChannelIds = await loadIds(supabase, "channels", "id");
       }
@@ -588,6 +626,7 @@ Deno.serve(async (req: Request) => {
       if ([
         "conference_participants", "conference_messages", "conference_polls",
         "conference_reactions", "room_mod_actions", "pending_approvals", "banned_users",
+        "conference_whiteboard", "conference_waiting_room", "conference_quality_metrics",
       ].includes(tableKey)) {
         existingRoomIds = await loadIds(supabase, "conference_rooms", "id");
       }
