@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { CalendarDays, Plus, Trash2, CreditCard as Edit2, Download, Upload, ChevronDown, Check, Loader as Loader2, Save, RefreshCw, Sun, Moon, Star, CircleAlert as AlertCircle, EllipsisVertical as MoreVertical, Copy, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../lib/xlsxCompat';
 
 interface Occasion {
   id: string;
@@ -222,7 +222,7 @@ export function CalendarOccasionsPanel() {
     return true;
   });
 
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
     const rows = occasions.map(o => ({
       عنوان: o.title,
       'نوع تقویم': o.calendar_type === 'shamsi' ? 'شمسی' : 'قمری',
@@ -235,7 +235,7 @@ export function CalendarOccasionsPanel() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'مناسبت‌ها');
-    XLSX.writeFile(wb, 'calendar_occasions.xlsx');
+    await XLSX.writeFile(wb, 'calendar_occasions.xlsx');
     toast.success('فایل دانلود شد');
   };
 
@@ -245,7 +245,7 @@ export function CalendarOccasionsPanel() {
     const reader = new FileReader();
     reader.onload = async ev => {
       try {
-        const wb = XLSX.read(ev.target?.result, { type: 'array' });
+        const wb = await XLSX.read(ev.target?.result, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows: any[] = XLSX.utils.sheet_to_json(ws);
         const inserts = rows.map(r => ({

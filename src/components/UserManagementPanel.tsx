@@ -3,7 +3,7 @@ import { Users, Search, Plus, RefreshCw, EllipsisVertical as MoreVertical, KeyRo
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../lib/xlsxCompat';
 
 // ─── Jalali date input helper ─────────────────────────────────────────────────
 const JALALI_MONTHS_ADMIN = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
@@ -1300,7 +1300,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
     is_admin: false, is_active: true, is_hidden: false, created_at: null,
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     const rows = profiles.map(p => {
       const row: Record<string, string> = {};
       EXCEL_COLUMNS.forEach(col => {
@@ -1312,7 +1312,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'کاربران');
-    XLSX.writeFile(wb, `users_${new Date().toLocaleDateString('fa-IR').replace(/\//g, '-')}.xlsx`);
+    await XLSX.writeFile(wb, `users_${new Date().toLocaleDateString('fa-IR').replace(/\//g, '-')}.xlsx`);
     toast.success(`${profiles.length} کاربر خروجی گرفته شد`);
   };
 
@@ -1330,7 +1330,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
 
     try {
       const data = await file.arrayBuffer();
-      const wb = XLSX.read(data);
+      const wb = await XLSX.read(data);
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
       console.log('[IMPORT] Total rows:', rows.length);
@@ -1472,7 +1472,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
     }
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     const headers = [...EXCEL_COLUMNS.map(c => c.label), 'رمز عبور'];
     const example = [
       'علی محمدی',       // نام و نام خانوادگی
@@ -1495,10 +1495,9 @@ export function UserManagementPanel({ currentUserId }: Props) {
       'Password@123',    // رمز عبور (اختیاری — پیش‌فرض: Ss123456)
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-    ws['!cols'] = headers.map(() => ({ wch: 22 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'قالب');
-    XLSX.writeFile(wb, 'users_template.xlsx');
+    await XLSX.writeFile(wb, 'users_template.xlsx');
     toast.success('قالب دانلود شد');
   };
 

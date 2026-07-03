@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Download, Upload, Database, Loader2, CheckCircle, AlertTriangle, Shield, FileText, Calendar, ClipboardList, MessageSquare, BookOpen, FolderOpen, Table2, RefreshCw, ChevronDown, ChevronUp, Info, Video, Send, Link } from 'lucide-react';
+import { Download, Upload, Database, Loader as Loader2, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Shield, FileText, Calendar, ClipboardList, MessageSquare, BookOpen, FolderOpen, Table2, RefreshCw, ChevronDown, ChevronUp, Info, Video, Send, Link } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../lib/xlsxCompat';
 
 interface TableConfig {
   key: string;
@@ -247,7 +247,7 @@ function RestorePanel() {
         setSelectedTables(new Set(Object.keys(rest)));
       } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: 'array' });
+        const wb = await XLSX.read(buf, { type: 'array' });
         const result: Record<string, any[]> = {};
         const labelToKey = Object.fromEntries(TABLES.map(t => [t.label.slice(0, 31), t.key]));
         for (const sheetName of wb.SheetNames) {
@@ -595,7 +595,7 @@ export function BackupPanel() {
         const ws = XLSX.utils.json_to_sheet(result[cfg.key]);
         XLSX.utils.book_append_sheet(wb, ws, cfg.label.slice(0, 31));
       }
-      XLSX.writeFile(wb, `backup_${ts}.xlsx`);
+      await XLSX.writeFile(wb, `backup_${ts}.xlsx`);
     }
 
     const nonEmpty = Object.values(result).filter(r => r.length > 0).length;

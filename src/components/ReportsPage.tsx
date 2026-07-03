@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChartBar as BarChart3, TrendingUp, Download, Calendar, Clock, Users, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, RefreshCw, Loader as Loader2, ArrowUpRight, ArrowDownRight, Target, Activity, MapPin, UserCheck, Timer, ChartPie as PieChart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../lib/xlsxCompat';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { usePermissions } from '../context/PermissionsContext';
@@ -230,13 +230,12 @@ export function ReportsPage() {
     finally { setExporting(false); }
   };
 
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
     if (!exportData?.length) return;
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Report');
-    ws['!cols'] = selectedFields.map(() => ({ wch: 22 }));
-    XLSX.writeFile(wb, `report-${moment().format('jYYYY-jMM-jDD')}.xlsx`);
+    await XLSX.writeFile(wb, `report-${moment().format('jYYYY-jMM-jDD')}.xlsx`);
     toast.success('فایل دانلود شد');
   };
 

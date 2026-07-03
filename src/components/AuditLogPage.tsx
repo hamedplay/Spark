@@ -3,7 +3,7 @@ import { Activity, Search, Download, RefreshCw, X, CircleAlert as AlertCircle, T
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../lib/xlsxCompat';
 
 moment.loadPersian({ dialect: 'persian-modern', usePersianDigits: false });
 
@@ -281,7 +281,7 @@ export function AuditLogPage() {
 
   useEffect(() => { search(); }, []);
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const rows = logs.map((a, i) => ({
       ردیف: i + 1,
       'نوع رویداد': a.action,
@@ -298,7 +298,7 @@ export function AuditLogPage() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'رخدادها');
-    XLSX.writeFile(wb, `audit_log_${filters.year}_${filters.month}.xlsx`);
+    await XLSX.writeFile(wb, `audit_log_${filters.year}_${filters.month}.xlsx`);
     toast.success(`${logs.length} رخداد خروجی گرفته شد`);
   };
 

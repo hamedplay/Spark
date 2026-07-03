@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import { Task, TaskWorkflowStep } from '../types';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
+import * as XLSX from '../lib/xlsxCompat';
 import moment from 'moment-jalaali';
 import { usePermissions } from '../context/PermissionsContext';
 import { insertNotification } from '../lib/notifications';
@@ -772,7 +772,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     }
   };
 
-  const handleExportToExcel = () => {    const exportData = tasks.map(task => ({
+  const handleExportToExcel = async () => {    const exportData = tasks.map(task => ({
       'عنوان': task.title,
       'توضیحات': task.description,
       'وضعیت': task.status === 'pending' ? 'در انتظار' : task.status === 'in_progress' ? 'در حال انجام' : 'تکمیل شده',
@@ -784,7 +784,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
-    XLSX.writeFile(wb, `tasks-${new Date().toISOString().split('T')[0]}.xlsx`);
+    await XLSX.writeFile(wb, `tasks-${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success('فایل اکسل دانلود شد');
   };
 
