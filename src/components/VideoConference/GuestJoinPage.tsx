@@ -532,7 +532,7 @@ export function GuestJoinPage({ code }: Props) {
       {/* تصویر پس‌زمینه */}
       <div
         className="absolute inset-0 bg-cover bg-center opacity-10"
-        style={{ backgroundImage: `url('https://images.pexels.com/photos/3183150/pexels-photo-3183150.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1')` }}
+        style={{ backgroundImage: `url('/pexels-photo-3183150.jpg')` }}
         aria-hidden="true"
       />
       <div className="absolute inset-0 bg-gradient-to-b from-gray-950/60 via-gray-950/40 to-gray-950/80" aria-hidden="true" />

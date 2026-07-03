@@ -1262,7 +1262,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       {/* Background image — pointer-events-none so it never interferes with video tiles or controls */}
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
         <img
-          src="https://images.pexels.com/photos/4226140/pexels-photo-4226140.jpeg?auto=compress&cs=tinysrgb&w=1200"
+          src="/pexels-photo-4226140.jpg"
           alt=""
           loading="lazy"
           decoding="async"

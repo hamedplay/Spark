@@ -767,7 +767,7 @@ export function VideoConferencePage() {
         aria-hidden="true"
       >
         <img
-          src="https://images.pexels.com/photos/4226140/pexels-photo-4226140.jpeg?auto=compress&cs=tinysrgb&w=1200"
+          src="/pexels-photo-4226140.jpg"
           alt=""
           className="w-full h-full object-cover"
         />
