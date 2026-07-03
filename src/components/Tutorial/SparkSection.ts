@@ -1,9 +1,4 @@
-import {
-  Bot, Zap, Sparkles, Brain, Mic, Volume2, RefreshCw, VolumeX,
-  Send, Trash2, Search, ListFilter as Filter, Play,
-  CircleCheck as CheckCircle2, CircleAlert as AlertCircle,
-  ChevronDown, ChevronUp, Terminal, BookOpen, Users, Square,
-} from 'lucide-react';
+import { Bot, Zap, Sparkles, Brain, Mic, Volume2, RefreshCw, VolumeX, Send, Trash2, Search, ListFilter as Filter, Play, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, ChevronDown, ChevronUp, Terminal, BookOpen, Users, Square, Circle as XCircle, Navigation, Calendar, MessageSquare, ClipboardList } from 'lucide-react';
 import type { GuideSection } from './types';
 
 export const SparkSection: GuideSection = {
@@ -14,11 +9,11 @@ export const SparkSection: GuideSection = {
   gradient: 'from-sky-500 to-blue-600',
   overview: 'دستیار هوشمند فارسی‌زبان با ورودی متن و صدا — دستورات سازمانی را اجرا می‌کند، تاریخچه دستورات را نگه می‌دارد، و از طریق FAB شناور در همه صفحات قابل دسترسی است.',
   icons: [
-    { icon: Bot, name: 'FAB اسپارک', desc: 'دکمه شناور در گوشه صفحه — در همه صفحات قابل دسترسی', color: 'text-sky-500' },
+    { icon: Bot, name: 'FAB اسپارک', desc: 'دکمه شناور قابل جابجایی در گوشه صفحه — در همه صفحات قابل دسترسی', color: 'text-sky-500' },
     { icon: Send, name: 'ارسال دستور', desc: 'ارسال متن دستور با دکمه ارسال یا Enter', color: 'text-sky-600' },
     { icon: Mic, name: 'ورودی صوتی', desc: 'ضبط دستور با صدا — تبدیل به متن و پردازش', color: 'text-red-600' },
     { icon: Square, name: 'توقف ضبط', desc: 'توقف ضبط صدا', color: 'text-gray-500' },
-    { icon: Volume2, name: 'پاسخ صوتی', desc: 'خواندن پاسخ توسط اسپارک — text-to-speech', color: 'text-teal-600' },
+    { icon: Volume2, name: 'پاسخ صوتی', desc: 'خواندن پاسخ توسط اسپارک — text-to-speech فارسی', color: 'text-teal-600' },
     { icon: VolumeX, name: 'بی‌صدا', desc: 'خاموش کردن پاسخ صوتی اسپارک', color: 'text-gray-500' },
     { icon: RefreshCw, name: 'رفرش تنظیمات', desc: 'بارگذاری مجدد تنظیمات و کلید API', color: 'text-slate-600' },
     { icon: CheckCircle2, name: 'تأیید اجرا', desc: 'تأیید دستور شناسایی‌شده: «بله، اجرا کن»', color: 'text-green-600' },
@@ -27,13 +22,19 @@ export const SparkSection: GuideSection = {
     { icon: Sparkles, name: 'اسپارک پایه', desc: 'پردازش محلی بدون کلید API — برای دستورات ساده', color: 'text-sky-500' },
     { icon: Brain, name: 'حافظه', desc: 'اسپارک مخاطبین و الگوهای پرتکرار را حفظ می‌کند', color: 'text-purple-600' },
     { icon: Terminal, name: 'صفحه دستورات', desc: 'پنل SparkPage: تمپلیت‌های آماده + اجرای دستور دستی', color: 'text-slate-700' },
-    { icon: BookOpen, name: 'تمپلیت‌ها', desc: 'دستورات آماده گروه‌بندی‌شده: جلسه، اقدام، یادداشت، پیام', color: 'text-blue-600' },
+    { icon: Calendar, name: 'دستورات جلسه', desc: 'تمپلیت‌های جلسه: ثبت درخواست، لغو، تغییر زمان', color: 'text-blue-600' },
+    { icon: MessageSquare, name: 'دستورات چت', desc: 'تمپلیت‌های پیام: ارسال پیام، تماس صوتی/تصویری', color: 'text-emerald-600' },
+    { icon: ClipboardList, name: 'دستورات اقدام', desc: 'تمپلیت‌های وظیفه: ایجاد اقدام با عنوان و مسئول', color: 'text-amber-600' },
+    { icon: BookOpen, name: 'دستورات یادداشت', desc: 'تمپلیت‌های یادداشت: ثبت یادداشت ساده یا با محتوا', color: 'text-orange-600' },
+    { icon: Users, name: 'دستورات مخاطب', desc: 'تمپلیت‌های مخاطب: افزودن مخاطب با نام و شماره', color: 'text-blue-500' },
+    { icon: Navigation, name: 'ناوبری', desc: 'دستور «برو به [صفحه]» — جابجایی در برنامه', color: 'text-gray-600' },
     { icon: Search, name: 'جستجو لاگ', desc: 'جستجو در تاریخچه دستورات اجراشده', color: 'text-gray-600' },
     { icon: Filter, name: 'فیلتر لاگ', desc: 'فیلتر تاریخچه: همه، موفق، ناموفق', color: 'text-purple-600' },
+    { icon: XCircle, name: 'دستور ناموفق', desc: 'نشانگر قرمز دستور اجرانشده — قابل مشاهده در لاگ', color: 'text-red-500' },
     { icon: Trash2, name: 'حذف لاگ', desc: 'حذف همه یا حذف تک‌تک لاگ‌ها', color: 'text-red-500' },
     { icon: Play, name: 'اجرای تمپلیت', desc: 'اجرای مستقیم دستور از لیست تمپلیت', color: 'text-green-600' },
     { icon: ChevronDown, name: 'باز کردن پنل', desc: 'باز/بسته کردن پنل ورودی دستور', color: 'text-slate-500' },
-    { icon: Users, name: 'دستورات تیمی', desc: 'تمپلیت‌های مرتبط با مدیریت تیم و کاربران', color: 'text-blue-500' },
+    { icon: ChevronUp, name: 'جمع کردن پنل', desc: 'جمع کردن پنل باز‌شده دستورات', color: 'text-slate-500' },
   ],
   steps: [
     {
@@ -50,11 +51,11 @@ export const SparkSection: GuideSection = {
       title: 'صفحه دستورات (SparkPage)',
       items: [
         'از منوی اصلی به «اسپارک» بروید',
-        'تب «دستورات»: تمپلیت‌های آماده گروه‌بندی‌شده',
+        'تب «دستورات»: ۶ دسته تمپلیت آماده — جلسه، چت، تقویم، اقدام، یادداشت، مخاطب',
         'روی هر تمپلیت کلیک کنید تا در input کپی شود',
         'دکمه Play روی هر تمپلیت — اجرای مستقیم',
-        'تب «لاگ‌ها»: تاریخچه کامل دستورات با وضعیت',
-        'آمار: کل، موفق، ناموفق، به تفکیک نوع',
+        'تب «لاگ‌ها»: تاریخچه کامل دستورات با وضعیت موفق/ناموفق',
+        'آمار: کل، موفق، ناموفق، به تفکیک دسته',
       ],
     },
     {

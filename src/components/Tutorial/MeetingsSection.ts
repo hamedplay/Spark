@@ -1,9 +1,9 @@
 import {
   LayoutDashboard, Share2, Send, UserPlus, CalendarPlus, CreditCard as Edit2,
-  Trash2, ExternalLink, Archive, SquareCheck as CheckSquare, Bell,
-  ListFilter as Filter, FileText, Plus, ArrowRightLeft, RefreshCw,
+  Trash2, SquareCheck as CheckSquare, Bell,
+  ListFilter as Filter, FileText, Plus, RefreshCw,
   Image as ImageIcon, Download, ClipboardList, UserCheck, MapPin,
-  Phone, Clock, User, CircleAlert as AlertTriangle,
+  Phone, Clock, User, TriangleAlert as AlertTriangle,
 } from 'lucide-react';
 import type { GuideSection } from './types';
 
@@ -17,15 +17,14 @@ export const MeetingsSection: GuideSection = {
   icons: [
     { icon: Plus, name: 'جلسه جدید', desc: 'باز کردن فرم ایجاد جلسه با تمام فیلدها', color: 'text-blue-600' },
     { icon: UserPlus, name: 'افزودن کاربر', desc: 'دعوت کاربران سازمان و اطلاع‌رسانی به آن‌ها', color: 'text-indigo-600' },
-    { icon: ArrowRightLeft, name: 'تفویض جلسه', desc: 'محول کردن برگزاری جلسه به نماینده دیگر', color: 'text-violet-600' },
     { icon: ImageIcon, name: 'اشتراک تصویر', desc: 'تولید تصویر PNG از کارت جلسه و اشتراک‌گذاری آن', color: 'text-green-600' },
     { icon: FileText, name: 'اشتراک متن', desc: 'کپی متن کامل جلسه در کلیپ‌بورد یا ارسال native share', color: 'text-teal-600' },
     { icon: Share2, name: 'منوی اشتراک', desc: 'باز کردن منوی انتخاب روش اشتراک‌گذاری', color: 'text-emerald-600' },
-    { icon: Send, name: 'ارسال به مدیر', desc: 'ارسال جلسه با وضعیت «درخواست شده» برای تایید ادمین', color: 'text-sky-600' },
+    { icon: Send, name: 'ارسال به مدیر', desc: 'ارسال تصویر جلسه به مدیر از طریق تلگرام — فقط در وضعیت «درخواست شده»', color: 'text-sky-600' },
     { icon: RefreshCw, name: 'ارسال مجدد', desc: 'ارسال مجدد دعوت‌نامه — فعال هنگام وضعیت «رد شده»', color: 'text-blue-500' },
     { icon: Edit2, name: 'ویرایش', desc: 'تغییر موضوع، زمان، مدت، مکان، اولویت و شرکت‌کنندگان', color: 'text-amber-600' },
     { icon: CalendarPlus, name: 'ثبت در تقویم', desc: 'افزودن جلسه تایید‌شده به تقویم شمسی داخلی', color: 'text-teal-600' },
-    { icon: ExternalLink, name: 'گوگل کلندر', desc: 'انتقال جلسه تایید‌شده به Google Calendar', color: 'text-red-600' },
+    { icon: CalendarPlus, name: 'گوگل کلندر', desc: 'انتقال جلسه تایید‌شده به Google Calendar', color: 'text-red-600' },
     { icon: Trash2, name: 'حذف', desc: 'حذف دائمی جلسه — نیاز به تأیید دو مرحله‌ای دارد', color: 'text-red-600' },
     { icon: Download, name: 'دانلود تصویر', desc: 'دانلود PNG کارت جلسه با کیفیت بالا', color: 'text-purple-600' },
     { icon: CheckSquare, name: 'اقدامات جلسه', desc: 'مشاهده و افزودن وظایف پیگیری به کارتابل افراد', color: 'text-emerald-600' },
@@ -35,6 +34,9 @@ export const MeetingsSection: GuideSection = {
     { icon: Filter, name: 'فیلتر', desc: 'فیلتر جلسات بر اساس وضعیت، اولویت، تاریخ یا کاربر', color: 'text-purple-600' },
     { icon: MapPin, name: 'مکان', desc: 'محل برگزاری جلسه — قابل کلیک برای باز کردن در نقشه', color: 'text-rose-600' },
     { icon: Phone, name: 'تماس نماینده', desc: 'شماره نماینده جلسه — قابل کلیک برای تماس مستقیم', color: 'text-green-600' },
+    { icon: AlertTriangle, name: 'اولویت بالا', desc: 'نوار قرمز رنگ روی کارت برای جلسات اولویت بالا', color: 'text-red-500' },
+    { icon: Clock, name: 'زمان', desc: 'زمان شروع و مدت جلسه روی کارت', color: 'text-slate-600' },
+    { icon: User, name: 'نماینده', desc: 'نام نماینده برگزاری جلسه', color: 'text-teal-600' },
   ],
   steps: [
     {
@@ -52,11 +54,10 @@ export const MeetingsSection: GuideSection = {
     {
       title: 'چرخه وضعیت جلسه',
       items: [
-        'درخواست شده: جلسه ثبت شده، منتظر تایید ادمین',
-        'ارسال شده: جلسه برای تایید به مدیر ارسال شده',
+        'درخواست شده: جلسه ثبت شده — می‌توانید به مدیر ارسال کنید',
         'تایید شده: جلسه مجاز است — قابل افزودن به تقویم',
-        'رد شده: ادمین جلسه را تایید نکرده — با «ویرایش و ارسال مجدد» قابل اصلاح',
-        'لغو شده: جلسه توسط کاربر یا اسپارک لغو شده',
+        'رد شده: جلسه مورد تأیید نیست — با «ارسال مجدد» دوباره ارسال کنید',
+        'پس از تایید دکمه «ثبت در تقویم» و «گوگل کلندر» فعال می‌شوند',
       ],
     },
     {
