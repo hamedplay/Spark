@@ -184,10 +184,12 @@ export function DailyReportConfigPanel() {
     setSending(true);
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { toast.error('ابتدا وارد حساب خود شوید'); setSending(false); return; }
       const res = await fetch(`${supabaseUrl}/functions/v1/send-daily-meetings`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ force: true }),
       });
       const json = await res.json();
