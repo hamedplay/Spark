@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Send, ImagePlus, MessageSquareOff, MessageSquare, Loader2, X, ChevronDown,
-} from 'lucide-react';
+import { Send, ImagePlus, MessageSquareOff, MessageSquare, Loader as Loader2, X, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
@@ -16,6 +14,7 @@ interface Props {
   canToggleChat: boolean;
   onToggleChat: () => void;
   sendSignal: (to: string | null, type: string, data: object) => void;
+  onOwnMessage: (msg: ConferenceMessage) => void;
 }
 
 interface TypingUser { userId: string; name: string; ts: number; }
@@ -25,7 +24,7 @@ const SCROLL_THRESHOLD = 80;
 
 export function ChatPanel({
   roomId, currentUserId, currentUserName,
-  messages, chatEnabled, canToggleChat, onToggleChat, sendSignal,
+  messages, chatEnabled, canToggleChat, onToggleChat, sendSignal, onOwnMessage,
 }: Props) {
   const [input, setInput] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -139,10 +138,11 @@ export function ChatPanel({
       return;
     }
 
-    // Only clear input and broadcast after successful persist
+    // Add own message to local state immediately, then broadcast to peers
+    onOwnMessage(msg);
     setInput('');
     sendSignal(null, 'chat', msg);
-  }, [input, roomId, currentUserId, currentUserName, sendSignal, broadcastTyping]);
+  }, [input, roomId, currentUserId, currentUserName, sendSignal, broadcastTyping, onOwnMessage]);
 
   // ── Image upload ─────────────────────────────────────────────────────────────
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

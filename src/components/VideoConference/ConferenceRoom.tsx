@@ -1518,6 +1518,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
                   canToggleChat={checkPermission('toggle_chat')}
                   onToggleChat={toggleChatEnabled}
                   sendSignal={sendSignalStable}
+                  onOwnMessage={msg => setMessages(prev => [...prev, msg])}
                 />
               )}
 

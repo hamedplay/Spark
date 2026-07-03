@@ -420,16 +420,15 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
       </div>
 
       {/* Canvas */}
-      <div ref={containerRef} className="relative flex-1 min-h-0 flex items-center justify-center bg-white rounded-xl overflow-hidden">
+      <div ref={containerRef} className="relative flex-1 min-h-0 bg-white rounded-xl overflow-hidden">
         {/* canvas اصلی — stroke‌های نهایی */}
         <canvas ref={mainRef} width={1200} height={700}
-          className="max-w-full max-h-full absolute"
-          style={{ aspectRatio: '1200/700' }} />
+          className="absolute inset-0 w-full h-full" />
         {/* canvas overlay — preview در حال رسم */}
         <canvas ref={overlayRef} width={1200} height={700}
           aria-label="تخته سفید مشترک" role="img"
-          className="max-w-full max-h-full relative z-10"
-          style={{ aspectRatio: '1200/700', cursor: tool === 'eraser' ? 'cell' : tool === 'text' ? 'text' : 'crosshair', touchAction: 'none' }}
+          className="absolute inset-0 w-full h-full z-10"
+          style={{ cursor: tool === 'eraser' ? 'cell' : tool === 'text' ? 'text' : 'crosshair', touchAction: 'none' }}
           onMouseDown={e => onDown(e.clientX, e.clientY)}
           onMouseMove={e => onMove(e.clientX, e.clientY)}
           onMouseUp={e => onUp(e.clientX, e.clientY)}
