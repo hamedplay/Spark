@@ -1,572 +1,13 @@
 import { useState } from 'react';
-import { BookOpen, LayoutDashboard, Calendar, SquareCheck as CheckSquare, StickyNote, Phone, ChartBar as FileBarChart2, MessageCircle, Video, CircleUser as UserCircle, Hash, Bot, Search, ChevronRight, ChevronLeft, Share2, Archive, Send, UserPlus, CalendarPlus, CreditCard as Edit2, Trash2, Paperclip, Smile, Mic, Image as ImageIcon, Star, Bell, BellOff, Tag, Clock, Users, Lock, Settings, Plus, RefreshCw, Download, Upload, ExternalLink, Eye, CircleCheck as CheckCircle2, Circle as XCircle, CircleAlert as AlertCircle, ListFilter as Filter, SlidersHorizontal, LogOut, Sun, Moon, Volume2, VolumeX, PhoneCall, Zap, Brain, Sparkles, Layers, Globe, Building2, ChartBar as BarChart2, ChartPie as PieChart, TrendingUp, Table, CalendarDays, Hop as Home, X, List, Forward, Reply, Pin, Activity, Newspaper, Palette, LayoutGrid, User, MonitorPlay, Video as Sidebar, LayoutTemplate } from 'lucide-react';
+import {
+  BookOpen, Search, X, LayoutGrid, Sparkles, Bot, Zap,
+} from 'lucide-react';
+import { SECTIONS } from './TutorialSections';
+import type { GuideSection } from './TutorialSections';
 
 interface TutorialPageProps {
   onAskSpark?: (command: string) => void;
 }
-
-interface IconItem {
-  icon: React.ElementType;
-  name: string;
-  desc: string;
-  color?: string;
-}
-
-interface GuideSection {
-  id: string;
-  title: string;
-  icon: React.ElementType;
-  color: string;
-  gradient: string;
-  overview: string;
-  icons: IconItem[];
-  steps: { title: string; items: string[] }[];
-  tips: string[];
-  sparkQuestions: string[];
-}
-
-const SECTIONS: GuideSection[] = [
-  {
-    id: 'meetings',
-    title: 'درخواست جلسه',
-    icon: LayoutDashboard,
-    color: 'blue',
-    gradient: 'from-blue-500 to-blue-700',
-    overview: 'مرکز مدیریت تمام جلسات سازمانی — درخواست، ثبت، تایید و پیگیری جلسات با تمام شرکت‌کنندگان.',
-    icons: [
-      { icon: UserPlus, name: 'ارسال به کاربر', desc: 'جلسه را به کاربر دیگری ارسال کنید تا شرکت‌کننده انتخاب کند', color: 'text-blue-600' },
-      { icon: Share2, name: 'اشتراک‌گذاری', desc: 'تصویر جلسه را به واتساپ، بله ارسال یا دانلود کنید', color: 'text-green-600' },
-      { icon: Send, name: 'ارسال به مدیر', desc: 'جلسات در وضعیت درخواست‌شده را برای تایید ارسال کنید', color: 'text-sky-600' },
-      { icon: Edit2, name: 'ویرایش', desc: 'اطلاعات جلسه را ویرایش کنید (موضوع، زمان، مکان و ...)', color: 'text-amber-600' },
-      { icon: CalendarPlus, name: 'برنامه‌ریزی در تقویم', desc: 'جلسه تایید‌شده را به تقویم داخلی اضافه کنید', color: 'text-teal-600' },
-      { icon: Archive, name: 'بایگانی', desc: 'جلسه‌های تکمیل‌شده را ببندید و بایگانی کنید', color: 'text-slate-600' },
-      { icon: ExternalLink, name: 'افزودن به گوگل', desc: 'جلسه تایید‌شده را به گوگل کلندر منتقل کنید', color: 'text-red-600' },
-      { icon: CheckSquare, name: 'اقدامات جلسه', desc: 'وظایف پیگیری جلسه را مشاهده یا اضافه کنید', color: 'text-emerald-600' },
-      { icon: Bell, name: 'اعلان', desc: 'اعلان پیامک یا درون‌برنامه‌ای برای شرکت‌کنندگان', color: 'text-orange-600' },
-      { icon: Filter, name: 'فیلتر', desc: 'فیلتر جلسات بر اساس وضعیت، اولویت یا تاریخ', color: 'text-purple-600' },
-    ],
-    steps: [
-      {
-        title: 'ایجاد جلسه جدید',
-        items: [
-          'روی دکمه «جلسه جدید» کلیک کنید',
-          'موضوع، تاریخ، مدت، محل، نماینده و شماره تماس را وارد کنید',
-          'اولویت را مشخص کنید: بالا / متوسط / پایین',
-          'شرکت‌کنندگان را از لیست کاربران انتخاب کنید',
-          'ایمیل مهمانان خارجی را در صورت نیاز وارد کنید',
-          'روی «ایجاد جلسه» کلیک کنید',
-        ],
-      },
-      {
-        title: 'وضعیت‌های جلسه',
-        items: [
-          'درخواست شده: جلسه ثبت شده و منتظر تایید ادمین',
-          'تایید شده: جلسه تایید و قابل برنامه‌ریزی در تقویم',
-          'رد شده: جلسه توسط ادمین رد شده',
-          'لغو شده: جلسه توسط کاربر یا اسپارک لغو شده',
-          'بایگانی شده: جلسه تکمیل شده و بسته',
-        ],
-      },
-      {
-        title: 'اقدامات (وظایف) جلسه',
-        items: [
-          'در پایین کارت جلسه روی «اقدامات» کلیک کنید',
-          'عنوان اقدام و مسئول را مشخص کنید',
-          'اقدام به کارتابل مسئول ارسال می‌شود',
-          'وضعیت: در انتظار / در حال انجام / تکمیل شده',
-        ],
-      },
-    ],
-    tips: [
-      'برای جستجوی سریع جلسه، نام موضوع را در نوار جستجوی بالا تایپ کنید',
-      'جلسات با اولویت «بالا» با رنگ قرمز مشخص می‌شوند',
-      'می‌توانید جلسات را به‌صورت عکس به واتساپ یا بله ارسال کنید',
-      'اسپارک می‌تواند جلسه را لغو یا زمانش را جابجا کند',
-    ],
-    sparkQuestions: [
-      'چطور یک جلسه جدید ثبت کنم؟',
-      'وضعیت جلسات امروز چیه؟',
-      'جلسه تست را لغو کن',
-      'جلسه هماهنگی را یک ساعت جلو بنداز',
-    ],
-  },
-  {
-    id: 'calendar',
-    title: 'تقویم',
-    icon: Calendar,
-    color: 'teal',
-    gradient: 'from-teal-500 to-teal-700',
-    overview: 'تقویم شمسی هوشمند با نمای روزانه، هفتگی و ماهانه — مدیریت جلسات، مناسبت‌ها و زمان‌بندی با اشتراک‌گذاری بین کاربران.',
-    icons: [
-      { icon: ChevronLeft, name: 'قبلی', desc: 'رفتن به روز / هفته / ماه قبل', color: 'text-teal-600' },
-      { icon: ChevronRight, name: 'بعدی', desc: 'رفتن به روز / هفته / ماه بعد', color: 'text-teal-600' },
-      { icon: Home, name: 'امروز', desc: 'بازگشت سریع به روز جاری', color: 'text-blue-600' },
-      { icon: Plus, name: 'رویداد جدید', desc: 'ایجاد رویداد یا جلسه جدید در تقویم', color: 'text-green-600' },
-      { icon: CalendarDays, name: 'نمای ماه', desc: 'نمایش ماهانه تمام رویدادها', color: 'text-teal-600' },
-      { icon: List, name: 'نمای لیست', desc: 'نمایش لیستی رویدادها به‌ترتیب زمان', color: 'text-slate-600' },
-      { icon: Layers, name: 'تقویم چندگانه', desc: 'مشاهده و مدیریت تقویم‌های مختلف', color: 'text-purple-600' },
-      { icon: Eye, name: 'اشتراک', desc: 'مشترک شدن در تقویم سایر کاربران', color: 'text-amber-600' },
-      { icon: Globe, name: 'تقویم عمومی', desc: 'تقویم اشتراکی سازمان — مناسبت‌های تعطیلات', color: 'text-sky-600' },
-      { icon: Star, name: 'مناسبت‌ها', desc: 'تقویم مناسبت‌های ملی و مذهبی', color: 'text-yellow-600' },
-    ],
-    steps: [
-      {
-        title: 'نمای‌های تقویم',
-        items: [
-          'نمای روز: جزئیات رویدادهای امروز با ساعت دقیق',
-          'نمای هفته: مشاهده ۷ روز همزمان',
-          'نمای ماه: جدول کلی ماهانه',
-          'لیست هفتگی/ماهانه: فهرست رویدادها به ترتیب زمان',
-        ],
-      },
-      {
-        title: 'تقویم‌های چندگانه',
-        items: [
-          'تقویم «شخصی» هنگام ثبت‌نام به‌طور خودکار ایجاد می‌شود',
-          'برای تقویم جدید: سایدبار → «تقویم جدید»',
-          'رنگ هر تقویم قابل تنظیم است',
-          'می‌توانید در تقویم‌های سایر کاربران مشترک شوید',
-          'تقویم «مناسبت‌ها» رویدادهای ملی را نمایش می‌دهد',
-        ],
-      },
-    ],
-    tips: [
-      'برای ایجاد رویداد سریع، روی هر خانه خالی در تقویم کلیک کنید',
-      'جلسات تایید‌شده با آیکن تقویم به تقویم اضافه می‌شوند',
-      'اسپارک می‌تواند به تاریخ خاصی در تقویم ببرد',
-    ],
-    sparkQuestions: [
-      'تقویم ماهانه را باز کن',
-      'جلسات فردا چیه؟',
-      'برو به تاریخ ۱ مهر',
-      'نمای هفتگی نشون بده',
-    ],
-  },
-  {
-    id: 'chat',
-    title: 'چت سازمانی',
-    icon: MessageCircle,
-    color: 'green',
-    gradient: 'from-green-500 to-emerald-700',
-    overview: 'سیستم پیام‌رسانی داخلی سازمان با پشتیبانی از پیام‌های متنی، فایل، تصویر، تماس صوتی و تصویری.',
-    icons: [
-      { icon: Send, name: 'ارسال پیام', desc: 'ارسال متن پیام با Enter یا دکمه ارسال', color: 'text-green-600' },
-      { icon: Paperclip, name: 'پیوست فایل', desc: 'ارسال فایل، تصویر، اسناد', color: 'text-blue-600' },
-      { icon: Smile, name: 'ایموجی', desc: 'افزودن شکلک به پیام', color: 'text-yellow-600' },
-      { icon: Mic, name: 'پیام صوتی', desc: 'ضبط و ارسال پیام صوتی', color: 'text-red-600' },
-      { icon: Reply, name: 'پاسخ', desc: 'پاسخ به پیام خاص (رفرنس)', color: 'text-sky-600' },
-      { icon: Forward, name: 'فوروارد', desc: 'ارسال پیام به مخاطب دیگر', color: 'text-teal-600' },
-      { icon: Pin, name: 'پین کردن', desc: 'پین پیام مهم برای دسترسی سریع', color: 'text-amber-600' },
-      { icon: Tag, name: 'برچسب', desc: 'افزودن تگ به پیام برای دسته‌بندی', color: 'text-purple-600' },
-      { icon: Bell, name: 'یادآور', desc: 'تنظیم یادآور برای پیام مهم', color: 'text-orange-600' },
-      { icon: AlertCircle, name: 'اورژانسی', desc: 'علامت‌گذاری پیام به عنوان فوری یا مهم', color: 'text-red-600' },
-      { icon: PhoneCall, name: 'تماس صوتی', desc: 'شروع تماس صوتی مستقیم', color: 'text-green-600' },
-      { icon: Video, name: 'تماس تصویری', desc: 'شروع ویدیو کال با کاربر', color: 'text-blue-600' },
-      { icon: Trash2, name: 'حذف پیام', desc: 'حذف پیام (فقط برای خودتان یا برای همه)', color: 'text-red-500' },
-    ],
-    steps: [
-      {
-        title: 'شروع مکالمه',
-        items: [
-          'سایدبار چپ → گفتگوی جدید (آیکن +)',
-          'نام کاربر مورد نظر را جستجو کنید',
-          'روی نام کلیک کنید — مکالمه باز می‌شود',
-          'تایپ کنید و Enter بزنید یا روی آیکن ارسال کلیک کنید',
-        ],
-      },
-      {
-        title: 'مدیریت پیام‌ها',
-        items: [
-          'هولد / راست‌کلیک روی پیام: منوی عملیات باز می‌شود',
-          'ریکشن با ایموجی: کلیک روی 🙂 در منوی پیام',
-          'وضعیت: ✓ ارسال شده، ✓✓ تحویل داده شده، ✓✓ (آبی) خوانده شده',
-          'فایل‌ها و تصاویر در پنل اطلاعات مکالمه موجودند',
-        ],
-      },
-    ],
-    tips: [
-      'پیام‌های اورژانسی با رنگ قرمز و پیام‌های مهم با رنگ نارنجی نمایش داده می‌شوند',
-      'اسپارک می‌تواند برای شما پیام ارسال کند',
-      'گفتگوهای حذف‌شده فقط برای شما پاک می‌شوند',
-    ],
-    sparkQuestions: [
-      'پیام بده به زهرا با موضوع پیگیری پروژه',
-      'تماس صوتی با علی بگیر',
-      'برو به صفحه چت',
-    ],
-  },
-  {
-    id: 'channels',
-    title: 'کانال‌ها',
-    icon: Hash,
-    color: 'purple',
-    gradient: 'from-violet-500 to-purple-700',
-    overview: 'کانال‌های سازمانی — فضاهای تیمی برای همکاری گروهی، اشتراک‌گذاری محتوا و مدیریت کارهای تیمی.',
-    icons: [
-      { icon: Hash, name: 'کانال', desc: 'هر کانال یک فضای تیمی با موضوع مشخص', color: 'text-purple-600' },
-      { icon: Lock, name: 'کانال خصوصی', desc: 'کانال با دسترسی محدود — فقط اعضای دعوت‌شده', color: 'text-red-600' },
-      { icon: Globe, name: 'کانال عمومی', desc: 'کانال باز — همه کاربران می‌توانند عضو شوند', color: 'text-green-600' },
-      { icon: Users, name: 'اعضا', desc: 'مدیریت اعضای کانال — دعوت یا حذف', color: 'text-blue-600' },
-      { icon: Settings, name: 'تنظیمات', desc: 'تغییر نام، آیکن و رنگ کانال', color: 'text-slate-600' },
-      { icon: Pin, name: 'پیام پین‌شده', desc: 'پیام‌های مهم که در بالای کانال نمایش داده می‌شوند', color: 'text-amber-600' },
-      { icon: CheckSquare, name: 'کارهای تیمی', desc: 'مدیریت وظایف گروهی در کانال', color: 'text-emerald-600' },
-      { icon: Star, name: 'ستاره', desc: 'کانال‌های مورد علاقه را ستاره‌دار کنید', color: 'text-yellow-600' },
-      { icon: BellOff, name: 'بی‌صدا', desc: 'غیرفعال کردن اعلان‌های کانال', color: 'text-gray-600' },
-      { icon: Newspaper, name: 'موضوعات کاری', desc: 'پنل اخبار و موضوعات مرتبط با کانال', color: 'text-sky-600' },
-    ],
-    steps: [
-      {
-        title: 'ایجاد کانال',
-        items: [
-          'سایدبار → «کانال جدید»',
-          'نام، توضیح و نوع کانال (عمومی/خصوصی) را انتخاب کنید',
-          'اعضای اولیه را دعوت کنید',
-          'رنگ و آیکن کانال را تنظیم کنید',
-        ],
-      },
-      {
-        title: 'کارهای تیمی در کانال',
-        items: [
-          'پنل «کارهای تیمی» در سایدبار کانال',
-          'ایجاد کار، تعیین مسئول و تاریخ سررسید (ددلاین)',
-          'وضعیت کارها: در انتظار / در حال انجام / تکمیل',
-          'اعضا می‌توانند کارها را به خود اختصاص دهند',
-          'کارهای دیرکرده با رنگ قرمز در پنل کانال نمایش داده می‌شوند',
-        ],
-      },
-    ],
-    tips: [
-      'از # برای اشاره به کانال‌ها در پیام‌ها استفاده کنید',
-      'کانال‌های ستاره‌دار در بالای لیست نمایش می‌یابند',
-      'مدیر کانال می‌تواند پیام‌ها را ویرایش یا حذف کند',
-    ],
-    sparkQuestions: [
-      'برو به صفحه کانال‌ها',
-      'چطور یک کانال جدید بسازم؟',
-    ],
-  },
-  {
-    id: 'tasks',
-    title: 'اقدامات (کارتابل)',
-    icon: CheckSquare,
-    color: 'orange',
-    gradient: 'from-orange-500 to-amber-600',
-    overview: 'کارتابل شخصی — مدیریت وظایف محول‌شده، ایجاد اقدام جدید و پیگیری وضعیت انجام کارها.',
-    icons: [
-      { icon: Plus, name: 'وظیفه جدید', desc: 'ایجاد اقدام/وظیفه جدید', color: 'text-orange-600' },
-      { icon: Edit2, name: 'ویرایش', desc: 'تغییر عنوان، توضیح یا سررسید وظیفه', color: 'text-amber-600' },
-      { icon: Trash2, name: 'حذف', desc: 'حذف وظیفه از لیست', color: 'text-red-600' },
-      { icon: CheckCircle2, name: 'تکمیل', desc: 'علامت‌گذاری وظیفه به عنوان انجام‌شده', color: 'text-green-600' },
-      { icon: Archive, name: 'بایگانی', desc: 'بایگانی وظایف تکمیل‌شده', color: 'text-slate-600' },
-      { icon: AlertCircle, name: 'اولویت بالا', desc: 'وظایف فوری یا بحرانی', color: 'text-red-600' },
-      { icon: Clock, name: 'سررسید', desc: 'تاریخ و زمان انجام وظیفه', color: 'text-blue-600' },
-      { icon: User, name: 'مسئول', desc: 'شخص مسئول انجام وظیفه', color: 'text-teal-600' },
-      { icon: Filter, name: 'فیلتر', desc: 'فیلتر وظایف بر اساس وضعیت یا اولویت', color: 'text-purple-600' },
-    ],
-    steps: [
-      {
-        title: 'تب‌های کارتابل',
-        items: [
-          'ارجاع به من: وظایفی که دیگران به شما واگذار کرده‌اند',
-          'ایجاد‌شده توسط من: وظایفی که خودتان ثبت کرده‌اید',
-          'همه: مشاهده کلیه وظایف',
-          'بایگانی: وظایف تکمیل و بسته‌شده',
-        ],
-      },
-      {
-        title: 'ایجاد وظیفه',
-        items: [
-          'روی «اقدام جدید» کلیک کنید',
-          'عنوان، توضیح، اولویت و تاریخ سررسید را وارد کنید',
-          'مسئول را از لیست کاربران انتخاب کنید',
-          'اقدام در کارتابل مسئول نمایش داده می‌شود',
-        ],
-      },
-      {
-        title: 'حذف وظیفه',
-        items: [
-          'دکمه حذف (آیکن سطل آشغال) در کارت اقدام نمایش داده می‌شود',
-          'فقط سازنده یا مسئول اقدام می‌توانند آن را حذف کنند',
-          'قبل از حذف، تأییدیه دریافت می‌شود',
-          'اقدام‌های حذف‌شده از کارتابل حذف می‌شوند',
-        ],
-      },
-    ],
-    tips: [
-      'وظایف دیر‌کرده با رنگ قرمز مشخص می‌شوند',
-      'اسپارک می‌تواند وظیفه جدید ایجاد کند',
-      'وظایف ارجاع‌شده با برچسب آبی «ارجاع به من» مشخص هستند',
-      'فقط سازنده یا مسئول اقدام می‌توانند آن را حذف کنند',
-    ],
-    sparkQuestions: [
-      'چند تا اقدام دارم؟',
-      'اقدام ایجاد کن با عنوان بررسی گزارش برای علی',
-      'برو به صفحه اقدامات',
-    ],
-  },
-  {
-    id: 'notes',
-    title: 'یادداشت‌ها',
-    icon: StickyNote,
-    color: 'yellow',
-    gradient: 'from-yellow-500 to-amber-500',
-    overview: 'یادداشت‌های سریع با پشتیبانی از متن، پیوست فایل، تبدیل صدا به متن و اشتراک‌گذاری.',
-    icons: [
-      { icon: Plus, name: 'یادداشت جدید', desc: 'ایجاد یادداشت جدید', color: 'text-yellow-600' },
-      { icon: Edit2, name: 'ویرایش', desc: 'تغییر عنوان یا محتوای یادداشت', color: 'text-amber-600' },
-      { icon: Trash2, name: 'حذف', desc: 'حذف یادداشت از لیست', color: 'text-red-600' },
-      { icon: Archive, name: 'بایگانی', desc: 'بایگانی یادداشت‌های قدیمی', color: 'text-slate-600' },
-      { icon: Mic, name: 'دیکته', desc: 'تبدیل صدا به متن در یادداشت', color: 'text-blue-600' },
-      { icon: Paperclip, name: 'پیوست', desc: 'افزودن فایل یا تصویر به یادداشت', color: 'text-teal-600' },
-      { icon: Share2, name: 'اشتراک‌گذاری', desc: 'ارسال یادداشت به واتساپ یا بله', color: 'text-green-600' },
-      { icon: Send, name: 'ارسال به دیگران', desc: 'ارسال یادداشت به کاربر دیگر — یادداشت در کارتابل او ثبت می‌شود', color: 'text-sky-600' },
-      { icon: Download, name: 'دانلود', desc: 'دانلود یادداشت به عنوان تصویر', color: 'text-purple-600' },
-    ],
-    steps: [
-      {
-        title: 'ایجاد یادداشت',
-        items: [
-          'روی «یادداشت جدید» کلیک کنید',
-          'عنوان و محتوای یادداشت را وارد کنید',
-          'از آیکن میکروفون برای تبدیل صدا به متن استفاده کنید',
-          'فایل یا تصویر پیوست کنید',
-          'روی «ذخیره» کلیک کنید',
-        ],
-      },
-    ],
-    tips: [
-      'یادداشت‌ها می‌توانند به عنوان تصویر دانلود یا در شبکه‌های اجتماعی به اشتراک گذاشته شوند',
-      'با «ارسال به دیگران» یادداشت برای کاربر دیگری کپی می‌شود و اعلان دریافت می‌کند',
-      'اسپارک می‌تواند یادداشت جدید ثبت کند',
-    ],
-    sparkQuestions: [
-      'یادداشت ثبت کن با عنوان جلسه فردا',
-      'چند تا یادداشت دارم؟',
-      'برو به صفحه یادداشت‌ها',
-    ],
-  },
-  {
-    id: 'contacts',
-    title: 'مخاطبین',
-    icon: Phone,
-    color: 'cyan',
-    gradient: 'from-cyan-500 to-sky-600',
-    overview: 'دفترچه تلفن و مخاطبین سازمانی — ذخیره اطلاعات تماس، سازمان و ایمیل به‌همراه جستجوی سریع.',
-    icons: [
-      { icon: Plus, name: 'مخاطب جدید', desc: 'افزودن مخاطب تلفنی یا ایمیل جدید', color: 'text-cyan-600' },
-      { icon: Edit2, name: 'ویرایش', desc: 'تغییر اطلاعات مخاطب', color: 'text-amber-600' },
-      { icon: Trash2, name: 'حذف', desc: 'حذف مخاطب از دفترچه', color: 'text-red-600' },
-      { icon: Search, name: 'جستجو', desc: 'جستجو بر اساس نام، شماره یا موضوع', color: 'text-blue-600' },
-      { icon: Download, name: 'خروجی Excel', desc: 'صادر کردن لیست مخاطبین به فایل Excel', color: 'text-green-600' },
-      { icon: Upload, name: 'ورودی Excel', desc: 'وارد کردن مخاطبین از فایل Excel', color: 'text-orange-600' },
-      { icon: Building2, name: 'سازمان', desc: 'نام شرکت یا سازمان مخاطب', color: 'text-slate-600' },
-    ],
-    steps: [
-      {
-        title: 'ثبت مخاطب',
-        items: [
-          'روی «مخاطب جدید» کلیک کنید',
-          'نام، شماره تماس و سازمان را وارد کنید',
-          'برای مخاطبین ایمیل، آدرس ایمیل را هم وارد کنید',
-          'اطلاعات با هنگام ایجاد جلسه به‌صورت خودکار ذخیره می‌شوند',
-        ],
-      },
-    ],
-    tips: [
-      'مخاطبین قابل صادر کردن به Excel هستند',
-      'اسپارک می‌تواند مخاطب جدید ثبت کند',
-    ],
-    sparkQuestions: [
-      'چند تا مخاطب دارم؟',
-      'مخاطب اضافه کن به نام احمدی شماره ۰۹۱۲۱۲۳۴۵۶۷',
-      'برو به صفحه مخاطبین',
-    ],
-  },
-  {
-    id: 'reports',
-    title: 'گزارشات',
-    icon: FileBarChart2,
-    color: 'rose',
-    gradient: 'from-rose-500 to-red-600',
-    overview: 'داشبورد تحلیلی — نمودارهای آماری جلسات، اقدامات و فعالیت‌های سازمانی با قابلیت خروجی Excel.',
-    icons: [
-      { icon: BarChart2, name: 'نمودار ستونی', desc: 'نمودار روند جلسات در ماه‌های گذشته', color: 'text-rose-600' },
-      { icon: PieChart, name: 'نمودار دایره‌ای', desc: 'توزیع اولویت‌ها و وضعیت‌ها', color: 'text-purple-600' },
-      { icon: TrendingUp, name: 'روند', desc: 'تحلیل روند رشد یا کاهش جلسات', color: 'text-green-600' },
-      { icon: Table, name: 'جدول داده', desc: 'آخرین جلسات و اقدامات در قالب جدول', color: 'text-blue-600' },
-      { icon: Filter, name: 'فیلتر زمانی', desc: 'فیلتر: ماه جاری، ۳ ماه، ۶ ماه، سال', color: 'text-teal-600' },
-      { icon: Download, name: 'خروجی Excel', desc: 'صادر کردن گزارش به فایل xlsx', color: 'text-emerald-600' },
-      { icon: RefreshCw, name: 'بارگذاری مجدد', desc: 'به‌روزرسانی داده‌های گزارش', color: 'text-slate-600' },
-    ],
-    steps: [
-      {
-        title: 'داشبورد گزارش',
-        items: [
-          'KPIها: تعداد کل جلسات، اقدامات و نرخ تکمیل',
-          'نمودار ماهانه: روند جلسات ۶ ماه گذشته',
-          'توزیع اولویت: درصد جلسات بالا، متوسط، پایین',
-          'جدول آخرین جلسات برای بررسی سریع',
-          'انتخاب بازه زمانی دلخواه',
-        ],
-      },
-    ],
-    tips: [
-      'گزارش را به فرمت Excel دانلود کنید برای ارائه به مدیریت',
-      'فیلتر سال جاری کامل‌ترین دیدگاه را می‌دهد',
-    ],
-    sparkQuestions: [
-      'برو به صفحه گزارشات',
-      'چند تا جلسه این ماه داشتم؟',
-      'چند تا جلسه تا حالا گذاشتم؟',
-    ],
-  },
-  {
-    id: 'video',
-    title: 'ویدیو کنفرانس',
-    icon: Video,
-    color: 'indigo',
-    gradient: 'from-sky-500 to-blue-700',
-    overview: 'سیستم ویدیو کنفرانس داخلی — ایجاد اتاق جلسه، دعوت شرکت‌کنندگان و کنترل دوربین/میکروفون.',
-    icons: [
-      { icon: Plus, name: 'اتاق جدید', desc: 'ایجاد اتاق ویدیو کنفرانس جدید', color: 'text-blue-600' },
-      { icon: Video, name: 'ورود به اتاق', desc: 'پیوستن به اتاق ویدیو کنفرانس', color: 'text-green-600' },
-      { icon: Mic, name: 'میکروفون', desc: 'روشن/خاموش کردن میکروفون', color: 'text-red-600' },
-      { icon: ImageIcon, name: 'دوربین', desc: 'روشن/خاموش کردن دوربین', color: 'text-blue-600' },
-      { icon: LayoutGrid, name: 'نمای گالری', desc: 'نمایش همه شرکت‌کنندگان به صورت شبکه‌ای مساوی', color: 'text-teal-600' },
-      { icon: MonitorPlay, name: 'نمای اسپیکر', desc: 'بزرگ‌نمایی گوینده فعال — مناسب برای ارائه', color: 'text-purple-600' },
-      { icon: Sidebar, name: 'نمای سایدبار', desc: 'گوینده اصلی در مرکز + سایرین در کنار', color: 'text-amber-600' },
-      { icon: Pin, name: 'پین کاربر', desc: 'نمایش دائمی یک کاربر بدون تغییر خودکار', color: 'text-rose-600' },
-      { icon: UserPlus, name: 'دعوت', desc: 'ارسال دعوت‌نامه به سایر کاربران', color: 'text-teal-600' },
-      { icon: ExternalLink, name: 'لینک مهمان', desc: 'لینک اتاق برای مهمانان بدون حساب کاربری', color: 'text-sky-600' },
-      { icon: LogOut, name: 'خروج', desc: 'خروج از اتاق بدون بستن جلسه', color: 'text-amber-600' },
-      { icon: XCircle, name: 'پایان جلسه', desc: 'بستن اتاق برای همه شرکت‌کنندگان', color: 'text-red-600' },
-    ],
-    steps: [
-      {
-        title: 'برگزاری جلسه',
-        items: [
-          'روی «اتاق جدید» کلیک و نام اتاق را وارد کنید',
-          'لینک مهمان را برای کسانی که حساب ندارند کپی کنید',
-          'اعضای سازمان را با آیکن دعوت فراخوانید',
-          'دوربین و میکروفون را قبل از ورود چک کنید',
-          'هنگام پایان، «پایان جلسه» را فشار دهید تا همه خارج شوند',
-        ],
-      },
-      {
-        title: 'حالت‌های نمایش',
-        items: [
-          'نمای گالری: همه شرکت‌کنندگان با اندازه مساوی — مناسب برای جلسات چندنفره',
-          'نمای اسپیکر: بزرگ‌نمایی خودکار گوینده فعال — مناسب برای سخنرانی',
-          'نمای سایدبار: گوینده اصلی در مرکز + لیست سایرین در کنار',
-          'پین کاربر: کلیک روی آیکن پین در تایل هر کاربر برای ثابت نگه داشتن او',
-          'اشتراک صفحه: نمایش صفحه کامپیوتر در کنفرانس با اولویت نمایش',
-        ],
-      },
-    ],
-    tips: [
-      'میزبان می‌تواند بدون پایان دادن جلسه از اتاق خارج شود',
-      'لینک مهمان نیاز به ثبت‌نام ندارد',
-      'جلسات تقویم می‌توانند اتاق کنفرانس مرتبط داشته باشند',
-      'در هنگام اشتراک صفحه، تایل مربوطه با اولویت بالاتر نمایش داده می‌شود',
-      'می‌توانید تایل‌های شرکت‌کنندگان را با کشیدن جابجا کنید',
-    ],
-    sparkQuestions: [
-      'برو به صفحه ویدیو کنفرانس',
-      'تماس تصویری با علی بگیر',
-    ],
-  },
-  {
-    id: 'spark',
-    title: 'اسپارک (هوش مصنوعی)',
-    icon: Bot,
-    color: 'sky',
-    gradient: 'from-sky-500 to-blue-600',
-    overview: 'دستیار هوشمند فارسی‌زبان — با دستور زبان طبیعی می‌توانید تمام عملیات سیستم را انجام دهید.',
-    icons: [
-      { icon: Zap, name: 'AI فعال', desc: 'هوش مصنوعی Groq/OpenAI متصل است', color: 'text-yellow-500' },
-      { icon: Sparkles, name: 'اسپارک پایه', desc: 'پردازش محلی بدون نیاز به کلید API', color: 'text-sky-500' },
-      { icon: Brain, name: 'حافظه', desc: 'اسپارک مخاطبین و ترجیحات شما را به خاطر می‌سپارد', color: 'text-purple-600' },
-      { icon: Mic, name: 'دستور صوتی', desc: 'دستور را با صدا بگویید — پردازش می‌شود', color: 'text-red-600' },
-      { icon: Volume2, name: 'پاسخ صوتی', desc: 'اسپارک می‌تواند پاسخ را بخواند', color: 'text-teal-600' },
-      { icon: RefreshCw, name: 'بارگذاری مجدد', desc: 'رفرش تنظیمات اسپارک', color: 'text-slate-600' },
-      { icon: VolumeX, name: 'بی‌صدا', desc: 'خاموش کردن پاسخ صوتی اسپارک', color: 'text-gray-500' },
-    ],
-    steps: [
-      {
-        title: 'دستورات قابل اجرا',
-        items: [
-          'لغو جلسه: «جلسه [موضوع] را لغو کن»',
-          'جابجایی زمان: «جلسه [موضوع] را یک ساعت جلو بنداز»',
-          'ارسال پیام: «پیام بده به [نام] با موضوع [متن]»',
-          'ایجاد اقدام: «اقدام ایجاد کن با عنوان [عنوان] برای [نام]»',
-          'ایجاد یادداشت: «یادداشت ثبت کن با عنوان [عنوان]»',
-          'افزودن مخاطب: «مخاطب اضافه کن به نام [نام] شماره [شماره]»',
-          'پرس‌وجو: «چند تا جلسه امروز دارم؟»',
-          'ناوبری: «برو به تقویم» یا «صفحه چت را باز کن»',
-          'هر سوال عمومی: اسپارک جواب می‌دهد',
-        ],
-      },
-      {
-        title: 'تنظیمات اسپارک (ادمین)',
-        items: [
-          'پنل ادمین → تنظیمات اسپارک',
-          'کلید API را از Groq یا OpenAI وارد کنید',
-          'مدل هوش مصنوعی مورد نظر را انتخاب کنید',
-          'کلیدواژه‌های سازمانی را تنظیم کنید',
-        ],
-      },
-    ],
-    tips: [
-      'هر دستور فارسی قابل قبول است — کامل یا خلاصه',
-      'اسپارک بعد از تشخیص، بلافاصله اجرا می‌کند',
-      'اگر اطلاعات کافی نباشد، اسپارک سوال می‌پرسد',
-      'دستورات صوتی با دکمه میکروفون فعال می‌شوند',
-    ],
-    sparkQuestions: [
-      'چه کارهایی می‌تونی انجام بدی؟',
-      'جلسات امروز را لیست کن',
-      'نمای ماهانه تقویم را نشان بده',
-    ],
-  },
-  {
-    id: 'profile',
-    title: 'پروفایل',
-    icon: UserCircle,
-    color: 'slate',
-    gradient: 'from-slate-500 to-gray-600',
-    overview: 'اطلاعات شخصی، سازمانی و شبکه‌های اجتماعی خود را مدیریت کنید.',
-    icons: [
-      { icon: ImageIcon, name: 'تصویر پروفایل', desc: 'کلیک روی دوربین برای تغییر عکس (JPG/PNG/WEBP)', color: 'text-blue-600' },
-      { icon: User, name: 'اطلاعات شخصی', desc: 'نام، موبایل، کد ملی، تاریخ تولد، جنسیت', color: 'text-teal-600' },
-      { icon: Building2, name: 'اطلاعات سازمانی', desc: 'سازمان، سمت، واحد، کد پرسنلی', color: 'text-slate-600' },
-      { icon: Globe, name: 'شبکه اجتماعی', desc: 'وب‌سایت و لینکدین', color: 'text-sky-600' },
-      { icon: Activity, name: 'وضعیت حضور', desc: 'آنلاین / مشغول / دور از دستگاه / مزاحم نشوید', color: 'text-green-600' },
-      { icon: Sun, name: 'حالت روز', desc: 'تم روشن (Light Mode)', color: 'text-amber-500' },
-      { icon: Moon, name: 'حالت شب', desc: 'تم تاریک (Dark Mode)', color: 'text-slate-600' },
-      { icon: Palette, name: 'رنگ تم', desc: 'انتخاب رنگ اصلی رابط کاربری', color: 'text-purple-600' },
-    ],
-    steps: [
-      {
-        title: 'تکمیل پروفایل',
-        items: [
-          'روی آیکن کاربر در بالای صفحه → «پروفایل»',
-          'اطلاعات شخصی را پر کنید',
-          'تصویر پروفایل را آپلود کنید',
-          'سمت و واحد سازمانی را تکمیل کنید',
-          'روی «ذخیره» کلیک کنید',
-        ],
-      },
-    ],
-    tips: [
-      'پروفایل کامل باعث می‌شود سایر کاربران شما را بهتر بشناسند',
-      'وضعیت حضور شما در چت و لیست کاربران نمایش داده می‌شود',
-      'رنگ تم و حالت تاریک در همه صفحات اعمال می‌شود',
-    ],
-    sparkQuestions: [
-      'برو به صفحه پروفایل',
-    ],
-  },
-];
 
 const colorClasses: Record<string, {
   bg: string; text: string; lightBg: string; border: string; dot: string; badge: string
@@ -602,7 +43,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
 
   return (
     <div className="flex flex-col h-full" dir="rtl">
-      {/* ── Header ─────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
@@ -614,7 +55,6 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
               <p className="text-xs text-gray-500 dark:text-gray-400">آموزش آیکن به آیکن تمام بخش‌ها</p>
             </div>
           </div>
-          {/* Search */}
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -633,7 +73,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Sidebar ────────────────────────────────────────────────── */}
+        {/* Sidebar */}
         <div className="w-52 flex-shrink-0 bg-gray-50 dark:bg-gray-900 border-l border-gray-100 dark:border-gray-700 overflow-y-auto">
           <div className="p-2 space-y-0.5">
             {(searchQuery ? filtered : SECTIONS).map(section => {
@@ -660,7 +100,7 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
           </div>
         </div>
 
-        {/* ── Main content ─────────────────────────────────────────── */}
+        {/* Main content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {searchQuery && filtered.length === 0 && (
             <div className="text-center py-16 text-gray-400">
@@ -669,13 +109,11 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
             </div>
           )}
 
-          {/* Show all search results OR single active section */}
-          {(searchQuery ? filtered : [activeSection]).map(section => {
+          {(searchQuery ? filtered : [activeSection]).map((section: GuideSection) => {
             const SectionIcon = section.icon;
             const sc = colorClasses[section.color] || colorClasses.blue;
             return (
               <div key={section.id}>
-                {/* Section Header */}
                 <div className={`rounded-2xl p-5 mb-5 bg-gradient-to-r ${section.gradient} text-white shadow-md`}>
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
@@ -686,7 +124,6 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                   <p className="text-sm text-white/85 leading-relaxed">{section.overview}</p>
                 </div>
 
-                {/* Icons Guide */}
                 <div className={`bg-white dark:bg-gray-800 rounded-2xl border ${sc.border} overflow-hidden mb-5`}>
                   <div className={`px-4 py-3 ${sc.lightBg} border-b ${sc.border} flex items-center gap-2`}>
                     <LayoutGrid className={`w-4 h-4 ${sc.text}`} />
@@ -710,7 +147,6 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                   </div>
                 </div>
 
-                {/* Steps */}
                 <div className="grid md:grid-cols-2 gap-4 mb-5">
                   {section.steps.map((step, si) => (
                     <div key={si} className={`bg-white dark:bg-gray-800 rounded-2xl border ${sc.border} overflow-hidden`}>
@@ -729,7 +165,6 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                   ))}
                 </div>
 
-                {/* Tips */}
                 {section.tips.length > 0 && (
                   <div className={`bg-white dark:bg-gray-800 rounded-2xl border ${sc.border} p-4 mb-5`}>
                     <div className="flex items-center gap-2 mb-3">
@@ -747,7 +182,6 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
                   </div>
                 )}
 
-                {/* Ask Spark */}
                 {onAskSpark && section.sparkQuestions.length > 0 && (
                   <div className="bg-gradient-to-r from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 rounded-2xl border border-sky-200 dark:border-sky-800 p-4">
                     <div className="flex items-center gap-2 mb-3">
