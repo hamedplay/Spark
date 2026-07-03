@@ -31,12 +31,26 @@ function adminClient() {
   );
 }
 
-/** Validates the Bearer JWT and returns the caller's profile, or null on failure. */
+/** Validates the Bearer JWT (or service role key) and returns the caller's profile, or null on failure. */
 async function authenticate(
   authHeader: string | null,
 ): Promise<{ userId: string; isAdmin: boolean } | null> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
+
+  // Accept internal service-to-service calls using the service role key
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (serviceKey.length > 0) {
+    const enc = new TextEncoder();
+    const a = enc.encode(token);
+    const b = enc.encode(serviceKey);
+    if (a.length === b.length) {
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+      if (diff === 0) return { userId: "service", isAdmin: true };
+    }
+  }
+
   const supabase = adminClient();
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return null;
