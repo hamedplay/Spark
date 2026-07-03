@@ -2,8 +2,8 @@ import { useState } from 'react';
 import {
   BookOpen, Search, X, LayoutGrid, Sparkles, Bot, Zap,
 } from 'lucide-react';
-import { SECTIONS } from './TutorialSections';
-import type { GuideSection } from './TutorialSections';
+import { SECTIONS } from './sections';
+import type { GuideSection } from './types';
 
 interface TutorialPageProps {
   onAskSpark?: (command: string) => void;

@@ -11,7 +11,7 @@ import { ProfilePage } from './components/ProfilePage';
 import { ContactsPage } from './components/ContactsPage';
 import { ContactsEmailPage } from './components/ContactsEmailPage';
 import { CalendarPage } from './components/CalendarPage';
-import { TutorialPage } from './components/TutorialPage';
+import { TutorialPage } from './components/Tutorial';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ChatPage } from './components/Chat/ChatPage';
 import { VideoConferencePage } from './components/VideoConference/VideoConferencePage';
