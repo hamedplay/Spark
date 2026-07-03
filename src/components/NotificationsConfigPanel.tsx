@@ -172,11 +172,16 @@ function GroupsTab() {
 
   const loadRules = useCallback(async (groupId: string) => {
     setLoading(true);
-    const { data } = await supabase.from('notification_group_rules').select('*').eq('group_id', groupId);
-    const map: Record<string, boolean> = {};
-    for (const r of (data || [])) map[r.notification_type] = r.enabled;
-    setRules(map);
-    setLoading(false);
+    try {
+      const { data } = await supabase.from('notification_group_rules').select('*').eq('group_id', groupId);
+      const map: Record<string, boolean> = {};
+      for (const r of (data || [])) map[r.notification_type] = r.enabled;
+      setRules(map);
+    } catch {
+      toast.error('خطا در بارگذاری قوانین اعلان');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { if (selectedGroup) loadRules(selectedGroup); }, [selectedGroup, loadRules]);
@@ -675,9 +680,14 @@ function TemplatesTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('notification_templates').select('*').order('category').order('event_type').order('audience');
-    setTemplates((data || []) as NotificationTemplate[]);
-    setLoading(false);
+    try {
+      const { data } = await supabase.from('notification_templates').select('*').order('category').order('event_type').order('audience');
+      setTemplates((data || []) as NotificationTemplate[]);
+    } catch {
+      toast.error('خطا در بارگذاری قالب‌های اعلان');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);

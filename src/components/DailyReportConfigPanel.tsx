@@ -106,6 +106,7 @@ export function DailyReportConfigPanel() {
   const [sending, setSending] = useState(false);
   const [allGroups, setAllGroups] = useState<UserGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [groupSearch, setGroupSearch] = useState('');
@@ -114,32 +115,38 @@ export function DailyReportConfigPanel() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [cfgRes, profilesRes, groupsRes] = await Promise.all([
-      supabase.from('daily_report_config').select('*').maybeSingle(),
-      supabase.from('profiles').select('user_id, full_name, email, avatar_url').order('full_name'),
-      supabase.from('user_groups').select('id, name, display_name').order('name'),
-    ]);
-    if (cfgRes.data) {
-      const d = cfgRes.data;
-      setConfig({
-        id: d.id,
-        is_enabled: d.is_enabled,
-        send_time: d.send_time,
-        send_days: d.send_days ?? [0, 1, 2, 3, 4],
-        send_via_sms: d.send_via_sms,
-        send_via_notification: d.send_via_notification,
-        send_via_bale: d.send_via_bale ?? false,
-        recipient_user_ids: d.recipient_user_ids || [],
-        recipient_group_ids: d.recipient_group_ids || [],
-        notification_title_tpl: d.notification_title_tpl || DEFAULT_NOTIF_TITLE,
-        notification_body_tpl: d.notification_body_tpl || DEFAULT_NOTIF_BODY,
-        sms_tpl: d.sms_tpl || DEFAULT_SMS_LINE,
-        last_sent_date: d.last_sent_date,
-      });
+    setLoadError(false);
+    try {
+      const [cfgRes, profilesRes, groupsRes] = await Promise.all([
+        supabase.from('daily_report_config').select('*').maybeSingle(),
+        supabase.from('profiles').select('user_id, full_name, email, avatar_url').order('full_name'),
+        supabase.from('user_groups').select('id, name, display_name').order('name'),
+      ]);
+      if (cfgRes.data) {
+        const d = cfgRes.data;
+        setConfig({
+          id: d.id,
+          is_enabled: d.is_enabled,
+          send_time: d.send_time,
+          send_days: d.send_days ?? [0, 1, 2, 3, 4],
+          send_via_sms: d.send_via_sms,
+          send_via_notification: d.send_via_notification,
+          send_via_bale: d.send_via_bale ?? false,
+          recipient_user_ids: d.recipient_user_ids || [],
+          recipient_group_ids: d.recipient_group_ids || [],
+          notification_title_tpl: d.notification_title_tpl || DEFAULT_NOTIF_TITLE,
+          notification_body_tpl: d.notification_body_tpl || DEFAULT_NOTIF_BODY,
+          sms_tpl: d.sms_tpl || DEFAULT_SMS_LINE,
+          last_sent_date: d.last_sent_date,
+        });
+      }
+      setAllProfiles(profilesRes.data || []);
+      setAllGroups(groupsRes.data || []);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setAllProfiles(profilesRes.data || []);
-    setAllGroups(groupsRes.data || []);
-    setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -232,6 +239,24 @@ export function DailyReportConfigPanel() {
   if (loading) return (
     <div className="flex items-center justify-center py-16">
       <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
+    </div>
+  );
+
+  if (loadError) return (
+    <div className="flex flex-col items-center justify-center py-16 gap-4" dir="rtl">
+      <div className="w-14 h-14 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+        <CalendarDays className="w-7 h-7 text-red-400" />
+      </div>
+      <div className="text-center">
+        <p className="font-semibold text-gray-700 dark:text-gray-300">خطا در بارگذاری</p>
+        <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">اتصال به پایگاه داده برقرار نشد</p>
+      </div>
+      <button
+        onClick={fetchData}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-medium transition-colors"
+      >
+        <Loader2 className="w-4 h-4" /> تلاش مجدد
+      </button>
     </div>
   );
 
