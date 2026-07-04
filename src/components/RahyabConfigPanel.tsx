@@ -274,7 +274,7 @@ function AccountTab() {
 //  TAB 3 — Test Send
 // ════════════════════════════════════════════════════════════════════
 
-interface DebugLog {
+export interface DebugLog {
   soapAction: string;
   url: string;
   requestHeaders: Record<string, string>;
@@ -303,7 +303,7 @@ function statusBg(code?: number) {
   return 'bg-green-900/60 text-green-300';
 }
 
-function RequestLogPanel({ logs, onClear }: { logs: DebugLog[]; onClear: () => void }) {
+export function RequestLogPanel({ logs, onClear }: { logs: DebugLog[]; onClear: () => void }) {
   const [openIdx, setOpenIdx] = useState<number>(0);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showRespHeaders, setShowRespHeaders] = useState<Record<number, boolean>>({});

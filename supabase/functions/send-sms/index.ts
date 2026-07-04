@@ -117,9 +117,9 @@ Deno.serve(async (req: Request) => {
 
       let rahyabBody: Record<string, unknown>;
       if (mode === "test_connection") {
-        rahyabBody = { action: "test", _providerOverride: providerOverride };
+        rahyabBody = { action: "test", _providerOverride: providerOverride, debug: true };
       } else if (mode === "rahyab_test") {
-        rahyabBody = { ...body.rahyabPayload, _providerOverride: providerOverride };
+        rahyabBody = { ...body.rahyabPayload, _providerOverride: providerOverride, debug: true };
       } else {
         rahyabBody = { action: "send", mobiles: body.mobiles, message: body.message, isFarsi: true, _providerOverride: providerOverride };
       }
