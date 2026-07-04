@@ -359,7 +359,7 @@ export function CalendarViews(p: CalendarViewProps) {
               <span className="text-white/90 text-[10px] font-medium leading-none">{toFarsiTime(dispStart)} – {toFarsiTime(dispEnd)}</span>
             </div>
           )}
-          <div className={`text-white font-semibold leading-tight ${isCompact ? 'text-[10px] sm:text-[11px]' : 'text-[11px] sm:text-xs'} ${isTiny ? 'truncate' : 'line-clamp-2'} flex-shrink-0`}>
+          <div className={`text-white font-semibold leading-tight ${isCompact ? 'text-[6px] sm:text-[11px]' : 'text-[6px] sm:text-xs'} ${isTiny ? 'truncate sm:truncate' : 'break-words sm:line-clamp-2'} flex-shrink-0`}>
             {meeting.subject}
           </div>
           {!isCompact && meeting.location && (
@@ -757,7 +757,7 @@ export function CalendarViews(p: CalendarViewProps) {
                   {dm.slice(0, 2).map(m => {
                     const c = getMeetingColor(m);
                     return (
-                      <div key={m.id} className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded text-white truncate font-medium" style={{ backgroundColor: c }}>
+                      <div key={m.id} className="text-[6px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded text-white truncate font-medium" style={{ backgroundColor: c }}>
                         <span className="hidden sm:inline">{m.start_time ? toFarsiTime(m.start_time) + ' ' : ''}</span>
                         {m.subject}
                       </div>
