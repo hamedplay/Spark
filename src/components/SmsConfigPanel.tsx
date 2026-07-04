@@ -78,8 +78,9 @@ const TABS = [
 
 // ─── Provider type catalog ────────────────────────────────────────────────────
 const PROVIDER_TYPES = [
-  { key: 'rest',   label: 'sms.ir / REST API',           desc: 'سرویس‌دهندگان استاندارد مانند sms.ir' },
-  { key: 'rahyab', label: 'وب‌سرویس رهیاب رایان (SOAP)', desc: 'ارتباط از طریق پروتکل SOAP' },
+  { key: 'rest',        label: 'sms.ir / REST API',            desc: 'سرویس‌دهندگان استاندارد مانند sms.ir' },
+  { key: 'rahyab',      label: 'وب‌سرویس رهیاب رایان (SOAP)',  desc: 'ارتباط از طریق پروتکل SOAP' },
+  { key: 'rahyab_rest', label: 'رهیاب رایان REST API',         desc: 'ارتباط مستقیم HTTP بدون SOAP — rahyabbulk.ir:8443' },
 ];
 
 // ════════════════════════════════════════════════════════════════════
@@ -100,6 +101,11 @@ function ProviderForm({ provider, onSave, onCancel }: {
     api_url: 'http://RahyabBulk.ir/WebService/sms.asmx', api_key: '', line_number: '',
     sender_number: '', is_active: false, username: '', password: '', token: '', is_default: false,
   };
+  const blankRahyabRest: Partial<SmsProvider> = {
+    title: '', provider_name: 'rahyab_rest', provider_type: 'rahyab_rest', is_public_gateway: false,
+    api_url: 'https://rahyabbulk.ir:8443', api_key: '', line_number: '',
+    sender_number: '', is_active: false, username: '', password: '', token: '', is_default: false,
+  };
 
   const [form, setForm] = useState<Partial<SmsProvider>>(provider ? { ...provider } : blankRest);
   const [saving, setSaving] = useState(false);
@@ -107,19 +113,21 @@ function ProviderForm({ provider, onSave, onCancel }: {
 
   const set = (k: keyof SmsProvider, v: any) => setForm(f => ({ ...f, [k]: v }));
   const isRahyab = form.provider_type === 'rahyab';
+  const isRahyabRest = form.provider_type === 'rahyab_rest';
 
   const switchType = (type: string) => {
     if (type === 'rahyab') setForm(f => ({ ...blankRahyab, title: f.title || '' }));
+    else if (type === 'rahyab_rest') setForm(f => ({ ...blankRahyabRest, title: f.title || '' }));
     else setForm(f => ({ ...blankRest, title: f.title || '' }));
   };
 
   const handleSave = async () => {
     if (!form.title?.trim()) { toast.error('عنوان الزامی است'); return; }
-    if (isRahyab && !form.username?.trim() && !form.token?.trim()) {
+    if ((isRahyab || isRahyabRest) && !form.username?.trim() && !form.token?.trim()) {
       toast.error('نام کاربری یا توکن الزامی است'); return;
     }
-    if (isRahyab && !form.line_number?.trim()) {
-      toast.error('شماره اختصاصی الزامی است'); return;
+    if ((isRahyab || isRahyabRest) && !form.line_number?.trim()) {
+      toast.error(isRahyabRest ? 'شماره فرستنده الزامی است' : 'شماره اختصاصی الزامی است'); return;
     }
     setSaving(true);
 
@@ -220,7 +228,7 @@ function ProviderForm({ provider, onSave, onCancel }: {
         </div>
       )}
 
-      {/* Rahyab fields */}
+      {/* Rahyab SOAP fields */}
       {isRahyab && (
         <div className="space-y-4">
           <div className="flex items-start gap-3 px-4 py-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-2xl">
@@ -257,6 +265,49 @@ function ProviderForm({ provider, onSave, onCancel }: {
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">آدرس وب‌سرویس SOAP</label>
               <input className={inp} value={form.api_url || ''} onChange={e => set('api_url', e.target.value)} dir="ltr" />
               <p className="text-xs text-gray-400 mt-1 font-mono">پیش‌فرض: http://RahyabBulk.ir/WebService/sms.asmx</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rahyab REST fields */}
+      {isRahyabRest && (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl">
+            <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+              می‌توانید <strong>توکن</strong> را به جای نام کاربری استفاده کنید. در این حالت مقدار Username برابر توکن خواهد بود و Password می‌تواند هر رشته تصادفی حداقل ۵ کاراکتری باشد. این روش باعث می‌شود نام کاربری و رمز عبور اصلی افشا نشوند.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">توکن (اختیاری — جایگزین نام کاربری)</label>
+              <input className={inp} value={form.token || ''} onChange={e => set('token', e.target.value)}
+                placeholder="اگر توکن دارید اینجا وارد کنید" dir="ltr" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">نام کاربری *</label>
+              <input className={inp} value={form.username || ''} onChange={e => set('username', e.target.value)}
+                placeholder="نام کاربری پنل رهیاب" dir="ltr" />
+            </div>
+            <div className="relative">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">کلمه عبور *</label>
+              <input className={inp + ' pl-10'} type={showPass ? 'text' : 'password'}
+                value={form.password || ''} onChange={e => set('password', e.target.value)}
+                placeholder="حداقل ۵ کاراکتر" dir="ltr" />
+              <button type="button" onClick={() => setShowPass(v => !v)} className="absolute left-3 top-8 text-gray-400 hover:text-gray-600 transition-colors">
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شماره فرستنده (from) *</label>
+              <input className={inp} value={form.line_number || ''} onChange={e => set('line_number', e.target.value)}
+                placeholder="مثال: 50001805" dir="ltr" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">آدرس پایه API</label>
+              <input className={inp} value={form.api_url || ''} onChange={e => set('api_url', e.target.value)} dir="ltr" />
+              <p className="text-xs text-gray-400 mt-1 font-mono">پیش‌فرض: https://rahyabbulk.ir:8443</p>
             </div>
           </div>
         </div>
@@ -373,7 +424,7 @@ function ProvidersTab() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-800 dark:text-white truncate">{p.title}</p>
-                  <p className="text-xs text-gray-400 font-mono">{p.provider_type === 'rahyab' ? 'رهیاب رایان — SOAP' : (p.provider_name || 'REST API')}</p>
+                  <p className="text-xs text-gray-400 font-mono">{p.provider_type === 'rahyab' ? 'رهیاب رایان — SOAP' : p.provider_type === 'rahyab_rest' ? 'رهیاب رایان — REST' : (p.provider_name || 'REST API')}</p>
                 </div>
               </div>
               <div className="relative flex-shrink-0" ref={menuOpen === p.id ? menuRef : undefined}>
@@ -404,8 +455,8 @@ function ProvidersTab() {
             </div>
 
             <div className="flex flex-wrap gap-2 mt-3">
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${p.provider_type === 'rahyab' ? 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
-                {p.provider_type === 'rahyab' ? 'رهیاب رایان' : 'REST API'}
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${p.provider_type === 'rahyab' ? 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300' : p.provider_type === 'rahyab_rest' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
+                {p.provider_type === 'rahyab' ? 'رهیاب رایان SOAP' : p.provider_type === 'rahyab_rest' ? 'رهیاب رایان REST' : 'REST API'}
               </span>
               <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${p.is_active ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
                 {p.is_active ? 'فعال' : 'غیرفعال'}
@@ -537,7 +588,7 @@ function GroupsTab() {
                             <option value="">پیش‌فرض (سرویس‌دهنده اصلی)</option>
                             {providers.map(p => (
                               <option key={p.id} value={p.id}>
-                                {p.title}{p.provider_type === 'rahyab' ? ' (SOAP)' : ''}
+                                {p.title}{p.provider_type === 'rahyab' ? ' (SOAP)' : p.provider_type === 'rahyab_rest' ? ' (REST)' : ''}
                               </option>
                             ))}
                           </select>
@@ -1184,6 +1235,14 @@ const RAHYAB_TESTS: RahyabTestCard[] = [
   { id: 'get_info_xml',    title: '۶. getInfoXML',             desc: 'اطلاعات کامل XML — اعتبار، قیمت‌ها و شماره‌های اختصاصی را برمی‌گرداند.',  action: 'get_info_xml' },
 ];
 
+const RAHYAB_REST_TESTS: RahyabTestCard[] = [
+  { id: 'ip',       title: '۱. Test Connection',  desc: 'بررسی اتصال — IP مشاهده‌شده توسط سرور رهیاب را نمایش می‌دهد.',                action: 'ip' },
+  { id: 'get_info', title: '۲. Get Account Info', desc: 'دریافت اطلاعات کامل حساب از GetInfoXML — اعتبار، قیمت‌ها و شماره‌ها.',         action: 'get_info' },
+  { id: 'send',     title: '۳. Send Test SMS',    desc: 'ارسال پیامک آزمایشی با POST — نیاز به شماره موبایل و متن پیام دارد.',           action: 'send', needsPhone: true, needsMessage: true },
+  { id: 'delivery', title: '۴. Delivery Status',  desc: 'وضعیت تحویل — شناسه بازگشتی مرحله ۳ را وارد کنید.',                            action: 'delivery', needsReturnId: true },
+  { id: 'receive',  title: '۵. Receive SMS',      desc: 'دریافت پیامک‌های ورودی — LastRowID را وارد کنید (پیش‌فرض: 0).',                 action: 'receive' },
+];
+
 const DELIVERY_STATUS: Record<number, { label: string; color: string }> = {
   0: { label: 'نامشخص',        color: 'text-gray-500' },
   2: { label: 'تحویل داده شد', color: 'text-green-600' },
@@ -1204,16 +1263,23 @@ function TestTab() {
   const [sendStatus, setSendStatus] = useState<TestStatus>('idle');
   const [sendResult, setSendResult] = useState<any>(null);
 
-  // Rahyab per-card state
+  // Rahyab SOAP per-card state
   const [rahyabStatus, setRahyabStatus] = useState<Record<string, TestStatus>>({});
   const [rahyabResult, setRahyabResult] = useState<Record<string, any>>({});
   const [runningAll, setRunningAll] = useState(false);
+
+  // Rahyab REST per-card state
+  const [rahyabRestStatus, setRahyabRestStatus] = useState<Record<string, TestStatus>>({});
+  const [rahyabRestResult, setRahyabRestResult] = useState<Record<string, any>>({});
+  const [runningAllRest, setRunningAllRest] = useState(false);
+  const [lastRowIdInput, setLastRowIdInput] = useState('0');
 
   // Debug console
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
 
   const selectedProviderObj = providers.find(p => p.id === selectedProvider);
   const isRahyabProvider = selectedProviderObj?.provider_type === 'rahyab';
+  const isRahyabRestProvider = selectedProviderObj?.provider_type === 'rahyab_rest';
 
   useEffect(() => {
     supabase.from('sms_providers').select('*').eq('is_active', true).order('created_at')
@@ -1229,6 +1295,7 @@ function TestTab() {
     setConnResult(null); setSendResult(null);
     setConnStatus('idle'); setSendStatus('idle');
     setRahyabStatus({}); setRahyabResult({});
+    setRahyabRestStatus({}); setRahyabRestResult({});
     setDebugLogs([]);
   };
 
@@ -1334,6 +1401,56 @@ function TestTab() {
     toast.success('همه تست‌های رهیاب رایان اجرا شدند');
   };
 
+  // ── Rahyab REST single test ────────────────────────────────────────
+  const runRahyabRestTest = async (card: RahyabTestCard) => {
+    if (!selectedProvider) { toast.error('ابتدا یک سرویس‌دهنده انتخاب کنید'); return; }
+    if (card.needsPhone && !testPhone.trim()) { toast.error('شماره موبایل الزامی است'); return; }
+    if (card.needsMessage && !testMessage.trim()) { toast.error('متن پیام الزامی است'); return; }
+
+    setRahyabRestStatus(s => ({ ...s, [card.id]: 'loading' }));
+    setRahyabRestResult(r => ({ ...r, [card.id]: null }));
+
+    try {
+      let payload: Record<string, unknown>;
+      if (card.action === 'send') {
+        payload = { action: 'send', to: testPhone.trim(), message: testMessage.trim() };
+      } else if (card.action === 'delivery') {
+        const ids = returnIdInput.trim();
+        if (!ids) { toast.error('شناسه بازگشتی الزامی است'); setRahyabRestStatus(s => ({ ...s, [card.id]: 'idle' })); return; }
+        payload = { action: 'delivery', returnIds: ids };
+      } else if (card.action === 'receive') {
+        payload = { action: 'receive', lastRowId: lastRowIdInput.trim() || '0' };
+      } else {
+        payload = { action: card.action };
+      }
+
+      const result = await callEdge({ mode: 'rahyab_rest_test', providerId: selectedProvider, ...payload });
+      setRahyabRestResult(r => ({ ...r, [card.id]: result }));
+      setRahyabRestStatus(s => ({ ...s, [card.id]: result.ok ? 'ok' : 'error' }));
+
+      if (result.debug?.length) setDebugLogs(prev => [...prev, ...result.debug]);
+      if (card.action === 'send' && result.ok && result.returnId) {
+        setReturnIdInput(result.returnId);
+      }
+    } catch (e: any) {
+      setRahyabRestResult(r => ({ ...r, [card.id]: { error: e.message } }));
+      setRahyabRestStatus(s => ({ ...s, [card.id]: 'error' }));
+    }
+  };
+
+  const runAllRahyabRestTests = async () => {
+    if (!selectedProvider) { toast.error('ابتدا یک سرویس‌دهنده انتخاب کنید'); return; }
+    setRunningAllRest(true);
+    for (const card of RAHYAB_REST_TESTS) {
+      if (card.needsPhone && !testPhone.trim()) continue;
+      if (card.needsMessage && !testMessage.trim()) continue;
+      await runRahyabRestTest(card);
+      await new Promise(r => setTimeout(r, 400));
+    }
+    setRunningAllRest(false);
+    toast.success('همه تست‌های رهیاب رایان REST اجرا شدند');
+  };
+
   // ── Shared UI components ───────────────────────────────────────────
   const StatusBadge = ({ status }: { status: TestStatus }) => {
     if (status === 'idle') return null;
@@ -1427,7 +1544,7 @@ function TestTab() {
               )}
               {providers.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.title}{p.is_default ? ' (پیش‌فرض)' : ''}{p.provider_type === 'rahyab' ? ' — SOAP' : p.line_number ? ` — ${p.line_number}` : ''}
+                  {p.title}{p.is_default ? ' (پیش‌فرض)' : ''}{p.provider_type === 'rahyab' ? ' — SOAP' : p.provider_type === 'rahyab_rest' ? ' — REST' : p.line_number ? ` — ${p.line_number}` : ''}
                 </option>
               ))}
             </select>
@@ -1522,8 +1639,135 @@ function TestTab() {
         </>
       )}
 
+      {/* ── Rahyab REST 5-card test panel ────────────────────────────── */}
+      {isRahyabRestProvider && (
+        <>
+          {/* Shared inputs */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Phone className="w-4 h-4 text-blue-500" />
+              <h4 className="font-semibold text-gray-800 dark:text-white text-sm">اطلاعات مورد نیاز تست‌ها</h4>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شماره موبایل (برای تست ۳)</label>
+                <input className={inp} value={testPhone} onChange={e => setTestPhone(e.target.value)} placeholder="09121234567" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شناسه بازگشتی (برای تست تحویل)</label>
+                <input className={inp} value={returnIdInput} onChange={e => setReturnIdInput(e.target.value)} placeholder="خودکار از تست ارسال پر می‌شود" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">آخرین ردیف دریافت‌شده (برای تست دریافت)</label>
+                <input className={inp} value={lastRowIdInput} onChange={e => setLastRowIdInput(e.target.value)} placeholder="0" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">متن پیامک (برای تست ارسال)</label>
+                <input className={inp} value={testMessage} onChange={e => setTestMessage(e.target.value)} />
+              </div>
+            </div>
+            <button
+              onClick={runAllRahyabRestTests}
+              disabled={runningAllRest || providers.length === 0}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition"
+            >
+              {runningAllRest ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />}
+              {runningAllRest ? 'در حال اجرا...' : 'اجرای همه تست‌ها'}
+            </button>
+          </div>
+
+          {/* 5 test cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {RAHYAB_REST_TESTS.map(card => {
+              const st = rahyabRestStatus[card.id] || 'idle';
+              const result = rahyabRestResult[card.id];
+              const borderCls = st === 'ok' ? 'border-green-200 dark:border-green-800' : st === 'error' ? 'border-red-200 dark:border-red-800' : 'border-gray-100 dark:border-gray-700';
+              const isOk = st === 'ok';
+              return (
+                <div key={card.id} className={`bg-white dark:bg-gray-800 rounded-2xl border p-4 space-y-2 ${borderCls}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-gray-800 dark:text-white text-sm">{card.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{card.desc}</p>
+                    </div>
+                    <StatusBadge status={st} />
+                  </div>
+                  <button
+                    onClick={() => runRahyabRestTest(card)}
+                    disabled={st === 'loading' || runningAllRest}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-xs font-medium transition"
+                  >
+                    {st === 'loading' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
+                    {st === 'loading' ? 'در حال اجرا...' : 'اجرای تست'}
+                  </button>
+                  {result && st !== 'idle' && st !== 'loading' && (
+                    <div className={`mt-2 rounded-xl border p-3 text-xs font-mono leading-relaxed space-y-1 ${isOk ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'}`}>
+                      <p className={`font-bold mb-1 ${isOk ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>{isOk ? 'موفق' : 'خطا'}</p>
+                      {result.error && <p className="text-red-600 dark:text-red-400 break-all"><span className="font-semibold">خطا: </span>{result.error}</p>}
+                      {result.ip && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">IP: </span>{result.ip}</p>}
+                      {result.credit !== undefined && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">اعتبار: </span>{result.credit}</p>}
+                      {result.sent !== undefined && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">ارسال شد به: </span>{result.sent} شماره</p>}
+                      {result.returnIds?.length > 0 && <p className="text-gray-600 dark:text-gray-300 break-all"><span className="font-semibold">ReturnIDs: </span>{result.returnIds.join(', ')}</p>}
+                      {result.delivery && (
+                        <div className="mt-1 space-y-0.5">
+                          <p className="font-semibold text-gray-700 dark:text-gray-300">وضعیت تحویل:</p>
+                          {Object.entries(result.delivery as Record<string, number>).map(([id, code]) => {
+                            const ds = DELIVERY_STATUS[code as number] || { label: `کد ${code}`, color: 'text-gray-500' };
+                            return <p key={id} className={ds.color}><span className="text-gray-500 dark:text-gray-400">{id}: </span>{ds.label}</p>;
+                          })}
+                        </div>
+                      )}
+                      {result.messages !== undefined && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">پیام‌های دریافتی (کلیک)</summary>
+                          <pre className="mt-2 overflow-x-auto text-[11px] text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-all max-h-48">
+                            {JSON.stringify(result.messages, null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                      {result.rawXml && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">پاسخ کامل XML (کلیک)</summary>
+                          <pre className="mt-2 overflow-x-auto text-[11px] text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-all max-h-48">
+                            {result.rawXml}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Rahyab REST help */}
+          <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+              <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">راهنمای رهیاب رایان REST API</p>
+            </div>
+            <ul className="text-xs text-blue-700 dark:text-blue-400 space-y-1.5 list-disc list-inside leading-relaxed">
+              <li>اگر توکن وارد شده باشد، Username برابر توکن و Password یک رشته تصادفی ۵+ کاراکتری ارسال می‌شود</li>
+              <li>تست اتصال IP عمومی Edge Function را برمی‌گرداند — باید با IP مجاز در پنل رهیاب تطابق داشته باشد</li>
+              <li>تست ارسال: شناسه بازگشتی را در فیلد «شناسه بازگشتی» ذخیره می‌کند تا برای تست تحویل آماده باشد</li>
+              <li>تست تحویل: از ReturnID تست ارسال استفاده می‌کند — اگر خالی است ابتدا تست ارسال را اجرا کنید</li>
+              <li>تست دریافت: مقدار lastRowId=0 اولین پیام‌های خوانده‌نشده را برمی‌گرداند</li>
+              <li>خطای اتصال: پورت ۸۴۴۳ ممکن است توسط فایروال بلاک شده باشد — آدرس پایه API را بررسی کنید</li>
+            </ul>
+          </div>
+
+          {/* Debug console */}
+          {debugLogs.length > 0 && (
+            <RequestLogPanel
+              logs={debugLogs}
+              onClear={() => setDebugLogs([])}
+            />
+          )}
+        </>
+      )}
+
       {/* ── REST 2-step test panel ────────────────────────────────────── */}
-      {!isRahyabProvider && (
+      {!isRahyabProvider && !isRahyabRestProvider && (
         <>
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-3">
             <div className="flex items-center justify-between">

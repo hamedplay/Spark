@@ -102,6 +102,182 @@ Deno.serve(async (req: Request) => {
 
     const p = providers[0];
 
+    // ── Route to Rahyab REST if provider_type === 'rahyab_rest' ─────────
+    if (p.provider_type === "rahyab_rest") {
+      const apiBase = (p.api_url || "https://rahyabbulk.ir:8443").replace(/\/$/, "");
+      const token = p.token?.trim() || "";
+      // Per Rahyab docs: when using token, username=token, password=any 5+ char string
+      const effUsername = token || p.username?.trim() || "";
+      const effPassword = token ? "aBcD1" : (p.password?.trim() || "");
+      const fromNumber = p.line_number?.trim() || "";
+
+      if (!effUsername) return json({ ok: false, error: "نام کاربری یا توکن پیکربندی نشده است" }, 400);
+
+      const maskVal = (v: string) => (!v || v.length <= 4) ? "***" : "***" + v.slice(-4);
+      const maskPhone = (v: string) => (!v || v.length <= 4) ? "***" : v.slice(0, 3) + "****" + v.slice(-4);
+
+      type DebugEntry = {
+        soapAction: string; url: string;
+        requestHeaders: Record<string, string>; requestBody: string;
+        requestTimestamp: string; durationMs: number;
+        responseStatus?: number; responseBody?: string;
+        parsedResult?: string; error?: string;
+      };
+
+      const callRest = async (
+        url: string,
+        params: Record<string, string>,
+        method: "GET" | "POST" = "GET",
+      ): Promise<{ ok: boolean; status: number; body: string; durationMs: number; t0: number; error?: string }> => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 13000);
+        const t0 = Date.now();
+        try {
+          let fetchUrl = url;
+          const fetchOpts: RequestInit = {
+            method, signal: controller.signal,
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },
+          };
+          if (method === "GET" && Object.keys(params).length) {
+            fetchUrl += "?" + new URLSearchParams(params).toString();
+          } else if (method === "POST") {
+            fetchOpts.body = new URLSearchParams(params).toString();
+          }
+          const res = await fetch(fetchUrl, fetchOpts);
+          clearTimeout(timer);
+          const text = await res.text();
+          return { ok: res.ok, status: res.status, body: text, durationMs: Date.now() - t0, t0 };
+        } catch (e: any) {
+          clearTimeout(timer);
+          const msg = e?.name === "AbortError" ? "اتصال timeout شد (13s)" : e.message;
+          return { ok: false, status: 0, body: "", durationMs: Date.now() - t0, t0, error: msg };
+        }
+      };
+
+      const buildEntry = (
+        label: string, url: string, method: string,
+        maskedParams: Record<string, string>,
+        r: { ok: boolean; status: number; body: string; durationMs: number; t0: number; error?: string },
+      ): DebugEntry => ({
+        soapAction: `${method} ${label}`,
+        url,
+        requestHeaders: method === "POST" ? { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" } : {},
+        requestBody: new URLSearchParams(maskedParams).toString(),
+        requestTimestamp: new Date(r.t0).toISOString(),
+        durationMs: r.durationMs,
+        responseStatus: r.status || undefined,
+        responseBody: r.body || undefined,
+        parsedResult: r.body?.trim().slice(0, 500) || undefined,
+        error: r.error,
+      });
+
+      const maskedCreds = (extra: Record<string, string> = {}): Record<string, string> => ({
+        username: token ? "***token***" : effUsername,
+        password: maskVal(effPassword),
+        ...extra,
+      });
+
+      // ── test_connection → GET /ip.ashx ────────────────────────────────
+      if (mode === "test_connection") {
+        const url = `${apiBase}/ip.ashx`;
+        const r = await callRest(url, {}, "GET");
+        const dbg = [buildEntry("/ip.ashx", url, "GET", {}, r)];
+        if (!r.ok || r.error) return json({ ok: false, error: r.error || `HTTP ${r.status}`, debug: dbg });
+        return json({ ok: true, ip: r.body?.trim(), debug: dbg });
+      }
+
+      // ── send ──────────────────────────────────────────────────────────
+      if (mode === "send") {
+        const rawMobiles: string[] = body.mobiles || [];
+        const message: string = body.message || "";
+        if (!rawMobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
+        if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" }, 400);
+        if (!fromNumber) return json({ ok: false, error: "شماره فرستنده پیکربندی نشده است" }, 400);
+
+        const url = `${apiBase}/url/send.ashx`;
+        const allIds: string[] = [];
+        const errors: string[] = [];
+
+        for (const to of rawMobiles) {
+          const params: Record<string, string> = {
+            username: effUsername, password: effPassword,
+            from: fromNumber, to: to.trim(), farsi: "true", message,
+          };
+          const r = await callRest(url, params, "POST");
+          const responseBody = (r.body || "").trim();
+          const isOk = r.ok && /^\d+/.test(responseBody);
+          if (isOk) allIds.push(responseBody);
+          else errors.push(`${maskPhone(to)}: ${responseBody || r.error || "ارسال ناموفق"}`);
+        }
+
+        return json({
+          ok: errors.length === 0,
+          sent: allIds.length,
+          returnIds: allIds,
+          errors,
+        });
+      }
+
+      // ── rahyab_rest_test — individual test actions ─────────────────────
+      if (mode === "rahyab_rest_test") {
+        const action: string = body.action || "";
+
+        if (action === "ip") {
+          const url = `${apiBase}/ip.ashx`;
+          const r = await callRest(url, {}, "GET");
+          return json({ ok: !r.error && r.ok, ip: r.body?.trim(), debug: [buildEntry("/ip.ashx", url, "GET", {}, r)] });
+        }
+
+        if (action === "get_info") {
+          const url = `${apiBase}/url/GetInfoXML.ashx`;
+          const params = { username: effUsername, password: effPassword };
+          const r = await callRest(url, params, "POST");
+          const dbg = [buildEntry("/url/GetInfoXML.ashx", url, "POST", maskedCreds(), r)];
+          return json({ ok: !r.error && r.ok, rawResult: r.body, debug: dbg });
+        }
+
+        if (action === "send") {
+          const to: string = body.to || "";
+          const message: string = body.message || "";
+          if (!to) return json({ ok: false, error: "شماره گیرنده وارد نشده" });
+          if (!message) return json({ ok: false, error: "متن پیام وارد نشده" });
+          if (!fromNumber) return json({ ok: false, error: "شماره فرستنده پیکربندی نشده است" });
+
+          const url = `${apiBase}/url/send.ashx`;
+          const params: Record<string, string> = {
+            username: effUsername, password: effPassword,
+            from: fromNumber, to: to.trim(), farsi: "true", message,
+          };
+          const r = await callRest(url, params, "POST");
+          const maskedP = maskedCreds({ from: fromNumber, to: maskPhone(to), farsi: "true", message: message.slice(0, 20) + (message.length > 20 ? "…" : "") });
+          const responseBody = (r.body || "").trim();
+          const isOk = !r.error && r.ok && /^\d+/.test(responseBody);
+          return json({ ok: isOk, returnId: isOk ? responseBody : undefined, rawResult: responseBody, debug: [buildEntry("/url/send.ashx", url, "POST", maskedP, r)] });
+        }
+
+        if (action === "delivery") {
+          const returnIds: string = body.returnIds || "";
+          if (!returnIds.trim()) return json({ ok: false, error: "شناسه بازگشتی وارد نشده" });
+          const url = `${apiBase}/url/delivery.ashx`;
+          const params = { ReturnIDs: returnIds };
+          const r = await callRest(url, params, "GET");
+          return json({ ok: !r.error && r.ok, rawResult: r.body, debug: [buildEntry("/url/delivery.ashx", url, "GET", params, r)] });
+        }
+
+        if (action === "receive") {
+          const lastRowId = String(body.lastRowId ?? "0");
+          const url = `${apiBase}/url/receive.ashx`;
+          const params = { LastRowID: lastRowId };
+          const r = await callRest(url, params, "GET");
+          return json({ ok: !r.error && r.ok, rawResult: r.body, debug: [buildEntry("/url/receive.ashx", url, "GET", params, r)] });
+        }
+
+        return json({ ok: false, error: `عملیات ناشناخته: ${action}` }, 400);
+      }
+
+      return json({ ok: false, error: "mode نامعتبر برای rahyab_rest" }, 400);
+    }
+
     // ── Route to Rahyab if provider_type === 'rahyab' ─────────────────
     if (p.provider_type === "rahyab") {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
