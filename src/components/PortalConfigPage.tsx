@@ -63,6 +63,27 @@ const NAV_ITEMS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Options for known select-type config keys
+const SELECT_OPTIONS: Record<string, { value: string; label: string; description: string }[]> = {
+  ice_transport_policy: [
+    {
+      value: 'auto',
+      label: 'خودکار',
+      description: 'اگر TURN پیکربندی شده باشد فقط از relay استفاده می‌شود، وگرنه همه مسیرها مجاز است.',
+    },
+    {
+      value: 'relay',
+      label: 'فقط TURN (relay)',
+      description: 'همه ترافیک اجباراً از سرور TURN عبور می‌کند. برای شبکه‌های محدود یا پشت فایروال.',
+    },
+    {
+      value: 'all',
+      label: 'همه مسیرها (all)',
+      description: 'هر مسیر ICE (host، srflx، relay) مجاز است. سریع‌ترین اتصال اما نیاز به شبکه باز دارد.',
+    },
+  ],
+};
+
 // ─── ConfigField ──────────────────────────────────────────────────────────────
 function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: string, value: string) => void }) {
   const [val, setVal] = useState(entry.value ?? '');
@@ -73,6 +94,8 @@ function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: strin
   const change = (v: string) => { setVal(v); setDirty(v !== (entry.value ?? '')); };
 
   const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
+
+  const selectOptions = entry.value_type === 'select' ? (SELECT_OPTIONS[entry.key] ?? []) : [];
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -85,7 +108,9 @@ function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: strin
           </button>
         )}
       </div>
-      {entry.description && <p className="text-xs text-gray-400 dark:text-gray-500">{entry.description}</p>}
+      {entry.description && entry.value_type !== 'select' && (
+        <p className="text-xs text-gray-400 dark:text-gray-500">{entry.description}</p>
+      )}
       {entry.value_type === 'boolean' ? (
         <button onClick={() => { const n = val === 'true' ? 'false' : 'true'; change(n); onSave(entry.id, n); }}
           className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${val === 'true' ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
@@ -108,6 +133,34 @@ function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: strin
         <input type="number" value={val} onChange={e => change(e.target.value)} className={inputCls} />
       ) : entry.value_type === 'time' ? (
         <input type="time" value={val} onChange={e => change(e.target.value)} className={inputCls} />
+      ) : entry.value_type === 'select' && selectOptions.length > 0 ? (
+        <div className="flex flex-col gap-2" dir="rtl">
+          {selectOptions.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => { change(opt.value); onSave(entry.id, opt.value); }}
+              className={`w-full text-right px-3.5 py-2.5 rounded-xl border-2 transition-all ${
+                val === opt.value
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700 bg-white dark:bg-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                  val === opt.value ? 'border-blue-500' : 'border-gray-300 dark:border-gray-500'
+                }`}>
+                  {val === opt.value && <span className="w-2 h-2 rounded-full bg-blue-500" />}
+                </span>
+                <span className={`text-sm font-semibold ${val === opt.value ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}`}>
+                  {opt.label}
+                </span>
+              </div>
+              <p className={`text-xs mt-1 mr-6 text-right leading-relaxed ${val === opt.value ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                {opt.description}
+              </p>
+            </button>
+          ))}
+        </div>
       ) : (
         <input type="text" value={val} onChange={e => change(e.target.value)} className={inputCls} />
       )}
@@ -1096,7 +1149,14 @@ export function PortalConfigPage({ currentUserId }: Props) {
         return (
           <div className="space-y-5">
             <SectionCard title="تنظیمات ویدیو کنفرانس" icon={Video} color="teal">
-              {cfgs('video_conference').map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
+              {cfgs('video_conference').filter(c => c.key !== 'ice_transport_policy').map(c => (
+                <ConfigField key={c.id} entry={c} onSave={saveConfig} />
+              ))}
+              {cfgs('video_conference').filter(c => c.key === 'ice_transport_policy').map(c => (
+                <div key={c.id} className="md:col-span-2">
+                  <ConfigField entry={c} onSave={saveConfig} />
+                </div>
+              ))}
             </SectionCard>
             <IceTesterPanel configs={cfgs('video_conference')} />
           </div>
