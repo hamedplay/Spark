@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users, Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2, Crown, Pin, X, Copy, Check, Smile, ChartBar as BarChart2, PenTool, Volume2, VolumeX, Activity, UserPlus, ShieldAlert, UserX, Mic as Mic2, ChevronUp, ChevronDown, ArrowRightLeft, SlidersHorizontal, LayoutGrid, MonitorPlay, PanelRight, ShieldCheck, ShieldOff, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { getSharedRTCConfig } from '../../lib/rtcConfig';
 import { startDiagnostics, stopDiagnostics, stopAllDiagnostics, attemptICERestart } from '../../lib/webrtcDiagnostics';
 import toast from 'react-hot-toast';
 import type {
@@ -23,78 +24,6 @@ import type { VideoQuality } from './SettingsPanel';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const MAX_PARTICIPANTS = 20;
-
-// Build ICE server list from env — fallback for local dev
-function buildRTCConfig(): RTCConfiguration {
-  const host = import.meta.env.VITE_TURN_HOST;
-  const username = import.meta.env.VITE_TURN_USERNAME;
-  const credential = import.meta.env.VITE_TURN_PASSWORD;
-
-  const iceServers: RTCIceServer[] = [];
-
-  if (host && username && credential) {
-    iceServers.push({
-      urls: [
-        `turn:${host}:3478?transport=udp`,
-        `turn:${host}:3478?transport=tcp`,
-        `turns:${host}:5349`,
-      ],
-      username,
-      credential,
-    });
-  }
-
-  return {
-    iceServers,
-    iceCandidatePoolSize: 10,
-    iceTransportPolicy: iceServers.length > 0 ? 'relay' : 'all',
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-  };
-}
-
-// Build RTCConfig from system_config DB values
-export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfiguration {
-  const turnServerUrl = cfg['turn_server']?.trim() || '';
-  const username = cfg['turn_username']?.trim() || '';
-  const credential = cfg['turn_credential']?.trim() || '';
-  const stunServersStr = cfg['stun_servers']?.trim() || '';
-
-  const iceServers: RTCIceServer[] = [];
-
-  if (stunServersStr) {
-    const stunUrls = stunServersStr.split(',').map((s: string) => s.trim()).filter(Boolean);
-    if (stunUrls.length) iceServers.push({ urls: stunUrls });
-  }
-
-  if (turnServerUrl && username && credential) {
-    // Strip scheme prefix (turn: or turns:) to extract bare host:port
-    const bare = turnServerUrl.replace(/^turns?:\/?\/?/i, '').replace(/^turns?:/i, '').split('?')[0];
-    iceServers.push({
-      urls: [
-        `turn:${bare}?transport=udp`,
-        `turn:${bare}?transport=tcp`,
-        `turns:${bare}`,
-      ],
-      username,
-      credential,
-    });
-  }
-
-  const hasRelay = iceServers.some(s =>
-    (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some(u => /^turns?:/i.test(u))
-  );
-
-  return {
-    iceServers,
-    iceCandidatePoolSize: 10,
-    iceTransportPolicy: hasRelay ? 'relay' : 'all',
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-  };
-}
-
-const FALLBACK_RTC_CONFIG: RTCConfiguration = buildRTCConfig();
 
 function calculateBitrate(width: number, height: number, fps: number) {
   const pixels = width * height;
@@ -201,22 +130,14 @@ interface Props {
 // ── Main component ────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 export function ConferenceRoomView({ room, currentUserId, currentUserName, myPeerId, localStream, onLeave, onInvite }: Props) {
-  // ── RTCConfig — loaded from system_config on mount, env vars as fallback
-  const rtcConfigRef = useRef<RTCConfiguration>(FALLBACK_RTC_CONFIG);
+  // ── RTCConfig — loaded from system_config via shared cache on mount
+  const rtcConfigRef = useRef<RTCConfiguration>({
+    iceServers: [], iceTransportPolicy: 'all',
+    iceCandidatePoolSize: 10, bundlePolicy: 'max-bundle', rtcpMuxPolicy: 'require',
+  });
 
   useEffect(() => {
-    supabase
-      .from('system_config')
-      .select('key,value')
-      .eq('section', 'video_conference')
-      .then(({ data }) => {
-        if (!data) return;
-        const cfg = Object.fromEntries(data.map((r: { key: string; value: string | null }) => [r.key, r.value ?? '']));
-        const built = buildRTCConfigFromDB(cfg);
-        if ((built.iceServers as RTCIceServer[]).length > 0) {
-          rtcConfigRef.current = built;
-        }
-      });
+    getSharedRTCConfig().then(cfg => { rtcConfigRef.current = cfg; });
   }, []);
   const [media, dispatch] = useReducer(mediaReducer, {
     isMuted: false, isVideoOff: false, isHandRaised: false,

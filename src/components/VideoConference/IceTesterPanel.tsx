@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Play, Square, CircleCheck as CheckCircle, Circle as XCircle, CircleAlert as AlertCircle, Wifi, WifiOff, Loader as Loader2, Trash2 } from 'lucide-react';
-import { buildRTCConfigFromDB } from './ConferenceRoom';
+import { buildRTCConfigFromDB } from '../../lib/rtcConfig';
 
 interface ConfigEntry { id: string; section: string; key: string; value: string | null; value_type: string; label: string | null; description: string | null; }
 

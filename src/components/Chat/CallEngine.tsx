@@ -4,6 +4,7 @@ import {
   Minimize2, User,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { getSharedRTCConfig } from '../../lib/rtcConfig';
 import type { UserProfile } from './types';
 
 export interface CallSession {
@@ -28,11 +29,6 @@ interface Props {
   session: CallSession;
   onEnd: () => void;
 }
-
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-];
 
 // iOS Safari detection
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
@@ -258,8 +254,9 @@ export function CallEngine({ currentUserId, otherUser, callType, mode, session, 
       localVideoRef.current.play().catch(() => {});
     }
 
-    // Build PeerConnection
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
+    // Build PeerConnection using shared config from system_config
+    const rtcConfig = await getSharedRTCConfig();
+    const pc = new RTCPeerConnection(rtcConfig);
     pcRef.current = pc;
 
     // Add tracks
