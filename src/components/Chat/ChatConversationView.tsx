@@ -132,8 +132,9 @@ export function ChatConversationView({
         .from('user_presence')
         .upsert({
           user_id: currentUserId,
-          last_seen: new Date().toISOString()
-        });
+          last_seen: new Date().toISOString(),
+          is_online: true,
+        }, { onConflict: 'user_id' });
     };
     updatePresence();
     const interval = setInterval(updatePresence, 20000);

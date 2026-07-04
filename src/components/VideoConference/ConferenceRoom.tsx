@@ -135,9 +135,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     iceServers: [], iceTransportPolicy: 'all',
     iceCandidatePoolSize: 10, bundlePolicy: 'max-bundle', rtcpMuxPolicy: 'require',
   });
+  const rtcConfigReadyRef = useRef<Promise<void>>(
+    getSharedRTCConfig().then(cfg => { rtcConfigRef.current = cfg; })
+  );
 
   useEffect(() => {
-    getSharedRTCConfig().then(cfg => { rtcConfigRef.current = cfg; });
+    rtcConfigReadyRef.current = getSharedRTCConfig().then(cfg => { rtcConfigRef.current = cfg; });
   }, []);
   const [media, dispatch] = useReducer(mediaReducer, {
     isMuted: false, isVideoOff: false, isHandRaised: false,
@@ -563,7 +566,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     channelRef.current?.send({ type: 'broadcast', event: 'signal', payload });
   }, [currentUserId, currentUserName, room.id]);
 
-  const buildPC = useCallback((remotePeerId: string, remoteUserId: string, remoteDisplayName: string): RTCPeerConnection => {
+  const buildPC = useCallback(async (remotePeerId: string, remoteUserId: string, remoteDisplayName: string): Promise<RTCPeerConnection> => {
+    await rtcConfigReadyRef.current;
     const pc = new RTCPeerConnection(rtcConfigRef.current);
 
     localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
@@ -629,7 +633,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     return pc;
   }, [sendSignal]);
 
-  const getPC = useCallback((remotePeerId: string, remoteUserId: string, remoteDisplayName: string): RTCPeerConnection => {
+  const getPC = useCallback(async (remotePeerId: string, remoteUserId: string, remoteDisplayName: string): Promise<RTCPeerConnection> => {
     const cur = peersRef.current.get(remotePeerId);
     if (cur && cur.pc.connectionState !== 'failed' && cur.pc.connectionState !== 'closed') return cur.pc;
     return buildPC(remotePeerId, remoteUserId, remoteDisplayName);
@@ -645,7 +649,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   }, []);
 
   const makeOffer = useCallback(async (remotePeerId: string, remoteUserId: string, remoteDisplayName: string) => {
-    const pc = getPC(remotePeerId, remoteUserId, remoteDisplayName);
+    const pc = await getPC(remotePeerId, remoteUserId, remoteDisplayName);
     if (pc.signalingState !== 'stable') return;
     try {
       const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
@@ -688,11 +692,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           if (myPeerIdRef.current < from) {
             await makeOfferRef.current(from, from_user_id, from_name);
           } else {
-            getPCRef.current(from, from_user_id, from_name);
+            await getPCRef.current(from, from_user_id, from_name);
           }
 
         } else if (type === 'offer') {
-          const pc = getPCRef.current(from, from_user_id, from_name);
+          const pc = await getPCRef.current(from, from_user_id, from_name);
           try {
             if (pc.signalingState === 'have-local-offer') {
               if (myPeerIdRef.current < from) {
@@ -809,6 +813,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       })();
     })
     .subscribe(async (status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        // Realtime channel dropped — rejoin after a short delay
+        setTimeout(() => ch.subscribe(), 3000);
+        return;
+      }
       if (status !== 'SUBSCRIBED') return;
 
       sendSignalRef.current(null, 'join', { userId: currentUserId, displayName: currentUserName, peerId: myPeerId });
@@ -828,7 +837,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           if (myPeerIdRef.current < p.peer_id) {
             await makeOfferRef.current(p.peer_id, p.user_id, p.display_name);
           } else {
-            const existingPC = getPCRef.current(p.peer_id, p.user_id, p.display_name);
+            const existingPC = await getPCRef.current(p.peer_id, p.user_id, p.display_name);
             setTimeout(async () => {
               if (!existingPC.remoteDescription && existingPC.signalingState === 'stable') {
                 await makeOfferRef.current(p.peer_id, p.user_id, p.display_name);
