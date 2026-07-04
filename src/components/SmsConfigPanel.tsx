@@ -1257,6 +1257,7 @@ function TestTab() {
       const result = await callEdge({ mode: 'test_connection', providerId: selectedProvider });
       setConnResult(result);
       setConnStatus(result.ok ? 'ok' : 'error');
+      if (result.debug?.length) { setDebugLogs(prev => [...prev, ...result.debug]); setShowDebug(true); }
       if (result.ok) toast.success('اتصال به سرویس پیامک برقرار است');
       else toast.error('خطا در اتصال: ' + (result.error || ''));
     } catch (e: any) {
@@ -1273,6 +1274,7 @@ function TestTab() {
       const result = await callEdge({ mode: 'send', providerId: selectedProvider, mobiles: [testPhone.trim()], message: testMessage.trim() });
       setSendResult(result);
       setSendStatus(result.ok ? 'ok' : 'error');
+      if (result.debug?.length) { setDebugLogs(prev => [...prev, ...result.debug]); setShowDebug(true); }
       if (result.ok) toast.success(`پیامک تست ارسال شد — شناسه بسته: ${result.packId || '—'}`);
       else toast.error('خطا در ارسال: ' + (result.error || ''));
     } catch (e: any) {
@@ -1600,6 +1602,27 @@ function TestTab() {
               <li>خطای اتصال: Edge Function نمی‌تواند به api.sms.ir متصل شود — سرویس Supabase را بررسی کنید</li>
             </ul>
           </div>
+
+          {/* Debug console toggle + panel */}
+          {debugLogs.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowDebug(v => !v)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-sm transition mb-3"
+                dir="ltr"
+              >
+                <Terminal className="w-4 h-4 text-teal-400" />
+                {showDebug ? 'Hide Debug Console' : 'Show Debug Console'}
+                <span className="ml-1 text-xs bg-gray-700 text-teal-400 px-1.5 py-0.5 rounded-full font-mono">{debugLogs.length}</span>
+              </button>
+              {showDebug && (
+                <RequestLogPanel
+                  logs={debugLogs}
+                  onClear={() => { setDebugLogs([]); setShowDebug(false); }}
+                />
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

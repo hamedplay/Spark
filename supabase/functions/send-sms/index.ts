@@ -149,28 +149,61 @@ Deno.serve(async (req: Request) => {
 
     // ── MODE: test_connection ─────────────────────────────────────────
     if (mode === "test_connection") {
+      const reqUrl = `${baseUrl}/v1/credit`;
+      const reqHeaders = { "Accept": "application/json", "X-API-KEY": `***${apiKey.slice(-4)}` };
+      const reqTimestamp = new Date().toISOString();
+      const t0 = Date.now();
+
       let creditRaw: Response;
       try {
-        creditRaw = await fetch(`${baseUrl}/v1/credit`, {
+        creditRaw = await fetch(reqUrl, {
           headers: { "Accept": "application/json", "X-API-KEY": apiKey },
         });
       } catch (e: any) {
-        return json({ ok: false, error: `خطای اتصال: ${e.message}` });
+        const durationMs = Date.now() - t0;
+        const debugEntry = {
+          soapAction: "GET /v1/credit",
+          url: reqUrl,
+          requestHeaders: reqHeaders,
+          requestBody: "",
+          requestTimestamp: reqTimestamp,
+          durationMs,
+          error: e.message,
+        };
+        return json({ ok: false, error: `خطای اتصال: ${e.message}`, debug: [debugEntry] });
       }
 
+      const durationMs = Date.now() - t0;
       const text = await creditRaw.text();
+      const responseHeaders: Record<string, string> = {};
+      creditRaw.headers.forEach((v, k) => { responseHeaders[k] = v; });
+
       let data: any;
       try { data = JSON.parse(text); } catch { data = { rawText: text }; }
 
+      const debugEntry = {
+        soapAction: "GET /v1/credit",
+        url: reqUrl,
+        requestHeaders: reqHeaders,
+        requestBody: "",
+        requestTimestamp: reqTimestamp,
+        durationMs,
+        responseStatus: creditRaw.status,
+        responseHeaders,
+        responseBody: text,
+        parsedResult: JSON.stringify(data),
+        error: !creditRaw.ok ? (data?.message || `HTTP ${creditRaw.status}`) : (data?.status !== 1 ? (data?.message || "پاسخ غیرمنتظره") : undefined),
+      };
+
       if (!creditRaw.ok) {
         return json({ ok: false, httpStatus: creditRaw.status, response: data,
-          error: data?.message || `HTTP ${creditRaw.status}` });
+          error: data?.message || `HTTP ${creditRaw.status}`, debug: [debugEntry] });
       }
       if (data?.status !== 1) {
         return json({ ok: false, response: data,
-          error: data?.message || "پاسخ غیرمنتظره از سرور" });
+          error: data?.message || "پاسخ غیرمنتظره از سرور", debug: [debugEntry] });
       }
-      return json({ ok: true, credit: data.data, response: data });
+      return json({ ok: true, credit: data.data, response: data, debug: [debugEntry] });
     }
 
     // ── MODE: send (likeToLike) ───────────────────────────────────────
@@ -211,33 +244,71 @@ Deno.serve(async (req: Request) => {
       sendDateTime,
     };
 
+    const sendReqUrl = `${baseUrl}/v1/send/likeToLike`;
+    const sendReqHeaders = {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "X-API-KEY": `***${apiKey.slice(-4)}`,
+    };
+    const sendReqBody = JSON.stringify(payload);
+    const sendReqTimestamp = new Date().toISOString();
+    const sendT0 = Date.now();
+
     let smsRaw: Response;
     try {
-      smsRaw = await fetch(`${baseUrl}/v1/send/likeToLike`, {
+      smsRaw = await fetch(sendReqUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "X-API-KEY": apiKey,
         },
-        body: JSON.stringify(payload),
+        body: sendReqBody,
       });
     } catch (e: any) {
-      return json({ ok: false, error: `خطای اتصال به سرور: ${e.message}` });
+      const durationMs = Date.now() - sendT0;
+      const debugEntry = {
+        soapAction: "POST /v1/send/likeToLike",
+        url: sendReqUrl,
+        requestHeaders: sendReqHeaders,
+        requestBody: sendReqBody,
+        requestTimestamp: sendReqTimestamp,
+        durationMs,
+        error: e.message,
+      };
+      return json({ ok: false, error: `خطای اتصال به سرور: ${e.message}`, debug: [debugEntry] });
     }
 
+    const sendDurationMs = Date.now() - sendT0;
     const text = await smsRaw.text();
+    const sendResponseHeaders: Record<string, string> = {};
+    smsRaw.headers.forEach((v, k) => { sendResponseHeaders[k] = v; });
+
     let smsData: any;
     try { smsData = JSON.parse(text); } catch { smsData = { rawText: text }; }
 
+    const sendDebugEntry = {
+      soapAction: "POST /v1/send/likeToLike",
+      url: sendReqUrl,
+      requestHeaders: sendReqHeaders,
+      requestBody: sendReqBody,
+      requestTimestamp: sendReqTimestamp,
+      durationMs: sendDurationMs,
+      responseStatus: smsRaw.status,
+      responseHeaders: sendResponseHeaders,
+      responseBody: text,
+      parsedResult: JSON.stringify(smsData),
+      error: !smsRaw.ok ? (smsData?.message || `HTTP ${smsRaw.status}`) : (smsData?.status !== 1 ? (smsData?.message || "ارسال ناموفق") : undefined),
+    };
+
     if (!smsRaw.ok) {
       return json({ ok: false, httpStatus: smsRaw.status, response: smsData,
-        error: smsData?.message || `HTTP ${smsRaw.status}` });
+        error: smsData?.message || `HTTP ${smsRaw.status}`, debug: [sendDebugEntry] });
     }
 
     if (smsData?.status !== 1) {
       return json({ ok: false, response: smsData,
-        error: smsData?.message || "ارسال ناموفق" });
+        error: smsData?.message || "ارسال ناموفق", debug: [sendDebugEntry] });
     }
 
     return json({
@@ -247,6 +318,7 @@ Deno.serve(async (req: Request) => {
       messageIds: smsData.data?.messageIds,
       cost: smsData.data?.cost,
       response: smsData,
+      debug: [sendDebugEntry],
     });
 
   } catch (err: any) {
