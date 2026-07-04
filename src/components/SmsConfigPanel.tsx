@@ -103,7 +103,7 @@ function ProviderForm({ provider, onSave, onCancel }: {
   };
   const blankRahyabRest: Partial<SmsProvider> = {
     title: '', provider_name: 'rahyab_rest', provider_type: 'rahyab_rest', is_public_gateway: false,
-    api_url: 'https://rahyabbulk.ir:8443', api_key: '', line_number: '',
+    api_url: 'https://rahyabbulk.ir:8443/', api_key: '', line_number: '',
     sender_number: '', is_active: false, username: '', password: '', token: '', is_default: false,
   };
 
@@ -194,8 +194,8 @@ function ProviderForm({ provider, onSave, onCancel }: {
           placeholder={isRahyab ? 'مثال: رهیاب رایان اصلی' : 'مثال: sms.ir اصلی'} />
       </div>
 
-      {/* REST fields */}
-      {!isRahyab && (
+      {/* REST fields (sms.ir only — not shown for rahyab SOAP or rahyab REST) */}
+      {!isRahyab && !isRahyabRest && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">کلید API (X-API-KEY) *</label>
@@ -286,9 +286,10 @@ function ProviderForm({ provider, onSave, onCancel }: {
                 placeholder="اگر توکن دارید اینجا وارد کنید" dir="ltr" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">نام کاربری *</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">نام کاربری {form.token?.trim() ? '(نادیده گرفته می‌شود — توکن فعال است)' : '*'}</label>
               <input className={inp} value={form.username || ''} onChange={e => set('username', e.target.value)}
-                placeholder="نام کاربری پنل رهیاب" dir="ltr" />
+                placeholder="نام کاربری پنل رهیاب" dir="ltr"
+                disabled={!!form.token?.trim()} />
             </div>
             <div className="relative">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">کلمه عبور *</label>
@@ -307,7 +308,7 @@ function ProviderForm({ provider, onSave, onCancel }: {
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">آدرس پایه API</label>
               <input className={inp} value={form.api_url || ''} onChange={e => set('api_url', e.target.value)} dir="ltr" />
-              <p className="text-xs text-gray-400 mt-1 font-mono">پیش‌فرض: https://rahyabbulk.ir:8443</p>
+              <p className="text-xs text-gray-400 mt-1 font-mono">پیش‌فرض: https://rahyabbulk.ir:8443/</p>
             </div>
           </div>
         </div>
