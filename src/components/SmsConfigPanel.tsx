@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, EllipsisVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText, Terminal, Inbox as InboxIcon } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, EllipsisVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText, Terminal } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { DebugLog, RequestLogPanel } from './RahyabConfigPanel';
@@ -57,22 +57,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-sm [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white';
 
-async function callEdge(body: object): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const res = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token || anonKey}`,
-      'Apikey': anonKey,
-    },
-    body: JSON.stringify(body),
-  });
-  return res.json();
-}
-
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ value, onChange, color = 'bg-green-500' }: { value: boolean; onChange: (v: boolean) => void; color?: string }) {
   return (
@@ -89,7 +73,6 @@ const TABS = [
   { key: 'groups',     label: 'گروه‌بندی پیامک',  icon: GroupIcon },
   { key: 'templates',  label: 'قالب پیام‌ها',     icon: FileText },
   { key: 'test',       label: 'تست سامانه',        icon: FlaskConical },
-  { key: 'inbox',      label: 'صندوق دریافت',      icon: InboxIcon },
   { key: 'reports',    label: 'گزارش ارسال',       icon: BarChart2 },
 ];
 
@@ -1250,6 +1233,22 @@ function TestTab() {
     setDebugLogs([]); setShowDebug(false);
   };
 
+  const callEdge = async (body: object) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const res = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || anonKey}`,
+        'Apikey': anonKey,
+      },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  };
+
   // ── REST tests ─────────────────────────────────────────────────────
   const testConnection = async () => {
     if (!selectedProvider) { toast.error('ابتدا یک سرویس‌دهنده انتخاب کنید'); return; }
@@ -1608,154 +1607,7 @@ function TestTab() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  TAB 5 — Rahyab Inbox
-// ════════════════════════════════════════════════════════════════════
-
-interface InboxMessage {
-  id: string;
-  row_id: number;
-  sender: string;
-  receiver: string;
-  message: string;
-  received_at: string;
-  is_read: boolean;
-}
-
-function InboxTab() {
-  const [messages, setMessages] = useState<InboxMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(false);
-  const [lastRowId, setLastRowId] = useState(0);
-  const [rahyabProviderId, setRahyabProviderId] = useState<string>('');
-
-  const loadFromDb = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('rahyab_inbox')
-      .select('*')
-      .order('received_at', { ascending: false })
-      .limit(200);
-    setMessages((data as InboxMessage[]) ?? []);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    supabase.from('sms_providers')
-      .select('id')
-      .eq('provider_type', 'rahyab')
-      .eq('is_active', true)
-      .order('is_default', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => { if (data?.id) setRahyabProviderId(data.id); });
-    loadFromDb();
-  }, []);
-
-  const fetchNew = async () => {
-    if (!rahyabProviderId) { toast.error('سرویس‌دهنده رهیاب فعالی یافت نشد'); return; }
-    setFetching(true);
-    try {
-      const result = await callEdge({
-        mode: 'rahyab_test',
-        providerId: rahyabProviderId,
-        rahyabPayload: { action: 'receive', lastRowId },
-      });
-      if (result.ok) {
-        if (result.count > 0) {
-          setLastRowId(result.nextRowId ?? lastRowId);
-          toast.success(`${result.count} پیام جدید دریافت شد`);
-          await loadFromDb();
-        } else {
-          toast('پیام جدیدی وجود ندارد', { icon: '📭' });
-        }
-      } else {
-        toast.error(result.error || 'خطا در دریافت پیام');
-      }
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-    setFetching(false);
-  };
-
-  const markRead = async (id: string) => {
-    await supabase.from('rahyab_inbox').update({ is_read: true }).eq('id', id);
-    setMessages(m => m.map(msg => msg.id === id ? { ...msg, is_read: true } : msg));
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">صندوق دریافت رهیاب رایان</p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {messages.length} پیام — {messages.filter(m => !m.is_read).length} خوانده نشده
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={loadFromDb} disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            بروزرسانی
-          </button>
-          <button onClick={fetchNew} disabled={fetching || !rahyabProviderId}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition">
-            {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <InboxIcon className="w-4 h-4" />}
-            {fetching ? 'در حال دریافت...' : 'دریافت پیام جدید'}
-          </button>
-        </div>
-      </div>
-
-      {!rahyabProviderId && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
-          <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-          <p className="text-sm text-amber-700 dark:text-amber-300">سرویس‌دهنده رهیاب رایان فعالی یافت نشد. ابتدا در تب «سرویس‌دهندگان» یک سرویس‌دهنده رهیاب فعال تعریف کنید.</p>
-        </div>
-      )}
-
-      {loading && messages.length === 0 && (
-        <div className="py-16 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-300" /></div>
-      )}
-
-      {!loading && messages.length === 0 && (
-        <div className="py-16 text-center bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
-          <InboxIcon className="w-10 h-10 text-gray-200 dark:text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">صندوق دریافت خالی است</p>
-          {rahyabProviderId && (
-            <button onClick={fetchNew} disabled={fetching}
-              className="mt-3 text-sm text-teal-500 hover:text-teal-600 font-medium">
-              دریافت پیام‌های جدید
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {messages.map(msg => (
-          <div key={msg.id}
-            onClick={() => !msg.is_read && markRead(msg.id)}
-            className={`bg-white dark:bg-gray-800 rounded-2xl border p-4 transition cursor-pointer hover:border-gray-200 dark:hover:border-gray-600 ${msg.is_read ? 'border-gray-100 dark:border-gray-700' : 'border-teal-200 dark:border-teal-800 bg-teal-50/30 dark:bg-teal-900/10'}`}
-          >
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-200 font-mono" dir="ltr">{msg.sender}</span>
-                {!msg.is_read && <span className="w-2 h-2 rounded-full bg-teal-500 flex-shrink-0" />}
-              </div>
-              <span className="text-xs text-gray-400 flex-shrink-0" dir="ltr">
-                {new Date(msg.received_at).toLocaleString('fa-IR')}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{msg.message}</p>
-            <p className="text-xs text-gray-300 dark:text-gray-600 mt-1 font-mono" dir="ltr">به: {msg.receiver}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  TAB 6 — SMS Dispatch Reports
+//  TAB 5 — SMS Dispatch Reports
 // ════════════════════════════════════════════════════════════════════
 
 interface DispatchLog {
@@ -2023,7 +1875,7 @@ function ReportsTab() {
 //  Main SmsConfigPanel
 // ════════════════════════════════════════════════════════════════════
 export function SmsConfigPanel() {
-  const [tab, setTab] = useState<'providers' | 'groups' | 'templates' | 'test' | 'inbox' | 'reports'>('providers');
+  const [tab, setTab] = useState<'providers' | 'groups' | 'templates' | 'test' | 'reports'>('providers');
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -2047,7 +1899,6 @@ export function SmsConfigPanel() {
       {tab === 'groups'     && <GroupsTab />}
       {tab === 'templates'  && <TemplatesTab />}
       {tab === 'test'       && <TestTab />}
-      {tab === 'inbox'      && <InboxTab />}
       {tab === 'reports'    && <ReportsTab />}
     </div>
   );
