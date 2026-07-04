@@ -352,24 +352,24 @@ export function CalendarViews(p: CalendarViewProps) {
         onMouseUp={e => { e.stopPropagation(); if (!dragMovedRef.current) { setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0); } }}
         onClick={e => { e.stopPropagation(); handleBlockClick(meeting, e); }}
       >
-        <div className="px-2 py-1 h-full flex flex-col gap-0.5 overflow-hidden">
+        <div className="px-1 py-0.5 sm:px-2 sm:py-1 h-full flex flex-col gap-0.5 overflow-hidden">
           {!isTiny && (
-            <div className="flex items-center gap-0.5 flex-shrink-0">
+            <div className="hidden sm:flex items-center gap-0.5 flex-shrink-0">
               <Clock className="w-2.5 h-2.5 text-white/70 flex-shrink-0" />
               <span className="text-white/90 text-[10px] font-medium leading-none">{toFarsiTime(dispStart)} – {toFarsiTime(dispEnd)}</span>
             </div>
           )}
-          <div className={`text-white font-semibold leading-tight ${isCompact ? 'text-[11px]' : 'text-xs'} ${isTiny ? 'truncate' : 'line-clamp-2'} flex-shrink-0`}>
+          <div className={`text-white font-semibold leading-tight ${isCompact ? 'text-[10px] sm:text-[11px]' : 'text-[11px] sm:text-xs'} ${isTiny ? 'truncate' : 'line-clamp-2'} flex-shrink-0`}>
             {meeting.subject}
           </div>
           {!isCompact && meeting.location && (
-            <div className="flex items-center gap-0.5 flex-shrink-0">
+            <div className="hidden sm:flex items-center gap-0.5 flex-shrink-0">
               <MapPin className="w-2.5 h-2.5 text-white/60 flex-shrink-0" />
               <span className="text-white/75 text-[10px] truncate">{meeting.location}</span>
             </div>
           )}
           {!isCompact && participantCount > 0 && (
-            <div className="flex items-center gap-0.5 mt-auto flex-shrink-0">
+            <div className="hidden sm:flex items-center gap-0.5 mt-auto flex-shrink-0">
               <div className="flex items-center gap-0.5 bg-white/20 rounded-full px-1.5 py-0.5">
                 <svg className="w-2.5 h-2.5 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 <span className="text-[9px] text-white/90 font-medium">{participantCount}</span>
@@ -598,9 +598,9 @@ export function CalendarViews(p: CalendarViewProps) {
           {weekDays.map(d => {
             const hasHol = getOccasionsForDay(d.jy, d.jm, d.jd).some((o: any) => o.is_holiday);
             return (
-              <div key={d.weekday} className={`text-center py-2 border-r border-gray-100 dark:border-gray-700 ${(d.weekday === 6 || hasHol) ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                <div className="text-xs font-medium">{JALAALI_WEEKDAYS[d.weekday]}</div>
-                <div className={`text-xl font-semibold mt-0.5 w-9 h-9 inline-flex items-center justify-center rounded-full ${isToday(d.jy, d.jm, d.jd) ? 'bg-blue-500 text-white' : 'dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'}`}
+              <div key={d.weekday} className={`text-center py-1.5 sm:py-2 border-r border-gray-100 dark:border-gray-700 ${(d.weekday === 6 || hasHol) ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                <div className="text-[10px] sm:text-xs font-medium">{JALAALI_WEEKDAYS[d.weekday]}</div>
+                <div className={`text-base sm:text-xl font-semibold mt-0.5 w-7 h-7 sm:w-9 sm:h-9 inline-flex items-center justify-center rounded-full ${isToday(d.jy, d.jm, d.jd) ? 'bg-blue-500 text-white' : 'dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'}`}
                   onClick={() => { setSelectedJy(d.jy); setSelectedJm(d.jm); setSelectedJd(d.jd); setViewMode('day'); }}>
                   {d.jd}
                 </div>
@@ -722,13 +722,13 @@ export function CalendarViews(p: CalendarViewProps) {
     <div className="flex flex-col flex-1 overflow-hidden mx-3 mb-3 mt-1 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-sm">
       <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
         {JALAALI_WEEKDAYS.map((d, i) => (
-          <div key={d} className={`text-center text-xs font-medium py-2 ${i === 6 ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>{d}</div>
+          <div key={d} className={`text-center text-[10px] sm:text-xs font-medium py-1.5 sm:py-2 ${i === 6 ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>{d}</div>
         ))}
       </div>
       <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900">
         <div className="grid grid-cols-7">
           {mainMonthDays.map((day, idx) => {
-            if (day === null) return <div key={`e${idx}`} className="min-h-[90px] bg-gray-50/50 dark:bg-gray-800/50 border-b border-r border-gray-100 dark:border-gray-700" />;
+            if (day === null) return <div key={`e${idx}`} className="min-h-[60px] sm:min-h-[90px] bg-gray-50/50 dark:bg-gray-800/50 border-b border-r border-gray-100 dark:border-gray-700" />;
             const dm = getMeetings(currentJy, currentJm, day);
             const isTd = isToday(currentJy, currentJm, day);
             const isSel = isSelected(currentJy, currentJm, day);
@@ -744,21 +744,26 @@ export function CalendarViews(p: CalendarViewProps) {
                     setMonthDayPopup({ jy: currentJy, jm: currentJm, jd: day, x: rect.left, y: rect.bottom });
                   }
                 }}
-                className={`min-h-[90px] p-1 border-b border-r border-gray-100 dark:border-gray-700 cursor-pointer transition-colors hover:bg-blue-50/40 dark:hover:bg-blue-900/10 ${isSel ? 'bg-blue-50 dark:bg-blue-900/20' : hasHoliday ? 'bg-red-50/40 dark:bg-red-900/10' : ''}`}>
-                <span className={`text-xs font-medium w-6 h-6 inline-flex items-center justify-center rounded-full ${isTd ? 'bg-blue-500 text-white' : (isFri || hasHoliday) ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>{day}</span>
+                className={`min-h-[60px] sm:min-h-[90px] p-0.5 sm:p-1 border-b border-r border-gray-100 dark:border-gray-700 cursor-pointer transition-colors hover:bg-blue-50/40 dark:hover:bg-blue-900/10 ${isSel ? 'bg-blue-50 dark:bg-blue-900/20' : hasHoliday ? 'bg-red-50/40 dark:bg-red-900/10' : ''}`}>
+                <span className={`text-[10px] sm:text-xs font-medium w-5 h-5 sm:w-6 sm:h-6 inline-flex items-center justify-center rounded-full ${isTd ? 'bg-blue-500 text-white' : (isFri || hasHoliday) ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>{day}</span>
                 {dayOcc.length > 0 && (
                   <div className="space-y-0.5 mt-0.5">
                     {dayOcc.slice(0, 1).map((o: any) => (
-                      <div key={o.id} title={o.title} className={`text-[9px] px-1 py-0.5 rounded truncate font-medium leading-tight ${o.is_holiday ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' : o.is_celebration ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>{o.title}</div>
+                      <div key={o.id} title={o.title} className={`text-[8px] sm:text-[9px] px-0.5 sm:px-1 py-0.5 rounded truncate font-medium leading-tight ${o.is_holiday ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' : o.is_celebration ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>{o.title}</div>
                     ))}
                   </div>
                 )}
                 <div className="space-y-0.5 mt-0.5">
                   {dm.slice(0, 2).map(m => {
                     const c = getMeetingColor(m);
-                    return <div key={m.id} className="text-[10px] px-1.5 py-0.5 rounded text-white truncate font-medium" style={{ backgroundColor: c }}>{m.start_time ? toFarsiTime(m.start_time) + ' ' : ''}{m.subject}</div>;
+                    return (
+                      <div key={m.id} className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded text-white truncate font-medium" style={{ backgroundColor: c }}>
+                        <span className="hidden sm:inline">{m.start_time ? toFarsiTime(m.start_time) + ' ' : ''}</span>
+                        {m.subject}
+                      </div>
+                    );
                   })}
-                  {dm.length > 2 && <div className="text-[10px] text-blue-500 dark:text-blue-400 px-1 font-medium">+{dm.length - 2} دیگر</div>}
+                  {dm.length > 2 && <div className="text-[9px] sm:text-[10px] text-blue-500 dark:text-blue-400 px-0.5 sm:px-1 font-medium">+{dm.length - 2}</div>}
                 </div>
               </div>
             );
