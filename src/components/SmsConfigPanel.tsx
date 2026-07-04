@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, EllipsisVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText, Terminal } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, RefreshCw, Eye, EyeOff, Globe, Phone, User, Lock, ChevronDown, Info, CreditCard as Edit2, EllipsisVertical as MoreVertical, Group as GroupIcon, CircleAlert as AlertCircle, Wifi, WifiOff, Send, FlaskConical, ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { DebugLog, RequestLogPanel } from './RahyabConfigPanel';
@@ -1211,7 +1211,6 @@ function TestTab() {
 
   // Debug console
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
-  const [showDebug, setShowDebug] = useState(false);
 
   const selectedProviderObj = providers.find(p => p.id === selectedProvider);
   const isRahyabProvider = selectedProviderObj?.provider_type === 'rahyab';
@@ -1230,7 +1229,7 @@ function TestTab() {
     setConnResult(null); setSendResult(null);
     setConnStatus('idle'); setSendStatus('idle');
     setRahyabStatus({}); setRahyabResult({});
-    setDebugLogs([]); setShowDebug(false);
+    setDebugLogs([]);
   };
 
   const callEdge = async (body: object) => {
@@ -1257,7 +1256,7 @@ function TestTab() {
       const result = await callEdge({ mode: 'test_connection', providerId: selectedProvider });
       setConnResult(result);
       setConnStatus(result.ok ? 'ok' : 'error');
-      if (result.debug?.length) { setDebugLogs(prev => [...prev, ...result.debug]); setShowDebug(true); }
+      if (result.debug?.length) { setDebugLogs(prev => [...prev, ...result.debug]); }
       if (result.ok) toast.success('اتصال به سرویس پیامک برقرار است');
       else toast.error('خطا در اتصال: ' + (result.error || ''));
     } catch (e: any) {
@@ -1274,7 +1273,7 @@ function TestTab() {
       const result = await callEdge({ mode: 'send', providerId: selectedProvider, mobiles: [testPhone.trim()], message: testMessage.trim() });
       setSendResult(result);
       setSendStatus(result.ok ? 'ok' : 'error');
-      if (result.debug?.length) { setDebugLogs(prev => [...prev, ...result.debug]); setShowDebug(true); }
+      if (result.debug?.length) { setDebugLogs(prev => [...prev, ...result.debug]); }
       if (result.ok) toast.success(`پیامک تست ارسال شد — شناسه بسته: ${result.packId || '—'}`);
       else toast.error('خطا در ارسال: ' + (result.error || ''));
     } catch (e: any) {
@@ -1310,7 +1309,6 @@ function TestTab() {
       // collect debug logs
       if (result.debug?.length) {
         setDebugLogs(prev => [...prev, ...result.debug]);
-        setShowDebug(true);
       }
 
       // auto-populate returnId from send result
@@ -1514,25 +1512,12 @@ function TestTab() {
             </ul>
           </div>
 
-          {/* Debug console toggle + panel */}
+          {/* Debug console */}
           {debugLogs.length > 0 && (
-            <div>
-              <button
-                onClick={() => setShowDebug(v => !v)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-sm transition mb-3"
-                dir="ltr"
-              >
-                <Terminal className="w-4 h-4 text-teal-400" />
-                {showDebug ? 'Hide Debug Console' : 'Show Debug Console'}
-                <span className="ml-1 text-xs bg-gray-700 text-teal-400 px-1.5 py-0.5 rounded-full font-mono">{debugLogs.length}</span>
-              </button>
-              {showDebug && (
-                <RequestLogPanel
-                  logs={debugLogs}
-                  onClear={() => { setDebugLogs([]); setShowDebug(false); }}
-                />
-              )}
-            </div>
+            <RequestLogPanel
+              logs={debugLogs}
+              onClear={() => setDebugLogs([])}
+            />
           )}
         </>
       )}
@@ -1603,25 +1588,12 @@ function TestTab() {
             </ul>
           </div>
 
-          {/* Debug console toggle + panel */}
+          {/* Debug console */}
           {debugLogs.length > 0 && (
-            <div>
-              <button
-                onClick={() => setShowDebug(v => !v)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-sm transition mb-3"
-                dir="ltr"
-              >
-                <Terminal className="w-4 h-4 text-teal-400" />
-                {showDebug ? 'Hide Debug Console' : 'Show Debug Console'}
-                <span className="ml-1 text-xs bg-gray-700 text-teal-400 px-1.5 py-0.5 rounded-full font-mono">{debugLogs.length}</span>
-              </button>
-              {showDebug && (
-                <RequestLogPanel
-                  logs={debugLogs}
-                  onClear={() => { setDebugLogs([]); setShowDebug(false); }}
-                />
-              )}
-            </div>
+            <RequestLogPanel
+              logs={debugLogs}
+              onClear={() => setDebugLogs([])}
+            />
           )}
         </>
       )}
