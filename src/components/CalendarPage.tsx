@@ -48,6 +48,7 @@ export function CalendarPage({
 }: CalendarPageProps) {
   const { prefs, updatePrefs, loading: prefsLoading } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const p = localStorage.getItem('user_prefs_calendar_view') as ViewMode | null;
     return p ?? 'week';
@@ -594,6 +595,8 @@ export function CalendarPage({
   };
 
   const fetchMeetings = useCallback(async (jy?: number, jm?: number) => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { console.log('[CalendarPage] fetchMeetings: no user, returning'); return; }
@@ -667,7 +670,8 @@ export function CalendarPage({
       });
       setMeetings(filtered);
     } catch { toast.error('خطا در دریافت جلسات'); }
-  }, [currentJy, currentJm]);
+    finally { setIsRefreshing(false); }
+  }, [currentJy, currentJm, isRefreshing]);
 
   // Keep ref in sync so real-time callbacks always call latest version
   useEffect(() => { fetchMeetingsRef.current = () => fetchMeetings(); }, [fetchMeetings]);
@@ -1931,7 +1935,7 @@ export function CalendarPage({
                 </div>
               )}
             </div>
-            <button onClick={fetchMeetings} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0"><RefreshCw className="w-4 h-4 text-gray-500 dark:text-gray-400" /></button>
+            <button onClick={() => fetchMeetings()} disabled={isRefreshing} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"><RefreshCw className={`w-4 h-4 text-gray-500 dark:text-gray-400 ${isRefreshing ? 'animate-spin' : ''}`} /></button>
             <button onClick={navigatePrev} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0"><ChevronRight className="w-5 h-5 dark:text-white" /></button>
             <button onClick={navigateNext} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0"><ChevronLeft className="w-5 h-5 dark:text-white" /></button>
             <h2 className="text-sm sm:text-base font-semibold dark:text-white flex-1 text-center min-w-0 truncate">{getNavTitle()}</h2>
