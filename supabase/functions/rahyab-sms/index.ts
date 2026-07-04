@@ -44,17 +44,45 @@ function extractResult(xml: string, action: string): string {
     .trim();
 }
 
+function maskSensitive(value: string): string {
+  if (!value) return '';
+  if (value.length <= 4) return '***';
+  return '***' + value.slice(-4);
+}
+
+function maskXml(xml: string, keysToMask: string[]): string {
+  let result = xml;
+  for (const key of keysToMask) {
+    result = result.replace(
+      new RegExp(`(<${key}[^>]*>)([\\s\\S]*?)(</${key}>)`, 'gi'),
+      (_, open, val, close) => `${open}${maskSensitive(val.trim())}${close}`,
+    );
+  }
+  return result;
+}
+
 async function callSoap(
   url: string,
   action: string,
   params: Record<string, string>,
   timeoutMs = 20000,
-): Promise<{ ok: boolean; result: string; rawXml?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  result: string;
+  rawXml?: string;
+  error?: string;
+  responseStatus?: number;
+  responseHeaders?: Record<string, string>;
+  durationMs?: number;
+  requestTimestamp?: string;
+}> {
   const soapAction = `http://tempuri.org/${action}`;
   const body = soapEnvelope(action, params);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const t0 = Date.now();
+  const requestTimestamp = new Date().toISOString();
 
   try {
     const res = await fetch(url, {
@@ -67,16 +95,20 @@ async function callSoap(
       signal: controller.signal,
     });
     clearTimeout(timer);
+    const durationMs = Date.now() - t0;
     const rawXml = await res.text();
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => { responseHeaders[k] = v; });
     if (!res.ok) {
-      return { ok: false, result: "", rawXml, error: `HTTP ${res.status}` };
+      return { ok: false, result: "", rawXml, error: `HTTP ${res.status}`, responseStatus: res.status, responseHeaders, durationMs, requestTimestamp };
     }
     const result = extractResult(rawXml, action);
-    return { ok: true, result, rawXml };
+    return { ok: true, result, rawXml, responseStatus: res.status, responseHeaders, durationMs, requestTimestamp };
   } catch (e: any) {
     clearTimeout(timer);
+    const durationMs = Date.now() - t0;
     const msg = e?.name === "AbortError" ? "اتصال به وب‌سرویس زمان‌بر شد (timeout)" : e.message;
-    return { ok: false, result: "", error: msg };
+    return { ok: false, result: "", error: msg, durationMs, requestTimestamp };
   }
 }
 
@@ -286,7 +318,11 @@ Deno.serve(async (req: Request) => {
         soapAction: "doGetInfo",
         url: soapUrl,
         requestHeaders,
-        requestBody: soapBody,
+        requestBody: maskXml(soapBody, ["uPassword"]),
+        requestTimestamp: soap.requestTimestamp,
+        durationMs: soap.durationMs,
+        responseStatus: soap.responseStatus,
+        responseHeaders: soap.responseHeaders,
         responseBody: soap.rawXml,
         parsedResult: soap.result || undefined,
         error: soap.error,
@@ -318,7 +354,10 @@ Deno.serve(async (req: Request) => {
         url: string;
         requestHeaders: Record<string, string>;
         requestBody: string;
+        requestTimestamp?: string;
+        durationMs?: number;
         responseStatus?: number;
+        responseHeaders?: Record<string, string>;
         responseBody?: string;
         parsedResult?: string;
         error?: string;
@@ -349,7 +388,11 @@ Deno.serve(async (req: Request) => {
             soapAction: "doSendSMS",
             url: soapUrl,
             requestHeaders,
-            requestBody: soapBody,
+            requestBody: maskXml(soapBody, ["uPassword"]),
+            requestTimestamp: soap.requestTimestamp,
+            durationMs: soap.durationMs,
+            responseStatus: soap.responseStatus,
+            responseHeaders: soap.responseHeaders,
             responseBody: soap.rawXml,
             parsedResult: soap.result,
             error: soap.error,
