@@ -58,6 +58,8 @@ function SettingsTab() {
   const [testing, setTesting] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
+  const [showLog, setShowLog] = useState(false);
 
   useEffect(() => {
     callRahyab('load_settings')
@@ -85,8 +87,11 @@ function SettingsTab() {
   const testConnection = async () => {
     setTesting(true);
     setTestResult(null);
+    setDebugLogs([]);
+    setShowLog(false);
     try {
-      const d = await callRahyab('test');
+      const d = await callRahyab('test', { debug: true });
+      if (d.debug) { setDebugLogs(d.debug); setShowLog(true); }
       if (d.ok) {
         setTestResult({ ok: true, msg: `اتصال موفق — اعتبار: ${d.credit} | انقضا: ${d.expireDate}` });
       } else {
@@ -176,7 +181,19 @@ function SettingsTab() {
           {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           {testing ? 'در حال تست...' : 'تست اتصال'}
         </button>
+        {debugLogs.length > 0 && (
+          <button
+            onClick={() => setShowLog(v => !v)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-sm transition"
+            dir="ltr"
+          >
+            <Terminal className="w-4 h-4" />
+            {showLog ? 'Hide Log' : 'Show Log'}
+          </button>
+        )}
       </div>
+
+      {showLog && debugLogs.length > 0 && <RequestLogPanel logs={debugLogs} />}
     </div>
   );
 }

@@ -274,11 +274,28 @@ Deno.serve(async (req: Request) => {
 
     // ── get_info / test ───────────────────────────────────────────────────────
     if (action === "get_info" || action === "test") {
-      const soap = await callSoap(soapUrl, "doGetInfo", { uUsername, uPassword });
-      if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP" });
+      const debugMode: boolean = body.debug === true;
+      const soapParams = { uUsername, uPassword };
+      const soapBody = soapEnvelope("doGetInfo", soapParams);
+      const requestHeaders = {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": `"http://tempuri.org/doGetInfo"`,
+      };
+      const soap = await callSoap(soapUrl, "doGetInfo", soapParams);
+      const debugEntry = debugMode ? {
+        soapAction: "doGetInfo",
+        url: soapUrl,
+        requestHeaders,
+        requestBody: soapBody,
+        responseBody: soap.rawXml,
+        parsedResult: soap.result || undefined,
+        error: soap.error,
+      } : null;
+      const dbg = debugEntry ? { debug: [debugEntry] } : {};
+      if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP", ...dbg });
       const info = parseGetInfo(soap.result);
-      if (!info.ok) return json({ ok: false, error: info.error ?? "احراز هویت ناموفق" });
-      return json({ ok: true, credit: info.credit, expireDate: info.expireDate });
+      if (!info.ok) return json({ ok: false, error: info.error ?? "احراز هویت ناموفق", ...dbg });
+      return json({ ok: true, credit: info.credit, expireDate: info.expireDate, ...dbg });
     }
 
     // ── send ──────────────────────────────────────────────────────────────────
