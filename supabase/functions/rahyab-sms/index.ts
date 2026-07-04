@@ -287,6 +287,7 @@ Deno.serve(async (req: Request) => {
       const message: string = body.message ?? "";
       const isFarsi: boolean = body.isFarsi !== false;
       const isFlash: boolean = body.isFlash === true;
+      const debugMode: boolean = body.debug === true;
 
       if (!mobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
       if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" }, 400);
@@ -295,10 +296,20 @@ Deno.serve(async (req: Request) => {
       const CHUNK = 100;
       const allIds: string[] = [];
       const errors: string[] = [];
+      const debugLogs: Array<{
+        soapAction: string;
+        url: string;
+        requestHeaders: Record<string, string>;
+        requestBody: string;
+        responseStatus?: number;
+        responseBody?: string;
+        parsedResult?: string;
+        error?: string;
+      }> = [];
 
       for (let i = 0; i < mobiles.length; i += CHUNK) {
         const chunk = mobiles.slice(i, i + CHUNK);
-        const soap = await callSoap(soapUrl, "doSendSMS", {
+        const soapParams = {
           uUsername, uPassword, uNumber,
           uCellphones: chunk.join(";"),
           uMessage: message,
@@ -306,7 +317,27 @@ Deno.serve(async (req: Request) => {
           uTopic: "false",
           uFlash: isFlash ? "true" : "false",
           uUDH: "",
-        });
+        };
+        const soapBody = soapEnvelope("doSendSMS", soapParams);
+        const soapActionHeader = `"http://tempuri.org/doSendSMS"`;
+        const requestHeaders = {
+          "Content-Type": "text/xml; charset=utf-8",
+          "SOAPAction": soapActionHeader,
+        };
+
+        const soap = await callSoap(soapUrl, "doSendSMS", soapParams);
+
+        if (debugMode) {
+          debugLogs.push({
+            soapAction: "doSendSMS",
+            url: soapUrl,
+            requestHeaders,
+            requestBody: soapBody,
+            responseBody: soap.rawXml,
+            parsedResult: soap.result,
+            error: soap.error,
+          });
+        }
 
         if (!soap.ok) { errors.push(soap.error ?? "خطای SOAP"); continue; }
         const parsed = parseSendOk(soap.result);
@@ -318,7 +349,13 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      return json({ ok: errors.length === 0, sent: allIds.length, returnIds: allIds, errors });
+      return json({
+        ok: errors.length === 0,
+        sent: allIds.length,
+        returnIds: allIds,
+        errors,
+        ...(debugMode ? { debug: debugLogs } : {}),
+      });
     }
 
     // ── receive ───────────────────────────────────────────────────────────────
