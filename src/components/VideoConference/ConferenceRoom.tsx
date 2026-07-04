@@ -24,7 +24,7 @@ import type { VideoQuality } from './SettingsPanel';
 
 const MAX_PARTICIPANTS = 20;
 
-// Build ICE server list from env — only self-hosted TURN, no external STUN
+// Build ICE server list from env — fallback for local dev
 function buildRTCConfig(): RTCConfiguration {
   const host = import.meta.env.VITE_TURN_HOST;
   const username = import.meta.env.VITE_TURN_USERNAME;
@@ -42,9 +42,6 @@ function buildRTCConfig(): RTCConfiguration {
       username,
       credential,
     });
-  } else {
-    // Fallback for local dev without TURN configured — log a warning
-    console.warn('[WebRTC] VITE_TURN_HOST/USERNAME/PASSWORD not set. ICE will rely on direct connectivity only.');
   }
 
   return {
@@ -56,7 +53,48 @@ function buildRTCConfig(): RTCConfiguration {
   };
 }
 
-const RTC_CONFIG: RTCConfiguration = buildRTCConfig();
+// Build RTCConfig from system_config DB values
+export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfiguration {
+  const turnServerUrl = cfg['turn_server']?.trim() || '';
+  const username = cfg['turn_username']?.trim() || '';
+  const credential = cfg['turn_credential']?.trim() || '';
+  const stunServersStr = cfg['stun_servers']?.trim() || '';
+
+  const iceServers: RTCIceServer[] = [];
+
+  if (stunServersStr) {
+    const stunUrls = stunServersStr.split(',').map((s: string) => s.trim()).filter(Boolean);
+    if (stunUrls.length) iceServers.push({ urls: stunUrls });
+  }
+
+  if (turnServerUrl && username && credential) {
+    // Strip scheme prefix (turn: or turns:) to extract bare host:port
+    const bare = turnServerUrl.replace(/^turns?:\/?\/?/i, '').replace(/^turns?:/i, '').split('?')[0];
+    iceServers.push({
+      urls: [
+        `turn:${bare}?transport=udp`,
+        `turn:${bare}?transport=tcp`,
+        `turns:${bare}`,
+      ],
+      username,
+      credential,
+    });
+  }
+
+  const hasRelay = iceServers.some(s =>
+    (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some(u => /^turns?:/i.test(u))
+  );
+
+  return {
+    iceServers,
+    iceCandidatePoolSize: 10,
+    iceTransportPolicy: hasRelay ? 'relay' : 'all',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+  };
+}
+
+const FALLBACK_RTC_CONFIG: RTCConfiguration = buildRTCConfig();
 
 function calculateBitrate(width: number, height: number, fps: number) {
   const pixels = width * height;
@@ -163,7 +201,23 @@ interface Props {
 // ── Main component ────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 export function ConferenceRoomView({ room, currentUserId, currentUserName, myPeerId, localStream, onLeave, onInvite }: Props) {
-  // ── Media state (reducer eliminates scattered setters + prevents race conditions)
+  // ── RTCConfig — loaded from system_config on mount, env vars as fallback
+  const rtcConfigRef = useRef<RTCConfiguration>(FALLBACK_RTC_CONFIG);
+
+  useEffect(() => {
+    supabase
+      .from('system_config')
+      .select('key,value')
+      .eq('section', 'video_conference')
+      .then(({ data }) => {
+        if (!data) return;
+        const cfg = Object.fromEntries(data.map((r: { key: string; value: string | null }) => [r.key, r.value ?? '']));
+        const built = buildRTCConfigFromDB(cfg);
+        if ((built.iceServers as RTCIceServer[]).length > 0) {
+          rtcConfigRef.current = built;
+        }
+      });
+  }, []);
   const [media, dispatch] = useReducer(mediaReducer, {
     isMuted: false, isVideoOff: false, isHandRaised: false,
     isScreenSharing: false, isSpeakerMuted: false,
@@ -589,7 +643,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   }, [currentUserId, currentUserName, room.id]);
 
   const buildPC = useCallback((remotePeerId: string, remoteUserId: string, remoteDisplayName: string): RTCPeerConnection => {
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection(rtcConfigRef.current);
 
     localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
 

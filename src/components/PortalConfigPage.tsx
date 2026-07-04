@@ -16,6 +16,7 @@ import { SystemMonitoringPage } from './SystemMonitoringPage';
 
 import { AuditLogPage } from './AuditLogPage';
 import { BackupPanel } from './BackupPanel';
+import { IceTesterPanel } from './VideoConference/IceTesterPanel';
 interface ConfigEntry { id: string; section: string; key: string; value: string | null; value_type: string; label: string | null; description: string | null; }
 interface AuditEntry { id: string; user_name: string | null; ip_address: string | null; user_agent: string | null; module: string | null; entity_name: string | null; action: string; details: string | null; severity: string; created_at: string; }
 interface Profile { user_id: string; full_name: string | null; email: string | null; is_admin: boolean | null; is_active: boolean | null; created_at: string | null; avatar_url?: string | null; department?: string | null; position?: string | null; }
@@ -1097,6 +1098,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
             <SectionCard title="تنظیمات ویدیو کنفرانس" icon={Video} color="teal">
               {cfgs('video_conference').map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
+            <IceTesterPanel configs={cfgs('video_conference')} />
           </div>
         );
 
