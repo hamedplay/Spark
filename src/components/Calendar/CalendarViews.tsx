@@ -352,24 +352,28 @@ export function CalendarViews(p: CalendarViewProps) {
         onMouseUp={e => { e.stopPropagation(); if (!dragMovedRef.current) { setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0); } }}
         onClick={e => { e.stopPropagation(); handleBlockClick(meeting, e); }}
       >
-        <div className="px-1 py-0.5 sm:px-2 sm:py-1 h-full flex flex-col gap-0.5 overflow-hidden">
+        <div className="px-2 py-1 h-full flex flex-col gap-0.5 overflow-hidden">
           {!isTiny && (
-            <div className="hidden sm:flex items-center gap-0.5 flex-shrink-0">
+            <div className={`${viewMode === 'week' ? 'hidden sm:flex' : 'flex'} items-center gap-0.5 flex-shrink-0`}>
               <Clock className="w-2.5 h-2.5 text-white/70 flex-shrink-0" />
               <span className="text-white/90 text-[10px] font-medium leading-none">{toFarsiTime(dispStart)} – {toFarsiTime(dispEnd)}</span>
             </div>
           )}
-          <div className={`text-white font-semibold leading-tight ${isCompact ? 'text-[7px] sm:text-[11px]' : 'text-[7px] sm:text-xs'} ${isTiny ? 'truncate sm:truncate' : 'break-words sm:line-clamp-2'} flex-shrink-0`}>
+          <div className={`text-white font-semibold leading-tight ${
+            viewMode === 'week'
+              ? (isCompact ? 'text-[7px] sm:text-[11px]' : 'text-[7px] sm:text-xs')
+              : (isCompact ? 'text-[11px]' : 'text-xs')
+          } ${isTiny ? 'truncate' : viewMode === 'week' ? 'break-words sm:line-clamp-2' : 'line-clamp-2'} flex-shrink-0`}>
             {meeting.subject}
           </div>
           {!isCompact && meeting.location && (
-            <div className="hidden sm:flex items-center gap-0.5 flex-shrink-0">
+            <div className={`${viewMode === 'week' ? 'hidden sm:flex' : 'flex'} items-center gap-0.5 flex-shrink-0`}>
               <MapPin className="w-2.5 h-2.5 text-white/60 flex-shrink-0" />
               <span className="text-white/75 text-[10px] truncate">{meeting.location}</span>
             </div>
           )}
           {!isCompact && participantCount > 0 && (
-            <div className="hidden sm:flex items-center gap-0.5 mt-auto flex-shrink-0">
+            <div className={`${viewMode === 'week' ? 'hidden sm:flex' : 'flex'} items-center gap-0.5 mt-auto flex-shrink-0`}>
               <div className="flex items-center gap-0.5 bg-white/20 rounded-full px-1.5 py-0.5">
                 <svg className="w-2.5 h-2.5 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 <span className="text-[9px] text-white/90 font-medium">{participantCount}</span>
