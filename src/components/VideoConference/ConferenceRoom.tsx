@@ -568,25 +568,43 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   const buildPC = useCallback(async (remotePeerId: string, remoteUserId: string, remoteDisplayName: string): Promise<RTCPeerConnection> => {
     await rtcConfigReadyRef.current;
+    console.log(`[WRTCDiag] buildPC → peer=${remotePeerId} name="${remoteDisplayName}" rtcConfig=`, JSON.stringify(rtcConfigRef.current));
     const pc = new RTCPeerConnection(rtcConfigRef.current);
 
+    const localTracks = localStreamRef.current.getTracks();
+    console.log(`[WRTCDiag] addTrack × ${localTracks.length} → peer=${remotePeerId}`, localTracks.map(t => `${t.kind}:${t.id}:enabled=${t.enabled}`));
     localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
 
     // تنظیم اولویت codec پس از addTrack
     setPreferredCodecs(pc);
 
     pc.ontrack = (e) => {
+      console.log(`[WRTCDiag] ontrack ← peer=${remotePeerId} track.kind=${e.track.kind} track.id=${e.track.id} streams.length=${e.streams.length} stream0_id=${e.streams[0]?.id ?? 'NONE'}`);
       const stream = e.streams[0];
-      if (!stream) return;
+      if (!stream) {
+        console.warn(`[WRTCDiag] ontrack: e.streams[0] is undefined for peer=${remotePeerId} — stream will NOT be set`);
+        return;
+      }
       const cur = peersRef.current.get(remotePeerId);
-      if (cur) { peersRef.current.set(remotePeerId, { ...cur, stream }); setPeers(new Map(peersRef.current)); }
+      if (cur) {
+        console.log(`[WRTCDiag] ontrack: setting stream on peer=${remotePeerId} stream.id=${stream.id} tracks=`, stream.getTracks().map(t => `${t.kind}:${t.id}`));
+        peersRef.current.set(remotePeerId, { ...cur, stream }); setPeers(new Map(peersRef.current));
+      } else {
+        console.warn(`[WRTCDiag] ontrack: peer=${remotePeerId} NOT found in peersRef — stream dropped`);
+      }
     };
 
     pc.onicecandidate = (e) => {
-      if (e.candidate) sendSignal(remotePeerId, 'ice', { candidate: e.candidate.toJSON() });
+      if (e.candidate) {
+        console.log(`[WRTCDiag] onicecandidate → SEND to peer=${remotePeerId} type=${e.candidate.type} protocol=${e.candidate.protocol} address=${e.candidate.address}`);
+        sendSignal(remotePeerId, 'ice', { candidate: e.candidate.toJSON() });
+      } else {
+        console.log(`[WRTCDiag] onicecandidate: gathering complete (null candidate) for peer=${remotePeerId} iceGatheringState=${pc.iceGatheringState}`);
+      }
     };
 
     pc.onconnectionstatechange = () => {
+      console.log(`[WRTCDiag] connectionState → peer=${remotePeerId} state=${pc.connectionState}`);
       const cur = peersRef.current.get(remotePeerId);
       if (cur) { peersRef.current.set(remotePeerId, { ...cur, connectionState: pc.connectionState }); setPeers(new Map(peersRef.current)); }
       if (pc.connectionState === 'connected') toast.success(`${remoteDisplayName} وارد شد`);
@@ -621,6 +639,18 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[WRTCDiag] iceConnectionState → peer=${remotePeerId} state=${pc.iceConnectionState}`);
+    };
+
+    pc.onsignalingstatechange = () => {
+      console.log(`[WRTCDiag] signalingState → peer=${remotePeerId} state=${pc.signalingState}`);
+    };
+
+    pc.onicegatheringstatechange = () => {
+      console.log(`[WRTCDiag] iceGatheringState → peer=${remotePeerId} state=${pc.iceGatheringState}`);
+    };
+
     const conn: PeerConnection = { peerId: remotePeerId, userId: remoteUserId, displayName: remoteDisplayName, pc, stream: null, screenStream: null, isScreenSharing: false, isMuted: false, isVideoOff: false, isHandRaised: false, connectionState: 'new', networkQuality: 'good', speakingSeconds: 0, audioLevel: 0 };
     peersRef.current.set(remotePeerId, conn);
     setPeers(new Map(peersRef.current));
@@ -641,19 +671,28 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   const flushICE = useCallback(async (remotePeerId: string) => {
     const q = iceCandidateQueue.current.get(remotePeerId) || [];
+    console.log(`[WRTCDiag] flushICE: peer=${remotePeerId} queued=${q.length} hasRemoteDesc=${!!peersRef.current.get(remotePeerId)?.pc?.remoteDescription}`);
     if (!q.length) return;
     const pc = peersRef.current.get(remotePeerId)?.pc;
     if (!pc?.remoteDescription) return;
-    for (const c of q) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+    for (const c of q) await pc.addIceCandidate(new RTCIceCandidate(c)).catch((err) => {
+      console.warn(`[WRTCDiag] flushICE addIceCandidate failed peer=${remotePeerId}`, err);
+    });
     iceCandidateQueue.current.delete(remotePeerId);
+    console.log(`[WRTCDiag] flushICE: flushed ${q.length} queued candidates for peer=${remotePeerId}`);
   }, []);
 
   const makeOffer = useCallback(async (remotePeerId: string, remoteUserId: string, remoteDisplayName: string) => {
     const pc = await getPC(remotePeerId, remoteUserId, remoteDisplayName);
-    if (pc.signalingState !== 'stable') return;
+    console.log(`[WRTCDiag] makeOffer → peer=${remotePeerId} signalingState=${pc.signalingState}`);
+    if (pc.signalingState !== 'stable') {
+      console.warn(`[WRTCDiag] makeOffer SKIPPED — signalingState=${pc.signalingState} peer=${remotePeerId}`);
+      return;
+    }
     try {
       const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
       await pc.setLocalDescription(offer);
+      console.log(`[WRTCDiag] makeOffer: offer created and set, SENDING to peer=${remotePeerId}`);
       sendSignalRef.current(remotePeerId, 'offer', { sdp: pc.localDescription });
     } catch (e) { console.error('makeOffer failed', e); }
   }, [getPC]);
@@ -684,6 +723,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       (async () => {
         if (type === 'join') {
+          console.log(`[WRTCDiag] RECV join ← from=${from} name="${from_name}" myPeerId=${myPeerIdRef.current} willOffer=${myPeerIdRef.current < from}`);
           // Reject new peers if room is at capacity
           if (peersRef.current.size >= MAX_PARTICIPANTS - 1) {
             console.warn(`[WebRTC] Ignoring join from ${from_name} — room at capacity (${MAX_PARTICIPANTS})`);
@@ -696,38 +736,62 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           }
 
         } else if (type === 'offer') {
+          console.log(`[WRTCDiag] RECV offer ← from=${from} name="${from_name}" iceRestart=${data.iceRestart ?? false}`);
           const pc = await getPCRef.current(from, from_user_id, from_name);
+          console.log(`[WRTCDiag] offer: pc.signalingState=${pc.signalingState} peer=${from}`);
           try {
             if (pc.signalingState === 'have-local-offer') {
               if (myPeerIdRef.current < from) {
+                console.log(`[WRTCDiag] offer: rollback local offer for peer=${from}`);
                 await pc.setLocalDescription({ type: 'rollback' } as RTCSessionDescriptionInit);
-              } else { return; }
+              } else {
+                console.warn(`[WRTCDiag] offer: SKIPPED (glare resolution) peer=${from} myPeerId=${myPeerIdRef.current}`);
+                return;
+              }
             }
-            if (pc.signalingState !== 'stable') return;
+            if (pc.signalingState !== 'stable') {
+              console.warn(`[WRTCDiag] offer: SKIPPED signalingState=${pc.signalingState} peer=${from}`);
+              return;
+            }
             await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            console.log(`[WRTCDiag] offer: setRemoteDescription done, creating answer for peer=${from}`);
             await flushICERef.current(from);
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
+            console.log(`[WRTCDiag] SEND answer → to=${from}`);
             sendSignalRef.current(from, 'answer', { sdp: pc.localDescription });
           } catch (e) { console.error('offer error', e); }
 
         } else if (type === 'answer') {
+          console.log(`[WRTCDiag] RECV answer ← from=${from} signalingState=${peersRef.current.get(from)?.pc.signalingState}`);
           const cur = peersRef.current.get(from);
           if (cur?.pc.signalingState === 'have-local-offer') {
-            try { await cur.pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); await flushICERef.current(from); }
+            try {
+              await cur.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+              console.log(`[WRTCDiag] answer: setRemoteDescription done for peer=${from}`);
+              await flushICERef.current(from);
+            }
             catch (e) { console.error('answer error', e); }
+          } else {
+            console.warn(`[WRTCDiag] answer: IGNORED — pc not found or signalingState=${peersRef.current.get(from)?.pc.signalingState} for peer=${from}`);
           }
 
         } else if (type === 'ice') {
           const cur = peersRef.current.get(from);
           if (cur?.pc) {
             if (cur.pc.remoteDescription) {
-              cur.pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+              console.log(`[WRTCDiag] RECV ice ← from=${from} → addIceCandidate (has remoteDesc) type=${data.candidate?.type} protocol=${data.candidate?.protocol}`);
+              cur.pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch((err) => {
+                console.warn(`[WRTCDiag] addIceCandidate failed from=${from}`, err);
+              });
             } else {
+              console.log(`[WRTCDiag] RECV ice ← from=${from} → QUEUED (no remoteDesc yet) type=${data.candidate?.type}`);
               const q = iceCandidateQueue.current.get(from) || [];
               q.push(data.candidate);
               iceCandidateQueue.current.set(from, q);
             }
+          } else {
+            console.warn(`[WRTCDiag] RECV ice ← from=${from} → DROPPED (no pc found)`);
           }
 
         } else if (type === 'leave') {
@@ -813,6 +877,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       })();
     })
     .subscribe(async (status) => {
+      console.log(`[WRTCDiag] channel conf-${room.id} subscribe status=${status} myPeerId=${myPeerIdRef.current}`);
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         // Realtime channel dropped — rejoin after a short delay
         setTimeout(() => ch.subscribe(), 3000);
@@ -820,6 +885,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       }
       if (status !== 'SUBSCRIBED') return;
 
+      console.log(`[WRTCDiag] SEND join → broadcast myPeerId=${myPeerId} userId=${currentUserId}`);
       sendSignalRef.current(null, 'join', { userId: currentUserId, displayName: currentUserName, peerId: myPeerId });
 
       await new Promise(r => setTimeout(r, 500));
@@ -831,14 +897,21 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         .eq('status', 'joined')
         .neq('user_id', currentUserId);
 
+      console.log(`[WRTCDiag] existing participants from DB: count=${existing?.length ?? 0}`, existing?.map(p => `peer=${p.peer_id} user=${p.user_id}`));
+
       if (existing) {
         for (const p of existing) {
-          if (!p.peer_id || p.peer_id === myPeerId) continue;
+          if (!p.peer_id || p.peer_id === myPeerId) {
+            console.log(`[WRTCDiag] skipping existing participant peer_id=${p.peer_id} (null or self)`);
+            continue;
+          }
+          console.log(`[WRTCDiag] existing participant peer=${p.peer_id} myPeerId=${myPeerIdRef.current} willOffer=${myPeerIdRef.current < p.peer_id}`);
           if (myPeerIdRef.current < p.peer_id) {
             await makeOfferRef.current(p.peer_id, p.user_id, p.display_name);
           } else {
             const existingPC = await getPCRef.current(p.peer_id, p.user_id, p.display_name);
             setTimeout(async () => {
+              console.log(`[WRTCDiag] delayed offer check for peer=${p.peer_id} hasRemoteDesc=${!!existingPC.remoteDescription} signalingState=${existingPC.signalingState}`);
               if (!existingPC.remoteDescription && existingPC.signalingState === 'stable') {
                 await makeOfferRef.current(p.peer_id, p.user_id, p.display_name);
               }
