@@ -497,6 +497,19 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     }
   }, [phase]);
 
+  // Same guard for the remote video: ontrack may have fired before React mounted the element.
+  // remoteStreamRef stores the last assigned stream — reattach it if the element is now live.
+  useEffect(() => {
+    if ((phase === 'connecting' || phase === 'connected') && remoteVideoRef.current) {
+      const stream = remoteStreamRef.current;
+      if (stream && remoteVideoRef.current.srcObject !== stream) {
+        remoteVideoRef.current.srcObject = stream;
+        remoteVideoRef.current.play().catch(() => {});
+        log('[E2EE][MEDIA]', 'remoteVideoRef.srcObject re-attached on phase mount');
+      }
+    }
+  }, [phase]);
+
   // Connection timeout: if still in 'connecting' after the allowed window, abort the call.
   const connTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -846,7 +859,13 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
   const buildPC = async () => {
     const cfg = await getSharedRTCConfig();
-    log('[E2EE][PC]', `creating RTCPeerConnection iceServers=${(cfg.iceServers as RTCIceServer[])?.length ?? 0}`);
+    const stunCount = (cfg.iceServers as RTCIceServer[] ?? []).filter(s =>
+      (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some((u: string) => /^stun:/i.test(u))
+    ).length;
+    const turnCount = (cfg.iceServers as RTCIceServer[] ?? []).filter(s =>
+      (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some((u: string) => /^turns?:/i.test(u))
+    ).length;
+    log('[E2EE][PC]', `RTCPeerConnection config: iceServers=${(cfg.iceServers as RTCIceServer[])?.length ?? 0} (stun=${stunCount} turn=${turnCount}) iceTransportPolicy=${cfg.iceTransportPolicy ?? 'all'}`);
     const pc = new RTCPeerConnection(cfg);
     pcRef.current = pc;
 
