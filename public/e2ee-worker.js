@@ -72,6 +72,12 @@ self.addEventListener('rtctransform', event => {
   port.addEventListener('message', msg => {
     const { type } = msg.data;
 
+    // Guard: transformer may be in a closed/invalid state after PC teardown
+    if (!event.transformer) {
+      console.warn('[E2EE][WORKER] transformer not available, ignoring message type=' + type);
+      return;
+    }
+
     if (type === 'init') {
       debugEnabled = !!msg.data.debug;
       mediaKind    = msg.data.media || 'unknown';

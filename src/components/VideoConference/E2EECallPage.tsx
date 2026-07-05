@@ -720,6 +720,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          channelCount: 1,
+          ...(isMobile && { sampleRate: 16000 }),
         },
         video: isMobile ? {
           facingMode: 'user',
@@ -733,12 +735,31 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
           frameRate: { ideal: 30, max: 30 },
         },
       });
-      localStreamRef.current = s;
+
       const audioTracks = s.getAudioTracks().length;
       const videoTracks = s.getVideoTracks().length;
-      log('[E2EE][MEDIA]', `local stream ready audioTracks=${audioTracks} videoTracks=${videoTracks}`);
+      log('[E2EE][MEDIA]', `local stream ready audioTracks=${audioTracks} videoTracks=${videoTracks} mobile=${isMobile}`);
+
+      if (audioTracks === 0) {
+        logWarn('[E2EE][MEDIA]', 'no audio track in local stream');
+        toast.error('دسترسی به میکروفون ممکن نیست');
+        s.getTracks().forEach(t => t.stop());
+        return null;
+      }
+      if (videoTracks === 0) {
+        logWarn('[E2EE][MEDIA]', 'no video track in local stream');
+        toast.error('دسترسی به دوربین ممکن نیست');
+        s.getTracks().forEach(t => t.stop());
+        return null;
+      }
+
+      localStreamRef.current = s;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = s;
+        localVideoRef.current.play().catch(err => {
+          // Local video is muted so NotAllowedError is unlikely, but guard anyway
+          log('[E2EE][MEDIA]', `local video play() error: ${err}`);
+        });
         log('[E2EE][MEDIA]', 'localVideoRef.srcObject set');
       }
       return s;
@@ -864,15 +885,37 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
           remoteEl.srcObject = remoteStream;
           log('[E2EE][MEDIA]', `remoteVideoRef.srcObject set trackCount=${remoteStream.getTracks().length}`);
         }
-        remoteEl.play().catch(err => {
-          log('[E2EE][MEDIA]', `remote video play() error (may be expected before user gesture): ${err}`);
-        });
+
+        const tryPlay = () => {
+          remoteEl.play().catch(err => {
+            if ((err as DOMException).name === 'NotAllowedError') {
+              // Autoplay blocked — retry on first user interaction (common on mobile)
+              log('[E2EE][MEDIA]', 'autoplay blocked, queuing play on user interaction');
+              const resume = () => {
+                remoteEl.play().catch(() => {});
+                document.removeEventListener('click', resume);
+                document.removeEventListener('touchstart', resume);
+              };
+              document.addEventListener('click', resume, { once: true });
+              document.addEventListener('touchstart', resume, { once: true });
+            } else {
+              log('[E2EE][MEDIA]', `remote video play() error: ${err}`);
+            }
+          });
+        };
+        tryPlay();
+
         // Log video element diagnostics 2 s after first track arrives
         const streamForDiag = remoteStream;
         setTimeout(() => {
           if (!remoteVideoRef.current) return;
           const v = remoteVideoRef.current;
           log('[E2EE][MEDIA]', `remote video diag: readyState=${v.readyState} paused=${v.paused} muted=${v.muted} autoplay=${v.autoplay} playsInline=${v.playsInline} videoWidth=${v.videoWidth} videoHeight=${v.videoHeight} trackCount=${streamForDiag.getTracks().length}`);
+          // If video track arrived but width is still 0, video is not rendering — retry play
+          if (v.videoWidth === 0 && streamForDiag.getVideoTracks().length > 0) {
+            logWarn('[E2EE][MEDIA]', 'videoWidth=0 after 2s — retrying play()');
+            tryPlay();
+          }
         }, 2000);
       } else {
         logWarn('[E2EE][MEDIA]', 'remoteVideoRef not mounted when ontrack fired');
