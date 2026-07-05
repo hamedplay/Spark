@@ -312,6 +312,26 @@ function randomHex(bytes: number): string {
   return bytesToHex(crypto.getRandomValues(new Uint8Array(bytes)));
 }
 
+// ── Signal shape validators ───────────────────────────────────────────────────
+
+function validateIceCandidate(c: unknown): c is RTCIceCandidateInit {
+  if (!c || typeof c !== 'object') return false;
+  const o = c as Record<string, unknown>;
+  if (typeof o.candidate !== 'string' || o.candidate.length > 2000) return false;
+  if ('sdpMid' in o && o.sdpMid !== null && typeof o.sdpMid !== 'string') return false;
+  if ('sdpMLineIndex' in o && o.sdpMLineIndex !== null && !Number.isInteger(o.sdpMLineIndex)) return false;
+  if ('usernameFragment' in o && o.usernameFragment !== null && typeof o.usernameFragment !== 'string') return false;
+  return true;
+}
+
+function validateSDP(sdp: unknown, expectedType: 'offer' | 'answer'): sdp is RTCSessionDescriptionInit {
+  if (!sdp || typeof sdp !== 'object') return false;
+  const o = sdp as Record<string, unknown>;
+  if (o.type !== expectedType) return false;
+  if (typeof o.sdp !== 'string' || o.sdp.length === 0 || o.sdp.length > 65536) return false;
+  return true;
+}
+
 function validateSignalPayload(
   payload: unknown,
   sessionId: string,
@@ -330,6 +350,28 @@ function validateSignalPayload(
     return null;
   }
   return p as Record<string, unknown> & { type: string; from: string };
+}
+
+/**
+ * Resolves when the channel reaches SUBSCRIBED, rejects on error or timeout.
+ * Use this instead of ad-hoc subscribe() promise wrappers.
+ */
+function waitForSubscribed(
+  ch: ReturnType<typeof supabase.channel>,
+  timeoutMs = 9000,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('channel subscribe timeout')), timeoutMs);
+    ch.subscribe(status => {
+      if (status === 'SUBSCRIBED') {
+        clearTimeout(timer);
+        resolve();
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        clearTimeout(timer);
+        reject(new Error(`channel subscribe failed: ${status}`));
+      }
+    });
+  });
 }
 
 // ── Transform helpers ─────────────────────────────────────────────────────────
@@ -430,6 +472,13 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   const sessionActiveRef  = useRef(false);
   const acceptTokenRef    = useRef<string>('');   // caller sets; callee echoes
   const safetyVerifiedRef = useRef(false);
+  const phaseRef          = useRef<CallPhase>('idle');   // mirror of phase for use in timeouts
+  const remoteStreamRef   = useRef<MediaStream | null>(null); // stable remote stream across tracks
+  const offerSentRef      = useRef(false);               // prevents duplicate offer on double-accepted
+  const cleaningUpRef     = useRef(false);               // reentrancy guard for doFullCleanup
+
+  // Keep phaseRef in sync with phase state
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // ── User search ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -552,8 +601,14 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   // ── Core session functions ────────────────────────────────────────────────
 
   const doFullCleanup = useCallback((reason?: FailReason) => {
+    if (cleaningUpRef.current) {
+      log('[E2EE][CALL]', `cleanup already in progress, skipping reason=${reason ?? 'none'}`);
+      return;
+    }
+    cleaningUpRef.current = true;
     log('[E2EE][CALL]', `cleanup reason=${reason ?? 'none'}`);
     sessionActiveRef.current = false;
+    offerSentRef.current = false;
 
     pcRef.current?.close();
     pcRef.current = null;
@@ -561,6 +616,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
 
+    remoteStreamRef.current = null;
     if (localVideoRef.current)  localVideoRef.current.srcObject  = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
 
@@ -585,6 +641,13 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     setShowSafety(false);
     safetyVerifiedRef.current = false;
     setE2eeStatus(SUPPORTS_TRANSFORMS ? 'pending' : 'unsupported');
+    setTargetUser(null);
+    setIncomingCall(null);
+    setSessionCode('');
+    setIsMuted(false);
+    setIsVideoOff(false);
+
+    cleaningUpRef.current = false;
 
     if (reason) {
       setFailReason(reason);
@@ -602,8 +665,6 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     }
     doFullCleanup();
     setPhase('ended');
-    setTargetUser(null);
-    setIncomingCall(null);
   }, [doFullCleanup]);
 
   const startLocalStream = async (): Promise<MediaStream | null> => {
@@ -713,29 +774,43 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
         }
       }
 
-      // Attach remote stream to video element
+      // Attach remote stream to video element — use a stable stream ref so that
+      // audio and video tracks arriving separately both land on the same stream.
       const remoteEl = remoteVideoRef.current;
       if (remoteEl) {
-        let remoteStream = (e.streams && e.streams[0]) || null;
-        if (!remoteStream) {
-          // Fallback: build a stream from the track directly
-          remoteStream = new MediaStream();
-          remoteStream.addTrack(e.track);
-          log('[E2EE][MEDIA]', `built fallback remote stream for kind=${e.track.kind}`);
+        let remoteStream: MediaStream;
+        if (e.streams && e.streams[0]) {
+          // Browser provided a stream — use it and remember it
+          remoteStream = e.streams[0];
+          remoteStreamRef.current = remoteStream;
+          log('[E2EE][MEDIA]', `ontrack using provided stream id=${remoteStream.id}`);
+        } else {
+          // No stream from browser — reuse or create a stable stream
+          if (!remoteStreamRef.current) {
+            remoteStreamRef.current = new MediaStream();
+            log('[E2EE][MEDIA]', `created stable fallback remote stream`);
+          }
+          remoteStream = remoteStreamRef.current;
+          // Only add the track if not already present
+          const alreadyPresent = remoteStream.getTracks().some(t => t.id === e.track.id);
+          if (!alreadyPresent) {
+            remoteStream.addTrack(e.track);
+            log('[E2EE][MEDIA]', `added track kind=${e.track.kind} to stable stream trackCount=${remoteStream.getTracks().length}`);
+          }
         }
         if (remoteEl.srcObject !== remoteStream) {
           remoteEl.srcObject = remoteStream;
-          log('[E2EE][MEDIA]', `remoteVideoRef.srcObject set tracks=${remoteStream.getTracks().length}`);
+          log('[E2EE][MEDIA]', `remoteVideoRef.srcObject set trackCount=${remoteStream.getTracks().length}`);
         }
-        const currentStream = remoteStream;
         remoteEl.play().catch(err => {
-          log('[E2EE][MEDIA]', `remote video play() failed (may be expected before user gesture): ${err}`);
+          log('[E2EE][MEDIA]', `remote video play() error (may be expected before user gesture): ${err}`);
         });
-        // Log video element state shortly after
+        // Log video element diagnostics 2 s after first track arrives
+        const streamForDiag = remoteStream;
         setTimeout(() => {
           if (!remoteVideoRef.current) return;
           const v = remoteVideoRef.current;
-          log('[E2EE][MEDIA]', `remote video state: readyState=${v.readyState} paused=${v.paused} muted=${v.muted} autoplay=${v.autoplay} playsInline=${v.playsInline} videoWidth=${v.videoWidth} videoHeight=${v.videoHeight} trackCount=${currentStream.getTracks().length}`);
+          log('[E2EE][MEDIA]', `remote video diag: readyState=${v.readyState} paused=${v.paused} muted=${v.muted} autoplay=${v.autoplay} playsInline=${v.playsInline} videoWidth=${v.videoWidth} videoHeight=${v.videoHeight} trackCount=${streamForDiag.getTracks().length}`);
         }, 2000);
       } else {
         logWarn('[E2EE][MEDIA]', 'remoteVideoRef not mounted when ontrack fired');
@@ -823,6 +898,15 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
       // ── Callee accepted → Caller verifies token, locks peer, sends offer ──
       if (type === 'accepted' && myRoleRef.current === 'caller') {
+        // Guard: only process if still waiting for acceptance and offer not yet sent
+        if (phaseRef.current !== 'outgoing_ring') {
+          log('[E2EE][SIGNAL]', `accepted dropped: phase=${phaseRef.current} (not outgoing_ring)`);
+          return;
+        }
+        if (offerSentRef.current) {
+          log('[E2EE][SIGNAL]', 'accepted dropped: offer already sent (duplicate accepted)');
+          return;
+        }
         const echoed = (data as Record<string, unknown>)?.acceptToken;
         if (echoed !== acceptTokenRef.current) {
           logWarn('[E2EE][SIGNAL]', `accepted: token mismatch — dropped`);
@@ -835,15 +919,16 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
         }
         log('[E2EE][SIGNAL]', `accepted: token OK — locking peer=${p.from}`);
         lockedPeerRef.current = p.from;
+        offerSentRef.current = true;
         setPhase('connecting');
         await doSendOffer();
       }
 
       // ── Offer received by callee ──
       else if (type === 'offer' && myRoleRef.current === 'callee') {
-        if (!data?.sdp) { logWarn('[E2EE][SIGNAL]', 'offer: missing sdp'); return; }
-        if (typeof data.publicKey !== 'string') { logWarn('[E2EE][SIGNAL]', 'offer: missing publicKey'); return; }
-        if (typeof data.salt !== 'string') { logWarn('[E2EE][SIGNAL]', 'offer: missing salt'); return; }
+        if (!validateSDP(data?.sdp, 'offer')) { logWarn('[E2EE][SIGNAL]', 'offer: invalid sdp'); return; }
+        if (typeof data?.publicKey !== 'string') { logWarn('[E2EE][SIGNAL]', 'offer: missing publicKey'); return; }
+        if (typeof data?.salt !== 'string') { logWarn('[E2EE][SIGNAL]', 'offer: missing salt'); return; }
         const saltBytes = hexToBytes(data.salt as string);
         if (!saltBytes || saltBytes.length !== 16) { logWarn('[E2EE][SIGNAL]', 'offer: invalid salt'); return; }
         const pc = pcRef.current;
@@ -871,8 +956,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
       // ── Answer received by caller ──
       else if (type === 'answer' && myRoleRef.current === 'caller') {
-        if (!data?.sdp) { logWarn('[E2EE][SIGNAL]', 'answer: missing sdp'); return; }
-        if (typeof data.publicKey !== 'string') { logWarn('[E2EE][SIGNAL]', 'answer: missing publicKey'); return; }
+        if (!validateSDP(data?.sdp, 'answer')) { logWarn('[E2EE][SIGNAL]', 'answer: invalid sdp'); return; }
+        if (typeof data?.publicKey !== 'string') { logWarn('[E2EE][SIGNAL]', 'answer: missing publicKey'); return; }
         if (!saltRef.current) { logWarn('[E2EE][SIGNAL]', 'answer: no salt'); return; }
         const pc = pcRef.current;
         if (!pc) { logWarn('[E2EE][SIGNAL]', 'answer: no pc'); return; }
@@ -891,7 +976,10 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       // ── ICE candidate ──
       else if (type === 'ice') {
         const candidate = data?.candidate;
-        if (!candidate || typeof candidate !== 'object') return;
+        if (!validateIceCandidate(candidate)) {
+          logWarn('[E2EE][ICE]', 'invalid ICE candidate payload — dropped');
+          return;
+        }
         const pc = pcRef.current;
         if (!pc) return;
         if (iceCandidateQueue.current.length >= ICE_QUEUE_MAX) {
@@ -900,11 +988,11 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
         }
         if (pc.remoteDescription) {
           log('[E2EE][ICE]', 'addIceCandidate (direct)');
-          await pc.addIceCandidate(new RTCIceCandidate(candidate as RTCIceCandidateInit))
+          await pc.addIceCandidate(new RTCIceCandidate(candidate))
             .catch(e => logWarn('[E2EE][ICE]', 'addIceCandidate failed:', e));
         } else {
           log('[E2EE][ICE]', `queuing candidate (no remoteDesc yet) queueLen=${iceCandidateQueue.current.length + 1}`);
-          iceCandidateQueue.current.push(candidate as RTCIceCandidateInit);
+          iceCandidateQueue.current.push(candidate);
         }
       }
 
@@ -923,7 +1011,9 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       }
     });
 
-    ch.subscribe(status => log('[E2EE][SIGNAL]', `session channel status=${status}`));
+    // NOTE: caller must call waitForSubscribed(ch) after this returns.
+    // Do NOT call ch.subscribe() here — that would double-subscribe when
+    // startCall/acceptCall await waitForSubscribed on the same channel.
     return ch;
   };
 
@@ -938,62 +1028,68 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       return;
     }
 
-    setTargetUser(target);
-    myRoleRef.current = 'caller';
-    sessionActiveRef.current = true;
+    try {
+      setTargetUser(target);
+      myRoleRef.current = 'caller';
+      offerSentRef.current = false;
 
-    const sessionId = uuidv4();
-    sessionIdRef.current = sessionId;
-    setSessionCode(sessionId.slice(0, 8).toUpperCase());
+      const sessionId = uuidv4();
+      sessionIdRef.current = sessionId;
+      setSessionCode(sessionId.slice(0, 8).toUpperCase());
 
-    // 128-bit token — callee must echo for peer lock
-    acceptTokenRef.current = randomHex(16);
+      // 128-bit token — callee must echo for peer lock
+      acceptTokenRef.current = randomHex(16);
 
-    log('[E2EE][KEY]', 'generating ECDH key pair');
-    ecdhKeyPairRef.current = await generateECDHKeyPair();
-    myPublicJWKRef.current = await exportPublicKey(ecdhKeyPairRef.current.publicKey);
-    log('[E2EE][KEY]', 'ECDH key pair generated, public key exported');
+      log('[E2EE][KEY]', 'generating ECDH key pair');
+      ecdhKeyPairRef.current = await generateECDHKeyPair();
+      myPublicJWKRef.current = await exportPublicKey(ecdhKeyPairRef.current.publicKey);
+      log('[E2EE][KEY]', 'ECDH key pair generated, public key exported');
 
-    const stream = await startLocalStream();
-    if (!stream) { doFullCleanup(); return; }
+      const stream = await startLocalStream();
+      if (!stream) { doFullCleanup(); return; }
 
-    // Subscribe to session channel before ringing to avoid missing 'accepted'
-    const ch = openSessionChannel(sessionId);
-    await new Promise<void>(r => {
-      const unsub = ch!.subscribe(status => { if (status === 'SUBSCRIBED') { unsub(); r(); } });
-    });
-    log('[E2EE][SIGNAL]', 'session channel subscribed');
+      // Subscribe to session channel before ringing to avoid missing 'accepted'
+      const ch = openSessionChannel(sessionId);
+      await waitForSubscribed(ch);
+      log('[E2EE][SIGNAL]', 'session channel subscribed');
 
-    await buildPC();
-    log('[E2EE][PC]', 'PeerConnection built');
+      await buildPC();
+      log('[E2EE][PC]', 'PeerConnection built');
 
-    const calleeInbox = supabase.channel(`e2ee-inbox-${target.user_id}`, {
-      config: { broadcast: { self: false } },
-    });
-    await new Promise<void>(r => {
-      const unsub = calleeInbox.subscribe(s => { if (s === 'SUBSCRIBED') { unsub(); r(); } });
-    });
-    calleeInbox.send({
-      type: 'broadcast', event: 'e2ee-ring',
-      payload: {
-        from: myPeerIdRef.current, sessionId, targetUserId: target.user_id,
-        callerName: currentUserName, callerId: currentUserId,
-        acceptToken: acceptTokenRef.current,
-        expiresAt: Date.now() + INVITE_TTL_MS,
-      },
-    });
-    setTimeout(() => supabase.removeChannel(calleeInbox), 3000);
-    log('[E2EE][SIGNAL]', `ring sent to inbox-${target.user_id}`);
+      // Mark session active only after minimum viable setup succeeds
+      sessionActiveRef.current = true;
 
-    setPhase('outgoing_ring');
+      const calleeInbox = supabase.channel(`e2ee-inbox-${target.user_id}`, {
+        config: { broadcast: { self: false } },
+      });
+      await waitForSubscribed(calleeInbox);
+      calleeInbox.send({
+        type: 'broadcast', event: 'e2ee-ring',
+        payload: {
+          from: myPeerIdRef.current, sessionId, targetUserId: target.user_id,
+          callerName: currentUserName, callerId: currentUserId,
+          acceptToken: acceptTokenRef.current,
+          expiresAt: Date.now() + INVITE_TTL_MS,
+        },
+      });
+      setTimeout(() => supabase.removeChannel(calleeInbox), 3000);
+      log('[E2EE][SIGNAL]', `ring sent to inbox-${target.user_id}`);
 
-    const capturedSessionId = sessionId;
-    setTimeout(() => {
-      if (sessionIdRef.current === capturedSessionId) {
-        log('[E2EE][CALL]', 'invite expired');
-        doFullCleanup('invite_expired');
-      }
-    }, INVITE_TTL_MS);
+      setPhase('outgoing_ring');
+
+      // Invite expiry: only cancel if still waiting for acceptance (not yet connected)
+      const capturedSessionId = sessionId;
+      setTimeout(() => {
+        if (sessionIdRef.current === capturedSessionId && phaseRef.current === 'outgoing_ring') {
+          log('[E2EE][CALL]', 'invite expired — still in outgoing_ring');
+          doFullCleanup('invite_expired');
+        }
+      }, INVITE_TTL_MS);
+    } catch (e) {
+      logError('[E2EE][ERROR]', 'startCall failed:', e);
+      toast.error('خطا در شروع تماس');
+      doFullCleanup('key_exchange');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId, currentUserName, doFullCleanup, doHangup]);
 
@@ -1014,40 +1110,47 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       return;
     }
 
-    myRoleRef.current    = 'callee';
-    sessionIdRef.current = ic.sessionId;
-    lockedPeerRef.current = ic.from; // lock to caller's peerId immediately
-    sessionActiveRef.current = true;
+    try {
+      myRoleRef.current    = 'callee';
+      sessionIdRef.current = ic.sessionId;
+      lockedPeerRef.current = ic.from;
+      offerSentRef.current = false;
 
-    log('[E2EE][KEY]', 'generating ECDH key pair (callee)');
-    ecdhKeyPairRef.current = await generateECDHKeyPair();
-    myPublicJWKRef.current = await exportPublicKey(ecdhKeyPairRef.current.publicKey);
-    log('[E2EE][KEY]', 'ECDH key pair generated (callee)');
+      log('[E2EE][KEY]', 'generating ECDH key pair (callee)');
+      ecdhKeyPairRef.current = await generateECDHKeyPair();
+      myPublicJWKRef.current = await exportPublicKey(ecdhKeyPairRef.current.publicKey);
+      log('[E2EE][KEY]', 'ECDH key pair generated (callee)');
 
-    const stream = await startLocalStream();
-    if (!stream) { doFullCleanup(); setIncomingCall(null); return; }
+      const stream = await startLocalStream();
+      if (!stream) { doFullCleanup(); setIncomingCall(null); return; }
 
-    const ch = openSessionChannel(ic.sessionId);
-    await new Promise<void>(r => {
-      const unsub = ch!.subscribe(s => { if (s === 'SUBSCRIBED') { unsub(); r(); } });
-    });
-    log('[E2EE][SIGNAL]', 'session channel subscribed (callee)');
+      const ch = openSessionChannel(ic.sessionId);
+      await waitForSubscribed(ch);
+      log('[E2EE][SIGNAL]', 'session channel subscribed (callee)');
 
-    await buildPC();
-    log('[E2EE][PC]', 'PeerConnection built (callee)');
+      await buildPC();
+      log('[E2EE][PC]', 'PeerConnection built (callee)');
 
-    ch!.send({
-      type: 'broadcast', event: 'e2ee-signal',
-      payload: {
-        type: 'accepted', from: myPeerIdRef.current, session: ic.sessionId,
-        data: { acceptToken: ic.acceptToken, targetUserId: ic.callerId },
-      },
-    });
-    log('[E2EE][SIGNAL]', 'accepted sent with token echo');
+      // Mark session active after minimum viable setup
+      sessionActiveRef.current = true;
 
-    setIncomingCall(null);
-    setTargetUser({ user_id: ic.callerId, full_name: ic.callerName, email: null });
-    setPhase('connecting');
+      ch.send({
+        type: 'broadcast', event: 'e2ee-signal',
+        payload: {
+          type: 'accepted', from: myPeerIdRef.current, session: ic.sessionId,
+          data: { acceptToken: ic.acceptToken, targetUserId: ic.callerId },
+        },
+      });
+      log('[E2EE][SIGNAL]', 'accepted sent with token echo');
+
+      setIncomingCall(null);
+      setTargetUser({ user_id: ic.callerId, full_name: ic.callerName, email: null });
+      setPhase('connecting');
+    } catch (e) {
+      logError('[E2EE][ERROR]', 'acceptCall failed:', e);
+      toast.error('خطا در پذیرش تماس');
+      doFullCleanup('key_exchange');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingCall, doFullCleanup]);
 
@@ -1056,13 +1159,17 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     const ic = incomingCall;
     if (!ic) return;
     log('[E2EE][CALL]', `rejectCall sessionId=${ic.sessionId}`);
-    const ch = supabase.channel(`e2ee-sess-${ic.sessionId}`, { config: { broadcast: { self: false } } });
-    ch.subscribe(() => {
-      ch.send({ type: 'broadcast', event: 'e2ee-signal', payload: { type: 'rejected', from: myPeerIdRef.current, session: ic.sessionId, data: {} } });
-      setTimeout(() => supabase.removeChannel(ch), 1500);
-    });
     setIncomingCall(null);
     setPhase('idle');
+    // Send rejected signal asynchronously — UI already moved to idle
+    const ch = supabase.channel(`e2ee-sess-${ic.sessionId}`, { config: { broadcast: { self: false } } });
+    waitForSubscribed(ch)
+      .then(() => {
+        ch.send({ type: 'broadcast', event: 'e2ee-signal', payload: { type: 'rejected', from: myPeerIdRef.current, session: ic.sessionId, data: {} } });
+        log('[E2EE][SIGNAL]', 'rejected signal sent');
+      })
+      .catch(err => logWarn('[E2EE][SIGNAL]', 'reject channel subscribe failed:', err))
+      .finally(() => setTimeout(() => supabase.removeChannel(ch), 1500));
   }, [incomingCall]);
 
   // ── Media controls ────────────────────────────────────────────────────────
