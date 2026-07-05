@@ -484,6 +484,39 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   // Keep phaseRef in sync with phase state
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
+  // When the local <video> element mounts (phase transitions to connecting/connected),
+  // attach the local stream that was captured before the element existed in the DOM.
+  useEffect(() => {
+    if ((phase === 'connecting' || phase === 'connected') && localVideoRef.current) {
+      const stream = localStreamRef.current;
+      if (stream && localVideoRef.current.srcObject !== stream) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
+        log('[E2EE][MEDIA]', 'localVideoRef.srcObject attached on phase mount');
+      }
+    }
+  }, [phase]);
+
+  // Connection timeout: if still in 'connecting' after the allowed window, abort the call.
+  const connTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (phase === 'connecting') {
+      connTimeoutRef.current = setTimeout(() => {
+        if (phaseRef.current === 'connecting') {
+          logError('[E2EE][ERROR]', 'connection timed out after 30s');
+          toast.error('اتصال برقرار نشد — لطفاً شرایط شبکه را بررسی کنید');
+          doFullCleanup('ice_failed');
+        }
+      }, 30_000);
+    } else {
+      if (connTimeoutRef.current) {
+        clearTimeout(connTimeoutRef.current);
+        connTimeoutRef.current = null;
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   // ── Network online/offline detection ─────────────────────────────────────
   useEffect(() => {
     const handleOnline = () => {
