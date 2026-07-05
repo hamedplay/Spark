@@ -982,7 +982,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
-      log('[E2EE][ICE]', `iceConnectionState=${s}`);
+      log('[E2EE][ICE]', `iceConnectionState=${s} role=${myRoleRef.current}`);
 
       if (s === 'connected' || s === 'completed') {
         if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
@@ -991,6 +991,14 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
       if (s === 'disconnected') {
         if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
+        // ONLY the original offerer (caller) sends ICE restart offers.
+        // If the callee also tries to send an offer, it enters have-local-offer state,
+        // then drops the caller's restart offer (signalingState check) — causing a deadlock.
+        // The callee waits: ICE state is shared, so the caller detects the disconnect too.
+        if (myRoleRef.current !== 'caller') {
+          logWarn('[E2EE][ICE]', 'ICE disconnected (callee) — waiting for caller to restart');
+          return;
+        }
         if (iceRestartAttempts >= MAX_ICE_RESTARTS) {
           logError('[E2EE][ICE]', `max ICE restarts (${MAX_ICE_RESTARTS}) reached — giving up`);
           doFullCleanup('ice_failed');
@@ -1009,12 +1017,13 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
       if (s === 'failed') {
         if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
-        if (iceRestartAttempts < MAX_ICE_RESTARTS) {
-          logWarn('[E2EE][ICE]', `ICE failed — immediate restart attempt ${iceRestartAttempts + 1}/${MAX_ICE_RESTARTS}`);
+        // Caller: try immediate restart. Callee: clean up (caller will hang up or restart).
+        if (myRoleRef.current === 'caller' && iceRestartAttempts < MAX_ICE_RESTARTS) {
+          logWarn('[E2EE][ICE]', `ICE failed (caller) — immediate restart attempt ${iceRestartAttempts + 1}/${MAX_ICE_RESTARTS}`);
           iceRestartAttempts++;
           sendRestartOffer();
         } else {
-          logError('[E2EE][ERROR]', 'ICE connection failed — max restarts reached, cleaning up');
+          logError('[E2EE][ERROR]', `ICE connection failed — cleaning up (role=${myRoleRef.current})`);
           doFullCleanup('ice_failed');
         }
       }
