@@ -83,7 +83,9 @@ export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfigurat
   switch (policyKey) {
     case 'relay': iceTransportPolicy = 'relay'; break;
     case 'all':   iceTransportPolicy = 'all';   break;
-    default:      iceTransportPolicy = hasTurn ? 'relay' : 'all'; // 'auto'
+    // 'auto': always 'all' so STUN candidates are tried first (faster, cheaper).
+    // Admins who need relay-only for privacy should set ice_transport_policy='relay' explicitly.
+    default:      iceTransportPolicy = 'all';
   }
 
   return {
@@ -115,14 +117,10 @@ function buildEnvFallbackConfig(): RTCConfiguration {
     });
   }
 
-  const hasTurn = iceServers.some(s =>
-    (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some(u => /^turns?:/i.test(u))
-  );
-
   return {
     iceServers,
     iceCandidatePoolSize: 10,
-    iceTransportPolicy: hasTurn ? 'relay' : 'all',
+    iceTransportPolicy: 'all',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
   };

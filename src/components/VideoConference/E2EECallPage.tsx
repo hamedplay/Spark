@@ -45,10 +45,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, ShieldCheck, ShieldAlert,
-  Loader, Check, Users, RefreshCw, Phone, PhoneIncoming, Eye,
+  Loader, Check, Users, RefreshCw, Phone, PhoneIncoming, Eye, Wifi, WifiOff,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getSharedRTCConfig, invalidateRTCConfigCache } from '../../lib/rtcConfig';
+import { startDiagnostics, stopDiagnostics } from '../../lib/webrtcDiagnostics';
+import type { PeerDiagnostics } from '../../lib/webrtcDiagnostics';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -450,6 +452,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   const [userSearch,      setUserSearch]     = useState('');
   const [users,           setUsers]          = useState<UserProfile[]>([]);
   const [searching,       setSearching]      = useState(false);
+  const [connDiag,        setConnDiag]       = useState<PeerDiagnostics | null>(null);
+  const [isOffline,       setIsOffline]      = useState(!navigator.onLine);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const localVideoRef     = useRef<HTMLVideoElement>(null);
@@ -479,6 +483,43 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
   // Keep phaseRef in sync with phase state
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  // ── Network online/offline detection ─────────────────────────────────────
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      log('[E2EE][NET]', 'network back online');
+      const pc = pcRef.current;
+      if (pc && (phaseRef.current === 'connected' || phaseRef.current === 'connecting')) {
+        log('[E2EE][NET]', 'triggering ICE restart after reconnect');
+        if (pc.signalingState === 'stable') {
+          pc.createOffer({ iceRestart: true })
+            .then(offer => pc.setLocalDescription(offer))
+            .then(() => {
+              sessionChannelRef.current?.send({
+                type: 'broadcast', event: 'e2ee-signal',
+                payload: { type: 'offer', from: myPeerIdRef.current, session: sessionIdRef.current, data: { sdp: pc.localDescription, publicKey: myPublicJWKRef.current, salt: saltRef.current ? bytesToHex(saltRef.current) : '' } },
+              });
+            })
+            .catch(err => logError('[E2EE][NET]', 'network-triggered ICE restart failed:', err));
+        }
+      }
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+      log('[E2EE][NET]', 'network offline');
+      if (phaseRef.current === 'connected' || phaseRef.current === 'connecting') {
+        toast('اتصال اینترنت قطع شد — در حال انتظار...', { icon: '⚠️' });
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── User search ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -610,6 +651,9 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     sessionActiveRef.current = false;
     offerSentRef.current = false;
 
+    if (sessionIdRef.current) stopDiagnostics(sessionIdRef.current);
+    setConnDiag(null);
+
     pcRef.current?.close();
     pcRef.current = null;
 
@@ -669,6 +713,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
   const startLocalStream = async (): Promise<MediaStream | null> => {
     log('[E2EE][MEDIA]', 'requesting getUserMedia');
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     try {
       const s = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -676,8 +721,13 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
           noiseSuppression: true,
           autoGainControl: true,
         },
-        video: {
-          facingMode: 'user',          // front camera on mobile
+        video: isMobile ? {
+          facingMode: 'user',
+          width:  { ideal: 360, max: 480 },
+          height: { ideal: 640, max: 720 },
+          frameRate: { ideal: 20, max: 30 },
+        } : {
+          facingMode: 'user',
           width:  { ideal: 640, max: 1280 },
           height: { ideal: 480, max: 720 },
           frameRate: { ideal: 30, max: 30 },
@@ -842,9 +892,11 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       const ev = e as RTCPeerConnectionIceErrorEvent;
       const url = ev.url ?? '';
       const isTurn = /^turns?:/i.test(url);
-      // STUN errors (including code 701 on STUN URLs) are non-fatal — log only in debug
       if (!isTurn) {
-        log('[E2EE][ICE]', `STUN candidate error code=${ev.errorCode} url=${url} (non-critical)`);
+        // STUN errors are non-fatal — only show in debug
+        if (E2EE_DEBUG) {
+          console.debug('[E2EE][ICE] STUN error (ignored):', ev.errorCode, url);
+        }
         return;
       }
       logError('[E2EE][ICE]', `TURN candidate error code=${ev.errorCode} text="${ev.errorText}" url=${url}`);
@@ -862,43 +914,66 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     };
 
     let iceDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let iceRestartAttempts = 0;
+    const MAX_ICE_RESTARTS = 3;
+
+    const sendRestartOffer = () => {
+      if (pc.signalingState !== 'stable') {
+        log('[E2EE][ICE]', `skip restart — signalingState=${pc.signalingState}`);
+        return;
+      }
+      pc.createOffer({ iceRestart: true })
+        .then(offer => pc.setLocalDescription(offer).then(() => offer))
+        .then(() => {
+          sessionChannelRef.current?.send({
+            type: 'broadcast', event: 'e2ee-signal',
+            payload: { type: 'offer', from: myPeerIdRef.current, session: sessionIdRef.current, data: { sdp: pc.localDescription, publicKey: myPublicJWKRef.current, salt: saltRef.current ? bytesToHex(saltRef.current) : '' } },
+          });
+          log('[E2EE][ICE]', `ICE restart offer sent attempt=${iceRestartAttempts}`);
+        })
+        .catch(err => {
+          logError('[E2EE][ICE]', 'ICE restart failed:', err);
+          doFullCleanup('peer_disconnected');
+        });
+    };
 
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
       log('[E2EE][ICE]', `iceConnectionState=${s}`);
 
       if (s === 'connected' || s === 'completed') {
-        // Clear any pending disconnect timer when connection recovers
         if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
+        iceRestartAttempts = 0;
       }
 
       if (s === 'disconnected') {
-        logWarn('[E2EE][ICE]', 'ICE disconnected — waiting 10 s before restart');
         if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
+        if (iceRestartAttempts >= MAX_ICE_RESTARTS) {
+          logError('[E2EE][ICE]', `max ICE restarts (${MAX_ICE_RESTARTS}) reached — giving up`);
+          doFullCleanup('ice_failed');
+          return;
+        }
+        // Exponential backoff: 5s, 10s, 20s
+        const delay = Math.min(5000 * Math.pow(2, iceRestartAttempts), 30_000);
+        logWarn('[E2EE][ICE]', `disconnected — restart attempt ${iceRestartAttempts + 1}/${MAX_ICE_RESTARTS} in ${delay / 1000}s`);
         iceDisconnectTimer = setTimeout(() => {
           iceDisconnectTimer = null;
           if (pc.iceConnectionState !== 'disconnected') return;
-          log('[E2EE][ICE]', 'still disconnected after 10 s — attempting ICE restart');
-          pc.createOffer({ iceRestart: true })
-            .then(offer => pc.setLocalDescription(offer).then(() => offer))
-            .then(offer => {
-              sessionChannelRef.current?.send({
-                type: 'broadcast', event: 'e2ee-signal',
-                payload: { type: 'offer', from: myPeerIdRef.current, session: sessionIdRef.current, data: { sdp: pc.localDescription, publicKey: myPublicJWKRef.current, salt: saltRef.current ? bytesToHex(saltRef.current) : '' } },
-              });
-              log('[E2EE][ICE]', 'ICE restart offer sent');
-            })
-            .catch(err => {
-              logError('[E2EE][ICE]', 'ICE restart failed:', err);
-              doFullCleanup('peer_disconnected');
-            });
-        }, 10_000);
+          iceRestartAttempts++;
+          sendRestartOffer();
+        }, delay);
       }
 
       if (s === 'failed') {
         if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
-        logError('[E2EE][ERROR]', 'ICE connection failed — cleaning up');
-        doFullCleanup('ice_failed');
+        if (iceRestartAttempts < MAX_ICE_RESTARTS) {
+          logWarn('[E2EE][ICE]', `ICE failed — immediate restart attempt ${iceRestartAttempts + 1}/${MAX_ICE_RESTARTS}`);
+          iceRestartAttempts++;
+          sendRestartOffer();
+        } else {
+          logError('[E2EE][ERROR]', 'ICE connection failed — max restarts reached, cleaning up');
+          doFullCleanup('ice_failed');
+        }
       }
     };
 
@@ -912,9 +987,21 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
     pc.onconnectionstatechange = () => {
       log('[E2EE][PC]', `connectionState=${pc.connectionState}`);
-      if (pc.connectionState === 'connected') setPhase('connected');
-      else if (pc.connectionState === 'failed') doFullCleanup('ice_failed');
-      else if (pc.connectionState === 'disconnected') {
+      if (pc.connectionState === 'connected') {
+        setPhase('connected');
+        // Start QoS diagnostics using existing webrtcDiagnostics service
+        startDiagnostics(pc, sessionIdRef.current, (diag) => {
+          setConnDiag(diag);
+          if (diag.rttMs !== null && diag.rttMs > 400) {
+            logWarn('[E2EE][QOS]', `high RTT: ${diag.rttMs}ms`);
+          }
+        }, 5000);
+      } else if (pc.connectionState === 'failed') {
+        stopDiagnostics(sessionIdRef.current);
+        doFullCleanup('ice_failed');
+      } else if (pc.connectionState === 'closed') {
+        stopDiagnostics(sessionIdRef.current);
+      } else if (pc.connectionState === 'disconnected') {
         logWarn('[E2EE][PC]', 'peer connection state: disconnected (ICE handler will manage recovery)');
       }
     };
@@ -1365,6 +1452,23 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
             {targetUser && (
               <div className="absolute top-3 right-3 text-white/70 text-sm font-medium drop-shadow-sm">
                 {targetUser.full_name || targetUser.email || 'مخاطب'}
+              </div>
+            )}
+
+            {/* Network/QoS indicator */}
+            {phase === 'connected' && (
+              <div className="absolute top-10 right-3 flex items-center gap-1.5">
+                {isOffline ? (
+                  <span className="flex items-center gap-1 text-[10px] text-red-400 bg-black/50 px-2 py-0.5 rounded-full">
+                    <WifiOff className="w-3 h-3" /> قطع
+                  </span>
+                ) : connDiag ? (
+                  <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-black/50 ${connDiag.rttMs !== null && connDiag.rttMs > 400 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    <Wifi className="w-3 h-3" />
+                    {connDiag.selectedCandidatePair?.localType === 'relay' ? 'TURN' : 'P2P'}
+                    {connDiag.rttMs !== null ? ` · ${connDiag.rttMs}ms` : ''}
+                  </span>
+                ) : null}
               </div>
             )}
 
