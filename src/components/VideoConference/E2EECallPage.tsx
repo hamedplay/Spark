@@ -593,6 +593,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   const [isVideoOff,      setIsVideoOff]     = useState(false);
   const [isRemoteMuted,   setIsRemoteMuted]  = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [remoteStreamTick, setRemoteStreamTick] = useState(0); // incremented when remoteStreamRef is updated while video el is unmounted
   const [targetUser,      setTargetUser]     = useState<UserProfile | null>(null);
   const [incomingCall,    setIncomingCall]   = useState<IncomingCall | null>(null);
   const [safetyNums,      setSafetyNums]     = useState<string[] | null>(null);
@@ -651,16 +652,18 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
   // Same guard for the remote video: ontrack may have fired before React mounted the element.
   // remoteStreamRef stores the last assigned stream — reattach it if the element is now live.
+  // remoteStreamTick is incremented by ontrack when the element isn't mounted yet, triggering this effect.
   useEffect(() => {
     if ((phase === 'connecting' || phase === 'connected') && remoteVideoRef.current) {
       const stream = remoteStreamRef.current;
       if (stream && remoteVideoRef.current.srcObject !== stream) {
         remoteVideoRef.current.srcObject = stream;
         remoteVideoRef.current.play().catch(() => {});
-        log('[E2EE][MEDIA]', 'remoteVideoRef.srcObject re-attached on phase mount');
+        log('[E2EE][MEDIA]', 'remoteVideoRef.srcObject re-attached on phase/tick mount');
       }
     }
-  }, [phase]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, remoteStreamTick]);
 
   // Diagnostic: log remote video readiness every second until frames are flowing.
   useEffect(() => {
@@ -1083,30 +1086,30 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
         }
       }
 
-      // Attach remote stream to video element — use a stable stream ref so that
-      // audio and video tracks arriving separately both land on the same stream.
+      // Build / update the stable remote stream REGARDLESS of whether the video element
+      // is mounted. If React hasn't re-rendered yet (setPhase('connecting') still pending),
+      // remoteVideoRef.current is null here — we store the stream and fire a state tick
+      // so the phase/tick useEffect can attach it once the element mounts.
+      let remoteStream: MediaStream;
+      if (e.streams && e.streams[0]) {
+        remoteStream = e.streams[0];
+        remoteStreamRef.current = remoteStream;
+        log('[E2EE][MEDIA]', `ontrack using provided stream id=${remoteStream.id}`);
+      } else {
+        if (!remoteStreamRef.current) {
+          remoteStreamRef.current = new MediaStream();
+          log('[E2EE][MEDIA]', 'created stable fallback remote stream');
+        }
+        remoteStream = remoteStreamRef.current;
+        const alreadyPresent = remoteStream.getTracks().some(t => t.id === e.track.id);
+        if (!alreadyPresent) {
+          remoteStream.addTrack(e.track);
+          log('[E2EE][MEDIA]', `added track kind=${e.track.kind} to stable stream trackCount=${remoteStream.getTracks().length}`);
+        }
+      }
+
       const remoteEl = remoteVideoRef.current;
       if (remoteEl) {
-        let remoteStream: MediaStream;
-        if (e.streams && e.streams[0]) {
-          // Browser provided a stream — use it and remember it
-          remoteStream = e.streams[0];
-          remoteStreamRef.current = remoteStream;
-          log('[E2EE][MEDIA]', `ontrack using provided stream id=${remoteStream.id}`);
-        } else {
-          // No stream from browser — reuse or create a stable stream
-          if (!remoteStreamRef.current) {
-            remoteStreamRef.current = new MediaStream();
-            log('[E2EE][MEDIA]', `created stable fallback remote stream`);
-          }
-          remoteStream = remoteStreamRef.current;
-          // Only add the track if not already present
-          const alreadyPresent = remoteStream.getTracks().some(t => t.id === e.track.id);
-          if (!alreadyPresent) {
-            remoteStream.addTrack(e.track);
-            log('[E2EE][MEDIA]', `added track kind=${e.track.kind} to stable stream trackCount=${remoteStream.getTracks().length}`);
-          }
-        }
         if (remoteEl.srcObject !== remoteStream) {
           remoteEl.srcObject = remoteStream;
           log('[E2EE][MEDIA]', `remoteVideoRef.srcObject set trackCount=${remoteStream.getTracks().length}`);
@@ -1144,7 +1147,10 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
           }
         }, 2000);
       } else {
-        logWarn('[E2EE][MEDIA]', 'remoteVideoRef not mounted when ontrack fired');
+        // Video element not yet mounted (React state update from setPhase('connecting') still pending).
+        // Trigger a tick so the phase/tick useEffect attaches the stream once the element mounts.
+        logWarn('[E2EE][MEDIA]', 'remoteVideoRef not mounted — stream stored, triggering tick for deferred attach');
+        setRemoteStreamTick(v => v + 1);
       }
     };
 
