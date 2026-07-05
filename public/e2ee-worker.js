@@ -72,6 +72,7 @@ self.addEventListener('rtctransform', event => {
 
   port.addEventListener('message', async msg => {
     const { type } = msg.data;
+    console.log(`[E2EE Worker] Received message type=${type} media=${mediaKind} role=${role}`);
 
     // Guard: transformer may be in a closed/invalid state after PC teardown
     if (!event.transformer) {

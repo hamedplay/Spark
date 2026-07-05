@@ -1020,8 +1020,12 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     };
 
     pc.onicecandidate = e => {
+      if (e.candidate) {
+        log('[E2EE][ICE]', `local candidate type=${e.candidate.type} candidate="${e.candidate.candidate}"`);
+      } else {
+        log('[E2EE][ICE]', 'candidate gathering complete');
+      }
       if (!e.candidate || !sessionChannelRef.current) return;
-      log('[E2EE][ICE]', `sending candidate type=${e.candidate.type}`);
       sessionChannelRef.current.send({
         type: 'broadcast', event: 'e2ee-signal',
         payload: { type: 'ice', from: myPeerIdRef.current, session: sessionIdRef.current, data: { candidate: e.candidate.toJSON() } },
@@ -1121,6 +1125,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
           sendRestartOffer();
         } else {
           logError('[E2EE][ERROR]', `ICE connection failed — cleaning up (role=${myRoleRef.current})`);
+          console.error('[WebRTC Connection] ICE Connection failed. This confirms a network path blockage — no TURN/STUN path available. Check TURN server configuration.');
           doFullCleanup('ice_failed');
         }
       }
