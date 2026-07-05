@@ -142,7 +142,7 @@ export interface Point {
   y: number;
 }
 
-export type SidePanel = 'chat' | 'participants' | 'polls' | 'whiteboard' | 'settings' | null;
+export type SidePanel = 'chat' | 'participants' | 'polls' | 'whiteboard' | 'settings' | 'diagnostics' | null;
 export type LayoutMode = 'gallery' | 'speaker' | 'sidebar';
 
 // ── Approval system ───────────────────────────────────────────────────────────
