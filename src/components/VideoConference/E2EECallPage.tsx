@@ -399,6 +399,28 @@ function attachSenderTransform(
   sender.transform = new RTCRtpScriptTransform(worker, { role: 'sender', port: port2 }, [port2]);
   port1.start();
   port1.postMessage({ type: 'init', debug, media: kind });
+
+  // Receive messages back from the worker (encrypt-ready, errors, logs, etc.)
+  // NOTE: port.postMessage() in the worker goes to port1; self.postMessage() would go to w.onmessage.
+  // Without this listener all worker feedback is silently dropped.
+  port1.addEventListener('message', e => {
+    const { type } = e.data || {};
+    if (type === 'log') {
+      const { level, tag, msg } = e.data;
+      if (level === 'error') logError(tag, msg);
+      else if (level === 'warn') logWarn(tag, msg);
+      else log(tag, msg);
+    } else if (type === 'encrypt-ready') {
+      log('[E2EE][XFORM]', `encrypt-ready kind=${kind}`);
+    } else if (type === 'encrypt-error') {
+      logError('[E2EE][XFORM]', `encrypt-error kind=${kind}:`, e.data.message);
+    } else if (type === 'version-mismatch') {
+      logError('[E2EE][XFORM]', `version-mismatch sender kind=${kind} got=0x${e.data.version?.toString(16)}`);
+    } else if (type === 'counter-exhausted') {
+      logError('[E2EE][XFORM]', `counter-exhausted sender kind=${kind}`);
+    }
+  });
+
   log('[E2EE][XFORM]', `sender transform attached trackId=${sender.track.id} kind=${kind}`);
   return { port: port1, kind, role: 'sender' };
 }
@@ -418,6 +440,26 @@ function attachReceiverTransform(
   receiver.transform = new RTCRtpScriptTransform(worker, { role: 'receiver', port: port2 }, [port2]);
   port1.start();
   port1.postMessage({ type: 'init', debug, media: kind });
+
+  // Receive messages back from the worker
+  port1.addEventListener('message', e => {
+    const { type } = e.data || {};
+    if (type === 'log') {
+      const { level, tag, msg } = e.data;
+      if (level === 'error') logError(tag, msg);
+      else if (level === 'warn') logWarn(tag, msg);
+      else log(tag, msg);
+    } else if (type === 'decrypt-ready') {
+      log('[E2EE][XFORM]', `decrypt-ready kind=${kind}`);
+    } else if (type === 'decrypt-error') {
+      logError('[E2EE][XFORM]', `decrypt-error kind=${kind}:`, e.data.message);
+    } else if (type === 'version-mismatch') {
+      logError('[E2EE][XFORM]', `version-mismatch receiver kind=${kind} got=0x${e.data.version?.toString(16)}`);
+    } else if (type === 'counter-exhausted') {
+      logError('[E2EE][XFORM]', `counter-exhausted receiver kind=${kind}`);
+    }
+  });
+
   log('[E2EE][XFORM]', `receiver transform attached trackId=${receiver.track.id} kind=${kind}`);
   return { port: port1, kind, role: 'receiver' };
 }
@@ -605,7 +647,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       });
       w.addEventListener('message', e => {
         const { type, level, tag, msg } = e.data || {};
-        if (type === 'log' && E2EE_DEBUG) {
+        if (type === 'log' && (level === 'error' || E2EE_DEBUG)) {
           const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
           fn(`[worker]${tag}`, msg);
         }

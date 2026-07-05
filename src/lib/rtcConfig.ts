@@ -55,6 +55,13 @@ export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfigurat
   const turnFallback     = cfg['enable_turn_fallback']?.trim()  !== 'false'; // default true
 
   const isStunOnly = policyKey === 'stun-only';
+  const hasTurnCreds = !!(turnServerUrl && username && credential);
+
+  console.info(
+    `[RTCConfig] buildRTCConfigFromDB policyKey=${policyKey} isStunOnly=${isStunOnly}` +
+    ` turnPresent=${hasTurnCreds} turnFallback=${turnFallback}` +
+    ` stunServers="${stunServersStr || '(none)'}"`
+  );
 
   const iceServers: RTCIceServer[] = [];
 
@@ -75,6 +82,11 @@ export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfigurat
       username,
       credential,
     });
+    console.info(`[RTCConfig] TURN server added bare=${bare} (udp+tcp+tls)`);
+  } else if (hasTurnCreds && (isStunOnly || !turnFallback)) {
+    console.warn(`[RTCConfig] TURN creds present but OMITTED — isStunOnly=${isStunOnly} turnFallback=${turnFallback}`);
+  } else if (!hasTurnCreds) {
+    console.warn('[RTCConfig] No TURN credentials configured — relay path unavailable (may fail behind strict NAT/firewall)');
   }
 
   const hasStun = iceServers.some(s =>
@@ -82,7 +94,10 @@ export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfigurat
   );
 
   // Always keep at least one STUN server for host+srflx candidate gathering
-  if (!hasStun) iceServers.unshift(FALLBACK_STUN);
+  if (!hasStun) {
+    iceServers.unshift(FALLBACK_STUN);
+    console.info('[RTCConfig] No STUN configured — added public Google STUN fallback');
+  }
 
   let iceTransportPolicy: RTCIceTransportPolicy;
   switch (policyKey) {
@@ -95,6 +110,18 @@ export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfigurat
     default:
       iceTransportPolicy = 'all';
   }
+
+  const turnCount = iceServers.filter(s =>
+    (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some(u => /^turns?:/i.test(u))
+  ).length;
+  const stunCount = iceServers.filter(s =>
+    (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some(u => /^stun:/i.test(u))
+  ).length;
+
+  console.info(
+    `[RTCConfig] final iceServers=${iceServers.length} (stun=${stunCount} turn=${turnCount})` +
+    ` iceTransportPolicy=${iceTransportPolicy}`
+  );
 
   return {
     iceServers,
@@ -123,6 +150,9 @@ function buildEnvFallbackConfig(): RTCConfiguration {
       username,
       credential,
     });
+    console.info(`[RTCConfig] env fallback: TURN host=${host}`);
+  } else {
+    console.warn('[RTCConfig] env fallback: no TURN env vars (VITE_TURN_HOST/USERNAME/PASSWORD) — STUN only');
   }
 
   return {
@@ -140,23 +170,33 @@ let _configPromise: Promise<RTCConfiguration> | null = null;
 
 export function getSharedRTCConfig(): Promise<RTCConfiguration> {
   if (!_configPromise) {
+    console.info('[RTCConfig] getSharedRTCConfig: cache MISS — fetching from system_config');
     _configPromise = supabase
       .from('system_config')
       .select('key,value')
       .eq('section', 'video_conference')
       .then(({ data }) => {
-        if (!data || data.length === 0) return buildEnvFallbackConfig();
+        if (!data || data.length === 0) {
+          console.warn('[RTCConfig] system_config returned no rows — using env fallback');
+          return buildEnvFallbackConfig();
+        }
         const cfg = Object.fromEntries(
           data.map((r: { key: string; value: string | null }) => [r.key, r.value ?? ''])
         );
         return buildRTCConfigFromDB(cfg);
       })
-      .catch(() => buildEnvFallbackConfig());
+      .catch((err) => {
+        console.error('[RTCConfig] DB fetch failed — using env fallback:', err);
+        return buildEnvFallbackConfig();
+      });
+  } else {
+    console.info('[RTCConfig] getSharedRTCConfig: cache HIT');
   }
   return _configPromise;
 }
 
 /** Call this after the admin saves video_conference settings to pick up the new values. */
 export function invalidateRTCConfigCache(): void {
+  console.info('[RTCConfig] cache invalidated — next call will re-fetch from DB');
   _configPromise = null;
 }

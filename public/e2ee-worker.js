@@ -55,6 +55,7 @@ self.addEventListener('rtctransform', event => {
   let encryptEpoch  = 0,    decryptEpoch  = 0;
   let frameCounter  = 0;
   let encryptReady  = false, decryptReady = false;
+  let encryptDropCount = 0; // rate-limit sender drop logs
 
   const log = (level, tag, msg) => {
     if (!debugEnabled && level !== 'error') return;
@@ -92,16 +93,20 @@ self.addEventListener('rtctransform', event => {
         encryptKey    = await crypto.subtle.importKey('raw', msg.data.keyData, { name: 'AES-GCM' }, false, ['encrypt']);
       } catch (err) {
         log('error', '[E2EE][WORKER]', `importKey (encrypt) failed: ${err}`);
+        console.error('[e2ee-worker] importKey (encrypt) failed:', err);
         port.postMessage({ type: 'encrypt-error', message: String(err) });
         return;
       }
       encryptIvSeed = new Uint8Array(msg.data.ivSeed); // defensive copy
       encryptEpoch  = msg.data.epoch ?? 0;
+      encryptDropCount = 0; // reset drop counter on new key
       if (type === 'rotate-encrypt-key') {
         frameCounter = 0;
         log('info', '[E2EE][WORKER]', `rotate-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
+        console.info(`[e2ee-worker] rotate-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
       } else {
         log('info', '[E2EE][WORKER]', `set-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
+        console.info(`[e2ee-worker] set-encrypt-key OK epoch=${encryptEpoch} media=${mediaKind}`);
       }
       encryptReady = true;
       if (type === 'set-encrypt-key') port.postMessage({ type: 'encrypt-ready' });
@@ -115,6 +120,7 @@ self.addEventListener('rtctransform', event => {
         decryptKey    = await crypto.subtle.importKey('raw', msg.data.keyData, { name: 'AES-GCM' }, false, ['decrypt']);
       } catch (err) {
         log('error', '[E2EE][WORKER]', `importKey (decrypt) failed: ${err}`);
+        console.error('[e2ee-worker] importKey (decrypt) failed:', err);
         port.postMessage({ type: 'decrypt-error', message: String(err) });
         return;
       }
@@ -122,8 +128,10 @@ self.addEventListener('rtctransform', event => {
       decryptEpoch  = msg.data.epoch ?? 0;
       if (type === 'rotate-decrypt-key') {
         log('info', '[E2EE][WORKER]', `rotate-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
+        console.info(`[e2ee-worker] rotate-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
       } else {
-        log('info', '[E2EE][WORKER]', `set-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
+        log('info', '[E2EE][WORKER]', `set-decrypt-key OK epoch=${decryptEpoch} media=${mediaKind}`);
+        console.info(`[e2ee-worker] set-decrypt-key OK epoch=${decryptEpoch} media=${mediaKind}`);
       }
       decryptReady = true;
       if (type === 'set-decrypt-key') port.postMessage({ type: 'decrypt-ready' });
@@ -145,6 +153,12 @@ self.addEventListener('rtctransform', event => {
       .pipeThrough(new TransformStream({
         async transform(frame, controller) {
           if (!encryptReady) {
+            encryptDropCount++;
+            // Log first drop and then every 100 frames to avoid console spam
+            if (encryptDropCount === 1 || encryptDropCount % 100 === 0) {
+              log('warn', '[E2EE][WORKER]', `sender drop: encrypt not ready count=${encryptDropCount} media=${mediaKind}`);
+              console.warn(`[e2ee-worker] sender drop: encryptReady=false count=${encryptDropCount} media=${mediaKind} role=${role}`);
+            }
             // Drop silently — key not yet installed, never send cleartext
             return;
           }
@@ -188,6 +202,7 @@ self.addEventListener('rtctransform', event => {
         // Only log if it's not a normal closure.
         if (err && err.name !== 'AbortError') {
           log('warn', '[E2EE][WORKER]', `sender pipeline ended role=${role} media=${mediaKind}: ${err}`);
+          console.warn(`[e2ee-worker] sender pipeline ended role=${role} media=${mediaKind}:`, err);
         }
       });
 
@@ -253,6 +268,7 @@ self.addEventListener('rtctransform', event => {
       .catch(err => {
         if (err && err.name !== 'AbortError') {
           log('warn', '[E2EE][WORKER]', `receiver pipeline ended role=${role} media=${mediaKind}: ${err}`);
+          console.warn(`[e2ee-worker] receiver pipeline ended role=${role} media=${mediaKind}:`, err);
         }
       });
   }
