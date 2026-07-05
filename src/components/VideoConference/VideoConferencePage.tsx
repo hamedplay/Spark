@@ -930,12 +930,36 @@ export function VideoConferencePage() {
           </div>
 
           {/* Features */}
-          <div className="bg-gradient-to-br from-teal-50 to-blue-50 dark:from-teal-900/20 dark:to-blue-900/20 rounded-2xl border border-teal-100 dark:border-teal-800/50 p-4">
-            <p className="text-xs font-semibold text-teal-700 dark:text-teal-300 mb-3">امکانات</p>
+          <div className="bg-gradient-to-br from-teal-50 to-blue-50 dark:from-teal-900/20 dark:to-blue-900/20 rounded-2xl border border-teal-100 dark:border-teal-800/50 p-4 space-y-3">
+            <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">امکانات</p>
+
+            {/* E2EE highlight */}
+            <button
+              onClick={() => setShowE2EE(true)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition-colors text-white text-xs font-medium"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+              <span>تماس یک‌به‌یک E2EE — AES-GCM 256</span>
+              <span className="mr-auto text-emerald-200 text-[10px] font-normal border border-emerald-400/50 rounded-full px-1.5 py-0.5">جدید</span>
+            </button>
+
             <div className="grid grid-cols-2 gap-1.5 text-xs text-gray-600 dark:text-gray-400">
-              {['ویدیو چندنفره', 'رمزنگاری E2E', 'اشتراک صفحه', 'چت داخلی', 'نظرسنجی زنده', 'وایت‌بورد', 'واکنش Emoji', 'لینک مهمان'].map(label => (
-                <div key={label} className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 flex-shrink-0" />
+              {[
+                'ویدیو چندنفره (تا ۲۰ نفر)',
+                'اشتراک‌گذاری صفحه',
+                'چت داخلی',
+                'نظرسنجی زنده',
+                'وایت‌بورد مشترک',
+                'واکنش Emoji',
+                'لینک مهمان',
+                'اتاق انتظار',
+                'مدیریت نقش‌ها',
+                'محدودیت زمان صحبت',
+                'چندین حالت نمایش',
+                'کیفیت تطبیقی',
+              ].map(label => (
+                <div key={label} className="flex items-start gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0 mt-1" />
                   <span>{label}</span>
                 </div>
               ))}
