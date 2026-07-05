@@ -46,6 +46,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, ShieldCheck, ShieldAlert,
   Loader, Check, Users, RefreshCw, Phone, PhoneIncoming, Eye, Wifi, WifiOff,
+  Volume2, VolumeX,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getSharedRTCConfig, invalidateRTCConfigCache } from '../../lib/rtcConfig';
@@ -590,6 +591,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   const [e2eeStatus,      setE2eeStatus]     = useState<E2EEStatus>(SUPPORTS_TRANSFORMS ? 'pending' : 'unsupported');
   const [isMuted,         setIsMuted]        = useState(false);
   const [isVideoOff,      setIsVideoOff]     = useState(false);
+  const [isRemoteMuted,   setIsRemoteMuted]  = useState(true);
   const [targetUser,      setTargetUser]     = useState<UserProfile | null>(null);
   const [incomingCall,    setIncomingCall]   = useState<IncomingCall | null>(null);
   const [safetyNums,      setSafetyNums]     = useState<string[] | null>(null);
@@ -655,6 +657,19 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
         log('[E2EE][MEDIA]', 'remoteVideoRef.srcObject re-attached on phase mount');
       }
     }
+  }, [phase]);
+
+  // Diagnostic: log remote video readiness every second until frames are flowing.
+  useEffect(() => {
+    if (phase !== 'connected') return;
+    const check = setInterval(() => {
+      const v = remoteVideoRef.current;
+      if (!v) return;
+      log('[E2EE][UI]', `remote video — readyState=${v.readyState} ${v.videoWidth}×${v.videoHeight} paused=${v.paused} srcObject=${!!v.srcObject}`);
+      if (v.videoWidth > 0) clearInterval(check);
+    }, 1000);
+    return () => clearInterval(check);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   // Connection timeout: if still in 'connecting' after the allowed window, abort the call.
@@ -1690,7 +1705,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
         {(phase === 'connecting' || phase === 'connected') && (
           <div className="relative h-[460px] sm:h-[540px] bg-gray-950 rounded-2xl overflow-hidden">
             {/* Remote video */}
-            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
 
             {/* Connecting overlay */}
             {phase === 'connecting' && (
@@ -1744,6 +1759,19 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
               <button onClick={toggleMute}  className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted    ? 'bg-red-600 hover:bg-red-700' : 'bg-white/20 hover:bg-white/30'}`}>{isMuted    ? <MicOff  className="w-5 h-5 text-white" /> : <Mic   className="w-5 h-5 text-white" />}</button>
               <button onClick={() => doHangup()} className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center transition-colors"><PhoneOff className="w-6 h-6 text-white" /></button>
               <button onClick={toggleVideo} className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-600 hover:bg-red-700' : 'bg-white/20 hover:bg-white/30'}`}>{isVideoOff ? <VideoOff className="w-5 h-5 text-white" /> : <Video className="w-5 h-5 text-white" />}</button>
+              <button
+                onClick={() => {
+                  const v = remoteVideoRef.current;
+                  if (v) {
+                    v.muted = !v.muted;
+                    setIsRemoteMuted(v.muted);
+                  }
+                }}
+                title={isRemoteMuted ? 'فعال کردن صدای طرف مقابل' : 'بی‌صدا کردن طرف مقابل'}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isRemoteMuted ? 'bg-amber-500 hover:bg-amber-600' : 'bg-white/20 hover:bg-white/30'}`}
+              >
+                {isRemoteMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
+              </button>
             </div>
           </div>
         )}
