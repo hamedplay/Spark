@@ -46,7 +46,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, ShieldCheck, ShieldAlert,
   Loader, Check, Users, RefreshCw, Phone, PhoneIncoming, Eye, Wifi, WifiOff,
-  Volume2, VolumeX,
+  Volume2, VolumeX, Monitor, MonitorOff,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getSharedRTCConfig, invalidateRTCConfigCache } from '../../lib/rtcConfig';
@@ -592,6 +592,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   const [isMuted,         setIsMuted]        = useState(false);
   const [isVideoOff,      setIsVideoOff]     = useState(false);
   const [isRemoteMuted,   setIsRemoteMuted]  = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [targetUser,      setTargetUser]     = useState<UserProfile | null>(null);
   const [incomingCall,    setIncomingCall]   = useState<IncomingCall | null>(null);
   const [safetyNums,      setSafetyNums]     = useState<string[] | null>(null);
@@ -629,6 +630,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   const remoteStreamRef   = useRef<MediaStream | null>(null); // stable remote stream across tracks
   const offerSentRef      = useRef(false);               // prevents duplicate offer on double-accepted
   const cleaningUpRef     = useRef(false);               // reentrancy guard for doFullCleanup
+  const screenStreamRef   = useRef<MediaStream | null>(null); // screen share stream
+  const isScreenSharingRef = useRef(false);              // ref mirror of isScreenSharing for ended-handler
 
   // Keep phaseRef in sync with phase state
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -870,6 +873,10 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
 
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current = null;
+    isScreenSharingRef.current = false;
+
     remoteStreamRef.current = null;
     if (localVideoRef.current)  localVideoRef.current.srcObject  = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
@@ -900,6 +907,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     setSessionCode('');
     setIsMuted(false);
     setIsVideoOff(false);
+    setIsScreenSharing(false);
 
     cleaningUpRef.current = false;
 
@@ -1615,6 +1623,51 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   const toggleMute  = () => { localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = isMuted; }); setIsMuted(v => !v); };
   const toggleVideo = () => { localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = isVideoOff; }); setIsVideoOff(v => !v); };
 
+  // ── Screen share ──────────────────────────────────────────────────────────
+  const stopScreenShare = useCallback(async () => {
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current = null;
+    // Restore camera track in the peer connection sender
+    const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+    const sender = pcRef.current?.getSenders().find(s => s.track?.kind === 'video');
+    if (cameraTrack && sender) {
+      try { await sender.replaceTrack(cameraTrack); } catch { /* pc may be closing */ }
+    }
+    if (localVideoRef.current && localStreamRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+    }
+    isScreenSharingRef.current = false;
+    setIsScreenSharing(false);
+    log('[E2EE][MEDIA]', 'screen share stopped');
+  }, []);
+
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharingRef.current) {
+      await stopScreenShare();
+      return;
+    }
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      screenStreamRef.current = screenStream;
+      const screenTrack = screenStream.getVideoTracks()[0];
+      // Replace video track in the sender — RTCRtpScriptTransform is preserved,
+      // so screen frames are automatically encrypted through the same E2EE pipeline.
+      const sender = pcRef.current?.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(screenTrack);
+      // Show screen content in the local PiP
+      if (localVideoRef.current) localVideoRef.current.srcObject = new MediaStream([screenTrack]);
+      // Auto-stop when user ends sharing via browser UI
+      screenTrack.addEventListener('ended', stopScreenShare);
+      isScreenSharingRef.current = true;
+      setIsScreenSharing(true);
+      log('[E2EE][MEDIA]', 'screen share started');
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'NotAllowedError') {
+        toast.error('خطا در اشتراک‌گذاری صفحه');
+      }
+    }
+  }, [stopScreenShare]);
+
   // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => () => { doFullCleanup(); }, [doFullCleanup]);
 
@@ -1757,6 +1810,13 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
             {/* Controls */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3">
               <button onClick={toggleMute}  className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted    ? 'bg-red-600 hover:bg-red-700' : 'bg-white/20 hover:bg-white/30'}`}>{isMuted    ? <MicOff  className="w-5 h-5 text-white" /> : <Mic   className="w-5 h-5 text-white" />}</button>
+              <button
+                onClick={toggleScreenShare}
+                title={isScreenSharing ? 'توقف اشتراک صفحه' : 'اشتراک‌گذاری صفحه'}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isScreenSharing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-white/20 hover:bg-white/30'}`}
+              >
+                {isScreenSharing ? <MonitorOff className="w-5 h-5 text-white" /> : <Monitor className="w-5 h-5 text-white" />}
+              </button>
               <button onClick={() => doHangup()} className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center transition-colors"><PhoneOff className="w-6 h-6 text-white" /></button>
               <button onClick={toggleVideo} className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-600 hover:bg-red-700' : 'bg-white/20 hover:bg-white/30'}`}>{isVideoOff ? <VideoOff className="w-5 h-5 text-white" /> : <Video className="w-5 h-5 text-white" />}</button>
               <button
