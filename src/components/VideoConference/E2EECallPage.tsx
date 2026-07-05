@@ -670,7 +670,19 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
   const startLocalStream = async (): Promise<MediaStream | null> => {
     log('[E2EE][MEDIA]', 'requesting getUserMedia');
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const s = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: {
+          facingMode: 'user',          // front camera on mobile
+          width:  { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
+        },
+      });
       localStreamRef.current = s;
       const audioTracks = s.getAudioTracks().length;
       const videoTracks = s.getVideoTracks().length;
@@ -828,10 +840,20 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
     pc.onicecandidateerror = (e: Event) => {
       const ev = e as RTCPeerConnectionIceErrorEvent;
-      logError('[E2EE][ICE]', `candidate error code=${ev.errorCode} text="${ev.errorText}" url=${ev.url}`);
+      const url = ev.url ?? '';
+      const isTurn = /^turns?:/i.test(url);
+      // STUN errors (including code 701 on STUN URLs) are non-fatal — log only in debug
+      if (!isTurn) {
+        log('[E2EE][ICE]', `STUN candidate error code=${ev.errorCode} url=${url} (non-critical)`);
+        return;
+      }
+      logError('[E2EE][ICE]', `TURN candidate error code=${ev.errorCode} text="${ev.errorText}" url=${url}`);
       if (ev.errorCode === 701) {
         logError('[E2EE][ICE]', 'TURN authentication failed — check credentials in system_config');
-        toast.error('احراز هویت سرور TURN شکست خورد — با پشتیبانی تماس بگیرید');
+        toast.error('احراز هویت سرور TURN شکست خورد — اطلاعات ورود را بررسی کنید');
+      } else if (ev.errorCode === 702) {
+        logError('[E2EE][ICE]', 'TURN server unreachable');
+        toast.error('سرور TURN در دسترس نیست');
       }
     };
 

@@ -149,7 +149,7 @@ self.addEventListener('rtctransform', event => {
             hdr.setUint32(2, counter >>> 0, false); // big-endian
             out.set(new Uint8Array(ct), HEADER_LEN);
             frame.data = out.buffer;
-            controller.enqueue(frame);
+            try { controller.enqueue(frame); } catch { /* stream closed during PC teardown */ }
           } catch (err) {
             port.postMessage({ type: 'encrypt-error', message: String(err) });
             log('error', '[E2EE][WORKER]', `encrypt failed media=${mediaKind}: ${err}`);
@@ -157,7 +157,14 @@ self.addEventListener('rtctransform', event => {
           }
         },
       }))
-      .pipeTo(event.transformer.writable);
+      .pipeTo(event.transformer.writable)
+      .catch(err => {
+        // Expected when the PC is closed — writable stream is aborted.
+        // Only log if it's not a normal closure.
+        if (err && err.name !== 'AbortError') {
+          log('warn', '[E2EE][WORKER]', `sender pipeline ended role=${role} media=${mediaKind}: ${err}`);
+        }
+      });
 
   // ── Receiver ──────────────────────────────────────────────────────────────
   } else {
@@ -203,7 +210,7 @@ self.addEventListener('rtctransform', event => {
           try {
             const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, decryptKey, ct);
             frame.data = pt;
-            controller.enqueue(frame);
+            try { controller.enqueue(frame); } catch { /* stream closed during PC teardown */ }
           } catch (err) {
             log('warn', '[E2EE][WORKER]', `decrypt failed media=${mediaKind} counter=${counter}: ${err}`);
             port.postMessage({ type: 'decrypt-error', message: `${mediaKind} counter=${counter}: ${err}` });
@@ -212,7 +219,12 @@ self.addEventListener('rtctransform', event => {
           }
         },
       }))
-      .pipeTo(event.transformer.writable);
+      .pipeTo(event.transformer.writable)
+      .catch(err => {
+        if (err && err.name !== 'AbortError') {
+          log('warn', '[E2EE][WORKER]', `receiver pipeline ended role=${role} media=${mediaKind}: ${err}`);
+        }
+      });
   }
 });
 
