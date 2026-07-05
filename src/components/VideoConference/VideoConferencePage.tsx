@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Video, Plus, LogIn, Copy, Check, Loader as Loader2, Mic, MicOff, VideoOff, Users, Clock, Crown, Link2, UserPlus, Send, Search, X, ChevronRight, RefreshCw, Globe, Calendar, Lock, Clock as Unlock, Shield, ShieldOff } from 'lucide-react';
+import { Video, Plus, LogIn, Copy, Check, Loader as Loader2, Mic, MicOff, VideoOff, Users, Clock, Crown, Link2, UserPlus, Send, Search, X, ChevronRight, RefreshCw, Globe, Calendar, Lock, Clock as Unlock, Shield, ShieldOff, ShieldCheck } from 'lucide-react';
+import { E2EECallPage } from './E2EECallPage';
 import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
@@ -327,6 +328,7 @@ export function VideoConferencePage() {
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
 
   const [inviteRoom, setInviteRoom] = useState<ConferenceRoom | null>(null);
+  const [showE2EE, setShowE2EE] = useState(false);
 
   // Pre-join device selection
   const [preJoinRoom, setPreJoinRoom] = useState<ConferenceRoom | null>(null);
@@ -759,6 +761,19 @@ export function VideoConferencePage() {
     );
   }
 
+  // ── E2EE 1-to-1 call ──────────────────────────────────────────────────────
+  if (showE2EE && userId) {
+    return (
+      <div className="h-[calc(100vh-120px)] min-h-[480px]">
+        <E2EECallPage
+          currentUserId={userId}
+          currentUserName={userName}
+          onBack={() => setShowE2EE(false)}
+        />
+      </div>
+    );
+  }
+
   // ── Lobby ──────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 relative" dir="rtl">
@@ -780,13 +795,21 @@ export function VideoConferencePage() {
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">جلسات آنلاین رمزنگاری‌شده WebRTC</p>
         </div>
-        <button
-          onClick={() => fetchRooms(userId || undefined)}
-          aria-label="بارگذاری مجدد"
-          className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowE2EE(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-sm font-medium transition-colors"
+          >
+            <ShieldCheck className="w-4 h-4" /> تماس E2EE
+          </button>
+          <button
+            onClick={() => fetchRooms(userId || undefined)}
+            aria-label="بارگذاری مجدد"
+            className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
