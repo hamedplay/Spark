@@ -1,5 +1,5 @@
-const STATIC_CACHE = 'spark-static-v6';
-const RUNTIME_CACHE = 'spark-runtime-v6';
+const STATIC_CACHE = 'spark-static-v7';
+const RUNTIME_CACHE = 'spark-runtime-v7';
 
 const STATIC_ASSETS = [
   '/',
@@ -222,6 +222,12 @@ self.addEventListener('fetch', (event) => {
    * Do not interfere with auth routes.
    */
   if (url.pathname.startsWith('/auth/')) return;
+
+  /**
+   * Never cache the E2EE worker script — it must always be the latest version
+   * so that any updates to ping/pong or frame-transform logic take effect immediately.
+   */
+  if (url.pathname === '/e2ee-worker.js') return;
 
   /**
    * Navigation requests:
