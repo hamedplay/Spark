@@ -246,7 +246,7 @@ async function deriveSessionKeys(
             { name: 'HKDF', hash: 'SHA-256', salt, info: aesInfo },
             hkdfKey,
             { name: 'AES-GCM', length: 256 },
-            false,
+            true,  // extractable=true so we can export raw bytes for postMessage
             usage,
           ),
           crypto.subtle.deriveBits(
@@ -422,10 +422,13 @@ function attachReceiverTransform(
   return { port: port1, kind, role: 'receiver' };
 }
 
-function pushKeyToPortRecord(pr: PortRecord, keys: DerivedKeys) {
+async function pushKeyToPortRecord(pr: PortRecord, keys: DerivedKeys) {
   const mk = pr.role === 'sender' ? keys.send[pr.kind] : keys.recv[pr.kind];
   const msgType = pr.role === 'sender' ? 'set-encrypt-key' : 'set-decrypt-key';
-  pr.port.postMessage({ type: msgType, key: mk.key, ivSeed: mk.ivSeed, epoch: 0 }, []);
+  // Export key as raw bytes — CryptoKey objects are not reliably cloneable across
+  // RTCRtpScriptTransform contexts in all browsers, but ArrayBuffers always are.
+  const keyData = await crypto.subtle.exportKey('raw', mk.key);
+  pr.port.postMessage({ type: msgType, keyData, ivSeed: mk.ivSeed, epoch: 0 }, [keyData]);
   log('[E2EE][KEY]', `pushKey role=${pr.role} kind=${pr.kind} msgType=${msgType}`);
 }
 
@@ -842,7 +845,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
       // Push to all existing port records
       for (const pr of portRecordsRef.current) {
-        pushKeyToPortRecord(pr, keys);
+        await pushKeyToPortRecord(pr, keys);
       }
       log('[E2EE][KEY]', `keys pushed to ${portRecordsRef.current.length} transform port(s)`);
 
@@ -887,14 +890,14 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
         if (pr) {
           portRecordsRef.current.push(pr);
           if (activeKeysRef.current) {
-            pushKeyToPortRecord(pr, activeKeysRef.current);
+            await pushKeyToPortRecord(pr, activeKeysRef.current);
             log('[E2EE][XFORM]', `sender keys pushed early kind=${pr.kind}`);
           }
         }
       }
     }
 
-    pc.ontrack = e => {
+    pc.ontrack = async (e) => {
       log('[E2EE][PC]', `ontrack kind=${e.track.kind} id=${e.track.id} muted=${e.track.muted} readyState=${e.track.readyState}`);
 
       // Attach receiver transform
@@ -903,7 +906,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
         if (pr) {
           portRecordsRef.current.push(pr);
           if (activeKeysRef.current) {
-            pushKeyToPortRecord(pr, activeKeysRef.current);
+            await pushKeyToPortRecord(pr, activeKeysRef.current);
             log('[E2EE][XFORM]', `receiver keys pushed early kind=${pr.kind}`);
           }
         }

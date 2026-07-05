@@ -21,10 +21,10 @@
  *   { type: 'init', debug: boolean, media: 'audio'|'video' }
  *
  * Main → Worker messages (via MessagePort transferred in options.port):
- *   { type:'set-encrypt-key',    key:CryptoKey, ivSeed:Uint8Array(8), epoch:number }
- *   { type:'set-decrypt-key',    key:CryptoKey, ivSeed:Uint8Array(8), epoch:number }
- *   { type:'rotate-encrypt-key', key, ivSeed, epoch }
- *   { type:'rotate-decrypt-key', key, ivSeed, epoch }
+ *   { type:'set-encrypt-key',    keyData:ArrayBuffer, ivSeed:Uint8Array(8), epoch:number }
+ *   { type:'set-decrypt-key',    keyData:ArrayBuffer, ivSeed:Uint8Array(8), epoch:number }
+ *   { type:'rotate-encrypt-key', keyData:ArrayBuffer, ivSeed:Uint8Array(8), epoch:number }
+ *   { type:'rotate-decrypt-key', keyData:ArrayBuffer, ivSeed:Uint8Array(8), epoch:number }
  *   { type:'ping' }
  *
  * Worker → Main:
@@ -69,7 +69,7 @@ self.addEventListener('rtctransform', event => {
     return iv;
   };
 
-  port.addEventListener('message', msg => {
+  port.addEventListener('message', async msg => {
     const { type } = msg.data;
 
     // Guard: transformer may be in a closed/invalid state after PC teardown
@@ -87,7 +87,14 @@ self.addEventListener('rtctransform', event => {
     }
 
     if (type === 'set-encrypt-key' || type === 'rotate-encrypt-key') {
-      encryptKey    = msg.data.key;
+      // keyData is an ArrayBuffer — import it so CryptoKey objects never cross thread boundaries
+      try {
+        encryptKey    = await crypto.subtle.importKey('raw', msg.data.keyData, { name: 'AES-GCM' }, false, ['encrypt']);
+      } catch (err) {
+        log('error', '[E2EE][WORKER]', `importKey (encrypt) failed: ${err}`);
+        port.postMessage({ type: 'encrypt-error', message: String(err) });
+        return;
+      }
       encryptIvSeed = new Uint8Array(msg.data.ivSeed); // defensive copy
       encryptEpoch  = msg.data.epoch ?? 0;
       if (type === 'rotate-encrypt-key') {
@@ -104,7 +111,13 @@ self.addEventListener('rtctransform', event => {
       }
 
     } else if (type === 'set-decrypt-key' || type === 'rotate-decrypt-key') {
-      decryptKey    = msg.data.key;
+      try {
+        decryptKey    = await crypto.subtle.importKey('raw', msg.data.keyData, { name: 'AES-GCM' }, false, ['decrypt']);
+      } catch (err) {
+        log('error', '[E2EE][WORKER]', `importKey (decrypt) failed: ${err}`);
+        port.postMessage({ type: 'decrypt-error', message: String(err) });
+        return;
+      }
       decryptIvSeed = new Uint8Array(msg.data.ivSeed);
       decryptEpoch  = msg.data.epoch ?? 0;
       if (type === 'rotate-decrypt-key') {
