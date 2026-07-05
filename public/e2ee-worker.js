@@ -47,10 +47,17 @@ const MAX_COUNTER   = 0xFFFF_FFFF;
 console.log('[e2ee-worker] worker script loaded');
 
 self.addEventListener('message', event => {
-  const { type } = event.data || {};
+  const { type, testPort } = event.data || {};
   if (type === 'ping') {
-    console.log('[e2ee-worker] ping received — sending pong');
-    self.postMessage({ type: 'pong' });
+    console.log('[e2ee-worker] ping received — sending pong via testPort');
+    // Respond via the transferred test port so the reply reaches the main thread
+    // regardless of any browser restrictions on self.postMessage in transform workers
+    if (testPort) {
+      testPort.postMessage({ type: 'pong' });
+    } else {
+      // Fallback for environments that support self.postMessage normally
+      self.postMessage({ type: 'pong' });
+    }
   }
 });
 

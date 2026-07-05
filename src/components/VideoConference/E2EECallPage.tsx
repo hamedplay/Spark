@@ -384,27 +384,33 @@ interface PortRecord {
   role:  'sender' | 'receiver';
 }
 
-/** Ping the Worker via self.postMessage to confirm the JS context is alive. */
+/** Ping the Worker via a transferred MessagePort to confirm the JS context is alive.
+ *  Uses a dedicated test port rather than self.postMessage because browsers that
+ *  implement RTCRtpScriptTransform may restrict top-level self.postMessage in
+ *  transform workers. MessagePort transfer always works. */
 function ensureWorkerReady(worker: Worker): Promise<void> {
   return new Promise((resolve, reject) => {
+    const { port1: testPort1, port2: testPort2 } = new MessageChannel();
+    testPort1.start();
+
     const timer = setTimeout(() => {
-      worker.removeEventListener('message', handler);
+      testPort1.close();
       reject(new Error('worker ping timeout'));
     }, 3000);
 
-    const handler = (e: MessageEvent) => {
+    testPort1.addEventListener('message', (e: MessageEvent) => {
       if (e.data?.type === 'pong') {
         clearTimeout(timer);
-        worker.removeEventListener('message', handler);
+        testPort1.close();
         log('[E2EE][WORKER]', 'worker health check passed (pong received)');
         console.info('[E2EE][WORKER] worker health check passed ✅');
         resolve();
       }
-    };
+    });
 
-    worker.addEventListener('message', handler);
-    worker.postMessage({ type: 'ping' });
-    console.info('[E2EE][WORKER] sending ping to worker...');
+    // Transfer testPort2 to the worker so it can respond via it
+    worker.postMessage({ type: 'ping', testPort: testPort2 }, [testPort2]);
+    console.info('[E2EE][WORKER] sending ping to worker via test port...');
   });
 }
 
