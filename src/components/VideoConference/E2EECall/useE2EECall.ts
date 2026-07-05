@@ -74,7 +74,7 @@ export function useE2EECall(
   const [e2eeStatus,       setE2eeStatus]       = useState<E2EEStatus>(SUPPORTS_TRANSFORMS ? 'pending' : 'unsupported');
   const [isMuted,          setIsMuted]          = useState(false);
   const [isVideoOff,       setIsVideoOff]       = useState(false);
-  const [isRemoteMuted,    setIsRemoteMuted]    = useState(true);
+  const [isRemoteMuted,    setIsRemoteMuted]    = useState(false);
   const [isScreenSharing,  setIsScreenSharing]  = useState(false);
   const [remoteStreamTick, setRemoteStreamTick] = useState(0);
   const [targetUser,       setTargetUser]       = useState<UserProfile | null>(null);

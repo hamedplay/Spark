@@ -95,10 +95,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
             onToggleVideo={toggleVideo}
             onToggleScreenShare={toggleScreenShare}
             onHangup={() => doHangup()}
-            onToggleRemoteMute={() => {
-              const v = remoteVideoRef.current;
-              if (v) { v.muted = !v.muted; setIsRemoteMuted(v.muted); }
-            }}
+            onToggleRemoteMute={() => setIsRemoteMuted(v => !v)}
             onShowSafety={() => setShowSafety(true)}
             onCloseSafety={() => setShowSafety(false)}
             onVerifySafety={() => {

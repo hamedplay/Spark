@@ -120,8 +120,8 @@ export function ActiveCallView({
   return (
     <>
       <div className="relative h-[460px] sm:h-[540px] bg-gray-950 rounded-2xl overflow-hidden">
-        {/* Remote video */}
-        <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+        {/* Remote video — muted is controlled by isRemoteMuted state */}
+        <video ref={remoteVideoRef} autoPlay playsInline muted={isRemoteMuted} className="w-full h-full object-cover" />
 
         {/* Connecting overlay */}
         {phase === 'connecting' && (
