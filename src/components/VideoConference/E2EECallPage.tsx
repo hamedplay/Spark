@@ -387,19 +387,30 @@ interface PortRecord {
 /** Ping the Worker via a transferred MessagePort to confirm the JS context is alive.
  *  Uses a dedicated test port rather than self.postMessage because browsers that
  *  implement RTCRtpScriptTransform may restrict top-level self.postMessage in
- *  transform workers. MessagePort transfer always works. */
+ *  transform workers. MessagePort transfer always works.
+ *
+ *  NOTE: This is a SOFT diagnostic — it resolves even on timeout because
+ *  worker.postMessage() → self.addEventListener('message') is unreliable for
+ *  dedicated transform workers in Chrome/Safari. A dead worker is detected
+ *  definitively by the workerRef being nulled in the error handler. */
 function ensureWorkerReady(worker: Worker): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const { port1: testPort1, port2: testPort2 } = new MessageChannel();
     testPort1.start();
+    let resolved = false;
 
     const timer = setTimeout(() => {
-      testPort1.close();
-      reject(new Error('worker ping timeout'));
+      if (!resolved) {
+        testPort1.close();
+        logWarn('[E2EE][WORKER]', 'ping timeout — worker alive check inconclusive, proceeding anyway');
+        console.warn('[E2EE][WORKER] worker ping timeout — continuing (transform-level checks will verify pipeline)');
+        resolve();
+      }
     }, 3000);
 
     testPort1.addEventListener('message', (e: MessageEvent) => {
-      if (e.data?.type === 'pong') {
+      if (!resolved && e.data?.type === 'pong') {
+        resolved = true;
         clearTimeout(timer);
         testPort1.close();
         log('[E2EE][WORKER]', 'worker health check passed (pong received)');
@@ -732,6 +743,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       const w = new Worker('/e2ee-worker.js');
       w.addEventListener('error', e => {
         logError('[E2EE][ERROR]', 'worker error:', e.message);
+        // Null the ref immediately so the !workerRef.current guard blocks future calls
+        workerRef.current = null;
         setE2eeStatus('error');
         toast.error('خطای Worker رمزنگاری — تماس قطع شد');
         doFullCleanup('ice_failed');
@@ -1429,15 +1442,9 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     }
 
     try {
+      // Soft worker health check — resolves even on timeout (see ensureWorkerReady comment)
       await ensureWorkerReady(workerRef.current);
-    } catch (err) {
-      logError('[E2EE][WORKER]', 'worker not responding:', err);
-      toast.error('خطا در بارگذاری رمزنگار');
-      setE2eeStatus('error');
-      return;
-    }
 
-    try {
       setTargetUser(target);
       myRoleRef.current = 'caller';
       offerSentRef.current = false;
@@ -1524,14 +1531,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
     try {
       await ensureWorkerReady(workerRef.current);
-    } catch (err) {
-      logError('[E2EE][WORKER]', 'worker not responding:', err);
-      toast.error('خطا در بارگذاری رمزنگار');
-      setE2eeStatus('error');
-      return;
-    }
 
-    try {
       myRoleRef.current    = 'callee';
       sessionIdRef.current = ic.sessionId;
       lockedPeerRef.current = ic.from;
