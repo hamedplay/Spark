@@ -92,7 +92,10 @@ self.addEventListener('rtctransform', event => {
       }
       encryptReady = true;
       if (type === 'set-encrypt-key') port.postMessage({ type: 'encrypt-ready' });
-      try { event.transformer.generateKeyFrame(); } catch { /* optional API */ }
+      // generateKeyFrame() is video-only — calling it on an audio transformer throws InvalidStateError
+      if (mediaKind === 'video') {
+        try { event.transformer.generateKeyFrame(); } catch { /* optional API */ }
+      }
 
     } else if (type === 'set-decrypt-key' || type === 'rotate-decrypt-key') {
       decryptKey    = msg.data.key;
@@ -105,7 +108,10 @@ self.addEventListener('rtctransform', event => {
       }
       decryptReady = true;
       if (type === 'set-decrypt-key') port.postMessage({ type: 'decrypt-ready' });
-      try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
+      // sendKeyFrameRequest() is video-only — calling it on an audio transformer throws InvalidStateError
+      if (mediaKind === 'video') {
+        try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
+      }
 
     } else if (type === 'ping') {
       port.postMessage({ type: 'pong' });
@@ -173,7 +179,10 @@ self.addEventListener('rtctransform', event => {
         async transform(frame, controller) {
           if (!decryptReady) {
             log('info', '[E2EE][WORKER]', `frame dropped: no decrypt key yet media=${mediaKind}`);
-            try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
+            // sendKeyFrameRequest() is video-only
+            if (mediaKind === 'video') {
+              try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
+            }
             return;
           }
 
@@ -214,8 +223,10 @@ self.addEventListener('rtctransform', event => {
           } catch (err) {
             log('warn', '[E2EE][WORKER]', `decrypt failed media=${mediaKind} counter=${counter}: ${err}`);
             port.postMessage({ type: 'decrypt-error', message: `${mediaKind} counter=${counter}: ${err}` });
-            // AES-GCM auth failure — drop and request keyframe
-            try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
+            // AES-GCM auth failure — drop and request keyframe (video-only)
+            if (mediaKind === 'video') {
+              try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
+            }
           }
         },
       }))
