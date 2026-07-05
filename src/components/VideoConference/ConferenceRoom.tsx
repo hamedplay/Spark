@@ -596,18 +596,70 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
-        console.log(`[WRTCDiag] onicecandidate → SEND to peer=${remotePeerId} type=${e.candidate.type} protocol=${e.candidate.protocol} address=${e.candidate.address}`);
+        console.log(
+          `[WRTCDiag][ICE-OUT] peer=${remotePeerId}` +
+          ` | type=${e.candidate.type}` +
+          ` | protocol=${e.candidate.protocol}` +
+          ` | address=${e.candidate.address}` +
+          ` | port=${e.candidate.port}` +
+          ` | candidate="${e.candidate.candidate}"`
+        );
         sendSignal(remotePeerId, 'ice', { candidate: e.candidate.toJSON() });
       } else {
-        console.log(`[WRTCDiag] onicecandidate: gathering complete (null candidate) for peer=${remotePeerId} iceGatheringState=${pc.iceGatheringState}`);
+        console.log(`[WRTCDiag][ICE-OUT] gathering complete (null candidate) peer=${remotePeerId} iceGatheringState=${pc.iceGatheringState}`);
       }
     };
 
     pc.onconnectionstatechange = () => {
-      console.log(`[WRTCDiag] connectionState → peer=${remotePeerId} state=${pc.connectionState}`);
+      console.log(`[WRTCDiag][STATE] connectionState → peer=${remotePeerId} state=${pc.connectionState}`);
       const cur = peersRef.current.get(remotePeerId);
       if (cur) { peersRef.current.set(remotePeerId, { ...cur, connectionState: pc.connectionState }); setPeers(new Map(peersRef.current)); }
       if (pc.connectionState === 'connected') toast.success(`${remoteDisplayName} وارد شد`);
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        pc.getStats().then(stats => {
+          let selectedPairId: string | null = null;
+          const candidates: Record<string, any> = {};
+          const pairs: any[] = [];
+          stats.forEach(r => {
+            if (r.type === 'local-candidate') {
+              candidates[r.id] = { dir: 'local', type: r.candidateType, protocol: r.protocol, address: r.address, port: r.port };
+              console.log(`[WRTCDiag][STATS] local-candidate id=${r.id} type=${r.candidateType} protocol=${r.protocol} address=${r.address} port=${r.port}`);
+            }
+            if (r.type === 'remote-candidate') {
+              candidates[r.id] = { dir: 'remote', type: r.candidateType, protocol: r.protocol, address: r.address, port: r.port };
+              console.log(`[WRTCDiag][STATS] remote-candidate id=${r.id} type=${r.candidateType} protocol=${r.protocol} address=${r.address} port=${r.port}`);
+            }
+            if (r.type === 'candidate-pair') {
+              pairs.push(r);
+              if (r.nominated && r.state === 'succeeded') selectedPairId = r.id;
+              console.log(
+                `[WRTCDiag][STATS] candidate-pair id=${r.id}` +
+                ` state=${r.state} nominated=${r.nominated}` +
+                ` local=${r.localCandidateId} remote=${r.remoteCandidateId}` +
+                ` bytesSent=${r.bytesSent ?? 'n/a'} bytesReceived=${r.bytesReceived ?? 'n/a'}` +
+                ` RTT=${r.currentRoundTripTime ?? 'n/a'} totalRTT=${r.totalRoundTripTime ?? 'n/a'}`
+              );
+            }
+          });
+          if (selectedPairId) {
+            const pair = pairs.find(p => p.id === selectedPairId);
+            const lc = pair ? candidates[pair.localCandidateId]  : null;
+            const rc = pair ? candidates[pair.remoteCandidateId] : null;
+            console.log(
+              `[WRTCDiag][STATS] SELECTED PAIR peer=${remotePeerId}` +
+              ` | local=${lc?.type}/${lc?.protocol}/${lc?.address}:${lc?.port}` +
+              ` | remote=${rc?.type}/${rc?.protocol}/${rc?.address}:${rc?.port}` +
+              ` | bytesSent=${pair?.bytesSent} bytesReceived=${pair?.bytesReceived} RTT=${pair?.currentRoundTripTime}`
+            );
+          } else {
+            console.warn(
+              `[WRTCDiag][STATS] NO selected candidate-pair peer=${remotePeerId}` +
+              ` | total_pairs=${pairs.length}` +
+              ` | pair_states: [${pairs.map(p => `${p.id}:${p.state}(nominated=${p.nominated})`).join(', ')}]`
+            );
+          }
+        }).catch(err => console.warn(`[WRTCDiag][STATS] getStats failed peer=${remotePeerId}`, err));
+      }
       if (pc.connectionState === 'disconnected') {
         // First try ICE restart before giving up
         setTimeout(async () => {
@@ -640,15 +692,31 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log(`[WRTCDiag] iceConnectionState → peer=${remotePeerId} state=${pc.iceConnectionState}`);
+      const s = pc.iceConnectionState;
+      console.log(`[WRTCDiag][STATE] iceConnectionState → peer=${remotePeerId} state=${s}`);
+      if (s === 'failed') {
+        console.warn(`[WRTCDiag][ICE-FAIL] iceConnectionState=failed peer=${remotePeerId} — dumping getStats`);
+        pc.getStats().then(stats => {
+          stats.forEach(r => {
+            if (r.type === 'candidate-pair') {
+              console.warn(
+                `[WRTCDiag][ICE-FAIL] candidate-pair id=${r.id}` +
+                ` state=${r.state} nominated=${r.nominated}` +
+                ` writable=${r.writable} priority=${r.priority}` +
+                ` bytesSent=${r.bytesSent ?? 0} bytesReceived=${r.bytesReceived ?? 0}`
+              );
+            }
+          });
+        }).catch(() => {});
+      }
     };
 
     pc.onsignalingstatechange = () => {
-      console.log(`[WRTCDiag] signalingState → peer=${remotePeerId} state=${pc.signalingState}`);
+      console.log(`[WRTCDiag][STATE] signalingState → peer=${remotePeerId} state=${pc.signalingState}`);
     };
 
     pc.onicegatheringstatechange = () => {
-      console.log(`[WRTCDiag] iceGatheringState → peer=${remotePeerId} state=${pc.iceGatheringState}`);
+      console.log(`[WRTCDiag][STATE] iceGatheringState → peer=${remotePeerId} state=${pc.iceGatheringState}`);
     };
 
     const conn: PeerConnection = { peerId: remotePeerId, userId: remoteUserId, displayName: remoteDisplayName, pc, stream: null, screenStream: null, isScreenSharing: false, isMuted: false, isVideoOff: false, isHandRaised: false, connectionState: 'new', networkQuality: 'good', speakingSeconds: 0, audioLevel: 0 };
@@ -671,15 +739,24 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
   const flushICE = useCallback(async (remotePeerId: string) => {
     const q = iceCandidateQueue.current.get(remotePeerId) || [];
-    console.log(`[WRTCDiag] flushICE: peer=${remotePeerId} queued=${q.length} hasRemoteDesc=${!!peersRef.current.get(remotePeerId)?.pc?.remoteDescription}`);
+    console.log(`[WRTCDiag][ICE-FLUSH] peer=${remotePeerId} queued=${q.length} hasRemoteDesc=${!!peersRef.current.get(remotePeerId)?.pc?.remoteDescription}`);
     if (!q.length) return;
     const pc = peersRef.current.get(remotePeerId)?.pc;
     if (!pc?.remoteDescription) return;
-    for (const c of q) await pc.addIceCandidate(new RTCIceCandidate(c)).catch((err) => {
-      console.warn(`[WRTCDiag] flushICE addIceCandidate failed peer=${remotePeerId}`, err);
-    });
+    for (const c of q) {
+      console.log(
+        `[WRTCDiag][ICE-FLUSH] addIceCandidate peer=${remotePeerId}` +
+        ` | typeof=${typeof c}` +
+        ` | json=${JSON.stringify(c)}`
+      );
+      await pc.addIceCandidate(new RTCIceCandidate(c)).then(() => {
+        console.log(`[WRTCDiag][ICE-FLUSH] addIceCandidate SUCCESS peer=${remotePeerId}`);
+      }).catch((err) => {
+        console.warn(`[WRTCDiag][ICE-FLUSH] addIceCandidate FAILED peer=${remotePeerId}`, err);
+      });
+    }
     iceCandidateQueue.current.delete(remotePeerId);
-    console.log(`[WRTCDiag] flushICE: flushed ${q.length} queued candidates for peer=${remotePeerId}`);
+    console.log(`[WRTCDiag][ICE-FLUSH] done — flushed ${q.length} candidates for peer=${remotePeerId}`);
   }, []);
 
   const makeOffer = useCallback(async (remotePeerId: string, remoteUserId: string, remoteDisplayName: string) => {
@@ -780,18 +857,28 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
           const cur = peersRef.current.get(from);
           if (cur?.pc) {
             if (cur.pc.remoteDescription) {
-              console.log(`[WRTCDiag] RECV ice ← from=${from} → addIceCandidate (has remoteDesc) type=${data.candidate?.type} protocol=${data.candidate?.protocol}`);
-              cur.pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch((err) => {
-                console.warn(`[WRTCDiag] addIceCandidate failed from=${from}`, err);
+              console.log(
+                `[WRTCDiag][ICE-IN] RECV ice peer=${from} → addIceCandidate` +
+                ` | typeof_data.candidate=${typeof data.candidate}` +
+                ` | json=${JSON.stringify(data.candidate)}`
+              );
+              cur.pc.addIceCandidate(new RTCIceCandidate(data.candidate)).then(() => {
+                console.log(`[WRTCDiag][ICE-IN] addIceCandidate SUCCESS peer=${from}`);
+              }).catch((err) => {
+                console.warn(`[WRTCDiag][ICE-IN] addIceCandidate FAILED peer=${from}`, err);
               });
             } else {
-              console.log(`[WRTCDiag] RECV ice ← from=${from} → QUEUED (no remoteDesc yet) type=${data.candidate?.type}`);
+              console.log(
+                `[WRTCDiag][ICE-IN] RECV ice peer=${from} → QUEUED (no remoteDesc)` +
+                ` | typeof_data.candidate=${typeof data.candidate}` +
+                ` | json=${JSON.stringify(data.candidate)}`
+              );
               const q = iceCandidateQueue.current.get(from) || [];
               q.push(data.candidate);
               iceCandidateQueue.current.set(from, q);
             }
           } else {
-            console.warn(`[WRTCDiag] RECV ice ← from=${from} → DROPPED (no pc found)`);
+            console.warn(`[WRTCDiag][ICE-IN] RECV ice peer=${from} → DROPPED (no pc found) json=${JSON.stringify(data.candidate)}`);
           }
 
         } else if (type === 'leave') {
