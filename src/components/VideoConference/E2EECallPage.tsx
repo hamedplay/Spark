@@ -48,7 +48,7 @@ import {
   Loader, Check, Users, RefreshCw, Phone, PhoneIncoming, Eye,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getSharedRTCConfig } from '../../lib/rtcConfig';
+import { getSharedRTCConfig, invalidateRTCConfigCache } from '../../lib/rtcConfig';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -826,14 +826,56 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       });
     };
 
+    pc.onicecandidateerror = (e: Event) => {
+      const ev = e as RTCPeerConnectionIceErrorEvent;
+      logError('[E2EE][ICE]', `candidate error code=${ev.errorCode} text="${ev.errorText}" url=${ev.url}`);
+      if (ev.errorCode === 701) {
+        logError('[E2EE][ICE]', 'TURN authentication failed — check credentials in system_config');
+        toast.error('احراز هویت سرور TURN شکست خورد — با پشتیبانی تماس بگیرید');
+      }
+    };
+
     pc.onicegatheringstatechange = () => {
       log('[E2EE][ICE]', `iceGatheringState=${pc.iceGatheringState}`);
     };
 
+    let iceDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     pc.oniceconnectionstatechange = () => {
-      log('[E2EE][ICE]', `iceConnectionState=${pc.iceConnectionState}`);
-      if (pc.iceConnectionState === 'failed') {
-        logError('[E2EE][ERROR]', 'ICE connection failed');
+      const s = pc.iceConnectionState;
+      log('[E2EE][ICE]', `iceConnectionState=${s}`);
+
+      if (s === 'connected' || s === 'completed') {
+        // Clear any pending disconnect timer when connection recovers
+        if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
+      }
+
+      if (s === 'disconnected') {
+        logWarn('[E2EE][ICE]', 'ICE disconnected — waiting 10 s before restart');
+        if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
+        iceDisconnectTimer = setTimeout(() => {
+          iceDisconnectTimer = null;
+          if (pc.iceConnectionState !== 'disconnected') return;
+          log('[E2EE][ICE]', 'still disconnected after 10 s — attempting ICE restart');
+          pc.createOffer({ iceRestart: true })
+            .then(offer => pc.setLocalDescription(offer).then(() => offer))
+            .then(offer => {
+              sessionChannelRef.current?.send({
+                type: 'broadcast', event: 'e2ee-signal',
+                payload: { type: 'offer', from: myPeerIdRef.current, session: sessionIdRef.current, data: { sdp: pc.localDescription, publicKey: myPublicJWKRef.current, salt: saltRef.current ? bytesToHex(saltRef.current) : '' } },
+              });
+              log('[E2EE][ICE]', 'ICE restart offer sent');
+            })
+            .catch(err => {
+              logError('[E2EE][ICE]', 'ICE restart failed:', err);
+              doFullCleanup('peer_disconnected');
+            });
+        }, 10_000);
+      }
+
+      if (s === 'failed') {
+        if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
+        logError('[E2EE][ERROR]', 'ICE connection failed — cleaning up');
         doFullCleanup('ice_failed');
       }
     };
@@ -851,7 +893,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       if (pc.connectionState === 'connected') setPhase('connected');
       else if (pc.connectionState === 'failed') doFullCleanup('ice_failed');
       else if (pc.connectionState === 'disconnected') {
-        logWarn('[E2EE][PC]', 'peer disconnected');
+        logWarn('[E2EE][PC]', 'peer connection state: disconnected (ICE handler will manage recovery)');
       }
     };
 
@@ -1033,6 +1075,9 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       myRoleRef.current = 'caller';
       offerSentRef.current = false;
 
+      // Invalidate cached RTCConfiguration so any admin changes take effect immediately
+      invalidateRTCConfigCache();
+
       const sessionId = uuidv4();
       sessionIdRef.current = sessionId;
       setSessionCode(sessionId.slice(0, 8).toUpperCase());
@@ -1115,6 +1160,9 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       sessionIdRef.current = ic.sessionId;
       lockedPeerRef.current = ic.from;
       offerSentRef.current = false;
+
+      // Invalidate cached RTCConfiguration so any admin changes take effect immediately
+      invalidateRTCConfigCache();
 
       log('[E2EE][KEY]', 'generating ECDH key pair (callee)');
       ecdhKeyPairRef.current = await generateECDHKeyPair();
