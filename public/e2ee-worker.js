@@ -1,5 +1,5 @@
 /**
- * e2ee-worker.js  v2
+ * e2ee-worker.js  v3
  *
  * RTCRtpScriptTransform handler for per-frame AES-GCM-256 encryption.
  *
@@ -7,40 +7,37 @@
  * ───────────────────
  * • Frames are DROPPED (not passed through) until a key is installed.
  *   Cleartext media never enters the transport layer.
- * • Sender and receiver hold SEPARATE CryptoKey objects:
- *     sender → encrypt-only key
- *     receiver → decrypt-only key
- *   Both are derived from the ECDH shared secret via HKDF with direction-aware
- *   info strings, so a captured receive key cannot be used to forge frames.
+ * • Separate AES-GCM-256 key per (direction × media-kind):
+ *     caller-to-callee/audio, caller-to-callee/video,
+ *     callee-to-caller/audio, callee-to-caller/video
+ *   A captured receive/video key cannot be used to forge audio frames.
  * • IV/nonce (12 B) = [8 B per-direction seed ‖ 4 B monotonic counter BE].
- *   The seed is derived via HKDF and changes on key rotation; the counter is
- *   never reset except on rotation — so IV(epoch, counter) is globally unique
- *   within a session.
- * • Frame header (6 B, prepended): [1 B version=0x01] [1 B epoch] [4 B counter BE]
- *   — versioned for future SFrameTransform / cipher migrations.
- * • Counter exhaustion at 2^32 triggers a `counter-exhausted` notification to
- *   the main thread, which should rotate keys before the counter overflows.
+ *   The seed changes on key rotation; the counter is never reset except
+ *   on rotation — so IV(epoch, counter) is globally unique within a session.
+ * • Frame header (6 B, prepended): [1 B version=0x02][1 B epoch][4 B counter BE]
+ * • Counter exhaustion at 2^32 triggers a `counter-exhausted` notification.
+ *
+ * Init message (required before encrypt/decrypt keys):
+ *   { type: 'init', debug: boolean, media: 'audio'|'video' }
  *
  * Main → Worker messages (via MessagePort transferred in options.port):
  *   { type:'set-encrypt-key',    key:CryptoKey, ivSeed:Uint8Array(8), epoch:number }
  *   { type:'set-decrypt-key',    key:CryptoKey, ivSeed:Uint8Array(8), epoch:number }
- *   { type:'rotate-encrypt-key', key, ivSeed, epoch }  ← resets frame counter to 0
+ *   { type:'rotate-encrypt-key', key, ivSeed, epoch }
  *   { type:'rotate-decrypt-key', key, ivSeed, epoch }
  *   { type:'ping' }
  *
  * Worker → Main:
+ *   { type:'ready' }
  *   { type:'encrypt-ready' }  { type:'decrypt-ready' }
  *   { type:'counter-exhausted' }  { type:'pong' }
  *   { type:'encrypt-error', message:string }
+ *   { type:'decrypt-error', message:string }
  *   { type:'version-mismatch', version:number }
- *
- * SFrameTransform migration path:
- *   Replace the TransformStream bodies with an SFrameTransform instance once
- *   the standard ships broadly — key derivation, HKDF context strings, and the
- *   signalling layer remain unchanged.
+ *   { type:'log', level:'info'|'warn'|'error', tag:string, msg:string }
  */
 
-const FRAME_VERSION = 0x01;
+const FRAME_VERSION = 0x02;
 const HEADER_LEN    = 6;       // 1 B version + 1 B epoch + 4 B counter
 const GCM_TAG_LEN   = 16;
 const IV_LEN        = 12;      // 8 B seed || 4 B counter
@@ -49,29 +46,51 @@ const MAX_COUNTER   = 0xFFFF_FFFF;
 self.addEventListener('rtctransform', event => {
   const { role, port } = event.transformer.options;
 
+  // Resolved after 'init' message
+  let debugEnabled = false;
+  let mediaKind    = 'unknown'; // 'audio' | 'video'
+
   let encryptKey    = null, decryptKey    = null;
   let encryptIvSeed = null, decryptIvSeed = null;
   let encryptEpoch  = 0,    decryptEpoch  = 0;
   let frameCounter  = 0;
   let encryptReady  = false, decryptReady = false;
 
-  /** Build the 12-byte AES-GCM nonce from the direction seed and frame counter. */
+  const log = (level, tag, msg) => {
+    if (!debugEnabled && level !== 'error') return;
+    port.postMessage({ type: 'log', level, tag, msg });
+  };
+
+  /** Build the 12-byte AES-GCM nonce: 8B seed || 4B counter (big-endian). */
   const makeIV = (seed, counter) => {
     const iv = new Uint8Array(IV_LEN);
     iv.set(seed, 0);
-    new DataView(iv.buffer).setUint32(8, counter, /* big-endian */ false);
+    new DataView(iv.buffer).setUint32(8, counter >>> 0, false /* big-endian */);
     return iv;
   };
 
   port.addEventListener('message', msg => {
     const { type } = msg.data;
 
+    if (type === 'init') {
+      debugEnabled = !!msg.data.debug;
+      mediaKind    = msg.data.media || 'unknown';
+      log('info', '[E2EE][WORKER]', `init role=${role} media=${mediaKind} debug=${debugEnabled}`);
+      port.postMessage({ type: 'ready' });
+      return;
+    }
+
     if (type === 'set-encrypt-key' || type === 'rotate-encrypt-key') {
       encryptKey    = msg.data.key;
       encryptIvSeed = new Uint8Array(msg.data.ivSeed); // defensive copy
       encryptEpoch  = msg.data.epoch ?? 0;
-      if (type === 'rotate-encrypt-key') frameCounter = 0; // counter resets on rotation
-      encryptReady  = true;
+      if (type === 'rotate-encrypt-key') {
+        frameCounter = 0;
+        log('info', '[E2EE][WORKER]', `rotate-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
+      } else {
+        log('info', '[E2EE][WORKER]', `set-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
+      }
+      encryptReady = true;
       if (type === 'set-encrypt-key') port.postMessage({ type: 'encrypt-ready' });
       try { event.transformer.generateKeyFrame(); } catch { /* optional API */ }
 
@@ -79,27 +98,36 @@ self.addEventListener('rtctransform', event => {
       decryptKey    = msg.data.key;
       decryptIvSeed = new Uint8Array(msg.data.ivSeed);
       decryptEpoch  = msg.data.epoch ?? 0;
-      decryptReady  = true;
+      if (type === 'rotate-decrypt-key') {
+        log('info', '[E2EE][WORKER]', `rotate-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
+      } else {
+        log('info', '[E2EE][WORKER]', `set-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
+      }
+      decryptReady = true;
       if (type === 'set-decrypt-key') port.postMessage({ type: 'decrypt-ready' });
-      try { event.transformer.sendKeyFrameRequest(); } catch { /* optional API */ }
+      try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
 
     } else if (type === 'ping') {
       port.postMessage({ type: 'pong' });
     }
   });
   port.start();
+  log('info', '[E2EE][WORKER]', `transform listener ready role=${role}`);
 
   // ── Sender ────────────────────────────────────────────────────────────────
   if (role === 'sender') {
     event.transformer.readable
       .pipeThrough(new TransformStream({
         async transform(frame, controller) {
-          // Drop frame until encrypt key is installed — never send cleartext.
-          if (!encryptReady) return;
+          if (!encryptReady) {
+            // Drop silently — key not yet installed, never send cleartext
+            return;
+          }
 
           if (frameCounter > MAX_COUNTER) {
             port.postMessage({ type: 'counter-exhausted' });
-            return; // drop — key rotation required before sending more frames
+            log('error', '[E2EE][WORKER]', `counter exhausted media=${mediaKind}`);
+            return;
           }
 
           const counter = frameCounter++;
@@ -117,13 +145,14 @@ self.addEventListener('rtctransform', event => {
             const out = new Uint8Array(HEADER_LEN + ct.byteLength);
             const hdr = new DataView(out.buffer);
             hdr.setUint8(0, FRAME_VERSION);
-            hdr.setUint8(1, encryptEpoch);
-            hdr.setUint32(2, counter, false); // big-endian
+            hdr.setUint8(1, encryptEpoch & 0xFF);
+            hdr.setUint32(2, counter >>> 0, false); // big-endian
             out.set(new Uint8Array(ct), HEADER_LEN);
             frame.data = out.buffer;
             controller.enqueue(frame);
           } catch (err) {
             port.postMessage({ type: 'encrypt-error', message: String(err) });
+            log('error', '[E2EE][WORKER]', `encrypt failed media=${mediaKind}: ${err}`);
             // drop frame — do not fall back to cleartext
           }
         },
@@ -135,8 +164,8 @@ self.addEventListener('rtctransform', event => {
     event.transformer.readable
       .pipeThrough(new TransformStream({
         async transform(frame, controller) {
-          // Drop frame until decrypt key is installed.
           if (!decryptReady) {
+            log('info', '[E2EE][WORKER]', `frame dropped: no decrypt key yet media=${mediaKind}`);
             try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
             return;
           }
@@ -150,11 +179,21 @@ self.addEventListener('rtctransform', event => {
               );
 
           // Minimum length: header + at least 1 plaintext byte + GCM tag
-          if (raw.length < HEADER_LEN + GCM_TAG_LEN + 1) return;
+          if (raw.length < HEADER_LEN + GCM_TAG_LEN + 1) {
+            log('warn', '[E2EE][WORKER]', `frame too short len=${raw.length} media=${mediaKind}`);
+            return;
+          }
 
           if (raw[0] !== FRAME_VERSION) {
             port.postMessage({ type: 'version-mismatch', version: raw[0] });
-            return; // unknown format — drop
+            log('warn', '[E2EE][WORKER]', `version mismatch got=${raw[0]} expected=${FRAME_VERSION} media=${mediaKind}`);
+            return;
+          }
+
+          const frameEpoch = raw[1];
+          if (frameEpoch !== (decryptEpoch & 0xFF)) {
+            log('warn', '[E2EE][WORKER]', `epoch mismatch frame=${frameEpoch} local=${decryptEpoch} media=${mediaKind}`);
+            // still try to decrypt — epoch can be ahead during rotation
           }
 
           const counter = new DataView(raw.buffer, raw.byteOffset).getUint32(2, false);
@@ -165,9 +204,10 @@ self.addEventListener('rtctransform', event => {
             const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, decryptKey, ct);
             frame.data = pt;
             controller.enqueue(frame);
-          } catch {
-            // AES-GCM authentication failure: wrong key, corrupted frame,
-            // out-of-epoch frame, or partial replay. Drop and ask for keyframe.
+          } catch (err) {
+            log('warn', '[E2EE][WORKER]', `decrypt failed media=${mediaKind} counter=${counter}: ${err}`);
+            port.postMessage({ type: 'decrypt-error', message: `${mediaKind} counter=${counter}: ${err}` });
+            // AES-GCM auth failure — drop and request keyframe
             try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
           }
         },
@@ -176,7 +216,6 @@ self.addEventListener('rtctransform', event => {
   }
 });
 
-// Surface any unhandled worker errors to the console.
 self.addEventListener('error', evt => {
   console.error('[e2ee-worker] unhandled error:', evt.message, evt.filename, evt.lineno);
 });
