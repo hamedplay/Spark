@@ -84,6 +84,7 @@ self.addEventListener('rtctransform', event => {
       debugEnabled = !!msg.data.debug;
       mediaKind    = msg.data.media || 'unknown';
       log('info', '[E2EE][WORKER]', `init role=${role} media=${mediaKind} debug=${debugEnabled}`);
+      console.info(`[E2EE Worker] init role=${role} media=${mediaKind} debug=${debugEnabled}`);
       port.postMessage({ type: 'ready' });
       return;
     }
@@ -110,6 +111,7 @@ self.addEventListener('rtctransform', event => {
         console.info(`[e2ee-worker] set-encrypt-key OK epoch=${encryptEpoch} media=${mediaKind}`);
       }
       encryptReady = true;
+      console.info(`[E2EE Worker] encryptReady=true media=${mediaKind} role=${role} epoch=${encryptEpoch}`);
       if (type === 'set-encrypt-key') port.postMessage({ type: 'encrypt-ready' });
       // generateKeyFrame() is video-only — calling it on an audio transformer throws InvalidStateError
       if (mediaKind === 'video') {
@@ -135,6 +137,7 @@ self.addEventListener('rtctransform', event => {
         console.info(`[e2ee-worker] set-decrypt-key OK epoch=${decryptEpoch} media=${mediaKind}`);
       }
       decryptReady = true;
+      console.info(`[E2EE Worker] decryptReady=true media=${mediaKind} role=${role} epoch=${decryptEpoch}`);
       if (type === 'set-decrypt-key') port.postMessage({ type: 'decrypt-ready' });
       // sendKeyFrameRequest() is video-only — calling it on an audio transformer throws InvalidStateError
       if (mediaKind === 'video') {
@@ -214,6 +217,7 @@ self.addEventListener('rtctransform', event => {
         async transform(frame, controller) {
           if (!decryptReady) {
             log('info', '[E2EE][WORKER]', `frame dropped: no decrypt key yet media=${mediaKind}`);
+            console.warn(`[E2EE Worker] receiver drop: decryptReady=false media=${mediaKind} role=${role}`);
             // sendKeyFrameRequest() is video-only
             if (mediaKind === 'video') {
               try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
@@ -257,6 +261,7 @@ self.addEventListener('rtctransform', event => {
             try { controller.enqueue(frame); } catch { /* stream closed during PC teardown */ }
           } catch (err) {
             log('warn', '[E2EE][WORKER]', `decrypt failed media=${mediaKind} counter=${counter}: ${err}`);
+            console.warn(`[E2EE Worker] decrypt failed media=${mediaKind} counter=${counter}:`, err);
             port.postMessage({ type: 'decrypt-error', message: `${mediaKind} counter=${counter}: ${err}` });
             // AES-GCM auth failure — drop and request keyframe (video-only)
             if (mediaKind === 'video') {

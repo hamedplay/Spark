@@ -422,6 +422,7 @@ function attachSenderTransform(
   });
 
   log('[E2EE][XFORM]', `sender transform attached trackId=${sender.track.id} kind=${kind}`);
+  console.info(`[E2EE][XFORM] sender transform attached trackId=${sender.track.id} kind=${kind}`);
   return { port: port1, kind, role: 'sender' };
 }
 
@@ -461,6 +462,7 @@ function attachReceiverTransform(
   });
 
   log('[E2EE][XFORM]', `receiver transform attached trackId=${receiver.track.id} kind=${kind}`);
+  console.info(`[E2EE][XFORM] receiver transform attached trackId=${receiver.track.id} kind=${kind}`);
   return { port: port1, kind, role: 'receiver' };
 }
 
@@ -470,8 +472,10 @@ async function pushKeyToPortRecord(pr: PortRecord, keys: DerivedKeys) {
   // Export key as raw bytes — CryptoKey objects are not reliably cloneable across
   // RTCRtpScriptTransform contexts in all browsers, but ArrayBuffers always are.
   const keyData = await crypto.subtle.exportKey('raw', mk.key);
-  pr.port.postMessage({ type: msgType, keyData, ivSeed: mk.ivSeed, epoch: 0 }, [keyData]);
-  log('[E2EE][KEY]', `pushKey role=${pr.role} kind=${pr.kind} msgType=${msgType}`);
+  const epoch = 0;
+  pr.port.postMessage({ type: msgType, keyData, ivSeed: mk.ivSeed, epoch }, [keyData]);
+  log('[E2EE][KEY]', `pushKey role=${pr.role} kind=${pr.kind} msgType=${msgType} epoch=${epoch}`);
+  console.info(`[E2EE][KEY] ${msgType} direction=${pr.role} mediaKind=${pr.kind} epoch=${epoch} ivSeed=${Array.from(mk.ivSeed).map(b => b.toString(16).padStart(2,'0')).join('')}`);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -911,6 +915,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
       (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some((u: string) => /^turns?:/i.test(u))
     ).length;
     log('[E2EE][PC]', `RTCPeerConnection config: iceServers=${(cfg.iceServers as RTCIceServer[])?.length ?? 0} (stun=${stunCount} turn=${turnCount}) iceTransportPolicy=${cfg.iceTransportPolicy ?? 'all'}`);
+    console.info(`[E2EE][PC] new RTCPeerConnection iceServers=${(cfg.iceServers as RTCIceServer[])?.length ?? 0} (stun=${stunCount} turn=${turnCount}) iceTransportPolicy=${cfg.iceTransportPolicy ?? 'all'}`);
     const pc = new RTCPeerConnection(cfg);
     pcRef.current = pc;
 
@@ -941,6 +946,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
     pc.ontrack = async (e) => {
       log('[E2EE][PC]', `ontrack kind=${e.track.kind} id=${e.track.id} muted=${e.track.muted} readyState=${e.track.readyState}`);
+      console.log(`[E2EE][PC] ontrack kind=${e.track.kind} id=${e.track.id} streamCount=${e.streams.length} streamId=${e.streams[0]?.id ?? 'none'}`);
 
       // Attach receiver transform
       if (workerRef.current) {
@@ -1084,6 +1090,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
       log('[E2EE][ICE]', `iceConnectionState=${s} role=${myRoleRef.current}`);
+      console.log(`[E2EE][ICE] iceConnectionState=${s} role=${myRoleRef.current}`);
 
       if (s === 'connected' || s === 'completed') {
         if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
@@ -1141,6 +1148,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
 
     pc.onconnectionstatechange = () => {
       log('[E2EE][PC]', `connectionState=${pc.connectionState}`);
+      console.log(`[E2EE][PC] connectionState=${pc.connectionState}`);
       if (pc.connectionState === 'connected') {
         setPhase('connected');
         // Start QoS diagnostics using existing webrtcDiagnostics service
