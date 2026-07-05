@@ -384,6 +384,30 @@ interface PortRecord {
   role:  'sender' | 'receiver';
 }
 
+/** Ping the Worker via self.postMessage to confirm the JS context is alive. */
+function ensureWorkerReady(worker: Worker): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      worker.removeEventListener('message', handler);
+      reject(new Error('worker ping timeout'));
+    }, 3000);
+
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'pong') {
+        clearTimeout(timer);
+        worker.removeEventListener('message', handler);
+        log('[E2EE][WORKER]', 'worker health check passed (pong received)');
+        console.info('[E2EE][WORKER] worker health check passed ✅');
+        resolve();
+      }
+    };
+
+    worker.addEventListener('message', handler);
+    worker.postMessage({ type: 'ping' });
+    console.info('[E2EE][WORKER] sending ping to worker...');
+  });
+}
+
 function attachSenderTransform(
   sender: RTCRtpSender,
   worker: Worker,
@@ -398,14 +422,23 @@ function attachSenderTransform(
   const { port1, port2 } = new MessageChannel();
   sender.transform = new RTCRtpScriptTransform(worker, { role: 'sender', port: port2 }, [port2]);
   port1.start();
-  port1.postMessage({ type: 'init', debug, media: kind });
+
+  // Wait for 'ready' ack from worker with 5s timeout before considering init successful
+  const initTimer = setTimeout(() => {
+    logWarn('[E2EE][XFORM]', `sender init-ready timeout (5s) kind=${kind} — worker may not have received init`);
+    console.warn(`[E2EE][XFORM] sender init-ready timeout (5s) for ${kind} — transform may not be active`);
+  }, 5000);
 
   // Receive messages back from the worker (encrypt-ready, errors, logs, etc.)
   // NOTE: port.postMessage() in the worker goes to port1; self.postMessage() would go to w.onmessage.
   // Without this listener all worker feedback is silently dropped.
   port1.addEventListener('message', e => {
     const { type } = e.data || {};
-    if (type === 'log') {
+    if (type === 'ready') {
+      clearTimeout(initTimer);
+      log('[E2EE][XFORM]', `sender init ack received kind=${kind}`);
+      console.info(`[E2EE][XFORM] sender init ack (ready) received kind=${kind} ✅`);
+    } else if (type === 'log') {
       const { level, tag, msg } = e.data;
       if (level === 'error') logError(tag, msg);
       else if (level === 'warn') logWarn(tag, msg);
@@ -421,6 +454,7 @@ function attachSenderTransform(
     }
   });
 
+  port1.postMessage({ type: 'init', debug, media: kind });
   log('[E2EE][XFORM]', `sender transform attached trackId=${sender.track.id} kind=${kind}`);
   console.info(`[E2EE][XFORM] sender transform attached trackId=${sender.track.id} kind=${kind}`);
   return { port: port1, kind, role: 'sender' };
@@ -440,12 +474,21 @@ function attachReceiverTransform(
   const { port1, port2 } = new MessageChannel();
   receiver.transform = new RTCRtpScriptTransform(worker, { role: 'receiver', port: port2 }, [port2]);
   port1.start();
-  port1.postMessage({ type: 'init', debug, media: kind });
+
+  // Wait for 'ready' ack from worker with 5s timeout before considering init successful
+  const initTimer = setTimeout(() => {
+    logWarn('[E2EE][XFORM]', `receiver init-ready timeout (5s) kind=${kind} — worker may not have received init`);
+    console.warn(`[E2EE][XFORM] receiver init-ready timeout (5s) for ${kind} — transform may not be active`);
+  }, 5000);
 
   // Receive messages back from the worker
   port1.addEventListener('message', e => {
     const { type } = e.data || {};
-    if (type === 'log') {
+    if (type === 'ready') {
+      clearTimeout(initTimer);
+      log('[E2EE][XFORM]', `receiver init ack received kind=${kind}`);
+      console.info(`[E2EE][XFORM] receiver init ack (ready) received kind=${kind} ✅`);
+    } else if (type === 'log') {
       const { level, tag, msg } = e.data;
       if (level === 'error') logError(tag, msg);
       else if (level === 'warn') logWarn(tag, msg);
@@ -461,21 +504,59 @@ function attachReceiverTransform(
     }
   });
 
+  port1.postMessage({ type: 'init', debug, media: kind });
   log('[E2EE][XFORM]', `receiver transform attached trackId=${receiver.track.id} kind=${kind}`);
   console.info(`[E2EE][XFORM] receiver transform attached trackId=${receiver.track.id} kind=${kind}`);
   return { port: port1, kind, role: 'receiver' };
 }
 
-async function pushKeyToPortRecord(pr: PortRecord, keys: DerivedKeys) {
+async function pushKeyToPortRecord(pr: PortRecord, keys: DerivedKeys): Promise<void> {
   const mk = pr.role === 'sender' ? keys.send[pr.kind] : keys.recv[pr.kind];
-  const msgType = pr.role === 'sender' ? 'set-encrypt-key' : 'set-decrypt-key';
+  const msgType  = pr.role === 'sender' ? 'set-encrypt-key'  : 'set-decrypt-key';
+  const ackType  = pr.role === 'sender' ? 'encrypt-ready'    : 'decrypt-ready';
   // Export key as raw bytes — CryptoKey objects are not reliably cloneable across
   // RTCRtpScriptTransform contexts in all browsers, but ArrayBuffers always are.
-  const keyData = await crypto.subtle.exportKey('raw', mk.key);
-  const epoch = 0;
-  pr.port.postMessage({ type: msgType, keyData, ivSeed: mk.ivSeed, epoch }, [keyData]);
-  log('[E2EE][KEY]', `pushKey role=${pr.role} kind=${pr.kind} msgType=${msgType} epoch=${epoch}`);
-  console.info(`[E2EE][KEY] ${msgType} direction=${pr.role} mediaKind=${pr.kind} epoch=${epoch} ivSeed=${Array.from(mk.ivSeed).map(b => b.toString(16).padStart(2,'0')).join('')}`);
+  const epoch    = 0;
+  const MAX_TRIES = 3;
+
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    const keyData = await crypto.subtle.exportKey('raw', mk.key);
+
+    const ackPromise = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pr.port.removeEventListener('message', handler);
+        reject(new Error(`${ackType} timeout attempt=${attempt}`));
+      }, 2000);
+
+      const handler = (e: MessageEvent) => {
+        if (e.data?.type === ackType) {
+          clearTimeout(timer);
+          pr.port.removeEventListener('message', handler);
+          resolve();
+        }
+      };
+      pr.port.addEventListener('message', handler);
+    });
+
+    pr.port.postMessage({ type: msgType, keyData, ivSeed: mk.ivSeed, epoch }, [keyData]);
+    log('[E2EE][KEY]', `pushKey attempt=${attempt} role=${pr.role} kind=${pr.kind} msgType=${msgType} epoch=${epoch}`);
+    console.info(`[E2EE][KEY] ${msgType} direction=${pr.role} mediaKind=${pr.kind} epoch=${epoch} attempt=${attempt} ivSeed=${Array.from(mk.ivSeed).map(b => b.toString(16).padStart(2,'0')).join('')}`);
+
+    try {
+      await ackPromise;
+      log('[E2EE][KEY]', `${ackType} confirmed role=${pr.role} kind=${pr.kind} attempt=${attempt}`);
+      console.info(`[E2EE][KEY] ${ackType} confirmed ✅ role=${pr.role} kind=${pr.kind} attempt=${attempt}`);
+      return;
+    } catch (err) {
+      if (attempt < MAX_TRIES) {
+        logWarn('[E2EE][KEY]', `${String(err)} — retrying (${attempt}/${MAX_TRIES})`);
+        console.warn(`[E2EE][KEY] ${String(err)} — retrying...`);
+      } else {
+        logError('[E2EE][KEY]', `key push failed after ${MAX_TRIES} attempts role=${pr.role} kind=${pr.kind}: ${err}`);
+        console.error(`[E2EE][KEY] key push FAILED after ${MAX_TRIES} attempts role=${pr.role} kind=${pr.kind}`);
+      }
+    }
+  }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -1342,6 +1423,15 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     }
 
     try {
+      await ensureWorkerReady(workerRef.current);
+    } catch (err) {
+      logError('[E2EE][WORKER]', 'worker not responding:', err);
+      toast.error('خطا در بارگذاری رمزنگار');
+      setE2eeStatus('error');
+      return;
+    }
+
+    try {
       setTargetUser(target);
       myRoleRef.current = 'caller';
       offerSentRef.current = false;
@@ -1423,6 +1513,15 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: Props) 
     }
     if (!SUPPORTS_TRANSFORMS || !workerRef.current) {
       toast.error('مرورگر از تماس امن پشتیبانی نمی‌کند');
+      return;
+    }
+
+    try {
+      await ensureWorkerReady(workerRef.current);
+    } catch (err) {
+      logError('[E2EE][WORKER]', 'worker not responding:', err);
+      toast.error('خطا در بارگذاری رمزنگار');
+      setE2eeStatus('error');
       return;
     }
 

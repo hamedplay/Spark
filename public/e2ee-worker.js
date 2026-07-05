@@ -43,6 +43,17 @@ const GCM_TAG_LEN   = 16;
 const IV_LEN        = 12;      // 8 B seed || 4 B counter
 const MAX_COUNTER   = 0xFFFF_FFFF;
 
+// ── Worker health check ────────────────────────────────────────────────────
+console.log('[e2ee-worker] worker script loaded');
+
+self.addEventListener('message', event => {
+  const { type } = event.data || {};
+  if (type === 'ping') {
+    console.log('[e2ee-worker] ping received — sending pong');
+    self.postMessage({ type: 'pong' });
+  }
+});
+
 self.addEventListener('rtctransform', event => {
   const { role, port } = event.transformer.options;
 
