@@ -5,13 +5,19 @@ import { supabase } from './supabase';
  * (section = 'video_conference').
  *
  * Supported keys:
- *   turn_server          full TURN URL, e.g. "turn:host:3478" or "turns:host:5349"
- *   turn_username        TURN auth username
- *   turn_credential      TURN auth password
- *   stun_servers         comma-separated STUN URLs
- *   ice_transport_policy "auto" | "relay" | "all"  (default: "auto")
+ *   turn_server              full TURN URL, e.g. "turn:host:3478" or "turns:host:5349"
+ *   turn_username            TURN auth username
+ *   turn_credential          TURN auth password
+ *   stun_servers             comma-separated STUN URLs
+ *   ice_transport_policy     "auto" | "p2p-first" | "all" | "relay" | "stun-only"
+ *   enable_turn_fallback     "true" | "false" — include TURN in ICE servers when policy != relay
  *
- * "auto" means: use "relay" if TURN is configured, "all" otherwise.
+ * Policy semantics:
+ *   "p2p-first" — all transports; WebRTC naturally prefers host > srflx > relay
+ *   "auto"      — same as p2p-first (always 'all')
+ *   "all"       — same as p2p-first
+ *   "relay"     — RTCIceTransportPolicy = 'relay', only TURN relay candidates used
+ *   "stun-only" — 'all' transport policy but TURN servers are omitted from iceServers
  */
 
 // Public STUN fallback — used when DB and env both have no ICE servers configured.
@@ -41,11 +47,14 @@ function stripTurnScheme(raw: string): string {
 }
 
 export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfiguration {
-  const turnServerUrl  = cfg['turn_server']?.trim()          || '';
-  const username       = cfg['turn_username']?.trim()        || '';
-  const credential     = cfg['turn_credential']?.trim()      || '';
-  const stunServersStr = cfg['stun_servers']?.trim()         || '';
-  const policyKey      = cfg['ice_transport_policy']?.trim() || 'auto';
+  const turnServerUrl    = cfg['turn_server']?.trim()           || '';
+  const username         = cfg['turn_username']?.trim()         || '';
+  const credential       = cfg['turn_credential']?.trim()       || '';
+  const stunServersStr   = cfg['stun_servers']?.trim()          || '';
+  const policyKey        = cfg['ice_transport_policy']?.trim()  || 'auto';
+  const turnFallback     = cfg['enable_turn_fallback']?.trim()  !== 'false'; // default true
+
+  const isStunOnly = policyKey === 'stun-only';
 
   const iceServers: RTCIceServer[] = [];
 
@@ -54,7 +63,8 @@ export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfigurat
     if (urls.length) iceServers.push({ urls });
   }
 
-  if (turnServerUrl && username && credential) {
+  // Include TURN only when the policy allows it and turn_fallback is enabled
+  if (!isStunOnly && turnFallback && turnServerUrl && username && credential) {
     const bare = stripTurnScheme(turnServerUrl);
     iceServers.push({
       urls: [
@@ -67,25 +77,23 @@ export function buildRTCConfigFromDB(cfg: Record<string, string>): RTCConfigurat
     });
   }
 
-  const hasTurn = iceServers.some(s =>
-    (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some(u => /^turns?:/i.test(u))
-  );
-
   const hasStun = iceServers.some(s =>
     (Array.isArray(s.urls) ? s.urls : [s.urls as string]).some(u => /^stun:/i.test(u))
   );
 
-  // Always keep at least one STUN server so host+srflx candidates can be gathered
-  // even when TURN is configured and iceTransportPolicy would otherwise be 'relay'.
+  // Always keep at least one STUN server for host+srflx candidate gathering
   if (!hasStun) iceServers.unshift(FALLBACK_STUN);
 
   let iceTransportPolicy: RTCIceTransportPolicy;
   switch (policyKey) {
-    case 'relay': iceTransportPolicy = 'relay'; break;
-    case 'all':   iceTransportPolicy = 'all';   break;
-    // 'auto': always 'all' so STUN candidates are tried first (faster, cheaper).
-    // Admins who need relay-only for privacy should set ice_transport_policy='relay' explicitly.
-    default:      iceTransportPolicy = 'all';
+    case 'relay':
+      iceTransportPolicy = 'relay';
+      break;
+    // stun-only, p2p-first, all, auto — all use 'all' transport policy.
+    // The distinction is in which iceServers are included (stun-only omits TURN above).
+    // WebRTC naturally tries host candidates first, then srflx, then relay.
+    default:
+      iceTransportPolicy = 'all';
   }
 
   return {

@@ -67,19 +67,29 @@ const NAV_ITEMS = [
 const SELECT_OPTIONS: Record<string, { value: string; label: string; description: string }[]> = {
   ice_transport_policy: [
     {
+      value: 'p2p-first',
+      label: 'P2P اول، سپس STUN، سپس TURN',
+      description: 'سریع‌ترین اتصال ممکن. ابتدا اتصال مستقیم (LAN)، سپس STUN، در صورت نیاز TURN. برای اکثر محیط‌ها بهترین گزینه است.',
+    },
+    {
       value: 'auto',
-      label: 'خودکار',
-      description: 'اگر TURN پیکربندی شده باشد فقط از relay استفاده می‌شود، وگرنه همه مسیرها مجاز است.',
+      label: 'خودکار (پیشنهادی)',
+      description: 'همه مسیرهای ICE (host، srflx، relay) مجاز هستند. WebRTC بهترین را انتخاب می‌کند.',
+    },
+    {
+      value: 'all',
+      label: 'همه مسیرها',
+      description: 'هر مسیر ICE همزمان امتحان می‌شود. سریع اما ممکن است IP واقعی افشا شود.',
     },
     {
       value: 'relay',
       label: 'فقط TURN (relay)',
-      description: 'همه ترافیک اجباراً از سرور TURN عبور می‌کند. برای شبکه‌های محدود یا پشت فایروال.',
+      description: 'همه ترافیک اجباراً از سرور TURN عبور می‌کند. برای شبکه‌های محدود، پشت فایروال، یا حریم خصوصی کامل.',
     },
     {
-      value: 'all',
-      label: 'همه مسیرها (all)',
-      description: 'هر مسیر ICE (host، srflx، relay) مجاز است. سریع‌ترین اتصال اما نیاز به شبکه باز دارد.',
+      value: 'stun-only',
+      label: 'فقط STUN (بدون TURN)',
+      description: 'فقط از STUN برای پیدا کردن آی‌پی عمومی استفاده می‌شود. TURN نادیده گرفته می‌شود. برای شبکه‌های ساده با NAT معمولی.',
     },
   ],
 };
