@@ -122,6 +122,8 @@ export function useE2EECall(
   const isScreenSharingRef = useRef(false);
   const lastKeyFingerprintRef = useRef<string>('');
   const autoAcceptRef      = useRef(false);
+  // Stored camera track so screen-share can restore it without re-acquiring
+  const cameraTrackRef     = useRef<MediaStreamTrack | null>(null);
 
   // ── Keep phaseRef in sync ──────────────────────────────────────────────
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -334,13 +336,10 @@ export function useE2EECall(
   }, [currentUserId]);
 
   // ── Consume pending E2EE ring from GlobalCallContext ───────────────────────
-  // When a user navigates to the E2EE page after accepting via the global overlay,
-  // the ring data is waiting in the singleton.
   useEffect(() => {
     if (!SUPPORTS_TRANSFORMS) return;
     const ring = getPendingE2EERing();
     if (!ring || Date.now() > ring.expiresAt || sessionActiveRef.current) return;
-    // Consume it so it doesn't fire again
     setPendingE2EERing(null);
     autoAcceptRef.current = !!ring.autoAccept;
     setIncomingCall({
@@ -377,7 +376,6 @@ export function useE2EECall(
     sessionActiveRef.current = false;
     offerSentRef.current = false;
 
-    // Wipe key material in all live transform contexts before closing ports
     workerRef.current?.postMessage({ type: 'clear' });
 
     if (sessionIdRef.current) stopDiagnostics(sessionIdRef.current);
@@ -388,6 +386,7 @@ export function useE2EECall(
 
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
+    cameraTrackRef.current = null;
 
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
@@ -483,10 +482,21 @@ export function useE2EECall(
       }
 
       localStreamRef.current = s;
+      // Store camera track reference for screen-share restore
+      cameraTrackRef.current = s.getVideoTracks()[0] ?? null;
+
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = s;
         localVideoRef.current.play().catch(() => {});
       }
+
+      if (E2EE_DEBUG) {
+        console.info('[E2EE][MEDIA] local stream tracks', s.getTracks().map(t => ({
+          kind: t.kind, enabled: t.enabled, muted: t.muted,
+          readyState: t.readyState, label: t.label,
+        })));
+      }
+
       return s;
     } catch (e) {
       logError('[E2EE][ERROR]', 'getUserMedia failed:', e);
@@ -504,13 +514,29 @@ export function useE2EECall(
     }
   };
 
+  // ── Push keys to all active port records ───────────────────────────────
+  const pushKeysToAllPorts = useCallback(async (keys: DerivedKeys) => {
+    const records = [...portRecordsRef.current];
+    const results = await Promise.allSettled(
+      records.map(pr => pushKeyToPortRecord(pr, keys))
+    );
+    if (E2EE_DEBUG) {
+      console.info('[E2EE][KEY] pushed keys to ports', {
+        count: records.length,
+        results: results.map(r => r.status),
+      });
+    }
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length > 0) {
+      logError('[E2EE][KEY]', `key push failed for ${failed.length}/${records.length} port(s)`);
+    }
+  }, []);
+
   const doSetupKeys = async (peerPublicJWK: string, salt: Uint8Array) => {
     if (!ecdhKeyPairRef.current) return;
-    // Idempotency guard: skip re-derivation if called again with identical inputs
-    // (happens on ICE restart where the same offer/answer is replayed)
     const fingerprint = `${peerPublicJWK}|${bytesToHex(salt)}`;
     if (fingerprint === lastKeyFingerprintRef.current) {
-      log('[E2EE][KEY]', 'doSetupKeys: same inputs as last call — skipping re-derivation');
+      log('[E2EE][KEY]', 'doSetupKeys: same inputs — skipping re-derivation');
       return;
     }
     lastKeyFingerprintRef.current = fingerprint;
@@ -521,18 +547,16 @@ export function useE2EECall(
         sessionIdRef.current, myRoleRef.current, salt,
       );
       activeKeysRef.current = keys;
-      for (const pr of portRecordsRef.current) {
-        await pushKeyToPortRecord(pr, keys);
-      }
-      // Re-push keys after a short delay to cover any receiver tracks
-      // that arrive via ontrack after this point (e.g. slow renegotiation)
+
+      // Push to all current port records
+      await pushKeysToAllPorts(keys);
+
+      // Delayed re-push covers ontrack receivers arriving after this point
       setTimeout(async () => {
-        if (!activeKeysRef.current) return;
-        const lateReceivers = portRecordsRef.current.filter(pr => pr.role === 'receiver');
-        for (const pr of lateReceivers) {
-          try { await pushKeyToPortRecord(pr, activeKeysRef.current); } catch { /* already pushed */ }
-        }
+        if (!sessionActiveRef.current || !activeKeysRef.current) return;
+        await pushKeysToAllPorts(activeKeysRef.current);
       }, 1500);
+
       const nums = await computeSafetyNumber(myPublicJWKRef.current, peerPublicJWK, sessionIdRef.current);
       setSafetyNums(nums);
       setE2eeStatus('active_unverified');
@@ -545,7 +569,7 @@ export function useE2EECall(
 
   // ── PeerConnection ─────────────────────────────────────────────────────
 
-  const buildPC = async () => {
+  const buildPC = async (): Promise<RTCPeerConnection | null> => {
     const cfg = await getSharedRTCConfig();
     log('[E2EE][PC]', `new RTCPeerConnection iceServers=${(cfg.iceServers as RTCIceServer[])?.length ?? 0}`);
     const pc = new RTCPeerConnection(cfg);
@@ -556,6 +580,14 @@ export function useE2EECall(
       for (const t of stream.getTracks()) {
         pc.addTrack(t, stream);
       }
+    }
+
+    if (E2EE_DEBUG) {
+      console.info('[E2EE][PC] senders after addTrack', pc.getSenders().map(s => ({
+        hasTrack: !!s.track,
+        kind: s.track?.kind,
+        readyState: s.track?.readyState,
+      })));
     }
 
     if (workerRef.current) {
@@ -572,7 +604,7 @@ export function useE2EECall(
               setE2eeStatus('error');
               toast.error('رمزنگاری فعال نشد — تماس لغو شد');
               doFullCleanup('key_exchange');
-              return;
+              return null;
             }
           }
         } else {
@@ -580,7 +612,7 @@ export function useE2EECall(
           setE2eeStatus('error');
           toast.error('رمزنگاری فعال نشد — تماس لغو شد');
           doFullCleanup('key_exchange');
-          return;
+          return null;
         }
       }
     }
@@ -592,14 +624,11 @@ export function useE2EECall(
         const pr = attachReceiverTransform(e.receiver, workerRef.current, E2EE_DEBUG);
         if (pr) {
           portRecordsRef.current.push(pr);
+          // Push active keys immediately if already derived
           if (activeKeysRef.current) {
-            try {
-              await pushKeyToPortRecord(pr, activeKeysRef.current);
-            } catch (e) {
-              logError('[E2EE][ERROR]', 'pushKey failed for receiver:', e);
-              doFullCleanup('key_exchange');
-              return;
-            }
+            pushKeyToPortRecord(pr, activeKeysRef.current).catch(err => {
+              logError('[E2EE][ERROR]', 'pushKey failed for late receiver transform:', err);
+            });
           }
         }
       }
@@ -883,7 +912,10 @@ export function useE2EECall(
       const ch = openSessionChannel(sessionId);
       await waitForSubscribed(ch);
 
-      await buildPC();
+      // buildPC returns null on failure (cleanup already called inside)
+      const pc = await buildPC();
+      if (!pc) return;
+
       sessionActiveRef.current = true;
 
       const calleeInbox = supabase.channel(`e2ee-inbox-${target.user_id}`, {
@@ -952,7 +984,11 @@ export function useE2EECall(
 
       const ch = openSessionChannel(ic.sessionId);
       await waitForSubscribed(ch);
-      await buildPC();
+
+      // buildPC returns null on failure (cleanup already called inside)
+      const pc = await buildPC();
+      if (!pc) { setIncomingCall(null); return; }
+
       sessionActiveRef.current = true;
 
       ch.send({
@@ -1003,36 +1039,80 @@ export function useE2EECall(
   const toggleVideo = () => { localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = isVideoOff; }); setIsVideoOff(v => !v); };
 
   const stopScreenShare = useCallback(async () => {
+    const sender = pcRef.current?.getSenders().find(s => s.track?.kind === 'video');
+    const restoreTrack = cameraTrackRef.current;
+
+    if (sender) {
+      try {
+        if (restoreTrack && restoreTrack.readyState === 'live') {
+          await sender.replaceTrack(restoreTrack);
+        } else {
+          // Re-acquire camera if the original track ended
+          const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          const camTrack = camStream.getVideoTracks()[0];
+          if (camTrack) {
+            cameraTrackRef.current = camTrack;
+            await sender.replaceTrack(camTrack);
+            if (localStreamRef.current) {
+              localStreamRef.current.getVideoTracks().forEach(t => { t.stop(); localStreamRef.current!.removeTrack(t); });
+              localStreamRef.current.addTrack(camTrack);
+            }
+          }
+        }
+      } catch (err) {
+        logError('[E2EE][MEDIA]', 'restore camera track failed:', err);
+        toast.error('بازگشت به دوربین ناموفق بود');
+      }
+    }
+
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
-    const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
-    const sender = pcRef.current?.getSenders().find(s => s.track?.kind === 'video');
-    if (cameraTrack && sender) {
-      try { await sender.replaceTrack(cameraTrack); } catch { /* pc may be closing */ }
-    }
+
     if (localVideoRef.current && localStreamRef.current) {
       localVideoRef.current.srcObject = localStreamRef.current;
     }
+
     isScreenSharingRef.current = false;
     setIsScreenSharing(false);
   }, []);
 
   const toggleScreenShare = useCallback(async () => {
     if (isScreenSharingRef.current) { await stopScreenShare(); return; }
+
+    if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') {
+      toast.error('اشتراک‌گذاری صفحه در این مرورگر پشتیبانی نمی‌شود');
+      return;
+    }
+
+    const pc = pcRef.current;
+    const sender = pc?.getSenders().find(s => s.track?.kind === 'video');
+    if (!sender) {
+      toast.error('فرستنده ویدیو پیدا نشد');
+      return;
+    }
+
     try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      screenStreamRef.current = screenStream;
-      const screenTrack = screenStream.getVideoTracks()[0];
-      const sender = pcRef.current?.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) await sender.replaceTrack(screenTrack);
-      if (localVideoRef.current) localVideoRef.current.srcObject = new MediaStream([screenTrack]);
-      screenTrack.addEventListener('ended', stopScreenShare);
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      screenStreamRef.current = displayStream;
+      const screenTrack = displayStream.getVideoTracks()[0];
+      if (!screenTrack) throw new Error('No screen video track');
+
+      await sender.replaceTrack(screenTrack);
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = new MediaStream([screenTrack]);
+      }
+
+      screenTrack.addEventListener('ended', () => { void stopScreenShare(); });
+
       isScreenSharingRef.current = true;
       setIsScreenSharing(true);
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== 'NotAllowedError') {
         toast.error('خطا در اشتراک‌گذاری صفحه');
       }
+      screenStreamRef.current?.getTracks().forEach(t => t.stop());
+      screenStreamRef.current = null;
     }
   }, [stopScreenShare]);
 
@@ -1049,9 +1129,11 @@ export function useE2EECall(
   const switchCamera = useCallback(async () => {
     const pc = pcRef.current;
     const currentStream = localStreamRef.current;
-    if (!currentStream || !pc) return;
+    if (!currentStream) return;
 
-    // Get up-to-date device list (permissions may have been granted since mount)
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+    // Refresh device list — permissions may have been granted since mount
     let devices = videoDevices;
     if (devices.length === 0) {
       try {
@@ -1061,25 +1143,42 @@ export function useE2EECall(
       } catch { /* ignore */ }
     }
 
-    if (devices.length < 2) {
+    const currentTrack = currentStream.getVideoTracks()[0];
+
+    let videoConstraints: MediaTrackConstraints;
+
+    if (devices.length >= 2) {
+      const currentDeviceId = currentTrack?.getSettings().deviceId;
+      const currentIndex = devices.findIndex(d => d.deviceId === currentDeviceId);
+      const nextDevice = devices[(currentIndex + 1) % devices.length];
+      videoConstraints = { deviceId: { exact: nextDevice.deviceId }, width: { ideal: 640 }, height: { ideal: 480 } };
+    } else if (isMobile) {
+      // Toggle facingMode on mobile when only one device reported (common on iOS)
+      const currentFacing = currentTrack?.getSettings().facingMode ?? 'user';
+      const nextFacing = currentFacing === 'user' ? 'environment' : 'user';
+      videoConstraints = { facingMode: { exact: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 } };
+    } else {
       toast('تنها یک دوربین در دسترس است');
       return;
     }
 
-    const currentTrack = currentStream.getVideoTracks()[0];
-    const currentDeviceId = currentTrack?.getSettings().deviceId;
-    const currentIndex = devices.findIndex(d => d.deviceId === currentDeviceId);
-    const nextDevice = devices[(currentIndex + 1) % devices.length];
-
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: nextDevice.deviceId }, width: { ideal: 640 }, height: { ideal: 480 } },
-      });
+      const newStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
       const newTrack = newStream.getVideoTracks()[0];
-      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (!newTrack) throw new Error('No video track from new camera');
+
+      // Replace in peer connection before stopping old track
+      const sender = pc?.getSenders().find(s => s.track?.kind === 'video');
       if (sender) await sender.replaceTrack(newTrack);
-      currentStream.getVideoTracks().forEach(t => { t.stop(); currentStream.removeTrack(t); });
+
+      // Stop old track only after replaceTrack succeeds
+      currentTrack?.stop();
+      currentStream.getVideoTracks().forEach(t => { if (t !== newTrack) currentStream.removeTrack(t); });
       currentStream.addTrack(newTrack);
+
+      // Update stored camera track reference
+      cameraTrackRef.current = newTrack;
+
       if (localVideoRef.current) localVideoRef.current.srcObject = currentStream;
     } catch (err) {
       logError('[E2EE][MEDIA]', 'switchCamera failed:', err);

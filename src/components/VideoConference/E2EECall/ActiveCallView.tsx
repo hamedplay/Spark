@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, type RefObject } from 'react';
+import { useState, useEffect, useRef, useCallback, type RefObject } from 'react';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, ShieldCheck, ShieldAlert, Loader, Check, Wifi, WifiOff, Volume2, VolumeX, Monitor, MonitorOff, ArrowLeftRight, Info, PictureInPicture2, FlipHorizontal2 as FlipHorizontal } from 'lucide-react';
 import type { PeerDiagnostics } from '../../../lib/webrtcDiagnostics';
 import type { CallPhase, E2EEStatus, UserProfile } from './types';
+import toast from 'react-hot-toast';
 
 type PipCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
 
@@ -73,21 +74,18 @@ function SafetyModal({ safetyNums, onVerify, onClose }: {
   const firstButtonRef = useRef<HTMLButtonElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Restore focus on unmount
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     firstButtonRef.current?.focus();
     return () => { previouslyFocused?.focus(); };
   }, []);
 
-  // Escape key
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  // Focus trap
   useEffect(() => {
     const modal = modalRef.current;
     if (!modal) return;
@@ -167,6 +165,26 @@ const PIP_CORNER_CLASSES: Record<PipCorner, string> = {
   'bottom-left':  'bottom-20 left-3',
 };
 
+// Check document-level PiP support (reliable at module load time on desktop)
+const SUPPORTS_DOCUMENT_PIP =
+  typeof document !== 'undefined' &&
+  'pictureInPictureEnabled' in document &&
+  !!document.pictureInPictureEnabled;
+
+// Check per-video element PiP support
+function videoSupportsPiP(video: HTMLVideoElement | null): boolean {
+  if (!video) return false;
+  if (typeof video.requestPictureInPicture === 'function' && !video.disablePictureInPicture) return true;
+  const v = video as HTMLVideoElement & { webkitSupportsPresentationMode?: (m: string) => boolean };
+  return !!v.webkitSupportsPresentationMode?.('picture-in-picture');
+}
+
+// Feature-detect screen share support
+const SUPPORTS_SCREEN_SHARE =
+  typeof navigator !== 'undefined' &&
+  !!navigator.mediaDevices &&
+  typeof navigator.mediaDevices.getDisplayMedia === 'function';
+
 export function ActiveCallView({
   phase, targetUser, localVideoRef, remoteVideoRef,
   isMuted, isVideoOff, isRemoteMuted, isScreenSharing,
@@ -180,12 +198,15 @@ export function ActiveCallView({
   const [isSwapped, setIsSwapped] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [isNativePip, setIsNativePip] = useState(false);
-  const supportsScreenShare = typeof navigator.mediaDevices?.getDisplayMedia === 'function';
+  // PiP availability — starts true on desktop (document API), then refined after mount
+  const [supportsPiP, setSupportsPiP] = useState(SUPPORTS_DOCUMENT_PIP);
 
   const pipRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  // Track active pointer ID so we can release capture safely on swap
+  const activePointerIdRef = useRef<number | null>(null);
 
-  // Manage remote video playback — muted prop has a known React bug, use imperative API
+  // ── Remote video playback ─────────────────────────────────────────────
   useEffect(() => {
     const video = remoteVideoRef.current;
     if (!video || (phase !== 'connecting' && phase !== 'connected')) return;
@@ -198,12 +219,22 @@ export function ActiveCallView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRemoteMuted, phase]);
 
-  // Reset needsAudioTap when phase ends
   useEffect(() => {
     if (phase !== 'connecting' && phase !== 'connected') setNeedsAudioTap(false);
   }, [phase]);
 
-  // Native PiP leave event — fires on the video element, not document
+  // ── PiP support detection ─────────────────────────────────────────────
+  useEffect(() => {
+    if (SUPPORTS_DOCUMENT_PIP) {
+      setSupportsPiP(true);
+      return;
+    }
+    // Recheck after video element mounts (webkit mobile)
+    setSupportsPiP(videoSupportsPiP(remoteVideoRef.current));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  // ── PiP leave event on the video element ─────────────────────────────
   useEffect(() => {
     const video = remoteVideoRef.current;
     if (!video) return;
@@ -213,11 +244,17 @@ export function ActiveCallView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reset drag state when swap changes to prevent stuck pointer capture
+  // ── Reset drag state when swap changes ───────────────────────────────
   useEffect(() => {
     setIsDragging(false);
     const pip = pipRef.current;
     if (pip) {
+      try {
+        if (activePointerIdRef.current != null) {
+          pip.releasePointerCapture(activePointerIdRef.current);
+        }
+      } catch { /* ignore — pointer may already be released */ }
+      activePointerIdRef.current = null;
       pip.style.left = '';
       pip.style.top = '';
       pip.style.right = '';
@@ -225,16 +262,17 @@ export function ActiveCallView({
     }
   }, [isSwapped]);
 
-  // ── Drag handlers ────────────────────────────────────────────────────────
+  // ── Drag handlers ─────────────────────────────────────────────────────
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
+    activePointerIdRef.current = e.pointerId;
     setIsDragging(true);
     const rect = e.currentTarget.getBoundingClientRect();
     dragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
+  }, []);
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDragging || !pipRef.current) return;
     const container = pipRef.current.parentElement;
     if (!container) return;
@@ -248,12 +286,16 @@ export function ActiveCallView({
     pipRef.current.style.top = `${y}px`;
     pipRef.current.style.right = 'auto';
     pipRef.current.style.bottom = 'auto';
-  };
+  }, [isDragging]);
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging || !pipRef.current) return;
-    e.currentTarget.releasePointerCapture(e.pointerId);
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     setIsDragging(false);
+    activePointerIdRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch { /* ignore */ }
+
+    if (!pipRef.current) return;
     const container = pipRef.current.parentElement;
     if (!container) return;
     const containerRect = container.getBoundingClientRect();
@@ -271,28 +313,15 @@ export function ActiveCallView({
     pipRef.current.style.top = '';
     pipRef.current.style.right = '';
     pipRef.current.style.bottom = '';
-  };
+  }, []);
 
-  // ── Native PiP ────────────────────────────────────────────────────────────
-
-  const [supportsPiP, setSupportsPiP] = useState(() => !!document.pictureInPictureEnabled);
-  useEffect(() => {
-    if (document.pictureInPictureEnabled) {
-      setSupportsPiP(true);
-      return;
-    }
-    const video = remoteVideoRef.current;
-    const v = video as (HTMLVideoElement & { webkitSupportsPresentationMode?: (m: string) => boolean }) | null;
-    setSupportsPiP(!!v?.webkitSupportsPresentationMode?.('picture-in-picture'));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+  // ── Native PiP handler ────────────────────────────────────────────────
 
   const handleNativePip = async () => {
     const video = remoteVideoRef.current;
     if (!video) return;
     try {
-      // Standard API (Chrome, Android, Firefox)
-      if (document.pictureInPictureEnabled) {
+      if (SUPPORTS_DOCUMENT_PIP) {
         if (document.pictureInPictureElement) {
           await document.exitPictureInPicture();
           setIsNativePip(false);
@@ -313,17 +342,18 @@ export function ActiveCallView({
         v.webkitSetPresentationMode(isPiP ? 'inline' : 'picture-in-picture');
         setIsNativePip(!isPiP);
       }
-    } catch { /* denied or unsupported */ }
+    } catch (err) {
+      console.error('[pip] failed', err);
+      toast.error('تصویر در تصویر فعال نشد');
+    }
   };
 
-  // ── Layout ────────────────────────────────────────────────────────────────
+  // ── Layout classes ────────────────────────────────────────────────────
 
-  // Remote video: full-screen when not swapped, PiP corner when swapped
   const remoteVideoClass = isSwapped
     ? `absolute ${PIP_CORNER_CLASSES[pipCorner]} w-28 h-36 sm:w-32 sm:h-40 rounded-xl border-2 border-blue-500/50 object-cover z-10 overflow-hidden`
     : 'absolute inset-0 w-full h-full object-cover z-0';
 
-  // PiP wrapper for local video: active when not swapped; local fills bg when swapped
   const pipWrapperClass = isSwapped
     ? 'absolute inset-0 w-full h-full z-0 overflow-hidden'
     : [
@@ -335,7 +365,6 @@ export function ActiveCallView({
 
   return (
     <>
-      {/* Screen reader status announcements */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {e2eeStatus === 'active_verified' && 'رمزنگاری تأییدشده'}
         {e2eeStatus === 'active_unverified' && 'رمزنگاری فعال، هویت تأییدنشده'}
@@ -345,7 +374,7 @@ export function ActiveCallView({
 
       <div className="relative h-[calc(100dvh-8rem)] sm:h-[540px] bg-gray-950 rounded-2xl overflow-hidden">
 
-        {/* Remote video — position determined by isSwapped */}
+        {/* Remote video */}
         <video
           ref={remoteVideoRef}
           autoPlay
@@ -353,12 +382,13 @@ export function ActiveCallView({
           className={remoteVideoClass}
         />
 
-        {/* Local video — draggable PiP by default, full-bg when swapped */}
+        {/* Local video — draggable PiP or full-bg when swapped */}
         <div
           ref={!isSwapped ? pipRef : undefined}
           onPointerDown={!isSwapped ? handlePointerDown : undefined}
           onPointerMove={!isSwapped ? handlePointerMove : undefined}
           onPointerUp={!isSwapped ? handlePointerUp : undefined}
+          onPointerCancel={!isSwapped ? handlePointerUp : undefined}
           className={pipWrapperClass}
           style={!isSwapped ? { touchAction: 'none' } : undefined}
         >
@@ -440,15 +470,15 @@ export function ActiveCallView({
             {isMuted ? <MicOff aria-hidden="true" className="w-5 h-5 text-white" /> : <Mic aria-hidden="true" className="w-5 h-5 text-white" />}
           </button>
 
-          {supportsScreenShare && (
-          <button
-            type="button"
-            onClick={onToggleScreenShare}
-            aria-label={isScreenSharing ? 'توقف اشتراک صفحه' : 'اشتراک‌گذاری صفحه'}
-            className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors ${isScreenSharing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-white/20 hover:bg-white/30'}`}
-          >
-            {isScreenSharing ? <MonitorOff aria-hidden="true" className="w-5 h-5 text-white" /> : <Monitor aria-hidden="true" className="w-5 h-5 text-white" />}
-          </button>
+          {SUPPORTS_SCREEN_SHARE && (
+            <button
+              type="button"
+              onClick={onToggleScreenShare}
+              aria-label={isScreenSharing ? 'توقف اشتراک صفحه' : 'اشتراک‌گذاری صفحه'}
+              className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors ${isScreenSharing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-white/20 hover:bg-white/30'}`}
+            >
+              {isScreenSharing ? <MonitorOff aria-hidden="true" className="w-5 h-5 text-white" /> : <Monitor aria-hidden="true" className="w-5 h-5 text-white" />}
+            </button>
           )}
 
           <button
@@ -518,7 +548,6 @@ export function ActiveCallView({
         </div>
       </div>
 
-      {/* Safety Number Modal */}
       {showSafety && safetyNums && (
         <SafetyModal
           safetyNums={safetyNums}
