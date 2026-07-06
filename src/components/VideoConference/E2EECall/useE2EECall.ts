@@ -116,6 +116,7 @@ export function useE2EECall(
   const cleaningUpRef      = useRef(false);
   const screenStreamRef    = useRef<MediaStream | null>(null);
   const isScreenSharingRef = useRef(false);
+  const lastKeyFingerprintRef = useRef<string>('');
 
   // ── Keep phaseRef in sync ──────────────────────────────────────────────
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -184,7 +185,7 @@ export function useE2EECall(
       setIsOffline(false);
       log('[E2EE][NET]', 'network back online');
       const pc = pcRef.current;
-      if (pc && (phaseRef.current === 'connected' || phaseRef.current === 'connecting')) {
+      if (pc && myRoleRef.current === 'caller' && (phaseRef.current === 'connected' || phaseRef.current === 'connecting')) {
         log('[E2EE][NET]', 'triggering ICE restart after reconnect');
         if (pc.signalingState === 'stable') {
           pc.createOffer({ iceRestart: true })
@@ -336,6 +337,9 @@ export function useE2EECall(
     sessionActiveRef.current = false;
     offerSentRef.current = false;
 
+    // Wipe key material in all live transform contexts before closing ports
+    workerRef.current?.postMessage({ type: 'clear' });
+
     if (sessionIdRef.current) stopDiagnostics(sessionIdRef.current);
     setConnDiag(null);
 
@@ -369,6 +373,7 @@ export function useE2EECall(
     sessionIdRef.current   = '';
     ecdhKeyPairRef.current = null;
     myPublicJWKRef.current = '';
+    lastKeyFingerprintRef.current = '';
 
     setSafetyNums(null);
     setShowSafety(false);
@@ -461,6 +466,14 @@ export function useE2EECall(
 
   const doSetupKeys = async (peerPublicJWK: string, salt: Uint8Array) => {
     if (!ecdhKeyPairRef.current) return;
+    // Idempotency guard: skip re-derivation if called again with identical inputs
+    // (happens on ICE restart where the same offer/answer is replayed)
+    const fingerprint = `${peerPublicJWK}|${bytesToHex(salt)}`;
+    if (fingerprint === lastKeyFingerprintRef.current) {
+      log('[E2EE][KEY]', 'doSetupKeys: same inputs as last call — skipping re-derivation');
+      return;
+    }
+    lastKeyFingerprintRef.current = fingerprint;
     try {
       const peerPub = await importPublicKey(peerPublicJWK);
       const keys = await deriveSessionKeys(
@@ -503,13 +516,18 @@ export function useE2EECall(
         if (pr) {
           portRecordsRef.current.push(pr);
           if (activeKeysRef.current) await pushKeyToPortRecord(pr, activeKeysRef.current);
+        } else {
+          // Transform failed to attach — abort to avoid sending cleartext
+          setE2eeStatus('error');
+          toast.error('رمزنگاری فعال نشد — تماس لغو شد');
+          doFullCleanup('key_exchange');
+          return;
         }
       }
     }
 
     pc.ontrack = async (e) => {
       log('[E2EE][PC]', `ontrack kind=${e.track.kind} id=${e.track.id}`);
-      console.log(`[E2EE][PC] ontrack kind=${e.track.kind} streamCount=${e.streams.length}`);
 
       if (workerRef.current) {
         const pr = attachReceiverTransform(e.receiver, workerRef.current, E2EE_DEBUG);
@@ -607,7 +625,6 @@ export function useE2EECall(
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
       log('[E2EE][ICE]', `iceConnectionState=${s}`);
-      console.log(`[E2EE][ICE] iceConnectionState=${s}`);
 
       if (s === 'connected' || s === 'completed') {
         if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
@@ -643,7 +660,6 @@ export function useE2EECall(
 
     pc.onconnectionstatechange = () => {
       log('[E2EE][PC]', `connectionState=${pc.connectionState}`);
-      console.log(`[E2EE][PC] connectionState=${pc.connectionState}`);
       if (pc.connectionState === 'connected') {
         setPhase('connected');
         startDiagnostics(pc, sessionIdRef.current, (diag) => {

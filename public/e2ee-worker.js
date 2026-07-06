@@ -25,6 +25,7 @@
  *   { type:'set-decrypt-key',    keyData:ArrayBuffer, ivSeed:Uint8Array(8), epoch:number }
  *   { type:'rotate-encrypt-key', keyData:ArrayBuffer, ivSeed:Uint8Array(8), epoch:number }
  *   { type:'rotate-decrypt-key', keyData:ArrayBuffer, ivSeed:Uint8Array(8), epoch:number }
+ *   { type:'clear' }
  *   { type:'ping' }
  *
  * Worker → Main:
@@ -43,19 +44,19 @@ const GCM_TAG_LEN   = 16;
 const IV_LEN        = 12;      // 8 B seed || 4 B counter
 const MAX_COUNTER   = 0xFFFF_FFFF;
 
+const DEBUG_LOGS = false;
+function workerLog(msg) { if (DEBUG_LOGS) console.log('[E2EE-Worker]', msg); }
+
 // ── Worker health check ────────────────────────────────────────────────────
-console.log('[e2ee-worker] worker script loaded');
+workerLog('worker script loaded');
 
 self.addEventListener('message', event => {
   const { type, testPort } = event.data || {};
   if (type === 'ping') {
-    console.log('[e2ee-worker] ping received — sending pong via testPort');
-    // Respond via the transferred test port so the reply reaches the main thread
-    // regardless of any browser restrictions on self.postMessage in transform workers
+    workerLog('ping received — sending pong');
     if (testPort) {
       testPort.postMessage({ type: 'pong' });
     } else {
-      // Fallback for environments that support self.postMessage normally
       self.postMessage({ type: 'pong' });
     }
   }
@@ -73,9 +74,9 @@ self.addEventListener('rtctransform', event => {
   let encryptEpoch  = 0,    decryptEpoch  = 0;
   let frameCounter  = 0;
   let encryptReady  = false, decryptReady = false;
-  let encryptDropCount = 0; // rate-limit sender drop logs
-  let decryptDropCount = 0; // rate-limit receiver drop logs
-  let decryptErrorCount = 0; // rate-limit decrypt error logs
+  let encryptDropCount = 0;
+  let decryptDropCount = 0;
+  let decryptErrorCount = 0;
 
   const log = (level, tag, msg) => {
     if (!debugEnabled && level !== 'error') return;
@@ -90,15 +91,12 @@ self.addEventListener('rtctransform', event => {
     return iv;
   };
 
-  // ── Step 1: Log every incoming port message ──────────────────────────────
   port.addEventListener('message', async msg => {
     const { type, epoch } = msg.data;
-    // [Worker-RX] fires for every message — key diagnostic to confirm messages arrive
-    console.log(`[Worker-RX] Received: ${type} | Media: ${mediaKind} | Epoch: ${epoch ?? 'n/a'} | Role: ${role}`);
 
     // Guard: transformer may be in a closed/invalid state after PC teardown
     if (!event.transformer) {
-      console.warn('[E2EE][WORKER] transformer not available, ignoring message type=' + type);
+      log('warn', '[E2EE][WORKER]', 'transformer not available, ignoring message type=' + type);
       return;
     }
 
@@ -106,37 +104,43 @@ self.addEventListener('rtctransform', event => {
       debugEnabled = !!msg.data.debug;
       mediaKind    = msg.data.media || 'unknown';
       log('info', '[E2EE][WORKER]', `init role=${role} media=${mediaKind} debug=${debugEnabled}`);
-      console.info(`[E2EE Worker] init role=${role} media=${mediaKind} debug=${debugEnabled}`);
       port.postMessage({ type: 'ready' });
       return;
     }
 
     if (type === 'set-encrypt-key' || type === 'rotate-encrypt-key') {
-      // keyData is an ArrayBuffer — import it so CryptoKey objects never cross thread boundaries
       try {
         encryptKey = await crypto.subtle.importKey('raw', msg.data.keyData, { name: 'AES-GCM' }, false, ['encrypt']);
       } catch (err) {
         log('error', '[E2EE][WORKER]', `importKey (encrypt) failed: ${err}`);
-        console.error('[e2ee-worker] importKey (encrypt) failed:', err);
         port.postMessage({ type: 'encrypt-error', message: String(err) });
         return;
       }
-      encryptIvSeed    = new Uint8Array(msg.data.ivSeed); // defensive copy
-      encryptEpoch     = msg.data.epoch ?? 0;
-      encryptDropCount = 0; // reset drop counter on new key
+
       if (type === 'rotate-encrypt-key') {
-        frameCounter = 0;
+        // Key rotation: always reset counter (new seed guarantees IV uniqueness)
+        encryptIvSeed = new Uint8Array(msg.data.ivSeed);
+        encryptEpoch  = msg.data.epoch ?? 0;
+        frameCounter  = 0;
+        encryptDropCount = 0;
         log('info', '[E2EE][WORKER]', `rotate-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
-        console.info(`[e2ee-worker] rotate-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
       } else {
-        log('info', '[E2EE][WORKER]', `set-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
-        console.info(`[e2ee-worker] set-encrypt-key OK epoch=${encryptEpoch} media=${mediaKind}`);
+        // Initial key set: only reset counter when ivSeed actually changed
+        // (avoids IV reuse on ICE restart where same key+seed is re-pushed)
+        const newSeed = new Uint8Array(msg.data.ivSeed);
+        const sameSeed = encryptIvSeed &&
+          encryptIvSeed.length === newSeed.length &&
+          encryptIvSeed.every((b, i) => b === newSeed[i]);
+        encryptIvSeed = newSeed;
+        encryptEpoch  = msg.data.epoch ?? 0;
+        if (!sameSeed) frameCounter = 0;
+        encryptDropCount = 0;
+        log('info', '[E2EE][WORKER]', `set-encrypt-key epoch=${encryptEpoch} media=${mediaKind} counterReset=${!sameSeed}`);
       }
-      // ── Step 2: Readiness confirmation ──────────────────────────────────
+
       encryptReady = true;
-      console.warn(`[Worker-Status] ENCRYPT READY ✅ | Media: ${mediaKind} | Epoch: ${encryptEpoch} | Role: ${role}`);
       if (type === 'set-encrypt-key') port.postMessage({ type: 'encrypt-ready' });
-      // generateKeyFrame() is video-only — calling it on an audio transformer throws InvalidStateError
+      // generateKeyFrame() is video-only
       if (mediaKind === 'video') {
         try { event.transformer.generateKeyFrame(); } catch { /* optional API */ }
       }
@@ -146,28 +150,39 @@ self.addEventListener('rtctransform', event => {
         decryptKey = await crypto.subtle.importKey('raw', msg.data.keyData, { name: 'AES-GCM' }, false, ['decrypt']);
       } catch (err) {
         log('error', '[E2EE][WORKER]', `importKey (decrypt) failed: ${err}`);
-        console.error('[e2ee-worker] importKey (decrypt) failed:', err);
         port.postMessage({ type: 'decrypt-error', message: String(err) });
         return;
       }
       decryptIvSeed    = new Uint8Array(msg.data.ivSeed);
       decryptEpoch     = msg.data.epoch ?? 0;
-      decryptDropCount = 0; // reset drop counter on new key
+      decryptDropCount = 0;
       if (type === 'rotate-decrypt-key') {
         log('info', '[E2EE][WORKER]', `rotate-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
-        console.info(`[e2ee-worker] rotate-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
       } else {
-        log('info', '[E2EE][WORKER]', `set-decrypt-key OK epoch=${decryptEpoch} media=${mediaKind}`);
-        console.info(`[e2ee-worker] set-decrypt-key OK epoch=${decryptEpoch} media=${mediaKind}`);
+        log('info', '[E2EE][WORKER]', `set-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
       }
-      // ── Step 2: Readiness confirmation ──────────────────────────────────
       decryptReady = true;
-      console.warn(`[Worker-Status] DECRYPT READY ✅ | Media: ${mediaKind} | Epoch: ${decryptEpoch} | Role: ${role}`);
       if (type === 'set-decrypt-key') port.postMessage({ type: 'decrypt-ready' });
-      // sendKeyFrameRequest() is video-only — calling it on an audio transformer throws InvalidStateError
+      // sendKeyFrameRequest() is video-only
       if (mediaKind === 'video') {
         try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
       }
+
+    } else if (type === 'clear') {
+      // Called at call end — wipe all key material and reset state
+      encryptKey    = null;
+      decryptKey    = null;
+      encryptIvSeed = null;
+      decryptIvSeed = null;
+      encryptEpoch  = 0;
+      decryptEpoch  = 0;
+      frameCounter  = 0;
+      encryptReady  = false;
+      decryptReady  = false;
+      encryptDropCount = 0;
+      decryptDropCount = 0;
+      decryptErrorCount = 0;
+      log('info', '[E2EE][WORKER]', `clear: state wiped media=${mediaKind}`);
 
     } else if (type === 'ping') {
       port.postMessage({ type: 'pong' });
@@ -181,14 +196,12 @@ self.addEventListener('rtctransform', event => {
     event.transformer.readable
       .pipeThrough(new TransformStream({
         async transform(frame, controller) {
-          // ── Step 3: Sender drop detection ─────────────────────────────
           if (!encryptReady) {
             encryptDropCount++;
             if (encryptDropCount === 1 || encryptDropCount % 100 === 0) {
               log('warn', '[E2EE][WORKER]', `sender drop: encrypt not ready count=${encryptDropCount} media=${mediaKind}`);
-              console.error(`[Worker-Drop] Sender dropping frame: encryptReady is FALSE for ${mediaKind} | count=${encryptDropCount}`);
             }
-            // Drop silently — key not yet installed, never send cleartext
+            // Drop — key not yet installed, never send cleartext
             return;
           }
 
@@ -227,11 +240,8 @@ self.addEventListener('rtctransform', event => {
       }))
       .pipeTo(event.transformer.writable)
       .catch(err => {
-        // Expected when the PC is closed — writable stream is aborted.
-        // Only log if it's not a normal closure.
         if (err && err.name !== 'AbortError') {
           log('warn', '[E2EE][WORKER]', `sender pipeline ended role=${role} media=${mediaKind}: ${err}`);
-          console.warn(`[e2ee-worker] sender pipeline ended role=${role} media=${mediaKind}:`, err);
         }
       });
 
@@ -240,14 +250,11 @@ self.addEventListener('rtctransform', event => {
     event.transformer.readable
       .pipeThrough(new TransformStream({
         async transform(frame, controller) {
-          // ── Step 4: Receiver drop detection ───────────────────────────
           if (!decryptReady) {
             decryptDropCount++;
             if (decryptDropCount === 1 || decryptDropCount % 100 === 0) {
               log('info', '[E2EE][WORKER]', `frame dropped: no decrypt key yet media=${mediaKind}`);
-              console.error(`[Worker-Drop] Receiver dropping frame: decryptReady is FALSE for ${mediaKind} | count=${decryptDropCount}`);
             }
-            // sendKeyFrameRequest() is video-only
             if (mediaKind === 'video') {
               try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
             }
@@ -274,11 +281,9 @@ self.addEventListener('rtctransform', event => {
             return;
           }
 
-          // ── Step 6: Epoch mismatch detection ──────────────────────────
           const frameEpoch = raw[1];
           if (frameEpoch !== (decryptEpoch & 0xFF)) {
             log('warn', '[E2EE][WORKER]', `epoch mismatch frame=${frameEpoch} local=${decryptEpoch} media=${mediaKind}`);
-            console.warn(`[Worker-Epoch] EPOCH MISMATCH ⚠️ | Frame epoch: ${frameEpoch} | Local epoch: ${decryptEpoch} | Media: ${mediaKind} — decrypt may fail`);
             // still try to decrypt — epoch can be ahead during rotation
           }
 
@@ -286,7 +291,6 @@ self.addEventListener('rtctransform', event => {
           const iv      = makeIV(decryptIvSeed, counter);
           const ct      = raw.slice(HEADER_LEN);
 
-          // ── Step 5: Decrypt error detection ───────────────────────────
           try {
             const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, decryptKey, ct);
             frame.data = pt;
@@ -294,11 +298,7 @@ self.addEventListener('rtctransform', event => {
           } catch (err) {
             decryptErrorCount++;
             log('warn', '[E2EE][WORKER]', `decrypt failed media=${mediaKind} counter=${counter}: ${err}`);
-            if (decryptErrorCount === 1 || decryptErrorCount % 100 === 0) {
-              console.error(`[Worker-Crypto] Decrypt Failed! Error: ${err.message} | Epoch: ${decryptEpoch} | Media: ${mediaKind} | Counter: ${counter} | count=${decryptErrorCount}`);
-            }
             port.postMessage({ type: 'decrypt-error', message: `${mediaKind} counter=${counter}: ${err}` });
-            // AES-GCM auth failure — drop and request keyframe (video-only)
             if (mediaKind === 'video') {
               try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
             }
@@ -309,12 +309,11 @@ self.addEventListener('rtctransform', event => {
       .catch(err => {
         if (err && err.name !== 'AbortError') {
           log('warn', '[E2EE][WORKER]', `receiver pipeline ended role=${role} media=${mediaKind}: ${err}`);
-          console.warn(`[e2ee-worker] receiver pipeline ended role=${role} media=${mediaKind}:`, err);
         }
       });
   }
 });
 
 self.addEventListener('error', evt => {
-  console.error('[e2ee-worker] unhandled error:', evt.message, evt.filename, evt.lineno);
+  workerLog(`unhandled error: ${evt.message} ${evt.filename}:${evt.lineno}`);
 });
