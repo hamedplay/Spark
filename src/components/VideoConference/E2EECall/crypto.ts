@@ -1,4 +1,4 @@
-import { APP_ID, PROTO_VER, log, logWarn } from './types';
+import { APP_ID, PROTO_VER } from './types';
 import type { DerivedKeys, MediaKeys } from './types';
 
 // ── JWK Validation ─────────────────────────────────────────────────────────
@@ -153,6 +153,3 @@ export const hexToBytes = (hex: string): Uint8Array | null => {
 export function randomHex(bytes: number): string {
   return bytesToHex(crypto.getRandomValues(new Uint8Array(bytes)));
 }
-
-// Suppress unused import warning — log/logWarn are re-exported for callers
-void log; void logWarn;

@@ -2,7 +2,7 @@
 
 export const INVITE_TTL_MS = 2 * 60 * 1000;
 export const ICE_QUEUE_MAX = 50;
-export const APP_ID        = typeof window !== 'undefined' ? window.location.hostname : 'app';
+export const APP_ID        = 'e2ee-call-v1';
 export const PROTO_VER     = 'v2';
 
 export const SUPPORTS_TRANSFORMS =

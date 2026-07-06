@@ -1,4 +1,4 @@
-import { SUPPORTS_TRANSFORMS, E2EE_DEBUG, log, logWarn, logError } from './types';
+import { SUPPORTS_TRANSFORMS, log, logWarn, logError } from './types';
 import type { DerivedKeys } from './types';
 
 export interface PortRecord {
@@ -17,7 +17,6 @@ export function ensureWorkerReady(worker: Worker): Promise<void> {
       if (!resolved) {
         testPort1.close();
         logWarn('[E2EE][WORKER]', 'ping timeout — worker alive check inconclusive, proceeding anyway');
-        console.warn('[E2EE][WORKER] worker ping timeout — continuing (transform-level checks will verify pipeline)');
         resolve();
       }
     }, 3000);
@@ -28,13 +27,12 @@ export function ensureWorkerReady(worker: Worker): Promise<void> {
         clearTimeout(timer);
         testPort1.close();
         log('[E2EE][WORKER]', 'worker health check passed (pong received)');
-        console.info('[E2EE][WORKER] worker health check passed ✅');
         resolve();
       }
     });
 
     worker.postMessage({ type: 'ping', testPort: testPort2 }, [testPort2]);
-    console.info('[E2EE][WORKER] sending ping to worker via test port...');
+    log('[E2EE][WORKER]', 'sending ping to worker via test port');
   });
 }
 
@@ -55,7 +53,6 @@ export function attachSenderTransform(
 
   const initTimer = setTimeout(() => {
     logWarn('[E2EE][XFORM]', `sender init-ready timeout (5s) kind=${kind} — worker may not have received init`);
-    console.warn(`[E2EE][XFORM] sender init-ready timeout (5s) for ${kind} — transform may not be active`);
   }, 5000);
 
   port1.addEventListener('message', e => {
@@ -63,7 +60,6 @@ export function attachSenderTransform(
     if (type === 'ready') {
       clearTimeout(initTimer);
       log('[E2EE][XFORM]', `sender init ack received kind=${kind}`);
-      console.info(`[E2EE][XFORM] sender init ack (ready) received kind=${kind} ✅`);
     } else if (type === 'log') {
       const { level, tag, msg } = e.data;
       if (level === 'error') logError(tag, msg);
@@ -82,7 +78,6 @@ export function attachSenderTransform(
 
   port1.postMessage({ type: 'init', debug, media: kind });
   log('[E2EE][XFORM]', `sender transform attached trackId=${sender.track.id} kind=${kind}`);
-  console.info(`[E2EE][XFORM] sender transform attached trackId=${sender.track.id} kind=${kind}`);
   return { port: port1, kind, role: 'sender' };
 }
 
@@ -103,7 +98,6 @@ export function attachReceiverTransform(
 
   const initTimer = setTimeout(() => {
     logWarn('[E2EE][XFORM]', `receiver init-ready timeout (5s) kind=${kind} — worker may not have received init`);
-    console.warn(`[E2EE][XFORM] receiver init-ready timeout (5s) for ${kind} — transform may not be active`);
   }, 5000);
 
   port1.addEventListener('message', e => {
@@ -111,7 +105,6 @@ export function attachReceiverTransform(
     if (type === 'ready') {
       clearTimeout(initTimer);
       log('[E2EE][XFORM]', `receiver init ack received kind=${kind}`);
-      console.info(`[E2EE][XFORM] receiver init ack (ready) received kind=${kind} ✅`);
     } else if (type === 'log') {
       const { level, tag, msg } = e.data;
       if (level === 'error') logError(tag, msg);
@@ -130,7 +123,6 @@ export function attachReceiverTransform(
 
   port1.postMessage({ type: 'init', debug, media: kind });
   log('[E2EE][XFORM]', `receiver transform attached trackId=${receiver.track.id} kind=${kind}`);
-  console.info(`[E2EE][XFORM] receiver transform attached trackId=${receiver.track.id} kind=${kind}`);
   return { port: port1, kind, role: 'receiver' };
 }
 
@@ -161,25 +153,18 @@ export async function pushKeyToPortRecord(pr: PortRecord, keys: DerivedKeys): Pr
     });
 
     pr.port.postMessage({ type: msgType, keyData, ivSeed: mk.ivSeed, epoch }, [keyData]);
-    log('[E2EE][KEY]', `pushKey attempt=${attempt} role=${pr.role} kind=${pr.kind} msgType=${msgType} epoch=${epoch}`);
-    console.info(`[E2EE][KEY] ${msgType} direction=${pr.role} mediaKind=${pr.kind} epoch=${epoch} attempt=${attempt} ivSeed=${Array.from(mk.ivSeed).map(b => b.toString(16).padStart(2,'0')).join('')}`);
+    log('[E2EE][KEY]', `pushKey attempt=${attempt} role=${pr.role} kind=${pr.kind} msgType=${msgType}`);
 
     try {
       await ackPromise;
       log('[E2EE][KEY]', `${ackType} confirmed role=${pr.role} kind=${pr.kind} attempt=${attempt}`);
-      console.info(`[E2EE][KEY] ${ackType} confirmed ✅ role=${pr.role} kind=${pr.kind} attempt=${attempt}`);
       return;
     } catch (err) {
       if (attempt < MAX_TRIES) {
         logWarn('[E2EE][KEY]', `${String(err)} — retrying (${attempt}/${MAX_TRIES})`);
-        console.warn(`[E2EE][KEY] ${String(err)} — retrying...`);
       } else {
         logError('[E2EE][KEY]', `key push failed after ${MAX_TRIES} attempts role=${pr.role} kind=${pr.kind}: ${err}`);
-        console.error(`[E2EE][KEY] key push FAILED after ${MAX_TRIES} attempts role=${pr.role} kind=${pr.kind}`);
       }
     }
   }
 }
-
-// Suppress unused — E2EE_DEBUG is used transitively by callers
-void E2EE_DEBUG;
