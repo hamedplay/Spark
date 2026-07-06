@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, X } from 'lucide-react';
+import { TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, X, ShieldCheck, Phone, PhoneOff } from 'lucide-react';
 import { CallEngine, IncomingCallNotification } from '../components/Chat/CallEngine';
 import type { CallSession } from '../components/Chat/CallEngine';
 import type { UserProfile } from '../components/Chat/types';
 import moment from 'moment-jalaali';
+import { setPendingE2EERing, type GlobalE2EERing } from '../lib/globalE2EERing';
 
 interface ActiveCall {
   session: CallSession;
@@ -152,6 +153,7 @@ interface ProviderProps {
   currentUserId: string | null;
   onNavigateToChat?: () => void;
   onNavigateToChannels?: () => void;
+  onNavigateToVideoConference?: () => void;
   children: React.ReactNode;
 }
 
@@ -159,15 +161,19 @@ export function GlobalCallProvider({
   currentUserId,
   onNavigateToChat,
   onNavigateToChannels,
+  onNavigateToVideoConference,
   children,
 }: ProviderProps) {
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
   const [urgentAlarm, setUrgentAlarm] = useState<UrgentAlarmData | null>(null);
   const [alarmVisible, setAlarmVisible] = useState(false);
+  const [e2eeRing, setE2eeRing] = useState<GlobalE2EERing | null>(null);
 
   const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const urgentChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const e2eeInboxChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const e2eeRingAudioRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const alarmIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const firedUrgentIds = useRef<Set<string>>(new Set());
 
@@ -176,6 +182,8 @@ export function GlobalCallProvider({
   onNavigateToChatRef.current = onNavigateToChat;
   const onNavigateToChannelsRef = useRef(onNavigateToChannels);
   onNavigateToChannelsRef.current = onNavigateToChannels;
+  const onNavigateToVideoConferenceRef = useRef(onNavigateToVideoConference);
+  onNavigateToVideoConferenceRef.current = onNavigateToVideoConference;
 
   // Keep currentUserId in a ref so alarm callbacks don't capture a stale value
   const currentUserIdRef = useRef(currentUserId);
@@ -223,6 +231,96 @@ export function GlobalCallProvider({
     playBeep();
     if (alarmIntervalRef.current) clearInterval(alarmIntervalRef.current);
     alarmIntervalRef.current = setInterval(playBeep, 1500);
+  };
+
+  // ── E2EE ring ringtone ──────────────────────────────────────────────────────
+  const playE2EERingTone = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const play = (freq: number, t: number) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.connect(g); g.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        g.gain.setValueAtTime(0.25, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.35);
+        osc.start(ctx.currentTime + t);
+        osc.stop(ctx.currentTime + t + 0.35);
+        setTimeout(() => ctx.close().catch(() => {}), (t + 0.5) * 1000);
+      };
+      play(880, 0); play(1100, 0.4); play(880, 0.8);
+    } catch { /* ignore */ }
+  };
+
+  // ── E2EE global ring listener ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const ch = supabase.channel(`e2ee-global-inbox-${currentUserId}`, {
+      config: { broadcast: { self: false } },
+    });
+    e2eeInboxChannelRef.current = ch;
+
+    ch.on('broadcast', { event: 'e2ee-ring' }, ({ payload }) => {
+      if (!payload || typeof payload !== 'object') return;
+      const p = payload as Record<string, unknown>;
+
+      if (p.targetUserId !== currentUserId) return;
+      if (typeof p.from        !== 'string' || p.from.length > 200)        return;
+      if (typeof p.sessionId   !== 'string' || p.sessionId.length > 100)   return;
+      if (typeof p.callerName  !== 'string' || p.callerName.length > 200)  return;
+      if (typeof p.callerId    !== 'string' || p.callerId.length > 200)    return;
+      if (typeof p.acceptToken !== 'string' || p.acceptToken.length !== 32) return;
+      if (typeof p.expiresAt   !== 'number') return;
+      if (Date.now() > (p.expiresAt as number)) return;
+
+      const ring: GlobalE2EERing = {
+        from:        p.from        as string,
+        sessionId:   p.sessionId   as string,
+        callerName:  p.callerName  as string,
+        callerId:    p.callerId    as string,
+        expiresAt:   p.expiresAt   as number,
+        acceptToken: p.acceptToken as string,
+      };
+
+      setPendingE2EERing(ring);
+      setE2eeRing(ring);
+
+      // Start repeating ringtone
+      playE2EERingTone();
+      if (e2eeRingAudioRef.current) clearInterval(e2eeRingAudioRef.current);
+      e2eeRingAudioRef.current = setInterval(playE2EERingTone, 3000);
+
+      // Auto-dismiss when invite expires
+      const ttl = (p.expiresAt as number) - Date.now();
+      setTimeout(() => {
+        setE2eeRing(r => r?.sessionId === ring.sessionId ? null : r);
+        setPendingE2EERing(null);
+        if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }
+      }, Math.max(0, ttl));
+    });
+
+    ch.subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+      e2eeInboxChannelRef.current = null;
+      if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }
+    };
+  }, [currentUserId]);
+
+  const dismissE2EERing = () => {
+    setE2eeRing(null);
+    setPendingE2EERing(null);
+    if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }
+  };
+
+  const acceptE2EERing = () => {
+    if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }
+    // Keep the ring in the singleton so useE2EECall can consume it
+    setE2eeRing(null);
+    onNavigateToVideoConferenceRef.current?.();
   };
 
   // ── On login: check for existing unread urgent messages ──────────────────
@@ -471,6 +569,42 @@ export function GlobalCallProvider({
                 className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-bold py-3.5 rounded-2xl transition-colors text-base shadow-lg"
               >
                 <CheckCircle className="w-5 h-5" /> متوجه شدم — قطع آلارم
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global E2EE incoming call overlay */}
+      {e2eeRing && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="w-full max-w-sm bg-gray-900 rounded-3xl shadow-2xl border border-emerald-500/40 overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+            <div className="bg-gradient-to-r from-emerald-900 to-gray-900 px-6 py-5 flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center animate-pulse flex-shrink-0">
+                <ShieldCheck className="w-7 h-7 text-emerald-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-white font-bold text-lg truncate">{e2eeRing.callerName}</p>
+                <p className="text-emerald-300 text-sm">تماس با رمزنگاری سرتاسری</p>
+              </div>
+            </div>
+            <div className="px-6 py-4 flex gap-3">
+              <button
+                type="button"
+                onClick={dismissE2EERing}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
+              >
+                <PhoneOff className="w-4 h-4" /> رد کردن
+              </button>
+              <button
+                type="button"
+                onClick={acceptE2EERing}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
+              >
+                <Phone className="w-4 h-4" /> پاسخ دادن
               </button>
             </div>
           </div>

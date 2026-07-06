@@ -755,6 +755,7 @@ function App() {
         currentUserId={currentUserId}
         onNavigateToChat={() => setActivePage('chat')}
         onNavigateToChannels={() => setActivePage('channels')}
+        onNavigateToVideoConference={() => setActivePage('video-conference')}
       >
         {showSplash && !splashDone && (
           <SplashScreen onDone={() => { setShowSplash(false); setSplashDone(true); }} />

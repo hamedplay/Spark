@@ -1,9 +1,5 @@
 import { useState, useEffect, useRef, type RefObject } from 'react';
-import {
-  Mic, MicOff, Video, VideoOff, PhoneOff, ShieldCheck, ShieldAlert,
-  Loader, Check, Wifi, WifiOff, Volume2, VolumeX, Monitor, MonitorOff,
-  ArrowLeftRight, Info, PictureInPicture2,
-} from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, ShieldCheck, ShieldAlert, Loader, Check, Wifi, WifiOff, Volume2, VolumeX, Monitor, MonitorOff, ArrowLeftRight, Info, PictureInPicture2, FlipHorizontal2 as FlipHorizontal } from 'lucide-react';
 import type { PeerDiagnostics } from '../../../lib/webrtcDiagnostics';
 import type { CallPhase, E2EEStatus, UserProfile } from './types';
 
@@ -26,6 +22,7 @@ interface Props {
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
+  onSwitchCamera: () => void;
   onHangup: () => void;
   onToggleRemoteMute: () => void;
   onShowSafety: () => void;
@@ -174,7 +171,7 @@ export function ActiveCallView({
   phase, targetUser, localVideoRef, remoteVideoRef,
   isMuted, isVideoOff, isRemoteMuted, isScreenSharing,
   connDiag, isOffline, e2eeStatus, safetyNums, showSafety,
-  onToggleMute, onToggleVideo, onToggleScreenShare, onHangup,
+  onToggleMute, onToggleVideo, onToggleScreenShare, onSwitchCamera, onHangup,
   onToggleRemoteMute, onShowSafety, onCloseSafety, onVerifySafety,
 }: Props) {
   const [needsAudioTap, setNeedsAudioTap] = useState(false);
@@ -425,6 +422,15 @@ export function ActiveCallView({
             className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-600 hover:bg-red-700' : 'bg-white/20 hover:bg-white/30'}`}
           >
             {isVideoOff ? <VideoOff aria-hidden="true" className="w-5 h-5 text-white" /> : <Video aria-hidden="true" className="w-5 h-5 text-white" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={onSwitchCamera}
+            aria-label="تغییر دوربین"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-colors bg-white/20 hover:bg-white/30"
+          >
+            <FlipHorizontal aria-hidden="true" className="w-5 h-5 text-white" />
           </button>
 
           <button

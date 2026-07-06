@@ -5,6 +5,7 @@ import { startDiagnostics, stopDiagnostics } from '../../../lib/webrtcDiagnostic
 import type { PeerDiagnostics } from '../../../lib/webrtcDiagnostics';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
+import { getPendingE2EERing, setPendingE2EERing } from '../../../lib/globalE2EERing';
 
 import {
   INVITE_TTL_MS, ICE_QUEUE_MAX, SUPPORTS_TRANSFORMS, E2EE_DEBUG,
@@ -44,6 +45,7 @@ export interface UseE2EECallReturn {
   searching: boolean;
   connDiag: PeerDiagnostics | null;
   isOffline: boolean;
+  videoDevices: MediaDeviceInfo[];
   // Refs
   localVideoRef: React.RefObject<HTMLVideoElement>;
   remoteVideoRef: React.RefObject<HTMLVideoElement>;
@@ -56,6 +58,7 @@ export interface UseE2EECallReturn {
   toggleMute: () => void;
   toggleVideo: () => void;
   toggleScreenShare: () => Promise<void>;
+  switchCamera: () => Promise<void>;
   verifySafety: () => void;
   // Setters exposed to views
   setUserSearch: React.Dispatch<React.SetStateAction<string>>;
@@ -88,6 +91,7 @@ export function useE2EECall(
   const [searching,        setSearching]        = useState(false);
   const [connDiag,         setConnDiag]         = useState<PeerDiagnostics | null>(null);
   const [isOffline,        setIsOffline]        = useState(!navigator.onLine);
+  const [videoDevices,     setVideoDevices]     = useState<MediaDeviceInfo[]>([]);
 
   // ── Refs ───────────────────────────────────────────────────────────────
   const localVideoRef      = useRef<HTMLVideoElement>(null);
@@ -327,6 +331,40 @@ export function useE2EECall(
     ch.subscribe(status => log('[E2EE][SIGNAL]', `inbox channel status=${status}`));
     return () => { supabase.removeChannel(ch); inboxChannelRef.current = null; };
   }, [currentUserId]);
+
+  // ── Consume pending E2EE ring from GlobalCallContext ───────────────────────
+  // When a user navigates to the E2EE page after accepting via the global overlay,
+  // the ring data is waiting in the singleton.
+  useEffect(() => {
+    if (!SUPPORTS_TRANSFORMS) return;
+    const ring = getPendingE2EERing();
+    if (!ring || Date.now() > ring.expiresAt || sessionActiveRef.current) return;
+    // Consume it so it doesn't fire again
+    setPendingE2EERing(null);
+    setIncomingCall({
+      from:        ring.from,
+      sessionId:   ring.sessionId,
+      callerName:  ring.callerName,
+      callerId:    ring.callerId,
+      expiresAt:   ring.expiresAt,
+      acceptToken: ring.acceptToken,
+    });
+    setPhase('incoming_ring');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Enumerate video devices ─────────────────────────────────────────────
+  useEffect(() => {
+    const enumerate = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setVideoDevices(devices.filter(d => d.kind === 'videoinput'));
+      } catch { /* permissions not yet granted */ }
+    };
+    enumerate();
+    navigator.mediaDevices.addEventListener('devicechange', enumerate);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', enumerate);
+  }, []);
 
   // ── Cleanup ────────────────────────────────────────────────────────────
 
@@ -840,17 +878,23 @@ export function useE2EECall(
       const calleeInbox = supabase.channel(`e2ee-inbox-${target.user_id}`, {
         config: { broadcast: { self: false } },
       });
-      await waitForSubscribed(calleeInbox);
-      calleeInbox.send({
-        type: 'broadcast', event: 'e2ee-ring',
-        payload: {
-          from: myPeerIdRef.current, sessionId, targetUserId: target.user_id,
-          callerName: currentUserName, callerId: currentUserId,
-          acceptToken: acceptTokenRef.current,
-          expiresAt: Date.now() + INVITE_TTL_MS,
-        },
+      const calleeGlobalInbox = supabase.channel(`e2ee-global-inbox-${target.user_id}`, {
+        config: { broadcast: { self: false } },
       });
-      setTimeout(() => supabase.removeChannel(calleeInbox), 3000);
+      const ringPayload = {
+        from: myPeerIdRef.current, sessionId, targetUserId: target.user_id,
+        callerName: currentUserName, callerId: currentUserId,
+        acceptToken: acceptTokenRef.current,
+        expiresAt: Date.now() + INVITE_TTL_MS,
+      };
+      await waitForSubscribed(calleeInbox);
+      calleeInbox.send({ type: 'broadcast', event: 'e2ee-ring', payload: ringPayload });
+      await waitForSubscribed(calleeGlobalInbox);
+      calleeGlobalInbox.send({ type: 'broadcast', event: 'e2ee-ring', payload: ringPayload });
+      setTimeout(() => {
+        supabase.removeChannel(calleeInbox);
+        supabase.removeChannel(calleeGlobalInbox);
+      }, 3000);
 
       setPhase('outgoing_ring');
 
@@ -982,16 +1026,40 @@ export function useE2EECall(
     setShowSafety(false);
   }, []);
 
+  const switchCamera = useCallback(async () => {
+    const pc = pcRef.current;
+    const currentStream = localStreamRef.current;
+    if (!currentStream || !pc) return;
+    const currentTrack = currentStream.getVideoTracks()[0];
+    const currentSettings = currentTrack?.getSettings() as MediaTrackSettings & { facingMode?: string };
+    const currentFacing = currentSettings?.facingMode;
+    const nextFacing = currentFacing === 'environment' ? 'user' : 'environment';
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: nextFacing, width: { ideal: 640 }, height: { ideal: 480 } },
+      });
+      const newTrack = newStream.getVideoTracks()[0];
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(newTrack);
+      currentStream.getVideoTracks().forEach(t => { t.stop(); currentStream.removeTrack(t); });
+      currentStream.addTrack(newTrack);
+      if (localVideoRef.current) localVideoRef.current.srcObject = currentStream;
+    } catch (err) {
+      logError('[E2EE][MEDIA]', 'switchCamera failed:', err);
+      toast.error('خطا در تغییر دوربین');
+    }
+  }, []);
+
   // ── Cleanup on unmount ─────────────────────────────────────────────────
   useEffect(() => () => { doFullCleanup(); }, [doFullCleanup]);
 
   return {
     phase, e2eeStatus, isMuted, isVideoOff, isRemoteMuted, isScreenSharing,
     targetUser, incomingCall, safetyNums, showSafety, sessionCode, failReason,
-    userSearch, users, searching, connDiag, isOffline,
+    userSearch, users, searching, connDiag, isOffline, videoDevices,
     localVideoRef, remoteVideoRef, safetyVerifiedRef,
     startCall, acceptCall, rejectCall, doHangup,
-    toggleMute, toggleVideo, toggleScreenShare, verifySafety,
+    toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   };
 }

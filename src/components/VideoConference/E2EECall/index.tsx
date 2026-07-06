@@ -14,9 +14,12 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
     userSearch, users, searching, connDiag, isOffline,
     localVideoRef, remoteVideoRef,
     startCall, acceptCall, rejectCall, doHangup,
-    toggleMute, toggleVideo, toggleScreenShare, verifySafety,
+    toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   } = useE2EECall(currentUserId, currentUserName);
+
+  const isCallActive = phase === 'connecting' || phase === 'connected';
+  const isCallOngoing = isCallActive || phase === 'outgoing_ring' || phase === 'incoming_ring';
 
   const failReasonText =
     failReason === 'ice_failed'        ? 'خطای شبکه ICE' :
@@ -28,28 +31,31 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
 
   return (
     <div className="flex flex-col h-full" dir="rtl">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
-          >
-            بازگشت
-          </button>
-          <div className="flex items-center gap-2">
-            <ShieldCheck aria-hidden="true" className="w-5 h-5 text-emerald-500" />
-            <h2 className="text-lg font-bold text-gray-800 dark:text-white">تماس با رمزنگاری سرتاسری</h2>
+      {/* Header — hidden during active call for full-screen experience */}
+      {!isCallOngoing && (
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+            >
+              بازگشت
+            </button>
+            <div className="flex items-center gap-2">
+              <ShieldCheck aria-hidden="true" className="w-5 h-5 text-emerald-500" />
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white">تماس با رمزنگاری سرتاسری</h2>
+            </div>
           </div>
+          {!SUPPORTS_TRANSFORMS && (
+            <span className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-full flex items-center gap-1">
+              <ShieldAlert aria-hidden="true" className="w-3.5 h-3.5" /> مرورگر ناسازگار — تماس رمزشده غیرممکن
+            </span>
+          )}
         </div>
-        {!SUPPORTS_TRANSFORMS && (
-          <span className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-full flex items-center gap-1">
-            <ShieldAlert aria-hidden="true" className="w-3.5 h-3.5" /> مرورگر ناسازگار — تماس رمزشده غیرممکن
-          </span>
-        )}
-      </div>
+      )}
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className={`flex-1 overflow-auto ${isCallActive ? 'p-0' : 'p-4'}`}>
 
         {/* Browser unsupported */}
         {!SUPPORTS_TRANSFORMS && (
@@ -65,7 +71,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
           </div>
         )}
 
-        {/* Incoming ring — only rendered when transforms are supported */}
+        {/* Incoming ring */}
         {SUPPORTS_TRANSFORMS && phase === 'incoming_ring' && incomingCall && (
           <IncomingRingView
             incomingCall={incomingCall}
@@ -83,8 +89,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
           />
         )}
 
-        {/* Active call */}
-        {(phase === 'connecting' || phase === 'connected') && (
+        {/* Active call — full bleed */}
+        {isCallActive && (
           <ActiveCallView
             phase={phase}
             targetUser={targetUser}
@@ -102,6 +108,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
             onToggleMute={toggleMute}
             onToggleVideo={toggleVideo}
             onToggleScreenShare={toggleScreenShare}
+            onSwitchCamera={switchCamera}
             onHangup={() => doHangup()}
             onToggleRemoteMute={() => setIsRemoteMuted(v => !v)}
             onShowSafety={() => setShowSafety(true)}
@@ -131,6 +138,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
               )}
             </div>
             <button
+              type="button"
               onClick={() => { setPhase('idle'); setFailReason(null); }}
               className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-colors"
             >
