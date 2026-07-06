@@ -121,6 +121,7 @@ export function useE2EECall(
   const screenStreamRef    = useRef<MediaStream | null>(null);
   const isScreenSharingRef = useRef(false);
   const lastKeyFingerprintRef = useRef<string>('');
+  const autoAcceptRef      = useRef(false);
 
   // ── Keep phaseRef in sync ──────────────────────────────────────────────
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -341,6 +342,7 @@ export function useE2EECall(
     if (!ring || Date.now() > ring.expiresAt || sessionActiveRef.current) return;
     // Consume it so it doesn't fire again
     setPendingE2EERing(null);
+    autoAcceptRef.current = !!ring.autoAccept;
     setIncomingCall({
       from:        ring.from,
       sessionId:   ring.sessionId,
@@ -963,6 +965,15 @@ export function useE2EECall(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingCall, doFullCleanup]);
 
+  // ── Auto-accept when arriving from global overlay ──────────────────────
+  useEffect(() => {
+    if (phase === 'incoming_ring' && incomingCall && autoAcceptRef.current) {
+      autoAcceptRef.current = false;
+      acceptCall();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, incomingCall]);
+
   const rejectCall = useCallback(() => {
     const ic = incomingCall;
     if (!ic) return;
@@ -1030,13 +1041,30 @@ export function useE2EECall(
     const pc = pcRef.current;
     const currentStream = localStreamRef.current;
     if (!currentStream || !pc) return;
+
+    // Get up-to-date device list (permissions may have been granted since mount)
+    let devices = videoDevices;
+    if (devices.length === 0) {
+      try {
+        const all = await navigator.mediaDevices.enumerateDevices();
+        devices = all.filter(d => d.kind === 'videoinput');
+        setVideoDevices(devices);
+      } catch { /* ignore */ }
+    }
+
+    if (devices.length < 2) {
+      toast('تنها یک دوربین در دسترس است');
+      return;
+    }
+
     const currentTrack = currentStream.getVideoTracks()[0];
-    const currentSettings = currentTrack?.getSettings() as MediaTrackSettings & { facingMode?: string };
-    const currentFacing = currentSettings?.facingMode;
-    const nextFacing = currentFacing === 'environment' ? 'user' : 'environment';
+    const currentDeviceId = currentTrack?.getSettings().deviceId;
+    const currentIndex = devices.findIndex(d => d.deviceId === currentDeviceId);
+    const nextDevice = devices[(currentIndex + 1) % devices.length];
+
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: nextFacing, width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { deviceId: { exact: nextDevice.deviceId }, width: { ideal: 640 }, height: { ideal: 480 } },
       });
       const newTrack = newStream.getVideoTracks()[0];
       const sender = pc.getSenders().find(s => s.track?.kind === 'video');
@@ -1048,7 +1076,7 @@ export function useE2EECall(
       logError('[E2EE][MEDIA]', 'switchCamera failed:', err);
       toast.error('خطا در تغییر دوربین');
     }
-  }, []);
+  }, [videoDevices]);
 
   // ── Cleanup on unmount ─────────────────────────────────────────────────
   useEffect(() => () => { doFullCleanup(); }, [doFullCleanup]);

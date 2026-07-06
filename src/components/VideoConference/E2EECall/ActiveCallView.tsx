@@ -202,11 +202,14 @@ export function ActiveCallView({
     if (phase !== 'connecting' && phase !== 'connected') setNeedsAudioTap(false);
   }, [phase]);
 
-  // Native PiP leave event
+  // Native PiP leave event — fires on the video element, not document
   useEffect(() => {
+    const video = remoteVideoRef.current;
+    if (!video) return;
     const handleLeave = () => setIsNativePip(false);
-    document.addEventListener('leavepictureinpicture', handleLeave);
-    return () => document.removeEventListener('leavepictureinpicture', handleLeave);
+    video.addEventListener('leavepictureinpicture', handleLeave);
+    return () => video.removeEventListener('leavepictureinpicture', handleLeave);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Drag handlers ────────────────────────────────────────────────────────
@@ -259,16 +262,42 @@ export function ActiveCallView({
 
   // ── Native PiP ────────────────────────────────────────────────────────────
 
+  const [supportsPiP, setSupportsPiP] = useState(false);
+  useEffect(() => {
+    const video = remoteVideoRef.current;
+    const v = video as (HTMLVideoElement & { webkitSupportsPresentationMode?: (m: string) => boolean }) | null;
+    setSupportsPiP(
+      !!document.pictureInPictureEnabled ||
+      !!v?.webkitSupportsPresentationMode?.('picture-in-picture')
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   const handleNativePip = async () => {
     const video = remoteVideoRef.current;
-    if (!video || !document.pictureInPictureEnabled) return;
+    if (!video) return;
     try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-        setIsNativePip(false);
-      } else {
-        await video.requestPictureInPicture();
-        setIsNativePip(true);
+      // Standard API (Chrome, Android, Firefox)
+      if (document.pictureInPictureEnabled) {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+          setIsNativePip(false);
+        } else {
+          await video.requestPictureInPicture();
+          setIsNativePip(true);
+        }
+        return;
+      }
+      // Webkit API (iOS Safari)
+      const v = video as HTMLVideoElement & {
+        webkitSupportsPresentationMode?: (m: string) => boolean;
+        webkitPresentationMode?: string;
+        webkitSetPresentationMode?: (m: string) => void;
+      };
+      if (v.webkitSupportsPresentationMode?.('picture-in-picture') && v.webkitSetPresentationMode) {
+        const isPiP = v.webkitPresentationMode === 'picture-in-picture';
+        v.webkitSetPresentationMode(isPiP ? 'inline' : 'picture-in-picture');
+        setIsNativePip(!isPiP);
       }
     } catch { /* denied or unsupported */ }
   };
@@ -460,7 +489,7 @@ export function ActiveCallView({
             <Info aria-hidden="true" className="w-4 h-4 text-white" />
           </button>
 
-          {document.pictureInPictureEnabled && (
+          {supportsPiP && (
             <button
               type="button"
               onClick={handleNativePip}

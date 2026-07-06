@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
 import { ApprovalWaitingGate } from './ApprovalGate';
+import { getPendingE2EERing } from '../../lib/globalE2EERing';
 import type { ConferenceRoom } from './types';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
@@ -328,7 +329,8 @@ export function VideoConferencePage() {
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
 
   const [inviteRoom, setInviteRoom] = useState<ConferenceRoom | null>(null);
-  const [showE2EE, setShowE2EE] = useState(false);
+  // Auto-open E2EE tab when navigated here from the global ring overlay
+  const [showE2EE, setShowE2EE] = useState(() => getPendingE2EERing() !== null);
 
   // Pre-join device selection
   const [preJoinRoom, setPreJoinRoom] = useState<ConferenceRoom | null>(null);

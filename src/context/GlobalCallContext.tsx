@@ -6,7 +6,7 @@ import { CallEngine, IncomingCallNotification } from '../components/Chat/CallEng
 import type { CallSession } from '../components/Chat/CallEngine';
 import type { UserProfile } from '../components/Chat/types';
 import moment from 'moment-jalaali';
-import { setPendingE2EERing, type GlobalE2EERing } from '../lib/globalE2EERing';
+import { setPendingE2EERing, getPendingE2EERing, type GlobalE2EERing } from '../lib/globalE2EERing';
 
 interface ActiveCall {
   session: CallSession;
@@ -318,7 +318,9 @@ export function GlobalCallProvider({
 
   const acceptE2EERing = () => {
     if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }
-    // Keep the ring in the singleton so useE2EECall can consume it
+    // Mark autoAccept so useE2EECall calls acceptCall immediately on mount
+    const ring = getPendingE2EERing();
+    if (ring) setPendingE2EERing({ ...ring, autoAccept: true });
     setE2eeRing(null);
     onNavigateToVideoConferenceRef.current?.();
   };

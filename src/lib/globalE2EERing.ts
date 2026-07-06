@@ -8,6 +8,7 @@ export interface GlobalE2EERing {
   callerId:    string;
   expiresAt:   number;
   acceptToken: string;
+  autoAccept?: boolean;
 }
 
 let _pending: GlobalE2EERing | null = null;
