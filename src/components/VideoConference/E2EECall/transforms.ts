@@ -86,7 +86,7 @@ export function attachReceiverTransform(
   worker: Worker,
   debug: boolean,
 ): PortRecord | null {
-  if (!SUPPORTS_TRANSFORMS) return null;
+  if (!SUPPORTS_TRANSFORMS || !receiver.track) return null;
   const kind = receiver.track.kind as 'audio' | 'video';
   if (kind !== 'audio' && kind !== 'video') {
     logWarn('[E2EE][XFORM]', `unknown receiver track kind=${receiver.track.kind} — skipping`);
@@ -160,11 +160,10 @@ export async function pushKeyToPortRecord(pr: PortRecord, keys: DerivedKeys): Pr
       log('[E2EE][KEY]', `${ackType} confirmed role=${pr.role} kind=${pr.kind} attempt=${attempt}`);
       return;
     } catch (err) {
-      if (attempt < MAX_TRIES) {
-        logWarn('[E2EE][KEY]', `${String(err)} — retrying (${attempt}/${MAX_TRIES})`);
-      } else {
-        logError('[E2EE][KEY]', `key push failed after ${MAX_TRIES} attempts role=${pr.role} kind=${pr.kind}: ${err}`);
-      }
+      logWarn('[E2EE][KEY]', `${String(err)} — retrying (${attempt}/${MAX_TRIES})`);
     }
   }
+
+  logError('[E2EE][KEY]', `key push permanently failed role=${pr.role} kind=${pr.kind}`);
+  throw new Error(`pushKey failed after ${MAX_TRIES} attempts role=${pr.role} kind=${pr.kind}`);
 }

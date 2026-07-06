@@ -515,7 +515,17 @@ export function useE2EECall(
         const pr = attachSenderTransform(sender, workerRef.current, E2EE_DEBUG);
         if (pr) {
           portRecordsRef.current.push(pr);
-          if (activeKeysRef.current) await pushKeyToPortRecord(pr, activeKeysRef.current);
+          if (activeKeysRef.current) {
+            try {
+              await pushKeyToPortRecord(pr, activeKeysRef.current);
+            } catch (e) {
+              logError('[E2EE][ERROR]', 'pushKey failed for sender — aborting:', e);
+              setE2eeStatus('error');
+              toast.error('رمزنگاری فعال نشد — تماس لغو شد');
+              doFullCleanup('key_exchange');
+              return;
+            }
+          }
         } else {
           // Transform failed to attach — abort to avoid sending cleartext
           setE2eeStatus('error');
@@ -533,7 +543,15 @@ export function useE2EECall(
         const pr = attachReceiverTransform(e.receiver, workerRef.current, E2EE_DEBUG);
         if (pr) {
           portRecordsRef.current.push(pr);
-          if (activeKeysRef.current) await pushKeyToPortRecord(pr, activeKeysRef.current);
+          if (activeKeysRef.current) {
+            try {
+              await pushKeyToPortRecord(pr, activeKeysRef.current);
+            } catch (e) {
+              logError('[E2EE][ERROR]', 'pushKey failed for receiver:', e);
+              doFullCleanup('key_exchange');
+              return;
+            }
+          }
         }
       }
 
