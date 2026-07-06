@@ -56,11 +56,11 @@ export interface UseE2EECallReturn {
   toggleMute: () => void;
   toggleVideo: () => void;
   toggleScreenShare: () => Promise<void>;
+  verifySafety: () => void;
   // Setters exposed to views
   setUserSearch: React.Dispatch<React.SetStateAction<string>>;
   setShowSafety: React.Dispatch<React.SetStateAction<boolean>>;
   setIsRemoteMuted: React.Dispatch<React.SetStateAction<boolean>>;
-  setE2eeStatus: React.Dispatch<React.SetStateAction<E2EEStatus>>;
   setPhase: React.Dispatch<React.SetStateAction<CallPhase>>;
   setFailReason: React.Dispatch<React.SetStateAction<FailReason>>;
 }
@@ -954,6 +954,16 @@ export function useE2EECall(
     }
   }, [stopScreenShare]);
 
+  const verifySafety = useCallback(() => {
+    if (!myPublicJWKRef.current || !activeKeysRef.current) {
+      logError('[E2EE][SAFETY]', 'verifySafety called before keys are established');
+      return;
+    }
+    safetyVerifiedRef.current = true;
+    setE2eeStatus('active_verified');
+    setShowSafety(false);
+  }, []);
+
   // ── Cleanup on unmount ─────────────────────────────────────────────────
   useEffect(() => () => { doFullCleanup(); }, [doFullCleanup]);
 
@@ -963,7 +973,7 @@ export function useE2EECall(
     userSearch, users, searching, connDiag, isOffline,
     localVideoRef, remoteVideoRef, safetyVerifiedRef,
     startCall, acceptCall, rejectCall, doHangup,
-    toggleMute, toggleVideo, toggleScreenShare,
-    setUserSearch, setShowSafety, setIsRemoteMuted, setE2eeStatus, setPhase, setFailReason,
+    toggleMute, toggleVideo, toggleScreenShare, verifySafety,
+    setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   };
 }

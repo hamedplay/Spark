@@ -10,8 +10,8 @@ interface Props {
 export function OutgoingRingView({ targetUser, sessionCode, onCancel }: Props) {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-5 bg-gray-900 rounded-2xl">
-      <Loader className="w-10 h-10 text-emerald-400 animate-spin" />
-      <div className="text-center">
+      <Loader aria-hidden="true" className="w-10 h-10 text-emerald-400 animate-spin motion-reduce:animate-none" />
+      <div role="status" aria-live="polite" className="text-center">
         <p className="text-white text-lg font-semibold">
           در حال تماس با {targetUser?.full_name || targetUser?.email || 'مخاطب'}...
         </p>
@@ -25,9 +25,10 @@ export function OutgoingRingView({ targetUser, sessionCode, onCancel }: Props) {
       )}
       <button
         onClick={onCancel}
+        aria-label="لغو تماس"
         className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm transition-colors flex items-center gap-2"
       >
-        <PhoneOff className="w-4 h-4" /> لغو تماس
+        <PhoneOff aria-hidden="true" className="w-4 h-4" /> لغو تماس
       </button>
     </div>
   );

@@ -1,4 +1,4 @@
-import { Loader, Users, Eye, ShieldCheck } from 'lucide-react';
+import { Loader, Users, Eye, ShieldCheck, Phone } from 'lucide-react';
 import type { UserProfile } from './types';
 
 interface Props {
@@ -38,10 +38,11 @@ export function IdleView({ userSearch, users, searching, onSearch, onStartCall }
             value={userSearch}
             onChange={e => onSearch(e.target.value)}
             placeholder="جستجوی نام یا ایمیل..."
+            aria-label="جستجو در لیست کاربران"
             className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
           {searching && (
-            <Loader className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+            <Loader aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
           )}
         </div>
         {users.length > 0 && (
@@ -50,15 +51,17 @@ export function IdleView({ userSearch, users, searching, onSearch, onStartCall }
               <li key={u.user_id}>
                 <button
                   onClick={() => onStartCall(u)}
+                  aria-label={`شروع تماس با ${u.full_name || u.email || 'کاربر'}`}
                   className="w-full text-right px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors flex items-center gap-3"
                 >
                   <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-400 text-sm font-bold shrink-0">
                     {(u.full_name || u.email || '?')[0].toUpperCase()}
                   </div>
-                  <div className="min-w-0 text-right">
+                  <div className="min-w-0 text-right flex-1">
                     <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.email || ''}</p>
                   </div>
+                  <Phone aria-hidden="true" className="w-4 h-4 text-emerald-500 shrink-0" />
                 </button>
               </li>
             ))}
