@@ -180,6 +180,7 @@ export function ActiveCallView({
   const [isSwapped, setIsSwapped] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [isNativePip, setIsNativePip] = useState(false);
+  const supportsScreenShare = typeof navigator.mediaDevices?.getDisplayMedia === 'function';
 
   const pipRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
@@ -211,6 +212,18 @@ export function ActiveCallView({
     return () => video.removeEventListener('leavepictureinpicture', handleLeave);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reset drag state when swap changes to prevent stuck pointer capture
+  useEffect(() => {
+    setIsDragging(false);
+    const pip = pipRef.current;
+    if (pip) {
+      pip.style.left = '';
+      pip.style.top = '';
+      pip.style.right = '';
+      pip.style.bottom = '';
+    }
+  }, [isSwapped]);
 
   // ── Drag handlers ────────────────────────────────────────────────────────
 
@@ -262,14 +275,15 @@ export function ActiveCallView({
 
   // ── Native PiP ────────────────────────────────────────────────────────────
 
-  const [supportsPiP, setSupportsPiP] = useState(false);
+  const [supportsPiP, setSupportsPiP] = useState(() => !!document.pictureInPictureEnabled);
   useEffect(() => {
+    if (document.pictureInPictureEnabled) {
+      setSupportsPiP(true);
+      return;
+    }
     const video = remoteVideoRef.current;
     const v = video as (HTMLVideoElement & { webkitSupportsPresentationMode?: (m: string) => boolean }) | null;
-    setSupportsPiP(
-      !!document.pictureInPictureEnabled ||
-      !!v?.webkitSupportsPresentationMode?.('picture-in-picture')
-    );
+    setSupportsPiP(!!v?.webkitSupportsPresentationMode?.('picture-in-picture'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
@@ -426,6 +440,7 @@ export function ActiveCallView({
             {isMuted ? <MicOff aria-hidden="true" className="w-5 h-5 text-white" /> : <Mic aria-hidden="true" className="w-5 h-5 text-white" />}
           </button>
 
+          {supportsScreenShare && (
           <button
             type="button"
             onClick={onToggleScreenShare}
@@ -434,6 +449,7 @@ export function ActiveCallView({
           >
             {isScreenSharing ? <MonitorOff aria-hidden="true" className="w-5 h-5 text-white" /> : <Monitor aria-hidden="true" className="w-5 h-5 text-white" />}
           </button>
+          )}
 
           <button
             type="button"

@@ -524,6 +524,15 @@ export function useE2EECall(
       for (const pr of portRecordsRef.current) {
         await pushKeyToPortRecord(pr, keys);
       }
+      // Re-push keys after a short delay to cover any receiver tracks
+      // that arrive via ontrack after this point (e.g. slow renegotiation)
+      setTimeout(async () => {
+        if (!activeKeysRef.current) return;
+        const lateReceivers = portRecordsRef.current.filter(pr => pr.role === 'receiver');
+        for (const pr of lateReceivers) {
+          try { await pushKeyToPortRecord(pr, activeKeysRef.current); } catch { /* already pushed */ }
+        }
+      }, 1500);
       const nums = await computeSafetyNumber(myPublicJWKRef.current, peerPublicJWK, sessionIdRef.current);
       setSafetyNums(nums);
       setE2eeStatus('active_unverified');
@@ -972,7 +981,7 @@ export function useE2EECall(
       acceptCall();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, incomingCall]);
+  }, [phase, incomingCall, acceptCall]);
 
   const rejectCall = useCallback(() => {
     const ic = incomingCall;
