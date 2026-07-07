@@ -105,13 +105,20 @@ Deno.serve(async (req: Request) => {
     // ── Route to Rahyab REST if provider_type === 'rahyab_rest' ─────────
     if (p.provider_type === "rahyab_rest") {
       const apiBase = (p.api_url || "https://rahyabbulk.ir:8443").replace(/\/$/, "");
-      const token = p.token?.trim() || "";
-      // Per Rahyab docs: when using token, username=token, password=any 5+ char string
-      const effUsername = token || p.username?.trim() || "";
-      const effPassword = token ? "aBcD1" : (p.password?.trim() || "");
-      const fromNumber = p.line_number?.trim() || "";
 
-      if (!effUsername) return json({ ok: false, error: "نام کاربری یا توکن پیکربندی نشده است" }, 400);
+      // ── Credential resolver ────────────────────────────────────────────
+      // Token takes priority: username = token, password = static 5-char string.
+      // Without token: use configured username + password.
+      interface RahyabCredentials { username: string; password: string; usesToken: boolean; }
+      function resolveRahyabCredentials(): RahyabCredentials {
+        const token = p.token?.trim() || "";
+        if (token) return { username: token, password: "aBcD1", usesToken: true };
+        return { username: p.username?.trim() || "", password: p.password?.trim() || "", usesToken: false };
+      }
+      const creds = resolveRahyabCredentials();
+      if (!creds.username) return json({ ok: false, error: "نام کاربری یا توکن پیکربندی نشده است" }, 400);
+
+      const fromNumber = p.line_number?.trim() || "";
 
       const maskVal = (v: string) => (!v || v.length <= 4) ? "***" : "***" + v.slice(-4);
       const maskPhone = (v: string) => (!v || v.length <= 4) ? "***" : v.slice(0, 3) + "****" + v.slice(-4);
@@ -124,6 +131,7 @@ Deno.serve(async (req: Request) => {
         parsedResult?: string; error?: string;
       };
 
+      // ── HTTP helper ────────────────────────────────────────────────────
       const callRest = async (
         url: string,
         params: Record<string, string>,
@@ -147,9 +155,11 @@ Deno.serve(async (req: Request) => {
           clearTimeout(timer);
           const text = await res.text();
           return { ok: res.ok, status: res.status, body: text, durationMs: Date.now() - t0, t0 };
-        } catch (e: any) {
+        } catch (e: unknown) {
           clearTimeout(timer);
-          const msg = e?.name === "AbortError" ? "اتصال timeout شد (13s)" : e.message;
+          const msg = (e instanceof Error && (e as Error & { name?: string }).name === "AbortError")
+            ? "اتصال timeout شد (13s)"
+            : (e instanceof Error ? e.message : String(e));
           return { ok: false, status: 0, body: "", durationMs: Date.now() - t0, t0, error: msg };
         }
       };
@@ -171,48 +181,216 @@ Deno.serve(async (req: Request) => {
         error: r.error,
       });
 
-      const maskedCreds = (extra: Record<string, string> = {}): Record<string, string> => ({
-        username: token ? "***token***" : effUsername,
-        password: maskVal(effPassword),
+      // Masked creds for debug log (never expose password/token)
+      const maskedCredsParams = (extra: Record<string, string> = {}): Record<string, string> => ({
+        username: creds.usesToken ? "***token***" : creds.username,
+        password: maskVal(creds.password),
         ...extra,
       });
+
+      // ── Application-level error detection ─────────────────────────────
+      // Rahyab returns "Error! ..." or "!Error ..." for application errors.
+      function extractRahyabError(body: string): string | null {
+        const t = body.trim();
+        if (/^\s*!?Error\b/i.test(t)) return t;
+        return null;
+      }
+
+      // ── Return ID validation ───────────────────────────────────────────
+      // Valid Return ID: all-digit string representing a positive integer.
+      // Kept as string to avoid JS number overflow for large IDs.
+      function isValidRahyabReturnId(value: string): boolean {
+        if (!/^\d+$/.test(value)) return false;
+        if (value === "0") return false;
+        // Strip leading zeros for comparison; any remaining non-zero digit is valid
+        return value.replace(/^0+/, "").length > 0;
+      }
+
+      // ── Send response parser ───────────────────────────────────────────
+      // Rahyab Send response format:
+      //   "Send OK.<ReturnIDs>ID1;ID2</ReturnIDs>"  (success)
+      //   "Error! ..."                              (application error)
+      // Legacy bare numeric ID also accepted.
+      interface RahyabSendParseResult {
+        success: boolean;
+        status: "success" | "partial_success" | "error";
+        returnIds: string[];
+        validReturnIds: string[];
+        failedReturnIds: string[];
+        rawResponse: string;
+        errorMessage: string | null;
+      }
+
+      function parseRahyabSendResponse(raw: unknown): RahyabSendParseResult {
+        const rawResponse = typeof raw === "string" ? raw.trim()
+          : raw == null ? "" : String(raw).trim();
+
+        const appError = extractRahyabError(rawResponse);
+        if (appError) {
+          return { success: false, status: "error", returnIds: [], validReturnIds: [], failedReturnIds: [], rawResponse, errorMessage: appError };
+        }
+
+        const hasSendOk = /Send\s+OK\.?/i.test(rawResponse);
+        const idsMatch = rawResponse.match(/<ReturnIDs>\s*([\s\S]*?)\s*<\/ReturnIDs>/i);
+        let allIds: string[] = [];
+
+        if (idsMatch?.[1]) {
+          // Rahyab uses ";" as primary separator; also accept comma and whitespace for robustness
+          allIds = idsMatch[1].split(/[;,\s]+/).map(id => id.trim()).filter(Boolean);
+        }
+
+        // Legacy: bare positive integer (no Send OK wrapper)
+        const isLegacyNumeric = !hasSendOk && /^\d+$/.test(rawResponse) && rawResponse !== "0";
+        if (isLegacyNumeric) allIds = [rawResponse];
+
+        const validReturnIds = allIds.filter(isValidRahyabReturnId);
+        const failedReturnIds = allIds.filter(id => !isValidRahyabReturnId(id));
+
+        if (!(hasSendOk || isLegacyNumeric)) {
+          return { success: false, status: "error", returnIds: allIds, validReturnIds: [], failedReturnIds: allIds, rawResponse, errorMessage: rawResponse || "پاسخ معتبری از سرویس رهیاب دریافت نشد" };
+        }
+
+        if (validReturnIds.length === 0) {
+          return { success: false, status: "error", returnIds: allIds, validReturnIds: [], failedReturnIds: allIds, rawResponse, errorMessage: "Rahyab returned no valid message ID" };
+        }
+
+        if (failedReturnIds.length > 0) {
+          // Some valid, some failed → partial success
+          return { success: true, status: "partial_success", returnIds: allIds, validReturnIds, failedReturnIds, rawResponse, errorMessage: null };
+        }
+
+        return { success: true, status: "success", returnIds: allIds, validReturnIds, failedReturnIds: [], rawResponse, errorMessage: null };
+      }
+
+      // ── Delivery response parser ───────────────────────────────────────
+      interface RahyabDeliveryItem {
+        returnId: string;
+        code: string;
+        statusKey: string;
+        statusLabel: string;
+      }
+
+      const DELIVERY_CODE_MAP: Record<string, { key: string; label: string }> = {
+        "0":  { key: "unknown",       label: "ارسال شده، وضعیت تحویل هنوز مشخص نیست" },
+        "2":  { key: "delivered",     label: "تحویل شده به گوشی" },
+        "5":  { key: "not_delivered", label: "به گوشی تحویل نشده" },
+        "9":  { key: "blocked",       label: "ارسال نشده / بلاک شده" },
+        "-1": { key: "not_found",     label: "شناسه پیام در سامانه رهیاب پیدا نشد" },
+      };
+
+      function parseRahyabDeliveryResponse(rawBody: string, requestedIds: string[]): {
+        ok: boolean; items: RahyabDeliveryItem[]; rawResponse: string; errorMessage: string | null;
+      } {
+        const raw = rawBody.trim();
+        const appError = extractRahyabError(raw);
+        if (appError) return { ok: false, items: [], rawResponse: raw, errorMessage: appError };
+        if (!raw) return { ok: false, items: [], rawResponse: raw, errorMessage: "پاسخ خالی از سرویس رهیاب" };
+
+        const codes = raw.split(/[;,\s]+/).map(c => c.trim()).filter(Boolean);
+        const items: RahyabDeliveryItem[] = codes.map((code, i) => {
+          const returnId = requestedIds[i] || `#${i + 1}`;
+          const mapping = DELIVERY_CODE_MAP[code] || { key: "unrecognized", label: `کد ناشناخته: ${code}` };
+          return { returnId, code, statusKey: mapping.key, statusLabel: mapping.label };
+        });
+        return { ok: true, items, rawResponse: raw, errorMessage: null };
+      }
+
+      // ── Receive XML parser ─────────────────────────────────────────────
+      interface RahyabReceivedSms {
+        rowId: string; sender: string; receiver: string; time: string; message: string;
+      }
+
+      function parseRahyabReceiveXml(rawBody: string): {
+        ok: boolean; messages: RahyabReceivedSms[]; nextLastRowId: string; rawResponse: string; errorMessage: string | null;
+      } {
+        const raw = rawBody.trim();
+        const appError = extractRahyabError(raw);
+        if (appError) return { ok: false, messages: [], nextLastRowId: "0", rawResponse: raw, errorMessage: appError };
+
+        // Empty or no-XML body = no messages (not an error)
+        if (!raw || !raw.includes("<")) return { ok: true, messages: [], nextLastRowId: "0", rawResponse: raw, errorMessage: null };
+
+        const messages: RahyabReceivedSms[] = [];
+        const smsBlocks = Array.from(raw.matchAll(/<sms>([\s\S]*?)<\/sms>/gi));
+        for (const match of smsBlocks) {
+          const block = match[1];
+          const get = (tag: string): string => {
+            const m = block.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))<\\/${tag}>`, "i"));
+            return (m?.[1] ?? m?.[2] ?? "").trim();
+          };
+          messages.push({ rowId: get("rowID"), sender: get("origAddr"), receiver: get("destAddr"), time: get("time"), message: get("message") });
+        }
+
+        const validRowIds = messages.map(m => m.rowId).filter(r => /^\d+$/.test(r));
+        const nextLastRowId = validRowIds.length > 0
+          ? validRowIds.reduce((max, id) => (BigInt(id) > BigInt(max) ? id : max))
+          : "0";
+
+        return { ok: true, messages, nextLastRowId, rawResponse: raw, errorMessage: null };
+      }
+
+      // ── GetInfoXML parser ──────────────────────────────────────────────
+      interface RahyabAccountInfo {
+        creditType: string | null; credit: string | null; active: boolean | null; expireDate: string | null;
+        prices: Array<{ provider: string; unicodePrice: string | null; nonUnicodePrice: string | null }>;
+        shortCodes: string[];
+      }
+
+      function parseRahyabAccountInfoXml(rawBody: string): {
+        ok: boolean; accountInfo: RahyabAccountInfo | null; rawResponse: string; errorMessage: string | null;
+      } {
+        const raw = rawBody.trim();
+        const appError = extractRahyabError(raw);
+        if (appError) return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: appError };
+        if (!raw || !raw.includes("<")) return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: raw || "پاسخ معتبری از سرویس رهیاب دریافت نشد" };
+
+        const getTag = (xml: string, tag: string): string => {
+          const m = xml.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))<\\/${tag}>`, "i"));
+          return (m?.[1] ?? m?.[2] ?? "").trim();
+        };
+
+        const userInfo = raw.match(/<UserInfo>([\s\S]*?)<\/UserInfo>/i)?.[1] ?? "";
+        const prices: Array<{ provider: string; unicodePrice: string | null; nonUnicodePrice: string | null }> = [];
+        for (const pm of Array.from(raw.matchAll(/<Provider>([\s\S]*?)<\/Provider>/gi))) {
+          prices.push({
+            provider: getTag(pm[1], "Name"),
+            unicodePrice: getTag(pm[1], "UnicodePrice") || null,
+            nonUnicodePrice: getTag(pm[1], "NonUnicodePrice") || null,
+          });
+        }
+
+        const shortCodes: string[] = [];
+        for (const sm of Array.from(raw.matchAll(/<ShortCode>([\s\S]*?)<\/ShortCode>/gi))) {
+          const code = sm[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, "$1").trim();
+          if (code) shortCodes.push(code);
+        }
+
+        const activeRaw = getTag(userInfo, "Active");
+        const accountInfo: RahyabAccountInfo = {
+          creditType: getTag(userInfo, "CreditType") || null,
+          credit: getTag(userInfo, "Credit") || null,
+          active: activeRaw === "1" ? true : activeRaw === "0" ? false : null,
+          expireDate: getTag(userInfo, "ExpireDate") || null,
+          prices,
+          shortCodes,
+        };
+
+        return { ok: true, accountInfo, rawResponse: raw, errorMessage: null };
+      }
 
       // ── test_connection → GET /ip.ashx ────────────────────────────────
       if (mode === "test_connection") {
         const url = `${apiBase}/ip.ashx`;
         const r = await callRest(url, {}, "GET");
         const dbg = [buildEntry("/ip.ashx", url, "GET", {}, r)];
-        if (!r.ok || r.error) return json({ ok: false, error: r.error || `HTTP ${r.status}`, debug: dbg });
-        return json({ ok: true, ip: r.body?.trim(), debug: dbg });
+        if (r.error || !r.ok) return json({ ok: false, error: r.error || `HTTP ${r.status}`, debug: dbg });
+        const ipText = r.body?.trim() || "";
+        const appErr = extractRahyabError(ipText);
+        if (appErr) return json({ ok: false, error: appErr, debug: dbg });
+        return json({ ok: true, ip: ipText, debug: dbg });
       }
 
-      // ── Rahyab REST send response parser ─────────────────────────────
-      // Rahyab responds with plain text, not JSON.
-      // Successful response format: "Send OK.<ReturnIDs>136381192055</ReturnIDs>"
-      // Legacy numeric-only responses (single ID) are also accepted for safety.
-      function parseRahyabSendResponse(raw: string): {
-        success: boolean;
-        returnIds: string[];
-        errorMessage: string | null;
-      } {
-        const text = raw.trim();
-        const idsMatch = text.match(/<ReturnIDs>\s*([\s\S]*?)\s*<\/ReturnIDs>/i);
-        const returnIds = idsMatch?.[1]
-          ? idsMatch[1].split(/[,\s]+/).map(id => id.trim()).filter(Boolean)
-          : [];
-        const hasSendOk = /Send\s+OK\.?/i.test(text);
-        // Legacy: response is a bare numeric ID (no Send OK wrapper)
-        const isLegacyNumeric = /^\d+$/.test(text);
-        const success = (hasSendOk && returnIds.length > 0) || isLegacyNumeric;
-        const ids = success && isLegacyNumeric && returnIds.length === 0 ? [text] : returnIds;
-        return {
-          success,
-          returnIds: ids,
-          errorMessage: success ? null : (text || "پاسخ معتبری از سرویس رهیاب دریافت نشد"),
-        };
-      }
-
-      // ── send ──────────────────────────────────────────────────────────
+      // ── send (production) ─────────────────────────────────────────────
       if (mode === "send") {
         const rawMobiles: string[] = body.mobiles || [];
         const message: string = body.message || "";
@@ -221,29 +399,24 @@ Deno.serve(async (req: Request) => {
         if (!fromNumber) return json({ ok: false, error: "شماره فرستنده پیکربندی نشده است" }, 400);
 
         const url = `${apiBase}/url/send.ashx`;
-        const allIds: string[] = [];
+        const allValidIds: string[] = [];
         const errors: string[] = [];
 
         for (const to of rawMobiles) {
           const params: Record<string, string> = {
-            username: effUsername, password: effPassword,
+            username: creds.username, password: creds.password,
             from: fromNumber, to: to.trim(), farsi: "true", message,
           };
           const r = await callRest(url, params, "POST");
           const parsed = parseRahyabSendResponse(r.body || "");
-          if (r.ok && parsed.success) {
-            allIds.push(...parsed.returnIds);
+          if (!r.error && r.ok && parsed.success) {
+            allValidIds.push(...parsed.validReturnIds);
           } else {
             errors.push(`${maskPhone(to)}: ${parsed.errorMessage || r.error || "ارسال ناموفق"}`);
           }
         }
 
-        return json({
-          ok: errors.length === 0,
-          sent: allIds.length,
-          returnIds: allIds,
-          errors,
-        });
+        return json({ ok: errors.length === 0, sent: allValidIds.length, returnIds: allValidIds, errors });
       }
 
       // ── rahyab_rest_test — individual test actions ─────────────────────
@@ -253,59 +426,88 @@ Deno.serve(async (req: Request) => {
         if (action === "ip") {
           const url = `${apiBase}/ip.ashx`;
           const r = await callRest(url, {}, "GET");
-          return json({ ok: !r.error && r.ok, ip: r.body?.trim(), debug: [buildEntry("/ip.ashx", url, "GET", {}, r)] });
+          const ipText = r.body?.trim() || "";
+          const appErr = extractRahyabError(ipText);
+          return json({ ok: !r.error && r.ok && !appErr, ip: appErr ? undefined : ipText, error: appErr || r.error || undefined, debug: [buildEntry("/ip.ashx", url, "GET", {}, r)] });
         }
 
         if (action === "get_info") {
           const url = `${apiBase}/url/GetInfoXML.ashx`;
-          const params = { username: effUsername, password: effPassword };
+          const params = { username: creds.username, password: creds.password };
           const r = await callRest(url, params, "POST");
-          const dbg = [buildEntry("/url/GetInfoXML.ashx", url, "POST", maskedCreds(), r)];
-          return json({ ok: !r.error && r.ok, rawResult: r.body, debug: dbg });
+          const parsed = parseRahyabAccountInfoXml(r.body || "");
+          const dbg = [buildEntry("/url/GetInfoXML.ashx", url, "POST", maskedCredsParams(), r)];
+          return json({ ok: !r.error && r.ok && parsed.ok, accountInfo: parsed.accountInfo, rawResult: parsed.rawResponse, error: parsed.errorMessage || r.error || undefined, debug: dbg });
         }
 
         if (action === "send") {
           const to: string = body.to || "";
           const message: string = body.message || "";
           if (!to) return json({ ok: false, error: "شماره گیرنده وارد نشده" });
-          if (!message) return json({ ok: false, error: "متن پیام وارد نشده" });
+          if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" });
           if (!fromNumber) return json({ ok: false, error: "شماره فرستنده پیکربندی نشده است" });
 
           const url = `${apiBase}/url/send.ashx`;
           const params: Record<string, string> = {
-            username: effUsername, password: effPassword,
+            username: creds.username, password: creds.password,
             from: fromNumber, to: to.trim(), farsi: "true", message,
           };
           const r = await callRest(url, params, "POST");
-          const maskedP = maskedCreds({ from: fromNumber, to: maskPhone(to), farsi: "true", message: message.slice(0, 20) + (message.length > 20 ? "…" : "") });
-          const responseBody = (r.body || "").trim();
-          const parsed = parseRahyabSendResponse(responseBody);
+          const maskedP = maskedCredsParams({ from: fromNumber, to: maskPhone(to), farsi: "true", message: message.slice(0, 20) + (message.length > 20 ? "…" : "") });
+          const parsed = parseRahyabSendResponse(r.body || "");
           const isOk = !r.error && r.ok && parsed.success;
           return json({
             ok: isOk,
-            returnId: isOk ? parsed.returnIds[0] : undefined,
-            returnIds: isOk ? parsed.returnIds : undefined,
-            rawResult: responseBody,
-            error: isOk ? undefined : (parsed.errorMessage || r.error || "ارسال ناموفق"),
+            status: isOk ? parsed.status : "error",
+            returnId: parsed.validReturnIds[0] ?? null,
+            returnIds: parsed.validReturnIds,
+            failedReturnIds: parsed.failedReturnIds,
+            rawResult: parsed.rawResponse,
+            error: isOk ? null : (parsed.errorMessage || r.error || "ارسال ناموفق"),
             debug: [buildEntry("/url/send.ashx", url, "POST", maskedP, r)],
           });
         }
 
         if (action === "delivery") {
-          const returnIds: string = body.returnIds || "";
-          if (!returnIds.trim()) return json({ ok: false, error: "شناسه بازگشتی وارد نشده" });
+          const returnIdsInput: string = body.returnIds || "";
+          if (!returnIdsInput.trim()) return json({ ok: false, error: "شناسه بازگشتی وارد نشده" });
+          // Parse user input (may be ;, comma, or space separated)
+          const requestedIds = returnIdsInput.split(/[;,\s]+/).map(s => s.trim()).filter(Boolean);
+          // Rahyab delivery endpoint requires `;` separator
+          const rahyabReturnIds = requestedIds.join(";");
+
           const url = `${apiBase}/url/delivery.ashx`;
-          const params = { ReturnIDs: returnIds };
+          // Delivery endpoint: username required, password NOT sent per Rahyab spec
+          const params: Record<string, string> = { username: creds.username, ReturnIDs: rahyabReturnIds };
           const r = await callRest(url, params, "GET");
-          return json({ ok: !r.error && r.ok, rawResult: r.body, debug: [buildEntry("/url/delivery.ashx", url, "GET", params, r)] });
+          const parsed = parseRahyabDeliveryResponse(r.body || "", requestedIds);
+          return json({
+            ok: !r.error && r.ok && parsed.ok,
+            delivery: parsed.items,
+            rawResult: parsed.rawResponse,
+            error: parsed.errorMessage || r.error || undefined,
+            debug: [buildEntry("/url/delivery.ashx", url, "GET", { username: "***", ReturnIDs: rahyabReturnIds }, r)],
+          });
         }
 
         if (action === "receive") {
-          const lastRowId = String(body.lastRowId ?? "0");
+          const lastRowIdRaw = String(body.lastRowId ?? "0").trim();
+          const lastRowId = /^\d+$/.test(lastRowIdRaw) ? lastRowIdRaw : "0";
+
           const url = `${apiBase}/url/receive.ashx`;
-          const params = { LastRowID: lastRowId };
+          // Receive endpoint: username + password required, plus LastRowID
+          const params: Record<string, string> = { username: creds.username, password: creds.password, LastRowID: lastRowId };
           const r = await callRest(url, params, "GET");
-          return json({ ok: !r.error && r.ok, rawResult: r.body, debug: [buildEntry("/url/receive.ashx", url, "GET", params, r)] });
+          const parsed = parseRahyabReceiveXml(r.body || "");
+          return json({
+            ok: !r.error && r.ok && parsed.ok,
+            messages: parsed.messages,
+            messageCount: parsed.messages.length,
+            nextLastRowId: parsed.nextLastRowId,
+            rawResult: parsed.rawResponse,
+            error: parsed.errorMessage || r.error || undefined,
+            debug: [buildEntry("/url/receive.ashx", url, "GET", maskedCredsParams({ LastRowID: lastRowId }), r)],
+          });
         }
 
         return json({ ok: false, error: `عملیات ناشناخته: ${action}` }, 400);

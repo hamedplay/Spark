@@ -1215,7 +1215,7 @@ function TemplatesTab() {
 //  TAB 4 — SMS Test Panel
 // ════════════════════════════════════════════════════════════════════
 
-type TestStatus = 'idle' | 'loading' | 'ok' | 'error';
+type TestStatus = 'idle' | 'loading' | 'ok' | 'partial' | 'error';
 
 interface RahyabTestCard {
   id: string;
@@ -1427,15 +1427,19 @@ function TestTab() {
 
       const result = await callEdge({ mode: 'rahyab_rest_test', providerId: selectedProvider, ...payload });
       setRahyabRestResult(r => ({ ...r, [card.id]: result }));
-      setRahyabRestStatus(s => ({ ...s, [card.id]: result.ok ? 'ok' : 'error' }));
+      setRahyabRestStatus(s => ({ ...s, [card.id]: result.ok ? (result.status === 'partial_success' ? 'partial' : 'ok') : 'error' }));
 
       if (result.debug?.length) setDebugLogs(prev => [...prev, ...result.debug]);
       if (card.action === 'send' && result.ok) {
-        // Edge function returns returnIds (array) and returnId (first element scalar)
+        // Use first valid return ID (validated positive integer, never -1 or 0)
         const firstId: string | undefined = result.returnIds?.[0] ?? result.returnId;
-        if (firstId) {
-          setReturnIdInput(firstId);
-          toast.success(`پیامک آزمایشی با موفقیت ارسال شد — شناسه: ${firstId}`);
+        const isValidReturnId = (v?: string) => typeof v === 'string' && /^\d+$/.test(v) && v !== '0';
+        if (isValidReturnId(firstId)) {
+          setReturnIdInput(firstId!);
+          const toastMsg = result.status === 'partial_success'
+            ? `ارسال جزئی — شناسه: ${firstId} (برخی شناسه‌ها ناموفق بودند)`
+            : `پیامک آزمایشی با موفقیت ارسال شد — شناسه: ${firstId}`;
+          toast.success(toastMsg);
         }
       }
     } catch (e: any) {
@@ -1462,6 +1466,7 @@ function TestTab() {
     if (status === 'idle') return null;
     if (status === 'loading') return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />;
     if (status === 'ok') return <Check className="w-4 h-4 text-green-500" />;
+    if (status === 'partial') return <MinusCircle className="w-4 h-4 text-amber-500" />;
     return <AlertCircle className="w-4 h-4 text-red-500" />;
   };
 
@@ -1687,8 +1692,8 @@ function TestTab() {
             {RAHYAB_REST_TESTS.map(card => {
               const st = rahyabRestStatus[card.id] || 'idle';
               const result = rahyabRestResult[card.id];
-              const borderCls = st === 'ok' ? 'border-green-200 dark:border-green-800' : st === 'error' ? 'border-red-200 dark:border-red-800' : 'border-gray-100 dark:border-gray-700';
-              const isOk = st === 'ok';
+              const borderCls = st === 'ok' ? 'border-green-200 dark:border-green-800' : st === 'partial' ? 'border-amber-200 dark:border-amber-800' : st === 'error' ? 'border-red-200 dark:border-red-800' : 'border-gray-100 dark:border-gray-700';
+              const isOk = st === 'ok' || st === 'partial';
               return (
                 <div key={card.id} className={`bg-white dark:bg-gray-800 rounded-2xl border p-4 space-y-2 ${borderCls}`}>
                   <div className="flex items-start justify-between gap-2">
@@ -1707,35 +1712,65 @@ function TestTab() {
                     {st === 'loading' ? 'در حال اجرا...' : 'اجرای تست'}
                   </button>
                   {result && st !== 'idle' && st !== 'loading' && (
-                    <div className={`mt-2 rounded-xl border p-3 text-xs font-mono leading-relaxed space-y-1 ${isOk ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'}`}>
-                      <p className={`font-bold mb-1 ${isOk ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>{isOk ? 'موفق' : 'خطا'}</p>
+                    <div className={`mt-2 rounded-xl border p-3 text-xs font-mono leading-relaxed space-y-1.5 ${st === 'partial' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800' : isOk ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'}`}>
+                      <p className={`font-bold mb-1 ${st === 'partial' ? 'text-amber-700 dark:text-amber-400' : isOk ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                        {st === 'partial' ? 'موفق جزئی' : isOk ? 'موفق' : 'خطا'}
+                      </p>
                       {result.error && <p className="text-red-600 dark:text-red-400 break-all"><span className="font-semibold">خطا: </span>{result.error}</p>}
+                      {/* IP test */}
                       {result.ip && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">IP: </span>{result.ip}</p>}
-                      {result.credit !== undefined && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">اعتبار: </span>{result.credit}</p>}
-                      {result.sent !== undefined && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">ارسال شد به: </span>{result.sent} شماره</p>}
-                      {result.returnIds?.length > 0 && <p className="text-gray-600 dark:text-gray-300 break-all"><span className="font-semibold">ReturnIDs: </span>{result.returnIds.join(', ')}</p>}
-                      {result.delivery && (
+                      {/* Send result */}
+                      {result.returnIds?.length > 0 && <p className="text-gray-600 dark:text-gray-300 break-all"><span className="font-semibold">ReturnIDs: </span>{result.returnIds.join('، ')}</p>}
+                      {result.failedReturnIds?.length > 0 && <p className="text-amber-600 dark:text-amber-400 break-all"><span className="font-semibold">شناسه‌های ناموفق: </span>{result.failedReturnIds.join('، ')}</p>}
+                      {/* GetInfo / accountInfo */}
+                      {result.accountInfo && (
+                        <div className="space-y-0.5">
+                          {result.accountInfo.credit != null && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">اعتبار: </span>{result.accountInfo.credit}</p>}
+                          {result.accountInfo.active != null && <p className="text-green-700 dark:text-green-300"><span className="font-semibold">وضعیت: </span>{result.accountInfo.active ? 'فعال' : 'غیرفعال'}</p>}
+                          {result.accountInfo.expireDate && <p className="text-gray-600 dark:text-gray-300"><span className="font-semibold">انقضا: </span>{result.accountInfo.expireDate}</p>}
+                          {result.accountInfo.shortCodes?.length > 0 && <p className="text-gray-600 dark:text-gray-300 break-all"><span className="font-semibold">خط ارسال: </span>{result.accountInfo.shortCodes.join('، ')}</p>}
+                        </div>
+                      )}
+                      {/* Delivery result — items array */}
+                      {Array.isArray(result.delivery) && result.delivery.length > 0 && (
                         <div className="mt-1 space-y-0.5">
                           <p className="font-semibold text-gray-700 dark:text-gray-300">وضعیت تحویل:</p>
-                          {Object.entries(result.delivery as Record<string, number>).map(([id, code]) => {
-                            const ds = DELIVERY_STATUS[code as number] || { label: `کد ${code}`, color: 'text-gray-500' };
-                            return <p key={id} className={ds.color}><span className="text-gray-500 dark:text-gray-400">{id}: </span>{ds.label}</p>;
+                          {(result.delivery as Array<{ returnId: string; code: string; statusLabel: string }>).map(item => {
+                            const colorCls = item.code === '2' ? 'text-green-600 dark:text-green-400'
+                              : item.code === '5' ? 'text-red-500 dark:text-red-400'
+                              : item.code === '9' ? 'text-red-700 dark:text-red-500'
+                              : item.code === '-1' ? 'text-gray-500'
+                              : 'text-amber-600 dark:text-amber-400';
+                            return <p key={item.returnId} className={colorCls}><span className="text-gray-500 dark:text-gray-400">{item.returnId}: </span>{item.statusLabel}</p>;
                           })}
                         </div>
                       )}
-                      {result.messages !== undefined && (
+                      {/* Receive result — messages array */}
+                      {result.messageCount !== undefined && (
+                        <p className="text-gray-700 dark:text-gray-300"><span className="font-semibold">تعداد پیام: </span>{result.messageCount}</p>
+                      )}
+                      {result.nextLastRowId && result.nextLastRowId !== '0' && (
+                        <p className="text-gray-600 dark:text-gray-400"><span className="font-semibold">آخرین ردیف: </span>{result.nextLastRowId}</p>
+                      )}
+                      {Array.isArray(result.messages) && result.messages.length > 0 && (
                         <details className="mt-1">
-                          <summary className="cursor-pointer text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">پیام‌های دریافتی (کلیک)</summary>
-                          <pre className="mt-2 overflow-x-auto text-[11px] text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-all max-h-48">
-                            {JSON.stringify(result.messages, null, 2)}
-                          </pre>
+                          <summary className="cursor-pointer text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">پیام‌های دریافتی ({result.messages.length}) — کلیک برای نمایش</summary>
+                          <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+                            {(result.messages as Array<{ rowId: string; sender: string; receiver: string; time: string; message: string }>).map((m, i) => (
+                              <div key={m.rowId || i} className="bg-white dark:bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-gray-700 text-[11px] space-y-0.5">
+                                <p><span className="text-gray-500">از: </span>{m.sender} <span className="text-gray-400 mx-1">|</span> <span className="text-gray-500">به: </span>{m.receiver} <span className="text-gray-400 mx-1">|</span> <span className="text-gray-500">زمان: </span>{m.time}</p>
+                                <p className="text-gray-700 dark:text-gray-200 break-all">{m.message}</p>
+                              </div>
+                            ))}
+                          </div>
                         </details>
                       )}
-                      {result.rawXml && (
+                      {/* Raw response fallback */}
+                      {result.rawResult && (
                         <details className="mt-1">
-                          <summary className="cursor-pointer text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">پاسخ کامل XML (کلیک)</summary>
+                          <summary className="cursor-pointer text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">پاسخ خام سرور (کلیک)</summary>
                           <pre className="mt-2 overflow-x-auto text-[11px] text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-all max-h-48">
-                            {result.rawXml}
+                            {result.rawResult}
                           </pre>
                         </details>
                       )}

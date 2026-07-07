@@ -426,7 +426,7 @@ export function RequestLogPanel({ logs, onClear }: { logs: DebugLog[]; onClear: 
                       </div>
                       {/* Request Body */}
                       <div>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Body (SOAP XML)</p>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Request Body</p>
                         <pre className="bg-gray-800 rounded-lg p-2.5 text-[11px] font-mono text-green-300 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed max-h-56 overflow-y-auto">
                           {log.requestBody}
                         </pre>
