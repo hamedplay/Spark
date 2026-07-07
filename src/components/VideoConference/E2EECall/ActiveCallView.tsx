@@ -208,7 +208,18 @@ function SafetyModal({ safetyNums, onVerify, onClose }: {
   );
 }
 
-// ── MorePanel (bottom sheet) ──────────────────────────────────────────────
+// ── MorePanel ─────────────────────────────────────────────────────────────
+//
+// Mobile  → fixed full-width bottom sheet (existing behavior)
+// Desktop → absolute floating popover anchored above the toolbar
+//
+// Rendered INSIDE the call-stage container (z-20+) so that:
+//   • `absolute` positioning works relative to the call stage, not the document
+//   • no CSS-transform / overflow:hidden ancestor breaks `fixed` on desktop
+//
+// Backdrop:
+//   Mobile  — full-screen dark overlay (z-40)
+//   Desktop — transparent click-outside catcher (inset-0, no background)
 
 interface MorePanelProps {
   isScreenSharing: boolean;
@@ -219,6 +230,7 @@ interface MorePanelProps {
   showStats: boolean;
   isNativePip: boolean;
   supportsPiP: boolean;
+  moreBtnRef: React.RefObject<HTMLButtonElement | null>;
   onToggleScreenShare: () => void;
   onSwitchCamera: () => void;
   onToggleRemoteMute: () => void;
@@ -231,92 +243,121 @@ interface MorePanelProps {
 function MorePanel({
   isScreenSharing, isStartingScreenShare, isSwitchingCamera,
   isRemoteMuted, isSwapped, showStats, isNativePip, supportsPiP,
+  moreBtnRef,
   onToggleScreenShare, onSwitchCamera, onToggleRemoteMute,
   onSwap, onToggleStats, onNativePip, onClose,
 }: MorePanelProps) {
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); moreBtnRef.current?.focus(); }
+    };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [onClose]);
+  }, [onClose, moreBtnRef]);
 
-  const row = 'flex items-center gap-3 w-full px-4 py-3.5 text-right rounded-xl transition-colors hover:bg-white/10 active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:opacity-40 disabled:pointer-events-none';
+  // row style — same for both mobile and desktop
+  const row = 'flex w-full items-center gap-3 px-4 py-3.5 text-right rounded-xl transition-colors hover:bg-white/10 active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:opacity-40 disabled:pointer-events-none';
   const ic  = 'w-5 h-5 shrink-0';
+
+  const header = (
+    <div className="flex items-center justify-between px-2 pb-3 border-b border-white/10" dir="rtl">
+      <span className="text-white font-semibold text-sm">کنترل‌های بیشتر</span>
+      <button type="button" onClick={() => { onClose(); moreBtnRef.current?.focus(); }} aria-label="بستن"
+        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
+        <X aria-hidden="true" className="w-4 h-4" />
+      </button>
+    </div>
+  );
+
+  const actions = (
+    <div className="space-y-0.5" dir="rtl">
+      {SUPPORTS_SCREEN_SHARE && (
+        <button type="button" onClick={() => { onToggleScreenShare(); onClose(); }}
+          disabled={isStartingScreenShare} className={row}>
+          {isStartingScreenShare
+            ? <Loader     aria-hidden="true" className={`${ic} text-blue-400 animate-spin`} />
+            : isScreenSharing
+              ? <MonitorOff aria-hidden="true" className={`${ic} text-blue-400`} />
+              : <Monitor    aria-hidden="true" className={`${ic} text-gray-300`} />
+          }
+          <span className="flex-1 min-w-0 text-sm text-gray-200">
+            {isStartingScreenShare ? 'در حال شروع...' : isScreenSharing ? 'توقف اشتراک صفحه' : 'اشتراک‌گذاری صفحه'}
+          </span>
+        </button>
+      )}
+
+      <button type="button"
+        onClick={() => { if (!isScreenSharing) { onSwitchCamera(); onClose(); } }}
+        disabled={isSwitchingCamera || isScreenSharing}
+        className={row}
+      >
+        {isSwitchingCamera
+          ? <Loader         aria-hidden="true" className={`${ic} text-gray-400 animate-spin`} />
+          : <FlipHorizontal aria-hidden="true" className={`${ic} text-gray-300`} />
+        }
+        <span className="flex-1 min-w-0 text-sm text-gray-200">
+          {isSwitchingCamera ? 'در حال تغییر...' : 'تغییر دوربین'}
+        </span>
+        {isScreenSharing && <span className="text-xs text-gray-500 shrink-0">در حین اشتراک غیرفعال</span>}
+      </button>
+
+      <button type="button" onClick={() => { onToggleRemoteMute(); onClose(); }} className={row}>
+        {isRemoteMuted
+          ? <VolumeX aria-hidden="true" className={`${ic} text-amber-400`} />
+          : <Volume2 aria-hidden="true" className={`${ic} text-gray-300`} />
+        }
+        <span className="flex-1 min-w-0 text-sm text-gray-200">
+          {isRemoteMuted ? 'فعال کردن صدای طرف مقابل' : 'بی‌صدا کردن طرف مقابل'}
+        </span>
+      </button>
+
+      <button type="button" onClick={() => { onSwap(); onClose(); }} className={row}>
+        <ArrowLeftRight aria-hidden="true" className={`${ic} ${isSwapped ? 'text-blue-400' : 'text-gray-300'}`} />
+        <span className="flex-1 min-w-0 text-sm text-gray-200">تعویض موقعیت ویدیوها</span>
+      </button>
+
+      <button type="button" onClick={() => { onToggleStats(); onClose(); }} className={row}>
+        <Info aria-hidden="true" className={`${ic} ${showStats ? 'text-blue-400' : 'text-gray-300'}`} />
+        <span className="flex-1 min-w-0 text-sm text-gray-200">آمار تماس</span>
+      </button>
+
+      {supportsPiP && (
+        <button type="button" onClick={() => { onNativePip(); onClose(); }} className={row}>
+          <PictureInPicture2 aria-hidden="true" className={`${ic} ${isNativePip ? 'text-blue-400' : 'text-gray-300'}`} />
+          <span className="flex-1 min-w-0 text-sm text-gray-200">
+            {isNativePip ? 'خروج از تصویر در تصویر' : 'تصویر در تصویر'}
+          </span>
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      {/* ── Mobile backdrop (full-screen dark overlay) ── */}
       <div
-        role="dialog" aria-modal="true" aria-label="گزینه‌های بیشتر" dir="rtl"
-        className="fixed bottom-0 left-0 right-0 z-50 bg-gray-900/97 border-t border-white/10 rounded-t-2xl pt-4 px-3 space-y-1 max-h-[70vh] overflow-y-auto"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}
+        className="absolute inset-0 z-40 bg-black/50 backdrop-blur-sm sm:bg-transparent sm:backdrop-blur-none"
+        onClick={() => { onClose(); moreBtnRef.current?.focus(); }}
+        aria-hidden="true"
+      />
+
+      {/* ── Mobile: bottom sheet ── Desktop: floating popover ── */}
+      <div
+        role="dialog" aria-modal="true" aria-label="کنترل‌های بیشتر"
+        id="more-controls-panel"
+        className={[
+          'absolute z-50 bg-gray-900/95 border border-white/10 overflow-y-auto',
+          // Mobile: full-width bottom sheet
+          'left-0 right-0 bottom-0 rounded-t-2xl pt-4 px-3 max-h-[70vh]',
+          // Desktop: floating popover above toolbar, right-aligned, fixed width
+          'sm:left-auto sm:right-3 sm:bottom-[76px] sm:rounded-2xl sm:pt-4 sm:px-3',
+          'sm:w-[min(20rem,calc(100vw-1.5rem))] sm:max-h-[calc(100%-96px)]',
+          'sm:shadow-2xl sm:shadow-black/60',
+        ].join(' ')}
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
       >
-        <div className="flex items-center justify-between px-2 pb-3 border-b border-white/10">
-          <span className="text-white font-semibold text-sm">گزینه‌های بیشتر</span>
-          <button type="button" onClick={onClose} aria-label="بستن"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none">
-            <X aria-hidden="true" className="w-4 h-4" />
-          </button>
-        </div>
-
-        {SUPPORTS_SCREEN_SHARE && (
-          <button type="button" onClick={() => { onToggleScreenShare(); onClose(); }}
-            disabled={isStartingScreenShare} className={row}>
-            {isStartingScreenShare
-              ? <Loader aria-hidden="true" className={`${ic} text-blue-400 animate-spin`} />
-              : isScreenSharing
-                ? <MonitorOff aria-hidden="true" className={`${ic} text-blue-400`} />
-                : <Monitor    aria-hidden="true" className={`${ic} text-gray-300`} />
-            }
-            <span className="text-sm text-gray-200">
-              {isStartingScreenShare ? 'در حال شروع...' : isScreenSharing ? 'توقف اشتراک صفحه' : 'اشتراک‌گذاری صفحه'}
-            </span>
-          </button>
-        )}
-
-        <button type="button"
-          onClick={() => { if (!isScreenSharing) { onSwitchCamera(); onClose(); } }}
-          disabled={isSwitchingCamera || isScreenSharing}
-          className={row}
-        >
-          {isSwitchingCamera
-            ? <Loader        aria-hidden="true" className={`${ic} text-gray-400 animate-spin`} />
-            : <FlipHorizontal aria-hidden="true" className={`${ic} text-gray-300`} />
-          }
-          <span className="text-sm text-gray-200 flex-1">
-            {isSwitchingCamera ? 'در حال تغییر...' : 'تغییر دوربین'}
-          </span>
-          {isScreenSharing && <span className="text-xs text-gray-500">در حین اشتراک غیرفعال</span>}
-        </button>
-
-        <button type="button" onClick={() => { onToggleRemoteMute(); onClose(); }} className={row}>
-          {isRemoteMuted
-            ? <VolumeX aria-hidden="true" className={`${ic} text-amber-400`} />
-            : <Volume2 aria-hidden="true" className={`${ic} text-gray-300`} />
-          }
-          <span className="text-sm text-gray-200">
-            {isRemoteMuted ? 'فعال کردن صدای طرف مقابل' : 'بی‌صدا کردن طرف مقابل'}
-          </span>
-        </button>
-
-        <button type="button" onClick={() => { onSwap(); onClose(); }} className={row}>
-          <ArrowLeftRight aria-hidden="true" className={`${ic} ${isSwapped ? 'text-blue-400' : 'text-gray-300'}`} />
-          <span className="text-sm text-gray-200">تعویض موقعیت ویدیوها</span>
-        </button>
-
-        <button type="button" onClick={() => { onToggleStats(); onClose(); }} className={row}>
-          <Info aria-hidden="true" className={`${ic} ${showStats ? 'text-blue-400' : 'text-gray-300'}`} />
-          <span className="text-sm text-gray-200">آمار تماس</span>
-        </button>
-
-        {supportsPiP && (
-          <button type="button" onClick={() => { onNativePip(); onClose(); }} className={row}>
-            <PictureInPicture2 aria-hidden="true" className={`${ic} ${isNativePip ? 'text-blue-400' : 'text-gray-300'}`} />
-            <span className="text-sm text-gray-200">
-              {isNativePip ? 'خروج از تصویر در تصویر' : 'تصویر در تصویر'}
-            </span>
-          </button>
-        )}
+        {header}
+        {actions}
       </div>
     </>
   );
@@ -453,6 +494,9 @@ export function ActiveCallView({
   const dragOffsetRef    = useRef({ x: 0, y: 0 });
   const activePointerRef = useRef<number | null>(null);
 
+  // Ref to More button so focus returns to it when the panel closes
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+
   // ── Event-driven stream sync (no polling) ────────────────────────────
   // Primary video elements — managed by useE2EECall hook
   // Floating tile video elements — synced here via useMediaStream
@@ -493,16 +537,15 @@ export function ActiveCallView({
   }, [isSwapped, localVideoRef, remoteVideoRef]);
 
   // ── PiP capability: detect on mount + on loadedmetadata ─────────────
-  // Rebind listener whenever primary video changes (swap or phase change)
+  // Rebind listener whenever primary video changes (swap or phase change).
+  // Uses getPiPTarget for usability check (readyState + live track).
   useEffect(() => {
     const primaryVideo = getPrimaryVideoElement();
 
     const recheck = () => setSupportsPiP(supportsVideoPiP(getPrimaryVideoElement()));
 
-    // Immediate check
     recheck();
 
-    // Listen for loadedmetadata — WebKit PiP often becomes available here
     primaryVideo?.addEventListener('loadedmetadata', recheck);
     return () => {
       primaryVideo?.removeEventListener('loadedmetadata', recheck);
@@ -595,47 +638,131 @@ export function ActiveCallView({
     setDragPosition(null); // switch back to corner-based positioning
   }, []);
 
-  // ── Native PiP — target-aware ────────────────────────────────────────
-  // Always targets the PRIMARY (full-bleed) video element.
-  // If a different video is already in PiP, exit it first.
-  const handleNativePip = useCallback(async () => {
-    const primaryVideo = getPrimaryVideoElement();
-    if (!primaryVideo || !supportsVideoPiP(primaryVideo)) {
-      toast.error('حالت تصویر در تصویر در این مرورگر در دسترس نیست');
-      return;
-    }
-    try {
-      if (supportsStandardVideoPiP(primaryVideo)) {
-        const pipEl = document.pictureInPictureElement;
-        if (pipEl) {
-          if (pipEl === primaryVideo) {
-            // Same video — exit
-            await document.exitPictureInPicture();
-            return;
-          }
-          // Different video was in PiP — exit it first, then enter with new target
-          await document.exitPictureInPicture();
-        }
-        await primaryVideo.requestPictureInPicture();
-        // State is driven by enterpictureinpicture/leavepictureinpicture events
-        return;
-      }
-      // WebKit presentation mode
-      const v = primaryVideo as HTMLVideoElement & {
+  // ── Usable PiP target selection ─────────────────────────────────────────
+  // A video is usable for PiP only when it has loaded metadata + has a live
+  // video track. Falls back to the other video if the preferred one is not yet usable.
+  const getPiPTarget = useCallback((): HTMLVideoElement | null => {
+    const preferred = isSwapped ? localVideoRef.current  : remoteVideoRef.current;
+    const fallback  = isSwapped ? remoteVideoRef.current : localVideoRef.current;
+
+    const isUsable = (v: HTMLVideoElement | null): v is HTMLVideoElement => {
+      if (!v) return false;
+      if (v.readyState < 1) return false; // HAVE_NOTHING
+      if (v.ended) return false;
+      const stream = v.srcObject instanceof MediaStream ? v.srcObject : null;
+      if (!stream) return false;
+      return stream.getVideoTracks().some(t => t.readyState === 'live');
+    };
+
+    if (isUsable(preferred)) return preferred;
+    if (isUsable(fallback))  return fallback;
+    return null;
+  }, [isSwapped, localVideoRef, remoteVideoRef]);
+
+  // ── Native PiP — target-aware + mobile-safe ──────────────────────────────
+  // Must be called directly from the onClick handler (no async preamble) to
+  // preserve the user-activation token that Safari/WebKit requires for PiP.
+  const handleNativePip = useCallback(() => {
+    const target = getPiPTarget();
+
+    if (import.meta.env.DEV) {
+      const wk = target as (HTMLVideoElement & {
         webkitSupportsPresentationMode?: (m: string) => boolean;
         webkitPresentationMode?: string;
-        webkitSetPresentationMode?: (m: string) => void;
+      }) | null;
+      console.debug('[pip] click', {
+        target,
+        readyState: target?.readyState,
+        paused: target?.paused,
+        ended: target?.ended,
+        srcObject: target?.srcObject instanceof MediaStream,
+        videoTracks: (target?.srcObject instanceof MediaStream
+          ? target.srcObject.getVideoTracks().map(t => ({ readyState: t.readyState, enabled: t.enabled, muted: t.muted }))
+          : []),
+        standardAPI: typeof target?.requestPictureInPicture === 'function',
+        pictureInPictureEnabled: document.pictureInPictureEnabled,
+        webkitSupportsPresentationMode: typeof wk?.webkitSupportsPresentationMode === 'function',
+        webkitPresentationMode: wk?.webkitPresentationMode,
+        displayModeStandalone: window.matchMedia('(display-mode: standalone)').matches,
+      });
+    }
+
+    if (!target) {
+      toast.error('ویدیو هنوز برای تصویر در تصویر آماده نیست.');
+      return;
+    }
+
+    // ── Standard PiP ────────────────────────────────────────────────────
+    if (supportsStandardVideoPiP(target)) {
+      const run = async () => {
+        try {
+          const pipEl = document.pictureInPictureElement;
+          if (pipEl) {
+            if (pipEl === target) {
+              await document.exitPictureInPicture();
+              return;
+            }
+            await document.exitPictureInPicture();
+          }
+          if (target.paused) await target.play();
+          await target.requestPictureInPicture();
+          // State driven by enterpictureinpicture / leavepictureinpicture events
+        } catch (err) {
+          const name = err instanceof DOMException ? err.name : undefined;
+          const msg  = err instanceof Error ? err.message : String(err);
+          console.error('[pip] standard failed', { name, message: msg, err });
+          if (name === 'NotSupportedError') {
+            toast.error('حالت تصویر در تصویر در این مرورگر در دسترس نیست.');
+          } else if (name === 'NotAllowedError') {
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+              (navigator as Navigator & { standalone?: boolean }).standalone === true;
+            if (isStandalone) {
+              toast.error('تصویر در تصویر در حالت فعلی برنامه فعال نشد. برنامه را در Safari باز کنید و دوباره امتحان کنید.');
+            } else {
+              toast.error('فعال‌سازی تصویر در تصویر انجام نشد.');
+            }
+          } else {
+            toast.error('فعال‌سازی تصویر در تصویر انجام نشد.');
+          }
+        }
       };
-      if (v.webkitSupportsPresentationMode?.('picture-in-picture') && v.webkitSetPresentationMode) {
+      void run();
+      return;
+    }
+
+    // ── WebKit presentation mode (Safari / iOS) ──────────────────────────
+    const v = target as HTMLVideoElement & {
+      webkitSupportsPresentationMode?: (m: string) => boolean;
+      webkitPresentationMode?: string;
+      webkitSetPresentationMode?: (m: string) => void;
+    };
+    if (
+      typeof v.webkitSetPresentationMode === 'function' &&
+      v.webkitSupportsPresentationMode?.('picture-in-picture')
+    ) {
+      try {
         const inPip = v.webkitPresentationMode === 'picture-in-picture';
+        // WebKit requires synchronous call inside the click activation.
+        // Do NOT await anything before this call.
         v.webkitSetPresentationMode(inPip ? 'inline' : 'picture-in-picture');
         // State updated by webkitpresentationmodechanged event listener
+      } catch (err) {
+        const name = err instanceof DOMException ? err.name : undefined;
+        const msg  = err instanceof Error ? err.message : String(err);
+        console.error('[pip] webkit failed', { name, message: msg, err });
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+          (navigator as Navigator & { standalone?: boolean }).standalone === true;
+        if (isStandalone) {
+          toast.error('تصویر در تصویر در حالت فعلی برنامه فعال نشد. برنامه را در Safari باز کنید و دوباره امتحان کنید.');
+        } else {
+          toast.error('فعال‌سازی تصویر در تصویر انجام نشد.');
+        }
       }
-    } catch (err) {
-      console.error('[pip] failed', err);
-      toast.error('حالت تصویر در تصویر فعال نشد');
+      return;
     }
-  }, [getPrimaryVideoElement]);
+
+    toast.error('حالت تصویر در تصویر در این مرورگر در دسترس نیست.');
+  }, [getPiPTarget]);
 
   const peerName   = targetUser?.full_name || targetUser?.email || 'مخاطب';
   const peerInit   = getUserInitials(peerName);
@@ -796,36 +923,47 @@ export function ActiveCallView({
               danger large
               onClick={onHangup}
             />
-            <CallControlButton
-              icon={<MoreHorizontal aria-hidden="true" className="w-5 h-5 text-white" />}
-              label="گزینه‌های بیشتر"
-              active={showMore}
+            <button
+              ref={moreBtnRef}
+              type="button"
               onClick={() => setShowMore(true)}
-            />
+              aria-label="گزینه‌های بیشتر"
+              aria-expanded={showMore}
+              aria-controls="more-controls-panel"
+              disabled={false}
+              className={[
+                'w-12 h-12 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition-all backdrop-blur-sm',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60',
+                showMore ? 'bg-white/30 hover:bg-white/40' : 'bg-black/40 hover:bg-black/60 active:bg-black/70',
+              ].join(' ')}
+            >
+              <MoreHorizontal aria-hidden="true" className="w-5 h-5 text-white" />
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* More panel */}
-      {showMore && (
-        <MorePanel
-          isScreenSharing={isScreenSharing}
-          isStartingScreenShare={isStartingScreenShare}
-          isSwitchingCamera={isSwitchingCamera}
-          isRemoteMuted={isRemoteMuted}
-          isSwapped={isSwapped}
-          showStats={showStats}
-          isNativePip={isNativePip}
-          supportsPiP={supportsPiP}
-          onToggleScreenShare={onToggleScreenShare}
-          onSwitchCamera={onSwitchCamera}
-          onToggleRemoteMute={onToggleRemoteMute}
-          onSwap={() => setIsSwapped(v => !v)}
-          onToggleStats={() => setShowStats(v => !v)}
-          onNativePip={handleNativePip}
-          onClose={() => setShowMore(false)}
-        />
-      )}
+        {/* More panel — inside call stage so absolute positioning is relative to it */}
+        {showMore && (
+          <MorePanel
+            isScreenSharing={isScreenSharing}
+            isStartingScreenShare={isStartingScreenShare}
+            isSwitchingCamera={isSwitchingCamera}
+            isRemoteMuted={isRemoteMuted}
+            isSwapped={isSwapped}
+            showStats={showStats}
+            isNativePip={isNativePip}
+            supportsPiP={supportsPiP}
+            moreBtnRef={moreBtnRef}
+            onToggleScreenShare={onToggleScreenShare}
+            onSwitchCamera={onSwitchCamera}
+            onToggleRemoteMute={onToggleRemoteMute}
+            onSwap={() => setIsSwapped(v => !v)}
+            onToggleStats={() => setShowStats(v => !v)}
+            onNativePip={handleNativePip}
+            onClose={() => setShowMore(false)}
+          />
+        )}
+      </div>
 
       {/* Safety modal */}
       {showSafety && safetyNums && (
