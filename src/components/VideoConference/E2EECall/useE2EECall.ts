@@ -52,6 +52,9 @@ export interface UseE2EECallReturn {
   localVideoRef: React.RefObject<HTMLVideoElement>;
   remoteVideoRef: React.RefObject<HTMLVideoElement>;
   safetyVerifiedRef: React.RefObject<boolean>;
+  // Stream refs — for event-driven consumer code (read-only)
+  localStreamRef: React.RefObject<MediaStream | null>;
+  remoteStreamRef: React.RefObject<MediaStream | null>;
   // Actions
   startCall: (target: UserProfile) => Promise<void>;
   acceptCall: () => Promise<void>;
@@ -496,9 +499,12 @@ export function useE2EECall(
       }
 
       localStreamRef.current = s;
-      // Store camera track reference and initial facing mode
-      cameraTrackRef.current = s.getVideoTracks()[0] ?? null;
-      currentFacingModeRef.current = 'user';
+      // Store camera track and read actual facing mode from track settings
+      const firstVideoTrack = s.getVideoTracks()[0] ?? null;
+      cameraTrackRef.current = firstVideoTrack;
+      const actualFacing = firstVideoTrack?.getSettings().facingMode;
+      currentFacingModeRef.current =
+        actualFacing === 'environment' ? 'environment' : 'user';
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = s;
@@ -1129,7 +1135,7 @@ export function useE2EECall(
         localVideoRef.current.srcObject = new MediaStream([screenTrack]);
       }
 
-      screenTrack.addEventListener('ended', () => { void stopScreenShare(); });
+      screenTrack.addEventListener('ended', () => { void stopScreenShare(); }, { once: true });
 
       isScreenSharingRef.current = true;
       isScreenShareOpRef.current = false;
@@ -1218,11 +1224,12 @@ export function useE2EECall(
       currentStream.getVideoTracks().forEach(t => { if (t !== newTrack) currentStream.removeTrack(t); });
       currentStream.addTrack(newTrack);
 
-      // Update stored camera track reference and facing mode
+      // Update stored camera track reference
+      // Sync facingMode from actual track settings, not from assumption
       cameraTrackRef.current = newTrack;
-      if (isMobile && devices.length < 2) {
-        currentFacingModeRef.current = currentFacingModeRef.current === 'user' ? 'environment' : 'user';
-      }
+      const newFacing = newTrack.getSettings().facingMode;
+      currentFacingModeRef.current =
+        newFacing === 'environment' ? 'environment' : 'user';
 
       // Sync localVideoRef
       if (localVideoRef.current) localVideoRef.current.srcObject = currentStream;
@@ -1256,6 +1263,7 @@ export function useE2EECall(
     targetUser, incomingCall, safetyNums, showSafety, sessionCode, failReason,
     userSearch, users, searching, connDiag, isOffline, videoDevices,
     localVideoRef, remoteVideoRef, safetyVerifiedRef,
+    localStreamRef, remoteStreamRef,
     startCall, acceptCall, rejectCall, doHangup,
     toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,

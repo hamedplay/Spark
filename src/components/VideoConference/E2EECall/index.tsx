@@ -13,7 +13,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
     isSwitchingCamera, isStartingScreenShare,
     targetUser, incomingCall, safetyNums, showSafety, sessionCode, failReason,
     userSearch, users, searching, connDiag, isOffline,
-    localVideoRef, remoteVideoRef,
+    localVideoRef, remoteVideoRef, localStreamRef, remoteStreamRef,
     startCall, acceptCall, rejectCall, doHangup,
     toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
@@ -100,6 +100,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
             targetUser={targetUser}
             localVideoRef={localVideoRef}
             remoteVideoRef={remoteVideoRef}
+            localStreamRef={localStreamRef}
+            remoteStreamRef={remoteStreamRef}
             isMuted={isMuted}
             isVideoOff={isVideoOff}
             isRemoteMuted={isRemoteMuted}

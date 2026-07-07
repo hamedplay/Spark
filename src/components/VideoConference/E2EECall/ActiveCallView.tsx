@@ -19,6 +19,34 @@ export function getUserInitials(nameOrEmail: string | null | undefined): string 
   return name.slice(0, 2).toUpperCase();
 }
 
+// ── Event-driven useMediaStream hook ─────────────────────────────────────
+//
+// Sets videoRef.srcObject = stream whenever the stream reference changes.
+// No polling — driven entirely by React re-renders (stream ref changes).
+// If stream is null, clears srcObject.
+
+function useMediaStream(
+  videoRef: RefObject<HTMLVideoElement | null>,
+  streamRef: RefObject<MediaStream | null>,
+  muted = false,
+) {
+  useEffect(() => {
+    const video  = videoRef.current;
+    const stream = streamRef.current;
+    if (!video) return;
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+      if (stream) {
+        video.muted = muted;
+        video.play().catch(() => {});
+      }
+    }
+  });
+  // Intentionally no dependency array: runs after every render so any
+  // stream reference change (camera switch, screen share, hangup) is picked
+  // up immediately on the next React commit — no polling needed.
+}
+
 // ── PiP capability detection ──────────────────────────────────────────────
 
 function supportsStandardVideoPiP(video: HTMLVideoElement | null): boolean {
@@ -133,7 +161,7 @@ function SafetyModal({ safetyNums, onVerify, onClose }: {
   useEffect(() => {
     const modal = modalRef.current;
     if (!modal) return;
-    const els   = modal.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    const els   = modal.querySelectorAll<HTMLElement>('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
     const first = els[0]; const last = els[els.length - 1];
     const trap  = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
@@ -219,8 +247,7 @@ function MorePanel({
     <>
       <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div
-        role="dialog" aria-modal="true" aria-label="گزینه‌های بیشتر"
-        dir="rtl"
+        role="dialog" aria-modal="true" aria-label="گزینه‌های بیشتر" dir="rtl"
         className="fixed bottom-0 left-0 right-0 z-50 bg-gray-900/97 border-t border-white/10 rounded-t-2xl pt-4 px-3 space-y-1 max-h-[70vh] overflow-y-auto"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}
       >
@@ -313,10 +340,10 @@ function VideoPlaceholder({ initials, name, label }: { initials: string; name?: 
 
 function E2EEBadge({ status, onClick }: { status: E2EEStatus; onClick: () => void }) {
   let icon: React.ReactNode, label: string, cls: string;
-  if (status === 'active_verified')   { icon = <ShieldCheck aria-hidden="true" className="w-3 h-3" />; label = 'E2EE تأییدشده';      cls = 'bg-emerald-900/80 text-emerald-300 border-emerald-700/50'; }
-  else if (status === 'active_unverified') { icon = <ShieldAlert aria-hidden="true" className="w-3 h-3" />; label = 'E2EE';           cls = 'bg-amber-900/80 text-amber-300 border-amber-700/50'; }
-  else if (status === 'error')        { icon = <ShieldAlert aria-hidden="true" className="w-3 h-3" />; label = 'خطای رمزنگاری';      cls = 'bg-red-900/80 text-red-300 border-red-700/50'; }
-  else                                { icon = <Loader aria-hidden="true" className="w-3 h-3 animate-spin" />; label = 'رمزنگاری...'; cls = 'bg-gray-800/80 text-gray-300 border-gray-600/50'; }
+  if      (status === 'active_verified')   { icon = <ShieldCheck aria-hidden="true" className="w-3 h-3" />;              label = 'E2EE تأییدشده';      cls = 'bg-emerald-900/80 text-emerald-300 border-emerald-700/50'; }
+  else if (status === 'active_unverified') { icon = <ShieldAlert aria-hidden="true" className="w-3 h-3" />;              label = 'E2EE';               cls = 'bg-amber-900/80 text-amber-300 border-amber-700/50'; }
+  else if (status === 'error')             { icon = <ShieldAlert aria-hidden="true" className="w-3 h-3" />;              label = 'خطای رمزنگاری';      cls = 'bg-red-900/80 text-red-300 border-red-700/50'; }
+  else                                     { icon = <Loader aria-hidden="true" className="w-3 h-3 animate-spin" />;      label = 'رمزنگاری...';        cls = 'bg-gray-800/80 text-gray-300 border-gray-600/50'; }
   return (
     <button type="button" onClick={onClick} aria-label={`وضعیت رمزنگاری: ${label}`}
       className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border backdrop-blur-sm hover:opacity-80 transition-opacity ${cls}`}>
@@ -352,6 +379,8 @@ interface Props {
   targetUser: UserProfile | null;
   localVideoRef: RefObject<HTMLVideoElement>;
   remoteVideoRef: RefObject<HTMLVideoElement>;
+  localStreamRef: RefObject<MediaStream | null>;
+  remoteStreamRef: RefObject<MediaStream | null>;
   isMuted: boolean;
   isVideoOff: boolean;
   isRemoteMuted: boolean;
@@ -376,25 +405,27 @@ interface Props {
 
 // ── ActiveCallView ────────────────────────────────────────────────────────
 //
-// Architecture:
-//   The primary video layer always contains both video elements (localVideoRef
-//   and remoteVideoRef) with CSS controlling which is visible as the full-bleed
-//   background.
+// Layout architecture:
 //
-//   The floating tile uses its OWN two <video> elements (floatLocalRef,
-//   floatRemoteRef). Their srcObject is synced from the primary refs via an
-//   effect that watches the primary video's srcObject.
+//   Primary video layer (z=0):
+//     Both remoteVideoRef + localVideoRef rendered here, full-bleed.
+//     CSS opacity switches which one shows as the background.
 //
-//   isSwapped determines:
-//     !isSwapped → primary shows remote, floating shows local
-//      isSwapped → primary shows local,  floating shows remote
+//   Floating tile (z=10):
+//     Always the SAME div wrapper (floatingRef) — never unmounted on swap.
+//     Contains two extra <video> elements: floatLocalRef + floatRemoteRef.
+//     srcObject synced via useMediaStream (event-driven, no polling).
+//     CSS opacity switches which video is visible inside the tile.
 //
-//   The floating tile's wrapper (floatingRef) is STABLE — it never unmounts
-//   on swap. Only the inner video visibility changes.
-//   This means drag state, pointer capture, and position all survive swap.
+//   Swap only changes the `isSwapped` boolean:
+//     !isSwapped → primary=remote, floating=local
+//      isSwapped → primary=local,  floating=remote
+//
+//   Position/drag state survives swap — only pointer capture is released.
 
 export function ActiveCallView({
   phase, targetUser, localVideoRef, remoteVideoRef,
+  localStreamRef, remoteStreamRef,
   isMuted, isVideoOff, isRemoteMuted, isScreenSharing,
   isSwitchingCamera, isStartingScreenShare,
   connDiag, isOffline, e2eeStatus, safetyNums, showSafety,
@@ -404,6 +435,8 @@ export function ActiveCallView({
   const [needsAudioTap,  setNeedsAudioTap]  = useState(false);
   const [isDragging,     setIsDragging]     = useState(false);
   const [pipCorner,      setPipCorner]      = useState<PipCorner>('bottom-right');
+  // dragPosition: non-null means inline style is active (during/after drag until next snap)
+  const [dragPosition,   setDragPosition]   = useState<{ x: number; y: number } | null>(null);
   const [isSwapped,      setIsSwapped]      = useState(false);
   const [showStats,      setShowStats]      = useState(false);
   const [isNativePip,    setIsNativePip]    = useState(false);
@@ -411,41 +444,20 @@ export function ActiveCallView({
   const [showMore,       setShowMore]       = useState(false);
   const [remoteHasFrame, setRemoteHasFrame] = useState(false);
 
-  // Floating tile video elements — their own refs, srcObject synced from primary refs
+  // Floating tile video elements — their own refs, srcObject driven by useMediaStream
   const floatLocalRef  = useRef<HTMLVideoElement>(null);
   const floatRemoteRef = useRef<HTMLVideoElement>(null);
 
-  // Draggable container for the floating tile — STABLE, never unmounted
-  const floatingRef    = useRef<HTMLDivElement>(null);
-  const dragOffsetRef  = useRef({ x: 0, y: 0 });
+  // Stable floating tile wrapper — never unmounted
+  const floatingRef      = useRef<HTMLDivElement>(null);
+  const dragOffsetRef    = useRef({ x: 0, y: 0 });
   const activePointerRef = useRef<number | null>(null);
 
-  // ── Sync floating tile srcObjects from primary video elements ────────
-  // This runs whenever phase changes (media streams attach during phase change)
-  // and on an interval to pick up srcObject changes (e.g. screen share, camera switch)
-  useEffect(() => {
-    if (phase !== 'connecting' && phase !== 'connected') return;
-
-    const sync = () => {
-      const localSrc  = localVideoRef.current?.srcObject  ?? null;
-      const remoteSrc = remoteVideoRef.current?.srcObject ?? null;
-
-      if (floatLocalRef.current && floatLocalRef.current.srcObject !== localSrc) {
-        floatLocalRef.current.srcObject = localSrc;
-        floatLocalRef.current.play().catch(() => {});
-      }
-      if (floatRemoteRef.current && floatRemoteRef.current.srcObject !== remoteSrc) {
-        floatRemoteRef.current.srcObject = remoteSrc;
-        floatRemoteRef.current.play().catch(() => {});
-      }
-    };
-
-    sync();
-    // Poll for srcObject changes (screen share, camera switch update srcObject)
-    const id = setInterval(sync, 1000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+  // ── Event-driven stream sync (no polling) ────────────────────────────
+  // Primary video elements — managed by useE2EECall hook
+  // Floating tile video elements — synced here via useMediaStream
+  useMediaStream(floatLocalRef,  localStreamRef,  true);   // muted = true (local)
+  useMediaStream(floatRemoteRef, remoteStreamRef, false);  // unmuted (remote)
 
   // ── Remote playback ──────────────────────────────────────────────────
   useEffect(() => {
@@ -457,10 +469,7 @@ export function ActiveCallView({
       video.play().catch(() => {});
       setNeedsAudioTap(true);
     });
-    // Also sync muted state on floating remote
-    if (floatRemoteRef.current) {
-      floatRemoteRef.current.muted = isRemoteMuted;
-    }
+    if (floatRemoteRef.current) floatRemoteRef.current.muted = isRemoteMuted;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRemoteMuted, phase]);
 
@@ -471,38 +480,68 @@ export function ActiveCallView({
   // ── Remote frame detection ───────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'connected') { setRemoteHasFrame(false); return; }
-    const check = () => {
-      const v = remoteVideoRef.current;
-      if (v && v.videoWidth > 0) { setRemoteHasFrame(true); return true; }
-      return false;
-    };
-    if (check()) return;
-    const id = setInterval(() => { if (check()) clearInterval(id); }, 500);
+    const check = () => remoteVideoRef.current && remoteVideoRef.current.videoWidth > 0;
+    if (check()) { setRemoteHasFrame(true); return; }
+    const id = setInterval(() => { if (check()) { setRemoteHasFrame(true); clearInterval(id); } }, 500);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // ── PiP support detection (after video element mounts) ───────────────
+  // ── PiP: primary video element for current swap state ────────────────
+  const getPrimaryVideoElement = useCallback((): HTMLVideoElement | null => {
+    return isSwapped ? localVideoRef.current : remoteVideoRef.current;
+  }, [isSwapped, localVideoRef, remoteVideoRef]);
+
+  // ── PiP capability: detect on mount + on loadedmetadata ─────────────
+  // Rebind listener whenever primary video changes (swap or phase change)
   useEffect(() => {
-    // Re-check now that the video element is live in DOM
-    const primaryVideo = isSwapped ? localVideoRef.current : remoteVideoRef.current;
-    setSupportsPiP(supportsVideoPiP(primaryVideo));
+    const primaryVideo = getPrimaryVideoElement();
+
+    const recheck = () => setSupportsPiP(supportsVideoPiP(getPrimaryVideoElement()));
+
+    // Immediate check
+    recheck();
+
+    // Listen for loadedmetadata — WebKit PiP often becomes available here
+    primaryVideo?.addEventListener('loadedmetadata', recheck);
+    return () => {
+      primaryVideo?.removeEventListener('loadedmetadata', recheck);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, isSwapped]);
 
-  // ── PiP leave event ──────────────────────────────────────────────────
+  // ── PiP state: sync with browser enter/leave events ──────────────────
+  // Attach to primary video. Rebind on swap so state stays accurate.
   useEffect(() => {
-    const video = remoteVideoRef.current;
-    if (!video) return;
-    const h = () => setIsNativePip(false);
-    video.addEventListener('leavepictureinpicture', h);
-    return () => video.removeEventListener('leavepictureinpicture', h);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const primaryVideo = getPrimaryVideoElement();
+    if (!primaryVideo) return;
 
-  // ── On swap: release pointer capture, reset inline position ──────────
-  // Note: we do NOT unmount/remount the floating wrapper.
-  // We only release capture and reset inline styles so corner classes take over.
+    const onEnter  = () => setIsNativePip(true);
+    const onLeave  = () => setIsNativePip(false);
+
+    primaryVideo.addEventListener('enterpictureinpicture', onEnter);
+    primaryVideo.addEventListener('leavepictureinpicture', onLeave);
+
+    // WebKit presentation mode change event
+    const v = primaryVideo as HTMLVideoElement & {
+      webkitPresentationMode?: string;
+    };
+    const onWebKitChange = () => {
+      setIsNativePip(v.webkitPresentationMode === 'picture-in-picture');
+    };
+    primaryVideo.addEventListener('webkitpresentationmodechanged', onWebKitChange);
+
+    return () => {
+      primaryVideo.removeEventListener('enterpictureinpicture', onEnter);
+      primaryVideo.removeEventListener('leavepictureinpicture', onLeave);
+      primaryVideo.removeEventListener('webkitpresentationmodechanged', onWebKitChange);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSwapped, phase]);
+
+  // ── On swap: only release pointer capture — PRESERVE position ────────
+  // We do NOT reset inline position or dragPosition.
+  // The tile stays exactly where it was.
   useEffect(() => {
     setIsDragging(false);
     const el = floatingRef.current;
@@ -511,11 +550,10 @@ export function ActiveCallView({
       if (activePointerRef.current != null) el.releasePointerCapture(activePointerRef.current);
     } catch { /* already released */ }
     activePointerRef.current = null;
-    // Clear inline position so CSS corner classes apply
-    el.style.left = el.style.top = el.style.right = el.style.bottom = '';
+    // Do NOT touch el.style.left/top or dragPosition — position is preserved
   }, [isSwapped]);
 
-  // ── Drag handlers ────────────────────────────────────────────────────
+  // ── Drag handlers ─────────────────────────────────────────────────────
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     activePointerRef.current = e.pointerId;
@@ -535,10 +573,7 @@ export function ActiveCallView({
     let y = e.clientY - cR.top  - dragOffsetRef.current.y;
     x = Math.max(8, Math.min(x, cR.width  - pR.width  - 8));
     y = Math.max(8, Math.min(y, cR.height - pR.height - TOOLBAR));
-    floatingRef.current.style.left   = `${x}px`;
-    floatingRef.current.style.top    = `${y}px`;
-    floatingRef.current.style.right  = 'auto';
-    floatingRef.current.style.bottom = 'auto';
+    setDragPosition({ x, y });
   }, [isDragging]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -557,31 +592,35 @@ export function ActiveCallView({
         ? cx < cR.width / 2 ? 'top-left'    : 'top-right'
         : cx < cR.width / 2 ? 'bottom-left' : 'bottom-right';
     setPipCorner(corner);
-    floatingRef.current.style.left = floatingRef.current.style.top =
-      floatingRef.current.style.right = floatingRef.current.style.bottom = '';
+    setDragPosition(null); // switch back to corner-based positioning
   }, []);
 
-  // ── Native PiP ───────────────────────────────────────────────────────
-  // Always targets the PRIMARY (full-bleed) video element
-  const handleNativePip = async () => {
-    const primaryVideo = isSwapped ? localVideoRef.current : remoteVideoRef.current;
+  // ── Native PiP — target-aware ────────────────────────────────────────
+  // Always targets the PRIMARY (full-bleed) video element.
+  // If a different video is already in PiP, exit it first.
+  const handleNativePip = useCallback(async () => {
+    const primaryVideo = getPrimaryVideoElement();
     if (!primaryVideo || !supportsVideoPiP(primaryVideo)) {
       toast.error('حالت تصویر در تصویر در این مرورگر در دسترس نیست');
       return;
     }
     try {
       if (supportsStandardVideoPiP(primaryVideo)) {
-        if (document.pictureInPictureElement) {
+        const pipEl = document.pictureInPictureElement;
+        if (pipEl) {
+          if (pipEl === primaryVideo) {
+            // Same video — exit
+            await document.exitPictureInPicture();
+            return;
+          }
+          // Different video was in PiP — exit it first, then enter with new target
           await document.exitPictureInPicture();
-          setIsNativePip(false);
-        } else {
-          await primaryVideo.requestPictureInPicture();
-          setIsNativePip(true);
-          primaryVideo.addEventListener('leavepictureinpicture', () => setIsNativePip(false), { once: true });
         }
+        await primaryVideo.requestPictureInPicture();
+        // State is driven by enterpictureinpicture/leavepictureinpicture events
         return;
       }
-      // WebKit
+      // WebKit presentation mode
       const v = primaryVideo as HTMLVideoElement & {
         webkitSupportsPresentationMode?: (m: string) => boolean;
         webkitPresentationMode?: string;
@@ -590,21 +629,24 @@ export function ActiveCallView({
       if (v.webkitSupportsPresentationMode?.('picture-in-picture') && v.webkitSetPresentationMode) {
         const inPip = v.webkitPresentationMode === 'picture-in-picture';
         v.webkitSetPresentationMode(inPip ? 'inline' : 'picture-in-picture');
-        setIsNativePip(!inPip);
+        // State updated by webkitpresentationmodechanged event listener
       }
     } catch (err) {
       console.error('[pip] failed', err);
       toast.error('حالت تصویر در تصویر فعال نشد');
     }
-  };
+  }, [getPrimaryVideoElement]);
 
   const peerName   = targetUser?.full_name || targetUser?.email || 'مخاطب';
   const peerInit   = getUserInitials(peerName);
   const netQuality = getNetworkQuality(connDiag, isOffline);
 
-  const floatingStyle: React.CSSProperties = isDragging
-    ? { touchAction: 'none', transition: 'none' }
-    : { ...CORNER_STYLE[pipCorner], touchAction: 'none', transition: 'all 0.2s ease' };
+  // Floating tile position style
+  // During/after drag: use explicit x/y coordinates
+  // At rest (after snap): use corner-based style
+  const floatingStyle: React.CSSProperties = dragPosition
+    ? { left: dragPosition.x, top: dragPosition.y, right: 'auto', bottom: 'auto', touchAction: 'none', transition: 'none' }
+    : { ...CORNER_STYLE[pipCorner], touchAction: 'none', transition: isDragging ? 'none' : 'all 0.2s ease' };
 
   return (
     <>
@@ -620,20 +662,19 @@ export function ActiveCallView({
 
         {/* Primary video layer — full bleed */}
         <div className="absolute inset-0 z-0">
-          {/* Remote primary — visible when !isSwapped */}
+          {/* Remote — visible when !isSwapped */}
           <video
             ref={remoteVideoRef}
             autoPlay playsInline
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${isSwapped ? 'opacity-0' : 'opacity-100'}`}
           />
-          {/* Local primary — visible when isSwapped */}
+          {/* Local — visible when isSwapped */}
           <video
             ref={localVideoRef}
             autoPlay playsInline muted
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${!isSwapped ? 'opacity-0' : 'opacity-100'}`}
           />
-
-          {/* Remote placeholder in primary slot */}
+          {/* Placeholder: remote has no frame in primary slot */}
           {!isSwapped && !remoteHasFrame && (
             <VideoPlaceholder
               initials={peerInit}
@@ -641,14 +682,13 @@ export function ActiveCallView({
               label={phase === 'connecting' ? 'در حال اتصال...' : 'در انتظار تصویر...'}
             />
           )}
-          {/* Local camera-off placeholder in primary slot */}
+          {/* Placeholder: local camera-off in primary slot */}
           {isSwapped && isVideoOff && (
             <VideoPlaceholder initials="شما" label="دوربین خاموش است" />
           )}
         </div>
 
-        {/* ── Floating tile — ALWAYS this wrapper ──────────────────────── */}
-        {/* isSwapped only swaps which video is VISIBLE inside the tile    */}
+        {/* ── Floating tile — STABLE wrapper, position preserved on swap ── */}
         <div
           ref={floatingRef}
           onPointerDown={handlePointerDown}
@@ -664,7 +704,7 @@ export function ActiveCallView({
             autoPlay playsInline muted
             className={`absolute inset-0 w-full h-full object-cover ${isSwapped ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           />
-          {/* Camera-off overlay for floating local */}
+          {/* Camera-off overlay in floating local slot */}
           {!isSwapped && isVideoOff && (
             <div className="absolute inset-0 bg-gray-800 flex items-center justify-center z-10">
               <VideoOff aria-hidden="true" className="w-5 h-5 text-gray-500" />
@@ -677,7 +717,7 @@ export function ActiveCallView({
             autoPlay playsInline
             className={`absolute inset-0 w-full h-full object-cover ${!isSwapped ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           />
-          {/* No-frame overlay for floating remote */}
+          {/* No-frame overlay in floating remote slot */}
           {isSwapped && !remoteHasFrame && (
             <div className="absolute inset-0 bg-gray-800 flex items-center justify-center z-10">
               <span className="text-gray-400 text-sm font-bold">{peerInit}</span>
@@ -696,7 +736,11 @@ export function ActiveCallView({
         {/* Tap-to-unmute */}
         {needsAudioTap && (
           <button type="button"
-            onClick={() => { const v = remoteVideoRef.current; if (v) { v.muted = false; v.play().catch(() => {}); } setNeedsAudioTap(false); }}
+            onClick={() => {
+              const v = remoteVideoRef.current;
+              if (v) { v.muted = false; v.play().catch(() => {}); }
+              setNeedsAudioTap(false);
+            }}
             className="absolute bottom-28 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-blue-600/90 hover:bg-blue-600 text-white text-sm px-4 py-2.5 rounded-full shadow-lg z-30 whitespace-nowrap">
             <Volume2 aria-hidden="true" className="w-4 h-4" />
             ضربه بزنید برای فعال‌سازی صدا
