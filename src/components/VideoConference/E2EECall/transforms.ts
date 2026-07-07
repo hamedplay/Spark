@@ -8,22 +8,23 @@ export interface PortRecord {
 }
 
 export function ensureWorkerReady(worker: Worker): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const { port1: testPort1, port2: testPort2 } = new MessageChannel();
     testPort1.start();
-    let resolved = false;
+    let settled = false;
 
     const timer = setTimeout(() => {
-      if (!resolved) {
+      if (!settled) {
+        settled = true;
         testPort1.close();
-        logWarn('[E2EE][WORKER]', 'ping timeout — worker alive check inconclusive, proceeding anyway');
-        resolve();
+        logWarn('[E2EE][WORKER]', 'ping timeout — worker not responding');
+        reject(new Error('worker ping timeout'));
       }
     }, 3000);
 
     testPort1.addEventListener('message', (e: MessageEvent) => {
-      if (!resolved && e.data?.type === 'pong') {
-        resolved = true;
+      if (!settled && e.data?.type === 'pong') {
+        settled = true;
         clearTimeout(timer);
         testPort1.close();
         log('[E2EE][WORKER]', 'worker health check passed (pong received)');

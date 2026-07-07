@@ -536,6 +536,7 @@ export function useE2EECall(
   };
 
   // ── Push keys to all active port records ───────────────────────────────
+  // Throws if any port fails to install its key — caller must handle the error.
   const pushKeysToAllPorts = useCallback(async (keys: DerivedKeys) => {
     const records = [...portRecordsRef.current];
     const results = await Promise.allSettled(
@@ -547,9 +548,10 @@ export function useE2EECall(
         results: results.map(r => r.status),
       });
     }
-    const failed = results.filter(r => r.status === 'rejected');
+    const failed = results.filter(r => r.status === 'rejected') as PromiseRejectedResult[];
     if (failed.length > 0) {
-      logError('[E2EE][KEY]', `key push failed for ${failed.length}/${records.length} port(s)`);
+      const reasons = failed.map(f => String(f.reason)).join('; ');
+      throw new Error(`key push failed for ${failed.length}/${records.length} port(s): ${reasons}`);
     }
   }, []);
 
@@ -569,14 +571,9 @@ export function useE2EECall(
       );
       activeKeysRef.current = keys;
 
-      // Push to all current port records
+      // Push to all ports that already exist (sender ports + any early receiver ports).
+      // ontrack installs keys to any receiver port that arrives after this point.
       await pushKeysToAllPorts(keys);
-
-      // Delayed re-push covers ontrack receivers arriving after this point
-      setTimeout(async () => {
-        if (!sessionActiveRef.current || !activeKeysRef.current) return;
-        await pushKeysToAllPorts(activeKeysRef.current);
-      }, 1500);
 
       const nums = await computeSafetyNumber(myPublicJWKRef.current, peerPublicJWK, sessionIdRef.current);
       setSafetyNums(nums);
@@ -646,10 +643,22 @@ export function useE2EECall(
         if (pr) {
           portRecordsRef.current.push(pr);
           if (activeKeysRef.current) {
-            pushKeyToPortRecord(pr, activeKeysRef.current).catch(err => {
-              logError('[E2EE][ERROR]', 'pushKey failed for late receiver transform:', err);
-            });
+            // Keys are already derived — install them now in this receiver.
+            // This is the critical path for the callee side: ontrack fires
+            // before or after doSetupKeys depending on network timing, and
+            // doSetupKeys only pushes to ports that existed at that moment.
+            try {
+              await pushKeyToPortRecord(pr, activeKeysRef.current);
+            } catch (err) {
+              logError('[E2EE][ERROR]', `key push failed for late receiver transform (${pr.kind}):`, err);
+              toast.error('رمزنگاری دریافت فعال نشد — تماس لغو شد');
+              doFullCleanup('key_exchange');
+              return;
+            }
           }
+          // If activeKeysRef.current is null here, keys haven't been derived yet.
+          // doSetupKeys will push to this port when it runs (it calls pushKeysToAllPorts
+          // over portRecordsRef.current which now includes this pr).
         }
       }
 

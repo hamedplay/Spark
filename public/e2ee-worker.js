@@ -77,6 +77,7 @@ self.addEventListener('rtctransform', event => {
   let encryptDropCount = 0;
   let decryptDropCount = 0;
   let decryptErrorCount = 0;
+  let counterExhaustedFired = false;
 
   const log = (level, tag, msg) => {
     if (!debugEnabled && level !== 'error') return;
@@ -123,6 +124,7 @@ self.addEventListener('rtctransform', event => {
         encryptEpoch  = msg.data.epoch ?? 0;
         frameCounter  = 0;
         encryptDropCount = 0;
+        counterExhaustedFired = false;
         log('info', '[E2EE][WORKER]', `rotate-encrypt-key epoch=${encryptEpoch} media=${mediaKind}`);
       } else {
         // Initial key set: only reset counter when ivSeed actually changed
@@ -133,7 +135,7 @@ self.addEventListener('rtctransform', event => {
           encryptIvSeed.every((b, i) => b === newSeed[i]);
         encryptIvSeed = newSeed;
         encryptEpoch  = msg.data.epoch ?? 0;
-        if (!sameSeed) frameCounter = 0;
+        if (!sameSeed) { frameCounter = 0; counterExhaustedFired = false; }
         encryptDropCount = 0;
         log('info', '[E2EE][WORKER]', `set-encrypt-key epoch=${encryptEpoch} media=${mediaKind} counterReset=${!sameSeed}`);
       }
@@ -182,6 +184,7 @@ self.addEventListener('rtctransform', event => {
       encryptDropCount = 0;
       decryptDropCount = 0;
       decryptErrorCount = 0;
+      counterExhaustedFired = false;
       log('info', '[E2EE][WORKER]', `clear: state wiped media=${mediaKind}`);
 
     } else if (type === 'ping') {
@@ -206,8 +209,11 @@ self.addEventListener('rtctransform', event => {
           }
 
           if (frameCounter > MAX_COUNTER) {
-            port.postMessage({ type: 'counter-exhausted' });
-            log('error', '[E2EE][WORKER]', `counter exhausted media=${mediaKind}`);
+            if (!counterExhaustedFired) {
+              counterExhaustedFired = true;
+              port.postMessage({ type: 'counter-exhausted' });
+              log('error', '[E2EE][WORKER]', `counter exhausted media=${mediaKind}`);
+            }
             return;
           }
 
