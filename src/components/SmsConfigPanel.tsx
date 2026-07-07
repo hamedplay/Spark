@@ -1275,6 +1275,10 @@ function TestTab() {
   const [runningAllRest, setRunningAllRest] = useState(false);
   const [lastRowIdInput, setLastRowIdInput] = useState('0');
 
+  // Rate limit and concurrent-request guards for Rahyab REST
+  const lastRahyabRequestAtRef = useRef<Partial<Record<'delivery' | 'receive', number>>>({});
+  const rahyabRequestRunningRef = useRef<Partial<Record<'delivery' | 'receive', boolean>>>({});
+
   // Debug console
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
 
@@ -1402,11 +1406,31 @@ function TestTab() {
     toast.success('همه تست‌های رهیاب رایان اجرا شدند');
   };
 
+  // ── Shared helpers ─────────────────────────────────────────────────
+  const isValidReturnId = (value: unknown): value is string => {
+    if (typeof value !== 'string' || !/^\d+$/.test(value)) return false;
+    return value.replace(/^0+/, '').length > 0;
+  };
+
+  const waitForRahyabRateLimit = async (action: 'delivery' | 'receive'): Promise<void> => {
+    const minMs = action === 'delivery' ? 1100 : 3100;
+    const last = lastRahyabRequestAtRef.current[action] ?? 0;
+    const remaining = minMs - (Date.now() - last);
+    if (remaining > 0) await new Promise<void>(r => window.setTimeout(r, remaining));
+    lastRahyabRequestAtRef.current[action] = Date.now();
+  };
+
   // ── Rahyab REST single test ────────────────────────────────────────
   const runRahyabRestTest = async (card: RahyabTestCard) => {
     if (!selectedProvider) { toast.error('ابتدا یک سرویس‌دهنده انتخاب کنید'); return; }
     if (card.needsPhone && !testPhone.trim()) { toast.error('شماره موبایل الزامی است'); return; }
     if (card.needsMessage && !testMessage.trim()) { toast.error('متن پیام الزامی است'); return; }
+
+    const rateLimitedAction = (card.action === 'delivery' || card.action === 'receive') ? card.action : null;
+
+    // Concurrent-request guard for delivery/receive
+    if (rateLimitedAction && rahyabRequestRunningRef.current[rateLimitedAction]) return;
+    if (rateLimitedAction) rahyabRequestRunningRef.current[rateLimitedAction] = true;
 
     setRahyabRestStatus(s => ({ ...s, [card.id]: 'loading' }));
     setRahyabRestResult(r => ({ ...r, [card.id]: null }));
@@ -1425,26 +1449,44 @@ function TestTab() {
         payload = { action: card.action };
       }
 
+      // Enforce Rahyab rate limits before sending
+      if (rateLimitedAction) await waitForRahyabRateLimit(rateLimitedAction);
+
       const result = await callEdge({ mode: 'rahyab_rest_test', providerId: selectedProvider, ...payload });
       setRahyabRestResult(r => ({ ...r, [card.id]: result }));
-      setRahyabRestStatus(s => ({ ...s, [card.id]: result.ok ? (result.status === 'partial_success' ? 'partial' : 'ok') : 'error' }));
+
+      // Map UI status from business result
+      let uiStatus: TestStatus;
+      if (card.action === 'delivery') {
+        const ds = result.status as string | undefined;
+        uiStatus = ds === 'delivered' ? 'ok'
+          : ds === 'pending' || ds === 'partial' ? 'partial'
+          : 'error';
+      } else {
+        uiStatus = result.ok ? (result.status === 'partial_success' ? 'partial' : 'ok') : 'error';
+      }
+      setRahyabRestStatus(s => ({ ...s, [card.id]: uiStatus }));
 
       if (result.debug?.length) setDebugLogs(prev => [...prev, ...result.debug]);
       if (card.action === 'send' && result.ok) {
-        // Use first valid return ID (validated positive integer, never -1 or 0)
         const firstId: string | undefined = result.returnIds?.[0] ?? result.returnId;
-        const isValidReturnId = (v?: string) => typeof v === 'string' && /^\d+$/.test(v) && v !== '0';
         if (isValidReturnId(firstId)) {
-          setReturnIdInput(firstId!);
+          setReturnIdInput(firstId);
           const toastMsg = result.status === 'partial_success'
             ? `ارسال جزئی — شناسه: ${firstId} (برخی شناسه‌ها ناموفق بودند)`
             : `پیامک آزمایشی با موفقیت ارسال شد — شناسه: ${firstId}`;
           toast.success(toastMsg);
         }
       }
+      // Auto-update lastRowId on successful receive
+      if (card.action === 'receive' && result.ok && result.nextLastRowId && result.nextLastRowId !== '0') {
+        setLastRowIdInput(result.nextLastRowId);
+      }
     } catch (e: any) {
       setRahyabRestResult(r => ({ ...r, [card.id]: { error: e.message } }));
       setRahyabRestStatus(s => ({ ...s, [card.id]: 'error' }));
+    } finally {
+      if (rateLimitedAction) rahyabRequestRunningRef.current[rateLimitedAction] = false;
     }
   };
 
@@ -1455,7 +1497,6 @@ function TestTab() {
       if (card.needsPhone && !testPhone.trim()) continue;
       if (card.needsMessage && !testMessage.trim()) continue;
       await runRahyabRestTest(card);
-      await new Promise(r => setTimeout(r, 400));
     }
     setRunningAllRest(false);
     toast.success('همه تست‌های رهیاب رایان REST اجرا شدند');
@@ -1714,7 +1755,14 @@ function TestTab() {
                   {result && st !== 'idle' && st !== 'loading' && (
                     <div className={`mt-2 rounded-xl border p-3 text-xs font-mono leading-relaxed space-y-1.5 ${st === 'partial' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800' : isOk ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'}`}>
                       <p className={`font-bold mb-1 ${st === 'partial' ? 'text-amber-700 dark:text-amber-400' : isOk ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
-                        {st === 'partial' ? 'موفق جزئی' : isOk ? 'موفق' : 'خطا'}
+                        {card.action === 'delivery'
+                          ? result.status === 'delivered' ? 'تحویل شده'
+                            : result.status === 'pending' ? 'در انتظار تعیین وضعیت'
+                            : result.status === 'partial' ? 'وضعیت ترکیبی'
+                            : result.status === 'failed' ? 'تحویل نشده / بلاک شده'
+                            : result.status === 'not_found' ? 'شناسه در سامانه پیدا نشد'
+                            : 'خطا'
+                          : st === 'partial' ? 'موفق جزئی' : isOk ? 'موفق' : 'خطا'}
                       </p>
                       {result.error && <p className="text-red-600 dark:text-red-400 break-all"><span className="font-semibold">خطا: </span>{result.error}</p>}
                       {/* IP test */}

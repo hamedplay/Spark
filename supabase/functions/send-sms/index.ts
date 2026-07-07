@@ -270,6 +270,9 @@ Deno.serve(async (req: Request) => {
         statusLabel: string;
       }
 
+      type RahyabDeliveryOverallStatus =
+        | "delivered" | "pending" | "partial" | "failed" | "not_found" | "error";
+
       const DELIVERY_CODE_MAP: Record<string, { key: string; label: string }> = {
         "0":  { key: "unknown",       label: "ارسال شده، وضعیت تحویل هنوز مشخص نیست" },
         "2":  { key: "delivered",     label: "تحویل شده به گوشی" },
@@ -278,13 +281,26 @@ Deno.serve(async (req: Request) => {
         "-1": { key: "not_found",     label: "شناسه پیام در سامانه رهیاب پیدا نشد" },
       };
 
+      function getRahyabDeliveryOverallStatus(items: RahyabDeliveryItem[]): RahyabDeliveryOverallStatus {
+        if (items.length === 0) return "error";
+        const codes = items.map(i => i.code);
+        const allMatch = (c: string) => codes.every(x => x === c);
+        const allIn = (...cs: string[]) => codes.every(x => cs.includes(x));
+        if (allMatch("2")) return "delivered";
+        if (allMatch("0")) return "pending";
+        if (allMatch("-1")) return "not_found";
+        if (allIn("5", "9")) return "failed";
+        return "partial";
+      }
+
       function parseRahyabDeliveryResponse(rawBody: string, requestedIds: string[]): {
-        ok: boolean; items: RahyabDeliveryItem[]; rawResponse: string; errorMessage: string | null;
+        ok: boolean; status: RahyabDeliveryOverallStatus; items: RahyabDeliveryItem[];
+        rawResponse: string; errorMessage: string | null;
       } {
         const raw = rawBody.trim();
         const appError = extractRahyabError(raw);
-        if (appError) return { ok: false, items: [], rawResponse: raw, errorMessage: appError };
-        if (!raw) return { ok: false, items: [], rawResponse: raw, errorMessage: "پاسخ خالی از سرویس رهیاب" };
+        if (appError) return { ok: false, status: "error", items: [], rawResponse: raw, errorMessage: appError };
+        if (!raw) return { ok: false, status: "error", items: [], rawResponse: raw, errorMessage: "پاسخ خالی از سرویس رهیاب" };
 
         const codes = raw.split(/[;,\s]+/).map(c => c.trim()).filter(Boolean);
         const items: RahyabDeliveryItem[] = codes.map((code, i) => {
@@ -292,7 +308,16 @@ Deno.serve(async (req: Request) => {
           const mapping = DELIVERY_CODE_MAP[code] || { key: "unrecognized", label: `کد ناشناخته: ${code}` };
           return { returnId, code, statusKey: mapping.key, statusLabel: mapping.label };
         });
-        return { ok: true, items, rawResponse: raw, errorMessage: null };
+        const overallStatus = getRahyabDeliveryOverallStatus(items);
+        return { ok: overallStatus === "delivered", status: overallStatus, items, rawResponse: raw, errorMessage: null };
+      }
+
+      // ── Compare large integer strings safely (no Number conversion) ────
+      function comparePositiveIntegerStrings(a: string, b: string): number {
+        const na = a.replace(/^0+/, "") || "0";
+        const nb = b.replace(/^0+/, "") || "0";
+        if (na.length !== nb.length) return na.length - nb.length;
+        return na.localeCompare(nb);
       }
 
       // ── Receive XML parser ─────────────────────────────────────────────
@@ -300,15 +325,24 @@ Deno.serve(async (req: Request) => {
         rowId: string; sender: string; receiver: string; time: string; message: string;
       }
 
-      function parseRahyabReceiveXml(rawBody: string): {
+      function parseRahyabReceiveXml(rawBody: string, currentLastRowId: string): {
         ok: boolean; messages: RahyabReceivedSms[]; nextLastRowId: string; rawResponse: string; errorMessage: string | null;
       } {
         const raw = rawBody.trim();
         const appError = extractRahyabError(raw);
-        if (appError) return { ok: false, messages: [], nextLastRowId: "0", rawResponse: raw, errorMessage: appError };
+        if (appError) return { ok: false, messages: [], nextLastRowId: currentLastRowId, rawResponse: raw, errorMessage: appError };
 
-        // Empty or no-XML body = no messages (not an error)
-        if (!raw || !raw.includes("<")) return { ok: true, messages: [], nextLastRowId: "0", rawResponse: raw, errorMessage: null };
+        // Truly empty response = no new messages
+        if (!raw) return { ok: true, messages: [], nextLastRowId: currentLastRowId, rawResponse: raw, errorMessage: null };
+
+        // Non-empty response must have valid smsBatch root
+        const hasSmsBatchRoot = /<smsBatch(?:\s|>)[\s\S]*<\/smsBatch>/i.test(raw);
+        if (!hasSmsBatchRoot) {
+          return {
+            ok: false, messages: [], nextLastRowId: currentLastRowId, rawResponse: raw,
+            errorMessage: "پاسخ Receive رهیاب ساختار معتبر smsBatch ندارد",
+          };
+        }
 
         const messages: RahyabReceivedSms[] = [];
         const smsBlocks = Array.from(raw.matchAll(/<sms>([\s\S]*?)<\/sms>/gi));
@@ -321,10 +355,10 @@ Deno.serve(async (req: Request) => {
           messages.push({ rowId: get("rowID"), sender: get("origAddr"), receiver: get("destAddr"), time: get("time"), message: get("message") });
         }
 
-        const validRowIds = messages.map(m => m.rowId).filter(r => /^\d+$/.test(r));
+        const validRowIds = messages.map(m => m.rowId).filter(r => /^\d+$/.test(r) && r !== "0");
         const nextLastRowId = validRowIds.length > 0
-          ? validRowIds.reduce((max, id) => (BigInt(id) > BigInt(max) ? id : max))
-          : "0";
+          ? validRowIds.reduce((max, id) => comparePositiveIntegerStrings(id, max) > 0 ? id : max, validRowIds[0])
+          : currentLastRowId;
 
         return { ok: true, messages, nextLastRowId, rawResponse: raw, errorMessage: null };
       }
@@ -342,7 +376,13 @@ Deno.serve(async (req: Request) => {
         const raw = rawBody.trim();
         const appError = extractRahyabError(raw);
         if (appError) return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: appError };
-        if (!raw || !raw.includes("<")) return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: raw || "پاسخ معتبری از سرویس رهیاب دریافت نشد" };
+        if (!raw) return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: "پاسخ معتبری از سرویس رهیاب دریافت نشد" };
+
+        // Must have UserAllInformation root — rejects HTML error pages and partial responses
+        const hasValidRoot = /<UserAllInformation(?:\s|>)[\s\S]*<\/UserAllInformation>/i.test(raw);
+        if (!hasValidRoot) {
+          return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: "پاسخ GetInfoXML رهیاب ساختار معتبر UserAllInformation ندارد" };
+        }
 
         const getTag = (xml: string, tag: string): string => {
           const m = xml.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))<\\/${tag}>`, "i"));
@@ -378,6 +418,37 @@ Deno.serve(async (req: Request) => {
         return { ok: true, accountInfo, rawResponse: raw, errorMessage: null };
       }
 
+      // ── Shared send execution (used by both production and test) ──────
+      interface RahyabRestSendExecutionResult {
+        ok: boolean;
+        status: "success" | "partial_success" | "error";
+        validReturnIds: string[];
+        failedReturnIds: string[];
+        rawResponse: string;
+        error: string | null;
+        requestResult: { ok: boolean; status: number; body: string; durationMs: number; t0: number; error?: string };
+      }
+
+      async function sendRahyabRestSms(to: string, message: string): Promise<RahyabRestSendExecutionResult> {
+        const url = `${apiBase}/url/send.ashx`;
+        const params: Record<string, string> = {
+          username: creds.username, password: creds.password,
+          from: fromNumber, to: to.trim(), farsi: "true", message,
+        };
+        const r = await callRest(url, params, "POST");
+        const parsed = parseRahyabSendResponse(r.body || "");
+        const ok = !r.error && r.ok && parsed.success;
+        return {
+          ok,
+          status: ok ? parsed.status : "error",
+          validReturnIds: parsed.validReturnIds,
+          failedReturnIds: parsed.failedReturnIds,
+          rawResponse: parsed.rawResponse,
+          error: ok ? null : (parsed.errorMessage || r.error || "ارسال ناموفق"),
+          requestResult: r,
+        };
+      }
+
       // ── test_connection → GET /ip.ashx ────────────────────────────────
       if (mode === "test_connection") {
         const url = `${apiBase}/ip.ashx`;
@@ -398,21 +469,15 @@ Deno.serve(async (req: Request) => {
         if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" }, 400);
         if (!fromNumber) return json({ ok: false, error: "شماره فرستنده پیکربندی نشده است" }, 400);
 
-        const url = `${apiBase}/url/send.ashx`;
         const allValidIds: string[] = [];
         const errors: string[] = [];
 
         for (const to of rawMobiles) {
-          const params: Record<string, string> = {
-            username: creds.username, password: creds.password,
-            from: fromNumber, to: to.trim(), farsi: "true", message,
-          };
-          const r = await callRest(url, params, "POST");
-          const parsed = parseRahyabSendResponse(r.body || "");
-          if (!r.error && r.ok && parsed.success) {
-            allValidIds.push(...parsed.validReturnIds);
+          const sent = await sendRahyabRestSms(to, message);
+          if (sent.ok) {
+            allValidIds.push(...sent.validReturnIds);
           } else {
-            errors.push(`${maskPhone(to)}: ${parsed.errorMessage || r.error || "ارسال ناموفق"}`);
+            errors.push(`${maskPhone(to)}: ${sent.error || "ارسال ناموفق"}`);
           }
         }
 
@@ -436,7 +501,10 @@ Deno.serve(async (req: Request) => {
           const params = { username: creds.username, password: creds.password };
           const r = await callRest(url, params, "POST");
           const parsed = parseRahyabAccountInfoXml(r.body || "");
-          const dbg = [buildEntry("/url/GetInfoXML.ashx", url, "POST", maskedCredsParams(), r)];
+          const dbg: DebugEntry[] = [{
+            ...buildEntry("/url/GetInfoXML.ashx", url, "POST", maskedCredsParams(), r),
+            parsedResult: JSON.stringify({ validRoot: parsed.ok, accountInfo: parsed.accountInfo }),
+          }];
           return json({ ok: !r.error && r.ok && parsed.ok, accountInfo: parsed.accountInfo, rawResult: parsed.rawResponse, error: parsed.errorMessage || r.error || undefined, debug: dbg });
         }
 
@@ -447,46 +515,41 @@ Deno.serve(async (req: Request) => {
           if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" });
           if (!fromNumber) return json({ ok: false, error: "شماره فرستنده پیکربندی نشده است" });
 
-          const url = `${apiBase}/url/send.ashx`;
-          const params: Record<string, string> = {
-            username: creds.username, password: creds.password,
-            from: fromNumber, to: to.trim(), farsi: "true", message,
-          };
-          const r = await callRest(url, params, "POST");
+          const sent = await sendRahyabRestSms(to, message);
           const maskedP = maskedCredsParams({ from: fromNumber, to: maskPhone(to), farsi: "true", message: message.slice(0, 20) + (message.length > 20 ? "…" : "") });
-          const parsed = parseRahyabSendResponse(r.body || "");
-          const isOk = !r.error && r.ok && parsed.success;
           return json({
-            ok: isOk,
-            status: isOk ? parsed.status : "error",
-            returnId: parsed.validReturnIds[0] ?? null,
-            returnIds: parsed.validReturnIds,
-            failedReturnIds: parsed.failedReturnIds,
-            rawResult: parsed.rawResponse,
-            error: isOk ? null : (parsed.errorMessage || r.error || "ارسال ناموفق"),
-            debug: [buildEntry("/url/send.ashx", url, "POST", maskedP, r)],
+            ok: sent.ok,
+            status: sent.status,
+            returnId: sent.validReturnIds[0] ?? null,
+            returnIds: sent.validReturnIds,
+            failedReturnIds: sent.failedReturnIds,
+            rawResult: sent.rawResponse,
+            error: sent.error,
+            debug: [buildEntry("/url/send.ashx", `${apiBase}/url/send.ashx`, "POST", maskedP, sent.requestResult)],
           });
         }
 
         if (action === "delivery") {
           const returnIdsInput: string = body.returnIds || "";
           if (!returnIdsInput.trim()) return json({ ok: false, error: "شناسه بازگشتی وارد نشده" });
-          // Parse user input (may be ;, comma, or space separated)
           const requestedIds = returnIdsInput.split(/[;,\s]+/).map(s => s.trim()).filter(Boolean);
-          // Rahyab delivery endpoint requires `;` separator
           const rahyabReturnIds = requestedIds.join(";");
 
           const url = `${apiBase}/url/delivery.ashx`;
-          // Delivery endpoint: username required, password NOT sent per Rahyab spec
           const params: Record<string, string> = { username: creds.username, ReturnIDs: rahyabReturnIds };
           const r = await callRest(url, params, "GET");
           const parsed = parseRahyabDeliveryResponse(r.body || "", requestedIds);
+          const dbg: DebugEntry[] = [{
+            ...buildEntry("/url/delivery.ashx", url, "GET", { username: "***", ReturnIDs: rahyabReturnIds }, r),
+            parsedResult: JSON.stringify({ overallStatus: parsed.status, items: parsed.items }),
+          }];
           return json({
-            ok: !r.error && r.ok && parsed.ok,
+            ok: parsed.ok,
+            status: parsed.status,
             delivery: parsed.items,
             rawResult: parsed.rawResponse,
             error: parsed.errorMessage || r.error || undefined,
-            debug: [buildEntry("/url/delivery.ashx", url, "GET", { username: "***", ReturnIDs: rahyabReturnIds }, r)],
+            debug: dbg,
           });
         }
 
@@ -495,10 +558,13 @@ Deno.serve(async (req: Request) => {
           const lastRowId = /^\d+$/.test(lastRowIdRaw) ? lastRowIdRaw : "0";
 
           const url = `${apiBase}/url/receive.ashx`;
-          // Receive endpoint: username + password required, plus LastRowID
           const params: Record<string, string> = { username: creds.username, password: creds.password, LastRowID: lastRowId };
           const r = await callRest(url, params, "GET");
-          const parsed = parseRahyabReceiveXml(r.body || "");
+          const parsed = parseRahyabReceiveXml(r.body || "", lastRowId);
+          const dbg: DebugEntry[] = [{
+            ...buildEntry("/url/receive.ashx", url, "GET", maskedCredsParams({ LastRowID: lastRowId }), r),
+            parsedResult: JSON.stringify({ messageCount: parsed.messages.length, nextLastRowId: parsed.nextLastRowId, messages: parsed.messages }),
+          }];
           return json({
             ok: !r.error && r.ok && parsed.ok,
             messages: parsed.messages,
@@ -506,7 +572,7 @@ Deno.serve(async (req: Request) => {
             nextLastRowId: parsed.nextLastRowId,
             rawResult: parsed.rawResponse,
             error: parsed.errorMessage || r.error || undefined,
-            debug: [buildEntry("/url/receive.ashx", url, "GET", maskedCredsParams({ LastRowID: lastRowId }), r)],
+            debug: dbg,
           });
         }
 
