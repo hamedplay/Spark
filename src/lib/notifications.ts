@@ -186,6 +186,9 @@ async function dispatchSms(
     const result = await res.json();
 
     if (result.ok) {
+      // For rahyab_rest: result.returnIds[0] is the provider message ID (Rahyab Return ID)
+      // For sms.ir / REST providers: result.returnIds is absent; use packId instead
+      const providerMessageId: string | null = result.returnIds?.[0] ?? null;
       await supabase.from('sms_dispatch_logs').insert({
         ...logBase,
         target_phone: phone,
@@ -196,6 +199,8 @@ async function dispatchSms(
         message_ids: result.messageIds ?? null,
         cost: result.cost ?? null,
         raw_response: result.response ?? null,
+        provider_message_id: providerMessageId,
+        delivery_status: providerMessageId ? 'pending' : null,
       });
     } else {
       await supabase.from('sms_dispatch_logs').insert({

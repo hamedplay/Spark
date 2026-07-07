@@ -1954,6 +1954,10 @@ interface DispatchLog {
   error_text: string | null;
   pack_id: string | null;
   cost: number | null;
+  provider_message_id: string | null;
+  delivery_status: string | null;
+  delivery_code: string | null;
+  delivery_checked_at: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
@@ -1961,6 +1965,16 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; cls:
   failed:  { label: 'خطا',         icon: <XCircle      className="w-4 h-4" />, cls: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' },
   skipped: { label: 'رد شد',       icon: <MinusCircle  className="w-4 h-4" />, cls: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30' },
   pending: { label: 'در انتظار',   icon: <Clock        className="w-4 h-4" />, cls: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' },
+};
+
+const DELIVERY_STATUS_UI: Record<string, { label: string; className: string }> = {
+  pending:       { label: 'در انتظار تعیین وضعیت', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  delivered:     { label: 'تحویل شده',              className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+  not_delivered: { label: 'تحویل نشده',             className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+  blocked:       { label: 'بلاک / ارسال نشده',      className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+  not_found:     { label: 'شناسه یافت نشد',         className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
+  unknown:       { label: 'نامشخص',                  className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
+  error:         { label: 'خطا در استعلام',          className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -1982,6 +1996,48 @@ function ReportsTab() {
   const PAGE_SIZE = 25;
 
   const [stats, setStats] = useState({ sent: 0, failed: 0, skipped: 0, total: 0 });
+  const [checkingDeliveryId, setCheckingDeliveryId] = useState<string | null>(null);
+
+  const checkDeliveryStatus = async (log: DispatchLog): Promise<void> => {
+    if (checkingDeliveryId === log.id) return;
+    setCheckingDeliveryId(log.id);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || anonKey}`,
+          'Apikey': anonKey,
+        },
+        body: JSON.stringify({ mode: 'rahyab_rest_delivery_lookup', logId: log.id }),
+      });
+      const result = await res.json();
+      if (result.status === 'delivered') {
+        toast.success('پیامک به گوشی تحویل شده است');
+      } else if (result.status === 'pending') {
+        toast('وضعیت تحویل هنوز مشخص نیست — دقایقی دیگر دوباره بررسی کنید', { icon: '⏳' });
+      } else if (result.error || !result.ok) {
+        toast.error(result.message || result.error || 'خطا در استعلام وضعیت تحویل');
+      } else {
+        toast.error(result.message || 'وضعیت تحویل نامشخص');
+      }
+      // Update the row in local state without full reload
+      if (result.deliveryStatus) {
+        setLogs(current => current.map(item =>
+          item.id === log.id
+            ? { ...item, delivery_status: result.deliveryStatus, delivery_code: result.deliveryCode ?? null, delivery_checked_at: result.deliveryCheckedAt ?? null }
+            : item
+        ));
+      }
+    } catch (e: any) {
+      toast.error(`خطا: ${e.message}`);
+    } finally {
+      setCheckingDeliveryId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2138,15 +2194,32 @@ function ReportsTab() {
                   {isOpen && (
                     <div className="px-4 pb-4 pt-1 bg-gray-50 dark:bg-gray-700/20 border-t border-gray-100 dark:border-gray-700 space-y-2">
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                        {/* Dispatch status */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">وضعیت ارسال</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200">{st.label}</p>
+                        </div>
+                        {/* Delivery status — separate from dispatch */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">وضعیت تحویل</p>
+                          {log.delivery_status
+                            ? <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${DELIVERY_STATUS_UI[log.delivery_status]?.className || 'bg-gray-100 text-gray-600'}`}>
+                                {DELIVERY_STATUS_UI[log.delivery_status]?.label || log.delivery_status}
+                              </span>
+                            : <p className="font-medium text-gray-400">بررسی نشده</p>
+                          }
+                        </div>
                         {[
-                          { label: 'وضعیت', value: st.label },
                           { label: 'دسته', value: `${CATEGORY_LABEL[log.category] || log.category} / ${EVENT_LABEL[log.event_type] || log.event_type}` },
                           { label: 'مخاطب', value: log.audience },
                           { label: 'شماره', value: log.target_phone || '—', mono: true },
                           { label: 'سرویس‌دهنده', value: log.provider_name || 'پیش‌فرض' },
+                          { label: 'شناسه سرویس‌دهنده', value: log.provider_message_id || '—', mono: true },
                           { label: 'Pack ID', value: log.pack_id || '—', mono: true },
+                          { label: 'کد تحویل', value: log.delivery_code || '—', mono: true },
                           { label: 'هزینه', value: log.cost != null ? String(log.cost) : '—' },
-                          { label: 'تاریخ', value: formatDate(log.created_at) },
+                          { label: 'آخرین استعلام', value: log.delivery_checked_at ? formatDate(log.delivery_checked_at) : '—' },
+                          { label: 'تاریخ ارسال', value: formatDate(log.created_at) },
                         ].map(item => (
                           <div key={item.label} className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
                             <p className="text-gray-400 mb-0.5">{item.label}</p>
@@ -2154,6 +2227,24 @@ function ReportsTab() {
                           </div>
                         ))}
                       </div>
+                      {/* Delivery status check button — only when provider_message_id and provider_id exist */}
+                      {log.provider_message_id && log.provider_id && (
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={e => { e.stopPropagation(); checkDeliveryStatus(log); }}
+                            disabled={checkingDeliveryId === log.id}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-xs font-medium transition"
+                          >
+                            {checkingDeliveryId === log.id
+                              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> در حال استعلام...</>
+                              : <><RefreshCw className="w-3.5 h-3.5" /> بررسی وضعیت تحویل</>
+                            }
+                          </button>
+                          {log.delivery_checked_at && (
+                            <span className="text-xs text-gray-400">آخرین بررسی: {formatDate(log.delivery_checked_at)}</span>
+                          )}
+                        </div>
+                      )}
                       {log.message && (
                         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
                           <p className="text-xs text-gray-400 mb-1">متن پیامک</p>

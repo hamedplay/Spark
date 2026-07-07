@@ -364,19 +364,26 @@ Deno.serve(async (req: Request) => {
 
           if (smsData?.ok) {
             smsSent = mobiles.length;
+            // returnIds[i] maps 1:1 to rawMobiles[i] (rahyab_rest returns one ID per recipient in order)
+            const returnIds: string[] = Array.isArray(smsData.returnIds) ? smsData.returnIds : [];
             await supabase.from("sms_dispatch_logs").insert(
-              rawMobiles.map((phone: string) => ({
-                target_phone: phone,
-                category: "daily_report",
-                event_type: "daily_meetings",
-                message: smsBody,
-                provider_id: provider?.id ?? null,
-                provider_name: provider?.title || provider?.provider_name || null,
-                status: "sent",
-                pack_id: smsData.packId ? String(smsData.packId) : null,
-                cost: smsData.cost ?? null,
-                raw_response: smsData,
-              }))
+              rawMobiles.map((phone: string, idx: number) => {
+                const providerMessageId = returnIds[idx] ?? null;
+                return {
+                  target_phone: phone,
+                  category: "daily_report",
+                  event_type: "daily_meetings",
+                  message: smsBody,
+                  provider_id: provider?.id ?? null,
+                  provider_name: provider?.title || provider?.provider_name || null,
+                  status: "sent",
+                  pack_id: smsData.packId ? String(smsData.packId) : null,
+                  cost: smsData.cost ?? null,
+                  raw_response: smsData,
+                  provider_message_id: providerMessageId,
+                  delivery_status: providerMessageId ? "pending" : null,
+                };
+              })
             );
           } else {
             smsError = smsData?.error || "ارسال ناموفق";

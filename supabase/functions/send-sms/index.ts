@@ -83,11 +83,38 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
     const mode: string = body.mode || "send";
-    const providerId: string | undefined = body.providerId;
+    let providerId: string | undefined = body.providerId;
 
     // test_connection and provider management require admin
     if (mode === "test_connection" && !caller.isAdmin) {
       return json({ ok: false, error: "Forbidden: admin access required" }, 403);
+    }
+
+    // For delivery_lookup, derive provider and message ID from the log record —
+    // never trust provider credentials or message IDs from the request body.
+    interface DeliveryLookupContext {
+      logId: string;
+      providerMessageId: string;
+    }
+    let deliveryLookupCtx: DeliveryLookupContext | null = null;
+
+    if (mode === "rahyab_rest_delivery_lookup") {
+      const logId: string = body.logId || "";
+      if (!logId) return json({ ok: false, error: "logId الزامی است" }, 400);
+
+      const { data: logRow, error: logErr } = await supabase
+        .from("sms_dispatch_logs")
+        .select("id, provider_id, provider_message_id")
+        .eq("id", logId)
+        .maybeSingle();
+
+      if (logErr || !logRow) return json({ ok: false, error: "رکورد گزارش یافت نشد" }, 404);
+      if (!logRow.provider_id) return json({ ok: false, error: "provider_id در گزارش ثبت نشده است" }, 400);
+      if (!logRow.provider_message_id) return json({ ok: false, error: "provider_message_id در گزارش ثبت نشده — ابتدا پیامک را ارسال کنید" }, 400);
+
+      // Override providerId so the normal provider-fetch path finds the right provider
+      providerId = logRow.provider_id;
+      deliveryLookupCtx = { logId, providerMessageId: String(logRow.provider_message_id) };
     }
 
     // ── Fetch provider ────────────────────────────────────────────────
@@ -577,6 +604,78 @@ Deno.serve(async (req: Request) => {
         }
 
         return json({ ok: false, error: `عملیات ناشناخته: ${action}` }, 400);
+      }
+
+      // ── rahyab_rest_delivery_lookup ────────────────────────────────────
+      if (mode === "rahyab_rest_delivery_lookup" && deliveryLookupCtx) {
+        const { logId, providerMessageId } = deliveryLookupCtx;
+
+        // Validate provider_message_id is a positive integer string
+        if (!isValidRahyabReturnId(providerMessageId)) {
+          return json({ ok: false, error: `provider_message_id نامعتبر: ${providerMessageId}` }, 400);
+        }
+
+        const url = `${apiBase}/url/delivery.ashx`;
+        const params: Record<string, string> = { username: creds.username, ReturnIDs: providerMessageId };
+        const r = await callRest(url, params, "GET");
+
+        const parsed = parseRahyabDeliveryResponse(r.body || "", [providerMessageId]);
+        const now = new Date().toISOString();
+
+        // Map overall status to delivery_status column value
+        const deliveryStatusMap: Record<string, string> = {
+          delivered: "delivered",
+          pending: "pending",
+          failed: "not_delivered",
+          not_found: "not_found",
+          partial: "unknown",
+          error: "error",
+        };
+        // For single-message lookup: use first item's code if available
+        const firstItem = parsed.items[0];
+        const rawCode = firstItem?.code ?? null;
+        const deliveryStatusFromCode: Record<string, string> = {
+          "2": "delivered", "0": "pending", "5": "not_delivered", "9": "blocked", "-1": "not_found",
+        };
+        const dbDeliveryStatus = rawCode
+          ? (deliveryStatusFromCode[rawCode] ?? "unknown")
+          : (deliveryStatusMap[parsed.status] ?? "error");
+
+        // Update sms_dispatch_logs
+        await supabase.from("sms_dispatch_logs").update({
+          delivery_status: dbDeliveryStatus,
+          delivery_code: rawCode,
+          delivery_checked_at: now,
+        }).eq("id", logId);
+
+        const dbg: DebugEntry[] = [{
+          ...buildEntry("/url/delivery.ashx", url, "GET", { username: "***", ReturnIDs: providerMessageId }, r),
+          parsedResult: JSON.stringify({ overallStatus: parsed.status, code: rawCode, deliveryStatus: dbDeliveryStatus }),
+        }];
+
+        // Human-readable message for UI
+        const statusMessages: Record<string, string> = {
+          delivered:     "پیامک به گوشی تحویل شده است",
+          pending:       "پیامک ارسال شده اما وضعیت تحویل هنوز مشخص نیست",
+          not_delivered: "پیامک به گوشی تحویل نشده",
+          blocked:       "پیامک ارسال نشده یا بلاک شده",
+          not_found:     "شناسه پیام در سامانه رهیاب پیدا نشد",
+          unknown:       "وضعیت نامشخص",
+          error:         parsed.errorMessage || r.error || "خطا در استعلام وضعیت",
+        };
+
+        return json({
+          ok: dbDeliveryStatus === "delivered",
+          status: parsed.status,
+          deliveryStatus: dbDeliveryStatus,
+          deliveryCode: rawCode,
+          deliveryCheckedAt: now,
+          providerMessageId,
+          message: statusMessages[dbDeliveryStatus] ?? "وضعیت نامشخص",
+          rawResult: parsed.rawResponse,
+          error: parsed.errorMessage || r.error || undefined,
+          debug: dbg,
+        });
       }
 
       return json({ ok: false, error: "mode نامعتبر برای rahyab_rest" }, 400);
