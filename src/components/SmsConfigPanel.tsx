@@ -1430,8 +1430,13 @@ function TestTab() {
       setRahyabRestStatus(s => ({ ...s, [card.id]: result.ok ? 'ok' : 'error' }));
 
       if (result.debug?.length) setDebugLogs(prev => [...prev, ...result.debug]);
-      if (card.action === 'send' && result.ok && result.returnId) {
-        setReturnIdInput(result.returnId);
+      if (card.action === 'send' && result.ok) {
+        // Edge function returns returnIds (array) and returnId (first element scalar)
+        const firstId: string | undefined = result.returnIds?.[0] ?? result.returnId;
+        if (firstId) {
+          setReturnIdInput(firstId);
+          toast.success(`پیامک آزمایشی با موفقیت ارسال شد — شناسه: ${firstId}`);
+        }
       }
     } catch (e: any) {
       setRahyabRestResult(r => ({ ...r, [card.id]: { error: e.message } }));

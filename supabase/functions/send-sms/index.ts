@@ -186,6 +186,32 @@ Deno.serve(async (req: Request) => {
         return json({ ok: true, ip: r.body?.trim(), debug: dbg });
       }
 
+      // ── Rahyab REST send response parser ─────────────────────────────
+      // Rahyab responds with plain text, not JSON.
+      // Successful response format: "Send OK.<ReturnIDs>136381192055</ReturnIDs>"
+      // Legacy numeric-only responses (single ID) are also accepted for safety.
+      function parseRahyabSendResponse(raw: string): {
+        success: boolean;
+        returnIds: string[];
+        errorMessage: string | null;
+      } {
+        const text = raw.trim();
+        const idsMatch = text.match(/<ReturnIDs>\s*([\s\S]*?)\s*<\/ReturnIDs>/i);
+        const returnIds = idsMatch?.[1]
+          ? idsMatch[1].split(/[,\s]+/).map(id => id.trim()).filter(Boolean)
+          : [];
+        const hasSendOk = /Send\s+OK\.?/i.test(text);
+        // Legacy: response is a bare numeric ID (no Send OK wrapper)
+        const isLegacyNumeric = /^\d+$/.test(text);
+        const success = (hasSendOk && returnIds.length > 0) || isLegacyNumeric;
+        const ids = success && isLegacyNumeric && returnIds.length === 0 ? [text] : returnIds;
+        return {
+          success,
+          returnIds: ids,
+          errorMessage: success ? null : (text || "پاسخ معتبری از سرویس رهیاب دریافت نشد"),
+        };
+      }
+
       // ── send ──────────────────────────────────────────────────────────
       if (mode === "send") {
         const rawMobiles: string[] = body.mobiles || [];
@@ -204,10 +230,12 @@ Deno.serve(async (req: Request) => {
             from: fromNumber, to: to.trim(), farsi: "true", message,
           };
           const r = await callRest(url, params, "POST");
-          const responseBody = (r.body || "").trim();
-          const isOk = r.ok && /^\d+/.test(responseBody);
-          if (isOk) allIds.push(responseBody);
-          else errors.push(`${maskPhone(to)}: ${responseBody || r.error || "ارسال ناموفق"}`);
+          const parsed = parseRahyabSendResponse(r.body || "");
+          if (r.ok && parsed.success) {
+            allIds.push(...parsed.returnIds);
+          } else {
+            errors.push(`${maskPhone(to)}: ${parsed.errorMessage || r.error || "ارسال ناموفق"}`);
+          }
         }
 
         return json({
@@ -251,8 +279,16 @@ Deno.serve(async (req: Request) => {
           const r = await callRest(url, params, "POST");
           const maskedP = maskedCreds({ from: fromNumber, to: maskPhone(to), farsi: "true", message: message.slice(0, 20) + (message.length > 20 ? "…" : "") });
           const responseBody = (r.body || "").trim();
-          const isOk = !r.error && r.ok && /^\d+/.test(responseBody);
-          return json({ ok: isOk, returnId: isOk ? responseBody : undefined, rawResult: responseBody, debug: [buildEntry("/url/send.ashx", url, "POST", maskedP, r)] });
+          const parsed = parseRahyabSendResponse(responseBody);
+          const isOk = !r.error && r.ok && parsed.success;
+          return json({
+            ok: isOk,
+            returnId: isOk ? parsed.returnIds[0] : undefined,
+            returnIds: isOk ? parsed.returnIds : undefined,
+            rawResult: responseBody,
+            error: isOk ? undefined : (parsed.errorMessage || r.error || "ارسال ناموفق"),
+            debug: [buildEntry("/url/send.ashx", url, "POST", maskedP, r)],
+          });
         }
 
         if (action === "delivery") {
