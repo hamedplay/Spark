@@ -1,15 +1,15 @@
 import { useEffect } from 'react';
 import { PhoneOff, ShieldCheck } from 'lucide-react';
 import type { UserProfile } from './types';
+import { getUserInitials } from './ActiveCallView';
 
 interface Props {
   targetUser: UserProfile | null;
-  sessionCode: string;
   onCancel: () => void;
 }
 
-export function OutgoingRingView({ targetUser, sessionCode, onCancel }: Props) {
-  // Subtle outgoing dial tone
+export function OutgoingRingView({ targetUser, onCancel }: Props) {
+  // Subtle dial tone
   useEffect(() => {
     try {
       const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -17,11 +17,11 @@ export function OutgoingRingView({ targetUser, sessionCode, onCancel }: Props) {
       const scheduleDial = (startAt: number) => {
         if (stopped) return;
         const osc = ctx.createOscillator();
-        const g = ctx.createGain();
+        const g   = ctx.createGain();
         osc.connect(g); g.connect(ctx.destination);
         osc.frequency.value = 440;
         osc.type = 'sine';
-        g.gain.setValueAtTime(0.1, startAt);
+        g.gain.setValueAtTime(0.08, startAt);
         g.gain.exponentialRampToValueAtTime(0.001, startAt + 0.6);
         osc.start(startAt);
         osc.stop(startAt + 0.6);
@@ -39,43 +39,33 @@ export function OutgoingRingView({ targetUser, sessionCode, onCancel }: Props) {
   }, []);
 
   const displayName = targetUser?.full_name || targetUser?.email || 'مخاطب';
-  const initials = displayName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+  const initials    = getUserInitials(displayName);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[380px] gap-7 py-10 select-none">
-      {/* Avatar with spinner ring */}
+      {/* Avatar with slow spinner ring */}
       <div className="relative flex items-center justify-center">
         <svg
-          className="absolute w-28 h-28 animate-spin text-emerald-500/50"
-          style={{ animationDuration: '3s' }}
+          className="absolute w-28 h-28 text-emerald-500/40"
+          style={{ animation: 'spin 4s linear infinite' }}
           viewBox="0 0 100 100"
           fill="none"
         >
-          <circle cx="50" cy="50" r="46" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="72 216" />
+          <circle cx="50" cy="50" r="46" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="60 230" />
         </svg>
-        <div className="w-20 h-20 rounded-full bg-gray-800 border-4 border-emerald-600/60 flex items-center justify-center shadow-xl">
+        <div className="w-20 h-20 rounded-full bg-gray-800 border-4 border-emerald-700/60 flex items-center justify-center shadow-xl">
           <span className="text-white text-xl font-bold tracking-wide">{initials}</span>
         </div>
       </div>
 
       {/* Status */}
       <div role="status" aria-live="polite" className="text-center space-y-1.5">
-        <p className="text-white text-xl font-semibold">
-          در حال تماس با {displayName}
-        </p>
+        <p className="text-white text-xl font-semibold">در حال تماس با {displayName}</p>
         <div className="flex items-center justify-center gap-1.5 text-emerald-400 text-sm">
           <ShieldCheck aria-hidden="true" className="w-4 h-4" />
           <span>در انتظار پاسخ</span>
         </div>
       </div>
-
-      {/* Session code */}
-      {sessionCode && (
-        <div className="flex items-center gap-2 bg-gray-800/80 border border-gray-700 px-4 py-2 rounded-xl">
-          <span className="text-gray-400 text-xs">کد جلسه:</span>
-          <span className="text-gray-100 text-sm font-mono tracking-widest">{sessionCode}</span>
-        </div>
-      )}
 
       {/* Cancel */}
       <button

@@ -10,6 +10,7 @@ import type { E2EECallProps } from './types';
 export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECallProps) {
   const {
     phase, e2eeStatus, isMuted, isVideoOff, isRemoteMuted, isScreenSharing,
+    isSwitchingCamera, isStartingScreenShare,
     targetUser, incomingCall, safetyNums, showSafety, sessionCode, failReason,
     userSearch, users, searching, connDiag, isOffline,
     localVideoRef, remoteVideoRef,
@@ -18,7 +19,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   } = useE2EECall(currentUserId, currentUserName);
 
-  const isCallActive = phase === 'connecting' || phase === 'connected';
+  const isCallActive  = phase === 'connecting' || phase === 'connected';
   const isCallOngoing = isCallActive || phase === 'outgoing_ring' || phase === 'incoming_ring';
 
   const failReasonText =
@@ -30,7 +31,10 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
     failReason ?? '';
 
   return (
-    <div className="flex flex-col h-full" dir="rtl">
+    <div
+      className={`flex flex-col ${isCallActive ? 'h-full overflow-hidden' : 'h-full'}`}
+      dir="rtl"
+    >
       {/* Header — hidden during active call for full-screen experience */}
       {!isCallOngoing && (
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
@@ -55,7 +59,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
         </div>
       )}
 
-      <div className={`flex-1 overflow-auto ${isCallActive ? 'p-0' : 'p-4'}`}>
+      {/* Content area — flex-1 + min-h-0 so ActiveCallView can fill parent height */}
+      <div className={`flex-1 min-h-0 ${isCallActive ? 'overflow-hidden p-0' : 'overflow-auto p-4'}`}>
 
         {/* Browser unsupported */}
         {!SUPPORTS_TRANSFORMS && (
@@ -84,12 +89,11 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
         {phase === 'outgoing_ring' && (
           <OutgoingRingView
             targetUser={targetUser}
-            sessionCode={sessionCode}
             onCancel={() => doHangup()}
           />
         )}
 
-        {/* Active call — full bleed */}
+        {/* Active call — full bleed within flex-1 container */}
         {isCallActive && (
           <ActiveCallView
             phase={phase}
@@ -100,6 +104,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
             isVideoOff={isVideoOff}
             isRemoteMuted={isRemoteMuted}
             isScreenSharing={isScreenSharing}
+            isSwitchingCamera={isSwitchingCamera}
+            isStartingScreenShare={isStartingScreenShare}
             connDiag={connDiag}
             isOffline={isOffline}
             e2eeStatus={e2eeStatus}
@@ -126,7 +132,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
             <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
               {phase === 'failed'
                 ? <ShieldAlert aria-hidden="true" className="w-8 h-8 text-red-400" />
-                : <PhoneOff aria-hidden="true" className="w-8 h-8 text-gray-400" />
+                : <PhoneOff    aria-hidden="true" className="w-8 h-8 text-gray-400" />
               }
             </div>
             <div className="text-center">

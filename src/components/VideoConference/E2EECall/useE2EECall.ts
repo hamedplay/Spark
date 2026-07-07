@@ -34,6 +34,8 @@ export interface UseE2EECallReturn {
   isVideoOff: boolean;
   isRemoteMuted: boolean;
   isScreenSharing: boolean;
+  isSwitchingCamera: boolean;
+  isStartingScreenShare: boolean;
   targetUser: UserProfile | null;
   incomingCall: IncomingCall | null;
   safetyNums: string[] | null;
@@ -73,25 +75,27 @@ export function useE2EECall(
   currentUserName: string,
 ): UseE2EECallReturn {
   // ── State ──────────────────────────────────────────────────────────────
-  const [phase,            setPhase]            = useState<CallPhase>('idle');
-  const [e2eeStatus,       setE2eeStatus]       = useState<E2EEStatus>(SUPPORTS_TRANSFORMS ? 'pending' : 'unsupported');
-  const [isMuted,          setIsMuted]          = useState(false);
-  const [isVideoOff,       setIsVideoOff]       = useState(false);
-  const [isRemoteMuted,    setIsRemoteMuted]    = useState(false);
-  const [isScreenSharing,  setIsScreenSharing]  = useState(false);
-  const [remoteStreamTick, setRemoteStreamTick] = useState(0);
-  const [targetUser,       setTargetUser]       = useState<UserProfile | null>(null);
-  const [incomingCall,     setIncomingCall]     = useState<IncomingCall | null>(null);
-  const [safetyNums,       setSafetyNums]       = useState<string[] | null>(null);
-  const [showSafety,       setShowSafety]       = useState(false);
-  const [sessionCode,      setSessionCode]      = useState('');
-  const [failReason,       setFailReason]       = useState<FailReason>(null);
-  const [userSearch,       setUserSearch]       = useState('');
-  const [users,            setUsers]            = useState<UserProfile[]>([]);
-  const [searching,        setSearching]        = useState(false);
-  const [connDiag,         setConnDiag]         = useState<PeerDiagnostics | null>(null);
-  const [isOffline,        setIsOffline]        = useState(!navigator.onLine);
-  const [videoDevices,     setVideoDevices]     = useState<MediaDeviceInfo[]>([]);
+  const [phase,               setPhase]               = useState<CallPhase>('idle');
+  const [e2eeStatus,          setE2eeStatus]          = useState<E2EEStatus>(SUPPORTS_TRANSFORMS ? 'pending' : 'unsupported');
+  const [isMuted,             setIsMuted]             = useState(false);
+  const [isVideoOff,          setIsVideoOff]          = useState(false);
+  const [isRemoteMuted,       setIsRemoteMuted]       = useState(false);
+  const [isScreenSharing,     setIsScreenSharing]     = useState(false);
+  const [isSwitchingCamera,   setIsSwitchingCamera]   = useState(false);
+  const [isStartingScreenShare, setIsStartingScreenShare] = useState(false);
+  const [remoteStreamTick,    setRemoteStreamTick]    = useState(0);
+  const [targetUser,          setTargetUser]          = useState<UserProfile | null>(null);
+  const [incomingCall,        setIncomingCall]        = useState<IncomingCall | null>(null);
+  const [safetyNums,          setSafetyNums]          = useState<string[] | null>(null);
+  const [showSafety,          setShowSafety]          = useState(false);
+  const [sessionCode,         setSessionCode]         = useState('');
+  const [failReason,          setFailReason]          = useState<FailReason>(null);
+  const [userSearch,          setUserSearch]          = useState('');
+  const [users,               setUsers]               = useState<UserProfile[]>([]);
+  const [searching,           setSearching]           = useState(false);
+  const [connDiag,            setConnDiag]            = useState<PeerDiagnostics | null>(null);
+  const [isOffline,           setIsOffline]           = useState(!navigator.onLine);
+  const [videoDevices,        setVideoDevices]        = useState<MediaDeviceInfo[]>([]);
 
   // ── Refs ───────────────────────────────────────────────────────────────
   const localVideoRef      = useRef<HTMLVideoElement>(null);
@@ -124,6 +128,11 @@ export function useE2EECall(
   const autoAcceptRef      = useRef(false);
   // Stored camera track so screen-share can restore it without re-acquiring
   const cameraTrackRef     = useRef<MediaStreamTrack | null>(null);
+  // Current facing mode for mobile camera switching
+  const currentFacingModeRef = useRef<'user' | 'environment'>('user');
+  // Lock refs to prevent concurrent async media operations
+  const isSwitchingCameraRef    = useRef(false);
+  const isScreenShareOpRef      = useRef(false);
 
   // ── Keep phaseRef in sync ──────────────────────────────────────────────
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -375,6 +384,8 @@ export function useE2EECall(
     log('[E2EE][CALL]', `cleanup reason=${reason ?? 'none'}`);
     sessionActiveRef.current = false;
     offerSentRef.current = false;
+    isSwitchingCameraRef.current = false;
+    isScreenShareOpRef.current = false;
 
     workerRef.current?.postMessage({ type: 'clear' });
 
@@ -387,6 +398,7 @@ export function useE2EECall(
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
     cameraTrackRef.current = null;
+    currentFacingModeRef.current = 'user';
 
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
@@ -424,6 +436,8 @@ export function useE2EECall(
     setIsMuted(false);
     setIsVideoOff(false);
     setIsScreenSharing(false);
+    setIsSwitchingCamera(false);
+    setIsStartingScreenShare(false);
 
     cleaningUpRef.current = false;
 
@@ -482,8 +496,9 @@ export function useE2EECall(
       }
 
       localStreamRef.current = s;
-      // Store camera track reference for screen-share restore
+      // Store camera track reference and initial facing mode
       cameraTrackRef.current = s.getVideoTracks()[0] ?? null;
+      currentFacingModeRef.current = 'user';
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = s;
@@ -500,7 +515,7 @@ export function useE2EECall(
       return s;
     } catch (e) {
       logError('[E2EE][ERROR]', 'getUserMedia failed:', e);
-      toast.error('دسترسی به دوربین/میکروفون ممکن نیست');
+      toast.error('دسترسی به دوربین یا میکروفون داده نشد');
       return null;
     }
   };
@@ -624,7 +639,6 @@ export function useE2EECall(
         const pr = attachReceiverTransform(e.receiver, workerRef.current, E2EE_DEBUG);
         if (pr) {
           portRecordsRef.current.push(pr);
-          // Push active keys immediately if already derived
           if (activeKeysRef.current) {
             pushKeyToPortRecord(pr, activeKeysRef.current).catch(err => {
               logError('[E2EE][ERROR]', 'pushKey failed for late receiver transform:', err);
@@ -912,7 +926,6 @@ export function useE2EECall(
       const ch = openSessionChannel(sessionId);
       await waitForSubscribed(ch);
 
-      // buildPC returns null on failure (cleanup already called inside)
       const pc = await buildPC();
       if (!pc) return;
 
@@ -985,7 +998,6 @@ export function useE2EECall(
       const ch = openSessionChannel(ic.sessionId);
       await waitForSubscribed(ch);
 
-      // buildPC returns null on failure (cleanup already called inside)
       const pc = await buildPC();
       if (!pc) { setIncomingCall(null); return; }
 
@@ -1039,6 +1051,9 @@ export function useE2EECall(
   const toggleVideo = () => { localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = isVideoOff; }); setIsVideoOff(v => !v); };
 
   const stopScreenShare = useCallback(async () => {
+    if (isScreenShareOpRef.current) return;
+    isScreenShareOpRef.current = true;
+
     const sender = pcRef.current?.getSenders().find(s => s.track?.kind === 'video');
     const restoreTrack = cameraTrackRef.current;
 
@@ -1048,7 +1063,13 @@ export function useE2EECall(
           await sender.replaceTrack(restoreTrack);
         } else {
           // Re-acquire camera if the original track ended
-          const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+          const camStream = await navigator.mediaDevices.getUserMedia({
+            video: isMobile
+              ? { facingMode: currentFacingModeRef.current }
+              : { facingMode: 'user' },
+            audio: false,
+          });
           const camTrack = camStream.getVideoTracks()[0];
           if (camTrack) {
             cameraTrackRef.current = camTrack;
@@ -1073,14 +1094,16 @@ export function useE2EECall(
     }
 
     isScreenSharingRef.current = false;
+    isScreenShareOpRef.current = false;
     setIsScreenSharing(false);
   }, []);
 
   const toggleScreenShare = useCallback(async () => {
+    if (isScreenShareOpRef.current) return;
     if (isScreenSharingRef.current) { await stopScreenShare(); return; }
 
     if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') {
-      toast.error('اشتراک‌گذاری صفحه در این مرورگر پشتیبانی نمی‌شود');
+      toast.error('اشتراک‌گذاری صفحه در این دستگاه پشتیبانی نمی‌شود');
       return;
     }
 
@@ -1090,6 +1113,9 @@ export function useE2EECall(
       toast.error('فرستنده ویدیو پیدا نشد');
       return;
     }
+
+    isScreenShareOpRef.current = true;
+    setIsStartingScreenShare(true);
 
     try {
       const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
@@ -1106,13 +1132,18 @@ export function useE2EECall(
       screenTrack.addEventListener('ended', () => { void stopScreenShare(); });
 
       isScreenSharingRef.current = true;
+      isScreenShareOpRef.current = false;
       setIsScreenSharing(true);
     } catch (err: unknown) {
-      if (err instanceof Error && err.name !== 'NotAllowedError') {
-        toast.error('خطا در اشتراک‌گذاری صفحه');
+      isScreenShareOpRef.current = false;
+      // NotAllowedError from user cancel — do not show toast
+      if (!(err instanceof Error) || err.name !== 'NotAllowedError') {
+        toast.error('اشتراک‌گذاری صفحه شروع نشد');
       }
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
       screenStreamRef.current = null;
+    } finally {
+      setIsStartingScreenShare(false);
     }
   }, [stopScreenShare]);
 
@@ -1126,8 +1157,16 @@ export function useE2EECall(
     setShowSafety(false);
   }, []);
 
+  // ── Switch camera ──────────────────────────────────────────────────────
   const switchCamera = useCallback(async () => {
-    const pc = pcRef.current;
+    // Prevent concurrent calls
+    if (isSwitchingCameraRef.current) return;
+    // Disable while screen sharing — semantics are ambiguous
+    if (isScreenSharingRef.current) {
+      toast('ابتدا اشتراک‌گذاری صفحه را متوقف کنید');
+      return;
+    }
+
     const currentStream = localStreamRef.current;
     if (!currentStream) return;
 
@@ -1144,7 +1183,6 @@ export function useE2EECall(
     }
 
     const currentTrack = currentStream.getVideoTracks()[0];
-
     let videoConstraints: MediaTrackConstraints;
 
     if (devices.length >= 2) {
@@ -1153,36 +1191,59 @@ export function useE2EECall(
       const nextDevice = devices[(currentIndex + 1) % devices.length];
       videoConstraints = { deviceId: { exact: nextDevice.deviceId }, width: { ideal: 640 }, height: { ideal: 480 } };
     } else if (isMobile) {
-      // Toggle facingMode on mobile when only one device reported (common on iOS)
-      const currentFacing = currentTrack?.getSettings().facingMode ?? 'user';
-      const nextFacing = currentFacing === 'user' ? 'environment' : 'user';
+      // Toggle facingMode on mobile — common on iOS where only one device is enumerated
+      const nextFacing = currentFacingModeRef.current === 'user' ? 'environment' : 'user';
       videoConstraints = { facingMode: { exact: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 } };
     } else {
-      toast('تنها یک دوربین در دسترس است');
+      toast('دوربین دیگری در دسترس نیست');
       return;
     }
 
+    isSwitchingCameraRef.current = true;
+    setIsSwitchingCamera(true);
+
+    let newStream: MediaStream | null = null;
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+      newStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
       const newTrack = newStream.getVideoTracks()[0];
       if (!newTrack) throw new Error('No video track from new camera');
 
-      // Replace in peer connection before stopping old track
+      // Replace in peer connection BEFORE stopping old track
+      const pc = pcRef.current;
       const sender = pc?.getSenders().find(s => s.track?.kind === 'video');
       if (sender) await sender.replaceTrack(newTrack);
 
-      // Stop old track only after replaceTrack succeeds
+      // Only now stop and remove old track
       currentTrack?.stop();
       currentStream.getVideoTracks().forEach(t => { if (t !== newTrack) currentStream.removeTrack(t); });
       currentStream.addTrack(newTrack);
 
-      // Update stored camera track reference
+      // Update stored camera track reference and facing mode
       cameraTrackRef.current = newTrack;
+      if (isMobile && devices.length < 2) {
+        currentFacingModeRef.current = currentFacingModeRef.current === 'user' ? 'environment' : 'user';
+      }
 
+      // Sync localVideoRef
       if (localVideoRef.current) localVideoRef.current.srcObject = currentStream;
     } catch (err) {
       logError('[E2EE][MEDIA]', 'switchCamera failed:', err);
-      toast.error('خطا در تغییر دوربین');
+      // Clean up new stream on failure — do NOT affect active call stream
+      newStream?.getTracks().forEach(t => t.stop());
+
+      const errName = (err instanceof Error) ? err.name : '';
+      if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+        toast.error('دوربین دیگری در دسترس نیست');
+      } else if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+        toast.error('دسترسی به دوربین یا میکروفون داده نشد');
+      } else if (errName === 'OverconstrainedError' || errName === 'ConstraintNotSatisfiedError') {
+        toast.error('دوربین دیگری در دسترس نیست');
+      } else {
+        toast.error('تغییر دوربین انجام نشد');
+      }
+    } finally {
+      isSwitchingCameraRef.current = false;
+      setIsSwitchingCamera(false);
     }
   }, [videoDevices]);
 
@@ -1191,6 +1252,7 @@ export function useE2EECall(
 
   return {
     phase, e2eeStatus, isMuted, isVideoOff, isRemoteMuted, isScreenSharing,
+    isSwitchingCamera, isStartingScreenShare,
     targetUser, incomingCall, safetyNums, showSafety, sessionCode, failReason,
     userSearch, users, searching, connDiag, isOffline, videoDevices,
     localVideoRef, remoteVideoRef, safetyVerifiedRef,
