@@ -20,6 +20,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
     portRecordsRef, myRoleRef, sessionIdRef, peerConnectionIdRef,
     startCall, acceptCall, rejectCall, doHangup,
     toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety, runSelfTest,
+    onRemoteElementMount,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   } = useE2EECall(currentUserId, currentUserName);
 
@@ -128,6 +129,7 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
             onShowSafety={() => setShowSafety(true)}
             onCloseSafety={() => setShowSafety(false)}
             onVerifySafety={verifySafety}
+            onRemoteElementMount={onRemoteElementMount}
             portRecordsRef={portRecordsRef}
             myRole={myRoleRef.current}
             sessionId={sessionIdRef.current}

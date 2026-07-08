@@ -122,8 +122,41 @@ export interface MediaHealthClassification {
     | 'REMOTE_TRACK_MISSING'
     | 'REMOTE_PLAYBACK_BLOCKED'
     | 'REMOTE_RENDER_OR_AUTOPLAY_FAILURE'
+    // Remote video rendering sub-classifications
+    | 'REMOTE_ELEMENT_MISSING'
+    | 'REMOTE_ELEMENT_DETACHED'
+    | 'REMOTE_STREAM_NOT_BOUND'
+    | 'REMOTE_VIDEO_NO_DIMENSIONS'
+    | 'REMOTE_VIDEO_PAUSED'
+    | 'REMOTE_VIDEO_NO_CURRENT_DATA'
+    | 'REMOTE_VIDEO_ZERO_LAYOUT_SIZE'
+    | 'DECODED_FRAMES_NOT_PRESENTED'
+    // Remote audio rendering sub-classifications
+    | 'REMOTE_AUDIO_SOURCE_SILENT_OR_VERY_LOW'
+    | 'REMOTE_AUDIO_ELEMENT_MUTED'
+    | 'REMOTE_AUDIO_VOLUME_ZERO'
+    | 'REMOTE_AUDIO_AUTOPLAY_BLOCKED'
     | 'UNKNOWN';
   persianExplanation: string;
+  // Rendering diagnostics (populated for remote video checks)
+  renderDiag?: RemoteRenderDiag;
+}
+
+export interface RemoteRenderDiag {
+  elementPresent:     boolean;
+  elementAttached:    boolean;
+  srcObjectBound:     boolean;
+  videoWidth:         number;
+  videoHeight:        number;
+  paused:             boolean;
+  readyState:         number;
+  muted:              boolean;
+  volume:             number;
+  layoutWidth:        number;
+  layoutHeight:       number;
+  opacity:            string;
+  visibility:         string;
+  presentedFrames:    number | null;
 }
 
 // ── Ring buffer ─────────────────────────────────────────────────────────────
@@ -367,6 +400,10 @@ interface HealthContext {
   remoteVideoElement: HTMLVideoElement | null;
   localTracks: MediaStreamTrack[];
   stalledCounters: Map<string, number>;
+  // Optional: canonical visible remote element (for render audit)
+  remoteVisibleElement?: HTMLVideoElement | null;
+  // Optional: presented frame counter from requestVideoFrameCallback
+  presentedFrameCount?: number | null;
 }
 
 export function analyseMediaHealth(ctx: HealthContext): MediaHealthClassification[] {
@@ -452,17 +489,137 @@ function analyseRecv(kind: 'audio' | 'video', ctx: HealthContext): MediaHealthCl
       }
     }
   }
-  if (kind === 'video' && ctx.remoteVideoElement) {
-    const v = ctx.remoteVideoElement;
-    if (!v.srcObject) {
-      return { kind, direction: 'recv', classification: 'REMOTE_RENDER_OR_AUTOPLAY_FAILURE',
-        persianExplanation: `${label}: RTP دریافت می‌شود اما srcObject ویدیو null است. Track به element متصل نشده.` };
+
+  // ── Remote video rendering checks ────────────────────────────────────
+  // Only run when framesDecoded is increasing (we know decode is working).
+  if (kind === 'video') {
+    // Use the canonical visible element if provided, otherwise fall back to remoteVideoElement
+    const el = ctx.remoteVisibleElement ?? ctx.remoteVideoElement;
+
+    // Build render diag regardless of element presence for debug export
+    const buildDiag = (v: HTMLVideoElement | null): RemoteRenderDiag => {
+      if (!v) {
+        return {
+          elementPresent: false, elementAttached: false, srcObjectBound: false,
+          videoWidth: 0, videoHeight: 0, paused: true, readyState: 0,
+          muted: false, volume: 1, layoutWidth: 0, layoutHeight: 0,
+          opacity: '', visibility: '', presentedFrames: ctx.presentedFrameCount ?? null,
+        };
+      }
+      const rect    = v.getBoundingClientRect();
+      const style   = window.getComputedStyle(v);
+      const attached = document.contains(v);
+      return {
+        elementPresent: true,
+        elementAttached: attached,
+        srcObjectBound: v.srcObject !== null,
+        videoWidth:     v.videoWidth,
+        videoHeight:    v.videoHeight,
+        paused:         v.paused,
+        readyState:     v.readyState,
+        muted:          v.muted,
+        volume:         v.volume,
+        layoutWidth:    rect.width,
+        layoutHeight:   rect.height,
+        opacity:        style.opacity,
+        visibility:     style.visibility,
+        presentedFrames: ctx.presentedFrameCount ?? null,
+      };
+    };
+
+    if (!el) {
+      return { kind, direction: 'recv', classification: 'REMOTE_ELEMENT_MISSING',
+        persianExplanation: `${label}: فریم‌ها decode می‌شوند اما element ویدیوی remote در DOM موجود نیست.`,
+        renderDiag: buildDiag(null) };
     }
-    if (v.paused && (v.srcObject as MediaStream)?.getVideoTracks().some(t => t.readyState === 'live')) {
-      return { kind, direction: 'recv', classification: 'REMOTE_RENDER_OR_AUTOPLAY_FAILURE',
-        persianExplanation: `${label}: Track زنده است اما play() اجرا نشده. احتمال: سیاست autoplay مرورگر.` };
+
+    const diag = buildDiag(el);
+
+    if (!diag.elementAttached) {
+      return { kind, direction: 'recv', classification: 'REMOTE_ELEMENT_DETACHED',
+        persianExplanation: `${label}: element موجود است اما از DOM جدا شده است. React remount یا swap ممکن است باعث شده.`,
+        renderDiag: diag };
+    }
+
+    if (!diag.srcObjectBound) {
+      return { kind, direction: 'recv', classification: 'REMOTE_STREAM_NOT_BOUND',
+        persianExplanation: `${label}: element موجود است اما srcObject null است. bindRemoteStreamToElement فراخوانی نشده.`,
+        renderDiag: diag };
+    }
+
+    if (diag.muted) {
+      return { kind, direction: 'recv', classification: 'REMOTE_AUDIO_ELEMENT_MUTED',
+        persianExplanation: `${label}: element ویدیوی remote مقدار muted=true دارد. صدا نخواهد پخش شد.`,
+        renderDiag: diag };
+    }
+
+    if (diag.videoWidth === 0 || diag.videoHeight === 0) {
+      return { kind, direction: 'recv', classification: 'REMOTE_VIDEO_NO_DIMENSIONS',
+        persianExplanation: `${label}: srcObject متصل است اما videoWidth/Height صفر است. frame هنوز دریافت نشده یا track متوقف شده.`,
+        renderDiag: diag };
+    }
+
+    if (diag.paused) {
+      return { kind, direction: 'recv', classification: 'REMOTE_VIDEO_PAUSED',
+        persianExplanation: `${label}: ویدیو pause است. احتمال: autoplay block یا play() صدا زده نشده.`,
+        renderDiag: diag };
+    }
+
+    // readyState < HAVE_CURRENT_DATA (2) means no presentable frame yet
+    if (diag.readyState < 2) {
+      return { kind, direction: 'recv', classification: 'REMOTE_VIDEO_NO_CURRENT_DATA',
+        persianExplanation: `${label}: readyState=${diag.readyState} — هنوز فریم قابل نمایش وجود ندارد (HAVE_CURRENT_DATA نیست).`,
+        renderDiag: diag };
+    }
+
+    if (diag.layoutWidth === 0 || diag.layoutHeight === 0) {
+      return { kind, direction: 'recv', classification: 'REMOTE_VIDEO_ZERO_LAYOUT_SIZE',
+        persianExplanation: `${label}: element ویدیو ابعاد صفر در layout دارد. احتمال: visibility:hidden، opacity:0، یا display:none.`,
+        renderDiag: diag };
+    }
+
+    // If we have a presented frame counter and it hasn't moved despite frames decoding
+    if (
+      diag.presentedFrames !== null &&
+      prevReceiver &&
+      receiver.framesDecoded > prevReceiver.framesDecoded &&
+      diag.presentedFrames === 0
+    ) {
+      return { kind, direction: 'recv', classification: 'DECODED_FRAMES_NOT_PRESENTED',
+        persianExplanation: `${label}: ${receiver.framesDecoded} فریم decode شده اما requestVideoFrameCallback هیچ فریمی ارائه نداده. element از stream جدا شده.`,
+        renderDiag: diag };
+    }
+
+    return { kind, direction: 'recv', classification: 'HEALTHY',
+      persianExplanation: `${label}: دریافت و رندر فعال است.`,
+      renderDiag: diag };
+  }
+
+  // ── Remote audio checks ───────────────────────────────────────────────
+  if (kind === 'audio' && ctx.remoteVideoElement) {
+    const v = ctx.remoteVideoElement;
+    if (v.muted) {
+      return { kind, direction: 'recv', classification: 'REMOTE_AUDIO_ELEMENT_MUTED',
+        persianExplanation: `${label}: element صدا muted=true دارد.` };
+    }
+    if (v.volume === 0) {
+      return { kind, direction: 'recv', classification: 'REMOTE_AUDIO_VOLUME_ZERO',
+        persianExplanation: `${label}: volume=0 روی element صدا.` };
+    }
+    if (v.paused) {
+      return { kind, direction: 'recv', classification: 'REMOTE_AUDIO_AUTOPLAY_BLOCKED',
+        persianExplanation: `${label}: element صدا pause است. احتمال: autoplay block.` };
+    }
+    if (prevReceiver && receiver.audioLevel !== null) {
+      const prevLevel = prevReceiver.audioLevel ?? 0;
+      const currLevel = receiver.audioLevel;
+      if (currLevel < 0.0001 && prevLevel < 0.0001 && receiver.bytesReceived > (prevReceiver.bytesReceived + 1000)) {
+        return { kind, direction: 'recv', classification: 'REMOTE_AUDIO_SOURCE_SILENT_OR_VERY_LOW',
+          persianExplanation: `${label}: بایت‌ها دریافت می‌شوند اما audioLevel بسیار پایین است (${currLevel.toFixed(6)}). احتمال: طرف مقابل بی‌صدا شده.` };
+      }
     }
   }
+
   return { kind, direction: 'recv', classification: 'HEALTHY',
     persianExplanation: `${label}: دریافت فعال است.` };
 }

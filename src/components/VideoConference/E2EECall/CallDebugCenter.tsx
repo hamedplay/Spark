@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Download, Copy, Check, RefreshCw, ChevronDown, ChevronRight, Activity, Wifi, Shield, Mic, Video, Cpu, Radio } from 'lucide-react';
+import { X, Download, Copy, Check, RefreshCw, ChevronDown, ChevronRight, Activity, Wifi, Shield, Mic, Video, Cpu, Radio, Monitor } from 'lucide-react';
 import {
   debugStoreSubscribe, getDebugEvents, getRTPSnapshots, buildDebugReport,
   sanitizeDebugReportForExport, isCallDebugEnabled, isDebugSessionEnded,
 } from './callDebugStore';
-import type { CallDebugEvent, RTPSnapshot, MediaHealthClassification } from './callDebugStore';
+import type { CallDebugEvent, RTPSnapshot, MediaHealthClassification, RemoteRenderDiag } from './callDebugStore';
 import { getChannelRegistry } from './signaling';
 import type { ChannelRecord } from './signaling';
 import type { PortRecord } from './transforms';
@@ -19,6 +19,10 @@ interface Props {
   mediaHealth: MediaHealthClassification[];
   onRunSelfTest: () => Promise<MediaHealthClassification[]>;
   onClose: () => void;
+  // Optional: remote video element for live rendering diagnostics
+  remoteVideoRef?: React.RefObject<HTMLVideoElement | null>;
+  isSwapped?: boolean;
+  presentedFrameCountRef?: React.RefObject<number>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -187,6 +191,7 @@ function ReceiverRow({ r }: { r: RTPSnapshot['receivers'][0] }) {
 export function CallDebugCenter({
   portRecordsRef, myRole, sessionId, peerConnectionId,
   mediaHealth, onRunSelfTest, onClose,
+  remoteVideoRef, isSwapped, presentedFrameCountRef,
 }: Props) {
   const [events,           setEvents]           = useState<CallDebugEvent[]>([]);
   const [snapshots,        setSnapshots]        = useState<RTPSnapshot[]>([]);
@@ -198,6 +203,7 @@ export function CallDebugCenter({
   const [catFilter,        setCatFilter]        = useState<string>('all');
   const [levelFilter,      setLevelFilter]      = useState<string>('all');
   const [eventsAutoScroll, setEventsAutoScroll] = useState(true);
+  const [renderDiag,       setRenderDiag]       = useState<RemoteRenderDiag | null>(null);
   const eventsEndRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
@@ -212,6 +218,43 @@ export function CallDebugCenter({
     refresh();
     return debugStoreSubscribe(refresh);
   }, [refresh]);
+
+  // Live remote rendering diagnostics — poll every second
+  useEffect(() => {
+    const poll = () => {
+      const el = remoteVideoRef?.current;
+      if (!el) {
+        setRenderDiag({
+          elementPresent: false, elementAttached: false, srcObjectBound: false,
+          videoWidth: 0, videoHeight: 0, paused: true, readyState: 0,
+          muted: false, volume: 1, layoutWidth: 0, layoutHeight: 0,
+          opacity: '', visibility: '', presentedFrames: presentedFrameCountRef?.current ?? null,
+        });
+        return;
+      }
+      const rect  = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      setRenderDiag({
+        elementPresent:  true,
+        elementAttached: document.contains(el),
+        srcObjectBound:  el.srcObject !== null,
+        videoWidth:      el.videoWidth,
+        videoHeight:     el.videoHeight,
+        paused:          el.paused,
+        readyState:      el.readyState,
+        muted:           el.muted,
+        volume:          el.volume,
+        layoutWidth:     rect.width,
+        layoutHeight:    rect.height,
+        opacity:         style.opacity,
+        visibility:      style.visibility,
+        presentedFrames: presentedFrameCountRef?.current ?? null,
+      });
+    };
+    poll();
+    const id = setInterval(poll, 1000);
+    return () => clearInterval(id);
+  }, [remoteVideoRef, presentedFrameCountRef]);
 
   // Auto-scroll event log to bottom
   useEffect(() => {
@@ -408,6 +451,50 @@ export function CallDebugCenter({
                 {rec.safeLastError && (
                   <div className="text-red-400 mt-0.5">{rec.safeLastError.name}: {rec.safeLastError.message}</div>
                 )}
+              </div>
+            ))}
+          </Section>
+
+          {/* ── Remote Rendering ── */}
+          <Section title="Remote Rendering" icon={<Monitor className="w-4 h-4 text-sky-400" />} defaultOpen={true}>
+            {!renderDiag && <p className="text-xs text-gray-600">Polling element...</p>}
+            {renderDiag && (
+              <div className="space-y-1">
+                <KV k="swap mode"        v={<span className={isSwapped ? 'text-amber-400' : 'text-gray-300'}>{isSwapped ? 'swapped (remote=float)' : 'normal (remote=primary)'}</span>} />
+                <KV k="element present"  v={<span className={renderDiag.elementPresent ? 'text-emerald-400' : 'text-red-400'}>{String(renderDiag.elementPresent)}</span>} />
+                <KV k="DOM attached"     v={<span className={renderDiag.elementAttached ? 'text-emerald-400' : 'text-red-400'}>{String(renderDiag.elementAttached)}</span>} />
+                <KV k="srcObject bound"  v={<span className={renderDiag.srcObjectBound ? 'text-emerald-400' : 'text-red-400'}>{String(renderDiag.srcObjectBound)}</span>} />
+                <KV k="video dims"       v={`${renderDiag.videoWidth}×${renderDiag.videoHeight}`} mono />
+                <KV k="layout size"      v={<span className={renderDiag.layoutWidth === 0 ? 'text-red-400' : 'text-gray-300'}>{renderDiag.layoutWidth.toFixed(0)}×{renderDiag.layoutHeight.toFixed(0)}</span>} />
+                <KV k="paused"           v={<span className={renderDiag.paused ? 'text-red-400' : 'text-emerald-400'}>{String(renderDiag.paused)}</span>} />
+                <KV k="readyState"       v={`${renderDiag.readyState} (${['NOTHING','METADATA','CURRENT_DATA','FUTURE_DATA','ENOUGH_DATA'][renderDiag.readyState] ?? '?'})`} mono />
+                <KV k="muted"            v={<span className={renderDiag.muted ? 'text-red-400' : 'text-emerald-400'}>{String(renderDiag.muted)}</span>} />
+                <KV k="volume"           v={String(renderDiag.volume)} mono />
+                <KV k="opacity"          v={<span className={renderDiag.opacity === '0' ? 'text-amber-400' : 'text-gray-300'}>{renderDiag.opacity}</span>} mono />
+                <KV k="visibility"       v={<span className={renderDiag.visibility === 'hidden' ? 'text-amber-400' : 'text-gray-300'}>{renderDiag.visibility}</span>} mono />
+                {renderDiag.presentedFrames !== null && (
+                  <KV k="presented frames" v={<span className={renderDiag.presentedFrames === 0 ? 'text-red-400' : 'text-emerald-400'}>{renderDiag.presentedFrames}</span>} />
+                )}
+                {/* DOM self-test: check visible element vs primary ref */}
+                {(() => {
+                  const domEl = document.querySelector('[data-call-media="remote"]');
+                  const refEl = remoteVideoRef?.current;
+                  const match = domEl === refEl;
+                  return (
+                    <KV k="ref==DOM el" v={
+                      <span className={match ? 'text-emerald-400' : 'text-red-400'}>
+                        {match ? 'OK' : 'MISMATCH — ref points to detached element'}
+                      </span>
+                    } />
+                  );
+                })()}
+              </div>
+            )}
+            {/* Health render diag from latest snap */}
+            {mediaHealth.filter(h => h.renderDiag).map((h, i) => (
+              <div key={i} className="mt-2 text-xs border border-white/5 rounded-lg p-2">
+                <span className={`font-semibold ${classColor(h.classification)}`}>{h.classification}</span>
+                <p className="text-gray-500 mt-0.5 leading-snug">{h.persianExplanation}</p>
               </div>
             ))}
           </Section>

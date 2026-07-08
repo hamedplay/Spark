@@ -83,6 +83,8 @@ export interface UseE2EECallReturn {
   switchCamera: () => Promise<void>;
   verifySafety: () => void;
   runSelfTest: () => Promise<MediaHealthClassification[]>;
+  // Callback for ActiveCallView to notify when remote video element remounts
+  onRemoteElementMount: (el: HTMLVideoElement | null) => void;
   // Setters exposed to views
   setUserSearch: React.Dispatch<React.SetStateAction<string>>;
   setShowSafety: React.Dispatch<React.SetStateAction<boolean>>;
@@ -161,6 +163,9 @@ export function useE2EECall(
   // ── Peer Connection identity ───────────────────────────────────────────
   // A unique id per RTCPeerConnection instance, included in debug events.
   const peerConnectionIdRef = useRef('');
+
+  // ── Presented frame counter — updated by ActiveCallView via callback ───
+  const presentedFrameCountRef = useRef<number>(0);
 
   // ── Required-transform barrier ─────────────────────────────────────────
   const transformWaitersRef = useRef<Array<() => void>>([]);
@@ -312,8 +317,10 @@ export function useE2EECall(
         curr: snap,
         portRecordStates: snap.portRecordStates,
         remoteVideoElement: remoteVideoRef.current,
+        remoteVisibleElement: remoteVideoRef.current,
         localTracks: localStreamRef.current?.getTracks() ?? [],
         stalledCounters: stalledCountersRef.current,
+        presentedFrameCount: isCallDebugEnabled() ? presentedFrameCountRef.current : null,
       });
       setMediaHealth(health);
 
@@ -366,14 +373,8 @@ export function useE2EECall(
 
   // ── Remote video mount / tick ──────────────────────────────────────────
   useEffect(() => {
-    if ((phase === 'connecting' || phase === 'connected') && remoteVideoRef.current) {
-      const stream = remoteStreamRef.current;
-      if (stream && remoteVideoRef.current.srcObject !== stream) {
-        remoteVideoRef.current.srcObject = stream;
-        remoteVideoRef.current.muted = false; // NEVER mute remote video
-        remoteVideoRef.current.play().catch(() => {});
-        log('[E2EE][MEDIA]', 'remoteVideoRef.srcObject re-attached on phase/tick mount');
-      }
+    if (phase === 'connecting' || phase === 'connected') {
+      bindRemoteStreamToElement('phase-mount');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, remoteStreamTick]);
@@ -576,6 +577,71 @@ export function useE2EECall(
     return () => navigator.mediaDevices.removeEventListener('devicechange', enumerate);
   }, []);
 
+  // ── Bind remote stream to video element ───────────────────────────────
+  // Single canonical function for all remote stream→element attachment.
+  // Ensures muted=false, calls play(), and logs the reason for binding.
+  const bindRemoteStreamToElement = useCallback((reason: string) => {
+    const el     = remoteVideoRef.current;
+    const stream = remoteStreamRef.current;
+    if (!el) {
+      dbgWarn('media', 'bind-remote-stream-no-element', { reason });
+      return;
+    }
+    if (!stream) {
+      dbgWarn('media', 'bind-remote-stream-no-stream', { reason });
+      return;
+    }
+    if (el.srcObject === stream) {
+      dbgInfo('media', 'bind-remote-stream-already-bound', { reason });
+      // Still ensure muted=false and playing
+      el.muted = false;
+      if (el.paused) el.play().catch(() => {});
+      return;
+    }
+    el.srcObject = stream;
+    el.muted = false; // NEVER mute remote video
+    dbgInfo('media', 'bind-remote-stream-attached', {
+      reason,
+      trackCount: stream.getTracks().length,
+      tracks: stream.getTracks().map(t => ({ kind: t.kind, readyState: t.readyState, enabled: t.enabled })),
+    });
+    el.play().then(() => {
+      dbgInfo('media', 'bind-remote-stream-play-success', { reason });
+    }).catch(err => {
+      if ((err as DOMException).name === 'NotAllowedError') {
+        dbgWarn('media', 'bind-remote-stream-autoplay-blocked', { reason });
+        const resume = () => {
+          el.muted = false;
+          el.play().catch(() => {});
+          document.removeEventListener('click', resume);
+          document.removeEventListener('touchstart', resume);
+        };
+        document.addEventListener('click', resume, { once: true });
+        document.addEventListener('touchstart', resume, { once: true });
+      } else {
+        dbgWarn('media', 'bind-remote-stream-play-error', { reason, error: String(err) });
+      }
+    });
+  }, []);
+
+  // ── Callback for ActiveCallView: remote element mounted/remounted ──────
+  // Fires when React mounts or remounts the remote video DOM element.
+  // Re-binds the remote stream to the new element without any generation changes.
+  const onRemoteElementMount = useCallback((el: HTMLVideoElement | null) => {
+    (remoteVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
+    if (!el) return;
+    const stream = remoteStreamRef.current;
+    if (!stream) return;
+    dbgInfo('media', 'remote-element-remount-rebind', {
+      elementId: el.getAttribute('data-call-media') ?? 'unknown',
+      hasSrcObject: el.srcObject !== null,
+    });
+    el.srcObject = stream;
+    el.muted = false;
+    el.play().catch(() => {});
+    presentedFrameCountRef.current = 0;
+  }, []);
+
   // ── Cleanup ────────────────────────────────────────────────────────────
   const doFullCleanup = useCallback((reason?: FailReason) => {
     if (cleaningUpRef.current) return;
@@ -613,7 +679,11 @@ export function useE2EECall(
 
     remoteStreamRef.current = null;
     if (localVideoRef.current)  localVideoRef.current.srcObject  = null;
+    // Guard: only clear the remote element if it still belongs to this generation.
+    // After cleanup, callGenerationRef has already been incremented, so the
+    // new element (if any) will get a fresh bind from onRemoteElementMount.
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    presentedFrameCountRef.current = 0;
 
     portRecordsRef.current.forEach(pr => {
       pr.state = 'closed';
@@ -892,14 +962,10 @@ export function useE2EECall(
       trackCount: remoteStream.getTracks().length,
     });
 
-    // Attach to video element (synchronously before awaits)
+    // Attach to video element using canonical bind function (synchronously before awaits)
     const remoteEl = remoteVideoRef.current;
     if (remoteEl) {
-      if (remoteEl.srcObject !== remoteStream) {
-        remoteEl.srcObject = remoteStream;
-        remoteEl.muted = false; // NEVER accidentally mute remote
-        dbgInfo('media', 'remote-video-srcobject-set', { trackCount: remoteStream.getTracks().length });
-      }
+      bindRemoteStreamToElement(`ontrack-${e.track.kind}`);
     }
 
     // Register transform SYNCHRONOUSLY before first await
@@ -919,27 +985,15 @@ export function useE2EECall(
 
     // Now play (async, after synchronous bookkeeping)
     if (remoteEl) {
-      const tryPlay = () => {
-        remoteEl.muted = false;
-        remoteEl.play().then(() => {
-          dbgInfo('media', 'remote-play-success', { kind: e.track.kind });
-        }).catch(err => {
-          if ((err as DOMException).name === 'NotAllowedError') {
-            dbgWarn('media', 'remote-play-rejected-autoplay', { kind: e.track.kind });
-            const resume = () => { remoteEl.muted = false; remoteEl.play().catch(() => {}); document.removeEventListener('click', resume); document.removeEventListener('touchstart', resume); };
-            document.addEventListener('click', resume, { once: true });
-            document.addEventListener('touchstart', resume, { once: true });
-          } else {
-            dbgWarn('media', 'remote-play-error', { kind: e.track.kind, error: String(err) });
-          }
-        });
-      };
-      tryPlay();
+      // bindRemoteStreamToElement already called play(); schedule a retry
+      // check in case the first decoded frames arrive after the initial play().
       const diagStream = remoteStream;
       setTimeout(() => {
         const v = remoteVideoRef.current;
         if (!v) return;
-        if (v.videoWidth === 0 && diagStream.getVideoTracks().length > 0) tryPlay();
+        if (v.paused || (v.videoWidth === 0 && diagStream.getVideoTracks().length > 0)) {
+          bindRemoteStreamToElement(`ontrack-retry-${e.track.kind}`);
+        }
       }, 2000);
     } else {
       dbgWarn('media', 'remote-video-ref-not-mounted', { kind: e.track.kind });
@@ -1578,8 +1632,10 @@ export function useE2EECall(
       prev, curr,
       portRecordStates: curr.portRecordStates,
       remoteVideoElement: remoteVideoRef.current,
+      remoteVisibleElement: remoteVideoRef.current,
       localTracks: localStreamRef.current?.getTracks() ?? [],
       stalledCounters: new Map(),
+      presentedFrameCount: isCallDebugEnabled() ? presentedFrameCountRef.current : null,
     });
     dbgInfo('lifecycle', 'self-test-complete', {
       results: result.map(r => `${r.direction}-${r.kind}:${r.classification}`),
@@ -1721,6 +1777,7 @@ export function useE2EECall(
     portRecordsRef, pcRef, myRoleRef, sessionIdRef, peerConnectionIdRef,
     startCall, acceptCall, rejectCall, doHangup,
     toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety, runSelfTest,
+    onRemoteElementMount,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   };
 }

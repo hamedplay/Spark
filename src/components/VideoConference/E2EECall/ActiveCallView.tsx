@@ -446,6 +446,9 @@ interface Props {
   onShowSafety: () => void;
   onCloseSafety: () => void;
   onVerifySafety: () => void;
+  // Called when the primary remote video element mounts/remounts so
+  // useE2EECall can rebind the stream to the new DOM element.
+  onRemoteElementMount?: (el: HTMLVideoElement | null) => void;
   // Debug Center (optional — only wired when isCallDebugEnabled())
   portRecordsRef?: RefObject<PortRecord[]>;
   myRole?: 'caller' | 'callee' | null;
@@ -483,6 +486,7 @@ export function ActiveCallView({
   connDiag, isOffline, e2eeStatus, safetyNums, showSafety,
   onToggleMute, onToggleVideo, onToggleScreenShare, onSwitchCamera, onHangup,
   onToggleRemoteMute, onShowSafety, onCloseSafety, onVerifySafety,
+  onRemoteElementMount,
   portRecordsRef, myRole, sessionId, peerConnectionId, mediaHealth, onRunSelfTest,
 }: Props) {
   const [needsAudioTap,  setNeedsAudioTap]  = useState(false);
@@ -509,6 +513,33 @@ export function ActiveCallView({
 
   // Ref to More button so focus returns to it when the panel closes
   const moreBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Debug: presented frame counter from requestVideoFrameCallback
+  const presentedFrameCountRef = useRef<number>(0);
+
+  // Ref callback for primary remote video: fires on mount and remount.
+  // Notifies useE2EECall so it can rebind the remote stream to the new element.
+  const remoteRefCallback = useCallback((el: HTMLVideoElement | null) => {
+    // Update the forwarded ref
+    (remoteVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
+    onRemoteElementMount?.(el);
+
+    // In debug mode, start requestVideoFrameCallback to count presented frames
+    if (isCallDebugEnabled() && el) {
+      presentedFrameCountRef.current = 0;
+      const tick: VideoFrameRequestCallback = () => {
+        presentedFrameCountRef.current += 1;
+        if ((el as HTMLVideoElement & { requestVideoFrameCallback?: (cb: VideoFrameRequestCallback) => number }).requestVideoFrameCallback) {
+          (el as HTMLVideoElement & { requestVideoFrameCallback: (cb: VideoFrameRequestCallback) => number }).requestVideoFrameCallback(tick);
+        }
+      };
+      const v = el as HTMLVideoElement & { requestVideoFrameCallback?: (cb: VideoFrameRequestCallback) => number };
+      if (typeof v.requestVideoFrameCallback === 'function') {
+        v.requestVideoFrameCallback(tick);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onRemoteElementMount]);
 
   // ── Event-driven stream sync (no polling) ────────────────────────────
   // Primary video elements — managed by useE2EECall hook
@@ -804,14 +835,16 @@ export function ActiveCallView({
         <div className="absolute inset-0 z-0">
           {/* Remote — visible when !isSwapped */}
           <video
-            ref={remoteVideoRef}
+            ref={remoteRefCallback}
             autoPlay playsInline
+            data-call-media="remote"
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${isSwapped ? 'opacity-0' : 'opacity-100'}`}
           />
           {/* Local — visible when isSwapped */}
           <video
             ref={localVideoRef}
             autoPlay playsInline muted
+            data-call-media="local"
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${!isSwapped ? 'opacity-0' : 'opacity-100'}`}
           />
           {/* Placeholder: remote has no frame in primary slot */}
@@ -842,6 +875,7 @@ export function ActiveCallView({
           <video
             ref={floatLocalRef}
             autoPlay playsInline muted
+            data-call-media="local-float"
             className={`absolute inset-0 w-full h-full object-cover ${isSwapped ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           />
           {/* Camera-off overlay in floating local slot */}
@@ -855,6 +889,7 @@ export function ActiveCallView({
           <video
             ref={floatRemoteRef}
             autoPlay playsInline
+            data-call-media="remote-float"
             className={`absolute inset-0 w-full h-full object-cover ${!isSwapped ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           />
           {/* No-frame overlay in floating remote slot */}
@@ -1007,6 +1042,9 @@ export function ActiveCallView({
           mediaHealth={mediaHealth ?? []}
           onRunSelfTest={onRunSelfTest}
           onClose={() => setShowDebug(false)}
+          remoteVideoRef={remoteVideoRef}
+          isSwapped={isSwapped}
+          presentedFrameCountRef={presentedFrameCountRef}
         />
       )}
     </>
