@@ -162,10 +162,6 @@ async function dispatchSms(
     }
 
     // Call send-sms Edge Function
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    const { data: { session } } = await supabase.auth.getSession();
-
     const requestBody: Record<string, unknown> = {
       mode: 'send',
       mobiles: [phone],
@@ -173,17 +169,10 @@ async function dispatchSms(
     };
     if (providerId) requestBody.providerId = providerId;
 
-    const res = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token || anonKey}`,
-        'Apikey': anonKey,
-      },
-      body: JSON.stringify(requestBody),
+    const { data: result, error: fnError } = await supabase.functions.invoke('send-sms', {
+      body: requestBody,
     });
-
-    const result = await res.json();
+    if (fnError) throw fnError;
 
     if (result.ok) {
       // For rahyab_rest: result.returnIds[0] is the provider message ID (Rahyab Return ID)

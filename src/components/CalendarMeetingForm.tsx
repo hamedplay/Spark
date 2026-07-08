@@ -37,19 +37,10 @@ async function sendSmsToExternals(
       }
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    const res = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token || anonKey}`,
-        'Apikey': anonKey,
-      },
-      body: JSON.stringify({ mobiles, message: smsMessage }),
+    const { data: result, error: fnError } = await supabase.functions.invoke('send-sms', {
+      body: { mobiles, message: smsMessage },
     });
-    const result = await res.json();
+    if (fnError) throw fnError;
 
     const logBase = {
       triggered_by_user_id: triggeredByUserId ?? null,
