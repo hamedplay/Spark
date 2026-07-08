@@ -11,11 +11,12 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
   const {
     phase, e2eeStatus, isMuted, isVideoOff, isRemoteMuted, isScreenSharing,
     isSwitchingCamera, isStartingScreenShare,
-    targetUser, incomingCall, safetyNums, showSafety, sessionCode, failReason,
-    userSearch, users, searching, connDiag, isOffline,
+    targetUser, incomingCall, safetyNums, showSafety, failReason,
+    userSearch, users, searching, connDiag, isOffline, mediaHealth,
     localVideoRef, remoteVideoRef, localStreamRef, remoteStreamRef,
+    portRecordsRef, myRoleRef, sessionIdRef, peerConnectionIdRef,
     startCall, acceptCall, rejectCall, doHangup,
-    toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety,
+    toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety, runSelfTest,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   } = useE2EECall(currentUserId, currentUserName);
 
@@ -122,6 +123,12 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
             onShowSafety={() => setShowSafety(true)}
             onCloseSafety={() => setShowSafety(false)}
             onVerifySafety={verifySafety}
+            portRecordsRef={portRecordsRef}
+            myRole={myRoleRef.current}
+            sessionId={sessionIdRef.current}
+            peerConnectionId={peerConnectionIdRef.current}
+            mediaHealth={mediaHealth}
+            onRunSelfTest={runSelfTest}
           />
         )}
 

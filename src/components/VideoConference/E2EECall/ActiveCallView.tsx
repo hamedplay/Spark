@@ -1,9 +1,13 @@
 import {
   useState, useEffect, useRef, useCallback, type RefObject,
 } from 'react';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, ShieldCheck, ShieldAlert, Loader, Check, Wifi, WifiOff, Volume2, VolumeX, Monitor, MonitorOff, ArrowLeftRight, Info, PictureInPicture2, FlipHorizontal2 as FlipHorizontal, MoveHorizontal as MoreHorizontal, X } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, ShieldCheck, ShieldAlert, Loader, Check, Wifi, WifiOff, Volume2, VolumeX, Monitor, MonitorOff, ArrowLeftRight, Info, PictureInPicture2, FlipHorizontal2 as FlipHorizontal, MoveHorizontal as MoreHorizontal, X, Bug } from 'lucide-react';
 import type { PeerDiagnostics } from '../../../lib/webrtcDiagnostics';
 import type { CallPhase, E2EEStatus, UserProfile } from './types';
+import type { PortRecord } from './transforms';
+import type { MediaHealthClassification } from './callDebugStore';
+import { isCallDebugEnabled } from './callDebugStore';
+import { CallDebugCenter } from './CallDebugCenter';
 import toast from 'react-hot-toast';
 
 // ── Shared utility ────────────────────────────────────────────────────────
@@ -442,6 +446,13 @@ interface Props {
   onShowSafety: () => void;
   onCloseSafety: () => void;
   onVerifySafety: () => void;
+  // Debug Center (optional — only wired when isCallDebugEnabled())
+  portRecordsRef?: RefObject<PortRecord[]>;
+  myRole?: 'caller' | 'callee' | null;
+  sessionId?: string;
+  peerConnectionId?: string;
+  mediaHealth?: MediaHealthClassification[];
+  onRunSelfTest?: () => Promise<MediaHealthClassification[]>;
 }
 
 // ── ActiveCallView ────────────────────────────────────────────────────────
@@ -472,6 +483,7 @@ export function ActiveCallView({
   connDiag, isOffline, e2eeStatus, safetyNums, showSafety,
   onToggleMute, onToggleVideo, onToggleScreenShare, onSwitchCamera, onHangup,
   onToggleRemoteMute, onShowSafety, onCloseSafety, onVerifySafety,
+  portRecordsRef, myRole, sessionId, peerConnectionId, mediaHealth, onRunSelfTest,
 }: Props) {
   const [needsAudioTap,  setNeedsAudioTap]  = useState(false);
   const [isDragging,     setIsDragging]     = useState(false);
@@ -484,6 +496,7 @@ export function ActiveCallView({
   const [supportsPiP,    setSupportsPiP]    = useState(false);
   const [showMore,       setShowMore]       = useState(false);
   const [remoteHasFrame, setRemoteHasFrame] = useState(false);
+  const [showDebug,      setShowDebug]      = useState(false);
 
   // Floating tile video elements — their own refs, srcObject driven by useMediaStream
   const floatLocalRef  = useRef<HTMLVideoElement>(null);
@@ -939,6 +952,20 @@ export function ActiveCallView({
             >
               <MoreHorizontal aria-hidden="true" className="w-5 h-5 text-white" />
             </button>
+            {isCallDebugEnabled() && (
+              <button
+                type="button"
+                onClick={() => setShowDebug(v => !v)}
+                aria-label="Debug Center"
+                className={[
+                  'w-10 h-10 min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center transition-all backdrop-blur-sm',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60',
+                  showDebug ? 'bg-blue-600/80 hover:bg-blue-600' : 'bg-black/40 hover:bg-black/60 active:bg-black/70',
+                ].join(' ')}
+              >
+                <Bug aria-hidden="true" className="w-4 h-4 text-white" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -968,6 +995,19 @@ export function ActiveCallView({
       {/* Safety modal */}
       {showSafety && safetyNums && (
         <SafetyModal safetyNums={safetyNums} onVerify={onVerifySafety} onClose={onCloseSafety} />
+      )}
+
+      {/* Debug Center */}
+      {showDebug && isCallDebugEnabled() && portRecordsRef && onRunSelfTest && (
+        <CallDebugCenter
+          portRecordsRef={portRecordsRef}
+          myRole={myRole ?? null}
+          sessionId={sessionId ?? ''}
+          peerConnectionId={peerConnectionId ?? ''}
+          mediaHealth={mediaHealth ?? []}
+          onRunSelfTest={onRunSelfTest}
+          onClose={() => setShowDebug(false)}
+        />
       )}
     </>
   );
