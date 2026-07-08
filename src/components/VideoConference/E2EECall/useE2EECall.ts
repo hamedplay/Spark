@@ -413,6 +413,7 @@ export function useE2EECall(
 
     portRecordsRef.current.forEach(pr => { try { pr.port.close(); } catch { /* already closed */ } });
     portRecordsRef.current = [];
+    transformWaitersRef.current = [];
 
     iceCandidateQueue.current = [];
     activeKeysRef.current = null;
@@ -535,12 +536,74 @@ export function useE2EECall(
     }
   };
 
-  // ── Push keys to all active port records ───────────────────────────────
+  // ── Required-transform barrier ─────────────────────────────────────────
+  // Resolves only when all 4 transforms (sender/audio, sender/video,
+  // receiver/audio, receiver/video) exist AND each has reached 'key-ready'.
+  // Called from doSetupKeys — which now waits for the barrier before marking
+  // the call active_unverified.
+  const transformWaitersRef = useRef<Array<() => void>>([]);
+
+  // Called every time a new PortRecord is pushed to portRecordsRef so waiters
+  // can re-check whether the required set is complete.
+  const notifyTransformWaiters = () => {
+    const waiters = transformWaitersRef.current.splice(0);
+    for (const w of waiters) w();
+  };
+
+  const requiredRoles: Array<{ role: 'sender' | 'receiver'; kind: 'audio' | 'video' }> = [
+    { role: 'sender',   kind: 'audio' },
+    { role: 'sender',   kind: 'video' },
+    { role: 'receiver', kind: 'audio' },
+    { role: 'receiver', kind: 'video' },
+  ];
+
+  const allRequiredKeyReady = (): boolean => {
+    const records = portRecordsRef.current;
+    return requiredRoles.every(req =>
+      records.some(pr => pr.role === req.role && pr.kind === req.kind && pr.state === 'key-ready')
+    );
+  };
+
+  const awaitRequiredTransforms = (timeoutMs = 15_000): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (allRequiredKeyReady()) { resolve(); return; }
+
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const states = portRecordsRef.current.map(
+          pr => `${pr.role}/${pr.kind}=${pr.state}`
+        ).join(', ');
+        logError('[E2EE][BARRIER]', `timeout waiting for all transforms. Records: [${states}]`);
+        reject(new Error(`transform barrier timeout — not all transforms key-ready. [${states}]`));
+      }, timeoutMs);
+
+      const check = () => {
+        if (settled) return;
+        if (allRequiredKeyReady()) {
+          settled = true;
+          clearTimeout(timer);
+          log('[E2EE][BARRIER]', 'all 4 required transforms are key-ready');
+          resolve();
+        } else {
+          transformWaitersRef.current.push(check);
+        }
+      };
+      transformWaitersRef.current.push(check);
+    });
+  };
+
+
   // Throws if any port fails to install its key — caller must handle the error.
   const pushKeysToAllPorts = useCallback(async (keys: DerivedKeys) => {
     const records = [...portRecordsRef.current];
     const results = await Promise.allSettled(
-      records.map(pr => pushKeyToPortRecord(pr, keys))
+      records.map(async pr => {
+        await pushKeyToPortRecord(pr, keys);
+        // Each successful key push may satisfy the barrier — wake waiters
+        notifyTransformWaiters();
+      })
     );
     if (E2EE_DEBUG) {
       console.info('[E2EE][KEY] pushed keys to ports', {
@@ -571,9 +634,15 @@ export function useE2EECall(
       );
       activeKeysRef.current = keys;
 
-      // Push to all ports that already exist (sender ports + any early receiver ports).
-      // ontrack installs keys to any receiver port that arrives after this point.
+      // Push to all ports that exist right now (sender ports, plus any early
+      // receiver ports from ontrack if it fired before doSetupKeys).
       await pushKeysToAllPorts(keys);
+
+      // Block here until all 4 required transforms (sender/audio, sender/video,
+      // receiver/audio, receiver/video) have confirmed their keys. This is the
+      // required-transform barrier: if ontrack fires after this point, those
+      // receiver ports will push keys themselves and call notifyTransformWaiters.
+      await awaitRequiredTransforms(15_000);
 
       const nums = await computeSafetyNumber(myPublicJWKRef.current, peerPublicJWK, sessionIdRef.current);
       setSafetyNums(nums);
@@ -582,6 +651,159 @@ export function useE2EECall(
       logError('[E2EE][ERROR]', 'key setup failed:', e);
       toast.error('خطا در رمزنگاری — تماس لغو شد');
       doFullCleanup('key_exchange');
+    }
+  };
+
+  // ── One-way media diagnostics ──────────────────────────────────────────
+  const diagnoseOneWayMedia = async (pc: RTCPeerConnection) => {
+    if (!E2EE_DEBUG) return;
+    try {
+      const stats = await pc.getStats();
+      const senderStats: string[] = [];
+      const receiverStats: string[] = [];
+      stats.forEach(s => {
+        if (s.type === 'outbound-rtp') {
+          senderStats.push(`kind=${s.kind} bytesSent=${s.bytesSent} packetsSent=${s.packetsSent}`);
+        } else if (s.type === 'inbound-rtp') {
+          receiverStats.push(`kind=${s.kind} bytesReceived=${s.bytesReceived} packetsReceived=${s.packetsReceived}`);
+        }
+      });
+
+      const records = portRecordsRef.current;
+      const portStates = records.map(pr => `${pr.role}/${pr.kind}=${pr.state}`).join(', ');
+
+      const hasSenderAudio   = records.some(pr => pr.role === 'sender'   && pr.kind === 'audio');
+      const hasSenderVideo   = records.some(pr => pr.role === 'sender'   && pr.kind === 'video');
+      const hasReceiverAudio = records.some(pr => pr.role === 'receiver' && pr.kind === 'audio');
+      const hasReceiverVideo = records.some(pr => pr.role === 'receiver' && pr.kind === 'video');
+
+      const allSendReady = records.filter(pr => pr.role === 'sender').every(pr => pr.state === 'key-ready');
+      const allRecvReady = records.filter(pr => pr.role === 'receiver').every(pr => pr.state === 'key-ready');
+
+      let diagnosis = '';
+      if (!hasReceiverAudio || !hasReceiverVideo) {
+        diagnosis = 'A — receiver transforms missing (ontrack has not fired for all tracks)';
+      } else if (!allRecvReady && allSendReady) {
+        diagnosis = 'B — receiver transforms exist but keys not installed (barrier race)';
+      } else if (!allSendReady && allRecvReady) {
+        diagnosis = 'C — sender key not installed (local encryption broken)';
+      } else if (!hasSenderAudio || !hasSenderVideo) {
+        diagnosis = 'D — sender transforms missing (attachSenderTransform skipped a track)';
+      } else if (allSendReady && allRecvReady) {
+        diagnosis = 'E — all transforms key-ready; issue may be ICE/network or SDP direction';
+      } else {
+        diagnosis = 'F — mixed state; check portStates';
+      }
+
+      console.group('[E2EE][DIAG] one-way media diagnosis');
+      console.log('diagnosis:', diagnosis);
+      console.log('portStates:', portStates);
+      console.log('senderStats:', senderStats);
+      console.log('receiverStats:', receiverStats);
+      console.log('hasSender:', { audio: hasSenderAudio, video: hasSenderVideo });
+      console.log('hasReceiver:', { audio: hasReceiverAudio, video: hasReceiverVideo });
+      console.groupEnd();
+    } catch (err) {
+      logError('[E2EE][DIAG]', 'diagnoseOneWayMedia failed:', err);
+    }
+  };
+
+  // ── SDP direction logging (E2EE_DEBUG only) ────────────────────────────
+  const logSDPDirections = (sdp: string | undefined, label: string) => {
+    if (!E2EE_DEBUG || !sdp) return;
+    const lines = sdp.split('\n');
+    let mediaSection = '';
+    const sections: string[] = [];
+    for (const line of lines) {
+      if (line.startsWith('m=')) {
+        mediaSection = line.trim();
+      } else if (mediaSection && /^a=(sendrecv|sendonly|recvonly|inactive)/.test(line)) {
+        const dir = line.trim().replace('a=', '');
+        sections.push(`${mediaSection.split(' ')[0].replace('m=', '')}:${dir}`);
+        mediaSection = '';
+      }
+    }
+    log('[E2EE][SDP]', `${label} directions: [${sections.join(', ')}]`);
+  };
+
+  // ── Handle remote track ────────────────────────────────────────────────
+  // Registered synchronously as pc.ontrack so the PortRecord is pushed before
+  // any awaits. Notifies the required-transform barrier after key push so
+  // awaitRequiredTransforms() can unblock.
+  const handleRemoteTrack = async (e: RTCTrackEvent) => {
+    log('[E2EE][PC]', `ontrack kind=${e.track.kind} id=${e.track.id}`);
+
+    if (workerRef.current) {
+      const pr = attachReceiverTransform(e.receiver, workerRef.current, E2EE_DEBUG);
+      if (pr) {
+        // Register synchronously — before any awaits — so pushKeysToAllPorts
+        // called from doSetupKeys will find this record.
+        portRecordsRef.current.push(pr);
+        notifyTransformWaiters();
+
+        if (activeKeysRef.current) {
+          // Keys already derived — install them now (keys arrived before ontrack)
+          try {
+            await pushKeyToPortRecord(pr, activeKeysRef.current);
+            // Notify barrier again after key is installed
+            notifyTransformWaiters();
+          } catch (err) {
+            logError('[E2EE][ERROR]', `key push failed for receiver transform (${pr.kind}):`, err);
+            toast.error('رمزنگاری دریافت فعال نشد — تماس لغو شد');
+            doFullCleanup('key_exchange');
+            return;
+          }
+        }
+        // If activeKeysRef.current is null: keys haven't been derived yet.
+        // doSetupKeys will call pushKeysToAllPorts which includes this pr,
+        // then after pushKey completes it will call notifyTransformWaiters.
+      }
+    }
+
+    let remoteStream: MediaStream;
+    if (e.streams && e.streams[0]) {
+      remoteStream = e.streams[0];
+      remoteStreamRef.current = remoteStream;
+    } else {
+      if (!remoteStreamRef.current) remoteStreamRef.current = new MediaStream();
+      remoteStream = remoteStreamRef.current;
+      if (!remoteStream.getTracks().some(t => t.id === e.track.id)) {
+        remoteStream.addTrack(e.track);
+      }
+    }
+
+    const remoteEl = remoteVideoRef.current;
+    if (remoteEl) {
+      if (remoteEl.srcObject !== remoteStream) {
+        remoteEl.srcObject = remoteStream;
+        log('[E2EE][MEDIA]', `srcObject set trackCount=${remoteStream.getTracks().length}`);
+      }
+      const tryPlay = () => {
+        remoteEl.play().catch(err => {
+          if ((err as DOMException).name === 'NotAllowedError') {
+            const resume = () => {
+              remoteEl.play().catch(() => {});
+              document.removeEventListener('click', resume);
+              document.removeEventListener('touchstart', resume);
+            };
+            document.addEventListener('click', resume, { once: true });
+            document.addEventListener('touchstart', resume, { once: true });
+          } else {
+            log('[E2EE][MEDIA]', `remote play() error: ${err}`);
+          }
+        });
+      };
+      tryPlay();
+      const diagStream = remoteStream;
+      setTimeout(() => {
+        const v = remoteVideoRef.current;
+        if (!v) return;
+        log('[E2EE][MEDIA]', `diag: readyState=${v.readyState} ${v.videoWidth}×${v.videoHeight} paused=${v.paused}`);
+        if (v.videoWidth === 0 && diagStream.getVideoTracks().length > 0) tryPlay();
+      }, 2000);
+    } else {
+      logWarn('[E2EE][MEDIA]', 'remoteVideoRef not mounted — triggering tick');
+      setRemoteStreamTick(v => v + 1);
     }
   };
 
@@ -635,79 +857,7 @@ export function useE2EECall(
       }
     }
 
-    pc.ontrack = async (e) => {
-      log('[E2EE][PC]', `ontrack kind=${e.track.kind} id=${e.track.id}`);
-
-      if (workerRef.current) {
-        const pr = attachReceiverTransform(e.receiver, workerRef.current, E2EE_DEBUG);
-        if (pr) {
-          portRecordsRef.current.push(pr);
-          if (activeKeysRef.current) {
-            // Keys are already derived — install them now in this receiver.
-            // This is the critical path for the callee side: ontrack fires
-            // before or after doSetupKeys depending on network timing, and
-            // doSetupKeys only pushes to ports that existed at that moment.
-            try {
-              await pushKeyToPortRecord(pr, activeKeysRef.current);
-            } catch (err) {
-              logError('[E2EE][ERROR]', `key push failed for late receiver transform (${pr.kind}):`, err);
-              toast.error('رمزنگاری دریافت فعال نشد — تماس لغو شد');
-              doFullCleanup('key_exchange');
-              return;
-            }
-          }
-          // If activeKeysRef.current is null here, keys haven't been derived yet.
-          // doSetupKeys will push to this port when it runs (it calls pushKeysToAllPorts
-          // over portRecordsRef.current which now includes this pr).
-        }
-      }
-
-      let remoteStream: MediaStream;
-      if (e.streams && e.streams[0]) {
-        remoteStream = e.streams[0];
-        remoteStreamRef.current = remoteStream;
-      } else {
-        if (!remoteStreamRef.current) remoteStreamRef.current = new MediaStream();
-        remoteStream = remoteStreamRef.current;
-        if (!remoteStream.getTracks().some(t => t.id === e.track.id)) {
-          remoteStream.addTrack(e.track);
-        }
-      }
-
-      const remoteEl = remoteVideoRef.current;
-      if (remoteEl) {
-        if (remoteEl.srcObject !== remoteStream) {
-          remoteEl.srcObject = remoteStream;
-          log('[E2EE][MEDIA]', `srcObject set trackCount=${remoteStream.getTracks().length}`);
-        }
-        const tryPlay = () => {
-          remoteEl.play().catch(err => {
-            if ((err as DOMException).name === 'NotAllowedError') {
-              const resume = () => {
-                remoteEl.play().catch(() => {});
-                document.removeEventListener('click', resume);
-                document.removeEventListener('touchstart', resume);
-              };
-              document.addEventListener('click', resume, { once: true });
-              document.addEventListener('touchstart', resume, { once: true });
-            } else {
-              log('[E2EE][MEDIA]', `remote play() error: ${err}`);
-            }
-          });
-        };
-        tryPlay();
-        const diagStream = remoteStream;
-        setTimeout(() => {
-          const v = remoteVideoRef.current;
-          if (!v) return;
-          log('[E2EE][MEDIA]', `diag: readyState=${v.readyState} ${v.videoWidth}×${v.videoHeight} paused=${v.paused}`);
-          if (v.videoWidth === 0 && diagStream.getVideoTracks().length > 0) tryPlay();
-        }, 2000);
-      } else {
-        logWarn('[E2EE][MEDIA]', 'remoteVideoRef not mounted — triggering tick');
-        setRemoteStreamTick(v => v + 1);
-      }
-    };
+    pc.ontrack = (e) => { void handleRemoteTrack(e); };
 
     pc.onicecandidate = e => {
       if (!e.candidate || !sessionChannelRef.current) return;
@@ -791,6 +941,9 @@ export function useE2EECall(
           setConnDiag(diag);
           if (diag.rttMs !== null && diag.rttMs > 400) logWarn('[E2EE][QOS]', `high RTT: ${diag.rttMs}ms`);
         }, 5000);
+        if (E2EE_DEBUG) {
+          setTimeout(() => { void diagnoseOneWayMedia(pc); }, 4000);
+        }
       } else if (pc.connectionState === 'failed') {
         stopDiagnostics(sessionIdRef.current);
         doFullCleanup('ice_failed');
@@ -812,6 +965,7 @@ export function useE2EECall(
     saltRef.current = salt;
     const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
     await pc.setLocalDescription(offer);
+    logSDPDirections(pc.localDescription?.sdp, 'caller:local-offer');
     ch.send({
       type: 'broadcast', event: 'e2ee-signal',
       payload: {
@@ -855,9 +1009,11 @@ export function useE2EECall(
         if (!pc || pc.signalingState !== 'stable') return;
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(data.sdp as RTCSessionDescriptionInit));
+          logSDPDirections((data.sdp as RTCSessionDescriptionInit)?.sdp, 'callee:remote-offer');
           await flushICEQueue(pc);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+          logSDPDirections(pc.localDescription?.sdp, 'callee:local-answer');
           await doSetupKeys(data.publicKey as string, saltBytes);
           ch.send({
             type: 'broadcast', event: 'e2ee-signal',
@@ -877,6 +1033,7 @@ export function useE2EECall(
         if (!pc || pc.signalingState !== 'have-local-offer') return;
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(data.sdp as RTCSessionDescriptionInit));
+          logSDPDirections((data.sdp as RTCSessionDescriptionInit)?.sdp, 'caller:remote-answer');
           await flushICEQueue(pc);
           await doSetupKeys(data.publicKey as string, saltRef.current);
         } catch (e) {

@@ -39,6 +39,14 @@ export type CallPhase =
 
 export type E2EEStatus = 'unsupported' | 'pending' | 'active_unverified' | 'active_verified' | 'error';
 
+export type TransformState =
+  | 'created'       // attachXxxTransform returned, init sent
+  | 'worker-ready'  // worker replied 'ready' to init message
+  | 'key-pending'   // set-xxx-key sent, awaiting matching requestId ACK
+  | 'key-ready'     // matching ACK received — frame crypto active
+  | 'failed'        // unrecoverable error
+  | 'closed';       // port closed during cleanup
+
 export type FailReason =
   | 'ice_failed'
   | 'key_exchange'

@@ -110,11 +110,12 @@ self.addEventListener('rtctransform', event => {
     }
 
     if (type === 'set-encrypt-key' || type === 'rotate-encrypt-key') {
+      const requestId = msg.data.requestId ?? null;
       try {
         encryptKey = await crypto.subtle.importKey('raw', msg.data.keyData, { name: 'AES-GCM' }, false, ['encrypt']);
       } catch (err) {
         log('error', '[E2EE][WORKER]', `importKey (encrypt) failed: ${err}`);
-        port.postMessage({ type: 'encrypt-error', message: String(err) });
+        port.postMessage({ type: 'encrypt-error', message: String(err), requestId });
         return;
       }
 
@@ -141,18 +142,19 @@ self.addEventListener('rtctransform', event => {
       }
 
       encryptReady = true;
-      if (type === 'set-encrypt-key') port.postMessage({ type: 'encrypt-ready' });
+      if (type === 'set-encrypt-key') port.postMessage({ type: 'encrypt-ready', requestId });
       // generateKeyFrame() is video-only
       if (mediaKind === 'video') {
         try { event.transformer.generateKeyFrame(); } catch { /* optional API */ }
       }
 
     } else if (type === 'set-decrypt-key' || type === 'rotate-decrypt-key') {
+      const requestId = msg.data.requestId ?? null;
       try {
         decryptKey = await crypto.subtle.importKey('raw', msg.data.keyData, { name: 'AES-GCM' }, false, ['decrypt']);
       } catch (err) {
         log('error', '[E2EE][WORKER]', `importKey (decrypt) failed: ${err}`);
-        port.postMessage({ type: 'decrypt-error', message: String(err) });
+        port.postMessage({ type: 'decrypt-error', message: String(err), requestId });
         return;
       }
       decryptIvSeed    = new Uint8Array(msg.data.ivSeed);
@@ -164,7 +166,7 @@ self.addEventListener('rtctransform', event => {
         log('info', '[E2EE][WORKER]', `set-decrypt-key epoch=${decryptEpoch} media=${mediaKind}`);
       }
       decryptReady = true;
-      if (type === 'set-decrypt-key') port.postMessage({ type: 'decrypt-ready' });
+      if (type === 'set-decrypt-key') port.postMessage({ type: 'decrypt-ready', requestId });
       // sendKeyFrameRequest() is video-only
       if (mediaKind === 'video') {
         try { event.transformer.sendKeyFrameRequest(); } catch { /* optional */ }
