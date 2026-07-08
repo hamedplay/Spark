@@ -10,7 +10,7 @@ export const SUPPORTS_TRANSFORMS =
 
 export const E2EE_DEBUG =
   (typeof import.meta !== 'undefined' && (import.meta as { env?: { DEV?: boolean } }).env?.DEV) ||
-  (typeof localStorage !== 'undefined' && localStorage.getItem('e2ee_debug') === '1');
+  (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('e2ee_debug') === '1');
 
 // ── Logging ────────────────────────────────────────────────────────────────
 

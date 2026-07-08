@@ -23,11 +23,13 @@ import {
   ensureWorkerReady, attachSenderTransform, attachReceiverTransform, pushKeyToPortRecord,
 } from './transforms';
 import {
-  validateIceCandidate, validateSDP, validateSignalPayload, waitForSubscribed,
+  validateIceCandidate, validateSDP, validateSignalPayload,
+  subscribeChannelOrThrow, safeRemoveChannel, clearChannelRegistry,
 } from './signaling';
+import type { ChannelPurpose } from './signaling';
 import {
   isCallDebugEnabled, dbgInfo, dbgWarn, dbgError,
-  debugStoreSetSession, debugStoreReset,
+  debugStoreSetSession, debugStoreReset, debugStoreMarkEnded,
   pushRTPSnapshot, getLatestSnapshot, getRTPSnapshots,
   analyseMediaHealth,
   buildDebugReport,
@@ -517,10 +519,23 @@ export function useE2EECall(
       dbgInfo('signaling', 'ring-received', { from: (p.from as string).slice(0, 8), sessionId: (p.sessionId as string).slice(0, 8) });
 
       if (sessionActiveRef.current) {
+        // Busy-reject: subscribe safely before sending — only send on SUBSCRIBED
+        const rejChId = uuidv4();
         const rejCh = supabase.channel(`e2ee-sess-${p.sessionId}`, { config: { broadcast: { self: false } } });
-        rejCh.subscribe(() => {
-          rejCh.send({ type: 'broadcast', event: 'e2ee-signal', payload: { type: 'rejected', from: myPeerIdRef.current, session: p.sessionId, data: {} } });
-          setTimeout(() => supabase.removeChannel(rejCh), 1500);
+        const rejSessionId = p.sessionId as string;
+        subscribeChannelOrThrow(rejCh, {
+          attemptId:    rejChId,
+          purpose:      'busy-reject-temp' as ChannelPurpose,
+          generation:   callGenerationRef.current,
+          sessionId:    rejSessionId,
+          channelId:    rejChId,
+          topicSummary: `e2ee-sess-${rejSessionId.slice(0, 8)}`,
+          startedAt:    Date.now(),
+        }).then(() => {
+          rejCh.send({ type: 'broadcast', event: 'e2ee-signal', payload: { type: 'rejected', from: myPeerIdRef.current, session: rejSessionId, data: {} } });
+          return safeRemoveChannel(rejCh, rejChId, 1500);
+        }).catch(() => {
+          void safeRemoveChannel(rejCh, rejChId);
         });
         return;
       }
@@ -618,6 +633,7 @@ export function useE2EECall(
       sessionChannelRef.current = null;
       dbgInfo('signaling', 'session-channel-removed');
     }
+    clearChannelRegistry();
     sessionIdRef.current   = '';
     ecdhKeyPairRef.current = null;
     myPublicJWKRef.current = '';
@@ -636,7 +652,9 @@ export function useE2EECall(
     setIsSwitchingCamera(false);
     setIsStartingScreenShare(false);
 
-    debugStoreReset();
+    // PRESERVE the debug timeline so the failure screen can show/export it.
+    // Do NOT call debugStoreReset() here — that happens only at the start of a new call.
+    debugStoreMarkEnded(reason ?? undefined);
     cleaningUpRef.current = false;
 
     if (reason) { setFailReason(reason); setPhase('failed'); }
@@ -974,15 +992,28 @@ export function useE2EECall(
   };
 
   // ── PeerConnection ─────────────────────────────────────────────────────
-  const buildPC = async (capturedGeneration: number): Promise<RTCPeerConnection | null> => {
-    // Guard: never build a second PC for the same generation
+  const buildPC = async (capturedGeneration: number, capturedSessionId: string): Promise<RTCPeerConnection | null> => {
+    // Generation + session guard: never build a stale PC
     if (capturedGeneration !== callGenerationRef.current) {
       dbgWarn('peer-connection', 'build-pc-stale-generation', { capturedGeneration });
       return null;
     }
+    if (capturedSessionId !== sessionIdRef.current) {
+      dbgWarn('peer-connection', 'build-pc-stale-session', { capturedSessionId });
+      return null;
+    }
+    // Reuse only if the existing PC is for the same generation+session and not closed
     if (pcRef.current) {
-      dbgWarn('peer-connection', 'build-pc-already-exists');
-      return pcRef.current;
+      const existing = pcRef.current;
+      if (existing.connectionState !== 'closed' && existing.connectionState !== 'failed') {
+        dbgWarn('peer-connection', 'build-pc-reusing-existing');
+        return existing;
+      }
+      // Stale/closed PC — close it and create a fresh one
+      dbgWarn('peer-connection', 'build-pc-stale-pc-closing');
+      existing.close();
+      pcRef.current = null;
+      peerConnectionIdRef.current = '';
     }
 
     const cfg = await getSharedRTCConfig();
@@ -1065,7 +1096,6 @@ export function useE2EECall(
       }
     }
 
-    const capturedSessionId = sessionIdRef.current;
     const capturedPCId = pcId;
 
     pc.ontrack = (e) => {
@@ -1312,9 +1342,8 @@ export function useE2EECall(
       }
     });
 
-    ch.subscribe(status => {
-      dbgInfo('signaling', 'session-channel-subscribed', { status });
-    });
+    // Do NOT call ch.subscribe() here.
+    // subscribeChannelOrThrow() is the single owner of subscribe for this channel.
     return ch;
   };
 
@@ -1359,25 +1388,50 @@ export function useE2EECall(
       if (generation !== callGenerationRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
 
       const ch = openSessionChannel(sessionId, generation);
-      await waitForSubscribed(ch!);
+      const sessChId = uuidv4();
+      await subscribeChannelOrThrow(ch!, {
+        attemptId:    sessChId,
+        purpose:      'session',
+        generation,
+        sessionId,
+        channelId:    sessChId,
+        topicSummary: `e2ee-sess-${sessionId.slice(0, 8)}`,
+        startedAt:    Date.now(),
+      });
 
-      const pc = await buildPC(generation);
+      if (generation !== callGenerationRef.current) return;
+
+      const pc = await buildPC(generation, sessionId);
       if (!pc) return;
 
       sessionActiveRef.current = true;
 
-      const calleeInbox = supabase.channel(`e2ee-inbox-${target.user_id}`, { config: { broadcast: { self: false } } });
-      const calleeGlobalInbox = supabase.channel(`e2ee-global-inbox-${target.user_id}`, { config: { broadcast: { self: false } } });
+      // Send ring to both the session inbox and the global inbox.
+      // Two channels are needed because the callee may be subscribed to either
+      // (depending on whether the page is active or in the background/PWA).
       const ringPayload = {
         from: myPeerIdRef.current, sessionId, targetUserId: target.user_id,
         callerName: currentUserName, callerId: currentUserId,
         acceptToken: acceptTokenRef.current, expiresAt: Date.now() + INVITE_TTL_MS,
       };
-      await waitForSubscribed(calleeInbox);
-      calleeInbox.send({ type: 'broadcast', event: 'e2ee-ring', payload: ringPayload });
-      await waitForSubscribed(calleeGlobalInbox);
-      calleeGlobalInbox.send({ type: 'broadcast', event: 'e2ee-ring', payload: ringPayload });
-      setTimeout(() => { supabase.removeChannel(calleeInbox); supabase.removeChannel(calleeGlobalInbox); }, 3000);
+
+      const inboxId  = uuidv4();
+      const globalId = uuidv4();
+      const calleeInbox       = supabase.channel(`e2ee-inbox-${target.user_id}`,        { config: { broadcast: { self: false } } });
+      const calleeGlobalInbox = supabase.channel(`e2ee-global-inbox-${target.user_id}`, { config: { broadcast: { self: false } } });
+
+      // Subscribe both, then send ring on whichever succeeds
+      const sendRing = (c: ReturnType<typeof supabase.channel>, cId: string, purpose: ChannelPurpose) =>
+        subscribeChannelOrThrow(c, {
+          attemptId: cId, purpose, generation, sessionId,
+          channelId: cId, topicSummary: `ring-${target.user_id.slice(0, 8)}`, startedAt: Date.now(),
+        }).then(() => {
+          c.send({ type: 'broadcast', event: 'e2ee-ring', payload: ringPayload });
+          return safeRemoveChannel(c, cId, 3000);
+        }).catch(() => { void safeRemoveChannel(c, cId); });
+
+      void sendRing(calleeInbox,       inboxId,  'callee-inbox');
+      void sendRing(calleeGlobalInbox, globalId, 'callee-global-inbox');
 
       setPhase('outgoing_ring');
       dbgInfo('lifecycle', 'ring-sent', { targetUserId: target.user_id.slice(0, 8) });
@@ -1439,9 +1493,20 @@ export function useE2EECall(
       if (generation !== callGenerationRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
 
       const ch = openSessionChannel(ic.sessionId, generation);
-      await waitForSubscribed(ch!);
+      const sessChId = uuidv4();
+      await subscribeChannelOrThrow(ch!, {
+        attemptId:    sessChId,
+        purpose:      'session',
+        generation,
+        sessionId:    ic.sessionId,
+        channelId:    sessChId,
+        topicSummary: `e2ee-sess-${ic.sessionId.slice(0, 8)}`,
+        startedAt:    Date.now(),
+      });
 
-      const pc = await buildPC(generation);
+      if (generation !== callGenerationRef.current) return;
+
+      const pc = await buildPC(generation, ic.sessionId);
       if (!pc) { setIncomingCall(null); return; }
 
       sessionActiveRef.current = true;
@@ -1478,11 +1543,23 @@ export function useE2EECall(
     if (!ic) return;
     setIncomingCall(null);
     setPhase('idle');
+    const rejChId = uuidv4();
     const ch = supabase.channel(`e2ee-sess-${ic.sessionId}`, { config: { broadcast: { self: false } } });
-    waitForSubscribed(ch)
-      .then(() => ch.send({ type: 'broadcast', event: 'e2ee-signal', payload: { type: 'rejected', from: myPeerIdRef.current, session: ic.sessionId, data: {} } }))
-      .catch(err => logWarn('[E2EE][SIGNAL]', 'reject channel subscribe failed:', err))
-      .finally(() => setTimeout(() => supabase.removeChannel(ch), 1500));
+    subscribeChannelOrThrow(ch, {
+      attemptId:    rejChId,
+      purpose:      'reject-temp',
+      generation:   callGenerationRef.current,
+      sessionId:    ic.sessionId,
+      channelId:    rejChId,
+      topicSummary: `e2ee-sess-${ic.sessionId.slice(0, 8)}`,
+      startedAt:    Date.now(),
+    }).then(() => {
+      ch.send({ type: 'broadcast', event: 'e2ee-signal', payload: { type: 'rejected', from: myPeerIdRef.current, session: ic.sessionId, data: {} } });
+      return safeRemoveChannel(ch, rejChId, 1500);
+    }).catch(err => {
+      logWarn('[E2EE][SIGNAL]', 'reject channel subscribe failed:', err);
+      void safeRemoveChannel(ch, rejChId);
+    });
   }, [incomingCall]);
 
   // ── Self-test ──────────────────────────────────────────────────────────

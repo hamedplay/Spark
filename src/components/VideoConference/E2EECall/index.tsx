@@ -1,10 +1,13 @@
-import { ShieldCheck, ShieldAlert, PhoneOff, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { ShieldCheck, ShieldAlert, PhoneOff, RefreshCw, Bug } from 'lucide-react';
 import { SUPPORTS_TRANSFORMS } from './types';
+import { isCallDebugEnabled } from './callDebugStore';
 import { useE2EECall } from './useE2EECall';
 import { IncomingRingView } from './IncomingRingView';
 import { OutgoingRingView } from './OutgoingRingView';
 import { ActiveCallView } from './ActiveCallView';
 import { IdleView } from './IdleView';
+import { CallDebugCenter } from './CallDebugCenter';
 import type { E2EECallProps } from './types';
 
 export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECallProps) {
@@ -19,6 +22,8 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
     toggleMute, toggleVideo, toggleScreenShare, switchCamera, verifySafety, runSelfTest,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   } = useE2EECall(currentUserId, currentUserName);
+
+  const [showFailedDebug, setShowFailedDebug] = useState(false);
 
   const isCallActive  = phase === 'connecting' || phase === 'connected';
   const isCallOngoing = isCallActive || phase === 'outgoing_ring' || phase === 'incoming_ring';
@@ -152,13 +157,24 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{failReasonText}</p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => { setPhase('idle'); setFailReason(null); }}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-colors"
-            >
-              <RefreshCw aria-hidden="true" className="w-4 h-4" /> تماس جدید
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { setPhase('idle'); setFailReason(null); }}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm transition-colors"
+              >
+                <RefreshCw aria-hidden="true" className="w-4 h-4" /> تماس جدید
+              </button>
+              {isCallDebugEnabled() && (
+                <button
+                  type="button"
+                  onClick={() => setShowFailedDebug(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm transition-colors"
+                >
+                  <Bug aria-hidden="true" className="w-4 h-4" /> Debug
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -173,6 +189,19 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
           />
         )}
       </div>
+
+      {/* Debug Center for failed/ended state — preserves the call failure timeline */}
+      {showFailedDebug && isCallDebugEnabled() && (
+        <CallDebugCenter
+          portRecordsRef={portRecordsRef}
+          myRole={myRoleRef.current}
+          sessionId={sessionIdRef.current}
+          peerConnectionId={peerConnectionIdRef.current}
+          mediaHealth={mediaHealth}
+          onRunSelfTest={runSelfTest}
+          onClose={() => setShowFailedDebug(false)}
+        />
+      )}
     </div>
   );
 }

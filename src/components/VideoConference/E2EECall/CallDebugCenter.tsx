@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Download, Copy, Check, RefreshCw, ChevronDown, ChevronRight, Activity, Wifi, Shield, Mic, Video, Cpu } from 'lucide-react';
+import { X, Download, Copy, Check, RefreshCw, ChevronDown, ChevronRight, Activity, Wifi, Shield, Mic, Video, Cpu, Radio } from 'lucide-react';
 import {
   debugStoreSubscribe, getDebugEvents, getRTPSnapshots, buildDebugReport,
-  isCallDebugEnabled,
+  sanitizeDebugReportForExport, isCallDebugEnabled, isDebugSessionEnded,
 } from './callDebugStore';
 import type { CallDebugEvent, RTPSnapshot, MediaHealthClassification } from './callDebugStore';
+import { getChannelRegistry } from './signaling';
+import type { ChannelRecord } from './signaling';
 import type { PortRecord } from './transforms';
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -188,6 +190,8 @@ export function CallDebugCenter({
 }: Props) {
   const [events,           setEvents]           = useState<CallDebugEvent[]>([]);
   const [snapshots,        setSnapshots]        = useState<RTPSnapshot[]>([]);
+  const [channelRecords,   setChannelRecords]   = useState<ChannelRecord[]>([]);
+  const [sessionEnded,     setSessionEnded]     = useState(false);
   const [selfTestResult,   setSelfTestResult]   = useState<MediaHealthClassification[] | null>(null);
   const [selfTestRunning,  setSelfTestRunning]  = useState(false);
   const [copied,           setCopied]           = useState(false);
@@ -199,6 +203,8 @@ export function CallDebugCenter({
   const refresh = useCallback(() => {
     setEvents([...getDebugEvents()]);
     setSnapshots([...getRTPSnapshots()]);
+    setChannelRecords([...getChannelRegistry().values()]);
+    setSessionEnded(isDebugSessionEnded());
   }, []);
 
   // Subscribe to store updates
@@ -232,7 +238,7 @@ export function CallDebugCenter({
 
   const handleCopyReport = async () => {
     try {
-      const report = buildDebugReport();
+      const report = sanitizeDebugReportForExport(buildDebugReport());
       await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -240,7 +246,7 @@ export function CallDebugCenter({
   };
 
   const handleDownloadReport = () => {
-    const report = buildDebugReport();
+    const report = sanitizeDebugReportForExport(buildDebugReport());
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -310,11 +316,12 @@ export function CallDebugCenter({
             <KV k="Role"             v={myRole ?? '—'} />
             <KV k="Session ID"       v={sessionId   ? sessionId.slice(0, 8)   : '—'} mono />
             <KV k="PC ID"            v={peerConnectionId ? peerConnectionId.slice(0, 8) : '—'} mono />
+            <KV k="Debug Lifecycle"  v={<span className={sessionEnded ? 'text-amber-400' : 'text-emerald-400'}>{sessionEnded ? 'ENDED (preserved)' : 'active'}</span>} />
             {latestSnap && <>
-              <KV k="Connection"     v={latestSnap.pcStates.connectionState} />
-              <KV k="ICE Connection" v={latestSnap.pcStates.iceConnectionState} />
-              <KV k="ICE Gathering"  v={latestSnap.pcStates.iceGatheringState} />
-              <KV k="Signaling"      v={latestSnap.pcStates.signalingState} />
+              <KV k="Connection"            v={latestSnap.pcStates.connectionState} />
+              <KV k="ICE Connection"        v={latestSnap.pcStates.iceConnectionState} />
+              <KV k="ICE Gathering"         v={latestSnap.pcStates.iceGatheringState} />
+              <KV k="WebRTC Signaling State" v={latestSnap.pcStates.signalingState} />
               {latestSnap.candidatePair && <>
                 <KV k="Local cand"   v={latestSnap.candidatePair.localType} />
                 <KV k="Remote cand"  v={latestSnap.candidatePair.remoteType} />
@@ -374,6 +381,33 @@ export function CallDebugCenter({
                   {pr.installedEpoch !== null && <span className="text-gray-600">epoch={pr.installedEpoch}</span>}
                 </div>
                 <div className="text-gray-600">id={pr.id.slice(0, 8)}</div>
+              </div>
+            ))}
+          </Section>
+
+          {/* ── Realtime Signaling ── */}
+          <Section title="Realtime Signaling" icon={<Radio className="w-4 h-4 text-indigo-400" />} defaultOpen={true}>
+            {channelRecords.length === 0 && <p className="text-xs text-gray-600">No channel records yet.</p>}
+            {channelRecords.map(rec => (
+              <div key={rec.channelId} className="text-xs font-mono border border-white/5 rounded-lg p-2 space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-indigo-400">{rec.purpose}</span>
+                  <span className={
+                    rec.status === 'subscribed' ? 'text-emerald-400' :
+                    rec.status === 'subscribing' ? 'text-blue-400' :
+                    rec.status === 'failed' ? 'text-red-400' :
+                    rec.status === 'removed' ? 'text-gray-500' : 'text-gray-400'
+                  }>{rec.status}</span>
+                  {rec.lastSupabaseStatus && <span className="text-gray-600">sb:{rec.lastSupabaseStatus}</span>}
+                </div>
+                <div className="text-gray-600">id={rec.channelId.slice(0, 8)} · topic={rec.topicSummary}</div>
+                {rec.subscribeAttemptId && <div className="text-gray-700">attempt={rec.subscribeAttemptId.slice(0, 8)}</div>}
+                {rec.subscribedAt && rec.subscribeStartedAt && (
+                  <div className="text-gray-600">subscribed in {rec.subscribedAt - rec.subscribeStartedAt}ms</div>
+                )}
+                {rec.safeLastError && (
+                  <div className="text-red-400 mt-0.5">{rec.safeLastError.name}: {rec.safeLastError.message}</div>
+                )}
               </div>
             ))}
           </Section>

@@ -2,18 +2,19 @@
  * callDebugStore.ts — in-memory bounded ring buffer for E2EE call diagnostics.
  *
  * SECURITY NOTE: this store NEVER persists cryptographic key material.
- * Stored fields are redacted at ingestion. Only fingerprints/truncated IDs
- * of sensitive values are kept.
+ * Stored fields are redacted at ingestion. Only safe metadata is kept.
+ * Debug enablement uses sessionStorage (tab-scoped, never persisted).
  */
 
 import { v4 as uuidv4 } from 'uuid';
 
 // ── Runtime debug flag ──────────────────────────────────────────────────────
+// Enable: sessionStorage.setItem('e2ee_debug','1'); location.reload();
 
 export function isCallDebugEnabled(): boolean {
   if (typeof import.meta !== 'undefined' && (import.meta as { env?: { DEV?: boolean } }).env?.DEV) return true;
   try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem('e2ee_debug') === '1';
+    return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('e2ee_debug') === '1';
   } catch {
     return false;
   }
@@ -127,32 +128,48 @@ export interface MediaHealthClassification {
 
 // ── Ring buffer ─────────────────────────────────────────────────────────────
 
-const MAX_EVENTS   = 750;
+const MAX_EVENTS    = 750;
 const MAX_SNAPSHOTS = 30;
 
-let sessionStartMs = Date.now();
+let sessionStartMs    = Date.now();
 let currentRole: 'caller' | 'callee' | null = null;
 let currentSessionId: string | undefined;
 let currentPCId: string | undefined;
 let currentGeneration: number | undefined;
+// 'ended' or 'failed' — set when cleanup preserves the timeline
+let sessionLifecycleEnded = false;
 
-const events: CallDebugEvent[]   = [];
-const snapshots: RTPSnapshot[]   = [];
+const events: CallDebugEvent[] = [];
+const snapshots: RTPSnapshot[] = [];
 let listeners: Array<() => void> = [];
 
 export function debugStoreSetSession(opts: {
-  role: 'caller' | 'callee' | null;
+  role?: 'caller' | 'callee' | null;
   sessionId?: string;
   peerConnectionId?: string;
   generation?: number;
 }) {
-  if (opts.role !== undefined) currentRole = opts.role;
-  if (opts.sessionId     !== undefined) currentSessionId  = opts.sessionId;
-  if (opts.peerConnectionId !== undefined) currentPCId   = opts.peerConnectionId;
-  if (opts.generation    !== undefined) currentGeneration = opts.generation;
+  if (opts.role           !== undefined) currentRole       = opts.role;
+  if (opts.sessionId      !== undefined) currentSessionId  = opts.sessionId;
+  if (opts.peerConnectionId !== undefined) currentPCId     = opts.peerConnectionId;
+  if (opts.generation     !== undefined) currentGeneration = opts.generation;
   sessionStartMs = Date.now();
+  sessionLifecycleEnded = false;
 }
 
+// Mark the session ended/failed without erasing the event buffer.
+// This allows the Debug Center to show the failure timeline after cleanup.
+export function debugStoreMarkEnded(failReason?: string) {
+  sessionLifecycleEnded = true;
+  dbg('info', 'lifecycle', 'session-debug-lifecycle-ended', failReason ? { failReason } : undefined);
+  notifyListeners();
+}
+
+export function isDebugSessionEnded(): boolean {
+  return sessionLifecycleEnded;
+}
+
+// Called only at the START of a genuinely new call — wipes the previous timeline.
 export function debugStoreReset() {
   events.length    = 0;
   snapshots.length = 0;
@@ -161,6 +178,7 @@ export function debugStoreReset() {
   currentSessionId = undefined;
   currentPCId      = undefined;
   currentGeneration = undefined;
+  sessionLifecycleEnded = false;
   notifyListeners();
 }
 
@@ -183,15 +201,15 @@ export function dbg(
   overrides?: Partial<Pick<CallDebugEvent, 'peerConnectionId' | 'generation' | 'endpointRole' | 'sessionId'>>,
 ): void {
   const ev: CallDebugEvent = {
-    id:              uuidv4(),
-    timestamp:       Date.now(),
-    elapsedMs:       Date.now() - sessionStartMs,
+    id:               uuidv4(),
+    timestamp:        Date.now(),
+    elapsedMs:        Date.now() - sessionStartMs,
     level,
     category,
-    endpointRole:    overrides?.endpointRole ?? currentRole,
-    sessionId:       overrides?.sessionId    ?? (currentSessionId ? currentSessionId.slice(0, 8) : undefined),
-    peerConnectionId: overrides?.peerConnectionId ?? (currentPCId ? currentPCId.slice(0, 8) : undefined),
-    generation:      overrides?.generation   ?? currentGeneration,
+    endpointRole:     overrides?.endpointRole    ?? currentRole,
+    sessionId:        overrides?.sessionId       ?? (currentSessionId  ? currentSessionId.slice(0, 8)  : undefined),
+    peerConnectionId: overrides?.peerConnectionId ?? (currentPCId       ? currentPCId.slice(0, 8)       : undefined),
+    generation:       overrides?.generation      ?? currentGeneration,
     event,
     data: data ? redactData(data) : undefined,
   };
@@ -224,8 +242,24 @@ export function getLatestSnapshot(): RTPSnapshot | null         { return snapsho
 const SENSITIVE_KEYS = new Set([
   'key', 'keyData', 'ivSeed', 'privateKey', 'sharedSecret', 'hkdfKey',
   'rawSecret', 'aesKey', 'token', 'accessToken', 'password', 'secret',
-  'jwk', 'publicKey', 'd', 'x', 'y',
+  'jwk', 'publicKey', 'd', 'x', 'y', 'credential', 'username',
+  'turn_username', 'turn_credential', 'turnUsername', 'turnCredential',
+  'urls', 'iceServerUrl',
 ]);
+
+const SENSITIVE_VALUE_PATTERNS = [
+  /Bearer\s+[A-Za-z0-9._-]+/gi,
+  /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9._-]+/g,
+  /apikey=[^\s&"]+/gi,
+  /\b(?:\d{1,3}\.){3}\d{1,3}\b/g,   // IPv4
+  /\[[0-9a-fA-F:]+\]/g,              // IPv6 in brackets
+];
+
+function redactString(value: string): string {
+  let out = value;
+  for (const pat of SENSITIVE_VALUE_PATTERNS) out = out.replace(pat, '[REDACTED]');
+  return out;
+}
 
 function redactValue(key: string, value: unknown): unknown {
   if (SENSITIVE_KEYS.has(key)) return '[REDACTED]';
@@ -233,44 +267,42 @@ function redactValue(key: string, value: unknown): unknown {
   if (key === 'sessionId' && typeof value === 'string') return value.slice(0, 8);
   if (key === 'deviceId'  && typeof value === 'string') return '[DEVICE_ID]';
   if (key === 'sdp'       && typeof value === 'string') return '[SDP_REDACTED]';
+  if (key === 'candidate' && typeof value === 'string') return '[ICE_CANDIDATE_REDACTED]';
+  if (typeof value === 'string') return redactString(value);
   return value;
 }
 
-function redactData(data: Record<string, unknown>): Record<string, unknown> {
+export function redactData(data: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(data)) {
-    if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
-      out[k] = redactData(v as Record<string, unknown>);
-    } else {
-      out[k] = redactValue(k, v);
-    }
+    out[k] = redactAny(k, v);
   }
   return out;
 }
 
-// ── Key fingerprint helper (SHA-256 prefix, NOT the key itself) ─────────────
-
-export async function keyFingerprint(material: ArrayBuffer): Promise<string> {
-  try {
-    const hash = await crypto.subtle.digest('SHA-256', material);
-    return Array.from(new Uint8Array(hash).slice(0, 8))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch {
-    return 'unknown';
+function redactAny(key: string, value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) {
+    return value.map(item => redactAny(key, item));
   }
+  if (typeof value === 'object') {
+    return redactData(value as Record<string, unknown>);
+  }
+  return redactValue(key, value);
 }
 
 // ── Debug report builder ────────────────────────────────────────────────────
 
 export interface CallDebugReport {
-  generatedAt:   string;
-  userAgent:     string;
-  role:          string | null;
-  sessionId:     string | undefined;
-  generation:    number | undefined;
-  events:        CallDebugEvent[];
-  latestSnapshot: RTPSnapshot | null;
-  snapshotCount: number;
+  generatedAt:      string;
+  userAgent:        string;
+  role:             string | null;
+  sessionId:        string | undefined;
+  generation:       number | undefined;
+  sessionEnded:     boolean;
+  events:           CallDebugEvent[];
+  latestSnapshot:   RTPSnapshot | null;
+  snapshotCount:    number;
 }
 
 export function buildDebugReport(): CallDebugReport {
@@ -280,10 +312,50 @@ export function buildDebugReport(): CallDebugReport {
     role:           currentRole,
     sessionId:      currentSessionId ? currentSessionId.slice(0, 8) : undefined,
     generation:     currentGeneration,
+    sessionEnded:   sessionLifecycleEnded,
     events:         [...events],
     latestSnapshot: getLatestSnapshot(),
     snapshotCount:  snapshots.length,
   };
+}
+
+// ── Export sanitization ─────────────────────────────────────────────────────
+// Applied immediately before clipboard copy or download Blob creation.
+// Allowlist-based: only known-safe scalar fields pass through unchecked.
+
+const EXPORT_BLOCKLIST = new Set([
+  'sdp', 'candidate', 'key', 'keyData', 'ivSeed', 'privateKey', 'sharedSecret',
+  'hkdfKey', 'rawSecret', 'aesKey', 'token', 'accessToken', 'password', 'secret',
+  'jwk', 'publicKey', 'd', 'x', 'y', 'credential', 'username',
+  'turn_username', 'turn_credential', 'Authorization', 'authorization',
+]);
+
+function sanitizeAny(key: string, value: unknown): unknown {
+  if (EXPORT_BLOCKLIST.has(key)) return '[SANITIZED]';
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'boolean' || typeof value === 'number') return value;
+  if (Array.isArray(value)) return value.map(item => sanitizeAny(key, item));
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = sanitizeAny(k, v);
+    }
+    return out;
+  }
+  if (typeof value === 'string') {
+    // Strip IP addresses and bearer tokens from strings
+    return value
+      .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, '[SANITIZED]')
+      .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9._-]+/g, '[SANITIZED]')
+      .replace(/\b(?:\d{1,3}\.){3}\d{1,3}(:\d+)?\b/g, '[IP_REDACTED]')
+      .replace(/\[[0-9a-fA-F:]+\](:\d+)?/g, '[IP_REDACTED]')
+      .slice(0, 2000);
+  }
+  return value;
+}
+
+export function sanitizeDebugReportForExport(report: CallDebugReport): CallDebugReport {
+  return sanitizeAny('report', report) as CallDebugReport;
 }
 
 // ── Media health analyser ───────────────────────────────────────────────────
@@ -294,7 +366,7 @@ interface HealthContext {
   portRecordStates: Array<{ role: string; kind: string; state: string }>;
   remoteVideoElement: HTMLVideoElement | null;
   localTracks: MediaStreamTrack[];
-  stalledCounters: Map<string, number>; // key → consecutive stalled snapshot count
+  stalledCounters: Map<string, number>;
 }
 
 export function analyseMediaHealth(ctx: HealthContext): MediaHealthClassification[] {
@@ -310,30 +382,26 @@ export function analyseMediaHealth(ctx: HealthContext): MediaHealthClassificatio
 }
 
 function analyseSend(kind: 'audio' | 'video', ctx: HealthContext): MediaHealthClassification {
-  const sender = ctx.curr.senders.find(s => s.kind === kind);
+  const sender     = ctx.curr.senders.find(s => s.kind === kind);
   const prevSender = ctx.prev?.senders.find(s => s.kind === kind);
-
-  const label = kind === 'audio' ? 'صدای ارسالی' : 'ویدیو ارسالی';
+  const label      = kind === 'audio' ? 'صدای ارسالی' : 'ویدیو ارسالی';
 
   if (!sender) {
     return { kind, direction: 'send', classification: 'LOCAL_SENDER_MISSING',
       persianExplanation: `${label}: RTCRtpSender برای ${kind} پیدا نشد. Track احتمالاً به PC اضافه نشده.` };
   }
-
   if (!sender.trackEnabled || sender.trackReadyState !== 'live') {
     return { kind, direction: 'send', classification: 'LOCAL_CAPTURE_FAILURE',
       persianExplanation: `${label}: Track میکروفون/دوربین غیرفعال یا خاتمه یافته است.` };
   }
-
   if (sender.direction !== 'sendrecv' && sender.direction !== 'sendonly') {
     return { kind, direction: 'send', classification: 'NEGOTIATED_NOT_SENDRECV',
       persianExplanation: `${label}: جهت transceiver '${sender.direction}' است. انتظار sendrecv بود.` };
   }
-
   if (prevSender) {
     const bytesDelta = sender.bytesSent - prevSender.bytesSent;
     if (bytesDelta === 0) {
-      const key = `send-${kind}`;
+      const key   = `send-${kind}`;
       const count = (ctx.stalledCounters.get(key) ?? 0) + 1;
       ctx.stalledCounters.set(key, count);
       if (count >= 3) {
@@ -344,37 +412,32 @@ function analyseSend(kind: 'audio' | 'video', ctx: HealthContext): MediaHealthCl
       ctx.stalledCounters.delete(`send-${kind}`);
     }
   }
-
   return { kind, direction: 'send', classification: 'HEALTHY',
     persianExplanation: `${label}: ارسال فعال است.` };
 }
 
 function analyseRecv(kind: 'audio' | 'video', ctx: HealthContext): MediaHealthClassification {
-  const receiver = ctx.curr.receivers.find(r => r.kind === kind);
+  const receiver     = ctx.curr.receivers.find(r => r.kind === kind);
   const prevReceiver = ctx.prev?.receivers.find(r => r.kind === kind);
-  const portRec = ctx.portRecordStates.find(pr => pr.role === 'receiver' && pr.kind === kind);
-
-  const label = kind === 'audio' ? 'صدای دریافتی' : 'ویدیو دریافتی';
+  const portRec      = ctx.portRecordStates.find(pr => pr.role === 'receiver' && pr.kind === kind);
+  const label        = kind === 'audio' ? 'صدای دریافتی' : 'ویدیو دریافتی';
 
   if (!receiver) {
     return { kind, direction: 'recv', classification: 'REMOTE_TRACK_MISSING',
       persianExplanation: `${label}: RTCRtpReceiver پیدا نشد. ontrack احتمالاً فیره نشده.` };
   }
-
   if (!portRec) {
     return { kind, direction: 'recv', classification: 'RECEIVER_TRANSFORM_MISSING',
       persianExplanation: `${label}: PortRecord برای receiver/${kind} وجود ندارد. Transform ثبت نشده.` };
   }
-
   if (portRec.state !== 'key-ready') {
     return { kind, direction: 'recv', classification: 'E2EE_RECEIVER_NOT_READY',
       persianExplanation: `${label}: بسته‌های RTP وارد می‌شوند اما Transform رمزگشایی در وضعیت '${portRec.state}' است. احتمال: مشکل نصب کلید E2EE.` };
   }
-
   if (prevReceiver) {
     const bytesDelta = receiver.bytesReceived - prevReceiver.bytesReceived;
     if (bytesDelta === 0) {
-      const key = `recv-${kind}`;
+      const key   = `recv-${kind}`;
       const count = (ctx.stalledCounters.get(key) ?? 0) + 1;
       ctx.stalledCounters.set(key, count);
       if (count >= 3) {
@@ -389,7 +452,6 @@ function analyseRecv(kind: 'audio' | 'video', ctx: HealthContext): MediaHealthCl
       }
     }
   }
-
   if (kind === 'video' && ctx.remoteVideoElement) {
     const v = ctx.remoteVideoElement;
     if (!v.srcObject) {
@@ -401,7 +463,6 @@ function analyseRecv(kind: 'audio' | 'video', ctx: HealthContext): MediaHealthCl
         persianExplanation: `${label}: Track زنده است اما play() اجرا نشده. احتمال: سیاست autoplay مرورگر.` };
     }
   }
-
   return { kind, direction: 'recv', classification: 'HEALTHY',
     persianExplanation: `${label}: دریافت فعال است.` };
 }
