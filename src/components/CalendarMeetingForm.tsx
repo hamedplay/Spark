@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { insertNotification, getSmsTemplates, fillPlaceholders } from '../lib/notifications';
+import type { SmsDispatchResult } from '../lib/notifications';
 import { CirclePlus as PlusCircle, Loader as Loader2, UserPlus, Bell, Repeat, MessageSquare, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, X, Plus, Users, Video, BookUser, Save, CreditCard as Edit2, Building2, ChevronDown, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail, AgendaItem } from '../types';
 import { useOrgUsers } from '../lib/useOrgUsers';
+
+interface ExternalSmsResult {
+  ok: boolean;
+  sent: number;
+  skipped: number;
+  error?: string;
+}
 
 async function sendSmsToExternals(
   externalNames: string[],
@@ -13,62 +21,88 @@ async function sendSmsToExternals(
   message: string,
   triggeredByUserId?: string | null,
   placeholders?: Record<string, string>,
-) {
-  if (!externalNames.length) return;
+): Promise<ExternalSmsResult> {
+  if (!externalNames.length) return { ok: true, sent: 0, skipped: 0 };
+
   const resolved = externalNames
     .map(name => ({ name, contact: allContacts.find(c => c.name === name) }))
     .filter((r): r is { name: string; contact: ContactEmail } => !!r.contact && !!((r.contact as any).phone))
     .filter(r => ((r.contact as any).phone as string).trim().length >= 7);
+
   const mobiles = resolved.map(r => (r.contact as any).phone as string);
+  const skippedNoPhone = externalNames.length - resolved.length;
+
   if (!mobiles.length) {
-    toast.error('شماره موبایل برای افراد خارج سازمان یافت نشد');
-    return;
+    return { ok: false, sent: 0, skipped: skippedNoPhone, error: 'شماره موبایل برای افراد خارج سازمان یافت نشد' };
   }
+
+  // Apply SMS template for external contacts if available
+  let smsMessage = message;
+  if (placeholders) {
+    const smsTemplates = await getSmsTemplates();
+    const templateBody =
+      smsTemplates.get('meeting:invite:external') ||
+      smsTemplates.get('meeting:invite:all');
+    if (templateBody) {
+      smsMessage = fillPlaceholders(templateBody, placeholders);
+    }
+  }
+
   try {
-    // Try to apply SMS template for meeting:invite:external or meeting:invite:all
-    let smsMessage = message;
-    if (placeholders) {
-      const smsTemplates = await getSmsTemplates();
-      const templateBody =
-        smsTemplates.get('meeting:invite:external') ||
-        smsTemplates.get('meeting:invite:all');
-      if (templateBody) {
-        smsMessage = fillPlaceholders(templateBody, placeholders);
-      }
-    }
-
     const { data: result, error: fnError } = await supabase.functions.invoke('send-sms', {
-      body: { mobiles, message: smsMessage },
+      body: {
+        mode: 'external',
+        mobiles,
+        message: smsMessage,
+        triggeredByUserId: triggeredByUserId ?? null,
+        category: 'meeting',
+        eventType: 'invite',
+      },
     });
-    if (fnError) throw fnError;
 
-    const logBase = {
-      triggered_by_user_id: triggeredByUserId ?? null,
-      target_user_id: null,
-      category: 'meeting',
-      event_type: 'invite',
-      audience: 'all',
-      message: smsMessage,
+    if (fnError) throw new Error(fnError.message ?? String(fnError));
+
+    return {
+      ok: result?.ok === true,
+      sent: result?.sent ?? 0,
+      skipped: (result?.skipped ?? 0) + skippedNoPhone,
+      error: result?.ok ? undefined : (result?.error ?? 'خطای ناشناخته'),
     };
-    const logs = mobiles.map(phone => ({
-      ...logBase,
-      target_phone: phone,
-      status: result.ok ? 'sent' : 'failed',
-      error_text: result.ok ? null : (result.error ?? 'خطای ناشناخته'),
-      pack_id: result.ok ? (result.packId ?? null) : null,
-      raw_response: result.response ?? null,
-    }));
-    await supabase.from('sms_dispatch_logs').insert(logs);
-
-    if (result.ok) {
-      toast.success(`پیامک به ${result.sent} نفر خارج سازمان ارسال شد`);
-    } else {
-      toast.error('خطا در ارسال پیامک: ' + (result.error || 'خطای ناشناخته'));
-    }
-  } catch (err: any) {
-    console.error('SMS send failed:', err);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, sent: 0, skipped: skippedNoPhone, error: msg };
   }
 }
+
+/**
+ * Collects SMS results for all recipients and shows a single, human-readable summary toast.
+ * Meeting save is never rolled back regardless of SMS outcome.
+ */
+function showSmsSummary(
+  internalResults: SmsDispatchResult[],
+  externalResult: ExternalSmsResult | null,
+) {
+  const sent = internalResults.filter(r => r.status === 'sent').length
+    + (externalResult?.sent ?? 0);
+  const skipped = internalResults.filter(r => r.status === 'skipped').length
+    + (externalResult?.skipped ?? 0);
+  const failed = internalResults.filter(r => r.status === 'failed').length
+    + (externalResult && !externalResult.ok && externalResult.sent === 0 ? 1 : 0);
+
+  if (sent === 0 && skipped === 0 && failed === 0) return;
+
+  const parts: string[] = [];
+  if (sent > 0)    parts.push(`پیامک ${sent} نفر ارسال شد`);
+  if (skipped > 0) parts.push(`${skipped} نفر پیامک ندارند یا قانونی برایشان تعریف نشده`);
+  if (failed > 0)  parts.push(`ارسال برای ${failed} نفر ناموفق بود`);
+
+  if (failed > 0) {
+    toast.error('جلسه ثبت شد. ' + parts.join(' — '), { duration: 6000 });
+  } else {
+    toast.success('جلسه ثبت شد. ' + parts.join(' — '), { duration: 5000 });
+  }
+}
+
 
 interface CalendarEntry {
   id: string;
@@ -635,8 +669,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
         }
 
-        toast.success('جلسه با موفقیت ثبت نهایی شد');
-
         // Create/refresh inbox invitations for participants only (notify_users see meeting directly via RLS, no inbox needed)
         const participantsForInvite = selectedParticipants
           .map(p => p.id)
@@ -652,16 +684,22 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         }
 
         await insertNotification({ userId, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد${agendaSummary}`, placeholders: smsPlaceholders, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
+
+        const internalSmsResults: SmsDispatchResult[] = [];
         if (participantIds.length) {
-          await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', audience: 'participants', fallbackTitle: isFirstSchedule ? 'دعوت به جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          const results = await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', audience: 'participants', fallbackTitle: isFirstSchedule ? 'دعوت به جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          internalSmsResults.push(...results);
         }
         if (observerIds.length) {
-          await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', audience: 'observers', fallbackTitle: isFirstSchedule ? 'اطلاع از جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          const results = await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: isFirstSchedule ? 'invite' : 'change', audience: 'observers', fallbackTitle: isFirstSchedule ? 'اطلاع از جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          internalSmsResults.push(...results);
         }
+        let externalSmsResult: ExternalSmsResult | null = null;
         if (sendSms && selectedExternal.length > 0) {
           const fallbackSms = `دعوت به جلسه: «${subject}» | تاریخ: ${meetingDateStr} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
-          sendSmsToExternals(selectedExternal, contacts, fallbackSms, userId, smsPlaceholders);
+          externalSmsResult = await sendSmsToExternals(selectedExternal, contacts, fallbackSms, userId, smsPlaceholders);
         }
+        showSmsSummary(internalSmsResults, externalSmsResult);
       } else {
         const { data: md, error: me } = await supabase.from('meetings').insert([record]).select().single();
         if (me) throw me;
@@ -692,18 +730,23 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
         }
         if (repeatEnabled && md && repeatEndDate) await createRepeatMeetings(record, repeatType, repeatInterval, repeatEndDate);
-        toast.success('جلسه ثبت شد');
         await insertNotification({ userId, category: 'meeting', eventType: 'invite', fallbackTitle: 'جلسه ثبت شد', fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}${agendaSummary}`, placeholders: smsPlaceholders, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
+
+        const internalSmsResults: SmsDispatchResult[] = [];
         if (participantIds.length) {
-          await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          const results = await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          internalSmsResults.push(...results);
         }
         if (observerIds.length) {
-          await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          const results = await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          internalSmsResults.push(...results);
         }
+        let externalSmsResult: ExternalSmsResult | null = null;
         if (sendSms && selectedExternal.length > 0) {
           const fallbackSms = `دعوت به جلسه: «${subject}» | تاریخ: ${meetingDateStr} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
-          sendSmsToExternals(selectedExternal, contacts, fallbackSms, userId, smsPlaceholders);
+          externalSmsResult = await sendSmsToExternals(selectedExternal, contacts, fallbackSms, userId, smsPlaceholders);
         }
+        showSmsSummary(internalSmsResults, externalSmsResult);
       }
       if (saveContact && representative?.trim() && phone?.trim() && userId) {
         const { error: contactError } = await supabase

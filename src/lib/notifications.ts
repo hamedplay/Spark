@@ -17,6 +17,14 @@ export interface NotifyPayload {
   actionUrl?: string | null;
 }
 
+export interface SmsDispatchResult {
+  ok: boolean;
+  status: 'sent' | 'skipped' | 'failed';
+  reason?: string;
+  errorCode?: string;
+  error?: string;
+}
+
 // In-memory template cache (refreshed per session)
 let templateCache: Map<string, { title: string; body: string }> | null = null;
 let cacheLoadedAt = 0;
@@ -91,6 +99,11 @@ async function dispatchBale(
   }
 }
 
+/**
+ * Dispatches an SMS to an internal user via the server-side 'dispatch' mode.
+ * All resolution (phone, provider, rule check) happens inside the Edge Function
+ * using the admin client — no phone numbers are exposed to the browser.
+ */
 async function dispatchSms(
   userId: string,
   category: string,
@@ -98,126 +111,54 @@ async function dispatchSms(
   audience: string,
   message: string,
   senderId?: string | null,
-): Promise<void> {
-  const logBase = {
-    target_user_id: userId,
-    triggered_by_user_id: senderId ?? null,
-    category,
-    event_type: eventType,
-    audience,
-    message,
-  };
-
+): Promise<SmsDispatchResult> {
   try {
-    // Use SECURITY DEFINER RPC to bypass RLS:
-    // reads target user's group memberships + sms_group_rules + phone in one call
-    const { data: dispatchRows, error: rpcError } = await supabase
-      .rpc('get_sms_dispatch_info', { target_user_id: userId, p_category: category });
-
-    if (rpcError) throw rpcError;
-
-    if (!dispatchRows?.length) {
-      await supabase.from('sms_dispatch_logs').insert({
-        ...logBase,
-        target_phone: null,
-        status: 'skipped',
-        error_text: `پیامک برای دسته «${category}» در گروه‌های کاربر فعال نیست`,
-      });
-      return;
-    }
-
-    const providerId: string | null = dispatchRows[0].provider_id ?? null;
-    const phone: string = dispatchRows[0].phone?.trim() ?? '';
-
-    if (!phone || phone.length < 7) {
-      await supabase.from('sms_dispatch_logs').insert({
-        ...logBase,
-        target_phone: phone || null,
-        provider_id: providerId,
-        status: 'skipped',
-        error_text: 'شماره موبایل در پروفایل کاربر ثبت نشده یا معتبر نیست',
-      });
-      return;
-    }
-
-    // Get provider name for logging
-    let providerName: string | null = null;
-    if (providerId) {
-      const { data: prov } = await supabase
-        .from('sms_providers')
-        .select('title')
-        .eq('id', providerId)
-        .maybeSingle();
-      providerName = prov?.title ?? null;
-    } else {
-      const { data: defProv } = await supabase
-        .from('sms_providers')
-        .select('id, title')
-        .eq('is_default', true)
-        .eq('is_active', true)
-        .maybeSingle();
-      if (defProv) {
-        providerName = defProv.title;
-      }
-    }
-
-    // Call send-sms Edge Function
-    const requestBody: Record<string, unknown> = {
-      mode: 'send',
-      mobiles: [phone],
-      message,
-    };
-    if (providerId) requestBody.providerId = providerId;
-
     const { data: result, error: fnError } = await supabase.functions.invoke('send-sms', {
-      body: requestBody,
+      body: {
+        mode: 'dispatch',
+        targetUserId: userId,
+        category,
+        eventType,
+        audience,
+        message,
+        triggeredByUserId: senderId ?? null,
+      },
     });
-    if (fnError) throw fnError;
 
-    if (result.ok) {
-      // For rahyab_rest: result.returnIds[0] is the provider message ID (Rahyab Return ID)
-      // For sms.ir / REST providers: result.returnIds is absent; use packId instead
-      const providerMessageId: string | null = result.returnIds?.[0] ?? null;
-      await supabase.from('sms_dispatch_logs').insert({
-        ...logBase,
-        target_phone: phone,
-        provider_id: providerId,
-        provider_name: providerName,
-        status: 'sent',
-        pack_id: result.packId ?? null,
-        message_ids: result.messageIds ?? null,
-        cost: result.cost ?? null,
-        raw_response: result.response ?? null,
-        provider_message_id: providerMessageId,
-        delivery_status: providerMessageId ? 'pending' : null,
-      });
-    } else {
-      await supabase.from('sms_dispatch_logs').insert({
-        ...logBase,
-        target_phone: phone,
-        provider_id: providerId,
-        provider_name: providerName,
-        status: 'failed',
-        error_text: result.error ?? 'خطای ناشناخته از سرویس پیامک',
-        raw_response: result.response ?? null,
-      });
+    if (fnError) {
+      throw new Error(fnError.message ?? String(fnError));
     }
-  } catch (err: any) {
-    // Log the failure but never let it break the notification flow
+
+    return {
+      ok: result?.ok === true,
+      status: result?.status ?? (result?.ok ? 'sent' : 'failed'),
+      reason: result?.reason,
+      errorCode: result?.errorCode,
+      error: result?.error,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Log the failure so it's visible in sms_dispatch_logs
     try {
       await supabase.from('sms_dispatch_logs').insert({
-        ...logBase,
+        target_user_id: userId,
+        triggered_by_user_id: senderId ?? null,
+        category,
+        event_type: eventType,
+        audience,
+        message,
         target_phone: null,
         status: 'failed',
-        error_text: err?.message ?? 'خطای داخلی هنگام ارسال پیامک',
+        error_text: `CLIENT_INVOKE_ERROR: ${message}`,
       });
     } catch {
       // ignore secondary logging failure
     }
+    return { ok: false, status: 'failed', errorCode: 'CLIENT_INVOKE_ERROR', error: message };
   }
 }
 
-export async function insertNotification(payload: NotifyPayload): Promise<void> {
+export async function insertNotification(payload: NotifyPayload): Promise<SmsDispatchResult> {
   const templates = await getTemplates();
   const audience = payload.audience || 'all';
   const template =
@@ -240,7 +181,7 @@ export async function insertNotification(payload: NotifyPayload): Promise<void> 
     action_url: payload.actionUrl ?? null,
   });
 
-  // Dispatch SMS — use notification body as fallback if no dedicated SMS template
+  // Resolve SMS message (dedicated template or fallback to notification body)
   const smsTemplates = await getSmsTemplates();
   const smsBody =
     smsTemplates.get(`${payload.category}:${payload.eventType}:${audience}`) ||
@@ -248,8 +189,8 @@ export async function insertNotification(payload: NotifyPayload): Promise<void> 
     message;
   const smsMessage = fillPlaceholders(smsBody, vars);
 
-  // Fire-and-forget — never block the notification insert
-  dispatchSms(
+  // Dispatch SMS via server-side dispatch mode — returns structured result
+  const smsResult = await dispatchSms(
     payload.userId,
     payload.category,
     payload.eventType,
@@ -261,6 +202,8 @@ export async function insertNotification(payload: NotifyPayload): Promise<void> 
   // Fire-and-forget — send Bale message if user has connected Bale account
   const baleText = title !== message ? `${title}\n${message}` : message;
   dispatchBale(payload.userId, baleText);
+
+  return smsResult;
 }
 
 export function invalidateTemplateCache() {
