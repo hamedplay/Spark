@@ -560,11 +560,14 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       const smsPlaceholders: Record<string, string> = {
         meeting_subject: subject,
         meeting_date: meetingDateStr,
+        start_time: startTime || '',
+        end_time: endTime || '',
         meeting_time: meetingTimeStr,
         location: location || '',
         location_part: location ? ` | ${location}` : '',
         join_link: joinLink,
         sender_name: userDisplayName,
+        organizer_name: userDisplayName,
         representative: representative || '',
         agenda: agendaEnabled && agendaItems.length > 0
           ? agendaItems.map((item, idx) => {

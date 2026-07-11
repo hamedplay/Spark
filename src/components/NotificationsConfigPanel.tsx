@@ -4,6 +4,14 @@ import { Bell, Users, Check, X, Loader as Loader2, RefreshCw, Save, Info, Chevro
 import { supabase } from '../lib/supabase';
 import { invalidateTemplateCache } from '../lib/notifications';
 import toast from 'react-hot-toast';
+import {
+  TEMPLATE_CATEGORIES as NOTIF_CATEGORIES,
+  TEMPLATE_EVENT_TYPES as EVENT_TYPES,
+  TEMPLATE_AUDIENCES as AUDIENCES,
+  TEMPLATE_PLACEHOLDERS as ALL_PLACEHOLDERS,
+  extractPlaceholders,
+  findUnknownPlaceholders,
+} from '../config/templateCatalog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface UserGroup { id: string; name: string; display_name: string | null; }
@@ -44,30 +52,6 @@ const NOTIFICATION_TYPES = [
 
 const N_CATEGORIES = Array.from(new Set(NOTIFICATION_TYPES.map(n => n.category)));
 
-const NOTIF_CATEGORIES = [
-  { key: 'meeting',  label: 'جلسات' },
-  { key: 'task',     label: 'اقدامات' },
-  { key: 'chat',     label: 'چت' },
-  { key: 'channel',  label: 'کانال‌ها' },
-  { key: 'calendar', label: 'تقویم' },
-  { key: 'note',     label: 'یادداشت‌ها' },
-  { key: 'system',   label: 'سیستم' },
-];
-
-const EVENT_TYPES = [
-  { key: 'invite', label: 'دعوت' }, { key: 'change', label: 'تغییر' },
-  { key: 'cancel', label: 'لغو' }, { key: 'reminder', label: 'یادآور' },
-  { key: 'assign', label: 'تخصیص' }, { key: 'complete', label: 'تکمیل' },
-  { key: 'event_invite', label: 'دعوت رویداد' }, { key: 'mention', label: 'منشن' },
-  { key: 'message', label: 'پیام' }, { key: 'share', label: 'اشتراک' },
-  { key: 'alert', label: 'هشدار' }, { key: 'custom', label: 'سفارشی' },
-];
-
-const AUDIENCES = [
-  { key: 'all', label: 'همه' }, { key: 'participants', label: 'شرکت‌کنندگان' },
-  { key: 'observers', label: 'مطلعین' }, { key: 'external', label: 'خارج سازمان' },
-];
-
 const COLORS = [
   { key: 'blue', label: 'آبی', cls: 'bg-blue-500' },
   { key: 'green', label: 'سبز', cls: 'bg-green-500' },
@@ -85,26 +69,6 @@ const COLOR_BADGE: Record<string, string> = {
   teal:  'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400',
   gray:  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
 };
-
-const ALL_PLACEHOLDERS = [
-  { key: 'full_name',       label: 'نام کامل' },
-  { key: 'meeting_subject', label: 'موضوع جلسه' },
-  { key: 'meeting_date',    label: 'تاریخ جلسه' },
-  { key: 'meeting_time',    label: 'ساعت جلسه' },
-  { key: 'location',        label: 'محل برگزاری' },
-  { key: 'representative',  label: 'نماینده' },
-  { key: 'minutes',         label: 'دقایق مانده' },
-  { key: 'task_title',      label: 'عنوان اقدام' },
-  { key: 'priority',        label: 'اولویت' },
-  { key: 'due_date',        label: 'مهلت' },
-  { key: 'event_title',     label: 'عنوان رویداد' },
-  { key: 'event_date',      label: 'تاریخ رویداد' },
-  { key: 'sender_name',     label: 'نام فرستنده' },
-  { key: 'note_title',      label: 'عنوان یادداشت' },
-  { key: 'message_preview', label: 'پیش‌نمایش پیام' },
-  { key: 'alert_message',   label: 'متن هشدار' },
-  { key: 'agenda',          label: 'دستور جلسه' },
-];
 
 const TABS = [
   { key: 'groups',    label: 'گروه‌بندی اعلان',   icon: GroupIcon },
@@ -353,9 +317,23 @@ function TemplateEditor({ template, onSave, onCancel }: {
   const handleSave = async () => {
     if (!form.title.trim()) { toast.error('عنوان اعلان الزامی است'); return; }
     if (!form.body.trim()) { toast.error('متن اعلان نمی‌تواند خالی باشد'); return; }
+    const unknown = findUnknownPlaceholders(form.body);
+    if (unknown.length > 0) {
+      toast.error(`متغیر ناشناخته: ${unknown.join('، ')}`);
+      return;
+    }
+    const extracted = extractPlaceholders(form.body);
     setSaving(true);
     const { error } = await supabase.from('notification_templates')
-      .update({ title: form.title, body: form.body, icon: form.icon, color: form.color, placeholders: form.placeholders, is_active: form.is_active, updated_at: new Date().toISOString() })
+      .update({
+        title: form.title,
+        body: form.body,
+        icon: form.icon,
+        color: form.color,
+        placeholders: extracted.length > 0 ? extracted : form.placeholders,
+        is_active: form.is_active,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', form.id);
     if (error) { toast.error('خطا در ذخیره قالب'); setSaving(false); return; }
     toast.success('قالب اعلان ذخیره شد');
@@ -494,8 +472,17 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
     if (!form.event_type.trim()) { toast.error('نوع رویداد الزامی است'); return; }
     if (!form.title.trim()) { toast.error('عنوان اعلان الزامی است'); return; }
     if (!form.body.trim()) { toast.error('متن اعلان نمی‌تواند خالی باشد'); return; }
+    const unknown = findUnknownPlaceholders(form.body);
+    if (unknown.length > 0) {
+      toast.error(`متغیر ناشناخته: ${unknown.join('، ')}`);
+      return;
+    }
+    const extracted = extractPlaceholders(form.body);
     setSaving(true);
-    const { error } = await supabase.from('notification_templates').insert([{ ...form }]);
+    const { error } = await supabase.from('notification_templates').insert([{
+      ...form,
+      placeholders: extracted.length > 0 ? extracted : form.placeholders,
+    }]);
     if (error) {
       if (error.code === '23505') toast.error('قالبی با این ترکیب از قبل وجود دارد');
       else toast.error('خطا در ذخیره قالب');

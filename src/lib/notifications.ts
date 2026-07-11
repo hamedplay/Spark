@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { renderTemplate } from '../config/templateCatalog';
 
 export interface NotifyPayload {
   userId: string;
@@ -71,10 +72,11 @@ async function getSmsTemplates(): Promise<Map<string, string>> {
 }
 
 function fillPlaceholders(text: string, vars: Record<string, string>): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_match, key) => {
-    const val = vars[key];
-    return (val !== undefined && val !== null) ? val : '';
-  });
+  const { rendered, leftover } = renderTemplate(text, vars);
+  if (leftover.length > 0) {
+    console.warn(`[notifications] Unfilled placeholders: ${leftover.join(', ')}`);
+  }
+  return rendered;
 }
 
 async function dispatchBale(

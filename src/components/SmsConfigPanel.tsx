@@ -3,6 +3,14 @@ import { MessageSquare, Plus, Trash2, Save, Loader as Loader2, X, Check, Refresh
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { DebugLog, RequestLogPanel } from './RahyabConfigPanel';
+import {
+  TEMPLATE_CATEGORIES as SMS_CATEGORIES,
+  TEMPLATE_EVENT_TYPES as EVENT_TYPES,
+  TEMPLATE_AUDIENCES as AUDIENCES,
+  TEMPLATE_PLACEHOLDERS as ALL_PLACEHOLDERS,
+  extractPlaceholders,
+  findUnknownPlaceholders,
+} from '../config/templateCatalog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SmsProvider {
@@ -37,21 +45,14 @@ interface SmsTemplate {
 }
 
 // ─── Catalogs ─────────────────────────────────────────────────────────────────
-const SMS_CATEGORIES = [
-  { key: 'meeting',  label: 'جلسات' },
-  { key: 'task',     label: 'اقدامات' },
-  { key: 'calendar', label: 'تقویم' },
-  { key: 'chat',     label: 'چت سازمانی' },
-  { key: 'channel',  label: 'کانال‌ها' },
-  { key: 'system',   label: 'سیستم' },
-];
-
 const CATEGORY_COLORS: Record<string, string> = {
   meeting: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
   task:    'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
   calendar:'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
   chat:    'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400',
   channel: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+  note:    'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
+  report:  'bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400',
   system:  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
 };
 
@@ -621,23 +622,6 @@ function GroupsTab() {
 // ════════════════════════════════════════════════════════════════════
 
 // All known placeholders by category for the guide + new form
-const ALL_PLACEHOLDERS: { key: string; label: string; example: string }[] = [
-  { key: 'full_name',        label: 'نام کامل',              example: 'علی احمدی' },
-  { key: 'meeting_subject',  label: 'موضوع جلسه',            example: 'جلسه هیئت مدیره' },
-  { key: 'meeting_date',     label: 'تاریخ جلسه',            example: '۱۴۰۳/۰۳/۱۵' },
-  { key: 'meeting_time',     label: 'ساعت جلسه',             example: '۱۴:۳۰' },
-  { key: 'location',         label: 'مکان',                  example: 'سالن اجتماعات' },
-  { key: 'join_link',        label: 'لینک ورود',             example: 'https://...' },
-  { key: 'minutes',          label: 'دقایق مانده',           example: '۳۰' },
-  { key: 'task_title',       label: 'عنوان اقدام',           example: 'بررسی گزارش مالی' },
-  { key: 'priority',         label: 'اولویت',                example: 'بالا' },
-  { key: 'due_date',         label: 'مهلت',                  example: '۱۴۰۳/۰۴/۰۱' },
-  { key: 'event_title',      label: 'عنوان رویداد',          example: 'جشن سالگرد' },
-  { key: 'event_date',       label: 'تاریخ رویداد',          example: '۱۴۰۳/۰۵/۱۰' },
-  { key: 'sender_name',      label: 'نام فرستنده',           example: 'سارا رضایی' },
-  { key: 'org_name',         label: 'نام سازمان',            example: 'شرکت نمونه' },
-];
-
 // Help guide shown collapsibly at top of templates tab
 function TemplateGuide() {
   const [open, setOpen] = useState(false);
@@ -694,19 +678,6 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
   const [phInput, setPhInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const EVENT_TYPES = [
-    { key: 'invite', label: 'دعوت' }, { key: 'change', label: 'تغییر' },
-    { key: 'cancel', label: 'لغو' }, { key: 'reminder', label: 'یادآور' },
-    { key: 'assign', label: 'تخصیص' }, { key: 'complete', label: 'تکمیل' },
-    { key: 'event_invite', label: 'دعوت رویداد' }, { key: 'mention', label: 'منشن' },
-    { key: 'custom', label: 'سفارشی' },
-  ];
-
-  const AUDIENCES = [
-    { key: 'all', label: 'همه' }, { key: 'participants', label: 'شرکت‌کنندگان' },
-    { key: 'observers', label: 'مطلعین' }, { key: 'external', label: 'خارج سازمان' },
-  ];
-
   const insertPlaceholder = (ph: string) => {
     const ta = textareaRef.current;
     if (ta) {
@@ -733,6 +704,12 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
   const handleSave = async () => {
     if (!form.event_type.trim()) { toast.error('نوع رویداد الزامی است'); return; }
     if (!form.body.trim()) { toast.error('متن پیام نمی‌تواند خالی باشد'); return; }
+    const unknown = findUnknownPlaceholders(form.body);
+    if (unknown.length > 0) {
+      toast.error(`متغیر ناشناخته: ${unknown.join('، ')}`);
+      return;
+    }
+    const extracted = extractPlaceholders(form.body);
     setSaving(true);
     const { error } = await supabase.from('sms_templates').insert([{
       category: form.category,
@@ -740,7 +717,7 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
       audience: form.audience,
       subject: form.subject,
       body: form.body,
-      placeholders: form.placeholders,
+      placeholders: extracted.length > 0 ? extracted : form.placeholders,
       is_active: form.is_active,
     }]);
     if (error) {
@@ -893,9 +870,21 @@ function TemplateEditor({ template, onSave, onCancel }: {
 
   const handleSave = async () => {
     if (!form.body.trim()) { toast.error('متن پیام نمی‌تواند خالی باشد'); return; }
+    const unknown = findUnknownPlaceholders(form.body);
+    if (unknown.length > 0) {
+      toast.error(`متغیر ناشناخته: ${unknown.join('، ')}`);
+      return;
+    }
+    const extracted = extractPlaceholders(form.body);
     setSaving(true);
     const { error } = await supabase.from('sms_templates')
-      .update({ subject: form.subject, body: form.body, is_active: form.is_active, updated_at: new Date().toISOString() })
+      .update({
+        subject: form.subject,
+        body: form.body,
+        placeholders: extracted.length > 0 ? extracted : form.placeholders,
+        is_active: form.is_active,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', form.id);
     if (error) { toast.error('خطا در ذخیره قالب'); setSaving(false); return; }
     toast.success('قالب پیام ذخیره شد');
