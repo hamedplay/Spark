@@ -155,16 +155,30 @@ export function renderTemplate(
 
 // ─── Meeting recipient role & template key ────────────────────────────────────
 
-export type MeetingRecipientRole = 'creator' | 'organizer' | 'participant' | 'representative';
+export type MeetingRecipientRole = 'creator' | 'organizer' | 'participant' | 'representative' | 'observer';
+
+export type MeetingAction = 'created' | 'invite' | 'change' | 'cancel' | 'reminder';
 
 /**
  * Determines which template event_type to use for a meeting notification
- * based on the recipient's role relative to the meeting.
+ * based on the recipient's role relative to the meeting and the action.
+ *
+ * - Creator/organizer of a newly created meeting gets 'meeting_created'
+ *   (not 'invite' — they created it, they weren't invited).
+ * - Representative gets 'meeting_representative_assigned'.
+ * - Everyone else gets the action itself ('invite', 'change', 'cancel', 'reminder').
  */
-export function getMeetingTemplateKey(role: MeetingRecipientRole): string {
-  if (role === 'creator' || role === 'organizer') return 'meeting_created';
-  if (role === 'representative') return 'meeting_representative_assigned';
-  return 'invite';
+export function getMeetingTemplateKey(
+  role: MeetingRecipientRole,
+  action: MeetingAction,
+): string {
+  if (action === 'created' && (role === 'creator' || role === 'organizer')) {
+    return 'meeting_created';
+  }
+  if (role === 'representative') {
+    return 'meeting_representative_assigned';
+  }
+  return action;
 }
 
 // ─── Meeting payload ───────────────────────────────────────────────────────────

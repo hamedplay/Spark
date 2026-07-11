@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin, RefreshCw, ChevronD
 import { CalendarViews } from './Calendar/CalendarViews';
 import { supabase } from '../lib/supabase';
 import { insertNotification as insertNotificationFromTemplate } from '../lib/notifications';
+import { getMeetingTemplateKey } from '../config/templateCatalog';
 import toast from 'react-hot-toast';
 import { CalendarMeetingForm } from './CalendarMeetingForm';
 import { MeetingInboxButton } from './MeetingInboxButton';

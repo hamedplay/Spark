@@ -5,6 +5,7 @@ import type { AgendaItem } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { sendMeetingToTelegram } from '../../lib/telegram';
 import { insertNotification } from '../../lib/notifications';
+import { getMeetingTemplateKey } from '../../config/templateCatalog';
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
 import { ActionsSection } from './ActionsSection';
@@ -219,7 +220,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
           insertNotification({
             userId: uid,
             category: 'meeting',
-            eventType: 'invite',
+            eventType: getMeetingTemplateKey('participant', 'invite'),
             audience: 'participants',
             fallbackTitle: `دعوت مجدد به جلسه: ${meeting.subject}`,
             fallbackMessage: `شما مجدداً به جلسه «${meeting.subject}» دعوت شده‌اید`,
@@ -335,7 +336,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
           insertNotification({
             userId: uid,
             category: 'meeting',
-            eventType: 'cancel',
+            eventType: getMeetingTemplateKey(pIds.includes(uid) ? 'participant' : 'observer', 'cancel'),
             audience: pIds.includes(uid) ? 'participants' : 'observers',
             fallbackTitle: 'جلسه لغو شد',
             fallbackMessage: `جلسه «${meeting.subject}» لغو شده است`,
@@ -434,7 +435,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
           insertNotification({
             userId: uid,
             category: 'meeting',
-            eventType: 'cancel',
+            eventType: getMeetingTemplateKey(pIds.includes(uid) ? 'participant' : 'observer', 'cancel'),
             audience: pIds.includes(uid) ? 'participants' : 'observers',
             fallbackTitle: 'جلسه لغو شد',
             fallbackMessage: `جلسه «${fullMtg.subject}» لغو شده است`,
@@ -531,7 +532,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
                 insertNotification({
                   userId: uid,
                   category: 'meeting',
-                  eventType: 'invite',
+                  eventType: getMeetingTemplateKey('participant', 'invite'),
                   audience: 'participants',
                   fallbackTitle: `دعوت مجدد به جلسه: ${meeting.subject}`,
                   fallbackMessage: `جلسه «${meeting.subject}» ویرایش شد و مجدداً برای شما ارسال گردید`,

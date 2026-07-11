@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Inbox, Check, UserCheck, X, MapPin, Clock, Calendar, Search, ChevronRight, Users, Building2, ChevronDown, Circle as XCircle, CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { insertNotification } from '../lib/notifications';
+import { getMeetingTemplateKey } from '../config/templateCatalog';
 import toast from 'react-hot-toast';
 import { useOrgUsers } from '../lib/useOrgUsers';
 import { useDraggableFab, panelStyle } from '../lib/useDraggableFab';
@@ -243,7 +244,7 @@ export function MeetingInboxButton() {
       await insertNotification({
         userId: delegateToId,
         category: 'meeting',
-        eventType: 'invite',
+        eventType: getMeetingTemplateKey('representative', 'invite'),
         fallbackTitle: 'انتخاب به عنوان جانشین',
         fallbackMessage: `شما به عنوان جانشین برای جلسه «${meeting.subject}» انتخاب شده‌اید`,
         placeholders: { meeting_subject: meeting.subject },

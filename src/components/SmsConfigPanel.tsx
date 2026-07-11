@@ -679,17 +679,23 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const insertPlaceholder = (ph: string) => {
+    const token = `{{${ph}}}`;
     const ta = textareaRef.current;
-    if (ta) {
-      const start = ta.selectionStart ?? form.body.length;
-      const end = ta.selectionEnd ?? form.body.length;
-      const newBody = form.body.slice(0, start) + `{{${ph}}}` + form.body.slice(end);
-      setForm(f => ({ ...f, body: newBody }));
-      setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + ph.length + 4; }, 0);
-    } else {
-      setForm(f => ({ ...f, body: f.body + `{{${ph}}}` }));
-    }
-    if (!form.placeholders.includes(ph)) setForm(f => ({ ...f, placeholders: [...f.placeholders, ph] }));
+    const start = ta?.selectionStart ?? form.body.length;
+    const end = ta?.selectionEnd ?? form.body.length;
+    const newBody = form.body.slice(0, start) + token + form.body.slice(end);
+    setForm(f => ({ ...f, body: newBody, placeholders: extractPlaceholders(newBody) }));
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      const cursor = start + token.length;
+      ta.focus();
+      ta.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const handleBodyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const body = e.target.value;
+    setForm(f => ({ ...f, body, placeholders: extractPlaceholders(body) }));
   };
 
   const addCustomPh = () => {
@@ -809,7 +815,7 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
           rows={5}
           className={inp + ' resize-none'}
           value={form.body}
-          onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
+          onChange={handleBodyChange}
           placeholder="متن پیامک را اینجا بنویسید. برای درج متغیر روی دکمه‌های بالا کلیک کنید..."
         />
       </div>
@@ -893,16 +899,23 @@ function TemplateEditor({ template, onSave, onCancel }: {
   };
 
   const insertPlaceholder = (ph: string) => {
+    const token = `{{${ph}}}`;
     const ta = textareaRef.current;
-    if (ta) {
-      const start = ta.selectionStart ?? form.body.length;
-      const end = ta.selectionEnd ?? form.body.length;
-      const newBody = form.body.slice(0, start) + `{{${ph}}}` + form.body.slice(end);
-      setForm(f => ({ ...f, body: newBody }));
-      setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + ph.length + 4; }, 0);
-    } else {
-      setForm(f => ({ ...f, body: f.body + `{{${ph}}}` }));
-    }
+    const start = ta?.selectionStart ?? form.body.length;
+    const end = ta?.selectionEnd ?? form.body.length;
+    const newBody = form.body.slice(0, start) + token + form.body.slice(end);
+    setForm(f => ({ ...f, body: newBody, placeholders: extractPlaceholders(newBody) }));
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      const cursor = start + token.length;
+      ta.focus();
+      ta.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const handleBodyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const body = e.target.value;
+    setForm(f => ({ ...f, body, placeholders: extractPlaceholders(body) }));
   };
 
   return (
@@ -936,7 +949,7 @@ function TemplateEditor({ template, onSave, onCancel }: {
           <label className="text-xs font-medium text-gray-600 dark:text-gray-400">متن پیام</label>
           <span className={`text-xs ${form.body.length > 160 ? 'text-amber-500' : 'text-gray-400'}`}>{form.body.length} کاراکتر{form.body.length > 160 ? ' (بیش از ۱ SMS)' : ''}</span>
         </div>
-        <textarea ref={textareaRef} rows={4} className={inp + ' resize-none'} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} placeholder="متن پیام را وارد کنید..." />
+        <textarea ref={textareaRef} rows={4} className={inp + ' resize-none'} value={form.body} onChange={handleBodyChange} placeholder="متن پیام را وارد کنید..." />
       </div>
 
       <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700 rounded-xl px-4 py-2.5">
