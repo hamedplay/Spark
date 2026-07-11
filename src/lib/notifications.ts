@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { renderTemplate } from '../config/templateCatalog';
+import type { RenderTemplateResult } from '../config/templateCatalog';
 
 export interface NotifyPayload {
   userId: string;
@@ -27,19 +28,31 @@ export interface SmsDispatchResult {
 }
 
 // In-memory template cache (refreshed per session)
-let templateCache: Map<string, { title: string; body: string }> | null = null;
+let templateCache: Map<string, { id: string; title: string; body: string; updatedAt: string }> | null = null;
 let cacheLoadedAt = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-async function getTemplates(): Promise<Map<string, { title: string; body: string }>> {
+async function getTemplates(): Promise<Map<string, { id: string; title: string; body: string; updatedAt: string }>> {
   if (templateCache && Date.now() - cacheLoadedAt < CACHE_TTL_MS) return templateCache;
   const { data } = await supabase
     .from('notification_templates')
-    .select('category, event_type, audience, title, body')
-    .eq('is_active', true);
-  const map = new Map<string, { title: string; body: string }>();
+    .select('id, category, event_type, audience, title, body, updated_at')
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false });
+  const map = new Map<string, { id: string; title: string; body: string; updatedAt: string }>();
   for (const t of (data || [])) {
-    map.set(`${t.category}:${t.event_type}:${t.audience}`, { title: t.title, body: t.body });
+    const key = `${t.category}:${t.event_type}:${t.audience}`;
+    // First match wins (most recently updated due to ORDER BY)
+    if (!map.has(key)) {
+      map.set(key, { id: t.id, title: t.title, body: t.body, updatedAt: t.updated_at });
+    }
+    // Also register under 'all' as fallback if this is audience-specific
+    if (t.audience !== 'all') {
+      const allKey = `${t.category}:${t.event_type}:all`;
+      if (!map.has(allKey)) {
+        map.set(allKey, { id: t.id, title: t.title, body: t.body, updatedAt: t.updated_at });
+      }
+    }
   }
   templateCache = map;
   cacheLoadedAt = Date.now();
@@ -72,11 +85,14 @@ async function getSmsTemplates(): Promise<Map<string, string>> {
 }
 
 function fillPlaceholders(text: string, vars: Record<string, string>): string {
-  const { rendered, leftover } = renderTemplate(text, vars);
-  if (leftover.length > 0) {
-    console.warn(`[notifications] Unfilled placeholders: ${leftover.join(', ')}`);
+  const result = renderTemplate(text, vars);
+  if (import.meta.env?.DEV && (result.missingPlaceholders.length > 0 || result.unresolvedPlaceholders.length > 0)) {
+    console.warn('[notifications] template issues:', {
+      missing: result.missingPlaceholders,
+      unresolved: result.unresolvedPlaceholders,
+    });
   }
-  return rendered;
+  return result.text;
 }
 
 async function dispatchBale(
@@ -168,6 +184,19 @@ export async function insertNotification(payload: NotifyPayload): Promise<SmsDis
     templates.get(`${payload.category}:${payload.eventType}:all`);
 
   const vars = payload.placeholders || {};
+
+  if (import.meta.env?.DEV) {
+    console.debug('[notification-template]', {
+      category: payload.category,
+      eventType: payload.eventType,
+      audience,
+      recipientId: payload.userId,
+      templateId: template?.id ?? null,
+      templateBody: template?.body ?? null,
+      payload: vars,
+    });
+  }
+
   const title = template ? fillPlaceholders(template.title, vars) : payload.fallbackTitle;
   const message = template ? fillPlaceholders(template.body, vars) : payload.fallbackMessage;
 
@@ -181,6 +210,10 @@ export async function insertNotification(payload: NotifyPayload): Promise<SmsDis
     sender_name: payload.senderName ?? null,
     sender_avatar_url: payload.senderAvatarUrl ?? null,
     action_url: payload.actionUrl ?? null,
+    template_id: template?.id ?? null,
+    template_category: payload.category,
+    template_event_type: payload.eventType,
+    template_audience: audience,
   });
 
   // Resolve SMS message (dedicated template or fallback to notification body)

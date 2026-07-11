@@ -216,6 +216,9 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
 
       const notifyIds = (declinedRows || []).map((r: any) => r.user_id);
       if (notifyIds.length > 0) {
+        const { data: notifyProfiles } = await supabase.from('profiles').select('user_id, full_name').in('user_id', notifyIds);
+        const nameMap: Record<string, string> = {};
+        for (const p of (notifyProfiles || [])) nameMap[p.user_id] = p.full_name || '';
         await Promise.all(notifyIds.map((uid: string) =>
           insertNotification({
             userId: uid,
@@ -224,6 +227,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
             audience: 'participants',
             fallbackTitle: `دعوت مجدد به جلسه: ${meeting.subject}`,
             fallbackMessage: `شما مجدداً به جلسه «${meeting.subject}» دعوت شده‌اید`,
+            placeholders: { meeting_subject: meeting.subject, full_name: nameMap[uid] || '', recipient_greeting: nameMap[uid] ? `${nameMap[uid]} گرامی` : 'همکار گرامی' },
             senderId: user.id,
             actionUrl: 'meetings',
           })
@@ -332,6 +336,9 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       const pIds = (meeting.participant_user_ids || []) as string[];
       const notifyIds = [...pIds, ...((meeting.notify_users || []) as string[])].filter(uid => uid !== user?.id);
       if (notifyIds.length) {
+        const { data: cancelProfiles } = await supabase.from('profiles').select('user_id, full_name').in('user_id', notifyIds);
+        const cancelNameMap: Record<string, string> = {};
+        for (const p of (cancelProfiles || [])) cancelNameMap[p.user_id] = p.full_name || '';
         await Promise.all(notifyIds.map(uid =>
           insertNotification({
             userId: uid,
@@ -340,6 +347,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
             audience: pIds.includes(uid) ? 'participants' : 'observers',
             fallbackTitle: 'جلسه لغو شد',
             fallbackMessage: `جلسه «${meeting.subject}» لغو شده است`,
+            placeholders: { meeting_subject: meeting.subject, full_name: cancelNameMap[uid] || '', recipient_greeting: cancelNameMap[uid] ? `${cancelNameMap[uid]} گرامی` : 'همکار گرامی' },
             senderId: user?.id ?? null,
             actionUrl: 'meetings',
           })
@@ -431,6 +439,9 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       const pIds = (fullMtg.participant_user_ids || []) as string[];
       const notifyIds = [...pIds, ...((fullMtg.notify_users || []) as string[])].filter(uid => uid !== user.id);
       if (notifyIds.length) {
+        const { data: cancelProfiles2 } = await supabase.from('profiles').select('user_id, full_name').in('user_id', notifyIds);
+        const cancelNameMap2: Record<string, string> = {};
+        for (const p of (cancelProfiles2 || [])) cancelNameMap2[p.user_id] = p.full_name || '';
         await Promise.all(notifyIds.map(uid =>
           insertNotification({
             userId: uid,
@@ -439,6 +450,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
             audience: pIds.includes(uid) ? 'participants' : 'observers',
             fallbackTitle: 'جلسه لغو شد',
             fallbackMessage: `جلسه «${fullMtg.subject}» لغو شده است`,
+            placeholders: { meeting_subject: fullMtg.subject, full_name: cancelNameMap2[uid] || '', recipient_greeting: cancelNameMap2[uid] ? `${cancelNameMap2[uid]} گرامی` : 'همکار گرامی' },
             senderId: user.id,
             actionUrl: 'meetings',
           })
@@ -528,6 +540,9 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
               .maybeSingle();
             const participantIds: string[] = (savedMtg?.participant_user_ids ?? []).filter((uid: string) => uid !== user.id);
             if (participantIds.length > 0) {
+              const { data: reInviteProfiles } = await supabase.from('profiles').select('user_id, full_name').in('user_id', participantIds);
+              const reInviteNameMap: Record<string, string> = {};
+              for (const p of (reInviteProfiles || [])) reInviteNameMap[p.user_id] = p.full_name || '';
               await Promise.all(participantIds.map(uid =>
                 insertNotification({
                   userId: uid,
@@ -536,6 +551,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
                   audience: 'participants',
                   fallbackTitle: `دعوت مجدد به جلسه: ${meeting.subject}`,
                   fallbackMessage: `جلسه «${meeting.subject}» ویرایش شد و مجدداً برای شما ارسال گردید`,
+                  placeholders: { meeting_subject: meeting.subject, full_name: reInviteNameMap[uid] || '', recipient_greeting: reInviteNameMap[uid] ? `${reInviteNameMap[uid]} گرامی` : 'همکار گرامی' },
                   senderId: user.id,
                   actionUrl: 'meetings',
                 })

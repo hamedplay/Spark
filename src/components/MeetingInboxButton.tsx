@@ -247,7 +247,7 @@ export function MeetingInboxButton() {
         eventType: getMeetingTemplateKey('representative', 'invite'),
         fallbackTitle: 'انتخاب به عنوان جانشین',
         fallbackMessage: `شما به عنوان جانشین برای جلسه «${meeting.subject}» انتخاب شده‌اید`,
-        placeholders: { meeting_subject: meeting.subject },
+        placeholders: { meeting_subject: meeting.subject, full_name: delegateName, recipient_greeting: `${delegateName} گرامی`, organizer_name: myName },
         senderId: currentUserId,
         actionUrl: 'calendar',
       });

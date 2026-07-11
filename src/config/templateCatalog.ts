@@ -82,7 +82,8 @@ export interface TemplatePlaceholder {
 }
 
 export const TEMPLATE_PLACEHOLDERS: TemplatePlaceholder[] = [
-  { key: 'full_name',        label: 'نام کامل گیرنده',      example: 'علی احمدی' },
+  { key: 'full_name',           label: 'نام کامل گیرنده',      example: 'علی احمدی' },
+  { key: 'recipient_greeting',  label: 'احوال‌پرسی گیرنده',     example: 'علی احمدی گرامی' },
   { key: 'meeting_subject',  label: 'موضوع جلسه',            example: 'جلسه هیئت مدیره' },
   { key: 'meeting_date',     label: 'تاریخ جلسه',            example: '۱۴۰۳/۰۳/۱۵' },
   { key: 'start_time',       label: 'ساعت شروع',              example: '۰۹:۰۰' },
@@ -134,23 +135,70 @@ export function findUnknownPlaceholders(template: string): string[] {
 
 // ─── Safe template rendering ───────────────────────────────────────────────────
 
+export interface RenderTemplateResult {
+  text: string;
+  missingPlaceholders: string[];
+  unresolvedPlaceholders: string[];
+}
+
 /**
  * Replaces `{{placeholder}}` tokens in a template string with values from `vars`.
- * Missing values are replaced with empty string (never `undefined` or `null`).
- * Remaining unreplaced placeholders are collected and returned for logging.
+ *
+ * - Missing/empty values are replaced with '' and collected in `missingPlaceholders`.
+ * - Any `{{...}}` tokens that survive the replace (e.g. malformed) are collected
+ *   in `unresolvedPlaceholders`.
+ * - The rendered text never contains `undefined` or `null`.
+ *
+ * In development, missing required placeholders are logged via console.warn.
  */
 export function renderTemplate(
-  text: string,
+  template: string,
+  vars: Record<string, string>,
+): RenderTemplateResult {
+  const missingPlaceholders: string[] = [];
+
+  const text = template.replace(
+    /{{\s*([a-zA-Z0-9_]+)\s*}}/g,
+    (_match, key: string) => {
+      const value = vars[key];
+      if (value === undefined || value === null || String(value).trim() === '') {
+        missingPlaceholders.push(key);
+        return '';
+      }
+      return String(value);
+    },
+  );
+
+  const unresolvedPlaceholders = Array.from(
+    text.matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g),
+    (m: RegExpMatchArray) => m[1],
+  );
+
+  if (import.meta.env?.DEV && missingPlaceholders.length > 0) {
+    console.warn('[notification-template] missing placeholder(s):',
+      missingPlaceholders.join(', '));
+  }
+
+  return {
+    text,
+    missingPlaceholders: [...new Set(missingPlaceholders)],
+    unresolvedPlaceholders: [...new Set(unresolvedPlaceholders)],
+  };
+}
+
+/**
+ * Backward-compatible wrapper: returns `{ rendered, leftover }`.
+ * `leftover` combines both missing and unresolved placeholders.
+ */
+export function renderTemplateLegacy(
+  template: string,
   vars: Record<string, string>,
 ): { rendered: string; leftover: string[] } {
-  const leftover: string[] = [];
-  const rendered = text.replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_match, key: string) => {
-    const val = vars[key];
-    if (val !== undefined && val !== null && val !== '') return val;
-    leftover.push(key);
-    return '';
-  });
-  return { rendered, leftover };
+  const result = renderTemplate(template, vars);
+  return {
+    rendered: result.text,
+    leftover: [...result.missingPlaceholders, ...result.unresolvedPlaceholders],
+  };
 }
 
 // ─── Meeting recipient role & template key ────────────────────────────────────
@@ -219,8 +267,11 @@ export function buildMeetingPayload(params: {
     ? `${params.startTime}-${params.endTime}`
     : params.startTime || '';
   const location = params.location || '';
+  const fullName = params.recipientName || '';
+  const greeting = fullName ? `${fullName} گرامی` : 'همکار گرامی';
   return {
-    full_name: params.recipientName,
+    full_name: fullName,
+    recipient_greeting: greeting,
     meeting_subject: params.subject,
     meeting_date: params.dateStr,
     start_time: params.startTime,
@@ -234,3 +285,33 @@ export function buildMeetingPayload(params: {
     agenda: params.agenda || '',
   };
 }
+
+/**
+ * Resolves a recipient's display name from multiple possible fields.
+ * Returns empty string if none are available.
+ */
+export function resolveRecipientFullName(recipient: {
+  full_name?: string | null;
+  display_name?: string | null;
+  name?: string | null;
+}): string {
+  return (
+    recipient.full_name?.trim() ||
+    recipient.display_name?.trim() ||
+    recipient.name?.trim() ||
+    ''
+  );
+}
+
+/**
+ * Required placeholders for meeting invite templates.
+ * `location` is optional — it may appear in the template but is not required.
+ */
+export const REQUIRED_MEETING_INVITE_PLACEHOLDERS = [
+  'full_name',
+  'meeting_subject',
+  'meeting_date',
+  'start_time',
+  'end_time',
+  'organizer_name',
+];

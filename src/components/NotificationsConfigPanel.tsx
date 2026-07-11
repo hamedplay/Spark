@@ -978,6 +978,7 @@ function LogsTab() {
   const [filterType, setFilterType] = useState('all');
   const [filterRead, setFilterRead] = useState('all');
   const [filterDate, setFilterDate] = useState('');
+  const [filterEventType, setFilterEventType] = useState('all');
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -995,6 +996,7 @@ function LogsTab() {
     if (filterType !== 'all') q = q.eq('type', filterType);
     if (filterRead === 'read') q = q.eq('read', true);
     if (filterRead === 'unread') q = q.eq('read', false);
+    if (filterEventType !== 'all') q = q.eq('template_event_type', filterEventType);
     if (filterDate) {
       const start = new Date(filterDate); start.setHours(0, 0, 0, 0);
       const end = new Date(filterDate); end.setHours(23, 59, 59, 999);
@@ -1016,19 +1018,25 @@ function LogsTab() {
 
     setLogs((data as any[]).map(r => ({
       ...r,
-      recipient_name: profileMap[r.user_id]?.full_name || '',
+      recipient_name: profileMap[r.user_id]?.full_name || (r.user_id ? 'کاربر حذف‌شده' : 'گیرنده نامشخص'),
       recipient_email: profileMap[r.user_id]?.email || '',
     })));
     setTotalCount(count || 0);
     setLoading(false);
-  }, [page, filterType, filterRead, filterDate]);
+  }, [page, filterType, filterRead, filterDate, filterEventType]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(0); }, [filterType, filterRead, filterDate]);
+  useEffect(() => { setPage(0); }, [filterType, filterRead, filterDate, filterEventType]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const typeLabel = (t: string) => NOTIF_CATEGORIES.find(c => c.key === t)?.label || t;
+  const eventTypeLabel = (et: string) => EVENT_TYPES.find(e => e.key === et)?.label || et || '—';
+
+  // Get event types available for the selected category
+  const availableEventTypes = filterType !== 'all'
+    ? EVENT_TYPES.filter(e => e.category === filterType)
+    : EVENT_TYPES;
 
   const TYPE_COLORS: Record<string, string> = {
     meeting:  'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
@@ -1075,10 +1083,21 @@ function LogsTab() {
         <div className="flex-1 min-w-36">
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">دسته‌بندی</label>
           <div className="relative">
-            <select value={filterType} onChange={e => setFilterType(e.target.value)}
+            <select value={filterType} onChange={e => { setFilterType(e.target.value); setFilterEventType('all'); }}
               className="appearance-none w-full text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500">
               <option value="all">همه دسته‌ها</option>
               {NOTIF_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+            <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
+        <div className="flex-1 min-w-36">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">نوع رویداد</label>
+          <div className="relative">
+            <select value={filterEventType} onChange={e => setFilterEventType(e.target.value)}
+              className="appearance-none w-full text-sm pr-3 pl-7 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500">
+              <option value="all">همه رویدادها</option>
+              {availableEventTypes.map(e => <option key={e.key} value={e.key}>{e.label}</option>)}
             </select>
             <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           </div>
@@ -1169,8 +1188,16 @@ function LogsTab() {
                         <span className="mr-2 font-medium text-gray-700 dark:text-gray-200">{log.sender_name || '—'}</span>
                       </div>
                       <div>
-                        <span className="text-gray-400">نوع:</span>
+                        <span className="text-gray-400">دسته:</span>
                         <span className="mr-2 font-medium text-gray-700 dark:text-gray-200">{typeLabel(log.type)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">نوع رویداد:</span>
+                        <span className="mr-2 font-medium text-gray-700 dark:text-gray-200">{eventTypeLabel(log.template_event_type || '')}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">مخاطب:</span>
+                        <span className="mr-2 font-medium text-gray-700 dark:text-gray-200">{log.template_audience || 'all'}</span>
                       </div>
                       <div>
                         <span className="text-gray-400">وضعیت:</span>
@@ -1178,6 +1205,12 @@ function LogsTab() {
                           {log.read ? 'خوانده‌شده' : 'خوانده‌نشده'}
                         </span>
                       </div>
+                      {log.template_id && (
+                        <div>
+                          <span className="text-gray-400">قالب:</span>
+                          <span className="mr-2 font-mono text-[11px] text-gray-500">{log.template_id.slice(0, 8)}…</span>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <span className="text-gray-400">متن اعلان:</span>
