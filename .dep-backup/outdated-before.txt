@@ -1,0 +1,10 @@
+Package                           Current   Wanted   Latest  Location                                       Depended by
+@supabase/supabase-js             2.110.0  2.110.0  2.110.2  node_modules/@supabase/supabase-js             project
+@typescript-eslint/eslint-plugin   8.62.1   8.63.0   8.63.0  node_modules/@typescript-eslint/eslint-plugin  project
+@typescript-eslint/parser          8.62.1   8.63.0   8.63.0  node_modules/@typescript-eslint/parser         project
+eslint                             10.6.0   10.6.0   10.7.0  node_modules/eslint                            project
+lucide-react                       1.23.0   1.23.0   1.24.0  node_modules/lucide-react                      project
+tailwindcss                        3.4.19   3.4.19    4.3.2  node_modules/tailwindcss                       project
+typescript                          6.0.3    6.0.3    7.0.2  node_modules/typescript                        project
+typescript-eslint                  8.62.1   8.62.1   8.63.0  node_modules/typescript-eslint                 project
+vite                                8.1.3    8.1.3    8.1.4  node_modules/vite                              project
