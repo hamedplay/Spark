@@ -1,0 +1,4 @@
+Contact: mailto:security@shahrmeeting.ir
+Expires: 2027-07-11T00:00:00Z
+Preferred-Languages: fa, en
+Canonical: https://shahrmeeting.ir/.well-known/security.txt
