@@ -169,7 +169,7 @@ To send immediately regardless of time/day:
 
 ```bash
 curl -s -X POST \
-  "https://zjmozuivykubdqnizhob.supabase.co/functions/v1/send-daily-meetings" \
+  "https://api.shahrmeeting.ir/functions/v1/send-daily-meetings" \
   -H "Authorization: Bearer <admin-jwt-token>" \
   -H "Content-Type: application/json" \
   -d '{"force": true}' | jq .
