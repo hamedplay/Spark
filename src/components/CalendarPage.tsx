@@ -1135,8 +1135,8 @@ export function CalendarPage({
       const isViaSubscription = isAnyParticipantSubscribed(allParticipants);
 
       if (m.calendar_id) {
-        // Creator's own meetings: respect the calendar toggle strictly
-        if (!enabledCalendarIds.has(m.calendar_id) && !isViaSubscription) { hiddenCalId++; return; }
+        // Meetings with a calendar_id: show/hide based solely on that calendar's toggle
+        if (!enabledCalendarIds.has(m.calendar_id)) { hiddenCalId++; return; }
       } else {
         // Creator's meeting without a calendar: respect myPublicCalendar toggle
         if (isCreator) {
