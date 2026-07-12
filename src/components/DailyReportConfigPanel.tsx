@@ -37,7 +37,7 @@ const DEFAULT_NOTIF_BODY = `📋 برنامه جلسات روز {{weekday}} {{da
 {{meetings_list}}`;
 const DEFAULT_SMS_LINE = '⏰ {{time}} | {{subject}}{{location_part}}';
 
-// Jalaali weekdays: index matches (getUTCDay() + 1) % 7
+// Jalaali weekdays: 0=شنبه … 6=جمعه (matches Asia/Tehran weekday via Intl.DateTimeFormat)
 const WEEKDAYS = [
   { index: 0, label: 'شنبه' },
   { index: 1, label: 'یکشنبه' },
@@ -181,6 +181,34 @@ export function DailyReportConfigPanel() {
   };
 
   const sendNow = async () => {
+    // Save config first, then send
+    setSaving(true);
+    const payload = {
+      is_enabled: config.is_enabled,
+      send_time: config.send_time,
+      send_days: config.send_days,
+      send_via_sms: config.send_via_sms,
+      send_via_notification: config.send_via_notification,
+      send_via_bale: config.send_via_bale,
+      recipient_user_ids: config.recipient_user_ids,
+      recipient_group_ids: config.recipient_group_ids,
+      notification_title_tpl: config.notification_title_tpl || null,
+      notification_body_tpl: config.notification_body_tpl || null,
+      sms_tpl: config.sms_tpl || null,
+      updated_at: new Date().toISOString(),
+    };
+    let saveOk = false;
+    if (config.id) {
+      const { error } = await supabase.from('daily_report_config').update(payload).eq('id', config.id);
+      saveOk = !error;
+    } else {
+      const { data, error } = await supabase.from('daily_report_config').insert(payload).select().maybeSingle();
+      saveOk = !error;
+      if (data) setConfig(c => ({ ...c, id: data.id }));
+    }
+    setSaving(false);
+    if (!saveOk) { toast.error('خطا در ذخیره تنظیمات — ارسال لغو شد'); return; }
+
     setSending(true);
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -194,17 +222,24 @@ export function DailyReportConfigPanel() {
       });
       const json = await res.json();
       if (json.ok) {
-        toast.success(
-          `ارسال شد — ${json.meetings_count} جلسه | ${json.recipients} دریافت‌کننده` +
-          (json.sms_sent ? ` | ${json.sms_sent} پیامک` : '') +
-          ` (${json.date_long || json.date})`
-        );
+        const parts = [
+          `${json.meetings_count} جلسه`,
+          `${json.recipients} دریافت‌کننده`,
+        ];
+        if (json.notifications_sent) parts.push(`${json.notifications_sent} اعلان`);
+        if (json.sms_sent) parts.push(`${json.sms_sent} پیامک`);
+        if (json.sms_skipped_no_phone) parts.push(`${json.sms_skipped_no_phone} فاقد شماره`);
+        if (json.bale_sent) parts.push(`${json.bale_sent} بله`);
+        toast.success(`ارسال شد — ${parts.join(' | ')} (${json.date_long || json.date})`);
         await fetchData();
       } else {
         const reasons: Record<string, string> = {
           no_config: 'تنظیمات یافت نشد — ابتدا تنظیمات را ذخیره کنید',
           disabled: 'ارسال غیرفعال است',
           no_recipients: 'هیچ دریافت‌کننده‌ای انتخاب نشده',
+          already_sent: 'امروز قبلاً ارسال شده',
+          not_time_yet: 'هنوز زمان ارسال نرسیده',
+          day_not_scheduled: 'امروز در روزهای ارسال نیست',
         };
         toast.error(reasons[json.reason] || `خطا: ${json.error || json.reason || 'نامشخص'}`);
       }
@@ -529,18 +564,34 @@ export function DailyReportConfigPanel() {
         </div>
       </div>
 
+      {/* Recipient summary */}
+      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700/50 px-4 py-3">
+        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+          <Users className="w-3.5 h-3.5" />
+          <span>
+            خلاصه گیرندگان: {config.recipient_user_ids.length} فرد مستقیم + {config.recipient_group_ids.length} گروه انتخاب شده
+            {(config.recipient_user_ids.length === 0 && config.recipient_group_ids.length === 0) && (
+              <span className="text-amber-600 dark:text-amber-400 font-medium mr-2">— حداقل یک فرد یا گروه انتخاب کنید</span>
+            )}
+          </span>
+        </div>
+      </div>
+
       {/* Action buttons */}
-      <div className="flex justify-end gap-3 pt-2">
-        <button onClick={sendNow} disabled={sending}
-          className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 font-medium text-sm transition-colors">
-          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          ارسال همین الان
-        </button>
-        <button onClick={save} disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-colors">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          ذخیره تنظیمات
-        </button>
+      <div className="flex flex-col gap-2 pt-2">
+        <p className="text-xs text-gray-400 text-right">ارسال همین الان با تنظیمات ذخیره‌شده انجام می‌شود — ابتدا ذخیره می‌شود سپس ارسال</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={sendNow} disabled={sending || (config.recipient_user_ids.length === 0 && config.recipient_group_ids.length === 0)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 font-medium text-sm transition-colors">
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            ارسال همین الان
+          </button>
+          <button onClick={save} disabled={saving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 font-medium text-sm transition-colors">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            ذخیره تنظیمات
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -7,11 +7,123 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+// ─── Timezone ────────────────────────────────────────────────────────────────
+const TEHRAN_TIMEZONE = "Asia/Tehran";
+
+interface TehranNow {
+  date: string;          // YYYY-MM-DD (Gregorian, Tehran)
+  time: string;          // HH:mm (Tehran)
+  weekdayIndex: number;  // 0=شنبه … 6=جمعه
+  startOfDayUtc: string; // ISO timestamp for start of Tehran day
+  endOfDayUtc: string;   // ISO timestamp for end of Tehran day
+}
+
+/**
+ * Returns Tehran date parts using Intl.DateTimeFormat.
+ * Handles DST correctly — offset is never hardcoded.
+ */
+function getTehranDateParts(now = new Date()): Record<string, string> {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TEHRAN_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+    weekday: "short",
+  });
+
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(now)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return parts;
+}
+
+/**
+ * Converts a JS weekday (Sun=0..Sat=6) to Jalaali weekday index
+ * (Sat=0=شنبه, Sun=1=یکشنبه, …, Fri=6=جمعه).
+ */
+function jsWeekdayToJalaaliIndex(jsWeekday: number): number {
+  // JS: Sun=0 Mon=1 Tue=2 Wed=3 Thu=4 Fri=5 Sat=6
+  // Jalaali: Sat=0 Sun=1 Mon=2 Tue=3 Wed=4 Thu=5 Fri=6
+  return (jsWeekday + 1) % 7;
+}
+
+function getTehranNow(now = new Date()): TehranNow {
+  const parts = getTehranDateParts(now);
+  const year = parseInt(parts.year);
+  const month = parseInt(parts.month);
+  const day = parseInt(parts.day);
+  const hour = parseInt(parts.hour);
+  const minute = parseInt(parts.minute);
+  const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  const date = `${parts.year}-${parts.month}-${parts.day}`;
+
+  // Determine weekday using Intl weekday (short: Sat, Sun, Mon, …)
+  const weekdayShort = parts.weekday; // "Sat","Sun","Mon","Tue","Wed","Thu","Fri"
+  const weekdayMap: Record<string, number> = {
+    Sat: 0, Sun: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6,
+  };
+  const weekdayIndex = weekdayMap[weekdayShort] ?? 0;
+
+  // Compute start/end of Tehran day in UTC
+  // We need to find the UTC instant that corresponds to 00:00 Tehran time
+  // and 23:59:59.999 Tehran time.
+  // Use Intl to format a Date at midnight Tehran and parse back.
+  const startOfDayTehran = new Date();
+  startOfDayTehran.setFullYear(year, month - 1, day);
+  startOfDayTehran.setHours(0, 0, 0, 0);
+
+  // Get the UTC offset for Tehran at this instant
+  const tehranOffsetMin = getTehranOffsetMinutes(startOfDayTehran);
+  const startOfDayUtc = new Date(Date.UTC(year, month - 1, day, 0, 0, 0) - tehranOffsetMin * 60 * 1000);
+  const endOfDayUtc = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - tehranOffsetMin * 60 * 1000);
+
+  return {
+    date,
+    time,
+    weekdayIndex,
+    startOfDayUtc: startOfDayUtc.toISOString(),
+    endOfDayUtc: endOfDayUtc.toISOString(),
+  };
+}
+
+/**
+ * Returns the UTC offset (in minutes) for Tehran at the given date.
+ * Uses Intl.DateTimeFormat to detect DST.
+ */
+function getTehranOffsetMinutes(d: Date): number {
+  // Format the same instant in Tehran and UTC, compute difference
+  const tehranParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TEHRAN_TIMEZONE,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+
+  const tp = Object.fromEntries(
+    tehranParts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]),
+  );
+
+  // Construct what Tehran local time looks like as if it were UTC
+  const tehranAsUtcMs = Date.UTC(
+    parseInt(tp.year), parseInt(tp.month) - 1, parseInt(tp.day),
+    parseInt(tp.hour), parseInt(tp.minute), parseInt(tp.second),
+  );
+  const actualUtcMs = d.getTime();
+  return Math.round((tehranAsUtcMs - actualUtcMs) / 60000);
+}
+
 // ─── Jalaali conversion ───────────────────────────────────────────────────────
 function toJalaali(gy: number, gm: number, gd: number): { jy: number; jm: number; jd: number } {
   const g_d_no = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
   let jy = 0, jm = 0, jd = 0;
-  let gy2 = gm > 2 ? gy + 1 : gy;
+  const gy2 = gm > 2 ? gy + 1 : gy;
   let days = 355666 + (365 * gy) + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) +
     Math.floor((gy2 + 399) / 400) + gd + g_d_no[gm - 1];
   jy = -1595 + (33 * Math.floor(days / 12053));
@@ -24,29 +136,28 @@ function toJalaali(gy: number, gm: number, gd: number): { jy: number; jm: number
   return { jy, jm, jd };
 }
 
-const JALAALI_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
-const JALAALI_WEEKDAYS = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه'];
+const JALAALI_MONTHS = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
+const JALAALI_WEEKDAYS = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"];
 
-function formatJalaaliDate(d: Date): string {
-  const j = toJalaali(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
-  const weekday = JALAALI_WEEKDAYS[(d.getUTCDay() + 1) % 7];
-  return `${weekday} ${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`;
+function formatJalaaliDate(year: number, month: number, day: number, weekdayIndex: number): string {
+  const j = toJalaali(year, month, day);
+  return `${JALAALI_WEEKDAYS[weekdayIndex]} ${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`;
 }
 
-function formatJalaaliShort(d: Date): string {
-  const j = toJalaali(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
-  return `${j.jd}/${j.jm}/${j.jy}`;
+function formatJalaaliShort(year: number, month: number, day: number): string {
+  const j = toJalaali(year, month, day);
+  return `${j.jy}/${String(j.jm).padStart(2, "0")}/${String(j.jd).padStart(2, "0")}`;
 }
 
 // ─── Template renderer ────────────────────────────────────────────────────────
 function renderTemplate(tpl: string, vars: Record<string, string>): string {
-  return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? '');
+  return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? "");
 }
 
 function validLocation(loc: string | null | undefined): string {
-  if (!loc) return '';
+  if (!loc) return "";
   const t = loc.trim();
-  if (t === '0' || t === '') return '';
+  if (t === "0" || t === "") return "";
   return t;
 }
 
@@ -59,10 +170,10 @@ function normalizePhone(phone: string): string {
   return digits;
 }
 
-const DEFAULT_NOTIF_TITLE = 'جلسات {{weekday}} {{date}} ({{count}} جلسه)';
-const DEFAULT_NOTIF_BODY = 'برنامه جلسات روز {{weekday}} {{date}}:\n{{meetings_list}}';
-const DEFAULT_SMS_LINE = '{{time}} | {{subject}}{{location_part}}';
-const DEFAULT_SMS_BODY = 'جلسات {{weekday}} {{date}}:\n{{meetings_list}}';
+const DEFAULT_NOTIF_TITLE = "جلسات {{weekday}} {{date}} ({{count}} جلسه)";
+const DEFAULT_NOTIF_BODY = "برنامه جلسات روز {{weekday}} {{date}}:\n{{meetings_list}}";
+const DEFAULT_SMS_LINE = "{{time}} | {{subject}}{{location_part}}";
+const DEFAULT_SMS_BODY = "جلسات {{weekday}} {{date}}:\n{{meetings_list}}";
 
 function adminClient() {
   return createClient(
@@ -72,29 +183,20 @@ function adminClient() {
   );
 }
 
-/**
- * Authorises the caller. Accepts two mechanisms:
- *  1. Scheduled cron job: `Authorization: Bearer <CRON_SECRET>` where the
- *     secret is stored in the CRON_SECRET edge-function secret.
- *  2. Manual admin invocation: a valid Supabase user JWT whose profile has
- *     is_admin = true.
- *
- * Returns the caller type, or null if the request is unauthorised.
- */
+// ─── Authorization ───────────────────────────────────────────────────────────
 async function authorize(
   authHeader: string | null,
 ): Promise<"cron" | "admin" | null> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
 
-  // 1. Cron-secret check (constant-time comparison via crypto)
+  // 1. Cron-secret check
   const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
   if (cronSecret.length > 0) {
     const enc = new TextEncoder();
     const a = enc.encode(token);
     const b = enc.encode(cronSecret);
     if (a.length === b.length) {
-      // Constant-time compare to prevent timing attacks
       let diff = 0;
       for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
       if (diff === 0) return "cron";
@@ -114,6 +216,76 @@ async function authorize(
   return "admin";
 }
 
+// ─── Send window check ────────────────────────────────────────────────────────
+function isWithinSendWindow(
+  currentMinutes: number,
+  configuredMinutes: number,
+  windowMinutes = 5,
+): boolean {
+  return (
+    currentMinutes >= configuredMinutes &&
+    currentMinutes < configuredMinutes + windowMinutes
+  );
+}
+
+function parseTimeToMinutes(timeStr: string): number {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + (m || 0);
+}
+
+// ─── Recipient resolution ────────────────────────────────────────────────────
+async function resolveDailyReportRecipients(
+  supabase: ReturnType<typeof adminClient>,
+  config: any,
+): Promise<{
+  recipientIds: string[];
+  directCount: number;
+  groupMemberCount: number;
+  groupMembersFromGroups: number;
+}> {
+  const recipientIds = new Set<string>();
+
+  // 1. Direct users
+  for (const userId of (config.recipient_user_ids || [])) {
+    if (userId && typeof userId === "string") {
+      recipientIds.add(userId);
+    }
+  }
+  const directCount = recipientIds.size;
+
+  // 2. Group members
+  let groupMemberCount = 0;
+  const groupIds = (config.recipient_group_ids || []).filter(
+    (id: string) => id && typeof id === "string",
+  );
+
+  if (groupIds.length > 0) {
+    const { data: members, error } = await supabase
+      .from("user_group_members")
+      .select("user_id")
+      .in("group_id", groupIds);
+
+    if (error) {
+      throw new Error(`group_members_query_failed: ${error.message}`);
+    }
+
+    for (const m of (members || [])) {
+      if (m.user_id && typeof m.user_id === "string") {
+        recipientIds.add(m.user_id);
+        groupMemberCount++;
+      }
+    }
+  }
+
+  return {
+    recipientIds: [...recipientIds],
+    directCount,
+    groupMemberCount,
+    groupMembersFromGroups: groupIds.length,
+  };
+}
+
+// ─── Main handler ────────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -125,7 +297,7 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  // ── Authentication & authorisation ──────────────────────────────────────────
+  // ── Auth ──
   const callerType = await authorize(req.headers.get("Authorization"));
   if (!callerType) return json({ ok: false, error: "Unauthorized" }, 401);
 
@@ -134,22 +306,15 @@ Deno.serve(async (req: Request) => {
 
     let force = false;
     let scheduled = false;
+    let dryRun = false;
     try {
       const body = await req.json().catch(() => ({}));
       force = !!body?.force;
-      // Only a cron caller is allowed to set scheduled=true
+      dryRun = !!body?.dry_run;
       scheduled = callerType === "cron" && !!body?.scheduled;
     } catch { /* ignore */ }
 
-    // Audit log the invocation
-    try {
-      await supabase.from("audit_logs").insert({
-        action: "send_daily_meetings_triggered",
-        details: { caller_type: callerType, force, scheduled },
-      });
-    } catch { /* non-critical */ }
-
-    // Load daily report config
+    // ── Load config ──
     const { data: config, error: cfgErr } = await supabase
       .from("daily_report_config")
       .select("*")
@@ -158,53 +323,105 @@ Deno.serve(async (req: Request) => {
     if (cfgErr || !config) return json({ ok: false, reason: "no_config" });
     if (!config.is_enabled && !force) return json({ ok: false, reason: "disabled" });
 
-    // IST date/time (UTC+3:30 = 210 minutes)
-    const IST_OFFSET_MINUTES = 210;
-    const now = new Date();
-    const istNow = new Date(now.getTime() + IST_OFFSET_MINUTES * 60 * 1000);
-    const istYear = istNow.getUTCFullYear();
-    const istMonth = istNow.getUTCMonth();
-    const istDate = istNow.getUTCDate();
+    // ── Tehran time ──
+    const tehranNow = getTehranNow();
+    const tehranDateParts = getTehranDateParts();
+    const tehranYear = parseInt(tehranDateParts.year);
+    const tehranMonth = parseInt(tehranDateParts.month);
+    const tehranDay = parseInt(tehranDateParts.day);
 
-    const todayStart = new Date(Date.UTC(istYear, istMonth, istDate, 0, 0, 0) - IST_OFFSET_MINUTES * 60 * 1000);
-    const todayEnd = new Date(Date.UTC(istYear, istMonth, istDate, 23, 59, 59) - IST_OFFSET_MINUTES * 60 * 1000);
-    const istDayForDisplay = new Date(Date.UTC(istYear, istMonth, istDate));
-
-    // For scheduled calls, check current minute matches send_time and day is allowed
+    // ── Scheduled check ──
     if (scheduled && !force) {
-      const istTimeStr = `${String(istNow.getUTCHours()).padStart(2, "0")}:${String(istNow.getUTCMinutes()).padStart(2, "0")}`;
-      if (istTimeStr !== config.send_time) {
-        return json({ ok: false, reason: "not_time_yet", time: istTimeStr, expected: config.send_time });
+      const currentMinutes = parseTimeToMinutes(tehranNow.time);
+      const configuredMinutes = parseTimeToMinutes(config.send_time || "07:00");
+
+      if (!isWithinSendWindow(currentMinutes, configuredMinutes, 5)) {
+        return json({
+          ok: false,
+          reason: "not_time_yet",
+          tehran_time: tehranNow.time,
+          configured_time: config.send_time,
+        });
       }
-      const istDayIndex = (istNow.getUTCDay() + 1) % 7;
+
       const allowedDays: number[] = config.send_days ?? [0, 1, 2, 3, 4, 5, 6];
-      if (!allowedDays.includes(istDayIndex)) {
-        return json({ ok: false, reason: "day_not_scheduled", day: istDayIndex });
+      if (!allowedDays.includes(tehranNow.weekdayIndex)) {
+        return json({
+          ok: false,
+          reason: "day_not_scheduled",
+          tehran_weekday: tehranNow.weekdayIndex,
+        });
       }
     }
 
-    // Jalaali date strings
-    const jalaaliLong = formatJalaaliDate(istDayForDisplay);
-    const jalaaliShort = formatJalaaliShort(istDayForDisplay);
-    const weekday = jalaaliLong.split(' ')[0];
+    // ── Idempotency: check daily_report_runs ──
+    const reportDate = tehranNow.date;
+    if (!dryRun) {
+      const { data: existingRun } = await supabase
+        .from("daily_report_runs")
+        .select("id, status")
+        .eq("config_id", config.id)
+        .eq("report_date", reportDate)
+        .maybeSingle();
 
-    // Fetch today's scheduled meetings
+      if (existingRun && (existingRun.status === "completed" || existingRun.status === "running")) {
+        return json({
+          ok: false,
+          reason: "already_sent",
+          report_date: reportDate,
+          status: existingRun.status,
+        });
+      }
+
+      // Insert run record
+      await supabase.from("daily_report_runs").insert({
+        config_id: config.id,
+        report_date: reportDate,
+        timezone: TEHRAN_TIMEZONE,
+        scheduled_time: config.send_time,
+        started_at: new Date().toISOString(),
+        status: "running",
+      }).select().maybeSingle();
+    }
+
+    // ── Resolve recipients ──
+    const { recipientIds, directCount, groupMemberCount, groupMembersFromGroups } =
+      await resolveDailyReportRecipients(supabase, config);
+
+    if (recipientIds.length === 0) {
+      // Update run record
+      if (!dryRun) {
+        await supabase.from("daily_report_runs")
+          .update({ status: "skipped", completed_at: new Date().toISOString(), error_text: "no_recipients" })
+          .eq("config_id", config.id)
+          .eq("report_date", reportDate);
+      }
+      return json({ ok: false, reason: "no_recipients" });
+    }
+
+    // ── Fetch today's meetings ──
     const { data: meetings, error: meetingsErr } = await supabase
       .from("meetings")
       .select("id, subject, start_time, end_time, location, representative, duration, request_date, participant_user_ids, notify_users")
       .in("status_type", ["approved", "scheduled"])
       .neq("status", "cancelled")
-      .gte("request_date", todayStart.toISOString())
-      .lte("request_date", todayEnd.toISOString())
+      .gte("request_date", tehranNow.startOfDayUtc)
+      .lte("request_date", tehranNow.endOfDayUtc)
       .order("start_time", { ascending: true, nullsFirst: false });
 
     if (meetingsErr) {
+      if (!dryRun) {
+        await supabase.from("daily_report_runs")
+          .update({ status: "failed", completed_at: new Date().toISOString(), error_text: meetingsErr.message })
+          .eq("config_id", config.id)
+          .eq("report_date", reportDate);
+      }
       return json({ ok: false, reason: "meetings_query_error", error: meetingsErr.message });
     }
 
     const meetingList = meetings || [];
 
-    // Collect all participant user IDs to resolve names
+    // ── Resolve participant names ──
     const allUserIds = new Set<string>();
     for (const m of meetingList) {
       (m.participant_user_ids || []).forEach((id: string) => allUserIds.add(id));
@@ -218,31 +435,10 @@ Deno.serve(async (req: Request) => {
         .from("profiles")
         .select("user_id, full_name")
         .in("user_id", [...allUserIds]);
-      (profiles || []).forEach((p: any) => { profileMap[p.user_id] = p.full_name || ''; });
+      (profiles || []).forEach((p: any) => { profileMap[p.user_id] = p.full_name || ""; });
     }
 
-    // Collect recipient user IDs
-    let recipientIds: string[] = [...(config.recipient_user_ids || [])];
-    if (config.recipient_group_ids && config.recipient_group_ids.length > 0) {
-      const { data: members } = await supabase
-        .from("user_group_members")
-        .select("user_id")
-        .in("group_id", config.recipient_group_ids);
-      recipientIds = [...new Set([...recipientIds, ...(members || []).map((m: any) => m.user_id)])];
-    }
-
-    if (recipientIds.length === 0) return json({ ok: false, reason: "no_recipients" });
-
-    // Fetch recipient phone numbers for SMS
-    const { data: recipientProfiles } = await supabase
-      .from("profiles")
-      .select("user_id, phone")
-      .in("user_id", recipientIds);
-
-    const phoneMap: Record<string, string> = {};
-    (recipientProfiles || []).forEach((p: any) => { if (p.phone) phoneMap[p.user_id] = p.phone; });
-
-    // ── Build meeting rows ────────────────────────────────────────────────────
+    // ── Build meeting rows ──
     const meetingCount = meetingList.length;
 
     interface MeetingRow {
@@ -263,10 +459,16 @@ Deno.serve(async (req: Request) => {
         ...(m.notify_users || []),
       ];
       const partNames = [...new Set(partIds.map((id: string) => profileMap[id]).filter(Boolean))];
-      const participants = partNames.slice(0, 4).join('، ') + (partNames.length > 4 ? ` و ${partNames.length - 4} نفر دیگر` : '');
+      const participants = partNames.slice(0, 4).join("، ") +
+        (partNames.length > 4 ? ` و ${partNames.length - 4} نفر دیگر` : "");
 
-      return { time, subject: m.subject || '—', location: loc, participants };
+      return { time, subject: m.subject || "—", location: loc, participants };
     });
+
+    // ── Jalaali date strings ──
+    const jalaaliLong = formatJalaaliDate(tehranYear, tehranMonth, tehranDay, tehranNow.weekdayIndex);
+    const jalaaliShort = formatJalaaliShort(tehranYear, tehranMonth, tehranDay);
+    const weekday = JALAALI_WEEKDAYS[tehranNow.weekdayIndex];
 
     const globalVars = {
       date: jalaaliShort,
@@ -275,7 +477,64 @@ Deno.serve(async (req: Request) => {
       count: String(meetingCount),
     };
 
-    // ── In-app notification ───────────────────────────────────────────────────
+    // ── Diagnostic logging ──
+    console.info("[daily-report]", {
+      trigger: force ? "manual" : (scheduled ? "scheduled" : "unknown"),
+      timezone: TEHRAN_TIMEZONE,
+      tehranDate: tehranNow.date,
+      tehranTime: tehranNow.time,
+      configuredTime: config.send_time,
+      configuredDays: config.send_days,
+      tehranWeekdayIndex: tehranNow.weekdayIndex,
+      directRecipientCount: directCount,
+      selectedGroupCount: groupMembersFromGroups,
+      resolvedGroupMemberCount: groupMemberCount,
+      deduplicatedRecipientCount: recipientIds.length,
+      meetingCount,
+      dryRun,
+    });
+
+    // ── Dry run: return without sending ──
+    if (dryRun) {
+      // Fetch phone/bale mappings for reporting
+      const { data: recipientProfiles } = await supabase
+        .from("profiles")
+        .select("user_id, phone")
+        .in("user_id", recipientIds);
+      const phoneCount = (recipientProfiles || []).filter((p: any) => p.phone).length;
+      const noPhoneCount = recipientIds.length - phoneCount;
+
+      const { data: baleMappings } = await supabase
+        .from("user_bale_mapping")
+        .select("user_id, bale_chat_id")
+        .in("user_id", recipientIds);
+      const baleCount = (baleMappings || []).filter((m: any) => m.bale_chat_id).length;
+
+      return json({
+        ok: true,
+        dry_run: true,
+        tehran_date: tehranNow.date,
+        tehran_time: tehranNow.time,
+        tehran_weekday: tehranNow.weekdayIndex,
+        tehran_weekday_label: weekday,
+        configured_time: config.send_time,
+        configured_days: config.send_days,
+        selected_user_ids: directCount,
+        selected_group_ids: groupMembersFromGroups,
+        resolved_group_members: groupMemberCount,
+        deduplicated_recipients: recipientIds.length,
+        recipients: recipientIds,
+        meetings_count: meetingCount,
+        notification_targets: config.send_via_notification ? recipientIds.length : 0,
+        sms_targets: config.send_via_sms ? phoneCount : 0,
+        sms_skipped_no_phone: config.send_via_sms ? noPhoneCount : 0,
+        bale_targets: config.send_via_bale ? baleCount : 0,
+        date_long: jalaaliLong,
+        date: jalaaliShort,
+      });
+    }
+
+    // ── In-app notification ──
     let notifSent = 0;
     if (config.send_via_notification) {
       const titleTpl = config.notification_title_tpl || DEFAULT_NOTIF_TITLE;
@@ -287,11 +546,11 @@ Deno.serve(async (req: Request) => {
       if (meetingCount === 0) {
         meetingsListForNotif = "امروز هیچ جلسه‌ای برنامه‌ریزی نشده است.";
       } else {
-        meetingsListForNotif = rows.map(r => {
+        meetingsListForNotif = rows.map((r) => {
           const parts = [r.time, r.subject];
           if (r.location) parts.push(r.location);
-          return `- ${parts.join(' | ')}`;
-        }).join('\n');
+          return `- ${parts.join(" | ")}`;
+        }).join("\n");
       }
 
       const notifMessage = renderTemplate(bodyTpl, { ...globalVars, meetings_list: meetingsListForNotif });
@@ -309,8 +568,18 @@ Deno.serve(async (req: Request) => {
       if (!notifErr) notifSent = recipientIds.length;
     }
 
-    // ── SMS ───────────────────────────────────────────────────────────────────
+    // ── Fetch recipient phones for SMS ──
+    const { data: recipientProfiles } = await supabase
+      .from("profiles")
+      .select("user_id, phone")
+      .in("user_id", recipientIds);
+
+    const phoneMap: Record<string, string> = {};
+    (recipientProfiles || []).forEach((p: any) => { if (p.phone) phoneMap[p.user_id] = p.phone; });
+
+    // ── SMS ──
     let smsSent = 0;
+    let smsSkippedNoPhone = 0;
     let smsError: string | null = null;
     if (config.send_via_sms) {
       const smsLineTpl = config.sms_tpl || DEFAULT_SMS_LINE;
@@ -319,7 +588,7 @@ Deno.serve(async (req: Request) => {
       if (meetingCount === 0) {
         smsMeetingLines = "امروز جلسه‌ای برنامه‌ریزی نشده است.";
       } else {
-        smsMeetingLines = rows.map(r => {
+        smsMeetingLines = rows.map((r) => {
           const locPart = r.location ? ` | ${r.location}` : "";
           return renderTemplate(smsLineTpl, {
             ...globalVars,
@@ -336,6 +605,7 @@ Deno.serve(async (req: Request) => {
 
       const rawMobiles = recipientIds.map((uid: string) => phoneMap[uid]).filter(Boolean);
       const mobiles = rawMobiles.map(normalizePhone);
+      smsSkippedNoPhone = recipientIds.length - rawMobiles.length;
 
       if (mobiles.length > 0) {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -353,7 +623,6 @@ Deno.serve(async (req: Request) => {
 
           const smsData = await smsResp.json().catch(() => ({}));
 
-          // Fetch provider info for logging
           const { data: providers } = await supabase
             .from("sms_providers")
             .select("id, title, provider_name")
@@ -364,7 +633,6 @@ Deno.serve(async (req: Request) => {
 
           if (smsData?.ok) {
             smsSent = mobiles.length;
-            // returnIds[i] maps 1:1 to rawMobiles[i] (rahyab_rest returns one ID per recipient in order)
             const returnIds: string[] = Array.isArray(smsData.returnIds) ? smsData.returnIds : [];
             await supabase.from("sms_dispatch_logs").insert(
               rawMobiles.map((phone: string, idx: number) => {
@@ -383,7 +651,7 @@ Deno.serve(async (req: Request) => {
                   provider_message_id: providerMessageId,
                   delivery_status: providerMessageId ? "pending" : null,
                 };
-              })
+              }),
             );
           } else {
             smsError = smsData?.error || "ارسال ناموفق";
@@ -398,7 +666,7 @@ Deno.serve(async (req: Request) => {
                 status: "failed",
                 error_text: smsError,
                 raw_response: smsData,
-              }))
+              })),
             );
           }
         } catch (e: any) {
@@ -407,7 +675,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── Bale ─────────────────────────────────────────────────────────────────
+    // ── Bale ──
     let baleSent = 0;
     let baleError: string | null = null;
     if (config.send_via_bale) {
@@ -431,11 +699,11 @@ Deno.serve(async (req: Request) => {
           if (meetingCount === 0) {
             meetingsListForBale = "امروز هیچ جلسه‌ای برنامه‌ریزی نشده است.";
           } else {
-            meetingsListForBale = rows.map(r => {
+            meetingsListForBale = rows.map((r) => {
               const parts = [r.time, r.subject];
               if (r.location) parts.push(r.location);
-              return `- ${parts.join(' | ')}`;
-            }).join('\n');
+              return `- ${parts.join(" | ")}`;
+            }).join("\n");
           }
           const baleMessage = `${notifTitle}\n\n${renderTemplate(bodyTpl, { ...globalVars, meetings_list: meetingsListForBale })}`;
 
@@ -469,19 +737,38 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── Update run record ──
+    await supabase.from("daily_report_runs")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        recipient_count: recipientIds.length,
+        meeting_count: meetingCount,
+      })
+      .eq("config_id", config.id)
+      .eq("report_date", reportDate);
+
+    // ── Update last_sent_date ──
+    await supabase.from("daily_report_config")
+      .update({ last_sent_date: reportDate, updated_at: new Date().toISOString() })
+      .eq("id", config.id);
+
     return json({
       ok: true,
       meetings_count: meetingCount,
       recipients: recipientIds.length,
       notifications_sent: notifSent,
       sms_sent: smsSent,
+      sms_skipped_no_phone: smsSkippedNoPhone,
       sms_error: smsError,
       bale_sent: baleSent,
       bale_error: baleError,
       date: jalaaliShort,
       date_long: jalaaliLong,
+      tehran_date: tehranNow.date,
+      tehran_time: tehranNow.time,
+      tehran_weekday: tehranNow.weekdayIndex,
     });
-
   } catch (err: any) {
     return json({ ok: false, error: err.message }, 500);
   }
