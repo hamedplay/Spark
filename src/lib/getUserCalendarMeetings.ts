@@ -31,6 +31,8 @@ export interface CalendarMeetingQuery {
   userId: string;
   startUtc: string;
   endUtc: string;
+  /** Optional: calendar IDs the user is subscribed to. Meetings in these calendars are visible. */
+  subscribedCalendarIds?: string[];
 }
 
 /**
@@ -56,7 +58,8 @@ export async function getUserCalendarMeetings<TClient extends { from: (table: st
   client: TClient,
   params: CalendarMeetingQuery,
 ): Promise<CalendarMeeting[]> {
-  const { userId, startUtc, endUtc } = params;
+  const { userId, startUtc, endUtc, subscribedCalendarIds } = params;
+  const subscribedCalIdSet = new Set(subscribedCalendarIds || []);
 
   // Fetch all non-closed meetings in the date range (same as CalendarPage)
   const { data: meetings, error } = await client
@@ -87,6 +90,9 @@ export async function getUserCalendarMeetings<TClient extends { from: (table: st
   const filtered = (meetings || []).filter((m: any) => {
     // Creator → always visible
     if (m.user_id === userId) return true;
+
+    // Meeting in a calendar the user is subscribed to → visible
+    if (m.calendar_id && subscribedCalIdSet.has(m.calendar_id)) return true;
 
     // Participant or observer → visible unless inbox says pending/declined
     const inboxS = inboxStatus.get(m.id);
