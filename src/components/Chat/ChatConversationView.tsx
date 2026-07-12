@@ -127,24 +127,18 @@ export function ChatConversationView({
 
   useEffect(() => {
     if (!currentUserId) return;
-    let cancelled = false;
     const updatePresence = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      const { error } = await supabase
+      await supabase
         .from('user_presence')
         .upsert({
-          user_id: user.id,
+          user_id: currentUserId,
           last_seen: new Date().toISOString(),
           is_online: true,
         }, { onConflict: 'user_id' });
-      if (error) {
-        console.error('[presence] upsert failed', { code: error.code, message: error.message });
-      }
     };
     updatePresence();
     const interval = setInterval(updatePresence, 20000);
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => clearInterval(interval);
   }, [currentUserId]);
   
   useEffect(() => {

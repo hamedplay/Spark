@@ -845,20 +845,18 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
         .maybeSingle();
       if (data) setUserProfile(data as UserProfile);
 
-      const { error: upsertErr } = await supabase.from('user_presence').upsert(
+      await supabase.from('user_presence').upsert(
         { user_id: user.id, last_seen: new Date().toISOString(), is_online: true, status: (localStorage.getItem('user_status') as string) || 'online' },
         { onConflict: 'user_id' }
       );
-      if (upsertErr) console.error('[presence] upsert failed', { code: upsertErr.code, message: upsertErr.message });
 
       const interval = setInterval(async () => {
         const s = localStorage.getItem('user_status') || 'online';
         if (s !== 'offline') {
-          const { error: intervalErr } = await supabase.from('user_presence').upsert(
+          await supabase.from('user_presence').upsert(
             { user_id: user.id, last_seen: new Date().toISOString(), is_online: true, status: s },
             { onConflict: 'user_id' }
           );
-          if (intervalErr) console.error('[presence] interval upsert failed', { code: intervalErr.code, message: intervalErr.message });
         }
       }, 60_000);
 

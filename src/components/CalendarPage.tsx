@@ -630,7 +630,6 @@ export function CalendarPage({
         userId: user.id,
         startUtc: queryFrom,
         endUtc: queryTo,
-        subscribedCalendarIds: subscribedCalendars.map(c => c.id),
       });
 
       console.log('[CalendarPage] fetchMeetings → setMeetings count:', filtered.length, 'userId:', user.id, 'jy/jm:', baseJy, baseJm);
@@ -644,7 +643,7 @@ export function CalendarPage({
       setMeetings(filtered);
     } catch { toast.error('خطا در دریافت جلسات'); }
     finally { setIsRefreshing(false); }
-  }, [currentJy, currentJm, isRefreshing, subscribedCalendars]);
+  }, [currentJy, currentJm, isRefreshing]);
 
   // Keep ref in sync so real-time callbacks always call latest version
   useEffect(() => { fetchMeetingsRef.current = () => fetchMeetings(); }, [fetchMeetings]);
@@ -1109,7 +1108,6 @@ export function CalendarPage({
         (m.participant_user_ids || []).includes(currentUserId) ||
         ((m.notify_users || []) as string[]).includes(currentUserId)
       );
-      const isViaSubscription = isAnyParticipantSubscribed([m.user_id, ...(m.participant_user_ids || [])]);
 
       // If calendars haven't loaded yet or userId is unknown, show all meetings
       if (!currentUserId || !calendarsLoaded) {
@@ -1120,19 +1118,33 @@ export function CalendarPage({
         return;
       }
 
+      // Meetings assigned to me → always use my personal public calendar toggle
+      if (isAssigned) {
+        // If I have a public calendar and it's disabled → hide the meeting
+        if (myPublicCalendar && !enabledCalendarIds.has(myPublicCalendar.id)) { hiddenPublicCalOff++; return; }
+        // If I have NO public calendar at all → still show (no toggle to apply)
+        const s = parseRequestDateToDateStr(m.request_date);
+        if (!s) return;
+        if (!map[s]) map[s] = [];
+        map[s].push(m);
+        return;
+      }
+
+      // Check if any participant has a calendar we subscribed to (and it's enabled)
+      const allParticipants = [m.user_id, ...(m.participant_user_ids || [])];
+      const isViaSubscription = isAnyParticipantSubscribed(allParticipants);
+
       if (m.calendar_id) {
-        // Meetings with a calendar_id: show/hide based solely on that calendar's toggle
-        if (!enabledCalendarIds.has(m.calendar_id)) { hiddenCalId++; return; }
-      } else if (isAssigned) {
-        // Meetings assigned to me without a calendar → use my personal public calendar toggle
-        if (myPublicCalendar && !enabledCalendarIds.has(myPublicCalendar.id)) { hiddenPublicCalOff++; return; }
-      } else if (isCreator) {
-        // Creator's meeting without a calendar: respect myPublicCalendar toggle
-        if (myPublicCalendar && !enabledCalendarIds.has(myPublicCalendar.id)) { hiddenPublicCalOff++; return; }
+        // Creator's own meetings: respect the calendar toggle strictly
+        if (!enabledCalendarIds.has(m.calendar_id) && !isViaSubscription) { hiddenCalId++; return; }
       } else {
-        // Meeting from a subscribed calendar owner without a calendar_id
-        if (!isViaSubscription) { hiddenNoCalNoSub++; return; }
-        if (m.members_only) return;
+        // Creator's meeting without a calendar: respect myPublicCalendar toggle
+        if (isCreator) {
+          if (myPublicCalendar && !enabledCalendarIds.has(myPublicCalendar.id)) { hiddenPublicCalOff++; return; }
+        } else {
+          if (!isViaSubscription) { hiddenNoCalNoSub++; return; }
+          if (m.members_only) return;
+        }
       }
 
       const s = parseRequestDateToDateStr(m.request_date);
