@@ -183,6 +183,9 @@ function adminClient() {
   );
 }
 
+// CRON_SECRET — must match the secret stored in vault.decrypted_secrets
+const CRON_SECRET = "d723e8f0-bcfc-4ddc-a67f-3441e90b2782-a438ddb6-917b-48ff-9291-61b2ac8b03e4";
+
 // ─── Authorization ───────────────────────────────────────────────────────────
 async function authorize(
   authHeader: string | null,
@@ -190,7 +193,33 @@ async function authorize(
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
 
-  // 1. Cron-secret check
+  // 1. Service role key — trusted as cron caller
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (serviceKey.length > 0) {
+    const enc = new TextEncoder();
+    const a = enc.encode(token);
+    const b = enc.encode(serviceKey);
+    if (a.length === b.length) {
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+      if (diff === 0) return "cron";
+    }
+  }
+
+  // 2. Anon key — trusted as cron caller (for pg_cron via pg_net)
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  if (anonKey.length > 0) {
+    const enc = new TextEncoder();
+    const a = enc.encode(token);
+    const b = enc.encode(anonKey);
+    if (a.length === b.length) {
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+      if (diff === 0) return "cron";
+    }
+  }
+
+  // 3. Cron-secret check
   const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
   if (cronSecret.length > 0) {
     const enc = new TextEncoder();
@@ -203,7 +232,7 @@ async function authorize(
     }
   }
 
-  // 2. Admin JWT check
+  // 3. Admin JWT check
   const supabase = adminClient();
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return null;
@@ -234,54 +263,87 @@ function parseTimeToMinutes(timeStr: string): number {
 }
 
 // ─── Recipient resolution ────────────────────────────────────────────────────
+interface RecipientResolution {
+  recipientIds: string[];
+  directRecipientCount: number;
+  selectedGroupCount: number;
+  rawGroupMembersCount: number;
+  uniqueGroupMembersCount: number;
+  deduplicatedRecipientCount: number;
+  duplicateCount: number;
+}
+
 async function resolveDailyReportRecipients(
   supabase: ReturnType<typeof adminClient>,
   config: any,
-): Promise<{
-  recipientIds: string[];
-  directCount: number;
-  groupMemberCount: number;
-  groupMembersFromGroups: number;
-}> {
-  const recipientIds = new Set<string>();
+): Promise<RecipientResolution> {
+  const directUserIds = new Set<string>();
+  const groupMemberIds = new Set<string>();
 
   // 1. Direct users
   for (const userId of (config.recipient_user_ids || [])) {
     if (userId && typeof userId === "string") {
-      recipientIds.add(userId);
+      directUserIds.add(userId);
     }
   }
-  const directCount = recipientIds.size;
 
   // 2. Group members
-  let groupMemberCount = 0;
   const groupIds = (config.recipient_group_ids || []).filter(
     (id: string) => id && typeof id === "string",
   );
 
-  if (groupIds.length > 0) {
-    const { data: members, error } = await supabase
-      .from("user_group_members")
-      .select("user_id")
-      .in("group_id", groupIds);
+  let rawGroupMembersCount = 0;
 
-    if (error) {
-      throw new Error(`group_members_query_failed: ${error.message}`);
+  if (groupIds.length > 0) {
+    // Validate that the groups actually exist
+    const { data: validGroups, error: groupErr } = await supabase
+      .from("user_groups")
+      .select("id")
+      .in("id", groupIds);
+
+    if (groupErr) {
+      throw new Error(`group_validation_query_failed: ${groupErr.message}`);
     }
 
-    for (const m of (members || [])) {
-      if (m.user_id && typeof m.user_id === "string") {
-        recipientIds.add(m.user_id);
-        groupMemberCount++;
+    const validGroupIds = (validGroups || []).map((g: any) => g.id);
+    if (validGroupIds.length === 0) {
+      // All group IDs are invalid — no group members to add
+    } else {
+      const { data: members, error } = await supabase
+        .from("user_group_members")
+        .select("user_id")
+        .in("group_id", validGroupIds);
+
+      if (error) {
+        throw new Error(`group_members_query_failed: ${error.message}`);
+      }
+
+      for (const m of (members || [])) {
+        if (m.user_id && typeof m.user_id === "string") {
+          groupMemberIds.add(m.user_id);
+          rawGroupMembersCount++;
+        }
       }
     }
   }
 
+  // 3. Merge and deduplicate
+  const finalRecipientIds = new Set<string>();
+  for (const id of directUserIds) finalRecipientIds.add(id);
+  for (const id of groupMemberIds) finalRecipientIds.add(id);
+
+  const rawCombinedCount = directUserIds.size + groupMemberIds.size;
+  const deduplicatedRecipientCount = finalRecipientIds.size;
+  const duplicateCount = rawCombinedCount - deduplicatedRecipientCount;
+
   return {
-    recipientIds: [...recipientIds],
-    directCount,
-    groupMemberCount,
-    groupMembersFromGroups: groupIds.length,
+    recipientIds: [...finalRecipientIds],
+    directRecipientCount: directUserIds.size,
+    selectedGroupCount: groupIds.length,
+    rawGroupMembersCount,
+    uniqueGroupMembersCount: groupMemberIds.size,
+    deduplicatedRecipientCount,
+    duplicateCount,
   };
 }
 
@@ -298,7 +360,16 @@ Deno.serve(async (req: Request) => {
     });
 
   // ── Auth ──
-  const callerType = await authorize(req.headers.get("Authorization"));
+  // Check for x-cron-secret header first (for pg_cron via pg_net)
+  const cronSecretHeader = req.headers.get("x-cron-secret");
+  let callerType: "cron" | "admin" | null = null;
+
+  if (cronSecretHeader && cronSecretHeader === CRON_SECRET) {
+    callerType = "cron";
+  } else {
+    callerType = await authorize(req.headers.get("Authorization"));
+  }
+
   if (!callerType) return json({ ok: false, error: "Unauthorized" }, 401);
 
   try {
@@ -356,45 +427,65 @@ Deno.serve(async (req: Request) => {
 
     // ── Idempotency: check daily_report_runs ──
     const reportDate = tehranNow.date;
-    if (!dryRun) {
-      const { data: existingRun } = await supabase
-        .from("daily_report_runs")
-        .select("id, status")
-        .eq("config_id", config.id)
-        .eq("report_date", reportDate)
-        .maybeSingle();
+    const triggerType = force ? "manual" : "scheduled";
+    const runKey = force
+      ? `${config.id}:${reportDate}:manual:${crypto.randomUUID()}`
+      : `${config.id}:${reportDate}:scheduled`;
 
-      if (existingRun && (existingRun.status === "completed" || existingRun.status === "running")) {
-        return json({
-          ok: false,
-          reason: "already_sent",
-          report_date: reportDate,
-          status: existingRun.status,
-        });
+    if (!dryRun) {
+      // For scheduled: check if a scheduled run already exists for today
+      if (!force) {
+        const { data: existingScheduled } = await supabase
+          .from("daily_report_runs")
+          .select("id, status")
+          .eq("config_id", config.id)
+          .eq("report_date", reportDate)
+          .eq("trigger_type", "scheduled")
+          .maybeSingle();
+
+        if (existingScheduled && (existingScheduled.status === "completed" || existingScheduled.status === "running")) {
+          return json({
+            ok: false,
+            reason: "already_sent",
+            report_date: reportDate,
+            status: existingScheduled.status,
+          });
+        }
       }
 
-      // Insert run record
-      await supabase.from("daily_report_runs").insert({
+      // Insert run record with unique run_key
+      const { error: insertErr } = await supabase.from("daily_report_runs").insert({
         config_id: config.id,
         report_date: reportDate,
         timezone: TEHRAN_TIMEZONE,
         scheduled_time: config.send_time,
         started_at: new Date().toISOString(),
         status: "running",
-      }).select().maybeSingle();
+        trigger_type: triggerType,
+        run_key: runKey,
+      });
+
+      if (insertErr) {
+        // run_key collision — another run with same key exists
+        return json({
+          ok: false,
+          reason: "already_running",
+          report_date: reportDate,
+          error: insertErr.message,
+        });
+      }
     }
 
     // ── Resolve recipients ──
-    const { recipientIds, directCount, groupMemberCount, groupMembersFromGroups } =
-      await resolveDailyReportRecipients(supabase, config);
+    const resolved = await resolveDailyReportRecipients(supabase, config);
+    const recipientIds = resolved.recipientIds;
 
     if (recipientIds.length === 0) {
       // Update run record
       if (!dryRun) {
         await supabase.from("daily_report_runs")
           .update({ status: "skipped", completed_at: new Date().toISOString(), error_text: "no_recipients" })
-          .eq("config_id", config.id)
-          .eq("report_date", reportDate);
+          .eq("run_key", runKey);
       }
       return json({ ok: false, reason: "no_recipients" });
     }
@@ -413,8 +504,7 @@ Deno.serve(async (req: Request) => {
       if (!dryRun) {
         await supabase.from("daily_report_runs")
           .update({ status: "failed", completed_at: new Date().toISOString(), error_text: meetingsErr.message })
-          .eq("config_id", config.id)
-          .eq("report_date", reportDate);
+          .eq("run_key", runKey);
       }
       return json({ ok: false, reason: "meetings_query_error", error: meetingsErr.message });
     }
@@ -479,17 +569,19 @@ Deno.serve(async (req: Request) => {
 
     // ── Diagnostic logging ──
     console.info("[daily-report]", {
-      trigger: force ? "manual" : (scheduled ? "scheduled" : "unknown"),
+      trigger: triggerType,
       timezone: TEHRAN_TIMEZONE,
       tehranDate: tehranNow.date,
       tehranTime: tehranNow.time,
       configuredTime: config.send_time,
       configuredDays: config.send_days,
       tehranWeekdayIndex: tehranNow.weekdayIndex,
-      directRecipientCount: directCount,
-      selectedGroupCount: groupMembersFromGroups,
-      resolvedGroupMemberCount: groupMemberCount,
-      deduplicatedRecipientCount: recipientIds.length,
+      directRecipientCount: resolved.directRecipientCount,
+      selectedGroupCount: resolved.selectedGroupCount,
+      rawGroupMembersCount: resolved.rawGroupMembersCount,
+      uniqueGroupMembersCount: resolved.uniqueGroupMembersCount,
+      deduplicatedRecipientCount: resolved.deduplicatedRecipientCount,
+      duplicateCount: resolved.duplicateCount,
       meetingCount,
       dryRun,
     });
@@ -517,20 +609,22 @@ Deno.serve(async (req: Request) => {
         tehran_time: tehranNow.time,
         tehran_weekday: tehranNow.weekdayIndex,
         tehran_weekday_label: weekday,
+        jalali_date: jalaaliShort,
+        jalali_date_long: jalaaliLong,
         configured_time: config.send_time,
         configured_days: config.send_days,
-        selected_user_ids: directCount,
-        selected_group_ids: groupMembersFromGroups,
-        resolved_group_members: groupMemberCount,
-        deduplicated_recipients: recipientIds.length,
+        selected_user_count: resolved.directRecipientCount,
+        selected_group_count: resolved.selectedGroupCount,
+        raw_group_members_count: resolved.rawGroupMembersCount,
+        unique_group_members_count: resolved.uniqueGroupMembersCount,
+        deduplicated_recipient_count: resolved.deduplicatedRecipientCount,
+        duplicate_count: resolved.duplicateCount,
         recipients: recipientIds,
         meetings_count: meetingCount,
         notification_targets: config.send_via_notification ? recipientIds.length : 0,
         sms_targets: config.send_via_sms ? phoneCount : 0,
         sms_skipped_no_phone: config.send_via_sms ? noPhoneCount : 0,
         bale_targets: config.send_via_bale ? baleCount : 0,
-        date_long: jalaaliLong,
-        date: jalaaliShort,
       });
     }
 
@@ -745,8 +839,7 @@ Deno.serve(async (req: Request) => {
         recipient_count: recipientIds.length,
         meeting_count: meetingCount,
       })
-      .eq("config_id", config.id)
-      .eq("report_date", reportDate);
+      .eq("run_key", runKey);
 
     // ── Update last_sent_date ──
     await supabase.from("daily_report_config")
