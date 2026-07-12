@@ -49,6 +49,7 @@ export function CreateEditCalendarModal({ editingCalendar, form, onChange, onSav
             >
               <option value="shared">اشتراکی</option>
               <option value="public">عمومی</option>
+              <option value="private">شخصی</option>
             </select>
           </div>
 

@@ -52,12 +52,13 @@ export function CalendarSidebar({
   isToday, isSelected, getMeetingsForDay,
   calendars, subscribedCalendars, enabledCalendarIds, onToggleCalendar,
   occasionsEnabled, onToggleOccasions,
-  sharedGroupOpen, publicGroupOpen,
-  onSharedGroupToggle, onPublicGroupToggle,
+  myGroupOpen, sharedGroupOpen, publicGroupOpen,
+  onMyGroupToggle, onSharedGroupToggle, onPublicGroupToggle,
   onNewCalendar, onOpenCalendarList,
 }: Props) {
   const [miniCalOpen, setMiniCalOpen] = useState(true);
   const [calendarsOpen, setCalendarsOpen] = useState(true);
+  const privateOwned = calendars.filter(c => c.type === 'private');
   const sharedOwned = calendars.filter(c => c.type === 'shared');
   const publicOwned = calendars.filter(c => c.type === 'public');
 
@@ -144,6 +145,26 @@ export function CalendarSidebar({
             </div>
 
             <div className="border-t border-gray-100 dark:border-gray-700 pt-1" />
+
+            {/* My personal calendars */}
+            {privateOwned.length > 0 && (
+              <div>
+                <button onClick={onMyGroupToggle} className="w-full flex items-center justify-between py-1.5 text-sm font-semibold dark:text-white hover:text-blue-500">
+                  <span>تقویم‌های شخصی</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${myGroupOpen ? '' : 'rotate-180'}`} />
+                </button>
+                {myGroupOpen && (
+                  <div className="space-y-0.5 mt-1">
+                    {privateOwned.map(cal => (
+                      <div key={cal.id} className="flex items-center gap-2 px-1 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 group/cal">
+                        <input type="checkbox" checked={enabledCalendarIds.has(cal.id)} onChange={() => onToggleCalendar(cal.id)} className="w-4 h-4 rounded flex-shrink-0" style={{ accentColor: cal.color }} />
+                        <span className="flex-1 text-sm dark:text-gray-300 truncate">{cal.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Shared calendars */}
             {(sharedOwned.length > 0 || subscribedCalendars.length > 0) && (

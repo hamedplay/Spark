@@ -760,7 +760,7 @@ export function CalendarPage({
 
   // ---- Calendar CRUD ----
   const resetCalendarForm = () => {
-    setCalendarForm({ name: '', type: 'private', description: '', is_active: true, enable_reminder: false, create_online_link: false, show_time_overlap: true, free_for_all: true, color: '#3b82f6' });
+    setCalendarForm({ name: '', type: 'shared', description: '', is_active: true, enable_reminder: false, create_online_link: false, show_time_overlap: true, free_for_all: true, color: '#3b82f6' });
   };
 
   const handleSaveCalendar = async () => {
@@ -1544,7 +1544,7 @@ export function CalendarPage({
           >
             <CalendarMeetingForm
               prefillData={prefillData}
-              calendars={[...calendars.filter(c => (c.type === 'public' || c.type === 'shared') && !c.is_occasions), ...subscribedCalendars.filter(c => c.type !== 'private' && !c.is_occasions)]}
+              calendars={[...calendars.filter(c => !c.is_occasions && c.type !== 'private'), ...subscribedCalendars.filter(c => !c.is_occasions && c.type !== 'private')]}
               onCancel={() => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); }}
               onSuccess={(subject, isUpdate) => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); fetchMeetings(); if (onScheduleComplete) onScheduleComplete(); sendNotification(isUpdate ? 'جلسه ویرایش شد' : 'جلسه ثبت شد', subject || ''); }}
             />
