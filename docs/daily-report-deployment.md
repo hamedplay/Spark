@@ -157,7 +157,7 @@ Test with dry_run to see what would be sent without actually sending:
 
 ```bash
 curl -s -X POST \
-  "https://zjmozuivykubdqnizhob.supabase.co/functions/v1/send-daily-meetings" \
+  "https://api.shahrmeeting.ir/functions/v1/send-daily-meetings" \
   -H "X-Cron-Secret: ${DAILY_REPORT_CRON_SECRET}" \
   -H "Content-Type: application/json" \
   -d '{"dry_run": true}' | jq .
