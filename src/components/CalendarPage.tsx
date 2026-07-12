@@ -5,6 +5,7 @@ import { CalendarViews } from './Calendar/CalendarViews';
 import { supabase } from '../lib/supabase';
 import { insertNotification as insertNotificationFromTemplate } from '../lib/notifications';
 import { getMeetingTemplateKey } from '../config/templateCatalog';
+import { getUserCalendarMeetings } from '../lib/getUserCalendarMeetings';
 import toast from 'react-hot-toast';
 import { CalendarMeetingForm } from './CalendarMeetingForm';
 import { MeetingInboxButton } from './MeetingInboxButton';
@@ -625,42 +626,12 @@ export function CalendarPage({
       const queryTo   = fmt(dayAfter);
       console.log('[CalendarPage] fetchMeetings query range:', queryFrom, '→', queryTo, '(jy/jm:', baseJy, baseJm + ')');
 
-      const [{ data, error }, { data: inboxRows }] = await Promise.all([
-        supabase.from('meetings')
-          .select('id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
-          .neq('status', 'closed')
-          .gte('request_date', queryFrom)
-          .lte('request_date', queryTo)
-          .order('start_time', { ascending: true }),
-        supabase.from('meeting_inbox')
-          .select('meeting_id, status')
-          .eq('user_id', user.id),
-      ]);
-
-      if (error) throw error;
-
-      const inboxStatus = new Map<string, string>(
-        (inboxRows || []).map((r: any) => [r.meeting_id, r.status])
-      );
-
-      // Visibility rules (mirrors the required calendar query):
-      //   Creator      → always visible (they own the meeting)
-      //   Participant  → visible unless inbox is explicitly 'pending' or 'declined'
-      //                  (accepted ✓, no-entry = directly added/delegated ✓, delegated ✓)
-      //   Observer /
-      //   Subscribed   → visible unless explicitly pending or declined
-      const filtered = (data || []).filter((m: any) => {
-        if (m.user_id === user.id) return true; // creator
-
-        const isParticipant = (m.participant_user_ids || []).includes(user.id);
-        if (isParticipant) {
-          const s = inboxStatus.get(m.id);
-          return s !== 'pending' && s !== 'declined';
-        }
-
-        const s = inboxStatus.get(m.id);
-        return s !== 'pending' && s !== 'declined';
+      const filtered = await getUserCalendarMeetings(supabase, {
+        userId: user.id,
+        startUtc: queryFrom,
+        endUtc: queryTo,
       });
+
       console.log('[CalendarPage] fetchMeetings → setMeetings count:', filtered.length, 'userId:', user.id, 'jy/jm:', baseJy, baseJm);
       // Sample the first 5 meetings to debug date grouping
       filtered.slice(0, 5).forEach((m: any) => {

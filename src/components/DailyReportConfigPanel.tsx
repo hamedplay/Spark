@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarDays, Clock, MessageSquare, Bell, Users, Save, Loader as Loader2, Plus, X, Check, Send, ChevronDown, ChevronUp, Info, Radio } from 'lucide-react';
+import { CalendarDays, Clock, MessageSquare, Bell, Users, Save, Loader as Loader2, Plus, X, Check, Send, ChevronDown, ChevronUp, Info, Radio, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -24,6 +24,7 @@ interface Config {
   send_via_sms: boolean;
   send_via_notification: boolean;
   send_via_bale: boolean;
+  send_empty_report: boolean;
   recipient_user_ids: string[];
   recipient_group_ids: string[];
   notification_title_tpl: string;
@@ -96,6 +97,7 @@ export function DailyReportConfigPanel() {
     send_via_sms: true,
     send_via_notification: true,
     send_via_bale: false,
+    send_empty_report: true,
     recipient_user_ids: [],
     recipient_group_ids: [],
     notification_title_tpl: DEFAULT_NOTIF_TITLE,
@@ -132,6 +134,7 @@ export function DailyReportConfigPanel() {
           send_via_sms: d.send_via_sms,
           send_via_notification: d.send_via_notification,
           send_via_bale: d.send_via_bale ?? false,
+          send_empty_report: d.send_empty_report ?? true,
           recipient_user_ids: d.recipient_user_ids || [],
           recipient_group_ids: d.recipient_group_ids || [],
           notification_title_tpl: d.notification_title_tpl || DEFAULT_NOTIF_TITLE,
@@ -160,6 +163,7 @@ export function DailyReportConfigPanel() {
       send_via_sms: config.send_via_sms,
       send_via_notification: config.send_via_notification,
       send_via_bale: config.send_via_bale,
+      send_empty_report: config.send_empty_report,
       recipient_user_ids: config.recipient_user_ids,
       recipient_group_ids: config.recipient_group_ids,
       notification_title_tpl: config.notification_title_tpl || null,
@@ -190,6 +194,7 @@ export function DailyReportConfigPanel() {
       send_via_sms: config.send_via_sms,
       send_via_notification: config.send_via_notification,
       send_via_bale: config.send_via_bale,
+      send_empty_report: config.send_empty_report,
       recipient_user_ids: config.recipient_user_ids,
       recipient_group_ids: config.recipient_group_ids,
       notification_title_tpl: config.notification_title_tpl || null,
@@ -391,7 +396,20 @@ export function DailyReportConfigPanel() {
           </div>
         </SectionCard>
 
-        {/* Recipients — users */}
+        {/* Empty report option */}
+        <SectionCard title="گزارش بدون جلسه" icon={FileText} iconColor="text-gray-500">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <Toggle value={config.send_empty_report} onChange={v => setConfig(c => ({ ...c, send_empty_report: v }))} />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              ارسال گزارش خالی برای کاربران بدون جلسه
+            </span>
+          </label>
+          {!config.send_empty_report && (
+            <p className="text-xs text-gray-400 mt-2">
+              اگر غیرفعال باشد، کاربرانی که در آن روز جلسه‌ای در تقویمشان ندارند گزارشی دریافت نمی‌کنند (وضعیت: skipped_no_calendar_meetings).
+            </p>
+          )}
+        </SectionCard>
         <SectionCard title="دریافت‌کنندگان (افراد)" icon={Users} iconColor="text-blue-500">
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-500 dark:text-gray-400">{recipientUsers.length} نفر انتخاب شده</span>

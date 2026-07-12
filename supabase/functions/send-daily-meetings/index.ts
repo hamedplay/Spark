@@ -561,12 +561,22 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ── Fetch today's meetings ──
-    const { data: meetings, error: meetingsErr } = await supabase
+    // ── Fetch per-recipient calendar meetings ──
+    // Uses the SAME visibility logic as CalendarPage.tsx:
+    //   Creator      → always visible
+    //   Participant  → visible unless meeting_inbox status is 'pending' or 'declined'
+    //   Observer     → visible unless meeting_inbox status is 'pending' or 'declined'
+    // This is the single source of truth for "what meetings show in a user's calendar".
+    // The shared service lives at src/lib/getUserCalendarMeetings.ts.
+    // This edge function inlines the same logic because Deno can't import from src/.
+
+    const EXCLUDED_INBOX_STATUSES = new Set(["pending", "declined"]);
+
+    // Batch fetch: 1 meetings query + 1 meeting_inbox query for all recipients
+    const { data: allMeetings, error: meetingsErr } = await supabase
       .from("meetings")
-      .select("id, subject, start_time, end_time, location, representative, duration, request_date, participant_user_ids, notify_users")
-      .in("status_type", ["approved", "scheduled"])
-      .neq("status", "cancelled")
+      .select("id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,notify_users,members_only,meeting_manager,is_online")
+      .neq("status", "closed")
       .gte("request_date", tehranNow.startOfDayUtc)
       .lte("request_date", tehranNow.endOfDayUtc)
       .order("start_time", { ascending: true, nullsFirst: false });
@@ -588,14 +598,67 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const meetingList = meetings || [];
+    // Fetch meeting_inbox for all recipients
+    const { data: allInbox, error: inboxErr } = await supabase
+      .from("meeting_inbox")
+      .select("meeting_id,user_id,status")
+      .in("user_id", recipientIds);
 
-    // ── Resolve participant names ──
+    if (inboxErr) {
+      if (!dryRun) {
+        await supabase.from("daily_report_runs")
+          .update({ status: "failed", completed_at: new Date().toISOString(), error_text: inboxErr.message })
+          .eq("run_key", runKey);
+      }
+      return json({
+        ok: false,
+        trigger_type: triggerType,
+        timezone: TEHRAN_TIMEZONE,
+        tehran_date: tehranNow.date,
+        tehran_time: tehranNow.time,
+        reason: "inbox_query_error",
+        error: inboxErr.message,
+      });
+    }
+
+    // Build inbox status map: Map<userId, Map<meetingId, status>>
+    const inboxByUser = new Map<string, Map<string, string>>();
+    for (const r of allInbox || []) {
+      let userMap = inboxByUser.get(r.user_id);
+      if (!userMap) { userMap = new Map(); inboxByUser.set(r.user_id, userMap); }
+      userMap.set(r.meeting_id, r.status);
+    }
+
+    // Group meetings per recipient using the calendar visibility logic
+    const recipientMeetingMap = new Map<string, any[]>();
+    for (const uid of recipientIds) {
+      recipientMeetingMap.set(uid, []);
+    }
+
+    for (const m of allMeetings || []) {
+      for (const uid of recipientIds) {
+        // Creator → always visible
+        if (m.user_id === uid) {
+          recipientMeetingMap.get(uid)!.push(m);
+          continue;
+        }
+        // Participant/Observer → visible unless inbox says pending/declined
+        const userInbox = inboxByUser.get(uid);
+        const inboxS = userInbox?.get(m.id);
+        if (!EXCLUDED_INBOX_STATUSES.has(inboxS || "pending")) {
+          recipientMeetingMap.get(uid)!.push(m);
+        }
+      }
+    }
+
+    // ── Resolve participant names for all meetings ──
     const allUserIds = new Set<string>();
-    for (const m of meetingList) {
-      (m.participant_user_ids || []).forEach((id: string) => allUserIds.add(id));
-      (m.notify_users || []).forEach((id: string) => allUserIds.add(id));
-      if (m.representative) allUserIds.add(m.representative);
+    for (const [, meetings] of recipientMeetingMap) {
+      for (const m of meetings) {
+        (m.participant_user_ids || []).forEach((id: string) => allUserIds.add(id));
+        (m.notify_users || []).forEach((id: string) => allUserIds.add(id));
+        if (m.representative) allUserIds.add(m.representative);
+      }
     }
 
     const profileMap: Record<string, string> = {};
@@ -607,9 +670,7 @@ Deno.serve(async (req: Request) => {
       (profiles || []).forEach((p: any) => { profileMap[p.user_id] = p.full_name || ""; });
     }
 
-    // ── Build meeting rows ──
-    const meetingCount = meetingList.length;
-
+    // ── Build per-recipient reports ──
     interface MeetingRow {
       time: string;
       subject: string;
@@ -617,36 +678,66 @@ Deno.serve(async (req: Request) => {
       participants: string;
     }
 
-    const rows: MeetingRow[] = meetingList.map((m: any) => {
-      let time = "";
-      if (m.start_time) time = m.end_time ? `${m.start_time} تا ${m.end_time}` : m.start_time;
-      else if (m.duration) time = m.duration;
+    interface RecipientReport {
+      user_id: string;
+      meetings: any[];
+      rows: MeetingRow[];
+      meeting_count: number;
+      meeting_ids: string[];
+      skipped: boolean;
+      skip_reason: string | null;
+    }
 
-      const loc = validLocation(m.location);
-      const partIds: string[] = [
-        ...(m.participant_user_ids || []),
-        ...(m.notify_users || []),
-      ];
-      const partNames = [...new Set(partIds.map((id: string) => profileMap[id]).filter(Boolean))];
-      const participants = partNames.slice(0, 4).join("، ") +
-        (partNames.length > 4 ? ` و ${partNames.length - 4} نفر دیگر` : "");
+    function buildMeetingRows(meetings: any[]): MeetingRow[] {
+      return meetings.map((m: any) => {
+        let time = "";
+        if (m.start_time) time = m.end_time ? `${m.start_time} تا ${m.end_time}` : m.start_time;
+        else if (m.duration) time = m.duration;
 
-      return { time, subject: m.subject || "—", location: loc, participants };
-    });
+        const loc = validLocation(m.location);
+        const partIds: string[] = [
+          ...(m.participant_user_ids || []),
+          ...(m.notify_users || []),
+        ];
+        const partNames = [...new Set(partIds.map((id: string) => profileMap[id]).filter(Boolean))];
+        const participants = partNames.slice(0, 4).join("، ") +
+          (partNames.length > 4 ? ` و ${partNames.length - 4} نفر دیگر` : "");
+
+        return { time, subject: m.subject || "—", location: loc, participants };
+      });
+    }
+
+    const sendEmptyReport = config.send_empty_report !== false; // default true
+    const recipientReports: RecipientReport[] = [];
+
+    for (const uid of recipientIds) {
+      const userMeetings = recipientMeetingMap.get(uid) || [];
+      const userRows = buildMeetingRows(userMeetings);
+      const meetingIds = userMeetings.map((m: any) => m.id);
+      const hasNoMeetings = userMeetings.length === 0;
+      const skipped = hasNoMeetings && !sendEmptyReport;
+
+      recipientReports.push({
+        user_id: uid,
+        meetings: userMeetings,
+        rows: userRows,
+        meeting_count: userMeetings.length,
+        meeting_ids: meetingIds,
+        skipped,
+        skip_reason: skipped ? "no_calendar_meetings_and_empty_report_disabled" : null,
+      });
+    }
+
+    const totalMeetings = recipientReports.reduce((sum, r) => sum + r.meeting_count, 0);
+    const skippedRecipients = recipientReports.filter(r => r.skipped).length;
+    const sentRecipients = recipientReports.length - skippedRecipients;
 
     // ── Jalaali date strings ──
     const jalaaliLong = formatJalaaliDate(tehranYear, tehranMonth, tehranDay, tehranNow.weekdayIndex);
     const jalaaliShort = formatJalaaliShort(tehranYear, tehranMonth, tehranDay);
     const weekday = JALAALI_WEEKDAYS[tehranNow.weekdayIndex];
 
-    const globalVars = {
-      date: jalaaliShort,
-      date_long: jalaaliLong,
-      weekday,
-      count: String(meetingCount),
-    };
-
-    // ── Diagnostic logging ──
+    // ── Diagnostic logging (no sensitive data) ──
     console.info("[daily-report]", {
       trigger: triggerType,
       timezone: TEHRAN_TIMEZONE,
@@ -661,13 +752,20 @@ Deno.serve(async (req: Request) => {
       uniqueGroupMembersCount: resolved.uniqueGroupMembersCount,
       deduplicatedRecipientCount: resolved.deduplicatedRecipientCount,
       duplicateCount: resolved.duplicateCount,
-      meetingCount,
+      totalMeetings,
+      skippedRecipients,
+      sentRecipients,
       dryRun,
+      recipientReports: recipientReports.map(r => ({
+        user_id: r.user_id,
+        calendar_meeting_count: r.meeting_count,
+        meeting_ids: r.meeting_ids,
+        skipped: r.skipped,
+      })),
     });
 
     // ── Dry run: return without sending ──
     if (dryRun) {
-      // Fetch phone/bale mappings for reporting
       const { data: recipientProfiles } = await supabase
         .from("profiles")
         .select("user_id, phone")
@@ -703,48 +801,71 @@ Deno.serve(async (req: Request) => {
         unique_group_members_count: resolved.uniqueGroupMembersCount,
         deduplicated_recipient_count: resolved.deduplicatedRecipientCount,
         duplicate_count: resolved.duplicateCount,
+        send_empty_report: sendEmptyReport,
         recipients: recipientIds,
-        meeting_count: meetingCount,
-        meetings_count: meetingCount,
-        notification_targets: config.send_via_notification ? recipientIds.length : 0,
+        recipient_reports: recipientReports.map(r => ({
+          user_id: r.user_id,
+          calendar_meeting_count: r.meeting_count,
+          meeting_ids: r.meeting_ids,
+          skipped: r.skipped,
+          skip_reason: r.skip_reason,
+        })),
+        total_meetings: totalMeetings,
+        skipped_recipients: skippedRecipients,
+        sent_recipients: sentRecipients,
+        notification_targets: config.send_via_notification ? sentRecipients : 0,
         sms_targets: config.send_via_sms ? phoneCount : 0,
         sms_skipped_no_phone: config.send_via_sms ? noPhoneCount : 0,
         bale_targets: config.send_via_bale ? baleCount : 0,
       });
     }
 
-    // ── In-app notification ──
+    // ── Per-recipient notification sending ──
     let notifSent = 0;
     if (config.send_via_notification) {
       const titleTpl = config.notification_title_tpl || DEFAULT_NOTIF_TITLE;
       const bodyTpl = config.notification_body_tpl || DEFAULT_NOTIF_BODY;
 
-      const notifTitle = renderTemplate(titleTpl, globalVars);
+      const notifRows: any[] = [];
+      for (const report of recipientReports) {
+        if (report.skipped) continue;
 
-      let meetingsListForNotif = "";
-      if (meetingCount === 0) {
-        meetingsListForNotif = "امروز هیچ جلسه‌ای برنامه‌ریزی نشده است.";
-      } else {
-        meetingsListForNotif = rows.map((r) => {
-          const parts = [r.time, r.subject];
-          if (r.location) parts.push(r.location);
-          return `- ${parts.join(" | ")}`;
-        }).join("\n");
+        const userVars = {
+          date: jalaaliShort,
+          date_long: jalaaliLong,
+          weekday,
+          count: String(report.meeting_count),
+        };
+
+        const notifTitle = renderTemplate(titleTpl, userVars);
+
+        let meetingsList = "";
+        if (report.meeting_count === 0) {
+          meetingsList = "برای امروز جلسه‌ای در تقویم شما ثبت نشده است.";
+        } else {
+          meetingsList = report.rows.map((r: MeetingRow) => {
+            const parts = [r.time, r.subject];
+            if (r.location) parts.push(r.location);
+            return `- ${parts.join(" | ")}`;
+          }).join("\n");
+        }
+
+        const notifMessage = renderTemplate(bodyTpl, { ...userVars, meetings_list: meetingsList });
+
+        notifRows.push({
+          user_id: report.user_id,
+          title: notifTitle,
+          message: notifMessage,
+          type: "info",
+          read: false,
+          created_at: new Date().toISOString(),
+        });
       }
 
-      const notifMessage = renderTemplate(bodyTpl, { ...globalVars, meetings_list: meetingsListForNotif });
-
-      const notifRows = recipientIds.map((uid: string) => ({
-        user_id: uid,
-        title: notifTitle,
-        message: notifMessage,
-        type: "info",
-        read: false,
-        created_at: new Date().toISOString(),
-      }));
-
-      const { error: notifErr } = await supabase.from("notifications").insert(notifRows);
-      if (!notifErr) notifSent = recipientIds.length;
+      if (notifRows.length > 0) {
+        const { error: notifErr } = await supabase.from("notifications").insert(notifRows);
+        if (!notifErr) notifSent = notifRows.length;
+      }
     }
 
     // ── Fetch recipient phones for SMS ──
@@ -756,39 +877,55 @@ Deno.serve(async (req: Request) => {
     const phoneMap: Record<string, string> = {};
     (recipientProfiles || []).forEach((p: any) => { if (p.phone) phoneMap[p.user_id] = p.phone; });
 
-    // ── SMS ──
+    // ── Per-recipient SMS ──
     let smsSent = 0;
     let smsSkippedNoPhone = 0;
     let smsError: string | null = null;
     if (config.send_via_sms) {
       const smsLineTpl = config.sms_tpl || DEFAULT_SMS_LINE;
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-      let smsMeetingLines = "";
-      if (meetingCount === 0) {
-        smsMeetingLines = "امروز جلسه‌ای برنامه‌ریزی نشده است.";
-      } else {
-        smsMeetingLines = rows.map((r) => {
-          const locPart = r.location ? ` | ${r.location}` : "";
-          return renderTemplate(smsLineTpl, {
-            ...globalVars,
-            time: r.time,
-            subject: r.subject,
-            location: r.location,
-            location_part: locPart,
-            participants: r.participants,
-          });
-        }).join("\n");
-      }
+      const { data: providers } = await supabase
+        .from("sms_providers")
+        .select("id, title, provider_name")
+        .eq("is_active", true)
+        .eq("is_default", true)
+        .limit(1);
+      const provider = providers?.[0];
 
-      const smsBody = renderTemplate(DEFAULT_SMS_BODY, { ...globalVars, meetings_list: smsMeetingLines });
+      for (const report of recipientReports) {
+        if (report.skipped) continue;
 
-      const rawMobiles = recipientIds.map((uid: string) => phoneMap[uid]).filter(Boolean);
-      const mobiles = rawMobiles.map(normalizePhone);
-      smsSkippedNoPhone = recipientIds.length - rawMobiles.length;
+        const phone = phoneMap[report.user_id];
+        if (!phone) { smsSkippedNoPhone++; continue; }
 
-      if (mobiles.length > 0) {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const userVars = {
+          date: jalaaliShort,
+          date_long: jalaaliLong,
+          weekday,
+          count: String(report.meeting_count),
+        };
+
+        let smsMeetingLines = "";
+        if (report.meeting_count === 0) {
+          smsMeetingLines = "برای امروز جلسه‌ای در تقویم شما ثبت نشده است.";
+        } else {
+          smsMeetingLines = report.rows.map((r: MeetingRow) => {
+            const locPart = r.location ? ` | ${r.location}` : "";
+            return renderTemplate(smsLineTpl, {
+              ...userVars,
+              time: r.time,
+              subject: r.subject,
+              location: r.location,
+              location_part: locPart,
+              participants: r.participants,
+            });
+          }).join("\n");
+        }
+
+        const smsBody = renderTemplate(DEFAULT_SMS_BODY, { ...userVars, meetings_list: smsMeetingLines });
+        const mobile = normalizePhone(phone);
 
         try {
           const smsResp = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
@@ -797,56 +934,42 @@ Deno.serve(async (req: Request) => {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${serviceKey}`,
             },
-            body: JSON.stringify({ mobiles, message: smsBody }),
+            body: JSON.stringify({ mobiles: [mobile], message: smsBody }),
           });
 
           const smsData = await smsResp.json().catch(() => ({}));
 
-          const { data: providers } = await supabase
-            .from("sms_providers")
-            .select("id, title, provider_name")
-            .eq("is_active", true)
-            .eq("is_default", true)
-            .limit(1);
-          const provider = providers?.[0];
-
           if (smsData?.ok) {
-            smsSent = mobiles.length;
+            smsSent++;
             const returnIds: string[] = Array.isArray(smsData.returnIds) ? smsData.returnIds : [];
-            await supabase.from("sms_dispatch_logs").insert(
-              rawMobiles.map((phone: string, idx: number) => {
-                const providerMessageId = returnIds[idx] ?? null;
-                return {
-                  target_phone: phone,
-                  category: "daily_report",
-                  event_type: "daily_meetings",
-                  message: smsBody,
-                  provider_id: provider?.id ?? null,
-                  provider_name: provider?.title || provider?.provider_name || null,
-                  status: "sent",
-                  pack_id: smsData.packId ? String(smsData.packId) : null,
-                  cost: smsData.cost ?? null,
-                  raw_response: smsData,
-                  provider_message_id: providerMessageId,
-                  delivery_status: providerMessageId ? "pending" : null,
-                };
-              }),
-            );
+            const providerMessageId = returnIds[0] ?? null;
+            await supabase.from("sms_dispatch_logs").insert({
+              target_phone: phone,
+              category: "daily_report",
+              event_type: "daily_meetings",
+              message: smsBody,
+              provider_id: provider?.id ?? null,
+              provider_name: provider?.title || provider?.provider_name || null,
+              status: "sent",
+              pack_id: smsData.packId ? String(smsData.packId) : null,
+              cost: smsData.cost ?? null,
+              raw_response: smsData,
+              provider_message_id: providerMessageId,
+              delivery_status: providerMessageId ? "pending" : null,
+            });
           } else {
             smsError = smsData?.error || "ارسال ناموفق";
-            await supabase.from("sms_dispatch_logs").insert(
-              rawMobiles.map((phone: string) => ({
-                target_phone: phone,
-                category: "daily_report",
-                event_type: "daily_meetings",
-                message: smsBody,
-                provider_id: provider?.id ?? null,
-                provider_name: provider?.title || provider?.provider_name || null,
-                status: "failed",
-                error_text: smsError,
-                raw_response: smsData,
-              })),
-            );
+            await supabase.from("sms_dispatch_logs").insert({
+              target_phone: phone,
+              category: "daily_report",
+              event_type: "daily_meetings",
+              message: smsBody,
+              provider_id: provider?.id ?? null,
+              provider_name: provider?.title || provider?.provider_name || null,
+              status: "failed",
+              error_text: smsError,
+              raw_response: smsData,
+            });
           }
         } catch (e: any) {
           smsError = e.message;
@@ -854,7 +977,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── Bale ──
+    // ── Per-recipient Bale ──
     let baleSent = 0;
     let baleError: string | null = null;
     if (config.send_via_bale) {
@@ -873,18 +996,6 @@ Deno.serve(async (req: Request) => {
         } else {
           const titleTpl = config.notification_title_tpl || DEFAULT_NOTIF_TITLE;
           const bodyTpl = config.notification_body_tpl || DEFAULT_NOTIF_BODY;
-          const notifTitle = renderTemplate(titleTpl, globalVars);
-          let meetingsListForBale = "";
-          if (meetingCount === 0) {
-            meetingsListForBale = "امروز هیچ جلسه‌ای برنامه‌ریزی نشده است.";
-          } else {
-            meetingsListForBale = rows.map((r) => {
-              const parts = [r.time, r.subject];
-              if (r.location) parts.push(r.location);
-              return `- ${parts.join(" | ")}`;
-            }).join("\n");
-          }
-          const baleMessage = `${notifTitle}\n\n${renderTemplate(bodyTpl, { ...globalVars, meetings_list: meetingsListForBale })}`;
 
           const { data: mappings } = await supabase
             .from("user_bale_mapping")
@@ -894,9 +1005,34 @@ Deno.serve(async (req: Request) => {
           const chatMap: Record<string, string> = {};
           (mappings || []).forEach((m: any) => { if (m.bale_chat_id) chatMap[m.user_id] = m.bale_chat_id; });
 
-          for (const uid of recipientIds) {
-            const chatId = chatMap[uid];
+          for (const report of recipientReports) {
+            if (report.skipped) continue;
+
+            const chatId = chatMap[report.user_id];
             if (!chatId) continue;
+
+            const userVars = {
+              date: jalaaliShort,
+              date_long: jalaaliLong,
+              weekday,
+              count: String(report.meeting_count),
+            };
+
+            const notifTitle = renderTemplate(titleTpl, userVars);
+
+            let meetingsList = "";
+            if (report.meeting_count === 0) {
+              meetingsList = "برای امروز جلسه‌ای در تقویم شما ثبت نشده است.";
+            } else {
+              meetingsList = report.rows.map((r: MeetingRow) => {
+                const parts = [r.time, r.subject];
+                if (r.location) parts.push(r.location);
+                return `- ${parts.join(" | ")}`;
+              }).join("\n");
+            }
+
+            const baleMessage = `${notifTitle}\n\n${renderTemplate(bodyTpl, { ...userVars, meetings_list: meetingsList })}`;
+
             try {
               const res = await fetch(`https://tapi.bale.ai/bot${botToken}/sendMessage`, {
                 method: "POST",
@@ -906,10 +1042,10 @@ Deno.serve(async (req: Request) => {
               if (res.ok) baleSent++;
               else {
                 const errBody = await res.text().catch(() => "");
-                console.warn("[daily-meetings] Bale send failed for %s: HTTP %s %s", uid, res.status, errBody.slice(0, 100));
+                console.warn("[daily-meetings] Bale send failed for %s: HTTP %s %s", report.user_id, res.status, errBody.slice(0, 100));
               }
             } catch (e: any) {
-              console.warn("[daily-meetings] Bale network error for %s: %s", uid, e?.message);
+              console.warn("[daily-meetings] Bale network error for %s: %s", report.user_id, e?.message);
             }
           }
         }
@@ -921,8 +1057,8 @@ Deno.serve(async (req: Request) => {
       .update({
         status: "completed",
         completed_at: new Date().toISOString(),
-        recipient_count: recipientIds.length,
-        meeting_count: meetingCount,
+        recipient_count: sentRecipients,
+        meeting_count: totalMeetings,
       })
       .eq("run_key", runKey);
 
@@ -941,10 +1077,12 @@ Deno.serve(async (req: Request) => {
       within_send_window: withinSendWindow,
       within_grace_period: withinGracePeriod,
       already_processed: false,
-      recipient_count: recipientIds.length,
-      meeting_count: meetingCount,
-      meetings_count: meetingCount,
-      recipients: recipientIds.length,
+      send_empty_report: sendEmptyReport,
+      recipient_count: sentRecipients,
+      total_recipients: recipientIds.length,
+      skipped_recipients: skippedRecipients,
+      sent_recipients: sentRecipients,
+      total_meetings: totalMeetings,
       notifications_sent: notifSent,
       sms_sent: smsSent,
       sms_skipped_no_phone: smsSkippedNoPhone,
@@ -954,6 +1092,13 @@ Deno.serve(async (req: Request) => {
       jalali_date: jalaaliShort,
       jalali_date_long: jalaaliLong,
       tehran_weekday: tehranNow.weekdayIndex,
+      recipient_reports: recipientReports.map(r => ({
+        user_id: r.user_id,
+        calendar_meeting_count: r.meeting_count,
+        meeting_ids: r.meeting_ids,
+        skipped: r.skipped,
+        skip_reason: r.skip_reason,
+      })),
     });
   } catch (err: any) {
     return json({ ok: false, error: err.message }, 500);
