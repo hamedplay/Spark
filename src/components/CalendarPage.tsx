@@ -1106,6 +1106,14 @@ export function CalendarPage({
   }, [calendars, subscribedCalendars, currentUserId, myPublicCalendar]);
 
   // ---- Filter meetings ----
+  // Set of all calendar IDs the user has a direct checkbox for (owned + subscribed)
+  const knownCalendarIds = useMemo(() => {
+    const s = new Set<string>();
+    calendars.forEach(c => s.add(c.id));
+    subscribedCalendars.forEach(c => s.add(c.id));
+    return s;
+  }, [calendars, subscribedCalendars]);
+
   // Map: owner user_id → set of calendar IDs they own that we subscribed to
   const subscribedOwnerCalendarIds = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -1164,8 +1172,12 @@ export function CalendarPage({
       const isViaSubscription = isAnyParticipantSubscribed(allParticipants);
 
       if (m.calendar_id) {
-        // Creator's own meetings: respect the calendar toggle strictly
-        if (!enabledCalendarIds.has(m.calendar_id) && !isViaSubscription) { hiddenCalId++; return; }
+        // If this calendar has a direct checkbox (owned or subscribed), respect its toggle strictly
+        if (knownCalendarIds.has(m.calendar_id)) {
+          if (!enabledCalendarIds.has(m.calendar_id)) { hiddenCalId++; return; }
+        } else if (!isViaSubscription) {
+          hiddenCalId++; return;
+        }
       } else {
         // Creator's meeting without a calendar: respect myPublicCalendar toggle
         if (isCreator) {
