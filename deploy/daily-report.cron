@@ -1,0 +1,9 @@
+# /etc/cron.d/daily-report
+# Cron entry for daily report scheduler — runs every 5 minutes.
+# Install: sudo cp deploy/daily-report.cron /etc/cron.d/daily-report
+# The script reads /etc/myapp/daily-report.env for secrets.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/5 * * * * root /usr/local/bin/daily-report-trigger.sh

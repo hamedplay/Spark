@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// Daily report edge function — sends daily management meeting summaries
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -183,56 +184,54 @@ function adminClient() {
   );
 }
 
-// CRON_SECRET — must match the secret stored in vault.decrypted_secrets
-const CRON_SECRET = "d723e8f0-bcfc-4ddc-a67f-3441e90b2782-a438ddb6-917b-48ff-9291-61b2ac8b03e4";
+// ─── Grace period ───────────────────────────────────────────────────────────
+const SCHEDULE_GRACE_PERIOD_MINUTES = 15;
+const SEND_WINDOW_MINUTES = 5;
+
+function timingSafeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const enc = new TextEncoder();
+  const ba = enc.encode(a);
+  const bb = enc.encode(b);
+  let diff = 0;
+  for (let i = 0; i < ba.length; i++) diff |= ba[i] ^ bb[i];
+  return diff === 0;
+}
 
 // ─── Authorization ───────────────────────────────────────────────────────────
 async function authorize(
   authHeader: string | null,
+  cronSecretHeader: string | null,
 ): Promise<"cron" | "admin" | null> {
+  // 1. X-Cron-Secret header — preferred for VPS cron / systemd
+  const cronSecretEnv = Deno.env.get("DAILY_REPORT_CRON_SECRET") ?? "";
+  if (cronSecretHeader && cronSecretEnv && timingSafeCompare(cronSecretHeader, cronSecretEnv)) {
+    return "cron";
+  }
+
+  // 1b. Also check against vault-stored cron_secret (for pg_cron)
+  if (cronSecretHeader) {
+    const supabase = adminClient();
+    const { data } = await supabase.rpc("verify_cron_secret", { candidate: cronSecretHeader });
+    if (data === true) return "cron";
+  }
+
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
 
-  // 1. Service role key — trusted as cron caller
+  // 2. Service role key — trusted as cron caller
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (serviceKey.length > 0) {
-    const enc = new TextEncoder();
-    const a = enc.encode(token);
-    const b = enc.encode(serviceKey);
-    if (a.length === b.length) {
-      let diff = 0;
-      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-      if (diff === 0) return "cron";
-    }
-  }
+  if (serviceKey.length > 0 && timingSafeCompare(token, serviceKey)) return "cron";
 
-  // 2. Anon key — trusted as cron caller (for pg_cron via pg_net)
+  // 3. Anon key — trusted as cron caller (for pg_cron via pg_net)
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  if (anonKey.length > 0) {
-    const enc = new TextEncoder();
-    const a = enc.encode(token);
-    const b = enc.encode(anonKey);
-    if (a.length === b.length) {
-      let diff = 0;
-      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-      if (diff === 0) return "cron";
-    }
-  }
+  if (anonKey.length > 0 && timingSafeCompare(token, anonKey)) return "cron";
 
-  // 3. Cron-secret check
-  const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
-  if (cronSecret.length > 0) {
-    const enc = new TextEncoder();
-    const a = enc.encode(token);
-    const b = enc.encode(cronSecret);
-    if (a.length === b.length) {
-      let diff = 0;
-      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-      if (diff === 0) return "cron";
-    }
-  }
+  // 4. Legacy CRON_SECRET env var
+  const legacyCronSecret = Deno.env.get("CRON_SECRET") ?? "";
+  if (legacyCronSecret.length > 0 && timingSafeCompare(token, legacyCronSecret)) return "cron";
 
-  // 3. Admin JWT check
+  // 5. Admin JWT check
   const supabase = adminClient();
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return null;
@@ -360,15 +359,9 @@ Deno.serve(async (req: Request) => {
     });
 
   // ── Auth ──
-  // Check for x-cron-secret header first (for pg_cron via pg_net)
-  const cronSecretHeader = req.headers.get("x-cron-secret");
-  let callerType: "cron" | "admin" | null = null;
-
-  if (cronSecretHeader && cronSecretHeader === CRON_SECRET) {
-    callerType = "cron";
-  } else {
-    callerType = await authorize(req.headers.get("Authorization"));
-  }
+  // X-Cron-Secret header for VPS cron / systemd; Authorization Bearer for admin UI
+  const cronSecretHeader = req.headers.get("x-cron-secret") || req.headers.get("X-Cron-Secret");
+  const callerType = await authorize(req.headers.get("Authorization"), cronSecretHeader);
 
   if (!callerType) return json({ ok: false, error: "Unauthorized" }, 401);
 
@@ -401,26 +394,77 @@ Deno.serve(async (req: Request) => {
     const tehranMonth = parseInt(tehranDateParts.month);
     const tehranDay = parseInt(tehranDateParts.day);
 
-    // ── Scheduled check ──
+    // ── Scheduled check with grace period ──
+    const currentMinutes = parseTimeToMinutes(tehranNow.time);
+    const configuredMinutes = parseTimeToMinutes(config.send_time || "07:00");
+    const withinSendWindow = isWithinSendWindow(currentMinutes, configuredMinutes, SEND_WINDOW_MINUTES);
+    const withinGracePeriod =
+      currentMinutes >= configuredMinutes &&
+      currentMinutes < configuredMinutes + SCHEDULE_GRACE_PERIOD_MINUTES;
+    const pastGracePeriod = currentMinutes >= configuredMinutes + SCHEDULE_GRACE_PERIOD_MINUTES;
+
     if (scheduled && !force) {
-      const currentMinutes = parseTimeToMinutes(tehranNow.time);
-      const configuredMinutes = parseTimeToMinutes(config.send_time || "07:00");
-
-      if (!isWithinSendWindow(currentMinutes, configuredMinutes, 5)) {
-        return json({
-          ok: false,
-          reason: "not_time_yet",
-          tehran_time: tehranNow.time,
-          configured_time: config.send_time,
-        });
-      }
-
       const allowedDays: number[] = config.send_days ?? [0, 1, 2, 3, 4, 5, 6];
       if (!allowedDays.includes(tehranNow.weekdayIndex)) {
         return json({
           ok: false,
-          reason: "day_not_scheduled",
+          trigger_type: "scheduled",
+          timezone: TEHRAN_TIMEZONE,
+          tehran_date: tehranNow.date,
+          tehran_time: tehranNow.time,
+          configured_time: config.send_time,
+          within_send_window: withinSendWindow,
+          within_grace_period: withinGracePeriod,
+          already_processed: false,
+          reason: "skipped_day",
           tehran_weekday: tehranNow.weekdayIndex,
+        });
+      }
+
+      if (!withinGracePeriod) {
+        if (pastGracePeriod) {
+          // Beyond grace period — mark as missed, do not send
+          if (!dryRun) {
+            try {
+              await supabase.from("daily_report_runs").insert({
+                config_id: config.id,
+                report_date: tehranNow.date,
+                timezone: TEHRAN_TIMEZONE,
+                scheduled_time: config.send_time,
+                started_at: new Date().toISOString(),
+                completed_at: new Date().toISOString(),
+                status: "missed",
+                trigger_type: "scheduled",
+                run_key: `${config.id}:${tehranNow.date}:scheduled`,
+                error_text: `past_grace_period: ${tehranNow.time} > ${config.send_time}+${SCHEDULE_GRACE_PERIOD_MINUTES}min`,
+              });
+            } catch { /* non-fatal */ }
+          }
+          return json({
+            ok: false,
+            trigger_type: "scheduled",
+            timezone: TEHRAN_TIMEZONE,
+            tehran_date: tehranNow.date,
+            tehran_time: tehranNow.time,
+            configured_time: config.send_time,
+            within_send_window: withinSendWindow,
+            within_grace_period: false,
+            already_processed: false,
+            reason: "missed",
+          });
+        }
+        // Before send_time — not time yet
+        return json({
+          ok: false,
+          trigger_type: "scheduled",
+          timezone: TEHRAN_TIMEZONE,
+          tehran_date: tehranNow.date,
+          tehran_time: tehranNow.time,
+          configured_time: config.send_time,
+          within_send_window: false,
+          within_grace_period: false,
+          already_processed: false,
+          reason: "skipped_not_time",
         });
       }
     }
@@ -446,14 +490,21 @@ Deno.serve(async (req: Request) => {
         if (existingScheduled && (existingScheduled.status === "completed" || existingScheduled.status === "running")) {
           return json({
             ok: false,
-            reason: "already_sent",
-            report_date: reportDate,
+            trigger_type: "scheduled",
+            timezone: TEHRAN_TIMEZONE,
+            tehran_date: tehranNow.date,
+            tehran_time: tehranNow.time,
+            configured_time: config.send_time,
+            within_send_window: withinSendWindow,
+            within_grace_period: withinGracePeriod,
+            already_processed: true,
+            reason: "already_processed",
             status: existingScheduled.status,
           });
         }
       }
 
-      // Insert run record with unique run_key
+      // Insert run record with unique run_key (atomic — concurrent requests get unique constraint violation)
       const { error: insertErr } = await supabase.from("daily_report_runs").insert({
         config_id: config.id,
         report_date: reportDate,
@@ -466,11 +517,18 @@ Deno.serve(async (req: Request) => {
       });
 
       if (insertErr) {
-        // run_key collision — another run with same key exists
+        // run_key collision — another concurrent run with same key exists
         return json({
           ok: false,
-          reason: "already_running",
-          report_date: reportDate,
+          trigger_type: triggerType,
+          timezone: TEHRAN_TIMEZONE,
+          tehran_date: tehranNow.date,
+          tehran_time: tehranNow.time,
+          configured_time: config.send_time,
+          within_send_window: withinSendWindow,
+          within_grace_period: withinGracePeriod,
+          already_processed: true,
+          reason: "already_processed",
           error: insertErr.message,
         });
       }
@@ -484,10 +542,23 @@ Deno.serve(async (req: Request) => {
       // Update run record
       if (!dryRun) {
         await supabase.from("daily_report_runs")
-          .update({ status: "skipped", completed_at: new Date().toISOString(), error_text: "no_recipients" })
+          .update({ status: "skipped_no_recipients", completed_at: new Date().toISOString(), error_text: "no_recipients" })
           .eq("run_key", runKey);
       }
-      return json({ ok: false, reason: "no_recipients" });
+      return json({
+        ok: false,
+        trigger_type: triggerType,
+        timezone: TEHRAN_TIMEZONE,
+        tehran_date: tehranNow.date,
+        tehran_time: tehranNow.time,
+        configured_time: config.send_time,
+        within_send_window: withinSendWindow,
+        within_grace_period: withinGracePeriod,
+        already_processed: false,
+        reason: "skipped_no_recipients",
+        recipient_count: 0,
+        meeting_count: meetingCount,
+      });
     }
 
     // ── Fetch today's meetings ──
@@ -506,7 +577,15 @@ Deno.serve(async (req: Request) => {
           .update({ status: "failed", completed_at: new Date().toISOString(), error_text: meetingsErr.message })
           .eq("run_key", runKey);
       }
-      return json({ ok: false, reason: "meetings_query_error", error: meetingsErr.message });
+      return json({
+        ok: false,
+        trigger_type: triggerType,
+        timezone: TEHRAN_TIMEZONE,
+        tehran_date: tehranNow.date,
+        tehran_time: tehranNow.time,
+        reason: "meetings_query_error",
+        error: meetingsErr.message,
+      });
     }
 
     const meetingList = meetings || [];
@@ -605,6 +684,8 @@ Deno.serve(async (req: Request) => {
       return json({
         ok: true,
         dry_run: true,
+        trigger_type: triggerType,
+        timezone: TEHRAN_TIMEZONE,
         tehran_date: tehranNow.date,
         tehran_time: tehranNow.time,
         tehran_weekday: tehranNow.weekdayIndex,
@@ -613,6 +694,9 @@ Deno.serve(async (req: Request) => {
         jalali_date_long: jalaaliLong,
         configured_time: config.send_time,
         configured_days: config.send_days,
+        within_send_window: withinSendWindow,
+        within_grace_period: withinGracePeriod,
+        already_processed: false,
         selected_user_count: resolved.directRecipientCount,
         selected_group_count: resolved.selectedGroupCount,
         raw_group_members_count: resolved.rawGroupMembersCount,
@@ -620,6 +704,7 @@ Deno.serve(async (req: Request) => {
         deduplicated_recipient_count: resolved.deduplicatedRecipientCount,
         duplicate_count: resolved.duplicateCount,
         recipients: recipientIds,
+        meeting_count: meetingCount,
         meetings_count: meetingCount,
         notification_targets: config.send_via_notification ? recipientIds.length : 0,
         sms_targets: config.send_via_sms ? phoneCount : 0,
@@ -848,6 +933,16 @@ Deno.serve(async (req: Request) => {
 
     return json({
       ok: true,
+      trigger_type: triggerType,
+      timezone: TEHRAN_TIMEZONE,
+      tehran_date: tehranNow.date,
+      tehran_time: tehranNow.time,
+      configured_time: config.send_time,
+      within_send_window: withinSendWindow,
+      within_grace_period: withinGracePeriod,
+      already_processed: false,
+      recipient_count: recipientIds.length,
+      meeting_count: meetingCount,
       meetings_count: meetingCount,
       recipients: recipientIds.length,
       notifications_sent: notifSent,
@@ -856,10 +951,8 @@ Deno.serve(async (req: Request) => {
       sms_error: smsError,
       bale_sent: baleSent,
       bale_error: baleError,
-      date: jalaaliShort,
-      date_long: jalaaliLong,
-      tehran_date: tehranNow.date,
-      tehran_time: tehranNow.time,
+      jalali_date: jalaaliShort,
+      jalali_date_long: jalaaliLong,
       tehran_weekday: tehranNow.weekdayIndex,
     });
   } catch (err: any) {
