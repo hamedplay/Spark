@@ -227,7 +227,7 @@ export function ChannelInputBar({
             insertNotification({
               userId: uid,
               category: 'channel',
-              eventType: 'new_message',
+              eventType: 'mention',
               fallbackTitle: `${senderName} شما را منشن کرد`,
               fallbackMessage: body.trim().slice(0, 120),
               placeholders: { sender_name: senderName, channel_name: channelName, channel_type: channelType === 'channel' ? 'کانال' : 'گروه', message_preview: body.trim().slice(0, 80) },

@@ -8,6 +8,17 @@ import { useOrgUsers } from '../lib/useOrgUsers';
 import { useDraggableFab, panelStyle } from '../lib/useDraggableFab';
 import { gregorianToJalali } from '../lib/sparkDateUtils';
 
+function formatMeetingDate(meeting: { start_time?: string | null; date?: string | null }): string {
+  try {
+    const dateStr = meeting.date || (meeting.start_time ? meeting.start_time.split('T')[0] : '');
+    if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const [jy, jm, jd] = gregorianToJalali(y, m, d);
+  return `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+  } catch { return ''; }
+}
+
 interface InboxEntry {
   id: string;           // meeting_inbox.id
   meeting_id: string;
@@ -152,10 +163,20 @@ export function MeetingInboxButton() {
       await insertNotification({
         userId: meeting.user_id,
         category: 'meeting',
-        eventType: 'change',
+        eventType: getMeetingTemplateKey('organizer', 'confirmed'),
         fallbackTitle: 'تأیید شرکت در جلسه',
         fallbackMessage: `${getProfileName(currentUserId)} شرکت در جلسه «${meeting.subject}» را تأیید کرد`,
-        placeholders: { meeting_subject: meeting.subject },
+        placeholders: {
+          meeting_subject: meeting.subject,
+          meeting_date: formatMeetingDate(meeting),
+          start_time: meeting.start_time || '',
+          end_time: meeting.end_time || '',
+          participant_name: getProfileName(currentUserId),
+          recipient_greeting: `${getProfileName(meeting.user_id)} گرامی`,
+          full_name: getProfileName(meeting.user_id),
+          organizer_name: getProfileName(meeting.user_id),
+          location: meeting.location || '',
+        },
         senderId: currentUserId,
         senderName: getProfileName(currentUserId),
         actionUrl: 'calendar',
@@ -193,10 +214,20 @@ export function MeetingInboxButton() {
       await insertNotification({
         userId: meeting.user_id,
         category: 'meeting',
-        eventType: 'change',
+        eventType: getMeetingTemplateKey('organizer', 'declined'),
         fallbackTitle: 'رد دعوت جلسه',
         fallbackMessage: `${getProfileName(currentUserId)} دعوت به جلسه «${meeting.subject}» را رد کرد`,
-        placeholders: { meeting_subject: meeting.subject },
+        placeholders: {
+          meeting_subject: meeting.subject,
+          meeting_date: formatMeetingDate(meeting),
+          start_time: meeting.start_time || '',
+          end_time: meeting.end_time || '',
+          participant_name: getProfileName(currentUserId),
+          recipient_greeting: `${getProfileName(meeting.user_id)} گرامی`,
+          full_name: getProfileName(meeting.user_id),
+          organizer_name: getProfileName(meeting.user_id),
+          location: meeting.location || '',
+        },
         senderId: currentUserId,
         senderName: getProfileName(currentUserId),
         actionUrl: 'meetings',
@@ -247,7 +278,19 @@ export function MeetingInboxButton() {
         eventType: getMeetingTemplateKey('representative', 'invite'),
         fallbackTitle: 'انتخاب به عنوان جانشین',
         fallbackMessage: `شما به عنوان جانشین برای جلسه «${meeting.subject}» انتخاب شده‌اید`,
-        placeholders: { meeting_subject: meeting.subject, full_name: delegateName, recipient_greeting: `${delegateName} گرامی`, organizer_name: myName },
+        placeholders: {
+          meeting_subject: meeting.subject,
+          meeting_date: formatMeetingDate(meeting),
+          start_time: meeting.start_time?.slice(11, 16) || '',
+          end_time: meeting.end_time?.slice(11, 16) || '',
+          location: meeting.location || '',
+          location_part: meeting.location ? ` | ${meeting.location}` : '',
+          full_name: delegateName,
+          recipient_greeting: `${delegateName} گرامی`,
+          organizer_name: myName,
+          represented_person_name: myName,
+          join_link: meeting.join_link || '',
+        },
         senderId: currentUserId,
         actionUrl: 'calendar',
       });
@@ -265,7 +308,18 @@ export function MeetingInboxButton() {
           eventType: 'change',
           fallbackTitle: 'تغییر جانشین در جلسه',
           fallbackMessage: `کاربر ${myName} برای جلسه «${meeting.subject}»، کاربر ${delegateName} را به عنوان جانشین انتخاب کرد`,
-          placeholders: { meeting_subject: meeting.subject },
+          placeholders: {
+            meeting_subject: meeting.subject,
+            meeting_date: formatMeetingDate(meeting),
+            start_time: meeting.start_time?.slice(11, 16) || '',
+            end_time: meeting.end_time?.slice(11, 16) || '',
+            location: meeting.location || '',
+            location_part: meeting.location ? ` | ${meeting.location}` : '',
+            full_name: getProfileName(uid),
+            recipient_greeting: getProfileName(uid) ? `${getProfileName(uid)} گرامی` : 'همکار گرامی',
+            organizer_name: myName,
+            represented_person_name: myName,
+          },
           senderId: currentUserId,
           actionUrl: 'calendar',
         })

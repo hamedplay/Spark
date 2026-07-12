@@ -740,7 +740,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
         }
         if (repeatEnabled && md && repeatEndDate) await createRepeatMeetings(record, repeatType, repeatInterval, repeatEndDate);
-        await insertNotification({ userId, category: 'meeting', eventType: 'invite', fallbackTitle: 'جلسه ثبت شد', fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: userDisplayName, recipient_greeting: `${userDisplayName} گرامی` }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
+        await insertNotification({ userId, category: 'meeting', eventType: getMeetingTemplateKey('creator', 'created'), fallbackTitle: 'جلسه ثبت شد', fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: userDisplayName, recipient_greeting: `${userDisplayName} گرامی` }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
 
         const internalSmsResults: SmsDispatchResult[] = [];
         if (participantIds.length) {

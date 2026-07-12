@@ -48,6 +48,10 @@ export const TEMPLATE_EVENT_TYPES: TemplateEventType[] = [
   { key: 'report_ready',  label: 'گزارش آماده شد' },
   { key: 'new_message',   label: 'پیام جدید در کانال' },
   { key: 'member_added',  label: 'افزودن عضو' },
+  { key: 'meeting_created',                  label: 'ثبت جلسه' },
+  { key: 'meeting_confirmed',                label: 'تأیید جلسه' },
+  { key: 'meeting_declined',                 label: 'رد جلسه' },
+  { key: 'meeting_representative_assigned',  label: 'انتخاب به‌عنوان جانشین' },
   { key: 'custom',        label: 'سفارشی' },
 ];
 
@@ -93,8 +97,10 @@ export const TEMPLATE_PLACEHOLDERS: TemplatePlaceholder[] = [
   { key: 'location_part',    label: 'بخش محل (با خط فاصله)',  example: ' | سالن اجتماعات' },
   { key: 'join_link',        label: 'لینک ورود',              example: 'https://...' },
   { key: 'organizer_name',   label: 'نام تنظیم‌کننده جلسه',   example: 'سارا رضایی' },
-  { key: 'representative',   label: 'نماینده',                example: 'رضا کریمی' },
-  { key: 'agenda',           label: 'دستور جلسه',             example: '۱. بررسی گزارش...' },
+  { key: 'representative',           label: 'نماینده',                example: 'رضا کریمی' },
+  { key: 'represented_person_name',  label: 'نام فرد جانشین‌شده',      example: 'محمد رضایی' },
+  { key: 'participant_name',         label: 'نام شرکت‌کننده',          example: 'علی احمدی' },
+  { key: 'agenda',                   label: 'دستور جلسه',             example: '۱. بررسی گزارش...' },
   { key: 'minutes',          label: 'دقایق مانده',            example: '۳۰' },
   { key: 'task_title',       label: 'عنوان اقدام',            example: 'بررسی گزارش مالی' },
   { key: 'priority',         label: 'اولویت',                 example: 'بالا' },
@@ -205,7 +211,7 @@ export function renderTemplateLegacy(
 
 export type MeetingRecipientRole = 'creator' | 'organizer' | 'participant' | 'representative' | 'observer';
 
-export type MeetingAction = 'created' | 'invite' | 'change' | 'cancel' | 'reminder';
+export type MeetingAction = 'created' | 'invite' | 'change' | 'cancel' | 'reminder' | 'confirmed' | 'declined';
 
 /**
  * Determines which template event_type to use for a meeting notification
@@ -225,6 +231,12 @@ export function getMeetingTemplateKey(
   }
   if (role === 'representative') {
     return 'meeting_representative_assigned';
+  }
+  if (action === 'confirmed') {
+    return 'meeting_confirmed';
+  }
+  if (action === 'declined') {
+    return 'meeting_declined';
   }
   return action;
 }
@@ -315,3 +327,290 @@ export const REQUIRED_MEETING_INVITE_PLACEHOLDERS = [
   'end_time',
   'organizer_name',
 ];
+
+// ─── Event Definition Catalog ─────────────────────────────────────────────────
+
+export interface TemplateEventDefinition {
+  key: string;
+  category: string;
+  label: string;
+  supportedChannels: Array<'notification' | 'sms'>;
+  audiences: string[];
+  requiredPlaceholders: string[];
+  optionalPlaceholders: string[];
+}
+
+export const TEMPLATE_EVENTS: TemplateEventDefinition[] = [
+  // Meeting events
+  {
+    key: 'meeting_created',
+    category: 'meeting',
+    label: 'ثبت جلسه',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['meeting_subject', 'meeting_date', 'start_time', 'end_time'],
+    optionalPlaceholders: ['location', 'organizer_name', 'join_link', 'recipient_greeting', 'full_name', 'location_part'],
+  },
+  {
+    key: 'invite',
+    category: 'meeting',
+    label: 'دعوت به جلسه',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all', 'participants', 'observers', 'external'],
+    requiredPlaceholders: ['meeting_subject', 'meeting_date', 'start_time', 'end_time'],
+    optionalPlaceholders: ['location', 'organizer_name', 'join_link', 'recipient_greeting', 'full_name', 'location_part', 'meeting_time'],
+  },
+  {
+    key: 'meeting_confirmed',
+    category: 'meeting',
+    label: 'تأیید جلسه',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all', 'organizer'],
+    requiredPlaceholders: ['meeting_subject', 'meeting_date', 'start_time', 'end_time', 'participant_name'],
+    optionalPlaceholders: ['location', 'organizer_name', 'join_link', 'recipient_greeting', 'full_name'],
+  },
+  {
+    key: 'meeting_declined',
+    category: 'meeting',
+    label: 'رد جلسه',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all', 'organizer'],
+    requiredPlaceholders: ['meeting_subject', 'meeting_date', 'start_time', 'end_time', 'participant_name'],
+    optionalPlaceholders: ['location', 'organizer_name', 'recipient_greeting', 'full_name'],
+  },
+  {
+    key: 'change',
+    category: 'meeting',
+    label: 'تغییر جلسه',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all', 'participants', 'observers', 'external'],
+    requiredPlaceholders: ['meeting_subject', 'meeting_date', 'start_time', 'end_time'],
+    optionalPlaceholders: ['location', 'organizer_name', 'join_link', 'recipient_greeting', 'full_name', 'location_part', 'meeting_time'],
+  },
+  {
+    key: 'cancel',
+    category: 'meeting',
+    label: 'لغو جلسه',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all', 'participants', 'observers'],
+    requiredPlaceholders: ['meeting_subject', 'meeting_date'],
+    optionalPlaceholders: ['start_time', 'end_time', 'location', 'organizer_name', 'recipient_greeting', 'full_name', 'location_part', 'meeting_time'],
+  },
+  {
+    key: 'reminder',
+    category: 'meeting',
+    label: 'یادآوری جلسه',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all', 'participants', 'observers'],
+    requiredPlaceholders: ['meeting_subject', 'minutes'],
+    optionalPlaceholders: ['meeting_date', 'start_time', 'end_time', 'location', 'recipient_greeting', 'full_name', 'location_part'],
+  },
+  {
+    key: 'meeting_representative_assigned',
+    category: 'meeting',
+    label: 'انتخاب به‌عنوان جانشین',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all', 'representative'],
+    requiredPlaceholders: ['meeting_subject', 'meeting_date', 'start_time', 'end_time', 'represented_person_name'],
+    optionalPlaceholders: ['location', 'organizer_name', 'join_link', 'recipient_greeting', 'full_name', 'location_part', 'meeting_time'],
+  },
+  // Task events
+  {
+    key: 'assign',
+    category: 'task',
+    label: 'تخصیص اقدام',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['task_title'],
+    optionalPlaceholders: ['priority', 'due_date', 'sender_name', 'recipient_greeting', 'full_name'],
+  },
+  {
+    key: 'complete',
+    category: 'task',
+    label: 'تکمیل اقدام',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['task_title'],
+    optionalPlaceholders: ['sender_name'],
+  },
+  {
+    key: 'reminder',
+    category: 'task',
+    label: 'یادآوری اقدام',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['task_title'],
+    optionalPlaceholders: ['due_date'],
+  },
+  // Chat events
+  {
+    key: 'message',
+    category: 'chat',
+    label: 'پیام چت',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['sender_name', 'message_preview'],
+    optionalPlaceholders: ['recipient_greeting', 'full_name'],
+  },
+  {
+    key: 'mention',
+    category: 'chat',
+    label: 'منشن در چت',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['sender_name', 'message_preview'],
+    optionalPlaceholders: ['recipient_greeting', 'full_name'],
+  },
+  // Channel events
+  {
+    key: 'new_message',
+    category: 'channel',
+    label: 'پیام جدید در کانال',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['sender_name', 'message_preview'],
+    optionalPlaceholders: ['channel_name', 'channel_type'],
+  },
+  {
+    key: 'mention',
+    category: 'channel',
+    label: 'منشن در کانال',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['sender_name', 'message_preview'],
+    optionalPlaceholders: ['channel_name', 'channel_type'],
+  },
+  {
+    key: 'member_added',
+    category: 'channel',
+    label: 'افزودن عضو',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['channel_name', 'channel_type'],
+    optionalPlaceholders: [],
+  },
+  // Note events
+  {
+    key: 'share',
+    category: 'note',
+    label: 'اشتراک یادداشت',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['note_title', 'sender_name'],
+    optionalPlaceholders: ['recipient_greeting', 'full_name'],
+  },
+  // Report events
+  {
+    key: 'report_ready',
+    category: 'report',
+    label: 'گزارش آماده شد',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['report_title'],
+    optionalPlaceholders: ['report_link', 'recipient_greeting', 'full_name'],
+  },
+  // System events
+  {
+    key: 'alert',
+    category: 'system',
+    label: 'هشدار سیستم',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['alert_message'],
+    optionalPlaceholders: [],
+  },
+  // Calendar events
+  {
+    key: 'event_invite',
+    category: 'calendar',
+    label: 'دعوت رویداد',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['event_title', 'event_date'],
+    optionalPlaceholders: ['recipient_greeting', 'full_name'],
+  },
+  {
+    key: 'reminder',
+    category: 'calendar',
+    label: 'یادآوری رویداد',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['event_title', 'event_date'],
+    optionalPlaceholders: ['recipient_greeting', 'full_name'],
+  },
+];
+
+// ─── Template Validation ─────────────────────────────────────────────────────
+
+export interface TemplateValidationResult {
+  valid: boolean;
+  missingRequiredPlaceholders: string[];
+  unknownPlaceholders: string[];
+  unusedPayloadPlaceholders: string[];
+}
+
+export function validateTemplateForEvent(
+  body: string,
+  event: TemplateEventDefinition,
+  knownPlaceholders: string[],
+): TemplateValidationResult {
+  const used = extractPlaceholders(body);
+
+  const missingRequiredPlaceholders = event.requiredPlaceholders.filter(
+    key => !used.includes(key),
+  );
+
+  const unknownPlaceholders = used.filter(
+    key => !knownPlaceholders.includes(key),
+  );
+
+  const allowed = [
+    ...event.requiredPlaceholders,
+    ...event.optionalPlaceholders,
+  ];
+
+  const unusedPayloadPlaceholders = allowed.filter(
+    key => !used.includes(key),
+  );
+
+  return {
+    valid:
+      missingRequiredPlaceholders.length === 0 &&
+      unknownPlaceholders.length === 0,
+    missingRequiredPlaceholders,
+    unknownPlaceholders,
+    unusedPayloadPlaceholders,
+  };
+}
+
+// ─── Payload Validation ───────────────────────────────────────────────────────
+
+export interface PayloadValidationResult {
+  valid: boolean;
+  missingRequiredValues: string[];
+  emptyRequiredValues: string[];
+}
+
+export function validatePayloadForEvent(
+  eventType: string,
+  payload: Record<string, string>,
+): PayloadValidationResult {
+  const eventDef = TEMPLATE_EVENTS.find(e => e.key === eventType);
+  if (!eventDef) {
+    return { valid: true, missingRequiredValues: [], emptyRequiredValues: [] };
+  }
+
+  const missingRequiredValues = eventDef.requiredPlaceholders.filter(
+    key => !(key in payload),
+  );
+
+  const emptyRequiredValues = eventDef.requiredPlaceholders.filter(
+    key => key in payload && (!payload[key] || String(payload[key]).trim() === ''),
+  );
+
+  return {
+    valid: missingRequiredValues.length === 0 && emptyRequiredValues.length === 0,
+    missingRequiredValues,
+    emptyRequiredValues,
+  };
+}

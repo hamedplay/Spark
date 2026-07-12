@@ -517,13 +517,15 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       // Send in-app notification to recipient
       const senderProfile = orgUsers.find(u => u.user_id === userId);
       const senderName = senderProfile?.full_name || senderProfile?.email || 'کاربر';
+      const recipientProfile = orgUsers.find(u => u.user_id === toUserId);
+      const recipientFullName = recipientProfile?.full_name || '';
       await insertNotification({
         userId: toUserId,
         category: 'note',
         eventType: 'share',
         fallbackTitle: 'یادداشت جدید دریافت شد',
         fallbackMessage: `«${senderName}» یادداشت «${note.title}» را برای شما ارسال کرد`,
-        placeholders: { senderName, noteTitle: note.title },
+        placeholders: { sender_name: senderName, note_title: note.title, full_name: recipientFullName, recipient_greeting: recipientFullName ? `${recipientFullName} گرامی` : 'همکار گرامی' },
         senderId: userId,
         senderName,
       });

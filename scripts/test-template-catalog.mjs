@@ -40,6 +40,9 @@ const {
   buildMeetingPayload,
   resolveRecipientFullName,
   REQUIRED_MEETING_INVITE_PLACEHOLDERS,
+  TEMPLATE_EVENTS,
+  validateTemplateForEvent,
+  validatePayloadForEvent,
 } = mod;
 
 // ─── Test runner ──────────────────────────────────────────────────────────────
@@ -390,6 +393,168 @@ assertEq(noNameRendered2.text, expectedNoName, 'no-name sample with greeting mat
 assertEq(noNameRendered2.missingPlaceholders.length, 0, 'no missing placeholders (recipient_greeting has fallback)');
 
 // ── Summary ───────────────────────────────────────────────────────────────────
+// ── 44. meeting_confirmed event type exists ───────────────────────────────────
+console.log('44. meeting_confirmed event type exists');
+assert(TEMPLATE_EVENT_TYPES.some(e => e.key === 'meeting_confirmed'), 'meeting_confirmed in TEMPLATE_EVENT_TYPES');
+assert(TEMPLATE_EVENTS.some(e => e.key === 'meeting_confirmed'), 'meeting_confirmed in TEMPLATE_EVENTS');
+
+// ── 45. meeting_declined event type exists ────────────────────────────────────
+console.log('45. meeting_declined event type exists');
+assert(TEMPLATE_EVENT_TYPES.some(e => e.key === 'meeting_declined'), 'meeting_declined in TEMPLATE_EVENT_TYPES');
+assert(TEMPLATE_EVENTS.some(e => e.key === 'meeting_declined'), 'meeting_declined in TEMPLATE_EVENTS');
+
+// ── 46. getMeetingTemplateKey returns meeting_confirmed ────────────────────────
+console.log('46. getMeetingTemplateKey returns meeting_confirmed');
+assertEq(getMeetingTemplateKey('organizer', 'confirmed'), 'meeting_confirmed', 'organizer + confirmed → meeting_confirmed');
+assertEq(getMeetingTemplateKey('participant', 'confirmed'), 'meeting_confirmed', 'participant + confirmed → meeting_confirmed');
+
+// ── 47. getMeetingTemplateKey returns meeting_declined ─────────────────────────
+console.log('47. getMeetingTemplateKey returns meeting_declined');
+assertEq(getMeetingTemplateKey('organizer', 'declined'), 'meeting_declined', 'organizer + declined → meeting_declined');
+assertEq(getMeetingTemplateKey('participant', 'declined'), 'meeting_declined', 'participant + declined → meeting_declined');
+
+// ── 48. meeting_confirmed does NOT return change ──────────────────────────────
+console.log('48. meeting_confirmed does NOT return change');
+const confirmedKey = getMeetingTemplateKey('organizer', 'confirmed');
+assert(confirmedKey !== 'change', 'confirmed is NOT change');
+assert(confirmedKey === 'meeting_confirmed', 'confirmed is meeting_confirmed');
+
+// ── 49. represented_person_name placeholder exists ────────────────────────────
+console.log('49. represented_person_name placeholder exists');
+assert(PLACEHOLDER_KEYS.includes('represented_person_name'), 'represented_person_name in PLACEHOLDER_KEYS');
+assert(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'represented_person_name'), 'represented_person_name in TEMPLATE_PLACEHOLDERS');
+
+// ── 50. participant_name placeholder exists ───────────────────────────────────
+console.log('50. participant_name placeholder exists');
+assert(PLACEHOLDER_KEYS.includes('participant_name'), 'participant_name in PLACEHOLDER_KEYS');
+
+// ── 51. validateTemplateForEvent catches missing required ─────────────────────
+console.log('51. validateTemplateForEvent catches missing required placeholders');
+const repEvent = TEMPLATE_EVENTS.find(e => e.key === 'meeting_representative_assigned');
+assert(repEvent, 'meeting_representative_assigned event definition exists');
+const incompleteBody = '{{recipient_greeting}}، شما به عنوان جانشین برای جلسه «{{meeting_subject}}» انتخاب شده‌اید.';
+const incompleteValidation = validateTemplateForEvent(incompleteBody, repEvent, PLACEHOLDER_KEYS);
+assert(!incompleteValidation.valid, 'incomplete template is invalid');
+assert(incompleteValidation.missingRequiredPlaceholders.includes('meeting_date'), 'missing meeting_date detected');
+assert(incompleteValidation.missingRequiredPlaceholders.includes('start_time'), 'missing start_time detected');
+assert(incompleteValidation.missingRequiredPlaceholders.includes('end_time'), 'missing end_time detected');
+assert(incompleteValidation.missingRequiredPlaceholders.includes('represented_person_name'), 'missing represented_person_name detected');
+
+// ── 52. validateTemplateForEvent passes for complete template ─────────────────
+console.log('52. validateTemplateForEvent passes for complete template');
+const completeBody = '{{recipient_greeting}}، شما به‌عنوان جانشین {{represented_person_name}} برای جلسه «{{meeting_subject}}» در تاریخ {{meeting_date}} از ساعت {{start_time}} تا {{end_time}} انتخاب شده‌اید.';
+const completeValidation = validateTemplateForEvent(completeBody, repEvent, PLACEHOLDER_KEYS);
+assert(completeValidation.valid, 'complete template is valid');
+assertEq(completeValidation.missingRequiredPlaceholders.length, 0, 'no missing required placeholders');
+
+// ── 53. validatePayloadForEvent catches missing values ────────────────────────
+console.log('53. validatePayloadForEvent catches missing required values');
+const payloadValidation = validatePayloadForEvent('meeting_confirmed', { meeting_subject: 'test' });
+assert(!payloadValidation.valid, 'incomplete payload is invalid');
+assert(payloadValidation.missingRequiredValues.includes('meeting_date'), 'missing meeting_date in payload');
+assert(payloadValidation.missingRequiredValues.includes('participant_name'), 'missing participant_name in payload');
+
+// ── 54. validatePayloadForEvent passes for complete payload ────────────────────
+console.log('54. validatePayloadForEvent passes for complete payload');
+const completePayload = {
+  meeting_subject: 'test',
+  meeting_date: '1405/04/21',
+  start_time: '16:00',
+  end_time: '17:30',
+  participant_name: 'Ali',
+};
+const completePayloadValidation = validatePayloadForEvent('meeting_confirmed', completePayload);
+assert(completePayloadValidation.valid, 'complete payload is valid');
+assertEq(completePayloadValidation.missingRequiredValues.length, 0, 'no missing required values');
+
+// ── 55. meeting_confirmed template renders correctly ───────────────────────────
+console.log('55. meeting_confirmed template renders correctly');
+const confirmedPayload = {
+  recipient_greeting: 'حامد گرامی',
+  participant_name: 'علی احمدی',
+  meeting_subject: 'جلسه تست',
+  meeting_date: '1405/04/21',
+  start_time: '16:00',
+  end_time: '17:30',
+};
+const confirmedTpl = '{{recipient_greeting}}، {{participant_name}} حضور خود را در جلسه «{{meeting_subject}}» در تاریخ {{meeting_date}} از ساعت {{start_time}} تا {{end_time}} تأیید کرد.';
+const confirmedRendered = renderTemplate(confirmedTpl, confirmedPayload);
+assertEq(confirmedRendered.text, 'حامد گرامی، علی احمدی حضور خود را در جلسه «جلسه تست» در تاریخ 1405/04/21 از ساعت 16:00 تا 17:30 تأیید کرد.', 'meeting_confirmed renders correctly');
+assertEq(confirmedRendered.missingPlaceholders.length, 0, 'no missing placeholders');
+
+// ── 56. meeting_declined template renders correctly ────────────────────────────
+console.log('56. meeting_declined template renders correctly');
+const declinedPayload = {
+  recipient_greeting: 'حامد گرامی',
+  participant_name: 'علی احمدی',
+  meeting_subject: 'جلسه تست',
+  meeting_date: '1405/04/21',
+  start_time: '16:00',
+  end_time: '17:30',
+};
+const declinedTpl = '{{recipient_greeting}}، {{participant_name}} دعوت به جلسه «{{meeting_subject}}» در تاریخ {{meeting_date}} از ساعت {{start_time}} تا {{end_time}} را رد کرد.';
+const declinedRendered = renderTemplate(declinedTpl, declinedPayload);
+assert(declinedRendered.text.includes('رد کرد'), 'declined template includes رد کرد');
+assertEq(declinedRendered.missingPlaceholders.length, 0, 'no missing placeholders');
+
+// ── 57. representative template includes all required placeholders ─────────────
+console.log('57. representative template includes all required placeholders');
+const repBody = '{{recipient_greeting}}، شما به‌عنوان جانشین {{represented_person_name}} برای جلسه «{{meeting_subject}}» در تاریخ {{meeting_date}} از ساعت {{start_time}} تا {{end_time}} در محل {{location}} انتخاب شده‌اید. تنظیم‌کننده جلسه: {{organizer_name}}';
+const repValidation = validateTemplateForEvent(repBody, repEvent, PLACEHOLDER_KEYS);
+assert(repValidation.valid, 'representative template is valid');
+assertEq(repValidation.missingRequiredPlaceholders.length, 0, 'no missing required placeholders');
+
+// ── 58. Consistency: all TEMPLATE_EVENTS have valid keys ──────────────────────
+console.log('58. Consistency: all TEMPLATE_EVENTS have valid keys');
+for (const event of TEMPLATE_EVENTS) {
+  assert(typeof event.key === 'string' && event.key.length > 0, `event ${event.key || '(empty)'} has valid key`);
+  assert(typeof event.category === 'string' && event.category.length > 0, `event ${event.key} has valid category`);
+  assert(Array.isArray(event.requiredPlaceholders), `event ${event.key} has requiredPlaceholders array`);
+  assert(Array.isArray(event.optionalPlaceholders), `event ${event.key} has optionalPlaceholders array`);
+  assert(event.supportedChannels.includes('notification'), `event ${event.key} supports notification`);
+}
+
+// ── 59. Consistency: all required placeholders exist in PLACEHOLDER_KEYS ──────
+console.log('59. Consistency: all required placeholders exist in PLACEHOLDER_KEYS');
+for (const event of TEMPLATE_EVENTS) {
+  for (const ph of event.requiredPlaceholders) {
+    assert(PLACEHOLDER_KEYS.includes(ph), `event ${event.key} required placeholder ${ph} exists in catalog`);
+  }
+}
+
+// ── 60. Consistency: all optional placeholders exist in PLACEHOLDER_KEYS ──────
+console.log('60. Consistency: all optional placeholders exist in PLACEHOLDER_KEYS');
+for (const event of TEMPLATE_EVENTS) {
+  for (const ph of event.optionalPlaceholders) {
+    assert(PLACEHOLDER_KEYS.includes(ph), `event ${event.key} optional placeholder ${ph} exists in catalog`);
+  }
+}
+
+// ── 61. No template renders undefined ──────────────────────────────────────────
+console.log('61. No template renders undefined');
+const undefTest = renderTemplate('Hello {{missing}} world', {});
+assert(!undefTest.text.includes('undefined'), 'no undefined in output');
+assert(!undefTest.text.includes('null'), 'no null in output');
+
+// ── 62. No output contains unresolved {{placeholder}} ──────────────────────────
+console.log('62. No output contains unresolved {{placeholder}}');
+const unresolvedTest = renderTemplate('Hello {{name}}', {});
+assert(!unresolvedTest.text.includes('{{'), 'no {{ in rendered output');
+assertEq(unresolvedTest.missingPlaceholders.length, 1, 'missing placeholder detected');
+
+// ── 63. channel:mention event type exists ─────────────────────────────────────
+console.log('63. channel:mention event type exists in catalog');
+assert(TEMPLATE_EVENTS.some(e => e.key === 'mention' && e.category === 'channel'), 'channel:mention event definition exists');
+
+// ── 64. note:share uses snake_case placeholders ────────────────────────────────
+console.log('64. note:share uses snake_case placeholders');
+const noteEvent = TEMPLATE_EVENTS.find(e => e.key === 'share' && e.category === 'note');
+assert(noteEvent, 'note:share event definition exists');
+assert(noteEvent.requiredPlaceholders.includes('note_title'), 'note:share requires note_title (snake_case)');
+assert(noteEvent.requiredPlaceholders.includes('sender_name'), 'note:share requires sender_name (snake_case)');
+assert(!noteEvent.requiredPlaceholders.includes('noteTitle'), 'note:share does NOT use noteTitle (camelCase)');
+assert(!noteEvent.requiredPlaceholders.includes('senderName'), 'note:share does NOT use senderName (camelCase)');
+
 console.log('\n=== Results ===');
 console.log(`Passed: ${passed}`);
 console.log(`Failed: ${failed}`);

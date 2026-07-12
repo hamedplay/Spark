@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { renderTemplate } from '../config/templateCatalog';
+import { renderTemplate, validatePayloadForEvent } from '../config/templateCatalog';
 import type { RenderTemplateResult } from '../config/templateCatalog';
 
 export interface NotifyPayload {
@@ -195,6 +195,15 @@ export async function insertNotification(payload: NotifyPayload): Promise<SmsDis
       templateBody: template?.body ?? null,
       payload: vars,
     });
+    const payloadValidation = validatePayloadForEvent(payload.eventType, vars);
+    if (!payloadValidation.valid) {
+      console.warn('[notification-template] payload validation failed:', {
+        eventType: payload.eventType,
+        missingRequiredValues: payloadValidation.missingRequiredValues,
+        emptyRequiredValues: payloadValidation.emptyRequiredValues,
+        recipientId: payload.userId,
+      });
+    }
   }
 
   const title = template ? fillPlaceholders(template.title, vars) : payload.fallbackTitle;

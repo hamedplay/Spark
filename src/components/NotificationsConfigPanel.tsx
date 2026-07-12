@@ -11,6 +11,8 @@ import {
   TEMPLATE_PLACEHOLDERS as ALL_PLACEHOLDERS,
   extractPlaceholders,
   findUnknownPlaceholders,
+  TEMPLATE_EVENTS,
+  validateTemplateForEvent,
 } from '../config/templateCatalog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -322,6 +324,16 @@ function TemplateEditor({ template, onSave, onCancel }: {
       toast.error(`متغیر ناشناخته: ${unknown.join('، ')}`);
       return;
     }
+    // Validate required placeholders for the selected event
+    const eventDef = TEMPLATE_EVENTS.find(e => e.key === form.event_type && e.category === form.category);
+    if (eventDef) {
+      const validation = validateTemplateForEvent(form.body, eventDef, ALL_PLACEHOLDERS.map(p => p.key));
+      if (validation.missingRequiredPlaceholders.length > 0) {
+        const labels = validation.missingRequiredPlaceholders.map(k => ALL_PLACEHOLDERS.find(p => p.key === k)?.label || k);
+        toast.error(`متغیرهای اجباری استفاده‌نشده: ${labels.join('، ')}`);
+        return;
+      }
+    }
     const extracted = extractPlaceholders(form.body);
     setSaving(true);
     const { error } = await supabase.from('notification_templates')
@@ -476,6 +488,16 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
     if (unknown.length > 0) {
       toast.error(`متغیر ناشناخته: ${unknown.join('، ')}`);
       return;
+    }
+    // Validate required placeholders for the selected event
+    const eventDef = TEMPLATE_EVENTS.find(e => e.key === form.event_type && e.category === form.category);
+    if (eventDef) {
+      const validation = validateTemplateForEvent(form.body, eventDef, ALL_PLACEHOLDERS.map(p => p.key));
+      if (validation.missingRequiredPlaceholders.length > 0) {
+        const labels = validation.missingRequiredPlaceholders.map(k => ALL_PLACEHOLDERS.find(p => p.key === k)?.label || k);
+        toast.error(`متغیرهای اجباری استفاده‌نشده: ${labels.join('، ')}`);
+        return;
+      }
     }
     const extracted = extractPlaceholders(form.body);
     setSaving(true);
