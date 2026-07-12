@@ -85,7 +85,7 @@ Set the generated secret:
 
 ```
 DAILY_REPORT_CRON_SECRET="your-generated-secret-here"
-DAILY_REPORT_ENDPOINT="https://zjmozuivykubdqnizhob.supabase.co/functions/v1/send-daily-meetings"
+DAILY_REPORT_ENDPOINT="https://api.shahrmeeting.ir/functions/v1/send-daily-meetings"
 ```
 
 Secure the file:
