@@ -658,7 +658,7 @@ function App() {
         return (
           <>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <h2 className="text-2xl font-bold dark:text-white">مدیریت جلسات</h2>
+              <h2 className="text-2xl font-bold dark:text-white">درخواست جلسات</h2>
               <div className="flex gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => setShowPendingMeetingsModal(true)}
