@@ -8,9 +8,9 @@ import { useOrgUsers } from '../lib/useOrgUsers';
 import { useDraggableFab, panelStyle } from '../lib/useDraggableFab';
 import { gregorianToJalali } from '../lib/sparkDateUtils';
 
-function formatMeetingDate(meeting: { start_time?: string | null; date?: string | null }): string {
+function formatMeetingDate(meeting: { start_time?: string | null; request_date?: string | null }): string {
   try {
-    const dateStr = meeting.date || (meeting.start_time ? meeting.start_time.split('T')[0] : '');
+    const dateStr = meeting.request_date || (meeting.start_time ? meeting.start_time.split('T')[0] : '');
     if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-').map(Number);
   if (!y || !m || !d) return dateStr;
