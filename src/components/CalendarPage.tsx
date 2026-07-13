@@ -164,6 +164,7 @@ export function CalendarPage({
     const tehranNow = new Date(Date.now() + IST_OFFSET_MS);
     const todayStr = `${tehranNow.getUTCFullYear()}-${String(tehranNow.getUTCMonth()+1).padStart(2,'0')}-${String(tehranNow.getUTCDate()).padStart(2,'0')}`;
     const result = meetings.filter(m => {
+      if (m.status_type === 'requested') return false;
       const dateStr = parseRequestDateToDateStr(m.request_date);
       if (dateStr && dateStr < todayStr && !prefs.show_past_meetings) return false;
       // Only treat archived meetings as "cancelled" when they are NOT scheduled calendar
