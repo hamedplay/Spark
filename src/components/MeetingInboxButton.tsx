@@ -8,15 +8,16 @@ import { useOrgUsers } from '../lib/useOrgUsers';
 import { useDraggableFab, panelStyle } from '../lib/useDraggableFab';
 import { gregorianToJalali } from '../lib/sparkDateUtils';
 
-function formatMeetingDate(meeting: { start_time?: string | null; request_date?: string | null }): string {
-  try {
-    const dateStr = meeting.request_date || (meeting.start_time ? meeting.start_time.split('T')[0] : '');
-    if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  if (!y || !m || !d) return dateStr;
-  const [jy, jm, jd] = gregorianToJalali(y, m, d);
-  return `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
-  } catch { return ''; }
+function formatMeetingDate(meeting: { request_date?: string | null }): string {
+  if (!meeting.request_date) return '';
+  const date = new Date(meeting.request_date);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: 'Asia/Tehran',
+  }).format(date);
 }
 
 interface InboxEntry {
