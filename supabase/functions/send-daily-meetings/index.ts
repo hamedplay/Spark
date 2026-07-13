@@ -642,10 +642,14 @@ Deno.serve(async (req: Request) => {
           recipientMeetingMap.get(uid)!.push(m);
           continue;
         }
+        // Only include meetings the user is related to (participant or observer)
+        const isParticipant = (m.participant_user_ids || []).includes(uid);
+        const isObserver = (m.notify_users || []).includes(uid);
+        if (!isParticipant && !isObserver) continue;
         // Participant/Observer → visible unless inbox says pending/declined
         const userInbox = inboxByUser.get(uid);
         const inboxS = userInbox?.get(m.id);
-        if (!EXCLUDED_INBOX_STATUSES.has(inboxS || "pending")) {
+        if (!EXCLUDED_INBOX_STATUSES.has(inboxS || "")) {
           recipientMeetingMap.get(uid)!.push(m);
         }
       }
