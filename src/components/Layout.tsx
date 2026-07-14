@@ -920,13 +920,6 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
     { id: 'contacts',         title: 'مخاطبین',         icon: Phone,           group: null },
     { id: 'reports',          title: 'گزارشات',         icon: FileBarChart2,   group: null },
     { id: 'spark',            title: 'اسپارک (دستیار)', icon: Bot,             group: null },
-    // ── صورت‌جلسات و مصوبات ───────────────────────────────────────────────
-    { id: 'minutes-dashboard',    title: 'داشبورد',              icon: LayoutDashboard, group: 'minutes' },
-    { id: 'minutes',              title: 'صورت‌جلسات',           icon: FileText,        group: 'minutes' },
-    { id: 'minutes-approvals',    title: 'کارتابل تأیید',        icon: ClipboardList,   group: 'minutes' },
-    { id: 'minutes-my-decisions', title: 'مصوبات من',            icon: DecisionIcon,    group: 'minutes' },
-    { id: 'minutes-followup',     title: 'پیگیری مصوبات',        icon: TrendingUp,      group: 'minutes' },
-    { id: 'minutes-reports',      title: 'گزارش‌ها',             icon: BarChart2,       group: 'minutes' },
   ];
 
   const MINUTES_PAGES = new Set([
@@ -935,8 +928,40 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
     'minutes-report', 'minutes-reports', 'minutes-dashboard',
   ]);
 
+  const minutesSubItems = [
+    { id: 'minutes-dashboard',    title: 'داشبورد',        icon: LayoutDashboard },
+    { id: 'minutes',              title: 'صورت‌جلسات',     icon: FileText        },
+    { id: 'minutes-approvals',    title: 'کارتابل تأیید',  icon: ClipboardList   },
+    { id: 'minutes-my-decisions', title: 'مصوبات من',      icon: DecisionIcon    },
+    { id: 'minutes-followup',     title: 'پیگیری مصوبات',  icon: TrendingUp      },
+    { id: 'minutes-reports',      title: 'گزارش‌ها',       icon: BarChart2       },
+  ];
+
+  // Internal pages that don't appear in menu but should highlight a parent subitem
+  const MINUTES_INTERNAL_PAGE_MAP: Record<string, string> = {
+    'minutes-new':    'minutes',
+    'minutes-edit':   'minutes',
+    'minutes-detail': 'minutes',
+    'minutes-report': 'minutes-reports',
+  };
+
+  const [isMinutesMenuOpen, setIsMinutesMenuOpen] = useState(() => MINUTES_PAGES.has(activePage));
+
+  useEffect(() => {
+    if (MINUTES_PAGES.has(activePage)) setIsMinutesMenuOpen(true);
+  }, [activePage]);
+
   const menuItems = allMenuItems.filter(item => {
     if (item.id === 'spark' && !sparkVisible) return false;
+    if (isAdmin) return true;
+    const permKey = MENU_PERMISSION_KEY[item.id];
+    if (!permKey) return true;
+    if (userPermissions === null) return true;
+    if (userPermissions === undefined) return false;
+    return !!userPermissions[permKey];
+  });
+
+  const visibleMinutesSubItems = minutesSubItems.filter(item => {
     if (isAdmin) return true;
     const permKey = MENU_PERMISSION_KEY[item.id];
     if (!permKey) return true;
@@ -1054,44 +1079,99 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
 
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          {menuItems.map((item, idx) => {
+          {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activePage === item.id
-              || (activePage === 'create-meeting' && item.id === 'meetings')
-              || (MINUTES_PAGES.has(activePage) && item.id === 'minutes-dashboard' && !menuItems.some(m => m.id === activePage));
-            const prevItem = menuItems[idx - 1];
-            const showGroupHeader = item.group === 'minutes' && (!prevItem || prevItem.group !== 'minutes');
+              || (activePage === 'create-meeting' && item.id === 'meetings');
             return (
-              <div key={item.id}>
-                {showGroupHeader && (
-                  <div className={`${isCollapsed ? 'hidden' : 'flex'} items-center gap-1.5 px-2 pt-3 pb-1`}>
-                    <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
-                    <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 whitespace-nowrap">صورت‌جلسات</span>
-                    <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
-                  </div>
-                )}
-                {showGroupHeader && isCollapsed && (
-                  <div className="h-px bg-gray-100 dark:bg-gray-700 mx-2 my-2" />
-                )}
-                <button
-                  onClick={() => handlePageChange(item.id as typeof activePage)}
-                  className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${isCollapsed ? 'justify-center px-2' : 'px-2.5'} ${
-                    isActive
-                      ? 'shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
-                  }`}
-                  style={isActive ? {
-                    backgroundColor: accentColor + '18',
-                    color: accentColor,
-                  } : {}}
-                  title={isCollapsed ? item.title : undefined}
-                >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  {!isCollapsed && <span className="truncate">{item.title}</span>}
-                </button>
-              </div>
+              <button
+                key={item.id}
+                onClick={() => handlePageChange(item.id as typeof activePage)}
+                className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${isCollapsed ? 'justify-center px-2' : 'px-2.5'} ${
+                  isActive
+                    ? 'shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
+                }`}
+                style={isActive ? { backgroundColor: accentColor + '18', color: accentColor } : {}}
+                title={isCollapsed ? item.title : undefined}
+              >
+                <Icon className="w-5 h-5 flex-shrink-0" />
+                {!isCollapsed && <span className="truncate">{item.title}</span>}
+              </button>
             );
           })}
+
+          {/* ── صورت‌جلسات و مصوبات accordion ── */}
+          {visibleMinutesSubItems.length > 0 && (
+            <div>
+              {/* Divider */}
+              <div className={`${isCollapsed ? 'hidden' : 'flex'} items-center gap-1.5 px-2 pt-3 pb-1`}>
+                <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
+                <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 whitespace-nowrap">صورت‌جلسات</span>
+                <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
+              </div>
+              {isCollapsed && <div className="h-px bg-gray-100 dark:bg-gray-700 mx-2 my-2" />}
+
+              {/* Parent button */}
+              <button
+                onClick={() => {
+                  if (isCollapsed) {
+                    handlePageChange('minutes-dashboard');
+                  } else {
+                    setIsMinutesMenuOpen(v => !v);
+                  }
+                }}
+                className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${isCollapsed ? 'justify-center px-2' : 'px-2.5'} ${
+                  MINUTES_PAGES.has(activePage)
+                    ? 'shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
+                }`}
+                style={MINUTES_PAGES.has(activePage) ? { backgroundColor: accentColor + '18', color: accentColor } : {}}
+                title={isCollapsed ? 'صورت‌جلسات و مصوبات' : undefined}
+              >
+                <FileText className="w-5 h-5 flex-shrink-0" />
+                {!isCollapsed && (
+                  <>
+                    <span className="truncate flex-1 text-right">صورت‌جلسات و مصوبات</span>
+                    <ChevronDown
+                      className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isMinutesMenuOpen ? 'rotate-180' : ''}`}
+                    />
+                  </>
+                )}
+              </button>
+
+              {/* Submenu — animated expand/collapse */}
+              {!isCollapsed && (
+                <div
+                  className="overflow-hidden transition-all duration-200"
+                  style={{ maxHeight: isMinutesMenuOpen ? `${visibleMinutesSubItems.length * 44}px` : '0px' }}
+                >
+                  <div className="pt-0.5 space-y-0.5">
+                    {visibleMinutesSubItems.map(sub => {
+                      const SubIcon = sub.icon;
+                      const mappedActive = MINUTES_INTERNAL_PAGE_MAP[activePage] ?? activePage;
+                      const isSubActive = mappedActive === sub.id;
+                      return (
+                        <button
+                          key={sub.id}
+                          onClick={() => handlePageChange(sub.id as typeof activePage)}
+                          className={`w-full flex items-center gap-2.5 py-2 pr-7 pl-2.5 rounded-xl transition-all text-sm font-medium ${
+                            isSubActive
+                              ? 'shadow-sm'
+                              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
+                          }`}
+                          style={isSubActive ? { backgroundColor: accentColor + '18', color: accentColor } : {}}
+                        >
+                          <SubIcon className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{sub.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </nav>
       </div>
 
