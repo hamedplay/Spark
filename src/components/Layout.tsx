@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, SquareCheck as CheckSquare, ChartBar as FileBarChart2, LogOut, StickyNote, Phone, Menu, ChevronRight, Calendar, BookOpen, MessageCircle, Video, LayoutGrid, Settings, X, Bot, Key, Sun, Moon, User, ChevronDown, Check, Palette, Download, Smartphone, Monitor, ExternalLink, MessagesSquare, Bell, LayoutList, CalendarDays, Clock, Eye, EyeOff, LayoutGrid as LayoutCompact } from 'lucide-react';
+import { LayoutDashboard, SquareCheck as CheckSquare, ChartBar as FileBarChart2, LogOut, StickyNote, Phone, Menu, ChevronRight, Calendar, BookOpen, MessageCircle, Video, LayoutGrid, Settings, X, Bot, Key, Sun, Moon, User, ChevronDown, Check, Palette, Download, Smartphone, Monitor, ExternalLink, MessagesSquare, Bell, LayoutList, CalendarDays, Clock, Eye, EyeOff, LayoutGrid as LayoutCompact, FileText, ClipboardList, SquareCheck as DecisionIcon, TrendingUp, ChartBar as BarChart2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import { NotificationBell } from './NotificationBell';
@@ -13,7 +13,7 @@ interface UserProfile {
   position: string | null;
 }
 
-type PageId = 'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'channels' | 'groups';
+type PageId = 'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'channels' | 'groups' | 'minutes' | 'minutes-new' | 'minutes-edit' | 'minutes-detail' | 'minutes-approvals' | 'minutes-my-decisions' | 'minutes-followup' | 'minutes-report' | 'minutes-reports' | 'minutes-dashboard';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -910,17 +910,30 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
   };
 
   const allMenuItems = [
-    { id: 'meetings',         title: 'درخواست جلسه',   icon: LayoutDashboard },
-    { id: 'calendar',         title: 'تقویم',           icon: Calendar        },
-    { id: 'chat',             title: 'چت سازمانی',      icon: MessageCircle   },
-    { id: 'channels',         title: 'کانال‌ها',         icon: MessagesSquare  },
-    { id: 'video-conference', title: 'ویدیو کنفرانس',   icon: Video           },
-    { id: 'tasks',            title: 'اقدامات',         icon: CheckSquare     },
-    { id: 'notes',            title: 'یادداشت‌ها',      icon: StickyNote      },
-    { id: 'contacts',         title: 'مخاطبین',         icon: Phone           },
-    { id: 'reports',          title: 'گزارشات',         icon: FileBarChart2   },
-    { id: 'spark',            title: 'اسپارک (دستیار)', icon: Bot             },
+    { id: 'meetings',         title: 'درخواست جلسه',   icon: LayoutDashboard, group: null },
+    { id: 'calendar',         title: 'تقویم',           icon: Calendar,        group: null },
+    { id: 'chat',             title: 'چت سازمانی',      icon: MessageCircle,   group: null },
+    { id: 'channels',         title: 'کانال‌ها',         icon: MessagesSquare,  group: null },
+    { id: 'video-conference', title: 'ویدیو کنفرانس',   icon: Video,           group: null },
+    { id: 'tasks',            title: 'اقدامات',         icon: CheckSquare,     group: null },
+    { id: 'notes',            title: 'یادداشت‌ها',      icon: StickyNote,      group: null },
+    { id: 'contacts',         title: 'مخاطبین',         icon: Phone,           group: null },
+    { id: 'reports',          title: 'گزارشات',         icon: FileBarChart2,   group: null },
+    { id: 'spark',            title: 'اسپارک (دستیار)', icon: Bot,             group: null },
+    // ── صورت‌جلسات و مصوبات ───────────────────────────────────────────────
+    { id: 'minutes-dashboard',    title: 'داشبورد',              icon: LayoutDashboard, group: 'minutes' },
+    { id: 'minutes',              title: 'صورت‌جلسات',           icon: FileText,        group: 'minutes' },
+    { id: 'minutes-approvals',    title: 'کارتابل تأیید',        icon: ClipboardList,   group: 'minutes' },
+    { id: 'minutes-my-decisions', title: 'مصوبات من',            icon: DecisionIcon,    group: 'minutes' },
+    { id: 'minutes-followup',     title: 'پیگیری مصوبات',        icon: TrendingUp,      group: 'minutes' },
+    { id: 'minutes-reports',      title: 'گزارش‌ها',             icon: BarChart2,       group: 'minutes' },
   ];
+
+  const MINUTES_PAGES = new Set([
+    'minutes', 'minutes-new', 'minutes-edit', 'minutes-detail',
+    'minutes-approvals', 'minutes-my-decisions', 'minutes-followup',
+    'minutes-report', 'minutes-reports', 'minutes-dashboard',
+  ]);
 
   const menuItems = allMenuItems.filter(item => {
     if (item.id === 'spark' && !sparkVisible) return false;
@@ -1041,27 +1054,42 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
 
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          {menuItems.map((item) => {
+          {menuItems.map((item, idx) => {
             const Icon = item.icon;
-            const isActive = activePage === item.id || (activePage === 'create-meeting' && item.id === 'meetings');
+            const isActive = activePage === item.id
+              || (activePage === 'create-meeting' && item.id === 'meetings')
+              || (MINUTES_PAGES.has(activePage) && item.id === 'minutes-dashboard' && !menuItems.some(m => m.id === activePage));
+            const prevItem = menuItems[idx - 1];
+            const showGroupHeader = item.group === 'minutes' && (!prevItem || prevItem.group !== 'minutes');
             return (
-              <button
-                key={item.id}
-                onClick={() => handlePageChange(item.id as typeof activePage)}
-                className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${isCollapsed ? 'justify-center px-2' : 'px-2.5'} ${
-                  isActive
-                    ? 'shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
-                }`}
-                style={isActive ? {
-                  backgroundColor: accentColor + '18',
-                  color: accentColor,
-                } : {}}
-                title={isCollapsed ? item.title : undefined}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span className="truncate">{item.title}</span>}
-              </button>
+              <div key={item.id}>
+                {showGroupHeader && (
+                  <div className={`${isCollapsed ? 'hidden' : 'flex'} items-center gap-1.5 px-2 pt-3 pb-1`}>
+                    <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
+                    <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 whitespace-nowrap">صورت‌جلسات</span>
+                    <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
+                  </div>
+                )}
+                {showGroupHeader && isCollapsed && (
+                  <div className="h-px bg-gray-100 dark:bg-gray-700 mx-2 my-2" />
+                )}
+                <button
+                  onClick={() => handlePageChange(item.id as typeof activePage)}
+                  className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${isCollapsed ? 'justify-center px-2' : 'px-2.5'} ${
+                    isActive
+                      ? 'shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
+                  }`}
+                  style={isActive ? {
+                    backgroundColor: accentColor + '18',
+                    color: accentColor,
+                  } : {}}
+                  title={isCollapsed ? item.title : undefined}
+                >
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  {!isCollapsed && <span className="truncate">{item.title}</span>}
+                </button>
+              </div>
             );
           })}
         </nav>

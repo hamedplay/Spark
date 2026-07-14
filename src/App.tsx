@@ -22,6 +22,15 @@ import { SparkAssistant, SparkMeetingPrefill } from './components/Spark/SparkAss
 import { SplashScreen } from './components/SplashScreen';
 import { GroupsPage } from './components/GroupsPage';
 import { ChannelsPage } from './components/Channels/ChannelsPage';
+import { MinutesDashboardPage } from './components/Minutes/MinutesDashboardPage';
+import { MinutesListPage } from './components/Minutes/MinutesListPage';
+import { MinutesFormPage } from './components/Minutes/MinutesFormPage';
+import { MinutesDetailPage } from './components/Minutes/MinutesDetailPage';
+import { MinutesApprovalsPage } from './components/Minutes/MinutesApprovalsPage';
+import { MyDecisionsPage } from './components/Minutes/MyDecisionsPage';
+import { DecisionsFollowupPage } from './components/Minutes/DecisionsFollowupPage';
+import { MinutesMeetingReportPage } from './components/Minutes/MinutesMeetingReportPage';
+import { MinutesReportsPage } from './components/Minutes/MinutesReportsPage';
 import { supabase, handleSupabaseError } from './lib/supabase';
 import { Search, Plus, X, Bell, Server, Wrench } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
@@ -41,7 +50,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'archived'>('open');
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activePage, setActivePage] = useState<'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'groups' | 'channels'>('calendar');
+  const [activePage, setActivePage] = useState<'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'groups' | 'channels' | 'minutes' | 'minutes-new' | 'minutes-edit' | 'minutes-detail' | 'minutes-approvals' | 'minutes-my-decisions' | 'minutes-followup' | 'minutes-report' | 'minutes-reports' | 'minutes-dashboard'>('calendar');
   const [loading, setLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
@@ -654,6 +663,26 @@ function App() {
           setChatInitUserId(userId);
           setActivePage('chat');
         }} />;
+      case 'minutes-dashboard':
+        return <MinutesDashboardPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes':
+        return <MinutesListPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes-new':
+        return <MinutesFormPage mode="new" onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes-edit':
+        return <MinutesFormPage mode="edit" onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes-detail':
+        return <MinutesDetailPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes-approvals':
+        return <MinutesApprovalsPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes-my-decisions':
+        return <MyDecisionsPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes-followup':
+        return <DecisionsFollowupPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes-report':
+        return <MinutesMeetingReportPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+      case 'minutes-reports':
+        return <MinutesReportsPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
       default:
         return (
           <>
