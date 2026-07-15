@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CircleAlert as AlertCircle, Upload } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CircleAlert as AlertCircle, Upload, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../../lib/supabase';
 import { PageHeader, ConfidentialityBadge } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -11,6 +12,45 @@ import type {
 interface Props {
   mode: 'new' | 'edit';
   onNavigate: (page: string) => void;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fetched data types
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface MeetingOption {
+  id: string;
+  subject: string;
+  request_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  location: string;
+  status_type: string;
+  user_id: string;
+  meeting_manager: string | null;
+  participant_user_ids: string[] | null;
+  org_unit_id: string | null;
+}
+
+interface ProfileOption {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  position: string | null;
+  primary_unit_id: string | null;
+}
+
+interface OrgUnitOption {
+  id: string;
+  name: string;
+}
+
+interface AgendaItemOption {
+  id: string;
+  title: string;
+  presenter: string | null;
+  duration_minutes: number | null;
+  sort_order: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,9 +65,12 @@ interface DraftMeetingInfo {
   startTime: string;
   endTime: string;
   location: string;
-  orgUnit: string;
-  secretary: string;
-  chair: string;
+  orgUnitId: string;
+  orgUnitNameSnapshot: string;
+  secretaryUserId: string;
+  secretaryNameSnapshot: string;
+  chairUserId: string;
+  chairNameSnapshot: string;
   notes: string;
   confidentiality: ConfidentialityLevel;
   status: MinutesStatus;
@@ -35,9 +78,11 @@ interface DraftMeetingInfo {
 
 interface DraftInternalParticipant {
   id: string;
-  name: string;
-  position: string;
-  orgUnit: string;
+  userId: string;
+  nameSnapshot: string;
+  positionSnapshot: string;
+  orgUnitId: string;
+  orgUnitNameSnapshot: string;
   invitationStatus: InvitationStatus;
   attendanceStatus: AttendanceStatus | null;
   delegate: string;
@@ -56,6 +101,7 @@ interface DraftExternalParticipant {
 
 interface DraftAgendaItem {
   id: string;
+  meetingAgendaItemId: string;
   order: number;
   title: string;
   description: string;
@@ -119,9 +165,12 @@ const defaultInfo: DraftMeetingInfo = {
   startTime: '',
   endTime: '',
   location: '',
-  orgUnit: '',
-  secretary: '',
-  chair: '',
+  orgUnitId: '',
+  orgUnitNameSnapshot: '',
+  secretaryUserId: '',
+  secretaryNameSnapshot: '',
+  chairUserId: '',
+  chairNameSnapshot: '',
   notes: '',
   confidentiality: 'organizational',
   status: 'draft',
@@ -129,9 +178,11 @@ const defaultInfo: DraftMeetingInfo = {
 
 const defaultInternalParticipant = (): DraftInternalParticipant => ({
   id: uid(),
-  name: '',
-  position: '',
-  orgUnit: '',
+  userId: '',
+  nameSnapshot: '',
+  positionSnapshot: '',
+  orgUnitId: '',
+  orgUnitNameSnapshot: '',
   invitationStatus: 'invited',
   attendanceStatus: null,
   delegate: '',
@@ -150,6 +201,7 @@ const defaultExternalParticipant = (): DraftExternalParticipant => ({
 
 const defaultAgendaItem = (order: number): DraftAgendaItem => ({
   id: uid(),
+  meetingAgendaItemId: '',
   order,
   title: '',
   description: '',
@@ -220,7 +272,141 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
   const [approvers, setApprovers] = useState<DraftApprover[]>([defaultApprover(1)]);
   const [finalization, setFinalization] = useState<DraftFinalization>(defaultFinalization);
 
+  // Fetched reference data
+  const [meetings, setMeetings] = useState<MeetingOption[]>([]);
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
+  const [orgUnits, setOrgUnits] = useState<OrgUnitOption[]>([]);
+  const [meetingsLoading, setMeetingsLoading] = useState(true);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [orgUnitsLoading, setOrgUnitsLoading] = useState(true);
+  const [meetingsError, setMeetingsError] = useState<string | null>(null);
+  const [profilesError, setProfilesError] = useState<string | null>(null);
+  const [orgUnitsError, setOrgUnitsError] = useState<string | null>(null);
+  const [agendaLoading, setAgendaLoading] = useState(false);
+
   const title = mode === 'new' ? 'ایجاد صورت‌جلسه' : 'ویرایش صورت‌جلسه';
+
+  // ── Fetch allowed meetings (scheduled + has calendar_id) ──────────────
+  useEffect(() => {
+    (async () => {
+      setMeetingsLoading(true);
+      setMeetingsError(null);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setMeetingsError('کاربر احراز هویت نشده است.');
+          setMeetingsLoading(false);
+          return;
+        }
+        const { data, error } = await supabase
+          .from('meetings')
+          .select('id, subject, request_date, start_time, end_time, location, status_type, user_id, meeting_manager, participant_user_ids, calendar_id')
+          .eq('status_type', 'scheduled')
+          .not('calendar_id', 'is', null)
+          .order('request_date', { ascending: false });
+        if (error) throw error;
+        setMeetings((data || []) as unknown as MeetingOption[]);
+      } catch (err) {
+        setMeetingsError(err instanceof Error ? err.message : 'خطا در بارگذاری جلسات');
+      } finally {
+        setMeetingsLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── Fetch all profiles ────────────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      setProfilesLoading(true);
+      setProfilesError(null);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('user_id, full_name, email, position, primary_unit_id')
+          .neq('is_active', false)
+          .order('full_name');
+        if (error) throw error;
+        setProfiles((data || []) as unknown as ProfileOption[]);
+      } catch (err) {
+        setProfilesError(err instanceof Error ? err.message : 'خطا در بارگذاری کاربران');
+      } finally {
+        setProfilesLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── Fetch org units ───────────────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      setOrgUnitsLoading(true);
+      setOrgUnitsError(null);
+      try {
+        const { data, error } = await supabase
+          .from('org_units')
+          .select('id, name')
+          .order('name');
+        if (error) throw error;
+        setOrgUnits((data || []) as unknown as OrgUnitOption[]);
+      } catch (err) {
+        setOrgUnitsError(err instanceof Error ? err.message : 'خطا در بارگذاری واحدها');
+      } finally {
+        setOrgUnitsLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── Prefill agenda items when meeting is selected ─────────────────────
+  const fetchAgendaItems = useCallback(async (meetingId: string) => {
+    setAgendaLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('meeting_agenda_items')
+        .select('id, title, presenter, duration_minutes, sort_order')
+        .eq('meeting_id', meetingId)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      const items = (data || []) as unknown as AgendaItemOption[];
+      if (items.length > 0) {
+        setAgendaItems(items.map((item, idx) => ({
+          id: uid(),
+          meetingAgendaItemId: item.id,
+          order: idx + 1,
+          title: item.title,
+          description: '',
+          presenter: item.presenter || '',
+          allocatedTime: item.duration_minutes != null ? String(item.duration_minutes) : '',
+          discussionResult: '',
+          resultType: 'discussion',
+          additionalNotes: '',
+        })));
+      } else {
+        setAgendaItems([defaultAgendaItem(1)]);
+      }
+    } catch (err) {
+      toast.error('خطا در بارگذاری دستور جلسات: ' + (err instanceof Error ? err.message : 'نامشخص'));
+      setAgendaItems([defaultAgendaItem(1)]);
+    } finally {
+      setAgendaLoading(false);
+    }
+  }, []);
+
+  const handleMeetingSelect = useCallback((meetingId: string) => {
+    const meeting = meetings.find(m => m.id === meetingId);
+    if (!meeting) {
+      setInfo(prev => ({ ...prev, meetingId: '', meetingTitle: '', meetingDate: '', startTime: '', endTime: '', location: '' }));
+      return;
+    }
+    setInfo(prev => ({
+      ...prev,
+      meetingId: meeting.id,
+      meetingTitle: meeting.subject,
+      meetingDate: meeting.request_date || '',
+      startTime: meeting.start_time || '',
+      endTime: meeting.end_time || '',
+      location: meeting.location || '',
+    }));
+    fetchAgendaItems(meeting.id);
+  }, [meetings, fetchAgendaItems]);
 
   const payload: MinutesDraftPayload = useMemo(
     () => ({
@@ -236,10 +422,11 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
   );
 
   const validate = (): string | null => {
+    if (!info.meetingId) return 'انتخاب جلسه الزامی است';
     if (!info.meetingTitle.trim()) return 'عنوان جلسه الزامی است';
     if (!info.meetingDate.trim()) return 'تاریخ جلسه الزامی است';
-    if (!info.secretary.trim()) return 'نام دبیر جلسه الزامی است';
-    if (!info.chair.trim()) return 'نام رئیس جلسه الزامی است';
+    if (!info.secretaryUserId) return 'انتخاب دبیر جلسه الزامی است';
+    if (!info.chairUserId) return 'انتخاب رئیس جلسه الزامی است';
     return null;
   };
 
@@ -249,7 +436,6 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
       toast.error(error);
       return;
     }
-    // eslint-disable-next-line no-console
     console.log('[MinutesDraftPayload]', payload);
     toast.success('پیش‌نویس فرم آماده شد؛ هنوز در دیتابیس ذخیره نشده است.');
   };
@@ -315,17 +501,39 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-            {activeSection === 0 && <SectionInfo info={info} setInfo={setInfo} />}
+            {activeSection === 0 && (
+              <SectionInfo
+                info={info}
+                setInfo={setInfo}
+                meetings={meetings}
+                meetingsLoading={meetingsLoading}
+                meetingsError={meetingsError}
+                profiles={profiles}
+                profilesLoading={profilesLoading}
+                profilesError={profilesError}
+                orgUnits={orgUnits}
+                orgUnitsLoading={orgUnitsLoading}
+                orgUnitsError={orgUnitsError}
+                onMeetingSelect={handleMeetingSelect}
+                agendaLoading={agendaLoading}
+              />
+            )}
             {activeSection === 1 && (
               <SectionParticipants
                 internalParticipants={internalParticipants}
                 setInternalParticipants={setInternalParticipants}
                 externalParticipants={externalParticipants}
                 setExternalParticipants={setExternalParticipants}
+                profiles={profiles}
+                profilesLoading={profilesLoading}
+                profilesError={profilesError}
+                orgUnits={orgUnits}
+                orgUnitsLoading={orgUnitsLoading}
+                orgUnitsError={orgUnitsError}
               />
             )}
             {activeSection === 2 && (
-              <SectionAgenda agendaItems={agendaItems} setAgendaItems={setAgendaItems} />
+              <SectionAgenda agendaItems={agendaItems} setAgendaItems={setAgendaItems} agendaLoading={agendaLoading} />
             )}
             {activeSection === 3 && (
               <SectionDecisions decisions={decisions} setDecisions={setDecisions} />
@@ -400,11 +608,57 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
 interface SectionInfoProps {
   info: DraftMeetingInfo;
   setInfo: React.Dispatch<React.SetStateAction<DraftMeetingInfo>>;
+  meetings: MeetingOption[];
+  meetingsLoading: boolean;
+  meetingsError: string | null;
+  profiles: ProfileOption[];
+  profilesLoading: boolean;
+  profilesError: string | null;
+  orgUnits: OrgUnitOption[];
+  orgUnitsLoading: boolean;
+  orgUnitsError: string | null;
+  onMeetingSelect: (meetingId: string) => void;
+  agendaLoading: boolean;
 }
 
-function SectionInfo({ info, setInfo }: SectionInfoProps) {
+function SectionInfo({
+  info, setInfo,
+  meetings, meetingsLoading, meetingsError,
+  profiles, profilesLoading, profilesError,
+  orgUnits, orgUnitsLoading, orgUnitsError,
+  onMeetingSelect, agendaLoading,
+}: SectionInfoProps) {
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
+
+  const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
+
+  const handleSecretaryChange = (userId: string) => {
+    const p = profiles.find(x => x.user_id === userId);
+    setInfo(prev => ({
+      ...prev,
+      secretaryUserId: userId,
+      secretaryNameSnapshot: p ? profileLabel(p) : '',
+    }));
+  };
+
+  const handleChairChange = (userId: string) => {
+    const p = profiles.find(x => x.user_id === userId);
+    setInfo(prev => ({
+      ...prev,
+      chairUserId: userId,
+      chairNameSnapshot: p ? profileLabel(p) : '',
+    }));
+  };
+
+  const handleOrgUnitChange = (unitId: string) => {
+    const unit = orgUnits.find(u => u.id === unitId);
+    setInfo(prev => ({
+      ...prev,
+      orgUnitId: unitId,
+      orgUnitNameSnapshot: unit ? unit.name : '',
+    }));
+  };
 
   return (
     <div className="space-y-5">
@@ -415,24 +669,42 @@ function SectionInfo({ info, setInfo }: SectionInfoProps) {
       {/* Meeting selector hint */}
       <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-sm text-blue-700 dark:text-blue-300">
         <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-        صورت‌جلسه فقط برای جلساتی قابل ایجاد است که در تقویم کاربر قرار دارند.
+        صورت‌جلسه فقط برای جلساتی قابل ایجاد است که در تقویم قرار دارند و وضعیت آن‌ها «برنامه‌ریزی‌شده» است.
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Meeting selector */}
         <div className="sm:col-span-2">
           <label htmlFor="meeting-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            انتخاب جلسه
+            انتخاب جلسه <span className="text-red-500">*</span>
           </label>
-          <select
-            id="meeting-select"
-            value={info.meetingId}
-            onChange={e => update('meetingId', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-          >
-            <option value="">انتخاب کنید...</option>
-            <option value="j1">جلسه بررسی برنامه‌ریزی سالانه — ۱۴۰۳/۰۵/۱۲</option>
-            <option value="j2">جلسه هماهنگی پروژه — ۱۴۰۳/۰۵/۰۸</option>
-          </select>
+          {meetingsLoading ? (
+            <LoadingSelect label="در حال بارگذاری جلسات..." />
+          ) : meetingsError ? (
+            <ErrorState message={meetingsError} />
+          ) : meetings.length === 0 ? (
+            <EmptyState message="هیچ جلسه برنامه‌ریزی‌شده‌ای با تقویم یافت نشد." />
+          ) : (
+            <select
+              id="meeting-select"
+              value={info.meetingId}
+              onChange={e => onMeetingSelect(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">انتخاب کنید...</option>
+              {meetings.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.subject}{m.request_date ? ` — ${m.request_date}` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          {agendaLoading && (
+            <p className="text-xs text-blue-500 mt-1 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              در حال بارگذاری دستور جلسات...
+            </p>
+          )}
         </div>
 
         <div className="sm:col-span-2">
@@ -522,43 +794,86 @@ function SectionInfo({ info, setInfo }: SectionInfoProps) {
           />
         </div>
 
+        {/* Org Unit selector */}
         <div>
           <label htmlFor="org-unit" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             واحد برگزارکننده
           </label>
-          <input
-            id="org-unit"
-            type="text"
-            value={info.orgUnit}
-            onChange={e => update('orgUnit', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-          />
+          {orgUnitsLoading ? (
+            <LoadingSelect label="در حال بارگذاری واحدها..." />
+          ) : orgUnitsError ? (
+            <ErrorState message={orgUnitsError} />
+          ) : orgUnits.length === 0 ? (
+            <EmptyState message="هیچ واحد سازمانی یافت نشد." />
+          ) : (
+            <select
+              id="org-unit"
+              value={info.orgUnitId}
+              onChange={e => handleOrgUnitChange(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">انتخاب کنید</option>
+              {orgUnits.map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          )}
         </div>
 
+        {/* Secretary selector */}
         <div>
           <label htmlFor="secretary" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             دبیر جلسه <span className="text-red-500">*</span>
           </label>
-          <input
-            id="secretary"
-            type="text"
-            value={info.secretary}
-            onChange={e => update('secretary', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-          />
+          {profilesLoading ? (
+            <LoadingSelect label="در حال بارگذاری کاربران..." />
+          ) : profilesError ? (
+            <ErrorState message={profilesError} />
+          ) : profiles.length === 0 ? (
+            <EmptyState message="هیچ کاربری یافت نشد." />
+          ) : (
+            <select
+              id="secretary"
+              value={info.secretaryUserId}
+              onChange={e => handleSecretaryChange(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">انتخاب کنید</option>
+              {profiles.map(p => (
+                <option key={p.user_id} value={p.user_id}>
+                  {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
+        {/* Chair selector */}
         <div>
           <label htmlFor="chair" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             رئیس جلسه <span className="text-red-500">*</span>
           </label>
-          <input
-            id="chair"
-            type="text"
-            value={info.chair}
-            onChange={e => update('chair', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-          />
+          {profilesLoading ? (
+            <LoadingSelect label="در حال بارگذاری کاربران..." />
+          ) : profilesError ? (
+            <ErrorState message={profilesError} />
+          ) : profiles.length === 0 ? (
+            <EmptyState message="هیچ کاربری یافت نشد." />
+          ) : (
+            <select
+              id="chair"
+              value={info.chairUserId}
+              onChange={e => handleChairChange(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">انتخاب کنید</option>
+              {profiles.map(p => (
+                <option key={p.user_id} value={p.user_id}>
+                  {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="sm:col-span-2">
@@ -607,6 +922,12 @@ interface SectionParticipantsProps {
   setInternalParticipants: React.Dispatch<React.SetStateAction<DraftInternalParticipant[]>>;
   externalParticipants: DraftExternalParticipant[];
   setExternalParticipants: React.Dispatch<React.SetStateAction<DraftExternalParticipant[]>>;
+  profiles: ProfileOption[];
+  profilesLoading: boolean;
+  profilesError: string | null;
+  orgUnits: OrgUnitOption[];
+  orgUnitsLoading: boolean;
+  orgUnitsError: string | null;
 }
 
 function SectionParticipants({
@@ -614,6 +935,12 @@ function SectionParticipants({
   setInternalParticipants,
   externalParticipants,
   setExternalParticipants,
+  profiles,
+  profilesLoading,
+  profilesError,
+  orgUnits,
+  orgUnitsLoading,
+  orgUnitsError,
 }: SectionParticipantsProps) {
   const addInternal = () =>
     setInternalParticipants(l => [...l, defaultInternalParticipant()]);
@@ -624,6 +951,28 @@ function SectionParticipants({
   const updateInternal = (id: string, field: keyof DraftInternalParticipant, value: string) =>
     setInternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
 
+  const handleInternalUserChange = (rowId: string, userId: string) => {
+    const p = profiles.find(x => x.user_id === userId);
+    const unit = orgUnits.find(u => u.id === (p?.primary_unit_id || ''));
+    setInternalParticipants(l => l.map(r => r.id === rowId ? {
+      ...r,
+      userId,
+      nameSnapshot: p ? (p.full_name || p.email || '') : '',
+      positionSnapshot: p?.position || '',
+      orgUnitId: p?.primary_unit_id || '',
+      orgUnitNameSnapshot: unit?.name || '',
+    } : r));
+  };
+
+  const handleInternalOrgUnitChange = (rowId: string, unitId: string) => {
+    const unit = orgUnits.find(u => u.id === unitId);
+    setInternalParticipants(l => l.map(r => r.id === rowId ? {
+      ...r,
+      orgUnitId: unitId,
+      orgUnitNameSnapshot: unit?.name || '',
+    } : r));
+  };
+
   const addExternal = () =>
     setExternalParticipants(l => [...l, defaultExternalParticipant()]);
 
@@ -632,6 +981,11 @@ function SectionParticipants({
 
   const updateExternal = (id: string, field: keyof DraftExternalParticipant, value: string) =>
     setExternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+
+  const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
+
+  const usersDisabled = profilesLoading || !!profilesError || profiles.length === 0;
+  const orgUnitsDisabled = orgUnitsLoading || !!orgUnitsError || orgUnits.length === 0;
 
   return (
     <div className="space-y-6">
@@ -645,17 +999,56 @@ function SectionParticipants({
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">شرکت‌کنندگان داخلی</h3>
           <button
             onClick={addInternal}
-            className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            disabled={usersDisabled}
+            className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-40"
           >
             <Plus className="w-3.5 h-3.5" /> افزودن
           </button>
         </div>
+        {profilesError && <ErrorState message={profilesError} />}
+        {!profilesError && profilesLoading ? (
+          <LoadingRow label="در حال بارگذاری کاربران..." />
+        ) : !profilesError && profiles.length === 0 ? (
+          <EmptyState message="هیچ کاربری برای انتخاب وجود ندارد." />
+        ) : (
         <div className="space-y-3">
           {internalParticipants.map(row => (
             <div key={row.id} className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
-              <InputField id={`int-name-${row.id}`} label="نام" placeholder="نام شرکت‌کننده" value={row.name} onChange={v => updateInternal(row.id, 'name', v)} />
-              <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.position} onChange={v => updateInternal(row.id, 'position', v)} />
-              <InputField id={`int-unit-${row.id}`} label="واحد" placeholder="واحد" value={row.orgUnit} onChange={v => updateInternal(row.id, 'orgUnit', v)} />
+              {/* User selector */}
+              <div>
+                <label htmlFor={`int-user-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">کاربر</label>
+                <select
+                  id={`int-user-${row.id}`}
+                  value={row.userId}
+                  onChange={e => handleInternalUserChange(row.id, e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">انتخاب کنید</option>
+                  {profiles.map(p => (
+                    <option key={p.user_id} value={p.user_id}>
+                      {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Position snapshot (read-only display from profile, editable) */}
+              <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.positionSnapshot} onChange={v => updateInternal(row.id, 'positionSnapshot', v)} />
+              {/* Org unit selector */}
+              <div>
+                <label htmlFor={`int-unit-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
+                <select
+                  id={`int-unit-${row.id}`}
+                  value={row.orgUnitId}
+                  onChange={e => handleInternalOrgUnitChange(row.id, e.target.value)}
+                  disabled={orgUnitsDisabled}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-40"
+                >
+                  <option value="">انتخاب کنید</option>
+                  {orgUnits.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
               <SelectField id={`int-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateInternal(row.id, 'invitationStatus', v)} />
               <SelectField id={`int-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateInternal(row.id, 'attendanceStatus', v)} />
               <div className="flex items-end">
@@ -670,6 +1063,7 @@ function SectionParticipants({
             </div>
           ))}
         </div>
+        )}
       </div>
 
       {/* External participants */}
@@ -715,9 +1109,10 @@ function SectionParticipants({
 interface SectionAgendaProps {
   agendaItems: DraftAgendaItem[];
   setAgendaItems: React.Dispatch<React.SetStateAction<DraftAgendaItem[]>>;
+  agendaLoading: boolean;
 }
 
-function SectionAgenda({ agendaItems, setAgendaItems }: SectionAgendaProps) {
+function SectionAgenda({ agendaItems, setAgendaItems, agendaLoading }: SectionAgendaProps) {
   const add = () =>
     setAgendaItems(l => [...l, defaultAgendaItem(l.length + 1)]);
 
@@ -731,16 +1126,24 @@ function SectionAgenda({ agendaItems, setAgendaItems }: SectionAgendaProps) {
     <div className="space-y-5">
       <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">دستور جلسات و نتایج</h2>
-        <button onClick={add} className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+        <button onClick={add} disabled={agendaLoading} className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-40">
           <Plus className="w-4 h-4" /> افزودن دستور
         </button>
       </div>
 
-      {agendaItems.map((item, idx) => (
+      {agendaLoading ? (
+        <LoadingRow label="در حال بارگذاری دستور جلسات..." />
+      ) : agendaItems.length === 0 ? (
+        <EmptyState message="هیچ دستور جلساتی یافت نشد." />
+      ) : (
+      agendaItems.map((item, idx) => (
         <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
             <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">دستور {idx + 1}</span>
+            {item.meetingAgendaItemId && (
+              <span className="text-xs text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">از دستور جلسات جلسه</span>
+            )}
             <div className="flex-1" />
             <button onClick={() => remove(item.id)} aria-label="حذف دستور" className="p-1 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
               <Trash2 className="w-4 h-4" />
@@ -770,7 +1173,8 @@ function SectionAgenda({ agendaItems, setAgendaItems }: SectionAgendaProps) {
             </div>
           </div>
         </div>
-      ))}
+      ))
+      )}
     </div>
   );
 }
@@ -1014,6 +1418,45 @@ function DebugPayloadPanel({ payload }: { payload: MinutesDraftPayload }) {
       <pre className="text-xs text-gray-600 dark:text-gray-300 overflow-x-auto max-h-80 overflow-y-auto">
         {JSON.stringify(payload, null, 2)}
       </pre>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Loading / Error / Empty state helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function LoadingSelect({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-gray-400 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700">
+      <Loader2 className="w-4 h-4 animate-spin" />
+      {label}
+    </div>
+  );
+}
+
+function LoadingRow({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-400">
+      <Loader2 className="w-5 h-5 animate-spin" />
+      {label}
+    </div>
+  );
+}
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl text-sm text-red-600 dark:text-red-400">
+      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex items-center justify-center py-4 text-sm text-gray-400">
+      {message}
     </div>
   );
 }
