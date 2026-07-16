@@ -475,46 +475,73 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
 
     setSavingDraft(true);
 
-    // Build RPC payload — exclude decisions, approvers, finalization,
-    // created_by_user_id, status, and external_participants.invitation_status
-    const rpcPayload = {
-      info: {
-        meetingId: info.meetingId,
-        meetingTitle: info.meetingTitle,
-        meetingDate: info.meetingDate,
-        meetingType: info.meetingType,
-        startTime: info.startTime,
-        endTime: info.endTime,
-        location: info.location,
-        orgUnitId: info.orgUnitId,
-        orgUnitNameSnapshot: info.orgUnitNameSnapshot,
-        secretaryUserId: info.secretaryUserId,
-        secretaryNameSnapshot: info.secretaryNameSnapshot,
-        chairUserId: info.chairUserId,
-        chairNameSnapshot: info.chairNameSnapshot,
-        notes: info.notes,
-        confidentiality: info.confidentiality,
-      },
-      internalParticipants,
-      externalParticipants: externalParticipants.map((p) => ({
-        id: p.id,
-        fullName: p.fullName,
-        organization: p.organization,
-        position: p.position,
-        mobile: p.mobile,
-        email: p.email,
-        attendanceStatus: p.attendanceStatus,
-      })),
-      agendaItems,
+    const payload = {
+      meeting_id: info.meetingId,
+      meeting_title_snapshot: info.meetingTitle,
+      meeting_date_snapshot: info.meetingDate,
+      meeting_start_time_snapshot: info.startTime || null,
+      meeting_end_time_snapshot: info.endTime || null,
+      meeting_location_snapshot: info.location || null,
+      meeting_type: info.meetingType || null,
+      org_unit_id: info.orgUnitId || null,
+      org_unit_name_snapshot: info.orgUnitNameSnapshot || null,
+      secretary_user_id: info.secretaryUserId || null,
+      secretary_name_snapshot: info.secretaryNameSnapshot,
+      chair_user_id: info.chairUserId || null,
+      chair_name_snapshot: info.chairNameSnapshot,
+      notes: info.notes || null,
+      confidentiality: info.confidentiality,
+
+      internal_participants: internalParticipants
+        .filter((p) => p.nameSnapshot.trim())
+        .map((p) => ({
+          user_id: p.userId || null,
+          name_snapshot: p.nameSnapshot,
+          position_snapshot: p.positionSnapshot || null,
+          org_unit_id: p.orgUnitId || null,
+          org_unit_name_snapshot: p.orgUnitNameSnapshot || null,
+          invitation_status: p.invitationStatus,
+          attendance_status: p.attendanceStatus || null,
+          notes: p.notes || null,
+        })),
+
+      external_participants: externalParticipants
+        .filter((p) => p.fullName.trim())
+        .map((p) => ({
+          full_name: p.fullName,
+          organization: p.organization || null,
+          position: p.position || null,
+          mobile: p.mobile || null,
+          email: p.email || null,
+          attendance_status: p.attendanceStatus || null,
+          notes: null,
+        })),
+
+      agenda_results: agendaItems
+        .filter((a) => a.title.trim())
+        .map((a) => ({
+          meeting_agenda_item_id: a.meetingAgendaItemId || null,
+          sort_order_snapshot: a.order,
+          agenda_title_snapshot: a.title,
+          agenda_description_snapshot: a.description || null,
+          presenter_snapshot: a.presenter || null,
+          allocated_minutes_snapshot:
+            a.allocatedTime && a.allocatedTime.trim()
+              ? Number.parseInt(a.allocatedTime, 10)
+              : null,
+          discussion_result: a.discussionResult || null,
+          result_type: a.resultType,
+          additional_notes: a.additionalNotes || null,
+        })),
     };
 
     if (isDev) {
-      console.log('[MinutesDraftRPCPayload]', rpcPayload);
+      console.log('[MinutesDraftRPCPayload]', payload);
     }
 
     try {
       const { data, error: rpcError } = await supabase.rpc('create_minutes_draft', {
-        p_payload: rpcPayload,
+        p_payload: payload,
       });
 
       if (rpcError) {
