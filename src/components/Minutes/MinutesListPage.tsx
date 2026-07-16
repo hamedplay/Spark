@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { Plus, Search, X, Eye, CreditCard as Edit2, Send, Printer, Trash2, CircleCheck as CheckCircle2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Search, X, Eye, CreditCard as Edit2, Send, Printer, Trash2, CircleCheck as CheckCircle2, CircleAlert as AlertCircle } from 'lucide-react';
 import {
   PageHeader, MinutesStatusBadge, ConfidentialityBadge,
   EmptyState, TableSkeleton, ConfirmActionDialog,
 } from './MinutesShared';
-import { MOCK_MINUTES } from './mockData';
-import type { MinutesStatus, ConfidentialityLevel } from './types';
+import { supabase } from '../../lib/supabase';
+import type { MinutesStatus, ConfidentialityLevel, MinuteSummary } from './types';
 
 interface Props {
   onNavigate: (page: string) => void;
@@ -16,10 +16,44 @@ export function MinutesListPage({ onNavigate }: Props) {
   const [statusFilter, setStatusFilter] = useState<MinutesStatus | 'all'>('all');
   const [confidentialityFilter, setConfidentialityFilter] = useState<ConfidentialityLevel | 'all'>('all');
   const [orgUnitFilter, setOrgUnitFilter] = useState('');
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [minutes, setMinutes] = useState<MinuteSummary[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  const filtered = MOCK_MINUTES.filter(m => {
+  useEffect(() => {
+    const fetchMinutes = async () => {
+      setIsLoading(true);
+      setError(null);
+      const { data, error: fetchError } = await supabase
+        .from('minutes')
+        .select('id, meeting_title_snapshot, meeting_date_snapshot, secretary_name_snapshot, chair_name_snapshot, status, confidentiality, org_unit_name_snapshot, updated_at')
+        .order('created_at', { ascending: false });
+
+      if (fetchError) {
+        setError(fetchError.message);
+        setMinutes([]);
+      } else {
+        setMinutes((data || []).map((row: Record<string, unknown>) => ({
+          id: row.id as string,
+          meetingTitle: (row.meeting_title_snapshot as string) || '',
+          meetingDate: (row.meeting_date_snapshot as string) || '',
+          secretary: (row.secretary_name_snapshot as string) || '',
+          chair: (row.chair_name_snapshot as string) || '',
+          status: row.status as MinutesStatus,
+          confidentiality: row.confidentiality as ConfidentialityLevel,
+          decisionCount: 0,
+          lastModified: row.updated_at ? new Date(row.updated_at as string).toLocaleDateString('fa-IR') : '',
+          version: '',
+          orgUnit: (row.org_unit_name_snapshot as string) || undefined,
+        })));
+      }
+      setIsLoading(false);
+    };
+    fetchMinutes();
+  }, []);
+
+  const filtered = minutes.filter(m => {
     const matchSearch = !search || m.meetingTitle.includes(search) || m.secretary.includes(search) || m.chair.includes(search);
     const matchStatus = statusFilter === 'all' || m.status === statusFilter;
     const matchConf = confidentialityFilter === 'all' || m.confidentiality === confidentialityFilter;
@@ -124,6 +158,12 @@ export function MinutesListPage({ onNavigate }: Props) {
           <div className="p-4">
             <TableSkeleton rows={5} />
           </div>
+        ) : error ? (
+          <EmptyState
+            icon={<AlertCircle className="w-8 h-8" />}
+            title="خطا در بارگذاری صورت‌جلسات"
+            description={error}
+          />
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={<Search className="w-8 h-8" />}
@@ -229,7 +269,7 @@ export function MinutesListPage({ onNavigate }: Props) {
 
             {/* Pagination placeholder */}
             <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>نمایش {filtered.length} از {MOCK_MINUTES.length}</span>
+              <span>نمایش {filtered.length} از {minutes.length}</span>
               <div className="flex items-center gap-1">
                 <button className="px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">قبلی</button>
                 <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white">۱</span>
