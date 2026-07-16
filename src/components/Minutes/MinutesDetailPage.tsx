@@ -85,26 +85,11 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
       setIsLoading(true);
       setError(null);
 
-      let targetId = minuteId;
+      const targetId = minuteId || sessionStorage.getItem('selectedMinuteId');
 
       if (!targetId) {
-        const { data: latest, error: latestErr } = await supabase
-          .from('minutes')
-          .select('id')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (latestErr) {
-          setError(latestErr.message);
-          setIsLoading(false);
-          return;
-        }
-        if (!latest) {
-          setIsLoading(false);
-          return;
-        }
-        targetId = latest.id;
+        setIsLoading(false);
+        return;
       }
 
       const { data: minData, error: minErr } = await supabase
@@ -182,8 +167,8 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
       <div dir="rtl" className="space-y-4">
         <EmptyState
           icon={<FileText className="w-8 h-8" />}
-          title="صورت‌جلسه‌ای یافت نشد"
-          description="ممکن است حذف شده باشد یا هنوز ایجاد نشده باشد."
+          title="صورت‌جلسه‌ای انتخاب نشده است"
+          description="برای مشاهده جزئیات، از لیست صورت‌جلسات یک مورد را انتخاب کنید."
         />
       </div>
     );

@@ -562,6 +562,7 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
         const minuteId = data.minute_id;
         if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', minuteId);
         toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
+        sessionStorage.setItem('selectedMinuteId', minuteId);
         onNavigate('minutes-detail');
         return;
       }

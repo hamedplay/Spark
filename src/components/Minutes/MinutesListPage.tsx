@@ -197,7 +197,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                     <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => onNavigate('minutes-detail')}
+                          onClick={() => { sessionStorage.setItem('selectedMinuteId', m.id); onNavigate('minutes-detail'); }}
                           className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline text-right"
                         >
                           {m.meetingTitle}
@@ -220,7 +220,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                       <td className="px-4 py-3">
                         <RowActions
                           status={m.status}
-                          onView={() => onNavigate('minutes-detail')}
+                          onView={() => { sessionStorage.setItem('selectedMinuteId', m.id); onNavigate('minutes-detail'); }}
                           onEdit={() => onNavigate('minutes-edit')}
                           onSendApproval={() => {}}
                           onPrint={() => {}}
@@ -239,7 +239,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                 <div key={m.id} className="p-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <button
-                      onClick={() => onNavigate('minutes-detail')}
+                      onClick={() => { sessionStorage.setItem('selectedMinuteId', m.id); onNavigate('minutes-detail'); }}
                       className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline text-right leading-snug"
                     >
                       {m.meetingTitle}
@@ -256,7 +256,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                     <ConfidentialityBadge level={m.confidentiality} />
                     <RowActions
                       status={m.status}
-                      onView={() => onNavigate('minutes-detail')}
+                      onView={() => { sessionStorage.setItem('selectedMinuteId', m.id); onNavigate('minutes-detail'); }}
                       onEdit={() => onNavigate('minutes-edit')}
                       onSendApproval={() => {}}
                       onPrint={() => {}}
