@@ -258,6 +258,39 @@ const SECTIONS = [
 const isDev = import.meta.env.DEV;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RPC error-code → Persian message mapping
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RPC_ERROR_MESSAGES: Record<string, string> = {
+  NOT_AUTHENTICATED: 'احراز هویت نشده‌اید. لطفاً دوباره وارد شوید.',
+  PAYLOAD_INVALID: 'اطلاعات ارسالی نامعتبر است.',
+  MEETING_ID_REQUIRED: 'انتخاب جلسه الزامی است.',
+  TITLE_REQUIRED: 'عنوان جلسه الزامی است.',
+  DATE_REQUIRED: 'تاریخ جلسه الزامی است.',
+  SECRETARY_NAME_REQUIRED: 'نام دبیر جلسه الزامی است.',
+  CHAIR_NAME_REQUIRED: 'نام رئیس جلسه الزامی است.',
+  INVALID_CONFIDENTIALITY: 'سطح محرمانگی نامعتبر است.',
+  MEETING_NO_PERMISSION: 'شما اجازه ایجاد صورت‌جلسه برای این جلسه را ندارید.',
+  MINUTES_ALREADY_EXISTS: 'برای این جلسه قبلاً صورت‌جلسه ثبت شده است.',
+  SECRETARY_USER_NOT_FOUND: 'کاربر دبیر جلسه یافت نشد.',
+  CHAIR_USER_NOT_FOUND: 'کاربر رئیس جلسه یافت نشد.',
+  ORG_UNIT_NOT_FOUND: 'واحد سازمانی یافت نشد.',
+  PARTICIPANT_NAME_REQUIRED: 'نام شرکت‌کننده الزامی است.',
+  PARTICIPANT_USER_NOT_FOUND: 'کاربر شرکت‌کننده یافت نشد.',
+  INVALID_INVITATION_STATUS: 'وضعیت دعوت نامعتبر است.',
+  INVALID_ATTENDANCE_STATUS: 'وضعیت حضور نامعتبر است.',
+  EXTERNAL_NAME_REQUIRED: 'نام شرکت‌کننده خارجی الزامی است.',
+  AGENDA_TITLE_REQUIRED: 'عنوان دستور جلسه الزامی است.',
+  AGENDA_SORT_ORDER_INVALID: 'ترتیب دستور جلسه نامعتبر است.',
+  AGENDA_ALLOCATED_TIME_INVALID: 'زمان اختصاص‌یافته دستور جلسه نامعتبر است.',
+  INVALID_RESULT_TYPE: 'نوع نتیجه دستور جلسه نامعتبر است.',
+  AGENDA_ITEM_MISMATCH: 'مغایرت در دستور جلسات.',
+  DUPLICATE_INTERNAL_PARTICIPANT: 'شرکت‌کننده داخلی تکراری است.',
+  DUPLICATE_AGENDA_ITEM: 'دستور جلسه تکراری است.',
+  INTERNAL_ERROR: 'خطای داخلی سرور رخ داد. لطفاً دوباره تلاش کنید.',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -283,6 +316,7 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [orgUnitsError, setOrgUnitsError] = useState<string | null>(null);
   const [agendaLoading, setAgendaLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   const title = mode === 'new' ? 'ایجاد صورت‌جلسه' : 'ویرایش صورت‌جلسه';
 
@@ -430,14 +464,90 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
     return null;
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
+    if (savingDraft) return; // prevent double submit
+
     const error = validate();
     if (error) {
       toast.error(error);
       return;
     }
-    console.log('[MinutesDraftPayload]', payload);
-    toast.success('پیش‌نویس فرم آماده شد؛ هنوز در دیتابیس ذخیره نشده است.');
+
+    setSavingDraft(true);
+
+    // Build RPC payload — exclude decisions, approvers, finalization,
+    // created_by_user_id, status, and external_participants.invitation_status
+    const rpcPayload = {
+      info: {
+        meetingId: info.meetingId,
+        meetingTitle: info.meetingTitle,
+        meetingDate: info.meetingDate,
+        meetingType: info.meetingType,
+        startTime: info.startTime,
+        endTime: info.endTime,
+        location: info.location,
+        orgUnitId: info.orgUnitId,
+        orgUnitNameSnapshot: info.orgUnitNameSnapshot,
+        secretaryUserId: info.secretaryUserId,
+        secretaryNameSnapshot: info.secretaryNameSnapshot,
+        chairUserId: info.chairUserId,
+        chairNameSnapshot: info.chairNameSnapshot,
+        notes: info.notes,
+        confidentiality: info.confidentiality,
+      },
+      internalParticipants,
+      externalParticipants: externalParticipants.map((p) => ({
+        id: p.id,
+        fullName: p.fullName,
+        organization: p.organization,
+        position: p.position,
+        mobile: p.mobile,
+        email: p.email,
+        attendanceStatus: p.attendanceStatus,
+      })),
+      agendaItems,
+    };
+
+    if (isDev) {
+      console.log('[MinutesDraftRPCPayload]', rpcPayload);
+    }
+
+    try {
+      const { data, error: rpcError } = await supabase.rpc('create_minutes_draft', {
+        p_payload: rpcPayload,
+      });
+
+      if (rpcError) {
+        if (isDev) console.error('[MinutesDraftRPC] Supabase error:', rpcError);
+        toast.error('ذخیره پیش‌نویس ناموفق بود. لطفاً دوباره تلاش کنید.');
+        return;
+      }
+
+      if (data && data.success === false) {
+        const code: string = data.code || 'INTERNAL_ERROR';
+        const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس ناموفق بود.';
+        if (isDev) console.error('[MinutesDraftRPC] Business error:', code, data.message);
+        toast.error(msg);
+        return;
+      }
+
+      if (data && data.success === true) {
+        const minuteId = data.minute_id;
+        if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', minuteId);
+        toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
+        onNavigate('minutes-detail');
+        return;
+      }
+
+      // Unexpected response shape — treat as error but preserve form
+      if (isDev) console.error('[MinutesDraftRPC] Unexpected response:', data);
+      toast.error('پاسخ نامعتبر از سرور دریافت شد.');
+    } catch (err) {
+      if (isDev) console.error('[MinutesDraftRPC] Exception:', err);
+      toast.error('خطای غیرمنتظره رخ داد. فرم حفظ شد؛ لطفاً دوباره تلاش کنید.');
+    } finally {
+      setSavingDraft(false);
+    }
   };
 
   return (
@@ -561,10 +671,11 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleSaveDraft}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                disabled={savingDraft}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
-                ذخیره پیش‌نویس
+                {savingDraft ? 'در حال ذخیره...' : 'ذخیره پیش‌نویس'}
               </button>
               <button
                 onClick={() => onNavigate('minutes-detail')}
@@ -576,10 +687,11 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
               {activeSection === SECTIONS.length - 1 ? (
                 <button
                   onClick={handleSaveDraft}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                  disabled={savingDraft}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-4 h-4" />
-                  ارسال برای تأیید
+                  {savingDraft ? 'در حال ذخیره...' : 'ارسال برای تأیید'}
                 </button>
               ) : (
                 <button
