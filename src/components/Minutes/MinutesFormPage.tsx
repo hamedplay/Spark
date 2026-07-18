@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CircleAlert as AlertCircle, Upload, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import { PageHeader, ConfidentialityBadge } from './MinutesShared';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { PageHeader, ConfidentialityBadge, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
   AgendaResultType, DecisionPriority, DecisionStatus, ApprovalMethod,
@@ -12,6 +13,7 @@ import type {
 interface Props {
   mode: 'new' | 'edit';
   onNavigate: (page: string) => void;
+  minuteId?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,7 +296,7 @@ const RPC_ERROR_MESSAGES: Record<string, string> = {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function MinutesFormPage({ mode, onNavigate }: Props) {
+export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [activeSection, setActiveSection] = useState(0);
 
   const [info, setInfo] = useState<DraftMeetingInfo>(defaultInfo);
@@ -318,7 +320,113 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
   const [agendaLoading, setAgendaLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
 
+  // Edit-mode state
+  const [editMinuteId, setEditMinuteId] = useState<string | null>(null);
+  const [editUpdatedAt, setEditUpdatedAt] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(mode === 'edit');
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editNotFound, setEditNotFound] = useState(false);
+
   const title = mode === 'new' ? 'ایجاد صورت‌جلسه' : 'ویرایش صورت‌جلسه';
+
+  // ── Edit mode: fetch existing minute and populate form ───────────────
+  useEffect(() => {
+    if (mode !== 'edit') return;
+    const targetId = minuteId || getMinuteIdFromUrl();
+    if (!targetId) {
+      setEditNotFound(true);
+      setEditLoading(false);
+      return;
+    }
+    (async () => {
+      setEditLoading(true);
+      setEditError(null);
+      setEditNotFound(false);
+      try {
+        const { data: minData, error: minErr } = await supabase
+          .from('minutes')
+          .select('id, meeting_id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_id, org_unit_name_snapshot, secretary_user_id, secretary_name_snapshot, chair_user_id, chair_name_snapshot, notes, confidentiality, status, updated_at')
+          .eq('id', targetId)
+          .maybeSingle();
+        if (minErr) throw minErr;
+        if (!minData) { setEditNotFound(true); setEditLoading(false); return; }
+        const m = minData as Record<string, unknown>;
+        setEditMinuteId(m.id as string);
+        setEditUpdatedAt(m.updated_at as string);
+        setInfo({
+          meetingId: m.meeting_id as string,
+          meetingTitle: (m.meeting_title_snapshot as string) || '',
+          meetingDate: (m.meeting_date_snapshot as string) || '',
+          meetingType: (m.meeting_type as string) || '',
+          startTime: (m.meeting_start_time_snapshot as string) || '',
+          endTime: (m.meeting_end_time_snapshot as string) || '',
+          location: (m.meeting_location_snapshot as string) || '',
+          orgUnitId: (m.org_unit_id as string) || '',
+          orgUnitNameSnapshot: (m.org_unit_name_snapshot as string) || '',
+          secretaryUserId: (m.secretary_user_id as string) || '',
+          secretaryNameSnapshot: (m.secretary_name_snapshot as string) || '',
+          chairUserId: (m.chair_user_id as string) || '',
+          chairNameSnapshot: (m.chair_name_snapshot as string) || '',
+          notes: (m.notes as string) || '',
+          confidentiality: (m.confidentiality as ConfidentialityLevel) || 'organizational',
+          status: (m.status as MinutesStatus) || 'draft',
+        });
+
+        const [ipRes, epRes, agRes] = await Promise.all([
+          supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
+          supabase.from('minutes_external_participants').select('id, full_name, organization, position, mobile, email, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
+          supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
+        ]);
+        if (ipRes.data) {
+          const rows = ipRes.data as unknown as Record<string, unknown>[];
+          setInternalParts(rows.length > 0 ? rows.map(r => ({
+            id: uid(),
+            userId: (r.user_id as string) || '',
+            nameSnapshot: (r.name_snapshot as string) || '',
+            positionSnapshot: (r.position_snapshot as string) || '',
+            orgUnitId: (r.org_unit_id as string) || '',
+            orgUnitNameSnapshot: (r.org_unit_name_snapshot as string) || '',
+            invitationStatus: (r.invitation_status as InvitationStatus) || 'invited',
+            attendanceStatus: (r.attendance_status as AttendanceStatus | null) ?? null,
+            delegate: '',
+            notes: (r.notes as string) || '',
+          })) : [defaultInternalParticipant()]);
+        }
+        if (epRes.data) {
+          const rows = epRes.data as unknown as Record<string, unknown>[];
+          setExternalParts(rows.length > 0 ? rows.map(r => ({
+            id: uid(),
+            fullName: (r.full_name as string) || '',
+            organization: (r.organization as string) || '',
+            position: (r.position as string) || '',
+            mobile: (r.mobile as string) || '',
+            email: (r.email as string) || '',
+            attendanceStatus: (r.attendance_status as AttendanceStatus | null) ?? null,
+          })) : [defaultExternalParticipant()]);
+        }
+        if (agRes.data) {
+          const rows = agRes.data as unknown as Record<string, unknown>[];
+          setAgendaItems(rows.length > 0 ? rows.map((r, idx) => ({
+            id: uid(),
+            meetingAgendaItemId: (r.meeting_agenda_item_id as string) || '',
+            order: idx + 1,
+            title: (r.agenda_title_snapshot as string) || '',
+            description: (r.agenda_description_snapshot as string) || '',
+            presenter: (r.presenter_snapshot as string) || '',
+            allocatedTime: r.allocated_minutes_snapshot != null ? String(r.allocated_minutes_snapshot) : '',
+            discussionResult: (r.discussion_result as string) || '',
+            resultType: (r.result_type as AgendaResultType) || 'discussion',
+            additionalNotes: (r.additional_notes as string) || '',
+          })) : [defaultAgendaItem(1)]);
+        }
+      } catch (err) {
+        setEditError(err instanceof Error ? err.message : 'خطا در بارگذاری صورت‌جلسه');
+      } finally {
+        setEditLoading(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, minuteId]);
 
   // ── Fetch allowed meetings (scheduled + has calendar_id) ──────────────
   useEffect(() => {
@@ -476,7 +584,6 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
     setSavingDraft(true);
 
     const payload = {
-      meeting_id: info.meetingId,
       meeting_title_snapshot: info.meetingTitle,
       meeting_date_snapshot: info.meetingDate,
       meeting_start_time_snapshot: info.startTime || null,
@@ -540,36 +647,75 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
     }
 
     try {
-      const { data, error: rpcError } = await supabase.rpc('create_minutes_draft', {
-        p_payload: payload,
-      });
-
-      if (rpcError) {
-        if (isDev) console.error('[MinutesDraftRPC] Supabase error:', rpcError);
-        toast.error('ذخیره پیش‌نویس ناموفق بود. لطفاً دوباره تلاش کنید.');
-        return;
+      if (mode === 'new') {
+        const createPayload = { meeting_id: info.meetingId, ...payload };
+        const { data, error: rpcError } = await supabase.rpc('create_minutes_draft', {
+          p_payload: createPayload,
+        });
+        if (rpcError) {
+          if (isDev) console.error('[MinutesDraftRPC] Supabase error:', rpcError);
+          toast.error('ذخیره پیش‌نویس ناموفق بود. لطفاً دوباره تلاش کنید.');
+          return;
+        }
+        if (data && data.success === false) {
+          const code: string = data.code || data.error_code || 'INTERNAL_ERROR';
+          const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس ناموفق بود.';
+          if (isDev) console.error('[MinutesDraftRPC] Business error:', code, data.message);
+          toast.error(msg);
+          return;
+        }
+        if (data && data.success === true) {
+          const newId = data.minute_id;
+          if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', newId);
+          toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
+          setMinuteIdInUrl(newId);
+          setMinutesPageInUrl('minutes-detail');
+          onNavigate('minutes-detail');
+          return;
+        }
+        if (isDev) console.error('[MinutesDraftRPC] Unexpected response:', data);
+        toast.error('پاسخ نامعتبر از سرور دریافت شد.');
+      } else {
+        // edit mode
+        if (!editMinuteId || !editUpdatedAt) {
+          toast.error('صورت‌جلسه بارگذاری نشده است.');
+          return;
+        }
+        const { data, error: rpcError } = await supabase.rpc('update_minutes_draft', {
+          p_minute_id: editMinuteId,
+          p_expected_updated_at: editUpdatedAt,
+          p_payload: payload,
+        });
+        if (rpcError) {
+          if (isDev) console.error('[MinutesUpdateRPC] Supabase error:', rpcError);
+          toast.error('به‌روزرسانی پیش‌نویس ناموفق بود. لطفاً دوباره تلاش کنید.');
+          return;
+        }
+        if (data && data.success === false) {
+          const code: string = data.code || data.error_code || 'INTERNAL_ERROR';
+          if (code === 'MINUTES_VERSION_CONFLICT') {
+            toast.error('این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.');
+          } else if (code === 'MINUTES_NO_PERMISSION') {
+            toast.error('شما اجازه ویرایش این صورت‌جلسه را ندارید.');
+          } else if (code === 'MINUTE_NOT_FOUND') {
+            toast.error('صورت‌جلسه یافت نشد.');
+          } else {
+            const msg = RPC_ERROR_MESSAGES[code] || 'به‌روزرسانی پیش‌نویس ناموفق بود.';
+            toast.error(msg);
+          }
+          return;
+        }
+        if (data && data.success === true) {
+          if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, data.updated_at);
+          toast.success('پیش‌نویس صورت‌جلسه با موفقیت به‌روزرسانی شد.');
+          setMinuteIdInUrl(data.minute_id);
+          setMinutesPageInUrl('minutes-detail');
+          onNavigate('minutes-detail');
+          return;
+        }
+        if (isDev) console.error('[MinutesUpdateRPC] Unexpected response:', data);
+        toast.error('پاسخ نامعتبر از سرور دریافت شد.');
       }
-
-      if (data && data.success === false) {
-        const code: string = data.code || 'INTERNAL_ERROR';
-        const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس ناموفق بود.';
-        if (isDev) console.error('[MinutesDraftRPC] Business error:', code, data.message);
-        toast.error(msg);
-        return;
-      }
-
-      if (data && data.success === true) {
-        const minuteId = data.minute_id;
-        if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', minuteId);
-        toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
-        sessionStorage.setItem('selectedMinuteId', minuteId);
-        onNavigate('minutes-detail');
-        return;
-      }
-
-      // Unexpected response shape — treat as error but preserve form
-      if (isDev) console.error('[MinutesDraftRPC] Unexpected response:', data);
-      toast.error('پاسخ نامعتبر از سرور دریافت شد.');
     } catch (err) {
       if (isDev) console.error('[MinutesDraftRPC] Exception:', err);
       toast.error('خطای غیرمنتظره رخ داد. فرم حفظ شد؛ لطفاً دوباره تلاش کنید.');
@@ -577,6 +723,45 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
       setSavingDraft(false);
     }
   };
+
+  // Edit-mode loading / not-found / error states
+  if (mode === 'edit' && editLoading) {
+    return (
+      <div dir="rtl" className="space-y-5">
+        <PageHeader title={title} />
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <TableSkeleton rows={6} />
+        </div>
+      </div>
+    );
+  }
+  if (mode === 'edit' && editNotFound) {
+    return (
+      <div dir="rtl" className="space-y-5">
+        <PageHeader title={title} />
+        <EmptyState
+          icon={<CircleAlert as AlertCircle className="w-8 h-8" />}
+          title="صورت‌جلسه‌ای یافت نشد"
+          description="این صورت‌جلسه وجود ندارد، حذف شده است، یا شما دسترسی ویرایش آن را ندارید."
+          action={
+            <button onClick={() => onNavigate('minutes')} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+              بازگشت به لیست
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+  if (mode === 'edit' && editError) {
+    return (
+      <div dir="rtl" className="space-y-5">
+        <PageHeader title={title} />
+        <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">
+          {editError}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div dir="rtl" className="space-y-5">
@@ -714,12 +899,12 @@ export function MinutesFormPage({ mode, onNavigate }: Props) {
               </button>
               {activeSection === SECTIONS.length - 1 ? (
                 <button
-                  onClick={handleSaveDraft}
-                  disabled={savingDraft}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled
+                  title="ارسال برای تأیید (به‌زودی)"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
                 >
                   <Send className="w-4 h-4" />
-                  {savingDraft ? 'در حال ذخیره...' : 'ارسال برای تأیید'}
+                  ارسال برای تأیید (به‌زودی)
                 </button>
               ) : (
                 <button
@@ -1329,6 +1514,20 @@ interface SectionDecisionsProps {
 }
 
 function SectionDecisions({ decisions, setDecisions }: SectionDecisionsProps) {
+  return (
+    <div className="space-y-5">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
+        مصوبات و اقدامات
+      </h2>
+      <ComingSoonBanner message="ذخیره‌سازی مصوبات در نسخه بعدی فعال خواهد شد. در این مرحله مصوبات ذخیره نمی‌شوند." />
+      <div className="opacity-50 pointer-events-none">
+        <DecisionsForm decisions={decisions} setDecisions={setDecisions} />
+      </div>
+    </div>
+  );
+}
+
+function DecisionsForm({ decisions, setDecisions }: SectionDecisionsProps) {
   const add = () =>
     setDecisions(l => [...l, defaultDecision()]);
 
@@ -1413,20 +1612,11 @@ function SectionAttachments() {
       <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
         پیوست‌ها
       </h2>
-
-      {/* Drop zone */}
-      <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-8 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
-        <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">فایل را اینجا رها کنید</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">یا</p>
-        <button className="flex items-center gap-2 mx-auto px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 transition-colors">
-          <Paperclip className="w-4 h-4" />
-          انتخاب فایل
-        </button>
-        <p className="text-xs text-gray-400 mt-3">آپلود واقعی در این مرحله فعال نیست</p>
+      <ComingSoonBanner message="آپلود پیوست در نسخه بعدی فعال خواهد شد." />
+      <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center opacity-50 pointer-events-none">
+        <Paperclip className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+        <p className="text-sm text-gray-400 dark:text-gray-500">آپلود فایل در نسخه بعدی</p>
       </div>
-
-      <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">هیچ فایلی پیوست نشده است.</p>
     </div>
   );
 }
@@ -1441,6 +1631,20 @@ interface SectionApproversProps {
 }
 
 function SectionApprovers({ approvers, setApprovers }: SectionApproversProps) {
+  return (
+    <div className="space-y-5">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
+        تأییدکنندگان
+      </h2>
+      <ComingSoonBanner message="مدیریت تأییدکنندگان در نسخه بعدی فعال خواهد شد. در این مرحله تأییدکنندگان ذخیره نمی‌شوند." />
+      <div className="opacity-50 pointer-events-none">
+        <ApproversForm approvers={approvers} setApprovers={setApprovers} />
+      </div>
+    </div>
+  );
+}
+
+function ApproversForm({ approvers, setApprovers }: SectionApproversProps) {
   const add = () =>
     setApprovers(l => [...l, defaultApprover(l.length + 1)]);
 
@@ -1510,6 +1714,20 @@ interface SectionFinalProps {
 }
 
 function SectionFinal({ finalization, setFinalization }: SectionFinalProps) {
+  return (
+    <div className="space-y-5">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
+        نهایی‌سازی
+      </h2>
+      <ComingSoonBanner message="نهایی‌سازی و انتشار در نسخه بعدی فعال خواهد شد. در این مرحله اطلاعات نهایی‌سازی ذخیره نمی‌شوند." />
+      <div className="opacity-50 pointer-events-none">
+        <FinalForm finalization={finalization} setFinalization={setFinalization} />
+      </div>
+    </div>
+  );
+}
+
+function FinalForm({ finalization, setFinalization }: SectionFinalProps) {
   const update = (field: keyof DraftFinalization, value: string) =>
     setFinalization(prev => ({ ...prev, [field]: value }));
 
@@ -1593,6 +1811,15 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
+function ComingSoonBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3 text-sm text-amber-700 dark:text-amber-400">
+      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
 function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex items-center justify-center py-4 text-sm text-gray-400">
@@ -1600,10 +1827,6 @@ function EmptyState({ message }: { message: string }) {
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Reusable controlled form elements
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface InputFieldProps {
   id: string;

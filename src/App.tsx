@@ -184,6 +184,15 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated || prefsLoading || landingApplied) return;
     setLandingApplied(true);
+    // Restore minutes page from URL param if present (direct refresh / back-forward)
+    const urlPage = new URLSearchParams(window.location.search).get('mpage');
+    if (urlPage) {
+      const valid: string[] = ['minutes','minutes-new','minutes-edit','minutes-detail','minutes-approvals','minutes-my-decisions','minutes-followup','minutes-report','minutes-reports','minutes-dashboard'];
+      if (valid.includes(urlPage)) {
+        setActivePage(urlPage as typeof activePage);
+        return;
+      }
+    }
     const page = prefs.default_landing_page as typeof activePage;
     setActivePage(page);
   }, [isAuthenticated, prefsLoading, landingApplied]);

@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
-import { Plus, Search, X, Eye, CreditCard as Edit2, Send, Printer, Trash2, CircleCheck as CheckCircle2, CircleAlert as AlertCircle } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Plus, Search, X, Eye, CreditCard as Edit2, Send, Printer, Trash2, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import {
   PageHeader, MinutesStatusBadge, ConfidentialityBadge,
   EmptyState, TableSkeleton, ConfirmActionDialog,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
+import {
+  setMinuteIdInUrl, clearMinuteIdFromUrl, setMinutesPageInUrl,
+} from '../../lib/minutesNavigation';
 import type { MinutesStatus, ConfidentialityLevel, MinuteSummary } from './types';
 
 interface Props {
@@ -20,38 +24,38 @@ export function MinutesListPage({ onNavigate }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [minutes, setMinutes] = useState<MinuteSummary[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchMinutes = async () => {
-      setIsLoading(true);
-      setError(null);
-      const { data, error: fetchError } = await supabase
-        .from('minutes')
-        .select('id, meeting_title_snapshot, meeting_date_snapshot, secretary_name_snapshot, chair_name_snapshot, status, confidentiality, org_unit_name_snapshot, updated_at')
-        .order('created_at', { ascending: false });
+  const fetchMinutes = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    const { data, error: fetchError } = await supabase
+      .from('minutes')
+      .select('id, meeting_title_snapshot, meeting_date_snapshot, secretary_name_snapshot, chair_name_snapshot, status, confidentiality, org_unit_name_snapshot, updated_at')
+      .order('created_at', { ascending: false });
 
-      if (fetchError) {
-        setError(fetchError.message);
-        setMinutes([]);
-      } else {
-        setMinutes((data || []).map((row: Record<string, unknown>) => ({
-          id: row.id as string,
-          meetingTitle: (row.meeting_title_snapshot as string) || '',
-          meetingDate: (row.meeting_date_snapshot as string) || '',
-          secretary: (row.secretary_name_snapshot as string) || '',
-          chair: (row.chair_name_snapshot as string) || '',
-          status: row.status as MinutesStatus,
-          confidentiality: row.confidentiality as ConfidentialityLevel,
-          decisionCount: 0,
-          lastModified: row.updated_at ? new Date(row.updated_at as string).toLocaleDateString('fa-IR') : '',
-          version: '',
-          orgUnit: (row.org_unit_name_snapshot as string) || undefined,
-        })));
-      }
-      setIsLoading(false);
-    };
-    fetchMinutes();
+    if (fetchError) {
+      setError(fetchError.message);
+      setMinutes([]);
+    } else {
+      setMinutes((data || []).map((row: Record<string, unknown>) => ({
+        id: row.id as string,
+        meetingTitle: (row.meeting_title_snapshot as string) || '',
+        meetingDate: (row.meeting_date_snapshot as string) || '',
+        secretary: (row.secretary_name_snapshot as string) || '',
+        chair: (row.chair_name_snapshot as string) || '',
+        status: row.status as MinutesStatus,
+        confidentiality: row.confidentiality as ConfidentialityLevel,
+        decisionCount: 0,
+        lastModified: row.updated_at ? new Date(row.updated_at as string).toLocaleDateString('fa-IR') : '',
+        version: '',
+        orgUnit: (row.org_unit_name_snapshot as string) || undefined,
+      })));
+    }
+    setIsLoading(false);
   }, []);
+
+  useEffect(() => { fetchMinutes(); }, [fetchMinutes]);
 
   const filtered = minutes.filter(m => {
     const matchSearch = !search || m.meetingTitle.includes(search) || m.secretary.includes(search) || m.chair.includes(search);
@@ -70,6 +74,45 @@ export function MinutesListPage({ onNavigate }: Props) {
     setOrgUnitFilter('');
   };
 
+  const goToDetail = (id: string) => {
+    setMinuteIdInUrl(id);
+    setMinutesPageInUrl('minutes-detail');
+    onNavigate('minutes-detail');
+  };
+
+  const goToEdit = (id: string) => {
+    setMinuteIdInUrl(id);
+    setMinutesPageInUrl('minutes-edit');
+    onNavigate('minutes-edit');
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget || deletingId) return;
+    setDeletingId(deleteTarget);
+    try {
+      const { error: delError } = await supabase
+        .from('minutes')
+        .delete()
+        .eq('id', deleteTarget);
+      if (delError) {
+        toast.error('حذف صورت‌جلسه ناموفق بود. لطفاً دوباره تلاش کنید.');
+        return;
+      }
+      toast.success('صورت‌جلسه حذف شد.');
+      setDeleteTarget(null);
+      await fetchMinutes();
+    } catch {
+      toast.error('خطای غیرمنتظره هنگام حذف.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    if (deletingId) return; // prevent closing while deleting
+    setDeleteTarget(null);
+  };
+
   return (
     <div dir="rtl" className="space-y-5">
       <PageHeader
@@ -77,7 +120,7 @@ export function MinutesListPage({ onNavigate }: Props) {
         description="مدیریت و پیگیری صورت‌جلسات سازمانی"
         actions={
           <button
-            onClick={() => onNavigate('minutes-new')}
+            onClick={() => { clearMinuteIdFromUrl(); setMinutesPageInUrl('minutes-new'); onNavigate('minutes-new'); }}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -171,7 +214,7 @@ export function MinutesListPage({ onNavigate }: Props) {
             description="فیلترها را تغییر دهید یا صورت‌جلسه جدید ایجاد کنید."
             action={
               <button
-                onClick={() => onNavigate('minutes-new')}
+                onClick={() => { clearMinuteIdFromUrl(); setMinutesPageInUrl('minutes-new'); onNavigate('minutes-new'); }}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
               >
                 <Plus className="w-4 h-4" /> ایجاد صورت‌جلسه
@@ -197,7 +240,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                     <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => { sessionStorage.setItem('selectedMinuteId', m.id); onNavigate('minutes-detail'); }}
+                          onClick={() => goToDetail(m.id)}
                           className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline text-right"
                         >
                           {m.meetingTitle}
@@ -220,10 +263,8 @@ export function MinutesListPage({ onNavigate }: Props) {
                       <td className="px-4 py-3">
                         <RowActions
                           status={m.status}
-                          onView={() => { sessionStorage.setItem('selectedMinuteId', m.id); onNavigate('minutes-detail'); }}
-                          onEdit={() => onNavigate('minutes-edit')}
-                          onSendApproval={() => {}}
-                          onPrint={() => {}}
+                          onView={() => goToDetail(m.id)}
+                          onEdit={() => goToEdit(m.id)}
                           onDelete={() => setDeleteTarget(m.id)}
                         />
                       </td>
@@ -239,7 +280,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                 <div key={m.id} className="p-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <button
-                      onClick={() => { sessionStorage.setItem('selectedMinuteId', m.id); onNavigate('minutes-detail'); }}
+                      onClick={() => goToDetail(m.id)}
                       className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline text-right leading-snug"
                     >
                       {m.meetingTitle}
@@ -256,10 +297,8 @@ export function MinutesListPage({ onNavigate }: Props) {
                     <ConfidentialityBadge level={m.confidentiality} />
                     <RowActions
                       status={m.status}
-                      onView={() => { sessionStorage.setItem('selectedMinuteId', m.id); onNavigate('minutes-detail'); }}
-                      onEdit={() => onNavigate('minutes-edit')}
-                      onSendApproval={() => {}}
-                      onPrint={() => {}}
+                      onView={() => goToDetail(m.id)}
+                      onEdit={() => goToEdit(m.id)}
                       onDelete={() => setDeleteTarget(m.id)}
                     />
                   </div>
@@ -285,28 +324,32 @@ export function MinutesListPage({ onNavigate }: Props) {
         <ConfirmActionDialog
           title="حذف صورت‌جلسه"
           message="آیا مطمئن هستید که می‌خواهید این صورت‌جلسه را حذف کنید؟ این عملیات قابل بازگشت نیست."
-          confirmLabel="حذف"
-          onConfirm={() => setDeleteTarget(null)}
-          onCancel={() => setDeleteTarget(null)}
+          confirmLabel={deletingId ? 'در حال حذف...' : 'حذف'}
+          onConfirm={handleDelete}
+          onCancel={closeDeleteDialog}
           danger
         />
       )}
+
+      {/* Hidden: keep Loader2 import used for future inline spinner if needed */}
+      <span className="hidden"><Loader2 className="w-0 h-0" /></span>
     </div>
   );
 }
 
 // ── RowActions ──────────────────────────────────────────────────────────────
+// Only View, Edit (draft/rejected), Delete (draft) are functional.
+// Send-approval, Publish, Print are disabled with a "به‌زودی" tooltip.
 
 interface RowActionsProps {
   status: MinutesStatus;
   onView: () => void;
   onEdit: () => void;
-  onSendApproval: () => void;
-  onPrint: () => void;
   onDelete: () => void;
 }
 
-function RowActions({ status, onView, onEdit, onSendApproval, onPrint, onDelete }: RowActionsProps) {
+function RowActions({ status, onView, onEdit, onDelete }: RowActionsProps) {
+  const disabledCls = 'p-1.5 rounded-lg text-gray-300 dark:text-gray-600 cursor-not-allowed';
   return (
     <div className="flex items-center gap-1 flex-wrap">
       <button onClick={onView} aria-label="مشاهده" title="مشاهده"
@@ -319,20 +362,24 @@ function RowActions({ status, onView, onEdit, onSendApproval, onPrint, onDelete 
           <Edit2 className="w-4 h-4" />
         </button>
       )}
-      {status === 'draft' && (
-        <button onClick={onSendApproval} aria-label="ارسال برای تأیید" title="ارسال برای تأیید"
-          className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-500 transition-colors">
-          <Send className="w-4 h-4" />
-        </button>
-      )}
+      <button
+        aria-label="ارسال برای تأیید (به‌زودی)" title="ارسال برای تأیید (به‌زودی)"
+        className={disabledCls}
+      >
+        <Send className="w-4 h-4" />
+      </button>
       {status === 'approved' && (
-        <button onClick={() => {}} aria-label="انتشار" title="انتشار"
-          className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 text-green-500 transition-colors">
+        <button
+          aria-label="انتشار (به‌زودی)" title="انتشار (به‌زودی)"
+          className={disabledCls}
+        >
           <CheckCircle2 className="w-4 h-4" />
         </button>
       )}
-      <button onClick={onPrint} aria-label="چاپ" title="چاپ"
-        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors">
+      <button
+        aria-label="چاپ (به‌زودی)" title="چاپ (به‌زودی)"
+        className={disabledCls}
+      >
         <Printer className="w-4 h-4" />
       </button>
       {status === 'draft' && (

@@ -5,6 +5,7 @@ import {
   EmptyState, TableSkeleton,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
 import type { MinutesStatus, ConfidentialityLevel } from './types';
 
 const TABS = [
@@ -79,15 +80,18 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
   const [agendaResults, setAgendaResults] = useState<AgendaResultRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     const fetchDetail = async () => {
       setIsLoading(true);
       setError(null);
+      setNotFound(false);
 
-      const targetId = minuteId || sessionStorage.getItem('selectedMinuteId');
+      const targetId = minuteId || getMinuteIdFromUrl();
 
       if (!targetId) {
+        setNotFound(true);
         setIsLoading(false);
         return;
       }
@@ -104,6 +108,7 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
         return;
       }
       if (!minData) {
+        setNotFound(true);
         setIsLoading(false);
         return;
       }
@@ -137,6 +142,14 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
     fetchDetail();
   }, [minuteId]);
 
+  const goEdit = () => {
+    if (minute) {
+      setMinuteIdInUrl(minute.id);
+      setMinutesPageInUrl('minutes-edit');
+    }
+    onNavigate('minutes-edit');
+  };
+
   if (isLoading) {
     return (
       <div dir="rtl" className="space-y-4">
@@ -162,13 +175,22 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
     );
   }
 
-  if (!minute) {
+  if (notFound || !minute) {
     return (
       <div dir="rtl" className="space-y-4">
         <EmptyState
           icon={<FileText className="w-8 h-8" />}
-          title="صورت‌جلسه‌ای انتخاب نشده است"
-          description="برای مشاهده جزئیات، از لیست صورت‌جلسات یک مورد را انتخاب کنید."
+          title="صورت‌جلسه‌ای یافت نشد"
+          description="این صورت‌جلسه وجود ندارد، حذف شده است، یا شما دسترسی مشاهده آن را ندارید."
+          action={
+            <button
+              onClick={() => onNavigate('minutes')}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+            >
+              <ArrowRight className="w-4 h-4" />
+              بازگشت به لیست
+            </button>
+          }
         />
       </div>
     );
@@ -219,26 +241,44 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
               <ArrowRight className="w-4 h-4" />
               بازگشت
             </button>
+            {(minute.status === 'draft' || minute.status === 'rejected') && (
+              <button
+                onClick={goEdit}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                <Edit2 className="w-4 h-4" />
+                ویرایش
+              </button>
+            )}
             <button
-              onClick={() => onNavigate('minutes-edit')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              disabled
+              title="ارسال برای تأیید (به‌زودی)"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
             >
-              <Edit2 className="w-4 h-4" />
-              ویرایش
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 transition-colors">
               <Send className="w-4 h-4" />
               ارسال برای تأیید
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+            <button
+              disabled
+              title="چاپ (به‌زودی)"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+            >
               <Printer className="w-4 h-4" />
               چاپ
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors">
+            <button
+              disabled
+              title="خروجی Word (به‌زودی)"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+            >
               <FileDown className="w-4 h-4" />
               Word
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 transition-colors">
+            <button
+              disabled
+              title="انتشار (به‌زودی)"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+            >
               <Globe className="w-4 h-4" />
               انتشار
             </button>
