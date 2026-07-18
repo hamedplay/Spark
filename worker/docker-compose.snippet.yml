@@ -1,0 +1,21 @@
+# docker-compose snippet — merge into existing docker-compose.yml
+# No ports published. Worker is an internal background processor.
+services:
+  avatar-worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: avatar-worker
+    restart: unless-stopped
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      AVATAR_WORKER_ID: avatar-worker-1
+    mem_limit: 512m
+    cpus: 0.5
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    no_ports: true
+    networks:
+      - default
