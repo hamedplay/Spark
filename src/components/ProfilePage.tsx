@@ -468,12 +468,18 @@ export function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [avatarProcessing, setAvatarProcessing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [openSection, setOpenSection] = useState<'personal' | 'work' | 'social' | 'calendar'>('personal');
   const [saved, setSaved] = useState(false);
   const [orgPositionInfo, setOrgPositionInfo] = useState<OrgPositionInfo | null>(null);
+  const avatarPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => { fetchProfile(); }, []);
+
+  useEffect(() => {
+    return () => { stopAvatarPoll(); };
+  }, []);
 
   const fetchOrgInfo = async (positionId: string | null) => {
     const [{ data: posData }, { data: allPos }, { data: allUnits }, { data: orgData }] = await Promise.all([
@@ -554,25 +560,89 @@ export function ProfilePage() {
     }
   };
 
+  const stopAvatarPoll = () => {
+    if (avatarPollRef.current) { clearInterval(avatarPollRef.current); avatarPollRef.current = null; }
+  };
+
+  const startAvatarPoll = (jobId: string) => {
+    stopAvatarPoll();
+    const startTime = Date.now();
+    const maxMs = 60_000;
+    const intervalMs = 2_000;
+
+    avatarPollRef.current = setInterval(async () => {
+      if (Date.now() - startTime > maxMs) {
+        stopAvatarPoll();
+        setAvatarProcessing(false);
+        toast.error('پردازش تصویر طولانی شد. لطفاً بعداً دوباره بررسی کنید.');
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('avatar_jobs')
+          .select('status')
+          .eq('id', jobId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return;
+
+        if (data.status === 'completed') {
+          stopAvatarPoll();
+          setAvatarProcessing(false);
+          await fetchProfile();
+          toast.success('تصویر پروفایل به‌روزرسانی شد');
+        } else if (data.status === 'failed') {
+          stopAvatarPoll();
+          setAvatarProcessing(false);
+          toast.error('پردازش تصویر ناموفق بود. لطفاً فایل دیگری امتحان کنید.');
+        }
+      } catch {
+        // transient poll error — keep polling
+      }
+    }, intervalMs);
+  };
+
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !profile) return;
+
+    // Stop any existing poll (new file selected)
+    stopAvatarPoll();
+
+    // UX validation (not the security boundary)
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('فقط فرمت‌های JPEG، PNG و WebP مجاز هستند');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('حجم فایل نباید بیشتر از ۲ مگابایت باشد');
+      e.target.value = '';
+      return;
+    }
+
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop();
-      const filePath = `${profile.user_id}/avatar.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('profiles').upload(filePath, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from('profiles').getPublicUrl(filePath);
-      const urlWithCacheBust = `${publicUrl}?t=${Date.now()}`;
-      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: urlWithCacheBust }).eq('id', profile.id);
-      if (updateError) throw updateError;
-      setProfile(p => p ? { ...p, avatar_url: urlWithCacheBust } : p);
-      toast.success('تصویر پروفایل به‌روزرسانی شد');
-    } catch (error: any) {
-      toast.error(error.message || 'خطا در آپلود تصویر');
-    } finally {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const { data, error } = await supabase.functions.invoke('avatar-upload', {
+        body: formData,
+      });
+
+      if (error) throw error;
+      if (!data?.job_id) throw new Error('پاسخ نامعتبر از سرور');
+
       setUploading(false);
+      setAvatarProcessing(true);
+      toast.success('تصویر ارسال شد. در حال پردازش...');
+      startAvatarPoll(data.job_id);
+    } catch (error: any) {
+      setUploading(false);
+      toast.error('خطا در آپلود تصویر. لطفاً دوباره تلاش کنید.');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -629,9 +699,9 @@ export function ProfilePage() {
                 </div>
               )}
             </div>
-            <label className="absolute -bottom-2 -left-2 w-8 h-8 bg-teal-500 hover:bg-teal-600 rounded-xl flex items-center justify-center cursor-pointer shadow-md transition">
-              {uploading ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Camera className="w-4 h-4 text-white" />}
-              <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" disabled={uploading} />
+            <label className={`absolute -bottom-2 -left-2 w-8 h-8 bg-teal-500 hover:bg-teal-600 rounded-xl flex items-center justify-center cursor-pointer shadow-md transition ${(uploading || avatarProcessing) ? 'opacity-60 pointer-events-none' : ''}`}>
+              {(uploading || avatarProcessing) ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Camera className="w-4 h-4 text-white" />}
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarUpload} className="hidden" disabled={uploading || avatarProcessing} />
             </label>
           </div>
           <div>
@@ -639,6 +709,12 @@ export function ProfilePage() {
               {profile.full_name || 'نام تعریف نشده'}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">{profile.email}</p>
+            {avatarProcessing && (
+              <p className="text-xs text-teal-600 dark:text-teal-400 mt-1 flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                در حال پردازش تصویر...
+              </p>
+            )}
             {profile.position && profile.organization && (
               <p className="text-sm text-teal-600 dark:text-teal-400 mt-1">
                 {profile.position} — {profile.organization}
