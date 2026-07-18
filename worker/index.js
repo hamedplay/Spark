@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
+import fs from "node:fs";
 
 const WORKER_ID = process.env.AVATAR_WORKER_ID || `worker-${crypto.randomUUID().slice(0, 8)}`;
 
@@ -36,6 +37,15 @@ const OUTPUT_QUALITY = 82;
 
 let lastPollAt = 0;
 let shuttingDown = false;
+const HEALTH_FILE = "/tmp/worker-health";
+
+function writeHealth() {
+  try {
+    fs.writeFileSync(HEALTH_FILE, String(Date.now()));
+  } catch {
+    // tmpfs might not be ready yet; ignore
+  }
+}
 
 function log(level, event, fields = {}) {
   const entry = {
@@ -123,7 +133,6 @@ async function processImage(buf) {
     .rotate()
     .resize(OUTPUT_SIZE, OUTPUT_SIZE, { fit: "cover", position: "centre" })
     .webp({ quality: OUTPUT_QUALITY })
-    .withMetadata(false)
     .toBuffer();
 
   return processed;
@@ -186,14 +195,31 @@ async function processJob(job) {
     const avatarUrl = getPublicUrl(outputPath);
     log("info", "output_uploaded", { job_id: jobId, output_path: outputPath });
 
-    const { data: completeResult, error: completeErr } = await getClient().rpc("complete_avatar_job", {
-      p_job_id: jobId,
-      p_worker_id: WORKER_ID,
-      p_output_path: outputPath,
-      p_avatar_url: avatarUrl,
-    });
+    let completeErr = null;
+    let completeResult = null;
+    try {
+      const res = await getClient().rpc("complete_avatar_job", {
+        p_job_id: jobId,
+        p_worker_id: WORKER_ID,
+        p_output_path: outputPath,
+        p_avatar_url: avatarUrl,
+      });
+      completeResult = res.data;
+      completeErr = res.error;
+    } catch (e) {
+      completeErr = e;
+    }
 
-    if (completeErr) throw completeErr;
+    if (completeErr) {
+      log("warn", "complete_failed_rolling_back", { job_id: jobId, error_category: classifyError(completeErr).category });
+      try {
+        await deleteStorageFile(AVATARS_BUCKET, outputPath);
+        log("info", "orphan_output_deleted", { job_id: jobId });
+      } catch (delErr) {
+        log("error", "orphan_output_delete_failed", { job_id: jobId, error_category: classifyError(delErr).category });
+      }
+      throw completeErr;
+    }
 
     const row = Array.isArray(completeResult) ? completeResult[0] : completeResult;
     const previousAvatarPath = row?.previous_avatar_path || null;
@@ -237,7 +263,6 @@ async function failJob(jobId, error, permanent) {
 
 async function pollAndProcess() {
   if (shuttingDown) return;
-  lastPollAt = Date.now();
 
   try {
     const { data, error } = await getClient().rpc("claim_next_avatar_job", {
@@ -246,13 +271,19 @@ async function pollAndProcess() {
 
     if (error) throw error;
     const job = Array.isArray(data) ? data[0] : data;
-    if (!job) return;
+    if (!job) {
+      lastPollAt = Date.now();
+      writeHealth();
+      return;
+    }
 
     try {
       await processJob(job);
     } catch (err) {
       await failJob(job.id, err);
     }
+    lastPollAt = Date.now();
+    writeHealth();
   } catch (err) {
     log("error", "poll_error", { error_category: classifyError(err).category });
   }
