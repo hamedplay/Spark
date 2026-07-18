@@ -503,10 +503,12 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 
 process.on("uncaughtException", (err) => {
   log("error", "uncaught_exception", { error_category: classifyError(err).category, detail: String(err?.message || err).slice(0, 200) });
+  process.exit(1);
 });
 
 process.on("unhandledRejection", (err) => {
   log("error", "unhandled_rejection", { error_category: classifyError(err).category, detail: String(err?.message || err).slice(0, 200) });
+  process.exit(1);
 });
 
 export {
