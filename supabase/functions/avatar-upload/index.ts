@@ -7,7 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MiB
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MiB — real file ceiling
+const MULTIPART_OVERHEAD = 64 * 1024; // 64 KiB allowance for multipart framing
+const MAX_REQUEST_SIZE = MAX_FILE_SIZE + MULTIPART_OVERHEAD; // preliminary Content-Length ceiling
 const QUARANTINE_BUCKET = "avatar-quarantine";
 
 type DetectedType = { ext: "jpg" | "png" | "webp"; mime: string };
@@ -96,6 +98,17 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 2. Receive file (multipart/form-data) ─────────────────────────────────
+  // Preliminary Content-Length check: allow 2 MiB file + 64 KiB multipart overhead.
+  // This is NOT the final authority — the real file size is checked after reading.
+  const contentLengthHeader = req.headers.get("Content-Length");
+  if (contentLengthHeader) {
+    const declaredLen = parseInt(contentLengthHeader, 10);
+    if (!Number.isNaN(declaredLen) && declaredLen > MAX_REQUEST_SIZE) {
+      log("warn", { requestId, userId, status: 413, errorCategory: "content_length_exceeded", declaredLen });
+      return json({ error: "Request exceeds size limit" }, 413);
+    }
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();
