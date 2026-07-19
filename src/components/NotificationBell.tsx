@@ -5,6 +5,7 @@ import {
   Video, Users, Star,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { setMinuteIdInUrl } from '../lib/minutesNavigation';
 import toast from 'react-hot-toast';
 
 interface AppNotification {
@@ -19,6 +20,10 @@ interface AppNotification {
   sender_name?: string | null;
   sender_avatar_url?: string | null;
   action_url?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  minute_id?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 type PageId =
@@ -36,7 +41,9 @@ type PageId =
   | 'chat'
   | 'video-conference'
   | 'portal-config'
-  | 'spark';
+  | 'spark'
+  | 'minutes-detail'
+  | 'minutes-my-decisions';
 
 const pageMap: Record<string, PageId> = {
   chat: 'chat',
@@ -48,6 +55,16 @@ const pageMap: Record<string, PageId> = {
   notes: 'notes',
   conference: 'video-conference',
   video_conference: 'video-conference',
+  minutes_approval_requested: 'minutes-detail',
+  minutes_all_approved: 'minutes-detail',
+  minutes_changes_requested: 'minutes-detail',
+  minutes_resubmitted: 'minutes-detail',
+  minutes_secretary_confirmed: 'minutes-detail',
+  minutes_published: 'minutes-detail',
+  decision_assigned: 'minutes-detail',
+  decision_completed: 'minutes-my-decisions',
+  decision_waiting_approval: 'minutes-my-decisions',
+  decision_stopped: 'minutes-my-decisions',
 };
 
 // Map notification type → icon component + color
@@ -471,13 +488,15 @@ export function NotificationBell({ onNavigate }: NotificationBellProps) {
   const handleNotificationClick = async (n: AppNotification) => {
     if (!n.read) await markAsRead(n.id);
 
-    if (onNavigate && n.action_url) {
-      const page = pageMap[n.action_url];
-      if (page) {
-        setShowPanel(false);
-        onNavigate(page);
-      }
+    const actionKey = n.action_url || n.type;
+    const page = pageMap[actionKey];
+    if (!page || !onNavigate) return;
+
+    if (page === 'minutes-detail' && n.minute_id) {
+      setMinuteIdInUrl(n.minute_id);
     }
+    setShowPanel(false);
+    onNavigate(page);
   };
 
   const markAllAsRead = async () => {
