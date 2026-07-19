@@ -542,10 +542,17 @@ export function ProfilePage() {
     setSaving(true);
     try {
       // date fields: send null instead of empty string to avoid Postgres date parse error
-      const payload: any = {
-        ...profile,
+      const payload: Pick<Profile, 'full_name' | 'phone' | 'national_id' | 'birth_date' | 'gender' | 'city' | 'bio' | 'employee_id' | 'hire_date' | 'location'> & { updated_at: string } = {
+        full_name: profile.full_name,
+        phone: profile.phone,
+        national_id: profile.national_id,
         birth_date: profile.birth_date ?? null,
+        gender: profile.gender,
+        city: profile.city,
+        bio: profile.bio,
+        employee_id: profile.employee_id,
         hire_date: profile.hire_date ?? null,
+        location: profile.location,
         updated_at: new Date().toISOString(),
       };
       const { error } = await supabase.from('profiles').update(payload).eq('id', profile.id);
