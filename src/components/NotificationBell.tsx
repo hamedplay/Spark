@@ -24,6 +24,7 @@ interface AppNotification {
   entity_id?: string | null;
   minute_id?: string | null;
   metadata?: Record<string, unknown> | null;
+  template_event_type?: string | null;
 }
 
 type PageId =
@@ -62,9 +63,9 @@ const pageMap: Record<string, PageId> = {
   minutes_secretary_confirmed: 'minutes-detail',
   minutes_published: 'minutes-detail',
   decision_assigned: 'minutes-detail',
-  decision_completed: 'minutes-my-decisions',
-  decision_waiting_approval: 'minutes-my-decisions',
-  decision_stopped: 'minutes-my-decisions',
+  decision_completed: 'minutes-detail',
+  decision_waiting_approval: 'minutes-detail',
+  decision_stopped: 'minutes-detail',
 };
 
 // Map notification type → icon component + color
@@ -486,11 +487,15 @@ export function NotificationBell({ onNavigate }: NotificationBellProps) {
   };
 
   const handleNotificationClick = async (n: AppNotification) => {
-    if (!n.read) await markAsRead(n.id);
-
-    const actionKey = n.action_url || n.type;
+    const actionKey = n.action_url || n.template_event_type || n.type;
     const page = pageMap[actionKey];
     if (!page || !onNavigate) return;
+
+    try {
+      if (!n.read) await markAsRead(n.id);
+    } catch {
+      /* swallow mark-read errors so navigation still runs */
+    }
 
     if (page === 'minutes-detail' && n.minute_id) {
       setMinuteIdInUrl(n.minute_id);
