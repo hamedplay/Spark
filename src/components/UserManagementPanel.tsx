@@ -134,9 +134,9 @@ function SectionAccordion({ title, subtitle, open, onToggle, children }: {
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
-function AvatarBlock({ profile, editable, onUpload }: {
+function AvatarBlock({ profile, editable, onUpload, uploading, avatarProcessing }: {
   profile: AdminProfile; editable: boolean;
-  onUpload?: (file: File) => void;
+  onUpload?: (file: File) => void; uploading?: boolean; avatarProcessing?: boolean;
 }) {
   const initials = (profile.full_name || profile.email || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   return (
@@ -147,9 +147,9 @@ function AvatarBlock({ profile, editable, onUpload }: {
           : <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-teal-600 dark:text-teal-400">{initials}</div>}
       </div>
       {editable && onUpload && (
-        <label className="absolute -bottom-2 -left-2 w-7 h-7 bg-teal-500 hover:bg-teal-600 rounded-xl flex items-center justify-center cursor-pointer shadow-md transition">
-          <Camera className="w-3.5 h-3.5 text-white" />
-          <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); }} />
+        <label className={`absolute -bottom-2 -left-2 w-7 h-7 bg-teal-500 hover:bg-teal-600 rounded-xl flex items-center justify-center cursor-pointer shadow-md transition${(uploading || avatarProcessing) ? ' opacity-60 pointer-events-none' : ''}`}>
+          {(uploading || avatarProcessing) ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" /> : <Camera className="w-3.5 h-3.5 text-white" />}
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploading || avatarProcessing} onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value=''; }} />
         </label>
       )}
     </div>
@@ -171,6 +171,8 @@ function UserProfileForm({
   const [showPass, setShowPass] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [avatarProcessing, setAvatarProcessing] = useState(false);
+  const avatarPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [section, setSection] = useState<'personal' | 'work' | 'social'>('personal');
 
   // Load the org name and auto-fill if user has a position assigned
@@ -188,19 +190,81 @@ function UserProfileForm({
 
   const set = (k: keyof AdminProfile, v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
 
+  const stopAvatarPoll = () => {
+    if (avatarPollRef.current) { clearInterval(avatarPollRef.current); avatarPollRef.current = null; }
+  };
+  useEffect(() => () => stopAvatarPoll(), []);
+
+  const startAvatarPoll = (jobId: string) => {
+    stopAvatarPoll();
+    const startTime = Date.now();
+    const maxMs = 60_000;
+    const intervalMs = 2_000;
+    avatarPollRef.current = setInterval(async () => {
+      if (Date.now() - startTime > maxMs) {
+        stopAvatarPoll();
+        setAvatarProcessing(false);
+        toast.error('پردازش تصویر طولانی شد. لطفاً بعداً دوباره بررسی کنید.');
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('avatar_jobs')
+          .select('status')
+          .eq('id', jobId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return;
+        if (data.status === 'completed') {
+          stopAvatarPoll();
+          setAvatarProcessing(false);
+          const { data: p, error: pErr } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('user_id', form.user_id)
+            .maybeSingle();
+          if (!pErr && p?.avatar_url) {
+            setForm(f => ({ ...f, avatar_url: `${p.avatar_url}${p.avatar_url.includes('?') ? '&' : '?'}t=${Date.now()}` }));
+          }
+          toast.success('تصویر آپلود شد');
+        } else if (data.status === 'failed') {
+          stopAvatarPoll();
+          setAvatarProcessing(false);
+          toast.error('پردازش تصویر ناموفق بود. لطفاً فایل دیگری امتحان کنید.');
+        }
+      } catch {
+        // transient poll error — keep polling
+      }
+    }, intervalMs);
+  };
+
   const handleAvatar = async (file: File) => {
     if (isNew) { toast.error('ابتدا کاربر را ذخیره کنید، سپس تصویر آپلود کنید'); return; }
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('فقط فرمت‌های JPEG، PNG و WebP مجاز هستند');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('حجم فایل نباید بیشتر از ۲ مگابایت باشد');
+      return;
+    }
     setUploading(true);
-    const ext = file.name.split('.').pop();
-    const path = `${form.user_id}/avatar.${ext}`;
-    const { error } = await supabase.storage.from('profiles').upload(path, file, { upsert: true });
-    if (error) { toast.error('خطا در آپلود'); setUploading(false); return; }
-    const { data: { publicUrl } } = supabase.storage.from('profiles').getPublicUrl(path);
-    const url = `${publicUrl}?t=${Date.now()}`;
-    await supabase.from('profiles').update({ avatar_url: url }).eq('user_id', form.user_id);
-    setForm(f => ({ ...f, avatar_url: url }));
-    toast.success('تصویر آپلود شد');
-    setUploading(false);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('target_user_id', form.user_id);
+      const { data, error } = await supabase.functions.invoke('avatar-upload', { body: formData });
+      if (error) throw error;
+      if (!data?.job_id) throw new Error('پاسخ نامعتبر از سرور');
+      setUploading(false);
+      setAvatarProcessing(true);
+      toast.success('تصویر ارسال شد. در حال پردازش...');
+      startAvatarPoll(data.job_id);
+    } catch {
+      setUploading(false);
+      toast.error('خطا در آپلود');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -224,9 +288,9 @@ function UserProfileForm({
       {/* Avatar + header */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 flex items-center gap-5">
         <div className="relative">
-          {uploading
+          {uploading || avatarProcessing
             ? <div className="w-20 h-20 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-teal-500" /></div>
-            : <AvatarBlock profile={form} editable={!isNew} onUpload={handleAvatar} />}
+            : <AvatarBlock profile={form} editable={!isNew} onUpload={handleAvatar} uploading={uploading} avatarProcessing={avatarProcessing} />}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-800 dark:text-white truncate">{form.full_name || (isNew ? 'کاربر جدید' : '—')}</p>

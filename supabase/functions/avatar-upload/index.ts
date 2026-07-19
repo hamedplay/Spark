@@ -123,6 +123,14 @@ Deno.serve(async (req: Request) => {
     return json({ error: "File field is required" }, 400);
   }
 
+  // Optional target_user_id: when an admin uploads on behalf of another user.
+  // Empty string or null means self-upload (existing behavior).
+  const targetUserIdRaw = formData.get("target_user_id");
+  const targetUserId =
+    typeof targetUserIdRaw === "string" && targetUserIdRaw.trim() !== ""
+      ? targetUserIdRaw.trim()
+      : null;
+
   // ── 3. Real size check (Content-Length is only preliminary) ───────────────
   let bytes: Uint8Array;
   try {
@@ -160,12 +168,39 @@ Deno.serve(async (req: Request) => {
     return json({ error: "File signature does not match declared type" }, 415);
   }
 
+  // ── 4b. Admin authorization for cross-user upload ──────────────────────────
+  // When targetUserId is provided and differs from the caller, verify the
+  // caller is an admin and the target user exists. All checks are server-side.
+  let effectiveUserId = userId;
+  if (targetUserId && targetUserId !== userId) {
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const { data: callerProfile } = await adminClient
+      .from("profiles")
+      .select("is_admin")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!callerProfile || callerProfile.is_admin !== true) {
+      log("warn", { requestId, userId, targetUserId, status: 403, errorCategory: "not_admin" });
+      return json({ error: "Forbidden" }, 403);
+    }
+    const { data: targetProfile } = await adminClient
+      .from("profiles")
+      .select("user_id")
+      .eq("user_id", targetUserId)
+      .maybeSingle();
+    if (!targetProfile) {
+      log("warn", { requestId, userId, targetUserId, status: 404, errorCategory: "target_not_found" });
+      return json({ error: "Target user not found" }, 404);
+    }
+    effectiveUserId = targetUserId;
+  }
+
   // ── 5. Generate safe storage path ─────────────────────────────────────────
-  // {user_id}/{uuid}.{ext}  — never use the user's filename, never allow ".."
+  // {effective_user_id}/{uuid}.{ext}  — never use the user's filename, never allow ".."
   const jobFileId = crypto.randomUUID();
-  const safePath = `${userId}/${jobFileId}.${detected.ext}`;
-  if (safePath.includes("..") || !safePath.startsWith(`${userId}/`)) {
-    log("error", { requestId, userId, status: 500, errorCategory: "path_safety_failed" });
+  const safePath = `${effectiveUserId}/${jobFileId}.${detected.ext}`;
+  if (safePath.includes("..") || !safePath.startsWith(`${effectiveUserId}/`)) {
+    log("error", { requestId, userId, effectiveUserId, status: 500, errorCategory: "path_safety_failed" });
     return json({ error: "Internal error" }, 500);
   }
 
@@ -186,7 +221,7 @@ Deno.serve(async (req: Request) => {
 
   // ── 7. Create avatar job via RPC ───────────────────────────────────────────
   const { data: jobRows, error: jobErr } = await adminClient.rpc("create_avatar_job", {
-    p_user_id: userId,
+    p_user_id: effectiveUserId,
     p_quarantine_path: safePath,
   });
 
