@@ -697,16 +697,12 @@ export function ChatMessage({
     if (!conv) { toast.error('گفتگو یافت نشد'); return; }
     const recipientId = conv.participant_a === currentUserId ? conv.participant_b : conv.participant_a;
     const senderProfile = allUsers.find(u => u.user_id === currentUserId);
-    await supabase.from('notifications').insert({
-      user_id: recipientId,
-      title: senderProfile?.full_name || 'پیگیری پیام',
-      message: `پیگیری: "${(message.body || '').slice(0, 80)}"`,
-      type: 'chat',
-      read: false,
-      sender_id: currentUserId,
-      sender_name: senderProfile?.full_name || null,
-      sender_avatar_url: senderProfile?.avatar_url || null,
-      action_url: 'chat',
+    await supabase.rpc('create_notification', {
+      p_user_id: recipientId,
+      p_title: senderProfile?.full_name || 'پیگیری پیام',
+      p_message: `پیگیری: "${(message.body || '').slice(0, 80)}"`,
+      p_type: 'chat',
+      p_action_url: 'chat',
     });
     toast.success('اعلان پیگیری ارسال شد');
   }

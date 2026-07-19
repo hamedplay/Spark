@@ -624,7 +624,7 @@ export function ChatConversationView({
     } else {
       await supabase.from('chat_message_stars').insert({ message_id: messageId, user_id: currentUserId });
       // Notification
-      await supabase.from('notifications').insert({ user_id: currentUserId, title: 'پیام نشانه‌دار شد', message: 'یک پیام را نشانه‌دار کردید', type: 'chat', read: false });
+      await supabase.rpc('create_notification', { p_user_id: currentUserId, p_title: 'پیام نشانه‌دار شد', p_message: 'یک پیام را نشانه‌دار کردید', p_type: 'chat' });
     }
     fetchMessages();
   };
@@ -651,12 +651,11 @@ export function ChatConversationView({
     await supabase.from('chat_messages').update({ status }).eq('id', messageId);
     fetchMessages();
     // Notify
-    await supabase.from('notifications').insert({
-      user_id: currentUserId,
-      title: 'وضعیت پیام تغییر کرد',
-      message: status === 'done' ? 'پیام به وضعیت رسیدگی شده تغییر یافت' : status === 'in_progress' ? 'پیام در حال رسیدگی است' : 'وضعیت پیام بازنشانی شد',
-      type: 'chat',
-      read: false,
+    await supabase.rpc('create_notification', {
+      p_user_id: currentUserId,
+      p_title: 'وضعیت پیام تغییر کرد',
+      p_message: status === 'done' ? 'پیام به وضعیت رسیدگی شده تغییر یافت' : status === 'in_progress' ? 'پیام در حال رسیدگی است' : 'وضعیت پیام بازنشانی شد',
+      p_type: 'chat',
     });
   };
 

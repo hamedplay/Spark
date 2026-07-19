@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Mail, CreditCard as Edit2, Save, X, Plus, Loader2, Search, Phone,
-  Upload, Download, Trash2, Users, Building2, Share2, Check,
-} from 'lucide-react';
+import { Mail, CreditCard as Edit2, Save, X, Plus, Loader as Loader2, Search, Phone, Upload, Download, Trash2, Users, Building2, Share2, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../context/PermissionsContext';
@@ -37,7 +34,7 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
   const [sent, setSent] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    supabase.from('profiles').select('user_id, full_name, email')
+    supabase.from('profiles_public').select('user_id, full_name, email')
       .neq('user_id', currentUserId)
       .then(({ data }) => setUsers(data || []));
   }, [currentUserId]);
@@ -59,13 +56,12 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
       });
       if (fnError) throw fnError;
 
-      await supabase.from('notifications').insert([{
-        user_id: u.user_id,
-        title: 'مخاطب جدید دریافت شد',
-        message: `مخاطب «${contact.name}» از طرف یک همکار برای شما ارسال شد.`,
-        type: 'info',
-        read: false,
-      }]);
+      await supabase.rpc('create_notification', {
+        p_user_id: u.user_id,
+        p_title: 'مخاطب جدید دریافت شد',
+        p_message: `مخاطب «${contact.name}» از طرف یک همکار برای شما ارسال شد.`,
+        p_type: 'info',
+      });
 
       setSent(prev => new Set([...prev, u.user_id]));
       toast.success(`مخاطب به ${u.full_name || u.email} ارسال شد`);

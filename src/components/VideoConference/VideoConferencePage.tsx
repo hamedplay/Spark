@@ -98,12 +98,12 @@ function InviteModal({ room, currentUserId, onClose }: {
     if (sent.has(u.user_id)) return; // dedup
     setSending(u.user_id);
     try {
-      const { error } = await supabase.from('notifications').insert([{
-        user_id: u.user_id,
-        title: `دعوت به ویدیو کنفرانس: ${room.name || 'جلسه ویدیویی'}`,
-        message: `برای ورود به جلسه کد «${room.code}» را در بخش ویدیو کنفرانس وارد کنید`,
-        type: 'meeting', read: false,
-      }]);
+      const { error } = await supabase.rpc('create_notification', {
+        p_user_id: u.user_id,
+        p_title: `دعوت به ویدیو کنفرانس: ${room.name || 'جلسه ویدیویی'}`,
+        p_message: `برای ورود به جلسه کد «${room.code}» را در بخش ویدیو کنفرانس وارد کنید`,
+        p_type: 'meeting',
+      });
       if (error) throw error;
       setSent(prev => new Set([...prev, u.user_id]));
       toast.success(`دعوتنامه به ${u.full_name || u.email} ارسال شد`);

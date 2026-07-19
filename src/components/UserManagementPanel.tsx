@@ -1200,7 +1200,9 @@ export function UserManagementPanel({ currentUserId }: Props) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('profiles').select(
+      'user_id, full_name, email, username, phone, organization, position, department, employee_id, hire_date, birth_date, gender, city, location, bio, national_id, avatar_url, is_admin, is_active, is_hidden, created_at'
+    ).order('created_at', { ascending: false });
     if (data) setProfiles(data as AdminProfile[]);
   }, []);
 

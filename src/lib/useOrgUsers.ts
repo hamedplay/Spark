@@ -78,7 +78,7 @@ export function useOrgUsers(currentUserId: string | null): UseOrgUsersResult {
 
       // همه پروفایل‌ها
       const { data: profiles } = await supabase
-        .from('profiles')
+        .from('profiles_public')
         .select('user_id, full_name, email, avatar_url, position')
         .not('is_active', 'eq', false)
         .not('is_hidden', 'eq', true)

@@ -76,12 +76,12 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
       }]);
       if (error) throw error;
 
-      await supabase.from('notifications').insert([{
-        user_id: userId,
-        title: 'درخواست جلسه جدید',
-        message: `یک درخواست جلسه جدید از طرف ${senderName} برای شما ارسال شده است`,
-        type: 'meeting',
-      }]);
+      await supabase.rpc('create_notification', {
+        p_user_id: userId,
+        p_title: 'درخواست جلسه جدید',
+        p_message: `یک درخواست جلسه جدید از طرف ${senderName} برای شما ارسال شده است`,
+        p_type: 'meeting',
+      });
 
       toast.success(`درخواست جلسه برای ${userName} ارسال شد`);
       onSuccess();

@@ -209,20 +209,15 @@ export async function insertNotification(payload: NotifyPayload): Promise<SmsDis
   const title = template ? fillPlaceholders(template.title, vars) : payload.fallbackTitle;
   const message = template ? fillPlaceholders(template.body, vars) : payload.fallbackMessage;
 
-  await supabase.from('notifications').insert({
-    user_id: payload.userId,
-    title,
-    message,
-    type: payload.category as 'meeting' | 'task' | 'note' | 'chat' | 'channel' | 'call' | 'system',
-    read: false,
-    sender_id: payload.senderId ?? null,
-    sender_name: payload.senderName ?? null,
-    sender_avatar_url: payload.senderAvatarUrl ?? null,
-    action_url: payload.actionUrl ?? null,
-    template_id: template?.id ?? null,
-    template_category: payload.category,
-    template_event_type: payload.eventType,
-    template_audience: audience,
+  await supabase.rpc('create_notification', {
+    p_user_id: payload.userId,
+    p_title: title,
+    p_message: message,
+    p_type: payload.category as 'meeting' | 'task' | 'note' | 'chat' | 'channel' | 'call' | 'system',
+    p_action_url: payload.actionUrl ?? null,
+    p_template_category: payload.category,
+    p_template_event_type: payload.eventType,
+    p_template_audience: audience,
   });
 
   // Resolve SMS message (dedicated template or fallback to notification body)
