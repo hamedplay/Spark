@@ -17,7 +17,6 @@ interface Contact {
 interface UserProfile {
   user_id: string;
   full_name: string | null;
-  email: string | null;
 }
 
 type AddMode = 'single' | 'bulk';
@@ -34,14 +33,13 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
   const [sent, setSent] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    supabase.from('profiles_public').select('user_id, full_name, email')
-      .neq('user_id', currentUserId)
-      .then(({ data }) => setUsers(data || []));
+    supabase.rpc('get_selectable_users')
+      .then(({ data }) => setUsers((data || []).filter((u: UserProfile) => u.user_id !== currentUserId)));
   }, [currentUserId]);
 
   const filtered = users.filter(u => {
     const q = search.toLowerCase();
-    return (u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q));
+    return u.full_name?.toLowerCase().includes(q);
   });
 
   const shareToUser = async (u: UserProfile) => {
@@ -64,7 +62,7 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
       });
 
       setSent(prev => new Set([...prev, u.user_id]));
-      toast.success(`مخاطب به ${u.full_name || u.email} ارسال شد`);
+      toast.success(`مخاطب به ${u.full_name || 'همکار'} ارسال شد`);
     } catch (err: any) {
       toast.error(err?.message || 'خطا در ارسال مخاطب');
     } finally {
@@ -103,11 +101,10 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
             ) : filtered.map(u => (
               <div key={u.user_id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
                 <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                  {(u.full_name || u.email || '?')[0].toUpperCase()}
+                  {(u.full_name || '?')[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.email}</p>
                 </div>
                 {sent.has(u.user_id) ? (
                   <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium whitespace-nowrap">
