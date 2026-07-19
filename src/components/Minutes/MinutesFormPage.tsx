@@ -78,6 +78,7 @@ interface DraftMeetingInfo {
   status: MinutesStatus;
   approvalMode: ApprovalMode | '';
   revisionNumber: number;
+  submittedAt: string | null;
 }
 
 interface DraftInternalParticipant {
@@ -180,6 +181,7 @@ const defaultInfo: DraftMeetingInfo = {
   status: 'draft',
   approvalMode: '',
   revisionNumber: 1,
+  submittedAt: null,
 };
 
 const defaultInternalParticipant = (): DraftInternalParticipant => ({
@@ -349,7 +351,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       try {
         const { data: minData, error: minErr } = await supabase
           .from('minutes')
-          .select('id, meeting_id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_id, org_unit_name_snapshot, secretary_user_id, secretary_name_snapshot, chair_user_id, chair_name_snapshot, notes, confidentiality, status, updated_at, approval_mode, revision_number')
+          .select('id, meeting_id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_id, org_unit_name_snapshot, secretary_user_id, secretary_name_snapshot, chair_user_id, chair_name_snapshot, notes, confidentiality, status, updated_at, approval_mode, revision_number, submitted_at')
           .eq('id', targetId)
           .maybeSingle();
         if (minErr) throw minErr;
@@ -376,6 +378,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           status: (m.status as MinutesStatus) || 'draft',
           approvalMode: (m.approval_mode as ApprovalMode) || '',
           revisionNumber: (m.revision_number as number) || 1,
+          submittedAt: (m.submitted_at as string) || null,
         });
 
         const [ipRes, epRes, agRes] = await Promise.all([
@@ -1311,7 +1314,7 @@ function SectionInfo({
             <div className="flex items-center gap-3">
               <select
                 value={info.approvalMode}
-                disabled={!!info.revisionNumber && info.revisionNumber > 1}
+                disabled={!!info.submittedAt || info.status !== 'draft'}
                 onChange={e => setInfo(prev => ({ ...prev, approvalMode: e.target.value as ApprovalMode | '' }))}
                 className="flex-1 px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
               >
@@ -1319,7 +1322,7 @@ function SectionInfo({
                 <option value="system">تأیید سیستمی</option>
                 <option value="in_person">تأیید حضوری</option>
               </select>
-              {info.revisionNumber > 1 && (
+              {(!!info.submittedAt || info.status !== 'draft') && (
                 <span className="text-xs text-gray-400">غیرقابل تغییر پس از ارسال</span>
               )}
             </div>
