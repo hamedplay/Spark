@@ -44,21 +44,29 @@ export function useOrgUsers(currentUserId: string | null): UseOrgUsersResult {
       const { data, error } = await supabase.rpc('get_selectable_users');
       if (error) throw error;
 
-      const enriched: OrgUserProfile[] = (data || []).map((p: any) => ({
-        user_id: p.user_id,
-        full_name: p.full_name,
-        email: null,
-        avatar_url: p.avatar_url,
-        position: p.position,
-        unit_id: p.unit_id || null,
-        unit_name: p.unit_name || null,
-        position_title: p.position_title || null,
-        level: p.level || null,
-      }));
+      // RPC already returns one row per user_id (DISTINCT ON), but guard against
+      // any future regression so each user_id appears exactly once.
+      const seen = new Set<string>();
+      const enriched: OrgUserProfile[] = [];
+      for (const p of (data || []) as any[]) {
+        if (!p?.user_id || seen.has(p.user_id)) continue;
+        seen.add(p.user_id);
+        enriched.push({
+          user_id: p.user_id,
+          full_name: p.full_name,
+          email: null,
+          avatar_url: p.avatar_url,
+          position: p.position,
+          unit_id: p.unit_id || null,
+          unit_name: p.unit_name || null,
+          position_title: p.position_title || null,
+          level: p.level || null,
+        });
+      }
 
       setAllUsers(enriched);
 
-      // گروه‌بندی بر اساس واحد
+      // گروه‌بندی بر اساس واحد — کاربران بدون واحد در گروه «بدون جایگاه سازمانی» باقی می‌مانند
       const unitMap: Map<string, OrgUnitGroup> = new Map();
 
       for (const u of enriched) {
@@ -66,7 +74,7 @@ export function useOrgUsers(currentUserId: string | null): UseOrgUsersResult {
         if (!unitMap.has(key)) {
           unitMap.set(key, {
             unit_id: u.unit_id,
-            unit_name: u.unit_name || 'بدون واحد سازمانی',
+            unit_name: u.unit_name || 'بدون جایگاه سازمانی',
             users: [],
           });
         }

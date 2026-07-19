@@ -40,18 +40,11 @@ interface InboxMeeting {
   calendar_id: string | null;
 }
 
-interface Profile {
-  user_id: string;
-  full_name: string | null;
-  email: string | null;
-}
-
 export function MeetingInboxButton() {
   const [open, setOpen] = useState(false);
   const { pos: fabPos, onDragStart, wasDragged } = useDraggableFab('inbox-fab-pos', 'right', 38);
   const [entries, setEntries] = useState<InboxEntry[]>([]);
   const [meetings, setMeetings] = useState<Record<string, InboxMeeting>>({});
-  const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -120,8 +113,6 @@ export function MeetingInboxButton() {
     setEntries(newEntries);
     setMeetings(mtgMap);
 
-    const { data: profs } = await supabase.from('profiles').select('user_id, full_name, email');
-    setAllProfiles(profs || []);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -339,9 +330,7 @@ export function MeetingInboxButton() {
   };
 
   const getProfileName = (uid: string) =>
-    allProfiles.find(p => p.user_id === uid)?.full_name ||
-    allProfiles.find(p => p.user_id === uid)?.email ||
-    '—';
+    orgAllUsers.find(p => p.user_id === uid)?.full_name || '—';
 
   const toggleUnit = (key: string) => setExpandedUnits(prev => {
     const next = new Set(prev);
@@ -353,7 +342,8 @@ export function MeetingInboxButton() {
 
   const filteredDelegates = orgAllUsers.filter(u =>
     (u.full_name || '').toLowerCase().includes(delegateSearch.toLowerCase()) ||
-    (u.email || '').toLowerCase().includes(delegateSearch.toLowerCase())
+    (u.position_title || '').toLowerCase().includes(delegateSearch.toLowerCase()) ||
+    (u.unit_name || '').toLowerCase().includes(delegateSearch.toLowerCase())
   );
 
   return (
@@ -459,12 +449,12 @@ export function MeetingInboxButton() {
                       >
                         <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
                           <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                            {(u.full_name || u.email || '?').charAt(0)}
+                            {(u.full_name || '?').charAt(0)}
                           </span>
                         </div>
                         <div className="flex-1 min-w-0 text-right">
                           <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
-                          <p className="text-xs text-gray-400 truncate">{u.position_title || u.email}</p>
+                          <p className="text-xs text-gray-400 truncate">{u.position_title || u.unit_name || ''}</p>
                         </div>
                       </button>
                     ))
@@ -494,12 +484,12 @@ export function MeetingInboxButton() {
                             >
                               <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
                                 <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                                  {(u.full_name || u.email || '?').charAt(0)}
+                                  {(u.full_name || '?').charAt(0)}
                                 </span>
                               </div>
                               <div className="flex-1 min-w-0 text-right">
                                 <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
-                                <p className="text-xs text-gray-400 truncate">{u.position_title || u.email}</p>
+                                <p className="text-xs text-gray-400 truncate">{u.position_title || u.unit_name || ''}</p>
                               </div>
                             </button>
                           ))}
