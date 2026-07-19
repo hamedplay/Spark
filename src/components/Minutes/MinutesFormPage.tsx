@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CircleAlert as AlertCircle, Upload, Loader as Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText, SquareCheck as CheckSquare, Save, Eye, Send, X, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
 import { PageHeader, ConfidentialityBadge, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
-  AgendaResultType, DecisionPriority, ApprovalMethod,
+  AgendaResultType, DecisionPriority,
   MinutesStatus, ApprovalMode,
 } from './types';
 
@@ -133,29 +133,12 @@ interface DraftDecision {
   latestUpdate: string;
 }
 
-interface DraftApprover {
-  id: string;
-  name: string;
-  position: string;
-  unit: string;
-  order: number;
-  method: ApprovalMethod;
-}
-
-interface DraftFinalization {
-  signDate: string;
-  versionNumber: string;
-  versionNotes: string;
-}
-
 interface MinutesDraftPayload {
   info: DraftMeetingInfo;
   internalParticipants: DraftInternalParticipant[];
   externalParticipants: DraftExternalParticipant[];
   agendaItems: DraftAgendaItem[];
   decisions: DraftDecision[];
-  approvers: DraftApprover[];
-  finalization: DraftFinalization;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -238,21 +221,6 @@ const defaultDecision = (): DraftDecision => ({
   latestUpdate: '',
 });
 
-const defaultApprover = (order: number): DraftApprover => ({
-  id: uid(),
-  name: '',
-  position: '',
-  unit: '',
-  order,
-  method: 'digital',
-});
-
-const defaultFinalization: DraftFinalization = {
-  signDate: '',
-  versionNumber: '',
-  versionNotes: '',
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Section definitions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -262,9 +230,6 @@ const SECTIONS = [
   { id: 'participants', label: 'شرکت‌کنندگان',             icon: Users },
   { id: 'agenda',       label: 'دستور جلسات',              icon: CheckSquare },
   { id: 'decisions',    label: 'مصوبات',                   icon: CheckSquare },
-  { id: 'attachments',  label: 'پیوست‌ها',                 icon: Paperclip },
-  { id: 'approvers',    label: 'تأییدکنندگان',             icon: Shield },
-  { id: 'final',        label: 'نسخه نهایی',               icon: FileSignature },
 ];
 
 const isDev = import.meta.env.DEV;
@@ -314,8 +279,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [externalParticipants, setExternalParticipants] = useState<DraftExternalParticipant[]>([defaultExternalParticipant()]);
   const [agendaItems, setAgendaItems] = useState<DraftAgendaItem[]>([defaultAgendaItem(1)]);
   const [decisions, setDecisions] = useState<DraftDecision[]>([defaultDecision()]);
-  const [approvers, setApprovers] = useState<DraftApprover[]>([defaultApprover(1)]);
-  const [finalization, setFinalization] = useState<DraftFinalization>(defaultFinalization);
 
   // Fetched reference data
   const [meetings, setMeetings] = useState<MeetingOption[]>([]);
@@ -589,10 +552,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       externalParticipants,
       agendaItems,
       decisions,
-      approvers,
-      finalization,
     }),
-    [info, internalParticipants, externalParticipants, agendaItems, decisions, approvers, finalization],
+    [info, internalParticipants, externalParticipants, agendaItems, decisions],
   );
 
   const validate = (): string | null => {
@@ -984,13 +945,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 agendaItems={agendaItems}
                 readOnly={isNonEditable}
               />
-            )}
-            {activeSection === 4 && <SectionAttachments />}
-            {activeSection === 5 && (
-              <SectionApprovers approvers={approvers} setApprovers={setApprovers} />
-            )}
-            {activeSection === 6 && (
-              <SectionFinal finalization={finalization} setFinalization={setFinalization} />
             )}
           </div>
 
@@ -1832,169 +1786,6 @@ function DecisionsForm({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Section 5 — Attachments (placeholder — no state needed)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function SectionAttachments() {
-  return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
-        پیوست‌ها
-      </h2>
-      <ComingSoonBanner message="آپلود پیوست در نسخه بعدی فعال خواهد شد." />
-      <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center opacity-50 pointer-events-none">
-        <Paperclip className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-        <p className="text-sm text-gray-400 dark:text-gray-500">آپلود فایل در نسخه بعدی</p>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Section 6 — Approvers
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface SectionApproversProps {
-  approvers: DraftApprover[];
-  setApprovers: React.Dispatch<React.SetStateAction<DraftApprover[]>>;
-}
-
-function SectionApprovers({ approvers, setApprovers }: SectionApproversProps) {
-  return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
-        تأییدکنندگان
-      </h2>
-      <ComingSoonBanner message="مدیریت تأییدکنندگان در نسخه بعدی فعال خواهد شد. در این مرحله تأییدکنندگان ذخیره نمی‌شوند." />
-      <div className="opacity-50 pointer-events-none">
-        <ApproversForm approvers={approvers} setApprovers={setApprovers} />
-      </div>
-    </div>
-  );
-}
-
-function ApproversForm({ approvers, setApprovers }: SectionApproversProps) {
-  const add = () =>
-    setApprovers(l => [...l, defaultApprover(l.length + 1)]);
-
-  const remove = (id: string) =>
-    setApprovers(l => l.filter(a => a.id !== id));
-
-  const update = (id: string, field: keyof DraftApprover, value: string) =>
-    setApprovers(l => l.map(a => (a.id === id ? { ...a, [field]: value } : a)));
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">تأییدکنندگان</h2>
-        <button onClick={add} className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-          <Plus className="w-4 h-4" /> افزودن
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
-        <label className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-          <input type="radio" name="approval-method" defaultChecked className="accent-blue-600" />
-          <div>
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">تأیید سیستمی</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">ارسال درخواست دیجیتال</p>
-          </div>
-        </label>
-        <label className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-          <input type="radio" name="approval-method" className="accent-blue-600" />
-          <div>
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">تأیید حضوری</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">ثبت تأیید دستی</p>
-          </div>
-        </label>
-      </div>
-
-      <div className="space-y-3">
-        {approvers.map((a, idx) => (
-          <div key={a.id} className="grid grid-cols-1 sm:grid-cols-4 gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl items-end">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-semibold flex items-center justify-center flex-shrink-0">
-                {idx + 1}
-              </span>
-              <InputField id={`ap-name-${a.id}`} label="نام" placeholder="" value={a.name} onChange={v => update(a.id, 'name', v)} />
-            </div>
-            <InputField id={`ap-pos-${a.id}`} label="سمت" placeholder="" value={a.position} onChange={v => update(a.id, 'position', v)} />
-            <InputField id={`ap-unit-${a.id}`} label="واحد" placeholder="" value={a.unit} onChange={v => update(a.id, 'unit', v)} />
-            <div className="flex items-end gap-2">
-              <SelectField id={`ap-method-${a.id}`} label="نوع تأیید" options={[{ value: 'digital', label: 'سیستمی' }, { value: 'in_person', label: 'حضوری' }]} value={a.method} onChange={v => update(a.id, 'method', v)} />
-              <button onClick={() => remove(a.id)} aria-label="حذف تأییدکننده" className="p-2 rounded-xl text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Section 7 — Final version & signature
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface SectionFinalProps {
-  finalization: DraftFinalization;
-  setFinalization: React.Dispatch<React.SetStateAction<DraftFinalization>>;
-}
-
-function SectionFinal({ finalization, setFinalization }: SectionFinalProps) {
-  return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
-        نهایی‌سازی
-      </h2>
-      <ComingSoonBanner message="نهایی‌سازی و انتشار در نسخه بعدی فعال خواهد شد. در این مرحله اطلاعات نهایی‌سازی ذخیره نمی‌شوند." />
-      <div className="opacity-50 pointer-events-none">
-        <FinalForm finalization={finalization} setFinalization={setFinalization} />
-      </div>
-    </div>
-  );
-}
-
-function FinalForm({ finalization, setFinalization }: SectionFinalProps) {
-  const update = (field: keyof DraftFinalization, value: string) =>
-    setFinalization(prev => ({ ...prev, [field]: value }));
-
-  return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
-        نسخه نهایی و امضا
-      </h2>
-
-      {/* Preview area */}
-      <div className="border border-gray-200 dark:border-gray-600 rounded-2xl p-6 bg-gray-50 dark:bg-gray-700/20 min-h-48 flex flex-col items-center justify-center gap-2">
-        <FileText className="w-12 h-12 text-gray-300 dark:text-gray-600" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">پیش‌نمایش صورت‌جلسه</p>
-        <button className="mt-2 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 transition-colors">
-          <Eye className="w-4 h-4" />
-          نمایش پیش‌نمایش
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">بارگذاری نسخه امضاشده</label>
-          <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-4 text-center hover:border-blue-400 transition-colors">
-            <Upload className="w-6 h-6 text-gray-400 mx-auto mb-1" />
-            <p className="text-xs text-gray-500 dark:text-gray-400">بارگذاری واقعی در این مرحله فعال نیست</p>
-          </div>
-        </div>
-        <InputField id="sign-date" label="تاریخ امضا" placeholder="۱۴۰۳/۰۵/۱۸" value={finalization.signDate} onChange={v => update('signDate', v)} />
-        <InputField id="version-number" label="شماره نسخه" placeholder="۱.۰" value={finalization.versionNumber} onChange={v => update('versionNumber', v)} />
-        <div className="sm:col-span-2">
-          <TextareaField id="version-notes" label="توضیحات نسخه" rows={2} value={finalization.versionNotes} onChange={v => update('versionNotes', v)} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Debug panel (dev only)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2034,15 +1825,6 @@ function LoadingRow({ label }: { label: string }) {
 function ErrorState({ message }: { message: string }) {
   return (
     <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl text-sm text-red-600 dark:text-red-400">
-      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-      <span>{message}</span>
-    </div>
-  );
-}
-
-function ComingSoonBanner({ message }: { message: string }) {
-  return (
-    <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3 text-sm text-amber-700 dark:text-amber-400">
       <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
       <span>{message}</span>
     </div>

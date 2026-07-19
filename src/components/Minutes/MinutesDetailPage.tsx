@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, CreditCard as Edit2, Send, Printer, FileDown, Globe, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, History, Clock, User, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, X, TriangleAlert as AlertTriangle, Loader as Loader2, Trash2, Download, CloudUpload as UploadCloud } from 'lucide-react';
+import { ArrowRight, CreditCard as Edit2, Send, Printer, Globe, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, History, Clock, User, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, X, TriangleAlert as AlertTriangle, Loader as Loader2, Trash2, Download, CloudUpload as UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   MinutesStatusBadge, ConfidentialityBadge, ApprovalStatusBadge, ApprovalModeBadge,
@@ -559,14 +559,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
             >
               <Printer className="w-4 h-4" />
               {printLoading ? 'در حال آماده‌سازی...' : 'چاپ / ذخیره PDF'}
-            </button>
-            <button
-              disabled
-              title="خروجی Word (به‌زودی)"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
-            >
-              <FileDown className="w-4 h-4" />
-              Word
             </button>
           </div>
         </div>
