@@ -186,12 +186,18 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const [userId, setUserId] = useState<string | null>(null);
 
   // گروه‌بندی کاربران بر اساس واحد سازمانی
-  const { groups: orgGroups } = useOrgUsers(userId);
+  const { groups: orgGroups, allUsers } = useOrgUsers(userId);
 
   const systemUserGroups = orgGroups.map(g => ({
     label: g.unit_name,
-    options: g.users.map(u => ({ id: u.user_id, name: u.full_name || u.email || '', sub: u.position_title || '' })),
+    options: g.users.map(u => ({ id: u.user_id, name: u.full_name || '', sub: u.position_title || '' })),
   }));
+
+  // تبدیل user_id به نام نمایشی بر اساس داده‌های useOrgUsers (بدون query مستقیم profiles)
+  const resolveUserName = (uid: string): string =>
+    allUsers.find(u => u.user_id === uid)?.full_name || 'کاربر سیستم';
+  const resolveUsersByIds = (ids: string[]): { id: string; name: string }[] =>
+    ids.map(id => ({ id, name: resolveUserName(id) }));
 
   const [showAuthError, setShowAuthError] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -282,7 +288,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) { setUserId(user.id); setShowAuthError(false); fetchSystemUsers(user.id); fetchContacts(user.id); }
+      if (user) { setUserId(user.id); setShowAuthError(false); fetchContacts(user.id); }
       else { setShowAuthError(true); }
     };
     getUser();
@@ -320,30 +326,19 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         else if (diffMin <= 360) setRequestDuration('نیم روز');
         else setRequestDuration('یک روز');
       }
-      // Load participants from prefill IDs
+      // Load participants from prefill IDs (name resolution via useOrgUsers data)
       if (prefillData.participantUserIds && prefillData.participantUserIds.length > 0) {
-        (async () => {
-          const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', prefillData.participantUserIds!);
-          if (profiles) {
-            setSelectedParticipants(profiles.map((p: any) => ({ id: p.user_id, name: p.full_name || p.email || p.user_id })));
-          }
-        })();
+        setSelectedParticipants(resolveUsersByIds(prefillData.participantUserIds));
       }
       // Load participants, notify users and external participants from existing meeting record (when scheduling from pending)
       if (prefillData.meetingId && (!prefillData.participantUserIds || prefillData.participantUserIds.length === 0)) {
         (async () => {
           const { data: mtg } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants').eq('id', prefillData.meetingId!).maybeSingle();
           if (mtg?.participant_user_ids?.length) {
-            const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', mtg.participant_user_ids);
-            if (profiles) {
-              setSelectedParticipants(profiles.map((p: any) => ({ id: p.user_id, name: p.full_name || p.email || p.user_id })));
-            }
+            setSelectedParticipants(resolveUsersByIds(mtg.participant_user_ids));
           }
           if (mtg?.notify_users?.length) {
-            const { data: notifyProfiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', mtg.notify_users);
-            if (notifyProfiles) {
-              setSelectedNotifyUsers(notifyProfiles.map((p: any) => ({ id: p.user_id, name: p.full_name || p.email || p.user_id })));
-            }
+            setSelectedNotifyUsers(resolveUsersByIds(mtg.notify_users));
           }
           if (mtg?.external_participants?.length) {
             setSelectedExternal(mtg.external_participants);
@@ -388,12 +383,8 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchSystemUsers = async (_currentUserId?: string) => {
-    try {
-      const { error } = await supabase.from('profiles').select('user_id, full_name, email').not('is_hidden', 'eq', true).order('full_name');
-      if (error) throw error;
-    } catch (error) { console.error('Error fetching users:', error); }
-  };
+  // No-op: user list now sourced from useOrgUsers (secure RPC). Kept for call-site stability.
+  const fetchSystemUsers = async (_currentUserId?: string) => {};
 
   const fetchContacts = async (uid: string) => {
     try {

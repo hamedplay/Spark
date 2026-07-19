@@ -381,12 +381,26 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [editingAgendaIdx, setEditingAgendaIdx] = useState<number | null>(null);
 
   // Org users for grouped pickers
-  const { groups: orgGroups, allUsers: _orgAllUsers } = useOrgUsers(userId);
+  const { groups: orgGroups, allUsers: orgAllUsers } = useOrgUsers(userId);
 
   const systemUserGroups = orgGroups.map(g => ({
     label: g.unit_name,
-    options: g.users.map(u => ({ id: u.user_id, name: u.full_name || u.email || '', sub: u.position_title || u.email || '' })),
+    options: g.users.map(u => ({ id: u.user_id, name: u.full_name || '', sub: u.position_title || '' })),
   }));
+
+  // تبدیل user_id به نام نمایشی بر اساس داده‌های useOrgUsers (بدون query مستقیم profiles)
+  const resolveUserName = (uid: string): string =>
+    orgAllUsers.find(u => u.user_id === uid)?.full_name || 'کاربر سیستم';
+  const resolveUsersByIds = (ids: string[]): { id: string; name: string }[] =>
+    ids.map(id => ({ id, name: resolveUserName(id) }));
+
+  // Populate the current user's display name from useOrgUsers data (no direct profiles query)
+  useEffect(() => {
+    if (userId && userDisplayName === '') {
+      const name = resolveUserName(userId);
+      if (name && name !== 'کاربر سیستم') setUserDisplayName(name);
+    }
+  }, [userId, orgAllUsers]);
 
   useEffect(() => {
     (async () => {
@@ -394,8 +408,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       if (user) {
         setUserId(user.id);
         fetchContacts(user.id);
-        const { data: prof } = await supabase.from('profiles').select('full_name, email').eq('user_id', user.id).maybeSingle();
-        if (prof) setUserDisplayName(prof.full_name || prof.email || '');
       }
     })();
   }, []);
@@ -455,15 +467,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       if (prefillData.repeatWeekday !== undefined) setRepeatWeekday(prefillData.repeatWeekday);
     }
     if (prefillData.participantUserIds && prefillData.participantUserIds.length > 0) {
-      (async () => {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('user_id, full_name, email')
-          .in('user_id', prefillData.participantUserIds!);
-        if (profiles) {
-          setSelectedParticipants(profiles.map((p: any) => ({ id: p.user_id, name: p.full_name || p.email })));
-        }
-      })();
+      setSelectedParticipants(resolveUsersByIds(prefillData.participantUserIds));
     }
   }, [prefillData]);
 
@@ -472,14 +476,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (!data) return;
 
     if ((data.participant_user_ids || []).length > 0) {
-      const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', data.participant_user_ids);
-      setSelectedParticipants((profiles || []).map((p: any) => ({ id: p.user_id, name: p.full_name || p.email })));
+      setSelectedParticipants(resolveUsersByIds(data.participant_user_ids as string[]));
     }
     if ((data.notify_users || []).length > 0) {
       const notifyIds = (data.notify_users as string[]);
-      const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', notifyIds);
       // Exclude the current user (creator) from the visible notify list since they're auto-included
-      setSelectedNotifyUsers((profiles || []).map((p: any) => ({ id: p.user_id, name: p.full_name || p.email })));
+      setSelectedNotifyUsers(resolveUsersByIds(notifyIds));
     }
     if ((data.external_participants || []).length > 0) {
       setSelectedExternal(data.external_participants as string[]);
@@ -590,16 +592,13 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }).join('\n')
         : '';
 
-      // Fetch display names for all participants in one query
+      // Resolve display names via useOrgUsers data (no direct profiles query)
       let participantNameMap: Record<string, string> = {};
       const participantIds = selectedParticipants.map(p => p.id).filter(id => id !== userId);
       const observerIds = selectedNotifyUsers.map(u => u.id).filter(id => id !== userId);
       const recipientIds = [...participantIds, ...observerIds];
-      if (recipientIds.length > 0) {
-        const { data: pProfiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', recipientIds);
-        for (const p of (pProfiles || [])) {
-          participantNameMap[p.user_id] = p.full_name || p.email || '';
-        }
+      for (const uid of recipientIds) {
+        participantNameMap[uid] = resolveUserName(uid);
       }
 
       if (prefillMeetingId) {
