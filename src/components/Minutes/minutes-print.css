@@ -1,0 +1,231 @@
+/* Minutes print view — A4, RTL, no interactive chrome. */
+
+.minutes-print-root {
+  display: none;
+}
+
+@media print {
+  /* Hide the entire app, then reveal only the print root. */
+  body * {
+    visibility: hidden;
+  }
+  .minutes-print-root,
+  .minutes-print-root * {
+    visibility: visible;
+  }
+  .minutes-print-root {
+    display: block;
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    color: #000;
+    background: #fff;
+  }
+
+  @page {
+    size: A4;
+    margin: 18mm 16mm 20mm 16mm;
+  }
+
+  /* Force light theme regardless of app dark mode. */
+  .minutes-print-root .mp-card,
+  .minutes-print-root .mp-table,
+  .minutes-print-root .mp-table th,
+  .minutes-print-root .mp-table td {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #333 !important;
+  }
+
+  .minutes-print-root {
+    font-family: 'Vazirmatn', system-ui, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #000;
+  }
+
+  .mp-doc {
+    width: 100%;
+  }
+
+  .mp-conf-banner {
+    position: fixed;
+    top: 4mm;
+    right: 0;
+    left: 0;
+    text-align: center;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2mm 0;
+    border-bottom: 1px solid #000;
+  }
+  .mp-conf-banner.confidential { background: #000; color: #fff; }
+  .mp-conf-banner.restricted { background: #fff; color: #000; border: 1px solid #000; }
+
+  .mp-watermark {
+    position: fixed;
+    top: 45%;
+    right: 0;
+    left: 0;
+    text-align: center;
+    font-size: 42pt;
+    font-weight: 700;
+    color: rgba(180, 0, 0, 0.12);
+    transform: rotate(-28deg);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .mp-header {
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 6mm;
+    margin-bottom: 6mm;
+  }
+  .mp-header h1 {
+    font-size: 20pt;
+    font-weight: 700;
+    margin: 0 0 2mm 0;
+  }
+  .mp-header .mp-sub {
+    font-size: 12pt;
+    font-weight: 700;
+    margin: 0 0 1mm 0;
+  }
+  .mp-header .mp-meta {
+    font-size: 10pt;
+    color: #333;
+  }
+
+  .mp-section {
+    margin-top: 6mm;
+    margin-bottom: 4mm;
+  }
+  .mp-section-title {
+    font-size: 13pt;
+    font-weight: 700;
+    border-bottom: 1px solid #000;
+    padding-bottom: 1mm;
+    margin: 0 0 3mm 0;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .mp-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2mm 6mm;
+    font-size: 10.5pt;
+  }
+  .mp-info-grid .mp-field {
+    display: flex;
+    gap: 1mm;
+  }
+  .mp-info-grid .mp-label {
+    font-weight: 700;
+    min-width: 32mm;
+  }
+  .mp-info-grid .mp-value {
+    flex: 1;
+  }
+
+  .mp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+    margin-bottom: 3mm;
+  }
+  .mp-table th,
+  .mp-table td {
+    border: 1px solid #333;
+    padding: 1.5mm 2mm;
+    text-align: right;
+    vertical-align: top;
+  }
+  .mp-table th {
+    background: #eee;
+    font-weight: 700;
+  }
+  .mp-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .mp-table thead {
+    display: table-header-group;
+  }
+
+  .mp-agenda-item,
+  .mp-decision-item {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 3mm;
+    padding: 2mm 0;
+    border-bottom: 1px dashed #999;
+  }
+  .mp-agenda-item:last-child,
+  .mp-decision-item:last-child {
+    border-bottom: none;
+  }
+  .mp-item-title {
+    font-weight: 700;
+    margin-bottom: 1mm;
+  }
+  .mp-item-row {
+    font-size: 10pt;
+    margin-bottom: 0.5mm;
+  }
+  .mp-item-label {
+    font-weight: 700;
+  }
+
+  .mp-approvals-table th,
+  .mp-approvals-table td {
+    text-align: right;
+  }
+
+  .mp-sign-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    margin-top: 8mm;
+    font-size: 10pt;
+  }
+  .mp-sign-box {
+    border: 1px solid #333;
+    padding: 3mm;
+    min-height: 22mm;
+  }
+  .mp-sign-box .mp-sign-name {
+    font-weight: 700;
+    margin-bottom: 1mm;
+  }
+
+  .mp-footer {
+    position: fixed;
+    bottom: 6mm;
+    right: 0;
+    left: 0;
+    text-align: center;
+    font-size: 8.5pt;
+    color: #333;
+    border-top: 1px solid #999;
+    padding-top: 1mm;
+  }
+  .mp-footer .mp-conf-tag {
+    font-weight: 700;
+  }
+
+  .mp-no-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .mp-end-note {
+    margin-top: 6mm;
+    font-size: 10pt;
+    font-style: italic;
+    text-align: center;
+  }
+}

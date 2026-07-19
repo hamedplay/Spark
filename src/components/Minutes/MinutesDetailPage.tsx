@@ -8,6 +8,8 @@ import {
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
 import type { MinutesStatus, ConfidentialityLevel, ApprovalMode, ApprovalStatus, DecisionRow, DecisionUpdateRow } from './types';
+import { MinutesPrintView } from './MinutesPrintView';
+import './minutes-print.css';
 
 const TABS = [
   { id: 'summary',      label: 'خلاصه',              icon: FileText },
@@ -116,6 +118,9 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [notFound, setNotFound] = useState(false);
   const [showRequestChanges, setShowRequestChanges] = useState(false);
   const [acting, setActing] = useState(false);
+  const [printDecisions, setPrintDecisions] = useState<DecisionRow[]>([]);
+  const [printOwnerNames, setPrintOwnerNames] = useState<Record<string, string>>({});
+  const [printLoading, setPrintLoading] = useState(false);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -349,6 +354,32 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     } finally { setActing(false); }
   };
 
+  const handlePrint = async () => {
+    if (printLoading || !minute) return;
+    setPrintLoading(true);
+    try {
+      const decRes = await supabase.from('minutes_decisions')
+          .select('id, minute_id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, status, progress_percent, start_date, due_date, completed_at, requires_followup, latest_update, created_by_user_id, created_at, updated_at')
+          .eq('minute_id', minute.id);
+      if (decRes.error) { toast.error('بارگذاری مصوبات برای چاپ ناموفق بود.'); return; }
+      const decRows = (decRes.data || []) as DecisionRow[];
+      const ownerIds = Array.from(new Set(decRows.map(d => d.primary_owner_user_id).filter(Boolean))) as string[];
+      let namesMap: Record<string, string> = {};
+      if (ownerIds.length > 0) {
+        const { data: profData } = await supabase.from('profiles')
+          .select('user_id, full_name')
+          .in('user_id', ownerIds);
+        namesMap = Object.fromEntries((profData || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name]));
+      }
+      setPrintDecisions(decRows);
+      setPrintOwnerNames(namesMap);
+      await new Promise(r => setTimeout(r, 50));
+      window.print();
+    } finally {
+      setPrintLoading(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div dir="rtl" className="space-y-4">
@@ -504,12 +535,13 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               </button>
             )}
             <button
-              disabled
-              title="چاپ (به‌زودی)"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+              onClick={handlePrint}
+              disabled={printLoading || !minute}
+              title="چاپ / ذخیره PDF"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Printer className="w-4 h-4" />
-              چاپ
+              {printLoading ? 'در حال آماده‌سازی...' : 'چاپ / ذخیره PDF'}
             </button>
             <button
               disabled
@@ -577,6 +609,35 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
           {activeTab === 'history' && <TabHistory />}
         </div>
       </div>
+      <MinutesPrintView
+        minute={{
+          id: minute.id,
+          meeting_title_snapshot: minute.meeting_title_snapshot,
+          meeting_date_snapshot: minute.meeting_date_snapshot,
+          meeting_start_time_snapshot: minute.meeting_start_time_snapshot,
+          meeting_end_time_snapshot: minute.meeting_end_time_snapshot,
+          meeting_location_snapshot: minute.meeting_location_snapshot,
+          meeting_type: minute.meeting_type,
+          org_unit_name_snapshot: minute.org_unit_name_snapshot,
+          secretary_name_snapshot: minute.secretary_name_snapshot,
+          chair_name_snapshot: minute.chair_name_snapshot,
+          notes: minute.notes,
+          confidentiality: minute.confidentiality,
+          status: minute.status,
+          approval_mode: minute.approval_mode,
+          revision_number: minute.revision_number,
+          secretary_confirmed_at: minute.secretary_confirmed_at,
+          chair_confirmed_at: minute.chair_confirmed_at,
+          published_at: minute.published_at,
+        }}
+        internalParts={internalParticipants}
+        externalParts={externalParticipants}
+        agendaResults={agendaResults}
+        approvals={approvals}
+        approvalComments={approvalComments}
+        decisions={printDecisions}
+        ownerNames={printOwnerNames}
+      />
     </div>
   );
 }
