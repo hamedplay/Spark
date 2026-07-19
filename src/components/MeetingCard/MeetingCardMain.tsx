@@ -524,7 +524,6 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       startTime: meeting.start_time || '',
       endTime: meeting.end_time || '',
       requestJalaaliDate: meetingJalaaliDate,
-      updatedAt: (meeting as any).updated_at ?? null,
     };
 
     const handleEditFormSuccess = async () => {

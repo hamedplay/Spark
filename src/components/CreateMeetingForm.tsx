@@ -171,7 +171,6 @@ interface CreateMeetingFormProps {
     dateJd?: number;
     participantUserIds?: string[];
     requestJalaaliDate?: string;
-    updatedAt?: string | null;
   } | null;
 }
 
@@ -278,7 +277,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const [scheduleDate, setScheduleDate] = useState<{ jy: number; jm: number; jd: number } | null>(null);
   const [isSchedulingFromCalendar, setIsSchedulingFromCalendar] = useState(false);
   const [prefillMeetingId, setPrefillMeetingId] = useState<string | null>(null);
-  const [prefillUpdatedAt, setPrefillUpdatedAt] = useState<string | null>(null);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('');
 
   useEffect(() => {
@@ -306,7 +304,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       if (prefillData.dateJy && prefillData.dateJm && prefillData.dateJd) {
         setScheduleDate({ jy: prefillData.dateJy, jm: prefillData.dateJm, jd: prefillData.dateJd });
       }
-      if (prefillData.meetingId) { setPrefillMeetingId(prefillData.meetingId); setPrefillUpdatedAt(prefillData.updatedAt ?? null); }
+      if (prefillData.meetingId) { setPrefillMeetingId(prefillData.meetingId); }
       // Only treat as calendar scheduling when a specific date was passed (drag from calendar cell)
       if (prefillData.dateJy && prefillData.dateJm && prefillData.dateJd) { setIsSchedulingFromCalendar(true); }
       if (prefillData.startTime && prefillData.endTime) {
@@ -334,8 +332,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       // Load participants, notify users and external participants from existing meeting record (when scheduling from pending)
       if (prefillData.meetingId && (!prefillData.participantUserIds || prefillData.participantUserIds.length === 0)) {
         (async () => {
-          const { data: mtg } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants, updated_at').eq('id', prefillData.meetingId!).maybeSingle();
-          if (mtg?.updated_at) setPrefillUpdatedAt(mtg.updated_at);
+          const { data: mtg } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants').eq('id', prefillData.meetingId!).maybeSingle();
           if (mtg?.participant_user_ids?.length) {
             const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', mtg.participant_user_ids);
             if (profiles) {
@@ -468,57 +465,41 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         meetingRecord.end_time = endTime;
       }
 
-      const agendaPayload = agendaEnabled ? agendaItems.map((item, i) => ({
-        title: item.title, presenter: item.presenter ?? '', duration_minutes: item.duration_minutes ?? '', sort_order: i,
-      })) : [];
-      const participantNamesPayload = selectedParticipants.map(p => p.name);
-      const payload: any = {
-        subject, request_date: gregDate, request_jalaali_date: requestJalaaliDate,
-        request_duration: requestDuration,
-        duration: isSchedulingFromCalendar && startTime && endTime ? `${startTime} - ${endTime}` : requestDuration,
-        location, representative, phone, notes: notes || '', priority,
-        status: isSchedulingFromCalendar ? 'closed' : 'open',
-        status_type: statusType,
-        notify_users: Array.from(new Set([userId, ...selectedNotifyUsers.map(u => u.id)])),
-        participant_user_ids: selectedParticipants.map(p => p.id),
-        external_participants: selectedExternal,
-        repeat_type: repeatEnabled ? repeatType : 'none',
-        repeat_interval: repeatEnabled ? String(repeatInterval) : '',
-        repeat_end_date: repeatEnabled ? repeatEndDate : '',
-        repeat_weekday: repeatEnabled && repeatType === 'weekly' ? String(repeatWeekday) : '',
-        reminder_minutes: reminderMinutes ? String(reminderMinutes) : '',
-        send_sms: false, meeting_manager: meetingManager || '',
-        calendar_id: selectedCalendarId || '',
-        agenda_items: agendaPayload,
-        participant_names: participantNamesPayload,
-      };
-      if (startTime && endTime) { payload.start_time = startTime; payload.end_time = endTime; }
-
       if (prefillMeetingId) {
-        const { error: updateErr } = await supabase.rpc('update_meeting_atomic', {
-          p_meeting_id: prefillMeetingId,
-          p_expected_updated_at: prefillUpdatedAt,
-          p_payload: payload,
-        });
-        if (updateErr) {
-          if (updateErr.message.includes('optimistic_concurrency_conflict')) {
-            toast.error('این جلسه توسط کاربر دیگری تغییر کرده. لطفاً صفحه را بازخوانی و دوباره تلاش کنید.');
-          } else { throw updateErr; }
-          setLoading(false); return;
+        const { error } = await supabase.from('meetings').update(meetingRecord).eq('id', prefillMeetingId);
+        if (error) throw error;
+
+        if (agendaEnabled) {
+          await supabase.from('meeting_agenda_items').delete().eq('meeting_id', prefillMeetingId);
+          if (agendaItems.length > 0) {
+            await supabase.from('meeting_agenda_items').insert(
+              agendaItems.map((item, i) => ({ ...item, meeting_id: prefillMeetingId, sort_order: i }))
+            );
+          }
         }
 
         logAudit({ module: 'meetings', action: 'meeting_updated', entity_name: subject, entity_id: prefillMeetingId, details: `جلسه "${subject}" ویرایش شد`, severity: 'info' });
 
         toast.success('جلسه ویرایش شد');
       } else {
-        const { data: newMeetingId, error: createErr } = await supabase.rpc('create_meeting_atomic', { p_payload: payload });
-        if (createErr) throw createErr;
+        const { data: meetingData, error: meetingError } = await supabase.from('meetings').insert([meetingRecord]).select().single();
+        if (meetingError) throw meetingError;
 
-        if (repeatEnabled && newMeetingId && repeatEndDate) {
-          await createRepeatMeetings(newMeetingId as string, meetingRecord);
+        if (selectedParticipants.length > 0 && meetingData) {
+          await supabase.from('participants').insert(selectedParticipants.map(p => ({ meeting_id: meetingData.id, name: p.name })));
         }
 
-        logAudit({ module: 'meetings', action: 'meeting_created', entity_name: subject, entity_id: newMeetingId as string, details: `جلسه جدید "${subject}" ثبت شد`, severity: 'info' });
+        if (repeatEnabled && meetingData && repeatEndDate) {
+          await createRepeatMeetings(meetingData.id, meetingRecord);
+        }
+
+        if (agendaEnabled && agendaItems.length > 0 && meetingData) {
+          await supabase.from('meeting_agenda_items').insert(
+            agendaItems.map((item, i) => ({ ...item, meeting_id: meetingData.id, sort_order: i }))
+          );
+        }
+
+        logAudit({ module: 'meetings', action: 'meeting_created', entity_name: subject, entity_id: meetingData?.id, details: `جلسه جدید "${subject}" ثبت شد`, severity: 'info' });
 
         toast.success('درخواست جلسه ثبت شد');
       }

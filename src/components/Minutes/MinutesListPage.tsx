@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, X, Eye, CreditCard as Edit2, Trash2, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
+import { Plus, Search, X, Eye, CreditCard as Edit2, Send, Printer, Trash2, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   PageHeader, MinutesStatusBadge, ConfidentialityBadge,
@@ -306,8 +306,14 @@ export function MinutesListPage({ onNavigate }: Props) {
               ))}
             </div>
 
+            {/* Pagination placeholder */}
             <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>نمایش {filtered.length} از {minutes.length} صورت‌جلسه</span>
+              <span>نمایش {filtered.length} از {minutes.length}</span>
+              <div className="flex items-center gap-1">
+                <button className="px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">قبلی</button>
+                <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white">۱</span>
+                <button className="px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">بعدی</button>
+              </div>
             </div>
           </>
         )}
@@ -332,8 +338,8 @@ export function MinutesListPage({ onNavigate }: Props) {
 }
 
 // ── RowActions ──────────────────────────────────────────────────────────────
-// View, Edit (draft/rejected), Delete (draft) are functional.
-// Submit-for-approval, publish and print are performed from the Detail page.
+// Only View, Edit (draft/rejected), Delete (draft) are functional.
+// Send-approval, Publish, Print are disabled with a "به‌زودی" tooltip.
 
 interface RowActionsProps {
   status: MinutesStatus;
@@ -343,6 +349,7 @@ interface RowActionsProps {
 }
 
 function RowActions({ status, onView, onEdit, onDelete }: RowActionsProps) {
+  const disabledCls = 'p-1.5 rounded-lg text-gray-300 dark:text-gray-600 cursor-not-allowed';
   return (
     <div className="flex items-center gap-1 flex-wrap">
       <button onClick={onView} aria-label="مشاهده" title="مشاهده"
@@ -355,6 +362,26 @@ function RowActions({ status, onView, onEdit, onDelete }: RowActionsProps) {
           <Edit2 className="w-4 h-4" />
         </button>
       )}
+      <button
+        aria-label="ارسال برای تأیید (به‌زودی)" title="ارسال برای تأیید (به‌زودی)"
+        className={disabledCls}
+      >
+        <Send className="w-4 h-4" />
+      </button>
+      {status === 'approved' && (
+        <button
+          aria-label="انتشار (به‌زودی)" title="انتشار (به‌زودی)"
+          className={disabledCls}
+        >
+          <CheckCircle2 className="w-4 h-4" />
+        </button>
+      )}
+      <button
+        aria-label="چاپ (به‌زودی)" title="چاپ (به‌زودی)"
+        className={disabledCls}
+      >
+        <Printer className="w-4 h-4" />
+      </button>
       {status === 'draft' && (
         <button onClick={onDelete} aria-label="حذف" title="حذف"
           className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors">
