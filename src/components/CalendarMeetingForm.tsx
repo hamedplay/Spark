@@ -389,7 +389,10 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
   // تبدیل user_id به نام نمایشی بر اساس داده‌های useOrgUsers (بدون query مستقیم profiles)
   const resolveUserName = (uid: string): string =>
-    orgAllUsers.find(u => u.user_id === uid)?.full_name || 'کاربر سیستم';
+    orgAllUsers.find(u => u.user_id === uid)?.full_name?.trim()
+    || selectedParticipants.find(p => p.id === uid)?.name?.trim()
+    || selectedNotifyUsers.find(u => u.id === uid)?.name?.trim()
+    || 'همکار گرامی';
   const resolveUsersByIds = (ids: string[]): { id: string; name: string }[] =>
     ids.map(id => ({ id, name: resolveUserName(id) }));
 
