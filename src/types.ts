@@ -34,6 +34,7 @@ export interface Meeting {
   calendar_id?: string | null;
   members_only?: boolean;
   archived_participant_ids?: string[] | null;
+  updated_at?: string | null;
 }
 
 export interface Action {

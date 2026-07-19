@@ -628,7 +628,7 @@ export function CalendarPage({
 
       const [{ data, error }, { data: inboxRows }] = await Promise.all([
         supabase.from('meetings')
-          .select('id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
+          .select('id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,updated_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
           .neq('status', 'closed')
           .gte('request_date', queryFrom)
           .lte('request_date', queryTo)
@@ -1031,6 +1031,7 @@ export function CalendarPage({
       notes: m.notes || '', priority: m.priority, meetingId: m.id,
       startTime: m.start_time || '', endTime: m.end_time || '',
       dateJy, dateJm, dateJd,
+      updatedAt: (m as any).updated_at ?? null,
       calendarId: m.calendar_id, membersOnly: m.members_only || false,
       repeatEnabled: hasRepeat,
       repeatType: (m.repeat_type === 'weekly' || m.repeat_type === 'monthly') ? m.repeat_type : 'weekly',
@@ -1461,6 +1462,7 @@ export function CalendarPage({
       phone: activePendingSchedule?.meeting.phone || '',
       notes: mentionData?.notes || activePendingSchedule?.meeting.notes || '',
       participantUserIds: mentionData?.participantUserIds || activePendingSchedule?.meeting.participant_user_ids || [],
+      updatedAt: (activePendingSchedule?.meeting as any)?.updated_at ?? null,
     });
     if (mentionData) {
       pendingMentionRef.current = null;
@@ -1475,8 +1477,9 @@ export function CalendarPage({
   const commitMove = async () => {
     const snap = pendingMove;
     if (!snap) return;
-    setPendingMove(null); // dismiss modal immediately so calendar is unblocked
+    setPendingMove(null);
     const { meeting, updates, ns, ne } = snap;
+    if (meeting.user_id !== currentUserId) { toast.error('فقط سازنده جلسه می‌تواند آن را جابجا کند'); fetchMeetings(); return; }
     const { error } = await supabase.from('meetings').update(updates).eq('id', meeting.id);
     if (!error) {
       toast.success('جلسه جابجا شد');
@@ -1487,7 +1490,7 @@ export function CalendarPage({
       const dragPIds = (meeting.participant_user_ids || []);
       const moveParticipants = [...dragPIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
       if (moveParticipants.length) await Promise.all(moveParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: dragPIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» جابجا شد`, placeholders: buildMeetingPlaceholders(movedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
-    } else toast.error('خطا');
+    } else { toast.error('خطا در جابجایی جلسه'); fetchMeetings(); }
   };
 
   const commitResize = async () => {
@@ -1495,6 +1498,7 @@ export function CalendarPage({
     if (!snap) return;
     setPendingResize(null);
     const { meeting, newEndTime } = snap;
+    if (meeting.user_id !== currentUserId) { toast.error('فقط سازنده جلسه می‌تواند مدت آن را تغییر دهد'); fetchMeetings(); return; }
     const { error } = await supabase.from('meetings').update({ end_time: newEndTime, duration: `${meeting.start_time} - ${newEndTime}` }).eq('id', meeting.id);
     if (!error) {
       toast.success('مدت جلسه تغییر کرد');
@@ -1505,7 +1509,7 @@ export function CalendarPage({
       const resizePIds = (meeting.participant_user_ids || []);
       const resizeParticipants = [...resizePIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
       if (resizeParticipants.length) await Promise.all(resizeParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: resizePIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
-    } else toast.error('خطا');
+    } else { toast.error('خطا در تغییر مدت جلسه'); fetchMeetings(); }
   };
 
   return (
