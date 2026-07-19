@@ -100,40 +100,49 @@ export async function uploadMinuteAttachment(
   const v = validateAttachment(file);
   if (!v.ok) throw new Error(v.error || 'فایل نامعتبر است.');
 
-  // 1. Create the DB record first to get an id (RPC sets uploaded_by, storage_path is derived).
-  // We generate a path using a client-side uuid placeholder; the RPC accepts the path we provide.
-  const pathId = crypto.randomUUID();
-  const ext = v.ext || '';
-  const storedFilename = `${pathId}${ext ? '.' + ext : ''}`;
-  const storagePath = `minutes/${opts.minuteId}/${pathId}/${storedFilename}`;
-
-  // 2. Upload bytes to private bucket at storagePath.
-  const { error: upErr } = await supabase.storage
-    .from(ATTACHMENT_BUCKET)
-    .upload(storagePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-      contentType: v.mime || file.type || 'application/octet-stream',
-    });
-  if (upErr) throw new Error('بارگذاری فایل ناموفق بود: ' + upErr.message);
-
-  // 3. Create DB record via RPC. If it fails, remove the uploaded object to avoid orphans.
-  const { data, error: rpcErr } = await supabase.rpc('create_minutes_attachment_record', {
+  // 1. Begin: backend validates auth/status/ext/mime/size/target, creates pending record, derives path.
+  const { data: beginData, error: beginErr } = await supabase.rpc('begin_minutes_attachment_upload', {
     p_minute_id: opts.minuteId,
     p_agenda_result_id: opts.agendaResultId ?? null,
     p_decision_id: opts.decisionId ?? null,
-    p_storage_path: storagePath,
     p_original_filename: file.name.trim(),
-    p_stored_filename: storedFilename,
     p_mime_type: v.mime || file.type || 'application/octet-stream',
     p_size_bytes: file.size,
     p_description: opts.description ?? null,
   });
-  if (rpcErr || !data) {
-    await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]);
-    throw new Error(translateRpcError(rpcErr?.message));
+  if (beginErr || !beginData) {
+    throw new Error(translateRpcError(beginErr?.message));
   }
-  const attachmentId = data as string;
+  const begin = beginData as { attachment_id: string; storage_path: string };
+  const attachmentId = begin.attachment_id;
+  const storagePath = begin.storage_path;
+
+  // 2. Upload bytes via signed upload URL (no direct INSERT policy exists).
+  const { data: sUp, error: upErr } = await supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .createSignedUploadUrl(storagePath);
+  if (upErr || !sUp?.path) {
+    // Upload failed; record stays pending and will be cleaned up later.
+    throw new Error('ساخت لینک بارگذاری ناموفق بود: ' + (upErr?.message || ''));
+  }
+  const upRes = await fetch(sUp.signedUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': v.mime || file.type || 'application/octet-stream' },
+  });
+  if (!upRes.ok) {
+    throw new Error('بارگذاری فایل ناموفق بود: ' + upRes.status);
+  }
+
+  // 3. Finalize: backend verifies object exists + size matches, sets ready, writes audit.
+  const { error: finErr } = await supabase.rpc('finalize_minutes_attachment', {
+    p_attachment_id: attachmentId,
+  });
+  if (finErr) {
+    // Finalize failed; best-effort remove the uploaded object to avoid orphan.
+    try { await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]); } catch { /* ignore */ }
+    throw new Error(translateRpcError(finErr.message));
+  }
 
   // 4. Fetch the created row.
   const { data: row, error: selErr } = await supabase
@@ -188,9 +197,14 @@ export async function deleteMinuteAttachment(attachmentId: string): Promise<void
     .maybeSingle();
   if (selErr || !row) throw new Error('پیوست یافت نشد.');
   const storagePath = (row as { storage_path: string }).storage_path;
+
+  // 1. Remove storage object FIRST. If this fails, record stays active, error shown.
+  const { error: rmErr } = await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]);
+  if (rmErr) throw new Error('حذف فایل ناموفق بود: ' + rmErr.message);
+
+  // 2. Only after successful storage removal, soft-delete the record via RPC.
   const { error } = await supabase.rpc('delete_minutes_attachment', { p_attachment_id: attachmentId });
   if (error) throw new Error(translateDeleteError(error.message));
-  try { await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]); } catch { /* best-effort */ }
 }
 
 function translateDeleteError(msg: string): string {
