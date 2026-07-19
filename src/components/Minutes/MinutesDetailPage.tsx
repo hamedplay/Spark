@@ -121,6 +121,16 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [printDecisions, setPrintDecisions] = useState<DecisionRow[]>([]);
   const [printOwnerNames, setPrintOwnerNames] = useState<Record<string, string>>({});
   const [printLoading, setPrintLoading] = useState(false);
+  const [printReady, setPrintReady] = useState(false);
+
+  useEffect(() => {
+    if (!printReady) return;
+    const id = requestAnimationFrame(() => {
+      window.print();
+      setPrintReady(false);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [printReady]);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -355,7 +365,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   };
 
   const handlePrint = async () => {
-    if (printLoading || !minute) return;
+    if (printLoading || printReady || !minute) return;
     setPrintLoading(true);
     try {
       const decRes = await supabase.from('minutes_decisions')
@@ -373,8 +383,9 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       }
       setPrintDecisions(decRows);
       setPrintOwnerNames(namesMap);
-      await new Promise(r => setTimeout(r, 50));
-      window.print();
+      setPrintReady(true);
+    } catch {
+      toast.error('آماده‌سازی چاپ ناموفق بود.');
     } finally {
       setPrintLoading(false);
     }

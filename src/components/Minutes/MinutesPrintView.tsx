@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import type {
   MinutesStatus, ConfidentialityLevel, ApprovalMode, ApprovalStatus,
   DecisionPriority, DecisionStatus, DecisionRow,
@@ -183,7 +184,7 @@ export function MinutesPrintView(props: MinutesPrintViewProps) {
 
   const printDate = new Date().toLocaleDateString('fa-IR');
 
-  return (
+  return createPortal(
     <div className="minutes-print-root" dir="rtl">
       <div className="mp-doc">
         {isConfidential && (
@@ -448,6 +449,7 @@ export function MinutesPrintView(props: MinutesPrintViewProps) {
         {isConfidential && <span className="mp-conf-tag">{CONF_LABELS[conf]} — </span>}
         {SYSTEM_TITLE} — تاریخ چاپ: {printDate} — صفحه‌بندی توسط مرورگر
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

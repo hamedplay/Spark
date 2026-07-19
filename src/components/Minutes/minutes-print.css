@@ -5,13 +5,9 @@
 }
 
 @media print {
-  /* Hide the entire app, then reveal only the print root. */
-  body * {
-    visibility: hidden;
-  }
-  .minutes-print-root,
-  .minutes-print-root * {
-    visibility: visible;
+  /* Hide the entire app via display:none so it doesn't reserve blank pages. */
+  #root {
+    display: none !important;
   }
   .minutes-print-root {
     display: block;
