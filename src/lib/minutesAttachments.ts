@@ -181,8 +181,16 @@ export async function listMinuteAttachments(minuteId: string): Promise<Attachmen
 }
 
 export async function deleteMinuteAttachment(attachmentId: string): Promise<void> {
+  const { data: row, error: selErr } = await supabase
+    .from('minutes_attachments')
+    .select('storage_path')
+    .eq('id', attachmentId)
+    .maybeSingle();
+  if (selErr || !row) throw new Error('پیوست یافت نشد.');
+  const storagePath = (row as { storage_path: string }).storage_path;
   const { error } = await supabase.rpc('delete_minutes_attachment', { p_attachment_id: attachmentId });
   if (error) throw new Error(translateDeleteError(error.message));
+  try { await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]); } catch { /* best-effort */ }
 }
 
 function translateDeleteError(msg: string): string {
