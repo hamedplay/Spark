@@ -380,7 +380,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [editingAgendaIdx, setEditingAgendaIdx] = useState<number | null>(null);
 
   // Org users for grouped pickers
-  const { groups: orgGroups, allUsers: orgAllUsers } = useOrgUsers(userId);
+  const { groups: orgGroups, allUsers: orgAllUsers, loading: orgUsersLoading } = useOrgUsers(userId);
 
   const systemUserGroups = orgGroups.map(g => ({
     label: g.unit_name,
@@ -508,8 +508,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (!userId) { toast.error('لطفا وارد شوید'); return; }
     if (!subject.trim()) { toast.error('موضوع جلسه را وارد کنید'); return; }
     if (!scheduleDate) { toast.error('تاریخ جلسه مشخص نیست'); return; }
-    // Resolve current user's display name locally at submit time to avoid race with orgAllUsers loading
-    const senderName = orgAllUsers.find(u => u.user_id === userId)?.full_name || 'کاربر سامانه';
+    if (orgUsersLoading) { toast.error('اطلاعات سازمانی در حال بارگذاری است؛ لحظاتی دیگر تلاش کنید'); return; }
+    const senderName = orgAllUsers.find(u => u.user_id === userId)?.full_name?.trim();
+    if (!senderName) { toast.error('اطلاعات سازمانی کاربر کامل نیست؛ امکان ثبت جلسه وجود ندارد.'); return; }
     setLoading(true);
     try {
       const m = moment(`${scheduleDate.jy}/${scheduleDate.jm}/${scheduleDate.jd}`, 'jYYYY/jM/jD');
@@ -1530,7 +1531,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
       {/* Footer */}
       <div className="flex gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || orgUsersLoading}
           className="flex-1 flex items-center justify-center gap-2 bg-teal-600 text-white py-2.5 rounded-xl hover:bg-teal-700 disabled:opacity-50 font-medium text-sm transition-colors">
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
           ثبت نهایی جلسه
