@@ -371,7 +371,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [sendSms, setSendSms] = useState(false);
   const [meetingManager, setMeetingManager] = useState('');
   const [isOnline, setIsOnline] = useState(false);
-  const [userDisplayName, setUserDisplayName] = useState('');
 
   // Agenda
   const [agendaEnabled, setAgendaEnabled] = useState(false);
@@ -393,14 +392,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     orgAllUsers.find(u => u.user_id === uid)?.full_name || 'کاربر سیستم';
   const resolveUsersByIds = (ids: string[]): { id: string; name: string }[] =>
     ids.map(id => ({ id, name: resolveUserName(id) }));
-
-  // Populate the current user's display name from useOrgUsers data (no direct profiles query)
-  useEffect(() => {
-    if (userId && userDisplayName === '') {
-      const name = resolveUserName(userId);
-      if (name && name !== 'کاربر سیستم') setUserDisplayName(name);
-    }
-  }, [userId, orgAllUsers]);
 
   useEffect(() => {
     (async () => {
@@ -517,6 +508,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (!userId) { toast.error('لطفا وارد شوید'); return; }
     if (!subject.trim()) { toast.error('موضوع جلسه را وارد کنید'); return; }
     if (!scheduleDate) { toast.error('تاریخ جلسه مشخص نیست'); return; }
+    // Resolve current user's display name locally at submit time to avoid race with orgAllUsers loading
+    const senderName = orgAllUsers.find(u => u.user_id === userId)?.full_name || 'کاربر سامانه';
     setLoading(true);
     try {
       const m = moment(`${scheduleDate.jy}/${scheduleDate.jm}/${scheduleDate.jd}`, 'jYYYY/jM/jD');
@@ -569,8 +562,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         location: location || '',
         location_part: location ? ` | ${location}` : '',
         join_link: joinLink,
-        sender_name: userDisplayName,
-        organizer_name: userDisplayName,
+        sender_name: senderName,
+        organizer_name: senderName,
         representative: representative || '',
         agenda: agendaEnabled && agendaItems.length > 0
           ? agendaItems.map((item, idx) => {
@@ -688,19 +681,19 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
         const creatorAction: MeetingAction = isFirstSchedule ? 'created' : 'change';
         const creatorEventType = getMeetingTemplateKey('creator', creatorAction);
-        await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: userDisplayName, recipient_greeting: `${userDisplayName} گرامی` }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
+        await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
 
         const internalSmsResults: SmsDispatchResult[] = [];
         if (participantIds.length) {
           const participantAction: MeetingAction = isFirstSchedule ? 'invite' : 'change';
           const participantEventType = getMeetingTemplateKey('participant', participantAction);
-          const results = await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: participantEventType, audience: 'participants', fallbackTitle: isFirstSchedule ? 'دعوت به جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          const results = await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: participantEventType, audience: 'participants', fallbackTitle: isFirstSchedule ? 'دعوت به جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
           internalSmsResults.push(...results);
         }
         if (observerIds.length) {
           const observerAction: MeetingAction = isFirstSchedule ? 'invite' : 'change';
           const observerEventType = getMeetingTemplateKey('observer', observerAction);
-          const results = await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: observerEventType, audience: 'observers', fallbackTitle: isFirstSchedule ? 'اطلاع از جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          const results = await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: observerEventType, audience: 'observers', fallbackTitle: isFirstSchedule ? 'اطلاع از جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
           internalSmsResults.push(...results);
         }
         let externalSmsResult: ExternalSmsResult | null = null;
@@ -739,15 +732,15 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
         }
         if (repeatEnabled && md && repeatEndDate) await createRepeatMeetings(record, repeatType, repeatInterval, repeatEndDate);
-        await insertNotification({ userId, category: 'meeting', eventType: getMeetingTemplateKey('creator', 'created'), fallbackTitle: 'جلسه ثبت شد', fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: userDisplayName, recipient_greeting: `${userDisplayName} گرامی` }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' });
+        await insertNotification({ userId, category: 'meeting', eventType: getMeetingTemplateKey('creator', 'created'), fallbackTitle: 'جلسه ثبت شد', fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
 
         const internalSmsResults: SmsDispatchResult[] = [];
         if (participantIds.length) {
-          const results = await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          const results = await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
           internalSmsResults.push(...results);
         }
         if (observerIds.length) {
-          const results = await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: userDisplayName, actionUrl: 'calendar' })));
+          const results = await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: 'invite', audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
           internalSmsResults.push(...results);
         }
         let externalSmsResult: ExternalSmsResult | null = null;
