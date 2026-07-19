@@ -6,7 +6,7 @@ import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../..
 import { PageHeader, ConfidentialityBadge, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
-  AgendaResultType, DecisionPriority, DecisionStatus, ApprovalMethod,
+  AgendaResultType, DecisionPriority, ApprovalMethod,
   MinutesStatus, ApprovalMode,
 } from './types';
 
@@ -118,17 +118,19 @@ interface DraftAgendaItem {
 }
 
 interface DraftDecision {
-  id: string;
+  id: string;              // local uid; for existing decisions, the DB uuid is kept in decisionId
+  decisionId: string | null; // DB id of an existing decision (null for new)
+  agendaResultId: string | null;
   title: string;
   description: string;
+  primaryOwnerUserId: string;
+  responsibleUnitId: string | null;
+  responsibleUnitNameSnapshot: string;
   priority: DecisionPriority;
-  status: DecisionStatus;
-  primaryOwner: string;
-  responsibleUnit: string;
   startDate: string;
-  deadline: string;
-  progressPercent: number;
+  dueDate: string;
   requiresFollowup: boolean;
+  latestUpdate: string;
 }
 
 interface DraftApprover {
@@ -222,16 +224,18 @@ const defaultAgendaItem = (order: number): DraftAgendaItem => ({
 
 const defaultDecision = (): DraftDecision => ({
   id: uid(),
+  decisionId: null,
+  agendaResultId: null,
   title: '',
   description: '',
+  primaryOwnerUserId: '',
+  responsibleUnitId: null,
+  responsibleUnitNameSnapshot: '',
   priority: 'normal',
-  status: 'not_started',
-  primaryOwner: '',
-  responsibleUnit: '',
   startDate: '',
-  deadline: '',
-  progressPercent: 0,
-  requiresFollowup: false,
+  dueDate: '',
+  requiresFollowup: true,
+  latestUpdate: '',
 });
 
 const defaultApprover = (order: number): DraftApprover => ({
@@ -381,10 +385,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           submittedAt: (m.submitted_at as string) || null,
         });
 
-        const [ipRes, epRes, agRes] = await Promise.all([
+        const [ipRes, epRes, agRes, decRes] = await Promise.all([
           supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_external_participants').select('id, full_name, organization, position, mobile, email, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
+          supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update').eq('minute_id', targetId).order('created_at', { ascending: true }),
         ]);
         if (ipRes.data) {
           const rows = ipRes.data as unknown as Record<string, unknown>[];
@@ -427,6 +432,24 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             resultType: (r.result_type as AgendaResultType) || 'discussion',
             additionalNotes: (r.additional_notes as string) || '',
           })) : [defaultAgendaItem(1)]);
+        }
+        if (decRes.data) {
+          const rows = decRes.data as unknown as Record<string, unknown>[];
+          setDecisions(rows.length > 0 ? rows.map((r) => ({
+            id: uid(),
+            decisionId: (r.id as string) || null,
+            agendaResultId: (r.agenda_result_id as string) || null,
+            title: (r.title as string) || '',
+            description: (r.description as string) || '',
+            primaryOwnerUserId: (r.primary_owner_user_id as string) || '',
+            responsibleUnitId: (r.responsible_unit_id as string) || null,
+            responsibleUnitNameSnapshot: (r.responsible_unit_name_snapshot as string) || '',
+            priority: (r.priority as DecisionPriority) || 'normal',
+            startDate: (r.start_date as string) || '',
+            dueDate: (r.due_date as string) || '',
+            requiresFollowup: (r.requires_followup as boolean) ?? true,
+            latestUpdate: (r.latest_update as string) || '',
+          })) : [defaultDecision()]);
         }
       } catch (err) {
         setEditError(err instanceof Error ? err.message : 'خطا در بارگذاری صورت‌جلسه');
@@ -578,6 +601,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     if (!info.meetingDate.trim()) return 'تاریخ جلسه الزامی است';
     if (!info.secretaryUserId) return 'انتخاب دبیر جلسه الزامی است';
     if (!info.chairUserId) return 'انتخاب رئیس جلسه الزامی است';
+    for (const d of decisions) {
+      if (!d.title.trim()) return 'عنوان هر مصوبه الزامی است';
+      if (!d.primaryOwnerUserId) return 'انتخاب مسئول اصلی برای هر مصوبه الزامی است';
+      if (d.startDate && d.dueDate && d.dueDate < d.startDate) return 'مهلت مصوبه نمی‌تواند قبل از تاریخ شروع باشد';
+    }
     return null;
   };
 
@@ -649,6 +677,21 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           result_type: a.resultType,
           additional_notes: a.additionalNotes || null,
         })),
+
+      decisions: decisions.map((d) => ({
+        id: d.decisionId || null,
+        agenda_result_id: d.agendaResultId || null,
+        title: d.title.trim(),
+        description: d.description || null,
+        primary_owner_user_id: d.primaryOwnerUserId,
+        responsible_unit_id: d.responsibleUnitId || null,
+        responsible_unit_name_snapshot: d.responsibleUnitNameSnapshot || null,
+        priority: d.priority,
+        start_date: d.startDate || null,
+        due_date: d.dueDate || null,
+        requires_followup: d.requiresFollowup,
+        latest_update: d.latestUpdate || null,
+      })),
     };
 
     if (isDev) {
@@ -835,6 +878,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     );
   }
 
+  const isNonEditable = mode === 'edit' && info.status !== 'draft' && info.status !== 'changes_requested';
+
   return (
     <div dir="rtl" className="space-y-5">
       <PageHeader
@@ -931,7 +976,16 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               <SectionAgenda agendaItems={agendaItems} setAgendaItems={setAgendaItems} agendaLoading={agendaLoading} />
             )}
             {activeSection === 3 && (
-              <SectionDecisions decisions={decisions} setDecisions={setDecisions} />
+              <SectionDecisions
+                decisions={decisions}
+                setDecisions={setDecisions}
+                profiles={profiles}
+                profilesLoading={profilesLoading}
+                orgUnits={orgUnits}
+                orgUnitsLoading={orgUnitsLoading}
+                agendaItems={agendaItems}
+                readOnly={isNonEditable}
+              />
             )}
             {activeSection === 4 && <SectionAttachments />}
             {activeSection === 5 && (
@@ -1616,78 +1670,149 @@ function SectionAgenda({ agendaItems, setAgendaItems, agendaLoading }: SectionAg
 interface SectionDecisionsProps {
   decisions: DraftDecision[];
   setDecisions: React.Dispatch<React.SetStateAction<DraftDecision[]>>;
+  profiles: ProfileOption[];
+  profilesLoading: boolean;
+  orgUnits: OrgUnitOption[];
+  orgUnitsLoading: boolean;
+  agendaItems: DraftAgendaItem[];
+  readOnly?: boolean;
 }
 
-function SectionDecisions({ decisions, setDecisions }: SectionDecisionsProps) {
+function SectionDecisions({
+  decisions, setDecisions,
+  profiles, profilesLoading,
+  orgUnits, orgUnitsLoading,
+  agendaItems, readOnly,
+}: SectionDecisionsProps) {
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
         مصوبات و اقدامات
       </h2>
-      <ComingSoonBanner message="ذخیره‌سازی مصوبات در نسخه بعدی فعال خواهد شد. در این مرحله مصوبات ذخیره نمی‌شوند." />
-      <div className="opacity-50 pointer-events-none">
-        <DecisionsForm decisions={decisions} setDecisions={setDecisions} />
-      </div>
+      {readOnly && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-3 text-sm text-blue-700 dark:text-blue-400">
+          این صورت‌جلسه در وضعیت قابل ویرایش نیست؛ بخش مصوبات فقط خواندنی است.
+        </div>
+      )}
+      <DecisionsForm
+        decisions={decisions}
+        setDecisions={setDecisions}
+        profiles={profiles}
+        profilesLoading={profilesLoading}
+        orgUnits={orgUnits}
+        orgUnitsLoading={orgUnitsLoading}
+        agendaItems={agendaItems}
+        readOnly={readOnly}
+      />
     </div>
   );
 }
 
-function DecisionsForm({ decisions, setDecisions }: SectionDecisionsProps) {
+function DecisionsForm({
+  decisions, setDecisions,
+  profiles, profilesLoading,
+  orgUnits, orgUnitsLoading,
+  agendaItems, readOnly,
+}: SectionDecisionsProps) {
   const add = () =>
     setDecisions(l => [...l, defaultDecision()]);
 
   const remove = (id: string) =>
     setDecisions(l => l.filter(r => r.id !== id));
 
-  const update = (id: string, field: keyof DraftDecision, value: string | number | boolean) =>
+  const update = (id: string, field: keyof DraftDecision, value: string | number | boolean | null) =>
     setDecisions(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+
+  const usersDisabled = profilesLoading || profiles.length === 0 || !!readOnly;
+  const orgUnitsDisabled = orgUnitsLoading || orgUnits.length === 0 || !!readOnly;
+
+  // Agenda results available for linking (only those with a saved title)
+  const agendaOptions = agendaItems
+    .filter((a) => a.title.trim())
+    .map((a, idx) => ({
+      value: a.id,
+      label: `${idx + 1}. ${a.title}`,
+    }));
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">مصوبات</h2>
-        <button onClick={add} className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-          <Plus className="w-4 h-4" /> افزودن مصوبه
-        </button>
+        {!readOnly && (
+          <button onClick={add} className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+            <Plus className="w-4 h-4" /> افزودن مصوبه
+          </button>
+        )}
       </div>
+
+      {decisions.length === 0 && (
+        <div className="text-center py-8 text-sm text-gray-400 dark:text-gray-500">
+          هیچ مصوبه‌ای ثبت نشده است. {!readOnly && 'برای افزودن روی «افزودن مصوبه» کلیک کنید.'}
+        </div>
+      )}
 
       {decisions.map((item, idx) => (
         <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">مصوبه {idx + 1}</span>
             <div className="flex-1" />
-            <button onClick={() => remove(item.id)} aria-label="حذف مصوبه" className="p-1 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {!readOnly && (
+              <button onClick={() => remove(item.id)} aria-label="حذف مصوبه" className="p-1 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
               <InputField id={`dec-title-${item.id}`} label="عنوان مصوبه" placeholder="عنوان مصوبه را وارد کنید" value={item.title} onChange={v => update(item.id, 'title', v)} />
             </div>
-            <TextareaField id={`dec-desc-${item.id}`} label="شرح کامل" rows={3} value={item.description} onChange={v => update(item.id, 'description', v)} />
-            <div className="space-y-3">
-              <SelectField id={`dec-priority-${item.id}`} label="اولویت" options={PRIORITY_OPTIONS} value={item.priority} onChange={v => update(item.id, 'priority', v)} />
-              <SelectField id={`dec-status-${item.id}`} label="وضعیت" options={DECISION_STATUS_OPTIONS} value={item.status} onChange={v => update(item.id, 'status', v)} />
-            </div>
-            <InputField id={`dec-owner-${item.id}`} label="مسئول اصلی" placeholder="" value={item.primaryOwner} onChange={v => update(item.id, 'primaryOwner', v)} />
-            <InputField id={`dec-unit-${item.id}`} label="واحد مسئول" placeholder="" value={item.responsibleUnit} onChange={v => update(item.id, 'responsibleUnit', v)} />
-            <InputField id={`dec-start-${item.id}`} label="تاریخ شروع" placeholder="۱۴۰۳/۰۵/۱۵" value={item.startDate} onChange={v => update(item.id, 'startDate', v)} />
-            <InputField id={`dec-deadline-${item.id}`} label="مهلت انجام" placeholder="۱۴۰۳/۰۶/۱۰" value={item.deadline} onChange={v => update(item.id, 'deadline', v)} />
             <div className="sm:col-span-2">
-              <label htmlFor={`dec-progress-${item.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                درصد پیشرفت
-              </label>
-              <input
-                id={`dec-progress-${item.id}`}
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={item.progressPercent}
-                onChange={e => update(item.id, 'progressPercent', Number(e.target.value))}
-                className="w-full accent-blue-600"
-              />
+              <TextareaField id={`dec-desc-${item.id}`} label="شرح کامل" rows={3} value={item.description} onChange={v => update(item.id, 'description', v)} />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">بند مرتبط</label>
+              <select
+                value={item.agendaResultId || ''}
+                onChange={e => update(item.id, 'agendaResultId', e.target.value || null)}
+                disabled={!!readOnly}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60"
+              >
+                <option value="">— بدون بند —</option>
+                {agendaOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <SelectField id={`dec-priority-${item.id}`} label="اولویت" options={PRIORITY_OPTIONS} value={item.priority} onChange={v => update(item.id, 'priority', v)} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">مسئول اصلی</label>
+              <select
+                value={item.primaryOwnerUserId}
+                onChange={e => update(item.id, 'primaryOwnerUserId', e.target.value)}
+                disabled={usersDisabled}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60"
+              >
+                <option value="">— انتخاب —</option>
+                {profiles.map(p => <option key={p.user_id} value={p.user_id}>{p.full_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">واحد مسئول</label>
+              <select
+                value={item.responsibleUnitId || ''}
+                onChange={e => {
+                  const unitId = e.target.value || null;
+                  const unit = orgUnits.find(u => u.id === unitId);
+                  update(item.id, 'responsibleUnitId', unitId);
+                  update(item.id, 'responsibleUnitNameSnapshot', unit?.name || '');
+                }}
+                disabled={orgUnitsDisabled}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60"
+              >
+                <option value="">— بدون واحد —</option>
+                {orgUnits.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+            <InputField id={`dec-start-${item.id}`} label="تاریخ شروع" placeholder="۱۴۰۳/۰۵/۱۵" value={item.startDate} onChange={v => update(item.id, 'startDate', v)} />
+            <InputField id={`dec-due-${item.id}`} label="مهلت انجام" placeholder="۱۴۰۳/۰۶/۱۰" value={item.dueDate} onChange={v => update(item.id, 'dueDate', v)} />
             <div className="sm:col-span-2 flex items-center gap-3">
               <label htmlFor={`dec-followup-${item.id}`} className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -1695,7 +1820,8 @@ function DecisionsForm({ decisions, setDecisions }: SectionDecisionsProps) {
                   type="checkbox"
                   checked={item.requiresFollowup}
                   onChange={e => update(item.id, 'requiresFollowup', e.target.checked)}
-                  className="w-4 h-4 rounded accent-blue-600"
+                  disabled={!!readOnly}
+                  className="w-4 h-4 rounded accent-blue-600 disabled:opacity-60"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">نیازمند پیگیری</span>
               </label>
@@ -2038,14 +2164,4 @@ const PRIORITY_OPTIONS = [
   { value: 'normal',    label: 'عادی' },
   { value: 'important', label: 'مهم' },
   { value: 'urgent',    label: 'فوری' },
-];
-
-const DECISION_STATUS_OPTIONS = [
-  { value: 'not_started',          label: 'شروع‌نشده' },
-  { value: 'planned',              label: 'برنامه‌ریزی‌شده' },
-  { value: 'in_progress',          label: 'در حال انجام' },
-  { value: 'waiting_coordination', label: 'منتظر هماهنگی' },
-  { value: 'waiting_approval',     label: 'منتظر تأیید' },
-  { value: 'completed',            label: 'تکمیل‌شده' },
-  { value: 'stopped',              label: 'متوقف‌شده' },
 ];

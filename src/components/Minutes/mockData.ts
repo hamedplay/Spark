@@ -1,13 +1,16 @@
 // Temporary mock data — replace with real data integration in later phase.
+// NOTE: MOCK_DECISIONS is still referenced by MinutesDashboardPage and
+// MinutesMeetingReportPage (out of scope for the decisions wiring task).
+// The in-scope pages (Form/Detail/MyDecisions/Followup) no longer use it.
 
 import type {
   MinuteSummary,
-  DecisionSummary,
   ApprovalSummary,
   InternalParticipant,
   ExternalParticipant,
   AgendaItem,
   HistoryEvent,
+  DecisionSummary,
 } from './types';
 
 export const MOCK_MINUTES: MinuteSummary[] = [
@@ -159,6 +162,7 @@ export const MOCK_AGENDA_ITEMS: AgendaItem[] = [
   },
 ];
 
+// Still used by MinutesDashboardPage and MinutesMeetingReportPage (out of scope).
 export const MOCK_DECISIONS: DecisionSummary[] = [
   {
     id: 'd1',

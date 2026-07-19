@@ -163,3 +163,80 @@ export interface HistoryEvent {
   timestamp: string;
   notes?: string;
 }
+
+// ── Decision DB row types (match public.minutes_decisions) ──────────────────
+
+export interface DecisionRow {
+  id: string;
+  minute_id: string;
+  agenda_result_id: string | null;
+  title: string;
+  description: string | null;
+  primary_owner_user_id: string;
+  responsible_unit_id: string | null;
+  responsible_unit_name_snapshot: string | null;
+  priority: DecisionPriority;
+  status: DecisionStatus;
+  progress_percent: number;
+  start_date: string | null;
+  due_date: string | null;
+  completed_at: string | null;
+  requires_followup: boolean;
+  latest_update: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Row returned by get_my_minutes_decisions RPC (decision fields + minute metadata)
+export interface MyDecisionRow extends DecisionRow {
+  minute_title: string;
+  minute_status: MinutesStatus;
+  meeting_date_snapshot: string;
+  overdue: boolean;
+  agenda_title: string | null;
+}
+
+// Row from minutes_decision_updates (history)
+export interface DecisionUpdateRow {
+  id: string;
+  decision_id: string;
+  minute_id: string;
+  previous_status: DecisionStatus | null;
+  new_status: DecisionStatus;
+  previous_progress_percent: number | null;
+  new_progress_percent: number;
+  update_text: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  created_by_name?: string;
+}
+
+// Payload shape accepted by _minutes_decisions_sync (via create/update_minutes_draft)
+export interface DecisionDraftPayload {
+  id?: string | null;
+  agenda_result_id?: string | null;
+  title: string;
+  description?: string | null;
+  primary_owner_user_id: string;
+  responsible_unit_id?: string | null;
+  responsible_unit_name_snapshot?: string | null;
+  priority: DecisionPriority;
+  start_date?: string | null;
+  due_date?: string | null;
+  requires_followup?: boolean;
+  latest_update?: string | null;
+}
+
+// Result of update_decision_progress RPC
+export interface UpdateDecisionProgressResult {
+  success: boolean;
+  decision_id?: string;
+  status?: DecisionStatus;
+  progress_percent?: number;
+  completed_at?: string | null;
+  updated_at?: string;
+  history_written?: boolean;
+  error_code?: string;
+  message?: string;
+}
