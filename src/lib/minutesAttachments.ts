@@ -100,32 +100,38 @@ export async function uploadMinuteAttachment(
   const v = validateAttachment(file);
   if (!v.ok) throw new Error(v.error || 'فایل نامعتبر است.');
 
-  // 1. Begin: backend validates auth/status/ext/mime/size/target, creates pending record, derives path.
-  const { data: beginData, error: beginErr } = await supabase.rpc('begin_minutes_attachment_upload', {
-    p_minute_id: opts.minuteId,
-    p_agenda_result_id: opts.agendaResultId ?? null,
-    p_decision_id: opts.decisionId ?? null,
-    p_original_filename: file.name.trim(),
-    p_mime_type: v.mime || file.type || 'application/octet-stream',
-    p_size_bytes: file.size,
-    p_description: opts.description ?? null,
+  // 1. Call Edge Function: validates JWT, runs begin RPC (derives path), creates signed upload URL server-side.
+  const { data: session } = await supabase.auth.getSession();
+  const token = session?.session?.access_token;
+  if (!token) throw new Error('برای بارگذاری پیوست باید وارد شوید.');
+
+  const efRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/minutes-attachment-upload`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      minute_id: opts.minuteId,
+      agenda_result_id: opts.agendaResultId ?? null,
+      decision_id: opts.decisionId ?? null,
+      original_filename: file.name.trim(),
+      mime_type: v.mime || file.type || 'application/octet-stream',
+      size_bytes: file.size,
+      description: opts.description ?? null,
+    }),
   });
-  if (beginErr || !beginData) {
-    throw new Error(translateRpcError(beginErr?.message));
+  if (!efRes.ok) {
+    const errBody = await efRes.json().catch(() => ({}));
+    throw new Error(translateRpcError(errBody.error) || `بارگذاری ناموفق بود (${efRes.status})`);
   }
-  const begin = beginData as { attachment_id: string; storage_path: string };
+  const begin = await efRes.json() as { attachment_id: string; storage_path: string; signed_url: string };
   const attachmentId = begin.attachment_id;
   const storagePath = begin.storage_path;
 
-  // 2. Upload bytes via signed upload URL (no direct INSERT policy exists).
-  const { data: sUp, error: upErr } = await supabase.storage
-    .from(ATTACHMENT_BUCKET)
-    .createSignedUploadUrl(storagePath);
-  if (upErr || !sUp?.path) {
-    // Upload failed; record stays pending and will be cleaned up later.
-    throw new Error('ساخت لینک بارگذاری ناموفق بود: ' + (upErr?.message || ''));
-  }
-  const upRes = await fetch(sUp.signedUrl, {
+  // 2. Upload bytes to the signed URL returned by the Edge Function.
+  const upRes = await fetch(begin.signed_url, {
     method: 'PUT',
     body: file,
     headers: { 'Content-Type': v.mime || file.type || 'application/octet-stream' },
