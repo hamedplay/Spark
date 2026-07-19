@@ -393,7 +393,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         ]);
         if (ipRes.data) {
           const rows = ipRes.data as unknown as Record<string, unknown>[];
-          setInternalParts(rows.length > 0 ? rows.map(r => ({
+          setInternalParticipants(rows.length > 0 ? rows.map(r => ({
             id: uid(),
             userId: (r.user_id as string) || '',
             nameSnapshot: (r.name_snapshot as string) || '',
@@ -408,7 +408,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         }
         if (epRes.data) {
           const rows = epRes.data as unknown as Record<string, unknown>[];
-          setExternalParts(rows.length > 0 ? rows.map(r => ({
+          setExternalParticipants(rows.length > 0 ? rows.map(r => ({
             id: uid(),
             fullName: (r.full_name as string) || '',
             organization: (r.organization as string) || '',
@@ -854,16 +854,14 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     return (
       <div dir="rtl" className="space-y-5">
         <PageHeader title={title} />
-        <EmptyState
-          icon={<CircleAlert as AlertCircle className="w-8 h-8" />}
-          title="صورت‌جلسه‌ای یافت نشد"
-          description="این صورت‌جلسه وجود ندارد، حذف شده است، یا شما دسترسی ویرایش آن را ندارید."
-          action={
-            <button onClick={() => onNavigate('minutes')} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
-              بازگشت به لیست
-            </button>
-          }
-        />
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <CircleAlert as AlertCircle className="w-10 h-10 text-gray-400 mb-3" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">صورت‌جلسه‌ای یافت نشد</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">این صورت‌جلسه وجود ندارد، حذف شده است، یا شما دسترسی ویرایش آن را ندارید.</p>
+          <button onClick={() => onNavigate('minutes')} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            بازگشت به لیست
+          </button>
+        </div>
       </div>
     );
   }

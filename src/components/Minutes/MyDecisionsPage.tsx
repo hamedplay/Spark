@@ -4,6 +4,7 @@ import {
   PageHeader, StatCard, DecisionStatusBadge, DecisionPriorityBadge, DecisionProgressBar, EmptyState, TableSkeleton, DecisionProgressModal,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
+import { setMinuteIdInUrl } from '../../lib/minutesNavigation';
 import type { DecisionStatus, MyDecisionRow, DecisionUpdateRow } from './types';
 
 interface Props {
@@ -142,7 +143,7 @@ export function MyDecisionsPage({ onNavigate }: Props) {
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="جستجو در عنوان، صورت‌جلسه، واحد..."
+              placeholder="جستجو در نتایج این صفحه..."
               value={search}
               onChange={e => { setSearch(e.target.value); setOffset(0); }}
               className="w-full pr-9 pl-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
@@ -193,7 +194,7 @@ export function MyDecisionsPage({ onNavigate }: Props) {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => onNavigate('minutes-detail', { id: d.minute_id })}
+                            onClick={() => { setMinuteIdInUrl(d.minute_id); onNavigate('minutes-detail'); }}
                             aria-label="مشاهده"
                             title="مشاهده صورت‌جلسه"
                             className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors"
@@ -230,7 +231,7 @@ export function MyDecisionsPage({ onNavigate }: Props) {
                   </div>
                   <DecisionProgressBar percent={d.progress_percent} />
                   <div className="flex gap-2 pt-1">
-                    <button onClick={() => onNavigate('minutes-detail', { id: d.minute_id })} className="text-xs px-2.5 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
+                    <button onClick={() => { setMinuteIdInUrl(d.minute_id); onNavigate('minutes-detail'); }} className="text-xs px-2.5 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
                       مشاهده
                     </button>
                     <button onClick={() => openProgress(d)} className="text-xs px-2.5 py-1.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">

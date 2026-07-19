@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Eye, TrendingUp, TriangleAlert as AlertTriangle, History, X, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Search, Eye, TrendingUp, TriangleAlert as AlertTriangle, History, X, Loader as Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
 import {
   PageHeader, DecisionStatusBadge, DecisionPriorityBadge, DecisionProgressBar, EmptyState, TableSkeleton, DecisionProgressModal,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
+import { setMinuteIdInUrl } from '../../lib/minutesNavigation';
 import type { DecisionStatus, DecisionPriority, DecisionRow, DecisionUpdateRow } from './types';
 
 interface Props {
@@ -299,7 +300,7 @@ export function DecisionsFollowupPage({ onNavigate }: Props) {
                       <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap max-w-[12rem] truncate">{d.latest_update || '—'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => onNavigate('minutes-detail', { id: d.minute_id })} aria-label="مشاهده" title="مشاهده صورت‌جلسه"
+                          <button onClick={() => { setMinuteIdInUrl(d.minute_id); onNavigate('minutes-detail'); }} aria-label="مشاهده" title="مشاهده صورت‌جلسه"
                             className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
                             <Eye className="w-4 h-4" />
                           </button>
@@ -334,7 +335,7 @@ export function DecisionsFollowupPage({ onNavigate }: Props) {
                   </div>
                   <DecisionProgressBar percent={d.progress_percent} />
                   <div className="flex gap-2 pt-1">
-                    <button onClick={() => onNavigate('minutes-detail', { id: d.minute_id })} className="text-xs px-2.5 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">مشاهده</button>
+                    <button onClick={() => { setMinuteIdInUrl(d.minute_id); onNavigate('minutes-detail'); }} className="text-xs px-2.5 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">مشاهده</button>
                     {canUpdate(d) && (
                       <button onClick={() => openProgress(d)} className="text-xs px-2.5 py-1.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors">ثبت پیشرفت</button>
                     )}
