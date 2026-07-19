@@ -40,60 +40,20 @@ export function useOrgUsers(currentUserId: string | null): UseOrgUsersResult {
   const load = async () => {
     setLoading(true);
     try {
-      // همه پروفایل‌ها به همراه پست اصلی و واحد سازمانی آن پست
-      const { data: members } = await supabase
-        .from('org_position_members')
-        .select(`
-          user_id,
-          is_primary,
-          org_positions (
-            id,
-            title,
-            level,
-            unit_id,
-            org_units ( id, name )
-          )
-        `)
-        .eq('is_primary', true);
+      // همه کاربران قابل انتخاب به همراه جایگاه سازمانی — از RPC امن
+      const { data, error } = await supabase.rpc('get_selectable_users');
+      if (error) throw error;
 
-      // مپ user_id → اطلاعات سازمانی
-      const orgMap: Record<string, {
-        unit_id: string | null;
-        unit_name: string | null;
-        position_title: string | null;
-        level: number | null;
-      }> = {};
-
-      for (const m of (members || [])) {
-        const pos = (m as any).org_positions;
-        if (!pos) continue;
-        const unit = pos.org_units;
-        orgMap[m.user_id] = {
-          unit_id: unit?.id || null,
-          unit_name: unit?.name || null,
-          position_title: pos.title || null,
-          level: pos.level || null,
-        };
-      }
-
-      // همه پروفایل‌ها
-      const { data: profiles } = await supabase
-        .from('profiles_public')
-        .select('user_id, full_name, email, avatar_url, position')
-        .not('is_active', 'eq', false)
-        .not('is_hidden', 'eq', true)
-        .order('full_name');
-
-      const enriched: OrgUserProfile[] = (profiles || []).map(p => ({
+      const enriched: OrgUserProfile[] = (data || []).map((p: any) => ({
         user_id: p.user_id,
         full_name: p.full_name,
-        email: p.email,
+        email: null,
         avatar_url: p.avatar_url,
         position: p.position,
-        unit_id: orgMap[p.user_id]?.unit_id || null,
-        unit_name: orgMap[p.user_id]?.unit_name || null,
-        position_title: orgMap[p.user_id]?.position_title || null,
-        level: orgMap[p.user_id]?.level || null,
+        unit_id: p.unit_id || null,
+        unit_name: p.unit_name || null,
+        position_title: p.position_title || null,
+        level: p.level || null,
       }));
 
       setAllUsers(enriched);
