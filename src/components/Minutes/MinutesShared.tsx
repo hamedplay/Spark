@@ -1,13 +1,13 @@
-import type { MinutesStatus, ConfidentialityLevel, DecisionStatus, DecisionPriority, ApprovalStatus } from './types';
+import type { MinutesStatus, ConfidentialityLevel, DecisionStatus, DecisionPriority, ApprovalStatus, ApprovalMode } from './types';
 
 // ── MinutesStatusBadge ──────────────────────────────────────────────────────
 
 const MINUTES_STATUS_CONFIG: Record<MinutesStatus, { label: string; classes: string }> = {
-  draft:            { label: 'پیش‌نویس',          classes: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
-  pending_approval: { label: 'در انتظار تأیید',    classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  approved:         { label: 'تأییدشده',            classes: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-  rejected:         { label: 'ردشده',              classes: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-  published:        { label: 'منتشرشده',            classes: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  draft:             { label: 'پیش‌نویس',          classes: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
+  pending_approval:  { label: 'در انتظار تأیید',    classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  changes_requested: { label: 'درخواست اصلاح',      classes: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  approved:          { label: 'تأییدشده',            classes: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  published:         { label: 'منتشرشده',            classes: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
 };
 
 export function MinutesStatusBadge({ status }: { status: MinutesStatus }) {
@@ -79,13 +79,31 @@ export function DecisionPriorityBadge({ priority }: { priority: DecisionPriority
 // ── ApprovalStatusBadge ─────────────────────────────────────────────────────
 
 const APPROVAL_STATUS_CONFIG: Record<ApprovalStatus, { label: string; classes: string }> = {
-  pending:  { label: 'در انتظار', classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  approved: { label: 'تأییدشده', classes: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-  rejected: { label: 'ردشده',    classes: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  pending:           { label: 'در انتظار',      classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  approved:          { label: 'تأییدشده',        classes: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  changes_requested: { label: 'درخواست اصلاح',  classes: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  invalidated:       { label: 'باطل‌شده',         classes: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
 };
 
 export function ApprovalStatusBadge({ status }: { status: ApprovalStatus }) {
   const cfg = APPROVAL_STATUS_CONFIG[status];
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cfg.classes}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
+// ── ApprovalModeBadge ────────────────────────────────────────────────────────
+
+const APPROVAL_MODE_CONFIG: Record<ApprovalMode, { label: string; classes: string }> = {
+  system:    { label: 'تأیید سیستمی',  classes: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
+  in_person: { label: 'تأیید حضوری',   classes: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+};
+
+export function ApprovalModeBadge({ mode }: { mode: ApprovalMode | null | undefined }) {
+  if (!mode) return null;
+  const cfg = APPROVAL_MODE_CONFIG[mode];
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cfg.classes}`}>
       {cfg.label}

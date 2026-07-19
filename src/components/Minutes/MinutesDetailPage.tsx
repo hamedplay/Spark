@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, CreditCard as Edit2, Send, Printer, FileDown, Globe, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, History, Clock, User, CircleAlert as AlertCircle } from 'lucide-react';
+import { ArrowRight, CreditCard as Edit2, Send, Printer, FileDown, Globe, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, History, Clock, User, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import {
-  MinutesStatusBadge, ConfidentialityBadge,
+  MinutesStatusBadge, ConfidentialityBadge, ApprovalStatusBadge, ApprovalModeBadge,
   EmptyState, TableSkeleton,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
-import type { MinutesStatus, ConfidentialityLevel } from './types';
+import type { MinutesStatus, ConfidentialityLevel, ApprovalMode, ApprovalStatus } from './types';
 
 const TABS = [
   { id: 'summary',      label: 'خلاصه',              icon: FileText },
@@ -29,9 +30,18 @@ interface MinuteDetail {
   org_unit_name_snapshot: string | null;
   secretary_name_snapshot: string;
   chair_name_snapshot: string;
+  secretary_user_id: string | null;
+  chair_user_id: string | null;
+  created_by_user_id: string;
   notes: string | null;
   confidentiality: string;
   status: string;
+  approval_mode: string | null;
+  revision_number: number;
+  submitted_at: string | null;
+  secretary_confirmed_at: string | null;
+  chair_confirmed_at: string | null;
+  published_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -67,20 +77,45 @@ interface AgendaResultRow {
   additional_notes: string | null;
 }
 
+interface ApprovalRow {
+  id: string;
+  approver_user_id: string;
+  status: ApprovalStatus;
+  approved_at: string | null;
+  changes_requested_at: string | null;
+  approver_name: string;
+}
+
+interface ApprovalCommentRow {
+  id: string;
+  agenda_result_id: string | null;
+  reason: string;
+  suggested_correction: string | null;
+  created_by_user_id: string;
+  created_by_name: string;
+  created_at: string;
+}
+
 interface Props {
   onNavigate: (page: string) => void;
   minuteId?: string;
+  currentUserId?: string;
+  isAdmin?: boolean;
 }
 
-export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
+export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin }: Props) {
   const [activeTab, setActiveTab] = useState('summary');
   const [minute, setMinute] = useState<MinuteDetail | null>(null);
   const [internalParts, setInternalParts] = useState<InternalParticipantRow[]>([]);
   const [externalParts, setExternalParts] = useState<ExternalParticipantRow[]>([]);
   const [agendaResults, setAgendaResults] = useState<AgendaResultRow[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
+  const [approvalComments, setApprovalComments] = useState<ApprovalCommentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [showRequestChanges, setShowRequestChanges] = useState(false);
+  const [acting, setActing] = useState(false);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -98,7 +133,7 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
 
       const { data: minData, error: minErr } = await supabase
         .from('minutes')
-        .select('id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_name_snapshot, secretary_name_snapshot, chair_name_snapshot, notes, confidentiality, status, created_at, updated_at')
+        .select('id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_name_snapshot, secretary_name_snapshot, chair_name_snapshot, secretary_user_id, chair_user_id, created_by_user_id, notes, confidentiality, status, approval_mode, revision_number, submitted_at, secretary_confirmed_at, chair_confirmed_at, published_at, created_at, updated_at')
         .eq('id', targetId)
         .maybeSingle();
 
@@ -115,7 +150,7 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
 
       setMinute(minData as MinuteDetail);
 
-      const [partsRes, extRes, agendaRes] = await Promise.all([
+      const [partsRes, extRes, agendaRes, approvalsRes] = await Promise.all([
         supabase
           .from('minutes_participants')
           .select('id, name_snapshot, position_snapshot, org_unit_name_snapshot, invitation_status, attendance_status')
@@ -131,11 +166,66 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
           .select('id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes')
           .eq('minute_id', targetId)
           .order('sort_order_snapshot', { ascending: true }),
+        supabase
+          .from('minutes_approvals')
+          .select('id, approver_user_id, status, approved_at, changes_requested_at')
+          .eq('minute_id', targetId)
+          .eq('revision_number', (minData as MinuteDetail).revision_number)
+          .order('created_at', { ascending: true }),
       ]);
 
       setInternalParts((partsRes.data || []) as InternalParticipantRow[]);
       setExternalParts((extRes.data || []) as ExternalParticipantRow[]);
       setAgendaResults((agendaRes.data || []) as AgendaResultRow[]);
+
+      // Fetch approver names from profiles
+      const approvalRows = (approvalsRes.data || []) as Array<{ id: string; approver_user_id: string; status: ApprovalStatus; approved_at: string | null; changes_requested_at: string | null }>;
+      if (approvalRows.length > 0) {
+        const userIds = approvalRows.map(a => a.approver_user_id);
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id, full_name')
+          .in('user_id', userIds);
+        const nameMap = new Map((profiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
+        setApprovals(approvalRows.map(a => ({
+          id: a.id,
+          approver_user_id: a.approver_user_id,
+          status: a.status,
+          approved_at: a.approved_at,
+          changes_requested_at: a.changes_requested_at,
+          approver_name: nameMap.get(a.approver_user_id) || 'کاربر',
+        })));
+      } else {
+        setApprovals([]);
+      }
+
+      // Fetch approval comments
+      const { data: commentsData } = await supabase
+        .from('minutes_approval_comments')
+        .select('id, agenda_result_id, reason, suggested_correction, created_by_user_id, created_at')
+        .eq('minute_id', targetId)
+        .eq('revision_number', (minData as MinuteDetail).revision_number)
+        .order('created_at', { ascending: true });
+      if (commentsData && commentsData.length > 0) {
+        const creatorIds = [...new Set(commentsData.map((c: { created_by_user_id: string }) => c.created_by_user_id))];
+        const { data: creatorProfiles } = await supabase
+          .from('profiles')
+          .select('user_id, full_name')
+          .in('user_id', creatorIds);
+        const creatorNameMap = new Map((creatorProfiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
+        setApprovalComments(commentsData.map((c: { id: string; agenda_result_id: string | null; reason: string; suggested_correction: string | null; created_by_user_id: string; created_at: string }) => ({
+          id: c.id,
+          agenda_result_id: c.agenda_result_id,
+          reason: c.reason,
+          suggested_correction: c.suggested_correction,
+          created_by_user_id: c.created_by_user_id,
+          created_by_name: creatorNameMap.get(c.created_by_user_id) || 'کاربر',
+          created_at: c.created_at,
+        })));
+      } else {
+        setApprovalComments([]);
+      }
+
       setIsLoading(false);
     };
 
@@ -148,6 +238,115 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
       setMinutesPageInUrl('minutes-edit');
     }
     onNavigate('minutes-edit');
+  };
+
+  // ── Role helpers ──
+  const isSecretary = !!(currentUserId && minute?.secretary_user_id === currentUserId);
+  const isChair = !!(currentUserId && minute?.chair_user_id === currentUserId);
+  const isCreator = !!(currentUserId && minute?.created_by_user_id === currentUserId);
+  const canManage = isAdmin || isSecretary || isCreator;
+  const myApproval = approvals.find(a => a.approver_user_id === currentUserId && a.status === 'pending');
+  const allApprovalsApproved = approvals.length > 0 && approvals.every(a => a.status === 'approved');
+
+  const refresh = () => {
+    // Re-fetch by reloading via state reset
+    setIsLoading(true);
+    setMinute(null);
+    setTimeout(() => {
+      const targetId = minuteId || getMinuteIdFromUrl();
+      if (targetId) {
+        // trigger effect by toggling loading — simplest: navigate to same page
+        window.dispatchEvent(new CustomEvent('minutes-refresh'));
+      }
+    }, 0);
+  };
+
+  useEffect(() => {
+    const handler = () => {
+      const targetId = minuteId || getMinuteIdFromUrl();
+      if (targetId) {
+        // Re-run the fetch effect by toggling a state
+        setNotFound(false);
+        setError(null);
+        setIsLoading(true);
+      }
+    };
+    window.addEventListener('minutes-refresh', handler);
+    return () => window.removeEventListener('minutes-refresh', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minuteId]);
+
+  const handleApprove = async () => {
+    if (acting || !minute || !myApproval) return;
+    setActing(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('approve_minute_revision', {
+        p_minute_id: minute.id,
+        p_revision_number: minute.revision_number,
+      });
+      if (rpcError) { toast.error('تأیید ناموفق بود.'); return; }
+      if (data?.success === false) {
+        const msgs: Record<string, string> = {
+          NOT_AN_APPROVER: 'شما تأییدکننده این صورت‌جلسه نیستید.',
+          MINUTE_NOT_PENDING: 'صورت‌جلسه در وضعیت تأیید نیست.',
+          REVISION_NOT_CURRENT: 'این نسخه دیگر معتبر نیست.',
+          APPROVAL_NOT_PENDING: 'تأیید شما قبلاً ثبت شده یا باطل شده است.',
+          APPROVAL_NOT_SYSTEM_MODE: 'این صورت‌جلسه از نوع سیستمی نیست.',
+        };
+        toast.error(msgs[data.error_code] || 'تأیید ناموفق بود.');
+        return;
+      }
+      toast.success(data.message || 'تأیید شما ثبت شد.');
+      refresh();
+    } finally { setActing(false); }
+  };
+
+  const handleSecretaryConfirm = async () => {
+    if (acting || !minute) return;
+    setActing(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('confirm_minutes_by_secretary', {
+        p_minute_id: minute.id,
+        p_expected_updated_at: minute.updated_at,
+      });
+      if (rpcError) { toast.error('تأیید دبیر ناموفق بود.'); return; }
+      if (data?.success === false) {
+        const msgs: Record<string, string> = {
+          MINUTES_NO_PERMISSION: 'شما دبیر این صورت‌جلسه نیستید.',
+          MINUTE_NOT_APPROVED: 'ابتدا همه تأییدکنندگان باید تأیید کنند.',
+          MINUTE_NOT_PENDING: 'صورت‌جلسه در وضعیت مناسب نیست.',
+          MINUTES_VERSION_CONFLICT: 'این صورت‌جلسه توسط کاربر دیگری تغییر کرده است.',
+        };
+        toast.error(msgs[data.error_code] || 'تأیید دبیر ناموفق بود.');
+        return;
+      }
+      toast.success(data.message || 'تأیید دبیر ثبت شد.');
+      refresh();
+    } finally { setActing(false); }
+  };
+
+  const handleChairPublish = async () => {
+    if (acting || !minute) return;
+    setActing(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('confirm_and_publish_minutes_by_chair', {
+        p_minute_id: minute.id,
+        p_expected_updated_at: minute.updated_at,
+      });
+      if (rpcError) { toast.error('انتشار ناموفق بود.'); return; }
+      if (data?.success === false) {
+        const msgs: Record<string, string> = {
+          MINUTES_NO_PERMISSION: 'شما رئیس این صورت‌جلسه نیستید.',
+          SECRETARY_NOT_CONFIRMED: 'ابتدا دبیر باید تأیید کند.',
+          NOT_ALL_APPROVERS_APPROVED: 'همه تأییدکنندگان هنوز تأیید نکرده‌اند.',
+          MINUTES_VERSION_CONFLICT: 'این صورت‌جلسه توسط کاربر دیگری تغییر کرده است.',
+        };
+        toast.error(msgs[data.error_code] || 'انتشار ناموفق بود.');
+        return;
+      }
+      toast.success(data.message || 'صورت‌جلسه منتشر شد.');
+      refresh();
+    } finally { setActing(false); }
   };
 
   if (isLoading) {
@@ -209,6 +408,12 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <MinutesStatusBadge status={minute.status as MinutesStatus} />
               <ConfidentialityBadge level={minute.confidentiality as ConfidentialityLevel} />
+              {minute.approval_mode && <ApprovalModeBadge mode={minute.approval_mode as ApprovalMode} />}
+              {minute.revision_number > 1 && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                  نسخه {minute.revision_number}
+                </span>
+              )}
             </div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white leading-snug">{minute.meeting_title_snapshot}</h1>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-500 dark:text-gray-400">
@@ -241,23 +446,63 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
               <ArrowRight className="w-4 h-4" />
               بازگشت
             </button>
-            {(minute.status === 'draft' || minute.status === 'rejected') && (
+            {(minute.status === 'draft' || minute.status === 'changes_requested') && canManage && (
               <button
                 onClick={goEdit}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 <Edit2 className="w-4 h-4" />
-                ویرایش
+                ویرایش و اصلاح
               </button>
             )}
-            <button
-              disabled
-              title="ارسال برای تأیید (به‌زودی)"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
-            >
-              <Send className="w-4 h-4" />
-              ارسال برای تأیید
-            </button>
+            {/* Approver: Approve button (system mode, pending_approval, my approval is pending) */}
+            {minute.status === 'pending_approval' && minute.approval_mode === 'system' && myApproval && (
+              <button
+                onClick={handleApprove}
+                disabled={acting}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {acting ? 'در حال...' : 'تأیید'}
+              </button>
+            )}
+            {/* Approver: Request changes button */}
+            {minute.status === 'pending_approval' && minute.approval_mode === 'system' && myApproval && (
+              <button
+                onClick={() => setShowRequestChanges(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-orange-500 hover:bg-orange-600 text-white transition-colors"
+              >
+                <Send className="w-4 h-4" />
+                درخواست اصلاح
+              </button>
+            )}
+            {/* Secretary: Confirm button */}
+            {isSecretary && !minute.secretary_confirmed_at &&
+             ((minute.approval_mode === 'system' && minute.status === 'approved') ||
+              (minute.approval_mode === 'in_person' && minute.status === 'pending_approval')) && (
+              <button
+                onClick={handleSecretaryConfirm}
+                disabled={acting}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-teal-600 hover:bg-teal-700 text-white transition-colors disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {acting ? 'در حال...' : 'تأیید دبیر'}
+              </button>
+            )}
+            {/* Chair: Publish button */}
+            {isChair && minute.secretary_confirmed_at && minute.status !== 'published' && (
+              (minute.approval_mode === 'system' && allApprovalsApproved) ||
+              minute.approval_mode === 'in_person'
+            ) && (
+              <button
+                onClick={handleChairPublish}
+                disabled={acting}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+              >
+                <Globe className="w-4 h-4" />
+                {acting ? 'در حال...' : 'تأیید و انتشار'}
+              </button>
+            )}
             <button
               disabled
               title="چاپ (به‌زودی)"
@@ -273,14 +518,6 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
             >
               <FileDown className="w-4 h-4" />
               Word
-            </button>
-            <button
-              disabled
-              title="انتشار (به‌زودی)"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
-            >
-              <Globe className="w-4 h-4" />
-              انتشار
             </button>
           </div>
         </div>
@@ -316,7 +553,18 @@ export function MinutesDetailPage({ onNavigate, minuteId }: Props) {
           {activeTab === 'agenda' && <TabAgenda items={agendaResults} />}
           {activeTab === 'decisions' && <TabDecisions />}
           {activeTab === 'attachments' && <TabAttachments />}
-          {activeTab === 'approvals' && <TabApprovals />}
+          {activeTab === 'approvals' && (
+            <TabApprovals
+              approvals={approvals}
+              comments={approvalComments}
+              agendaItems={agendaResults}
+              minute={minute}
+              currentUserId={currentUserId}
+              showRequestChanges={showRequestChanges}
+              setShowRequestChanges={setShowRequestChanges}
+              onAfterAction={refresh}
+            />
+          )}
           {activeTab === 'history' && <TabHistory />}
         </div>
       </div>
@@ -484,9 +732,251 @@ function TabAttachments() {
 
 // ── Tab: Approvals ────────────────────────────────────────────────────────────
 
-function TabApprovals() {
+// ── Tab: Approvals ────────────────────────────────────────────────────────────
+
+interface TabApprovalsProps {
+  approvals: ApprovalRow[];
+  comments: ApprovalCommentRow[];
+  agendaItems: AgendaResultRow[];
+  minute: MinuteDetail;
+  currentUserId?: string;
+  showRequestChanges: boolean;
+  setShowRequestChanges: (v: boolean) => void;
+  onAfterAction: () => void;
+}
+
+function TabApprovals({ approvals, comments, agendaItems, minute, currentUserId, showRequestChanges, setShowRequestChanges, onAfterAction }: TabApprovalsProps) {
+  const approvedCount = approvals.filter(a => a.status === 'approved').length;
+  const totalCount = approvals.length;
+
   return (
-    <EmptyState title="هنوز ثبت نشده" description="تأییدی برای این صورت‌جلسه ثبت نشده است." />
+    <div className="space-y-5">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
+        وضعیت تأییدها
+      </h2>
+
+      {/* Summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{approvedCount}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">تأییدشده</p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalCount}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">کل تأییدکنندگان</p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{minute.revision_number}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">نسخه فعلی</p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+          <p className="text-sm font-bold text-gray-900 dark:text-white">
+            {minute.secretary_confirmed_at ? 'بله' : 'خیر'}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">تأیید دبیر</p>
+        </div>
+      </div>
+
+      {/* Approvals list */}
+      {approvals.length === 0 ? (
+        <EmptyState title="بدون تأییدکننده" description={minute.approval_mode === 'in_person' ? 'در مدل حضوری تأیید سیستمی شرکت‌کنندگان وجود ندارد.' : 'هنوز تأییدکننده‌ای ثبت نشده است.'} />
+      ) : (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">تأییدکننده</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">وضعیت</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">تاریخ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+              {approvals.map(a => (
+                <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{a.approver_name}</td>
+                  <td className="px-4 py-3"><ApprovalStatusBadge status={a.status} /></td>
+                  <td className="px-4 py-3 text-xs text-gray-500">
+                    {a.approved_at ? new Date(a.approved_at).toLocaleDateString('fa-IR') :
+                     a.changes_requested_at ? new Date(a.changes_requested_at).toLocaleDateString('fa-IR') : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Change requests */}
+      {comments.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">درخواست‌های اصلاح</h3>
+          {comments.map(c => {
+            const agenda = c.agenda_result_id ? agendaItems.find(ag => ag.id === c.agenda_result_id) : null;
+            return (
+              <div key={c.id} className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-900/40 rounded-xl p-4 space-y-1">
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span className="font-medium text-orange-700 dark:text-orange-400">{c.created_by_name}</span>
+                  <span>•</span>
+                  <span>{new Date(c.created_at).toLocaleDateString('fa-IR')}</span>
+                </div>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  {agenda ? `بند: ${agenda.agenda_title_snapshot}` : 'اعتراض کلی'}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-medium">علت:</span> {c.reason}</p>
+                {c.suggested_correction && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-medium">پیشنهاد اصلاح:</span> {c.suggested_correction}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Request changes modal */}
+      {showRequestChanges && (
+        <RequestChangesModal
+          minute={minute}
+          agendaItems={agendaItems}
+          onClose={() => setShowRequestChanges(false)}
+          onSubmitted={() => { setShowRequestChanges(false); onAfterAction(); }}
+          currentUserId={currentUserId}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Request Changes Modal ─────────────────────────────────────────────────────
+
+interface RequestChangesModalProps {
+  minute: MinuteDetail;
+  agendaItems: AgendaResultRow[];
+  onClose: () => void;
+  onSubmitted: () => void;
+  currentUserId?: string;
+}
+
+interface ChangeItem {
+  agenda_result_id: string | null;
+  reason: string;
+  suggested_correction: string;
+}
+
+function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted }: RequestChangesModalProps) {
+  const [items, setItems] = useState<ChangeItem[]>([{ agenda_result_id: null, reason: '', suggested_correction: '' }]);
+  const [submitting, setSubmitting] = useState(false);
+
+  const addItem = () => setItems(prev => [...prev, { agenda_result_id: null, reason: '', suggested_correction: '' }]);
+  const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
+  const updateItem = (idx: number, field: keyof ChangeItem, value: string | null) =>
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    // Validate
+    for (const item of items) {
+      if (!item.reason.trim()) {
+        toast.error('علت برای هر مورد اجباری است.');
+        return;
+      }
+      if (!item.agenda_result_id && !item.suggested_correction.trim()) {
+        toast.error('برای اعتراض کلی، پیشنهاد اصلاح اجباری است.');
+        return;
+      }
+    }
+    setSubmitting(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('request_minutes_changes', {
+        p_minute_id: minute.id,
+        p_revision_number: minute.revision_number,
+        p_items: items.map(it => ({
+          agenda_result_id: it.agenda_result_id || null,
+          reason: it.reason,
+          suggested_correction: it.suggested_correction || null,
+        })),
+      });
+      if (rpcError) { toast.error('درخواست اصلاح ناموفق بود.'); return; }
+      if (data?.success === false) {
+        const msgs: Record<string, string> = {
+          NOT_AN_APPROVER: 'شما تأییدکننده این صورت‌جلسه نیستید.',
+          MINUTE_NOT_PENDING: 'صورت‌جلسه در وضعیت تأیید نیست.',
+          REVISION_NOT_CURRENT: 'این نسخه دیگر معتبر نیست.',
+          APPROVAL_NOT_PENDING: 'درخواست اصلاح شما قبلاً ثبت شده یا باطل شده است.',
+          APPROVAL_NOT_SYSTEM_MODE: 'این صورت‌جلسه از نوع سیستمی نیست.',
+          NO_CHANGE_ITEMS: 'حداقل یک مورد لازم است.',
+          REASON_REQUIRED: 'علت اجباری است.',
+          AGENDA_RESULT_MISMATCH: 'بند انتخاب‌شده متعلق به این صورت‌جلسه نیست.',
+          GENERAL_OBJECTION_NEEDS_CORRECTION: 'برای اعتراض کلی پیشنهاد اصلاح اجباری است.',
+        };
+        toast.error(msgs[data.error_code] || 'درخواست اصلاح ناموفق بود.');
+        return;
+      }
+      toast.success(data.message || 'درخواست اصلاح ثبت شد.');
+      onSubmitted();
+    } finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" dir="rtl">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">درخواست اصلاح</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400">بند یا بندهای مورد اعتراض و علت اصلاح را وارد کنید.</p>
+          {items.map((item, idx) => (
+            <div key={idx} className="space-y-2 border border-gray-100 dark:border-gray-700 rounded-xl p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-500">مورد {idx + 1}</span>
+                {items.length > 1 && (
+                  <button onClick={() => removeItem(idx)} className="text-xs text-red-500 hover:text-red-600">حذف</button>
+                )}
+              </div>
+              <select
+                value={item.agenda_result_id || ''}
+                onChange={e => updateItem(idx, 'agenda_result_id', e.target.value || null)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white"
+              >
+                <option value="">اعتراض کلی (بدون بند خاص)</option>
+                {agendaItems.map(ag => (
+                  <option key={ag.id} value={ag.id}>{ag.agenda_title_snapshot}</option>
+                ))}
+              </select>
+              <textarea
+                value={item.reason}
+                onChange={e => updateItem(idx, 'reason', e.target.value)}
+                placeholder="علت اعتراض (اجباری)"
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white resize-none"
+              />
+              <textarea
+                value={item.suggested_correction}
+                onChange={e => updateItem(idx, 'suggested_correction', e.target.value)}
+                placeholder="پیشنهاد اصلاح (برای اعتراض کلی اجباری)"
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white resize-none"
+              />
+            </div>
+          ))}
+          <button onClick={addItem} className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700">
+            <Plus className="w-4 h-4" /> افزودن مورد دیگر
+          </button>
+        </div>
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-100 dark:border-gray-700">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200">انصراف</button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="px-4 py-2 rounded-xl text-sm bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50"
+          >
+            {submitting ? 'در حال ارسال...' : 'ثبت درخواست اصلاح'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

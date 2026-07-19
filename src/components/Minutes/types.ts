@@ -4,8 +4,8 @@
 export type MinutesStatus =
   | 'draft'
   | 'pending_approval'
+  | 'changes_requested'
   | 'approved'
-  | 'rejected'
   | 'published';
 
 export type ConfidentialityLevel =
@@ -14,9 +14,11 @@ export type ConfidentialityLevel =
   | 'restricted'
   | 'confidential';
 
+export type ApprovalMode = 'system' | 'in_person';
+
 export type ApprovalMethod = 'digital' | 'in_person';
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+export type ApprovalStatus = 'pending' | 'approved' | 'changes_requested' | 'invalidated';
 
 export type InvitationStatus =
   | 'invited'
@@ -125,6 +127,33 @@ export interface MinuteSummary {
   lastModified: string;
   version: string;
   orgUnit?: string;
+  approvalMode?: ApprovalMode | null;
+  revisionNumber?: number;
+}
+
+export interface MinuteApprovalRow {
+  id: string;
+  minute_id: string;
+  revision_number: number;
+  approver_user_id: string;
+  approver_name: string;
+  status: ApprovalStatus;
+  approved_at: string | null;
+  changes_requested_at: string | null;
+}
+
+export interface MinuteApprovalCommentRow {
+  id: string;
+  approval_id: string;
+  minute_id: string;
+  revision_number: number;
+  agenda_result_id: string | null;
+  agenda_title: string | null;
+  reason: string;
+  suggested_correction: string | null;
+  created_by_user_id: string;
+  created_by_name: string;
+  created_at: string;
 }
 
 export interface HistoryEvent {

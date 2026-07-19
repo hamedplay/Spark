@@ -197,6 +197,21 @@ function App() {
     setActivePage(page);
   }, [isAuthenticated, prefsLoading, landingApplied]);
 
+  // Sync activePage with URL on back/forward navigation (popstate)
+  useEffect(() => {
+    const handler = () => {
+      const urlPage = new URLSearchParams(window.location.search).get('mpage');
+      if (urlPage) {
+        const valid: string[] = ['minutes','minutes-new','minutes-edit','minutes-detail','minutes-approvals','minutes-my-decisions','minutes-followup','minutes-report','minutes-reports','minutes-dashboard'];
+        if (valid.includes(urlPage)) {
+          setActivePage(urlPage as typeof activePage);
+        }
+      }
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, []);
+
   const loadUserPermissions = async (userId: string) => {
     try {
       // ── ۱. دسترسی‌های گروه‌بندی (روش قدیمی) ──────────────────────────────
@@ -681,9 +696,9 @@ function App() {
       case 'minutes-edit':
         return <MinutesFormPage mode="edit" onNavigate={(p) => setActivePage(p as typeof activePage)} />;
       case 'minutes-detail':
-        return <MinutesDetailPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+        return <MinutesDetailPage onNavigate={(p) => setActivePage(p as typeof activePage)} currentUserId={currentUserId || undefined} isAdmin={isAdmin} />;
       case 'minutes-approvals':
-        return <MinutesApprovalsPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
+        return <MinutesApprovalsPage onNavigate={(p) => setActivePage(p as typeof activePage)} currentUserId={currentUserId || undefined} />;
       case 'minutes-my-decisions':
         return <MyDecisionsPage onNavigate={(p) => setActivePage(p as typeof activePage)} />;
       case 'minutes-followup':

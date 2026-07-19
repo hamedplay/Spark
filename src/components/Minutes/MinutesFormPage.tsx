@@ -7,7 +7,7 @@ import { PageHeader, ConfidentialityBadge, TableSkeleton } from './MinutesShared
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
   AgendaResultType, DecisionPriority, DecisionStatus, ApprovalMethod,
-  MinutesStatus,
+  MinutesStatus, ApprovalMode,
 } from './types';
 
 interface Props {
@@ -76,6 +76,8 @@ interface DraftMeetingInfo {
   notes: string;
   confidentiality: ConfidentialityLevel;
   status: MinutesStatus;
+  approvalMode: ApprovalMode | '';
+  revisionNumber: number;
 }
 
 interface DraftInternalParticipant {
@@ -176,6 +178,8 @@ const defaultInfo: DraftMeetingInfo = {
   notes: '',
   confidentiality: 'organizational',
   status: 'draft',
+  approvalMode: '',
+  revisionNumber: 1,
 };
 
 const defaultInternalParticipant = (): DraftInternalParticipant => ({
@@ -345,7 +349,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       try {
         const { data: minData, error: minErr } = await supabase
           .from('minutes')
-          .select('id, meeting_id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_id, org_unit_name_snapshot, secretary_user_id, secretary_name_snapshot, chair_user_id, chair_name_snapshot, notes, confidentiality, status, updated_at')
+          .select('id, meeting_id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_id, org_unit_name_snapshot, secretary_user_id, secretary_name_snapshot, chair_user_id, chair_name_snapshot, notes, confidentiality, status, updated_at, approval_mode, revision_number')
           .eq('id', targetId)
           .maybeSingle();
         if (minErr) throw minErr;
@@ -370,6 +374,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           notes: (m.notes as string) || '',
           confidentiality: (m.confidentiality as ConfidentialityLevel) || 'organizational',
           status: (m.status as MinutesStatus) || 'draft',
+          approvalMode: (m.approval_mode as ApprovalMode) || '',
+          revisionNumber: (m.revision_number as number) || 1,
         });
 
         const [ipRes, epRes, agRes] = await Promise.all([
@@ -724,6 +730,69 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     }
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmitForApproval = async () => {
+    if (submitting) return;
+    if (!info.approvalMode) {
+      toast.error('لطفاً مدل تأیید را انتخاب کنید.');
+      return;
+    }
+    if (!info.meetingId) {
+      toast.error('لطفاً ابتدا جلسه را انتخاب و پیش‌نویس را ذخیره کنید.');
+      return;
+    }
+    // For system mode, verify at least one eligible approver exists
+    if (info.approvalMode === 'system') {
+      const eligible = internalParticipants.filter(
+        p => p.userId && p.attendanceStatus && ['present', 'online', 'late', 'delegate_attended'].includes(p.attendanceStatus)
+      );
+      if (eligible.length === 0) {
+        toast.error('در مدل سیستمی حداقل یک شرکت‌کننده داخلی با حساب کاربری و حضور تأییدشده لازم است.');
+        return;
+      }
+    }
+    setSubmitting(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('submit_minutes_for_approval', {
+        p_minute_id: mode === 'edit' ? (editMinuteId || info.meetingId) : info.meetingId,
+        p_expected_updated_at: editUpdatedAt,
+        p_approval_mode: info.approvalMode,
+      });
+      if (rpcError) {
+        toast.error('ارسال برای تأیید ناموفق بود. لطفاً دوباره تلاش کنید.');
+        return;
+      }
+      if (data && data.success === false) {
+        const code: string = data.error_code || 'INTERNAL_ERROR';
+        const msgs: Record<string, string> = {
+          NOT_AUTHENTICATED: 'برای ارسال باید وارد شده باشید.',
+          MINUTE_NOT_FOUND: 'صورت‌جلسه یافت نشد.',
+          MINUTES_NO_PERMISSION: 'شما اجازه ارسال این صورت‌جلسه را ندارید.',
+          MINUTE_NOT_SUBMITTABLE: 'این صورت‌جلسه در وضعیت قابل ارسال نیست.',
+          MINUTES_VERSION_CONFLICT: 'این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.',
+          APPROVAL_MODE_IMMUTABLE: 'مدل تأیید پس از اولین ارسال قابل تغییر نیست.',
+          INVALID_APPROVAL_MODE: 'مدل تأیید نامعتبر است.',
+          NO_ELIGIBLE_APPROVERS: 'هیچ شرکت‌کننده واجد شرایطی برای تأیید سیستمی وجود ندارد.',
+        };
+        toast.error(msgs[code] || 'ارسال برای تأیید ناموفق بود.');
+        return;
+      }
+      if (data && data.success === true) {
+        toast.success('صورت‌جلسه برای تأیید ارسال شد.');
+        if (data.minute_id) setMinuteIdInUrl(data.minute_id);
+        setMinutesPageInUrl('minutes-detail');
+        onNavigate('minutes-detail');
+        return;
+      }
+      toast.error('پاسخ نامعتبر از سرور دریافت شد.');
+    } catch {
+      toast.error('خطای غیرمنتظره رخ داد.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Edit-mode loading / not-found / error states
   if (mode === 'edit' && editLoading) {
     return (
@@ -899,12 +968,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               </button>
               {activeSection === SECTIONS.length - 1 ? (
                 <button
-                  disabled
-                  title="ارسال برای تأیید (به‌زودی)"
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                  onClick={handleSubmitForApproval}
+                  disabled={submitting || savingDraft || !info.approvalMode}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-4 h-4" />
-                  ارسال برای تأیید (به‌زودی)
+                  {submitting ? 'در حال ارسال...' : 'ارسال برای تأیید'}
                 </button>
               ) : (
                 <button
@@ -1231,6 +1300,39 @@ function SectionInfo({
               <option value="confidential">محرمانه</option>
             </select>
             <ConfidentialityBadge level={info.confidentiality} />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            مدل تأیید
+          </label>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <select
+                value={info.approvalMode}
+                disabled={!!info.revisionNumber && info.revisionNumber > 1}
+                onChange={e => setInfo(prev => ({ ...prev, approvalMode: e.target.value as ApprovalMode | '' }))}
+                className="flex-1 px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <option value="">انتخاب کنید</option>
+                <option value="system">تأیید سیستمی</option>
+                <option value="in_person">تأیید حضوری</option>
+              </select>
+              {info.revisionNumber > 1 && (
+                <span className="text-xs text-gray-400">غیرقابل تغییر پس از ارسال</span>
+              )}
+            </div>
+            {info.approvalMode === 'system' && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                در تأیید سیستمی، صورت‌جلسه برای تمام شرکت‌کنندگان داخلی دارای حساب سامانه که حاضر بوده‌اند ارسال می‌شود. پس از تأیید همه، تأیید دبیر و سپس رئیس جلسه برای انتشار لازم است.
+              </p>
+            )}
+            {info.approvalMode === 'in_person' && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                در تأیید حضوری، تأیید شرکت‌کنندگان سیستمی وجود ندارد. دبیر تأیید می‌کند که صورت‌جلسه در جلسه حضوری تأیید شده، سپس رئیس جلسه آن را منتشر می‌کند.
+              </p>
+            )}
           </div>
         </div>
       </div>

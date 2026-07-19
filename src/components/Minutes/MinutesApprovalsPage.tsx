@@ -1,253 +1,183 @@
-import { useState } from 'react';
-import { Check, X, MessageSquare, Eye } from 'lucide-react';
-import { PageHeader, MinutesStatusBadge, ApprovalStatusBadge } from './MinutesShared';
-import { MOCK_MINUTES, MOCK_APPROVALS } from './mockData';
+import { useEffect, useState, useCallback } from 'react';
+import { Eye, Check, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { PageHeader, ApprovalStatusBadge, ApprovalModeBadge, EmptyState, TableSkeleton } from './MinutesShared';
+import { supabase } from '../../lib/supabase';
+import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import type { ApprovalStatus, ApprovalMode } from './types';
 
-type TabKey = 'pending' | 'approved' | 'rejected' | 'all';
+interface ApprovalInboxRow {
+  approval_id: string;
+  minute_id: string;
+  revision_number: number;
+  meeting_title: string;
+  meeting_date: string;
+  secretary_name: string;
+  approval_mode: ApprovalMode;
+  submitted_at: string;
+  my_status: ApprovalStatus;
+}
 
 interface Props {
   onNavigate: (page: string) => void;
+  currentUserId?: string;
 }
 
-export function MinutesApprovalsPage({ onNavigate }: Props) {
-  const [activeTab, setActiveTab] = useState<TabKey>('pending');
-  const [actionModal, setActionModal] = useState<{ type: 'approve' | 'reject'; minuteTitle: string } | null>(null);
-  const [noteModal, setNoteModal] = useState<{ minuteTitle: string } | null>(null);
-  const [noteText, setNoteText] = useState('');
+export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
+  const [rows, setRows] = useState<ApprovalInboxRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
 
-  // Mock rows combining minutes + approvals data
-  const rows = MOCK_MINUTES.map((m, i) => ({
-    ...m,
-    approvalStage: `مرحله ${(i % 3) + 1}`,
-    approvalType: MOCK_APPROVALS[i % MOCK_APPROVALS.length].method,
-    sentDate: m.lastModified,
-    myStatus: MOCK_APPROVALS[i % MOCK_APPROVALS.length].status,
-  }));
+  const fetchInbox = useCallback(async () => {
+    if (!currentUserId) { setIsLoading(false); return; }
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Fetch pending approvals for current user in current revision
+      const { data: approvalsData, error: approvalsErr } = await supabase
+        .from('minutes_approvals')
+        .select('id, minute_id, revision_number, status')
+        .eq('approver_user_id', currentUserId)
+        .eq('status', 'pending')
+        .order('updated_at', { ascending: false });
 
-  const filtered = rows.filter(r => {
-    if (activeTab === 'pending') return r.myStatus === 'pending';
-    if (activeTab === 'approved') return r.myStatus === 'approved';
-    if (activeTab === 'rejected') return r.myStatus === 'rejected';
-    return true;
-  });
+      if (approvalsErr) throw approvalsErr;
+      if (!approvalsData || approvalsData.length === 0) {
+        setRows([]);
+        setIsLoading(false);
+        return;
+      }
 
-  const TABS: { key: TabKey; label: string; count: number }[] = [
-    { key: 'pending',  label: 'در انتظار تأیید من', count: rows.filter(r => r.myStatus === 'pending').length },
-    { key: 'approved', label: 'تأییدشده توسط من',   count: rows.filter(r => r.myStatus === 'approved').length },
-    { key: 'rejected', label: 'ردشده توسط من',       count: rows.filter(r => r.myStatus === 'rejected').length },
-    { key: 'all',      label: 'همه موارد',           count: rows.length },
-  ];
+      // Fetch parent minutes (only pending_approval ones are active in inbox)
+      const minuteIds = approvalsData.map(a => a.minute_id);
+      const { data: minutesData, error: minutesErr } = await supabase
+        .from('minutes')
+        .select('id, meeting_title_snapshot, meeting_date_snapshot, secretary_name_snapshot, approval_mode, revision_number, submitted_at, status')
+        .in('id', minuteIds)
+        .eq('status', 'pending_approval');
+
+      if (minutesErr) throw minutesErr;
+
+      const minuteMap = new Map((minutesData || []).map((m: Record<string, unknown>) => [m.id as string, m]));
+      const inboxRows: ApprovalInboxRow[] = [];
+      for (const a of approvalsData as Array<{ id: string; minute_id: string; revision_number: number; status: ApprovalStatus }>) {
+        const m = minuteMap.get(a.minute_id) as Record<string, unknown> | undefined;
+        if (!m) continue; // skip if minute not pending_approval or not visible
+        inboxRows.push({
+          approval_id: a.id,
+          minute_id: a.minute_id,
+          revision_number: a.revision_number,
+          meeting_title: (m.meeting_title_snapshot as string) || '',
+          meeting_date: (m.meeting_date_snapshot as string) || '',
+          secretary_name: (m.secretary_name_snapshot as string) || '',
+          approval_mode: m.approval_mode as ApprovalMode,
+          submitted_at: (m.submitted_at as string) || '',
+          my_status: a.status,
+        });
+      }
+      setRows(inboxRows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطا در بارگذاری کارتابل');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => { fetchInbox(); }, [fetchInbox]);
+
+  const goToDetail = (minuteId: string) => {
+    setMinuteIdInUrl(minuteId);
+    setMinutesPageInUrl('minutes-detail');
+    onNavigate('minutes-detail');
+  };
+
+  const handleApprove = async (minuteId: string, revisionNumber: number, approvalId: string) => {
+    if (actingId) return;
+    setActingId(approvalId);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('approve_minute_revision', {
+        p_minute_id: minuteId,
+        p_revision_number: revisionNumber,
+      });
+      if (rpcError) { toast.error('تأیید ناموفق بود.'); return; }
+      if (data?.success === false) {
+        const msgs: Record<string, string> = {
+          NOT_AN_APPROVER: 'شما تأییدکننده این صورت‌جلسه نیستید.',
+          MINUTE_NOT_PENDING: 'صورت‌جلسه در وضعیت تأیید نیست.',
+          REVISION_NOT_CURRENT: 'این نسخه دیگر معتبر نیست.',
+          APPROVAL_NOT_PENDING: 'تأیید شما قبلاً ثبت شده یا باطل شده است.',
+        };
+        toast.error(msgs[data.error_code] || 'تأیید ناموفق بود.');
+        return;
+      }
+      toast.success(data.message || 'تأیید شما ثبت شد.');
+      await fetchInbox();
+    } finally { setActingId(null); }
+  };
 
   return (
     <div dir="rtl" className="space-y-5">
-      <PageHeader title="کارتابل تأیید" description="مدیریت درخواست‌های تأیید صورت‌جلسات" />
+      <PageHeader title="کارتابل تأیید" description="صورت‌جلساتی که در انتظار تأیید شما هستند" />
 
-      {/* Tabs */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div className="flex overflow-x-auto border-b border-gray-100 dark:border-gray-700">
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                activeTab === t.key
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-              }`}
-            >
-              {t.label}
-              {t.count > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
-                  activeTab === t.key ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                }`}>
-                  {t.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
-                {['عنوان جلسه','تاریخ جلسه','دبیر','مرحله تأیید','نوع تأیید','تاریخ ارسال','وضعیت','عملیات'].map(h => (
-                  <th key={h} className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-              {filtered.map(row => (
-                <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => onNavigate('minutes-detail')}
-                      className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline text-right"
-                    >
-                      {row.meetingTitle}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{row.meetingDate}</td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{row.secretary}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{row.approvalStage}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                    {row.approvalType === 'digital' ? 'سیستمی' : 'حضوری'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">{row.sentDate}</td>
-                  <td className="px-4 py-3">
-                    <ApprovalStatusBadge status={row.myStatus} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => onNavigate('minutes-detail')}
-                        aria-label="مشاهده"
-                        title="مشاهده"
-                        className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      {row.myStatus === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => setActionModal({ type: 'approve', minuteTitle: row.meetingTitle })}
-                            aria-label="تأیید"
-                            title="تأیید"
-                            className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 text-green-500 transition-colors"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setActionModal({ type: 'reject', minuteTitle: row.meetingTitle })}
-                            aria-label="رد"
-                            title="رد"
-                            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={() => setNoteModal({ minuteTitle: row.meetingTitle })}
-                        aria-label="ثبت توضیح"
-                        title="ثبت توضیح"
-                        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        {isLoading ? (
+          <div className="p-4"><TableSkeleton rows={4} /></div>
+        ) : error ? (
+          <EmptyState icon={<AlertCircle className="w-8 h-8" />} title="خطا در بارگذاری" description={error} />
+        ) : rows.length === 0 ? (
+          <EmptyState title="موردی برای تأیید وجود ندارد" description="صورت‌جلساتی که برای تأیید به شما ارسال شوند در اینجا نمایش داده می‌شوند." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+                  {['عنوان جلسه','تاریخ','دبیر','مدل تأیید','نسخه','تاریخ ارسال','عملیات'].map(h => (
+                    <th key={h} className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {filtered.length === 0 && (
-            <div className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">
-              موردی برای نمایش وجود ندارد.
-            </div>
-          )}
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                {rows.map(row => (
+                  <tr key={row.approval_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                    <td className="px-4 py-3">
+                      <button onClick={() => goToDetail(row.minute_id)} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline text-right">
+                        {row.meeting_title}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{row.meeting_date}</td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{row.secretary_name}</td>
+                    <td className="px-4 py-3"><ApprovalModeBadge mode={row.approval_mode} /></td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{row.revision_number}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                      {row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('fa-IR') : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => goToDetail(row.minute_id)} title="مشاهده و اقدام"
+                          className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleApprove(row.minute_id, row.revision_number, row.approval_id)}
+                          disabled={actingId === row.approval_id}
+                          title="تأیید سریع"
+                          className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 text-green-500 transition-colors disabled:opacity-50"
+                        >
+                          {actingId === row.approval_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Approve / Reject modal */}
-      {actionModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" dir="rtl">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 dark:text-white">
-                {actionModal.type === 'approve' ? 'تأیید صورت‌جلسه' : 'رد صورت‌جلسه'}
-              </h3>
-              <button onClick={() => setActionModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {actionModal.type === 'approve' ? 'تأیید' : 'رد'} صورت‌جلسه:
-                <span className="font-medium text-gray-800 dark:text-gray-200"> {actionModal.minuteTitle}</span>
-              </p>
-              <div>
-                <label htmlFor="approval-note" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  توضیحات {actionModal.type === 'reject' ? '(الزامی)' : '(اختیاری)'}
-                </label>
-                <textarea
-                  id="approval-note"
-                  rows={3}
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white resize-none"
-                  placeholder="توضیحات خود را وارد کنید..."
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 px-5 pb-5">
-              <button
-                onClick={() => setActionModal(null)}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                  actionModal.type === 'approve'
-                    ? 'bg-green-500 hover:bg-green-600 text-white'
-                    : 'bg-red-500 hover:bg-red-600 text-white'
-                }`}
-              >
-                {actionModal.type === 'approve' ? 'تأیید' : 'رد'}
-              </button>
-              <button
-                onClick={() => setActionModal(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors"
-              >
-                انصراف
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Note modal */}
-      {noteModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" dir="rtl">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 dark:text-white">ثبت توضیح</h3>
-              <button onClick={() => setNoteModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-5">
-              <textarea
-                id="note-text"
-                rows={4}
-                value={noteText}
-                onChange={e => setNoteText(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white resize-none"
-                placeholder="توضیحات..."
-              />
-            </div>
-            <div className="flex gap-3 px-5 pb-5">
-              <button
-                onClick={() => { setNoteModal(null); setNoteText(''); }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-              >
-                ذخیره
-              </button>
-              <button
-                onClick={() => { setNoteModal(null); setNoteText(''); }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors"
-              >
-                انصراف
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Inline status badge for minutes */}
-      {filtered.length > 0 && (
-        <div className="hidden">
-          <MinutesStatusBadge status="draft" />
-        </div>
-      )}
+      {/* Keep ApprovalStatusBadge import used */}
+      <span className="hidden"><ApprovalStatusBadge status="pending" /></span>
     </div>
   );
 }
