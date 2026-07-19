@@ -472,9 +472,10 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         if (agendaEnabled) {
           await supabase.from('meeting_agenda_items').delete().eq('meeting_id', prefillMeetingId);
           if (agendaItems.length > 0) {
-            await supabase.from('meeting_agenda_items').insert(
+            const { error: agendaInsertErr } = await supabase.from('meeting_agenda_items').insert(
               agendaItems.map((item, i) => ({ ...item, meeting_id: prefillMeetingId, sort_order: i }))
             );
+            if (agendaInsertErr) throw agendaInsertErr;
           }
         }
 
@@ -486,7 +487,8 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         if (meetingError) throw meetingError;
 
         if (selectedParticipants.length > 0 && meetingData) {
-          await supabase.from('participants').insert(selectedParticipants.map(p => ({ meeting_id: meetingData.id, name: p.name })));
+          const { error: participantsInsertErr } = await supabase.from('participants').insert(selectedParticipants.map(p => ({ meeting_id: meetingData.id, name: p.name })));
+          if (participantsInsertErr) throw participantsInsertErr;
         }
 
         if (repeatEnabled && meetingData && repeatEndDate) {
@@ -494,9 +496,10 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         }
 
         if (agendaEnabled && agendaItems.length > 0 && meetingData) {
-          await supabase.from('meeting_agenda_items').insert(
+          const { error: agendaInsertErr } = await supabase.from('meeting_agenda_items').insert(
             agendaItems.map((item, i) => ({ ...item, meeting_id: meetingData.id, sort_order: i }))
           );
+          if (agendaInsertErr) throw agendaInsertErr;
         }
 
         logAudit({ module: 'meetings', action: 'meeting_created', entity_name: subject, entity_id: meetingData?.id, details: `جلسه جدید "${subject}" ثبت شد`, severity: 'info' });
