@@ -67,3 +67,41 @@ export function clearMinuteIdFromUrl(): void {
   window.history.replaceState({}, '', url.toString());
   sessionStorage.removeItem(STORAGE_KEY);
 }
+
+// ── Detail tab in URL (summary/approvals/decisions/attachments/history) ──────
+const TAB_PARAM = 'mtab';
+
+export type MinutesDetailTab =
+  | 'summary'
+  | 'participants'
+  | 'agenda'
+  | 'decisions'
+  | 'attachments'
+  | 'approvals'
+  | 'history';
+
+const VALID_TABS: MinutesDetailTab[] = [
+  'summary', 'participants', 'agenda', 'decisions', 'attachments', 'approvals', 'history',
+];
+
+export function isValidMinutesTab(tab: string | null): tab is MinutesDetailTab {
+  return !!tab && (VALID_TABS as string[]).includes(tab);
+}
+
+export function getMinutesTabFromUrl(): MinutesDetailTab | null {
+  const params = new URLSearchParams(window.location.search);
+  const t = params.get(TAB_PARAM);
+  return isValidMinutesTab(t) ? t : null;
+}
+
+export function setMinutesTabInUrl(tab: MinutesDetailTab): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set(TAB_PARAM, tab);
+  window.history.replaceState({}, '', url.toString());
+}
+
+export function clearMinutesTabFromUrl(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(TAB_PARAM);
+  window.history.replaceState({}, '', url.toString());
+}

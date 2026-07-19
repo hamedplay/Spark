@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, CreditCard as Edit2, Send, Printer, FileDown, Globe, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, History, Clock, User, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, X, TriangleAlert as AlertTriangle } from 'lucide-react';
+import { ArrowRight, CreditCard as Edit2, Send, Printer, FileDown, Globe, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, History, Clock, User, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, X, TriangleAlert as AlertTriangle, Loader as Loader2, Trash2, Download, CloudUpload as UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   MinutesStatusBadge, ConfidentialityBadge, ApprovalStatusBadge, ApprovalModeBadge,
   EmptyState, TableSkeleton, DecisionStatusBadge, DecisionPriorityBadge, DecisionProgressBar, DecisionProgressModal,
+  ConfirmActionDialog,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
-import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMinutesTabFromUrl, setMinutesTabInUrl, type MinutesDetailTab } from '../../lib/minutesNavigation';
+import {
+  listMinuteAttachments, uploadMinuteAttachment, deleteMinuteAttachment, getAttachmentDownloadUrl,
+  validateAttachment, formatBytes, MAX_ATTACHMENT_BYTES, type AttachmentRow,
+} from '../../lib/minutesAttachments';
+import { listMinuteAudit, AUDIT_ACTION_LABELS, ENTITY_LABELS, summarizeChange, type AuditLogRow } from '../../lib/minutesAudit';
 import type { MinutesStatus, ConfidentialityLevel, ApprovalMode, ApprovalStatus, DecisionRow, DecisionUpdateRow } from './types';
 import { MinutesPrintView } from './MinutesPrintView';
 import './minutes-print.css';
@@ -106,7 +112,7 @@ interface Props {
 }
 
 export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin }: Props) {
-  const [activeTab, setActiveTab] = useState('summary');
+  const [activeTab, setActiveTab] = useState<MinutesDetailTab>(() => getMinutesTabFromUrl() || 'summary');
   const [minute, setMinute] = useState<MinuteDetail | null>(null);
   const [internalParts, setInternalParts] = useState<InternalParticipantRow[]>([]);
   const [externalParts, setExternalParts] = useState<ExternalParticipantRow[]>([]);
@@ -575,7 +581,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
             return (
               <button
                 key={t.id}
-                onClick={() => setActiveTab(t.id)}
+                onClick={() => { setActiveTab(t.id as MinutesDetailTab); setMinutesTabInUrl(t.id as MinutesDetailTab); }}
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                   activeTab === t.id
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
@@ -604,7 +610,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               isAdmin={isAdmin}
             />
           )}
-          {activeTab === 'attachments' && <TabAttachments />}
+          {activeTab === 'attachments' && <TabAttachments minuteId={minute.id} canManage={canManage} />}
           {activeTab === 'approvals' && (
             <TabApprovals
               approvals={approvals}
@@ -617,7 +623,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               onAfterAction={refresh}
             />
           )}
-          {activeTab === 'history' && <TabHistory />}
+          {activeTab === 'history' && <TabHistory minuteId={minute.id} />}
         </div>
       </div>
       <MinutesPrintView
@@ -1011,11 +1017,170 @@ function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, currentUse
 
 // ── Tab: Attachments ──────────────────────────────────────────────────────────
 
-function TabAttachments() {
+interface TabAttachmentsProps {
+  minuteId: string;
+  canManage: boolean;
+}
+
+function TabAttachments({ minuteId, canManage }: TabAttachmentsProps) {
+  const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<AttachmentRow | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState<AttachmentRow | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [fileInput, setFileInput] = useState<HTMLInputElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const load = async () => {
+    setLoading(true); setError(null);
+    try { setAttachments(await listMinuteAttachments(minuteId)); }
+    catch (e) { setError(e instanceof Error ? e.message : 'بارگذاری پیوست‌ها ناموفق بود.'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [minuteId]);
+
+  const handleFiles = async (files: FileList | File[]) => {
+    if (!canManage) return;
+    const arr = Array.from(files);
+    for (const f of arr) {
+      const v = validateAttachment(f);
+      if (!v.ok) { toast.error(`${f.name}: ${v.error}`); continue; }
+      setUploading(null); setProgress(0);
+      try {
+        const { attachment } = await uploadMinuteAttachment(f, {
+          minuteId,
+          onProgress: setProgress,
+        });
+        setAttachments(prev => [...prev, attachment]);
+        toast.success(`${f.name} بارگذاری شد.`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'بارگذاری ناموفق بود.');
+      }
+    }
+    setProgress(0);
+    if (fileInput) fileInput.value = '';
+  };
+
+  const handleDownload = async (a: AttachmentRow) => {
+    setDownloading(a.id);
+    try {
+      const url = await getAttachmentDownloadUrl(a.id);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = a.original_filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'دانلود ناموفق بود.');
+    } finally { setDownloading(null); }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      await deleteMinuteAttachment(confirmDelete.id);
+      setAttachments(prev => prev.filter(x => x.id !== confirmDelete.id));
+      toast.success('پیوست حذف شد.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'حذف ناموفق بود.');
+    } finally { setConfirmDelete(null); }
+  };
+
+  if (loading) return <TableSkeleton rows={3} />;
+  if (error) return <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">{error}</div>;
+
   return (
-    <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-      <Paperclip className="w-10 h-10 text-gray-300 dark:text-gray-600" />
-      <p className="text-sm text-gray-500 dark:text-gray-400">هیچ پیوستی وجود ندارد.</p>
+    <div className="space-y-4" dir="rtl">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">پیوست‌ها</h2>
+        {canManage && (
+          <button
+            onClick={() => fileInput?.click()}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+          >
+            <UploadCloud className="w-4 h-4" />
+            افزودن فایل
+          </button>
+        )}
+      </div>
+      <input
+        ref={el => setFileInput(el)}
+        type="file"
+        multiple
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.txt,.zip"
+        onChange={e => e.target.files && handleFiles(e.target.files)}
+      />
+
+      {progress > 0 && (
+        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+          <div className="h-2 bg-blue-600 rounded-full transition-all" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+
+      {attachments.length === 0 ? (
+        <EmptyState icon={<Paperclip className="w-8 h-8" />} title="هیچ پیوستی وجود ندارد" description={canManage ? 'برای افزودن فایل روی «افزودن فایل» بزنید.' : undefined} />
+      ) : (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">نام فایل</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">حجم</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">بارگذارنده</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">تاریخ</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">عملیات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+              {attachments.map(a => (
+                <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={a.original_filename}>{a.original_filename}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{formatBytes(a.size_bytes)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{a.uploader_name || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{new Date(a.created_at).toLocaleDateString('fa-IR')}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleDownload(a)}
+                        disabled={downloading === a.id}
+                        className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                        title="دانلود"
+                      >
+                        {downloading === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      </button>
+                      {canManage && (
+                        <button
+                          onClick={() => setConfirmDelete(a)}
+                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="حذف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmActionDialog
+          title="حذف پیوست"
+          message={`آیا از حذف «${confirmDelete.original_filename}» مطمئن هستید؟`}
+          confirmLabel="حذف"
+          danger
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1272,9 +1437,82 @@ function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted }: Requ
 
 // ── Tab: History ──────────────────────────────────────────────────────────────
 
-function TabHistory() {
+interface TabHistoryProps {
+  minuteId: string;
+}
+
+function TabHistory({ minuteId }: TabHistoryProps) {
+  const [rows, setRows] = useState<AuditLogRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const PAGE = 20;
+
+  const loadInitial = async () => {
+    setLoading(true); setError(null);
+    try {
+      const { rows: r, hasMore: hm } = await listMinuteAudit(minuteId, PAGE, 0);
+      setRows(r); setHasMore(hm);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'بارگذاری تاریخچه ناموفق بود.');
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { loadInitial(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [minuteId]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const { rows: r, hasMore: hm } = await listMinuteAudit(minuteId, PAGE, rows.length);
+      setRows(prev => [...prev, ...r]); setHasMore(hm);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'بارگذاری بیشتر ناموفق بود.');
+    } finally { setLoadingMore(false); }
+  };
+
+  if (loading) return <TableSkeleton rows={5} />;
+  if (error) return <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">{error}</div>;
+  if (rows.length === 0) return <EmptyState icon={<History className="w-8 h-8" />} title="هنوز ثبت نشده" description="تاریخچه‌ای برای این صورت‌جلسه ثبت نشده است." />;
+
   return (
-    <EmptyState title="هنوز ثبت نشده" description="تاریخچه‌ای برای این صورت‌جلسه ثبت نشده است." />
+    <div className="space-y-3" dir="rtl">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white">تاریخچه تغییرات</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="divide-y divide-gray-50 dark:divide-gray-700">
+          {rows.map(r => (
+            <div key={r.id} className="p-4 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
+                <History className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{AUDIT_ACTION_LABELS[r.action] || r.action}</p>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(r.created_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{summarizeChange(r)}</p>
+                <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
+                  <span>{r.actor_name || 'سیستم'}</span>
+                  {r.revision_number != null && <span>· نسخه {r.revision_number}</span>}
+                  {r.entity_type !== 'minute' && <span>· {ENTITY_LABELS[r.entity_type] || r.entity_type}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+          >
+            {loadingMore ? 'در حال بارگذاری...' : 'بارگذاری بیشتر'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
