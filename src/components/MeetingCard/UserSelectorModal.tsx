@@ -3,7 +3,7 @@ import { Building2, Send, X, Loader as Loader2, Search, ChevronDown, ChevronRigh
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { Meeting } from '../../types';
-import { useOrgUsers, OrgUnitGroup } from '../../lib/useOrgUsers';
+import { useOrgUsers, OrgUnitGroup, OrgUserProfile } from '../../lib/useOrgUsers';
 
 interface UserSelectorModalProps {
   meetingId: string;
@@ -103,31 +103,24 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
 
   const isSearching = searchTerm.trim().length > 0;
 
-  const isAllowedUser = (u: { position_title?: string | null; unit_name?: string | null }) => {
-    const pt = u.position_title || '';
-    const un = u.unit_name || '';
-    return (
-      pt.startsWith('رییس دایره') ||
-      pt.startsWith('متصدی اداری') ||
-      pt.includes('دفتر') ||
-      un.includes('دفتر')
+  const matchesSearch = (u: OrgUserProfile): boolean => {
+    const q = searchTerm.toLowerCase();
+    if ((u.full_name || '').toLowerCase().includes(q)) return true;
+    if ((u.position || '').toLowerCase().includes(q)) return true;
+    if ((u.position_title || '').toLowerCase().includes(q)) return true;
+    if ((u.unit_name || '').toLowerCase().includes(q)) return true;
+    return u.assignments.some(a =>
+      (a.positionTitle || '').toLowerCase().includes(q) ||
+      (a.unitName || '').toLowerCase().includes(q)
     );
   };
 
-  const filteredAll = isSearching
-    ? allUsers.filter(u =>
-        isAllowedUser(u) && (
-          (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (u.unit_name || '').toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      )
-    : [];
+  const filteredAll = isSearching ? allUsers.filter(matchesSearch) : [];
 
   const visibleGroups: OrgUnitGroup[] = (selectedUnitId === 'all'
     ? groups
     : groups.filter(g => (g.unit_id || '__no_unit__') === selectedUnitId)
-  ).map(g => ({ ...g, users: g.users.filter(isAllowedUser) })).filter(g => g.users.length > 0);
+  );
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
@@ -150,7 +143,7 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
               className="flex-1 p-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">همه واحدهای سازمانی</option>
-              {groups.filter(g => g.users.some(isAllowedUser)).map(g => (
+              {groups.map(g => (
                 <option key={g.unit_id || '__no_unit__'} value={g.unit_id || '__no_unit__'}>
                   {g.unit_name} ({g.users.length} نفر)
                 </option>
@@ -164,7 +157,7 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
               type="text"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              placeholder="جستجوی نام، ایمیل یا واحد..."
+              placeholder="جستجوی نام، سمت یا واحد..."
               className="w-full pr-9 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -185,9 +178,10 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
                 <UserRow
                   key={u.user_id}
                   userId={u.user_id}
-                  name={u.full_name || u.email || ''}
-                  email={u.email || ''}
-                  subtitle={u.unit_name || u.position_title || ''}
+                  name={u.full_name || ''}
+                  assignments={u.assignments}
+                  primaryPositionTitle={u.position_title}
+                  primaryUnitName={u.unit_name}
                   sending={sendingToUserId === u.user_id}
                   disabled={loading}
                   onSend={handleSendToUser}
@@ -226,9 +220,10 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
                           <UserRow
                             key={u.user_id}
                             userId={u.user_id}
-                            name={u.full_name || u.email || ''}
-                            email={u.email || ''}
-                            subtitle={u.position_title || u.position || ''}
+                            name={u.full_name || ''}
+                            assignments={u.assignments}
+                            primaryPositionTitle={u.position_title}
+                            primaryUnitName={u.unit_name}
                             sending={sendingToUserId === u.user_id}
                             disabled={loading}
                             onSend={handleSendToUser}
@@ -248,25 +243,38 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
 }
 
 function UserRow({
-  userId, name, email, subtitle, sending, disabled, onSend,
+  userId, name, assignments, primaryPositionTitle, primaryUnitName, sending, disabled, onSend,
 }: {
   userId: string;
   name: string;
-  email: string;
-  subtitle: string;
+  assignments: { positionId: string; positionTitle: string | null; unitName: string | null; isPrimary: boolean }[];
+  primaryPositionTitle: string | null;
+  primaryUnitName: string | null;
   sending: boolean;
   disabled: boolean;
   onSend: (userId: string, name: string) => void;
 }) {
+  const hasAssignments = assignments.length > 0;
   return (
     <div className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
       <div className="flex items-center gap-2.5 min-w-0">
         <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 text-xs font-bold flex-shrink-0">
-          {(name || email || '?')[0]}
+          {(name || '?')[0]}
         </div>
         <div className="min-w-0">
           <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{name}</p>
-          <p className="text-xs text-gray-400 truncate">{subtitle || email}</p>
+          {hasAssignments ? (
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+              {assignments.map(a => (
+                <span key={a.positionId} className="text-xs text-gray-400 truncate">
+                  {a.positionTitle || '—'}{a.unitName ? ` · ${a.unitName}` : ''}
+                  {a.isPrimary && <span className="text-blue-500 font-medium mr-0.5">اصلی</span>}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 truncate">بدون جایگاه سازمانی</p>
+          )}
         </div>
       </div>
       <button

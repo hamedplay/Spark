@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
+import { useOrgUsers } from '../../../lib/useOrgUsers';
 import { getSharedRTCConfig, invalidateRTCConfigCache } from '../../../lib/rtcConfig';
 import { startDiagnostics, stopDiagnostics } from '../../../lib/webrtcDiagnostics';
 import type { PeerDiagnostics } from '../../../lib/webrtcDiagnostics';
@@ -120,6 +121,9 @@ export function useE2EECall(
   const [isOffline,           setIsOffline]           = useState(!navigator.onLine);
   const [videoDevices,        setVideoDevices]        = useState<MediaDeviceInfo[]>([]);
   const [mediaHealth,         setMediaHealth]         = useState<MediaHealthClassification[]>([]);
+
+  // ── Org-scoped user directory (replaces direct profiles query) ──────────
+  const { allUsers: orgUsers, loading: orgUsersLoading } = useOrgUsers(currentUserId);
 
   // ── Refs ───────────────────────────────────────────────────────────────
   const localVideoRef      = useRef<HTMLVideoElement>(null);
@@ -430,26 +434,35 @@ export function useE2EECall(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── User search ────────────────────────────────────────────────────────
+  // ── User search (scoped to same organization via useOrgUsers) ──────────
   useEffect(() => {
-    const t = setTimeout(async () => {
-      if (!userSearch.trim()) { setUsers([]); return; }
-      setSearching(true);
-      try {
-        const safe = userSearch.replace(/[%_\\'"]/g, '');
-        const { data } = await supabase
-          .from('profiles')
-          .select('user_id, full_name, email, avatar_url')
-          .neq('user_id', currentUserId)
-          .not('is_hidden', 'eq', true)
-          .or(`full_name.ilike.%${safe}%,email.ilike.%${safe}%`)
-          .limit(20);
-        setUsers((data as UserProfile[]) || []);
-      } catch { toast.error('خطا در جستجو'); }
-      finally { setSearching(false); }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [userSearch, currentUserId]);
+    const q = userSearch.trim().toLowerCase();
+    if (!q) { setUsers([]); return; }
+    setSearching(true);
+    try {
+      const filtered = orgUsers
+        .filter(u => u.user_id !== currentUserId)
+        .filter(u => {
+          if ((u.full_name || '').toLowerCase().includes(q)) return true;
+          if ((u.position || '').toLowerCase().includes(q)) return true;
+          if ((u.position_title || '').toLowerCase().includes(q)) return true;
+          if ((u.unit_name || '').toLowerCase().includes(q)) return true;
+          return u.assignments.some(a =>
+            (a.positionTitle || '').toLowerCase().includes(q) ||
+            (a.unitName || '').toLowerCase().includes(q)
+          );
+        })
+        .slice(0, 20)
+        .map(u => ({
+          user_id: u.user_id,
+          full_name: u.full_name,
+          email: null as string | null,
+          avatar_url: u.avatar_url,
+        }));
+      setUsers(filtered as unknown as UserProfile[]);
+    } catch { toast.error('خطا در جستجو'); }
+    finally { setSearching(false); }
+  }, [userSearch, currentUserId, orgUsers]);
 
   // ── Worker init ────────────────────────────────────────────────────────
   useEffect(() => {

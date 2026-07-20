@@ -26,10 +26,17 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: Props
   const isSearching = search.trim().length > 0;
 
   const filteredAll = isSearching
-    ? allUsers.filter(u =>
-        (u.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (u.email || '').toLowerCase().includes(search.toLowerCase())
-      )
+    ? allUsers.filter(u => {
+        const q = search.toLowerCase();
+        if ((u.full_name || '').toLowerCase().includes(q)) return true;
+        if ((u.position || '').toLowerCase().includes(q)) return true;
+        if ((u.position_title || '').toLowerCase().includes(q)) return true;
+        if ((u.unit_name || '').toLowerCase().includes(q)) return true;
+        return u.assignments.some(a =>
+          (a.positionTitle || '').toLowerCase().includes(q) ||
+          (a.unitName || '').toLowerCase().includes(q)
+        );
+      })
     : [];
 
   const unitTypeLabel = (type: string | null) => {
@@ -61,7 +68,7 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: Props
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="جستجوی نام یا ایمیل..."
+              placeholder="جستجوی نام، سمت یا واحد..."
               className="w-full pr-9 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
             />
           </div>
@@ -81,7 +88,7 @@ export function NewConversationModal({ currentUserId, onSelect, onClose }: Props
               ))}
             </div>
           ) : groups.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">کاربری یافت نشد</p>
+            <p className="text-sm text-gray-400 text-center py-8">کاربری در سازمان شما یافت نشد یا سازمان حساب شما تعیین نشده است.</p>
           ) : (
             // حالت عادی — گروه‌بندی بر اساس واحد
             <div className="pt-1 space-y-1">
@@ -137,27 +144,39 @@ function UserButton({
   onSelect,
   showUnit = true,
 }: {
-  user: { user_id: string; full_name: string | null; email: string | null; unit_name: string | null; position_title: string | null };
+  user: { user_id: string; full_name: string | null; email: string | null; unit_name: string | null; position_title: string | null; assignments: { positionId: string; positionTitle: string | null; unitName: string | null; isPrimary: boolean }[] };
   onSelect: (u: UserProfile) => void;
   showUnit?: boolean;
 }) {
+  const hasAssignments = user.assignments && user.assignments.length > 0;
   return (
     <button
-      onClick={() => onSelect({ user_id: user.user_id, full_name: user.full_name, email: user.email })}
+      onClick={() => onSelect({ user_id: user.user_id, full_name: user.full_name, email: null })}
       className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
     >
-      <UserAvatar name={user.full_name || user.email || 'U'} />
+      <UserAvatar name={user.full_name || 'U'} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-          {user.full_name || user.email}
+          {user.full_name || 'کاربر'}
         </p>
-        <p className="text-xs text-gray-400 truncate">
-          {user.position_title
-            ? user.position_title
-            : showUnit && user.unit_name
-              ? user.unit_name
-              : user.email}
-        </p>
+        {hasAssignments ? (
+          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+            {user.assignments.map(a => (
+              <span key={a.positionId} className="text-xs text-gray-400 truncate">
+                {a.positionTitle || '—'}{a.unitName ? ` · ${a.unitName}` : ''}
+                {a.isPrimary && <span className="text-blue-500 font-medium mr-0.5">اصلی</span>}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 truncate">
+            {user.position_title
+              ? user.position_title
+              : showUnit && user.unit_name
+                ? user.unit_name
+                : 'بدون جایگاه سازمانی'}
+          </p>
+        )}
       </div>
     </button>
   );

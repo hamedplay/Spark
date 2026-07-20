@@ -10,9 +10,15 @@ interface Props {
   onStartCall: (user: UserProfile) => void;
 }
 
-function getInitial(nameOrEmail: string | null | undefined): string {
-  const s = (nameOrEmail || '').trim();
+function getInitial(name: string | null | undefined): string {
+  const s = (name || '').trim();
   return s ? s[0].toUpperCase() : '?';
+}
+
+function formatAssignments(u: UserProfile): string {
+  const a = (u as any).assignments as { positionTitle: string | null; unitName: string | null; isPrimary: boolean }[] | undefined;
+  if (!a || a.length === 0) return 'بدون جایگاه سازمانی';
+  return a.map(x => `${x.positionTitle || '—'}${x.unitName ? ` · ${x.unitName}` : ''}${x.isPrimary ? ' (اصلی)' : ''}`).join('، ');
 }
 
 export function IdleView({ userSearch, users, searching, onSearch, onStartCall }: Props) {
@@ -66,7 +72,7 @@ export function IdleView({ userSearch, users, searching, onSearch, onStartCall }
             type="text"
             value={userSearch}
             onChange={e => onSearch(e.target.value)}
-            placeholder="جستجوی نام یا ایمیل..."
+            placeholder="جستجوی نام، سمت یا واحد..."
             aria-label="جستجو در لیست کاربران"
             className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-shadow"
           />
@@ -99,15 +105,15 @@ export function IdleView({ userSearch, users, searching, onSearch, onStartCall }
                 <button
                   type="button"
                   onClick={() => onStartCall(u)}
-                  aria-label={`شروع تماس با ${u.full_name || u.email || 'کاربر'}`}
+                  aria-label={`شروع تماس با ${u.full_name || 'کاربر'}`}
                   className="w-full text-right px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
                 >
                   <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-400 text-sm font-bold shrink-0">
-                    {getInitial(u.full_name || u.email)}
+                    {getInitial(u.full_name)}
                   </div>
                   <div className="min-w-0 text-right flex-1">
                     <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.email || ''}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{formatAssignments(u)}</p>
                   </div>
                   <Phone aria-hidden="true" className="w-4 h-4 text-emerald-500 shrink-0" />
                 </button>
@@ -126,7 +132,7 @@ export function IdleView({ userSearch, users, searching, onSearch, onStartCall }
         {/* Empty-query hint */}
         {!hasSearch && (
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            نام یا ایمیل کاربری را که می‌خواهید با او تماس بگیرید وارد کنید.
+            نام کاربری را که می‌خواهید با او تماس بگیرید وارد کنید.
           </p>
         )}
       </div>

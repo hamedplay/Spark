@@ -384,7 +384,13 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
   const systemUserGroups = orgGroups.map(g => ({
     label: g.unit_name,
-    options: g.users.map(u => ({ id: u.user_id, name: u.full_name || '', sub: u.position_title || '' })),
+    options: g.users.map(u => {
+      const subs: string[] = [];
+      if (u.position_title) subs.push(u.position_title);
+      const others = u.assignments.filter(a => a.positionTitle && a.positionTitle !== u.position_title);
+      if (others.length) subs.push(others.map(a => a.positionTitle).join('، '));
+      return { id: u.user_id, name: u.full_name || '', sub: subs.join(' · ') };
+    }),
   }));
 
   // تبدیل user_id به نام نمایشی بر اساس داده‌های useOrgUsers (بدون query مستقیم profiles)
