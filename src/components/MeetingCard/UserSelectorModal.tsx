@@ -3,7 +3,7 @@ import { Building2, Send, X, Loader as Loader2, Search, ChevronDown, ChevronRigh
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { Meeting } from '../../types';
-import { useOrgUsers, OrgUnitGroup, OrgUserProfile } from '../../lib/useOrgUsers';
+import { useOrgUsers, OrgUnitGroup, OrgUserProfile, resolveUserDisplay, FALLBACK_NAME } from '../../lib/useOrgUsers';
 
 interface UserSelectorModalProps {
   meetingId: string;
@@ -20,7 +20,7 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
   const [loading, setLoading] = useState(false);
   const [sendingToUserId, setSendingToUserId] = useState<string | null>(null);
 
-  const { groups, allUsers, loading: loadingUsers } = useOrgUsers(currentUserId);
+  const { groups, allUsers, loading: loadingUsers, usersById } = useOrgUsers(currentUserId);
 
   useEffect(() => {
     (async () => {
@@ -47,14 +47,9 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { toast.error('لطفا ابتدا وارد شوید'); return; }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, position')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      const senderName = profile?.full_name || user.email || 'کاربر';
-      const senderPosition = profile?.position || '';
+      const sender = usersById[user.id];
+      const senderName = sender?.full_name || FALLBACK_NAME;
+      const senderPosition = sender?.position_title || sender?.position || '';
 
       let meetingData = meetingDetails;
       if (!meetingData) {

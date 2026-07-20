@@ -84,7 +84,7 @@ export function CalendarPage({
   const [showSubscriptionsModal, setShowSubscriptionsModal] = useState(false);
   const [subscriptionsCalendar, setSubscriptionsCalendar] = useState<CalendarEntry | null>(null);
   const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([]);
-  const { usersById, loading: orgUsersLoading } = useOrgUsers(currentUserId);
+  const { usersById, allUsers, loading: orgUsersLoading } = useOrgUsers(currentUserId);
   const resolveName = useCallback((uid: string) =>
     resolveUserDisplay(usersById, uid, undefined, orgUsersLoading),
   [usersById, orgUsersLoading]);
@@ -748,10 +748,7 @@ export function CalendarPage({
     try {
       const { data: subs } = await supabase.from('calendar_subscriptions').select('id, calendar_id, user_id, permission').eq('calendar_id', calendarId);
       if (!subs || subs.length === 0) { setSubscriptions([]); return; }
-      const userIds = subs.map((s: any) => s.user_id);
-      const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', userIds);
-      const profileMap = Object.fromEntries((profiles || []).map((p: any) => [p.user_id, p]));
-      setSubscriptions(subs.map((s: any) => ({ ...s, profile: profileMap[s.user_id] || null })));
+      setSubscriptions(subs.map((s: any) => ({ ...s, profile: usersById[s.user_id] ? { full_name: usersById[s.user_id].full_name || '', email: '' } : null })));
     } catch {}
   };
 
@@ -1852,6 +1849,7 @@ export function CalendarPage({
           calendars={calendars}
           subscribedCalendars={subscribedCalendars}
           meetings={meetings}
+          allUsers={allUsers}
           resolveName={resolveName}
           search={calendarListSearch}
           onSearchChange={setCalendarListSearch}
@@ -1867,6 +1865,7 @@ export function CalendarPage({
         <SubscriptionsModal
           calendar={subscriptionsCalendar}
           subscriptions={subscriptions}
+          allUsers={allUsers}
           resolveName={resolveName}
           currentUserId={currentUserId}
           subSearch={subSearch}

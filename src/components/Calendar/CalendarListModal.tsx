@@ -1,11 +1,13 @@
 import { X, Search, Share2, Trash2, CreditCard as Edit2 } from 'lucide-react';
-import { CalendarEntry, MeetingData, ProfileEntry } from './types';
+import { CalendarEntry, MeetingData } from './types';
+import type { OrgUserProfile } from '../../lib/useOrgUsers';
 
 interface Props {
   calendars: CalendarEntry[];
   subscribedCalendars: CalendarEntry[];
   meetings: MeetingData[];
-  allProfiles: ProfileEntry[];
+  allUsers: OrgUserProfile[];
+  resolveName: (uid: string) => string;
   search: string;
   onSearchChange: (v: string) => void;
   onShare: (cal: CalendarEntry) => void;
@@ -15,7 +17,7 @@ interface Props {
 }
 
 export function CalendarListModal({
-  calendars, subscribedCalendars, meetings, allProfiles,
+  calendars, subscribedCalendars, meetings, allUsers, resolveName,
   search, onSearchChange, onShare, onEdit, onDelete, onClose,
 }: Props) {
   const allCals = [...calendars, ...subscribedCalendars];
@@ -64,7 +66,6 @@ export function CalendarListModal({
               {filtered.map((cal, idx) => {
                 const isOwned = calendars.some(c => c.id === cal.id);
                 const eventCount = meetings.filter(m => m.calendar_id === cal.id).length;
-                const owner = allProfiles.find(p => p.user_id === cal.user_id);
                 return (
                   <tr key={cal.id} className="border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
@@ -75,7 +76,7 @@ export function CalendarListModal({
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{eventCount}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{owner?.full_name || owner?.email || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{resolveName(cal.user_id)}</td>
                     <td className="px-4 py-3">
                       {isOwned && (
                         <div className="flex items-center gap-1 justify-end">

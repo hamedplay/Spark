@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Plus, Search, User, Trash2, ChevronDown } from 'lucide-react';
-import { CalendarEntry, CalendarSubscription, ProfileEntry } from './types';
+import { CalendarEntry, CalendarSubscription } from './types';
+import type { OrgUserProfile } from '../../lib/useOrgUsers';
 
 interface Props {
   calendar: CalendarEntry;
   subscriptions: CalendarSubscription[];
-  allProfiles: ProfileEntry[];
+  allUsers: OrgUserProfile[];
+  resolveName: (uid: string) => string;
   currentUserId: string | null;
   subSearch: string;
   subPermission: 'view' | 'edit';
@@ -18,7 +20,7 @@ interface Props {
 }
 
 export function SubscriptionsModal({
-  calendar, subscriptions, allProfiles, currentUserId,
+  calendar, subscriptions, allUsers, resolveName, currentUserId,
   subSearch, subPermission,
   onSearchChange, onPermissionChange, onAdd, onRemove, onUpdatePermission, onClose,
 }: Props) {
@@ -31,15 +33,24 @@ export function SubscriptionsModal({
     }
   }, [showUserPicker]);
 
-  const availableProfiles = allProfiles.filter(p => {
+  const matchesSearch = (p: OrgUserProfile, q: string) => {
+    if ((p.full_name || '').toLowerCase().includes(q)) return true;
+    if ((p.position_title || '').toLowerCase().includes(q)) return true;
+    if ((p.unit_name || '').toLowerCase().includes(q)) return true;
+    return p.assignments.some(a =>
+      (a.positionTitle || '').toLowerCase().includes(q) ||
+      (a.unitName || '').toLowerCase().includes(q)
+    );
+  };
+
+  const availableUsers = allUsers.filter(p => {
     if (p.user_id === currentUserId) return false;
     if (subscriptions.some(s => s.user_id === p.user_id)) return false;
     if (!subSearch.trim()) return true;
-    const q = subSearch.toLowerCase();
-    return (p.full_name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q);
+    return matchesSearch(p, subSearch.toLowerCase());
   });
 
-  const displayProfiles = subSearch.trim() ? availableProfiles : availableProfiles.slice(0, 20);
+  const displayUsers = subSearch.trim() ? availableUsers : availableUsers.slice(0, 20);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60]" onClick={onClose}>
@@ -86,35 +97,49 @@ export function SubscriptionsModal({
                   ref={searchRef}
                   value={subSearch}
                   onChange={e => onSearchChange(e.target.value)}
-                  placeholder="جستجوی نام یا ایمیل کاربر..."
+                  placeholder="جستجوی نام، سمت یا واحد..."
                   className="w-full pl-4 pr-9 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
 
-              {displayProfiles.length > 0 ? (
+              {displayUsers.length > 0 ? (
                 <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden max-h-52 overflow-y-auto">
-                  {displayProfiles.map(p => (
-                    <button
-                      key={p.user_id}
-                      onClick={() => {
-                        onAdd(p.user_id);
-                        onSearchChange('');
-                        setShowUserPicker(false);
-                      }}
-                      className="w-full text-right px-4 py-2.5 hover:bg-teal-50 dark:hover:bg-teal-900/20 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center flex-shrink-0">
-                        <User className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm dark:text-white font-medium truncate">{p.full_name || p.email || 'کاربر'}</p>
-                        {p.full_name && p.email && <p className="text-xs text-gray-400 truncate">{p.email}</p>}
-                      </div>
-                    </button>
-                  ))}
-                  {!subSearch.trim() && availableProfiles.length > 20 && (
+                  {displayUsers.map(p => {
+                    const hasAssignments = p.assignments.length > 0;
+                    return (
+                      <button
+                        key={p.user_id}
+                        onClick={() => {
+                          onAdd(p.user_id);
+                          onSearchChange('');
+                          setShowUserPicker(false);
+                        }}
+                        className="w-full text-right px-4 py-2.5 hover:bg-teal-50 dark:hover:bg-teal-900/20 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center flex-shrink-0">
+                          <User className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm dark:text-white font-medium truncate">{p.full_name || 'همکار سازمانی'}</p>
+                          {hasAssignments ? (
+                            <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                              {p.assignments.map(a => (
+                                <span key={a.positionId} className="text-xs text-gray-400 truncate">
+                                  {a.positionTitle || '—'}{a.unitName ? ` · ${a.unitName}` : ''}
+                                  {a.isPrimary && <span className="text-teal-500 font-medium mr-0.5">اصلی</span>}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-400 truncate">بدون جایگاه سازمانی</p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {!subSearch.trim() && availableUsers.length > 20 && (
                     <div className="px-4 py-2 text-xs text-gray-400 text-center">
-                      برای یافتن سایر کاربران جستجو کنید ({availableProfiles.length - 20} نفر بیشتر)
+                      برای یافتن سایر کاربران جستجو کنید ({availableUsers.length - 20} نفر بیشتر)
                     </div>
                   )}
                 </div>
@@ -145,7 +170,7 @@ export function SubscriptionsModal({
                       <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
                         <User className="w-4 h-4 text-gray-500" />
                       </div>
-                      <span className="text-sm dark:text-white">{sub.profile?.full_name || sub.profile?.email || 'کاربر'}</span>
+                      <span className="text-sm dark:text-white">{resolveName(sub.user_id)}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">

@@ -3,6 +3,7 @@ import moment from 'moment-jalaali';
 import { Star, EllipsisVertical as MoreVertical, CreditCard as Edit2, Trash2, Bell, Copy, Play, Pause, Tag, Send, Check, CheckCheck, Loader, Reply, X, Smile, ClipboardList, BellRing, MessageSquare, Forward, Eye } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
 import type { MessageWithMeta, ChatTag, MessageStatus, UserProfile } from './types';
+import { FALLBACK_NAME } from '../../lib/useOrgUsers';
 import { UserAvatar } from './ChatConversationItem';
 import { ForwardModal } from './ForwardModal';
 import { supabase } from '../../lib/supabase';
@@ -161,7 +162,7 @@ function renderInline(
         );
       case 'mention': {
         const isMe = token.user.user_id === currentUserId;
-        const name = token.user.full_name || token.user.email || '';
+        const name = token.user.full_name || FALLBACK_NAME;
         return (
           <span key={key}
             onClick={onMentionClick ? (e) => { e.stopPropagation(); onMentionClick(token.user); } : undefined}
@@ -414,7 +415,7 @@ export function ChatMessage({
                 <div className={`flex items-center gap-2 min-w-0 ${isOwn ? 'flex-row-reverse' : ''}`}>
                   {!isOwn && message.senderProfile && (
                     <span className="text-xs font-bold text-blue-600 dark:text-blue-400 truncate">
-                      {message.senderProfile.full_name || message.senderProfile.email}
+                      {message.senderProfile.full_name || FALLBACK_NAME}
                     </span>
                   )}
                   {typeLabel && (
@@ -737,7 +738,7 @@ function MentionProfilePopup({ user, currentUserId, onClose, onOpenDirectChat }:
     })();
   }, [user.user_id]);
 
-  const name = user.full_name || user.email || 'کاربر';
+  const name = user.full_name || FALLBACK_NAME;
   const initial = name.charAt(0).toUpperCase();
   const isSelf = user.user_id === currentUserId;
 
@@ -1049,12 +1050,12 @@ function ChatViewersModal({ messageId, conversationId, messageCreatedAt, current
                     <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                      {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
+                      {(profile?.full_name || FALLBACK_NAME).charAt(0).toUpperCase()}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
-                      {profile?.full_name || profile?.email || 'کاربر'}
+                      {profile?.full_name || FALLBACK_NAME}
                     </p>
                     {logLoading ? (
                       <p className="text-[11px] text-gray-400 mt-0.5">در حال بارگذاری...</p>

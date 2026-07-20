@@ -9,6 +9,7 @@ import type { ChatThemeSettings } from './ChatSettingsPage';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
 import { useGlobalCall } from '../../context/GlobalCallContext';
+import { useOrgUsers, resolveUserDisplay, FALLBACK_NAME } from '../../lib/useOrgUsers';
 import type {
   ConversationWithProfile, MessageWithMeta, ChatMessage as ChatMsg,
   UserProfile, ReactionCount, MessageStatus, ChatReminder,
@@ -56,10 +57,17 @@ export function ChatConversationView({
       osc.stop(ctx.currentTime + 0.4);
     } catch { /* audio not available */ }
   };
+  const { usersById, allUsers: orgUsers, loading: orgUsersLoading } = useOrgUsers(currentUserId);
+  const resolveName = useCallback((uid: string) => resolveUserDisplay(usersById, uid, undefined, orgUsersLoading), [usersById, orgUsersLoading]);
+  const buildSenderProfile = useCallback((uid: string): UserProfile | null => {
+    const u = usersById[uid];
+    if (!u) return null;
+    return { user_id: u.user_id, full_name: u.full_name, email: null, avatar_url: u.avatar_url };
+  }, [usersById]);
+
   const [messages, setMessages] = useState<MessageWithMeta[]>([]);
   const [replyingTo, setReplyingTo] = useState<ChatMsg | null>(null);
   const [editingMessage, setEditingMessage] = useState<ChatMsg | null>(null);
-  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [reminderAlarm, setReminderAlarm] = useState<ChatReminder | null>(null);
   const [showStarredModal, setShowStarredModal] = useState(false);
   const [showRemindersModal, setShowRemindersModal] = useState(false);
@@ -105,7 +113,6 @@ export function ChatConversationView({
     fetchMessages();
     subscribeToMessages();
     markAsRead();
-    fetchAllUsers();
     fetchReminders();
     fetchMentionBar();
     return () => {
@@ -202,16 +209,7 @@ export function ChatConversationView({
     return () => window.removeEventListener('chatThemeChanged', handler);
   }, []);
 
-  const fetchAllUsers = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('user_id, full_name, email, avatar_url')
-      .limit(500);
-    setAllUsers(data || []);
-  };
-
   const fetchMentionBar = async () => {
-    // Find messages in this conversation that mention the current user and were not sent by them
     const { data } = await supabase
       .from('chat_messages')
       .select('id, body, sender_id')
@@ -222,13 +220,10 @@ export function ChatConversationView({
       .order('created_at', { ascending: false })
       .limit(20);
     if (!data || data.length === 0) return;
-    const senderIds = [...new Set(data.map((m: any) => m.sender_id))];
-    const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', senderIds);
-    const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
     setMentionBarItems(data.map((m: any) => ({
       id: m.id,
       body: m.body,
-      senderName: profileMap.get(m.sender_id)?.full_name || profileMap.get(m.sender_id)?.email || 'کاربر',
+      senderName: resolveName(m.sender_id),
     })));
   };
 
@@ -266,21 +261,15 @@ export function ChatConversationView({
     const otherUserIds = (convs || []).map((c: any) =>
       c.participant_a === currentUserId ? c.participant_b : c.participant_a
     );
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('user_id, full_name, email')
-      .in('user_id', [...new Set(otherUserIds)]);
-    const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
     const convMap = new Map((convs || []).map((c: any) => [c.id, c]));
 
     const items: StarredItem[] = msgs.map((m: any) => {
       const conv = convMap.get(m.conversation_id);
       const otherId = conv ? (conv.participant_a === currentUserId ? conv.participant_b : conv.participant_a) : null;
-      const otherProfile = otherId ? profileMap.get(otherId) : null;
       return {
         message: { ...m, senderProfile: null, reactions: [], isStarred: true, replyTarget: null, tags: [], status: m.status || 'pending', read_by: m.read_by || [] },
         conversationId: m.conversation_id,
-        otherUserName: otherProfile?.full_name || otherProfile?.email || 'کاربر',
+        otherUserName: otherId ? resolveName(otherId) : FALLBACK_NAME,
       };
     });
     setGlobalStarred(items);
@@ -303,10 +292,9 @@ export function ChatConversationView({
     const msgIds = msgs.map(m => m.id);
     const senderIds = [...new Set(msgs.map(m => m.sender_id))];
 
-    const [reactionsRes, starsRes, profilesRes, tagsAssignRes] = await Promise.all([
+    const [reactionsRes, starsRes, tagsAssignRes] = await Promise.all([
       supabase.from('chat_message_reactions').select('*').in('message_id', msgIds),
       supabase.from('chat_message_stars').select('*').eq('user_id', currentUserId).in('message_id', msgIds),
-      supabase.from('profiles').select('user_id, full_name, email, avatar_url').in('user_id', senderIds),
       supabase.from('chat_message_tag_assignments')
         .select('message_id, chat_tags(id, name, color, user_id)')
         .eq('user_id', currentUserId)
@@ -323,7 +311,6 @@ export function ChatConversationView({
     }
 
     const starredIds = new Set((starsRes.data || []).map((s: any) => s.message_id));
-    const profileMap = new Map((profilesRes.data || []).map((p: any) => [p.user_id, p]));
     const tagsMap = new Map<string, any[]>();
     for (const a of (tagsAssignRes.data || [])) {
       const existing = tagsMap.get(a.message_id) || [];
@@ -345,7 +332,7 @@ export function ChatConversationView({
         ...m,
         status: m.status || 'pending',
         read_by: m.read_by || [],
-        senderProfile: profileMap.get(m.sender_id) || null,
+        senderProfile: buildSenderProfile(m.sender_id),
         reactions: reactionsMap.get(m.id) || [],
         isStarred: starredIds.has(m.id),
         replyTarget: m.reply_to_id ? replyTargetMap.get(m.reply_to_id) || null : null,
@@ -370,7 +357,7 @@ export function ChatConversationView({
         globalTriggerUrgentAlarm({
           id: latest.id,
           body: latest.body,
-          sender_name: profileMap.get(latest.sender_id)?.full_name || conversation.otherUser.full_name || 'کاربر',
+          sender_name: resolveName(latest.sender_id) || conversation.otherUser.full_name || FALLBACK_NAME,
           created_at: latest.created_at,
           conversation_id: conversation.id,
         });
@@ -552,18 +539,11 @@ export function ChatConversationView({
       .maybeSingle();
     if (!msg) return;
 
-    const senderIds = [...new Set([msg.sender_id])];
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('user_id, full_name, email, avatar_url')
-      .in('user_id', senderIds);
-    const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
-
     const injected: MessageWithMeta = {
       ...msg,
       status: msg.status || 'pending',
       read_by: msg.read_by || [],
-      senderProfile: profileMap.get(msg.sender_id) || null,
+      senderProfile: buildSenderProfile(msg.sender_id),
       reactions: [],
       isStarred: false,
       replyTarget: null,
@@ -689,7 +669,7 @@ export function ChatConversationView({
   };
 
   const isSavedMessages = conversation.otherUser.user_id === currentUserId;
-  const otherName = isSavedMessages ? 'پیام‌های ذخیره‌شده' : (conversation.otherUser.full_name || conversation.otherUser.email || 'کاربر');
+  const otherName = isSavedMessages ? 'پیام‌های ذخیره‌شده' : (conversation.otherUser.full_name || resolveName(conversation.otherUser.user_id));
   const localStarredCount = messages.filter(m => m.isStarred).length;
 
   return (
@@ -938,7 +918,7 @@ export function ChatConversationView({
                   message={msg}
                   isOwn={msg.sender_id === currentUserId}
                   currentUserId={currentUserId}
-                  allUsers={allUsers}
+                  allUsers={orgUsers}
                   onReply={() => setReplyingTo(msg)}
                   onEdit={() => setEditingMessage(msg)}
                   onStar={() => handleStar(msg.id, msg.isStarred)}
@@ -975,7 +955,7 @@ export function ChatConversationView({
         otherUserId={conversation.otherUser.user_id || null}
         replyingTo={replyingTo}
         editingMessage={editingMessage}
-        allUsers={allUsers}
+        allUsers={orgUsers}
         onSent={() => { fetchMessages(); onConversationUpdate(); scrollToBottom(); }}
         onCancelReply={() => setReplyingTo(null)}
         onCancelEdit={() => setEditingMessage(null)}
