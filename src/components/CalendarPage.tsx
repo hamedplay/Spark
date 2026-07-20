@@ -19,6 +19,7 @@ import {
   timeToMinutes, minutesToTime, minutesToSlotIndex,
 } from './Calendar/utils';
 import { CalendarSidebar } from './Calendar/CalendarSidebar';
+import { useOrgUsers, resolveUserDisplay } from '../lib/useOrgUsers';
 import { MeetingDetailModal } from './Calendar/MeetingDetailModal';
 import { CreateEditCalendarModal } from './Calendar/CreateEditCalendarModal';
 import { SubscriptionsModal } from './Calendar/SubscriptionsModal';
@@ -84,6 +85,10 @@ export function CalendarPage({
   const [subscriptionsCalendar, setSubscriptionsCalendar] = useState<CalendarEntry | null>(null);
   const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([]);
   const [allProfiles, setAllProfiles] = useState<ProfileEntry[]>([]);
+  const { usersById, loading: orgUsersLoading } = useOrgUsers(currentUserId);
+  const resolveName = useCallback((uid: string) =>
+    resolveUserDisplay(usersById, uid, allProfiles.find(p => p.user_id === uid)?.full_name || undefined, orgUsersLoading),
+  [usersById, allProfiles, orgUsersLoading]);
   const [subSearch, setSubSearch] = useState('');
   const [subPermission, setSubPermission] = useState<'view' | 'edit'>('edit');
 
@@ -467,8 +472,8 @@ export function CalendarPage({
       meetingDateStr = `${j.jy}/${String(j.jm).padStart(2, '0')}/${String(j.jd).padStart(2, '0')}`;
     }
     const meetingTimeStr = m.start_time && m.end_time ? `${m.start_time} - ${m.end_time}` : m.start_time || '';
-    const senderName = allProfiles.find(p => p.user_id === currentUserId)?.full_name || '';
-    const recipientName = recipientId ? (allProfiles.find(p => p.user_id === recipientId)?.full_name || '') : '';
+    const senderName = currentUserId ? resolveName(currentUserId) : '';
+    const recipientName = recipientId ? resolveName(recipientId) : '';
     return {
       meeting_subject: m.subject || '',
       meeting_date: meetingDateStr,
@@ -984,10 +989,10 @@ export function CalendarPage({
     const end = dateStr.replace(/-/g, '') + 'T' + m.end_time.replace(':', '') + '00';
 
     const participantNames = (m.participant_user_ids || [])
-      .map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0, 8))
+      .map(uid => resolveName(uid))
       .join('، ');
     const notifyNames = ((m.notify_users || []) as string[])
-      .map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0, 8))
+      .map(uid => resolveName(uid))
       .join('، ');
     const externalNames = (m.external_participants || []).join('، ');
 
@@ -1571,6 +1576,8 @@ export function CalendarPage({
           meeting={detailMeeting}
           currentUserId={currentUserId}
           allProfiles={allProfiles}
+          resolveName={resolveName}
+          resolveName={resolveName}
           calendars={calendars}
           subscribedCalendars={subscribedCalendars}
           getMeetingColor={getMeetingColor}
@@ -1856,6 +1863,7 @@ export function CalendarPage({
           subscribedCalendars={subscribedCalendars}
           meetings={meetings}
           allProfiles={allProfiles}
+          resolveName={resolveName}
           search={calendarListSearch}
           onSearchChange={setCalendarListSearch}
           onShare={cal => { handleOpenSubscriptions(cal); setShowCalendarList(false); }}
@@ -1871,6 +1879,7 @@ export function CalendarPage({
           calendar={subscriptionsCalendar}
           subscriptions={subscriptions}
           allProfiles={allProfiles}
+          resolveName={resolveName}
           currentUserId={currentUserId}
           subSearch={subSearch}
           subPermission={subPermission}
@@ -1994,6 +2003,7 @@ export function CalendarPage({
               getMeetings={getMeetings}
               getMeetingColor={getMeetingColor}
               allProfiles={allProfiles}
+          resolveName={resolveName}
               weekDays={weekDays}
               mainMonthDays={mainMonthDays}
               listMeetings={listMeetings}

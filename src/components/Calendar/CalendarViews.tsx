@@ -22,6 +22,7 @@ export interface CalendarViewProps {
   getMeetings: (jy: number, jm: number, jd: number) => MeetingData[];
   getMeetingColor: (m: MeetingData) => string;
   allProfiles: ProfileEntry[];
+  resolveName: (uid: string) => string;
   weekDays: Array<{ jy: number; jm: number; jd: number; weekday: number }>;
   mainMonthDays: Array<number | null>;
   listMeetings: Array<{ date: string; jy: number; jm: number; jd: number; meetings: MeetingData[] }>;
@@ -206,7 +207,7 @@ function computeOverlapLayers(mts: MeetingData[]): OverlapInfo[] {
 export function CalendarViews(p: CalendarViewProps) {
   const { viewMode, slotHeight, totalSlots, hideOffHours, workStartMin, workEndMin,
     visibleStartHour, visibleEndHour, currentTime, currentUserId,
-    getMeetings, getMeetingColor, allProfiles,
+    getMeetings, getMeetingColor, allProfiles, resolveName,
     isToday, isSelected, toFarsiTime,
     isDragging, dragStartSlot, dragEndSlot, dragDate,
     dragMoveMeeting, dragMoveOriginalSlot, dragMoveOriginalEndSlot,
@@ -416,7 +417,7 @@ export function CalendarViews(p: CalendarViewProps) {
     const color = getMeetingColor(m);
     const participantIds = m.participant_user_ids || [];
     const notifyIds = (m.notify_users || []) as string[];
-    const getNameById = (id: string) => allProfiles.find(pr => pr.user_id === id)?.full_name;
+    const getNameById = (id: string) => resolveName(id);
     const isMobile = window.innerWidth < 640;
     const popupStyle: React.CSSProperties = isMobile
       ? { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
@@ -799,7 +800,7 @@ export function CalendarViews(p: CalendarViewProps) {
               const participantIds = m.participant_user_ids || [];
               const notifyIds = (m.notify_users || []) as string[];
               const externalList = m.external_participants || [];
-              const getNameById = (id: string) => allProfiles.find(pr => pr.user_id === id)?.full_name;
+              const getNameById = (id: string) => resolveName(id);
               return (
                 <div key={m.id} className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
                   <button className="w-full text-right px-4 py-3.5 flex items-center gap-3" onClick={() => setExpandedMeetingId(isExp ? null : m.id)}>

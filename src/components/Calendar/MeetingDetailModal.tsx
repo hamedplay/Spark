@@ -18,6 +18,7 @@ interface Props {
   meeting: MeetingData;
   currentUserId: string | null;
   allProfiles: ProfileEntry[];
+  resolveName: (uid: string) => string;
   calendars: CalendarEntry[];
   subscribedCalendars: CalendarEntry[];
   getMeetingColor: (m: MeetingData) => string;
@@ -29,7 +30,7 @@ interface Props {
 }
 
 export function MeetingDetailModal({
-  meeting: m, currentUserId, allProfiles, calendars, subscribedCalendars,
+  meeting: m, currentUserId, allProfiles, resolveName, calendars, subscribedCalendars,
   getMeetingColor, onClose, onEdit, onDelete, onGoogleCalendar,
 }: Props) {
   const isOwner = m.user_id === currentUserId;
@@ -169,13 +170,13 @@ const getJalaliDate = (): string => {
 
   const buildShareText = (): string => {
     const participantNames = (m.participant_user_ids || [])
-      .map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0, 8))
+      .map(uid => resolveName(uid))
       .join('، ');
     const notifyNames = ((m.notify_users || []) as string[])
-      .map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0, 8))
+      .map(uid => resolveName(uid))
       .join('، ');
     const externalNames = (m.external_participants || []).join('، ');
-    const creatorName = creator?.full_name || creator?.email || 'کاربر ناشناس';
+    const creatorName = resolveName(m.user_id);
     const timeStr = m.start_time && m.end_time ? `${m.start_time} - ${m.end_time}` : '';
     const dateStr = getJalaliDate();
 
@@ -267,7 +268,7 @@ const getJalaliDate = (): string => {
             <div>
               <p className="text-xs text-gray-400 mb-0.5">ایجاد کننده جلسه</p>
               <p className="text-sm font-semibold dark:text-white">
-                {creator?.full_name || creator?.email || 'کاربر ناشناس'}
+                {creator?.full_name || resolveName(m.user_id)}
               </p>
             </div>
           </div>
@@ -369,7 +370,7 @@ const getJalaliDate = (): string => {
                     <div key={uid} className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 px-2.5 py-1 rounded-full text-xs font-medium flex-1 min-w-0">
                         <User className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">{p?.full_name || p?.email || uid.slice(0, 8)}</span>
+                        <span className="truncate">{p?.full_name || resolveName(uid)}</span>
                       </span>
                       {statusBadge}
                     </div>
@@ -406,7 +407,7 @@ const getJalaliDate = (): string => {
                   const p = allProfiles.find(x => x.user_id === uid);
                   return (
                     <span key={uid} className="inline-flex items-center gap-1.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-full text-xs font-medium">
-                      {p?.full_name || p?.email || uid.slice(0, 8)}
+                      {p?.full_name || resolveName(uid)}
                     </span>
                   );
                 })}
@@ -601,8 +602,8 @@ const getJalaliDate = (): string => {
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {(() => {
               const creatorName = isOwner ? 'شما' : (creator?.full_name || creator?.email || '');
-              const participantNames = (m.participant_user_ids || []).map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0,8)).join('، ');
-              const notifyNames = ((m.notify_users || []) as string[]).map(uid => allProfiles.find(p => p.user_id === uid)?.full_name || uid.slice(0,8)).join('، ');
+              const participantNames = (m.participant_user_ids || []).map(uid => resolveName(uid)).join('، ');
+              const notifyNames = ((m.notify_users || []) as string[]).map(uid => resolveName(uid)).join('، ');
               const extNames = (m.external_participants || []).join('، ');
               const rows = [
                 { label: 'ایجادکننده', value: creatorName },

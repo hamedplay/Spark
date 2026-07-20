@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabase';
 
 export interface OrgUserAssignment {
@@ -37,7 +37,26 @@ interface UseOrgUsersResult {
   allUsers: OrgUserProfile[];
   loading: boolean;
   error: boolean;
+  usersById: Record<string, OrgUserProfile>;
 }
+
+const FALLBACK_NAME = 'همکار سازمانی';
+const LOADING_NAME = 'در حال دریافت نام...';
+
+function resolveUserDisplay(
+  usersById: Record<string, OrgUserProfile>,
+  userId: string,
+  storedName?: string | null,
+  loading = false,
+): string {
+  if (loading) return LOADING_NAME;
+  const u = usersById[userId];
+  if (u?.full_name) return u.full_name;
+  if (storedName) return storedName;
+  return FALLBACK_NAME;
+}
+
+export { resolveUserDisplay, FALLBACK_NAME, LOADING_NAME };
 
 const EMPTY_STATE_MESSAGE = 'کاربری در سازمان شما یافت نشد یا سازمان حساب شما تعیین نشده است.';
 
@@ -130,7 +149,13 @@ export function useOrgUsers(currentUserId: string | null): UseOrgUsersResult {
     return () => { cancelled = true; };
   }, [currentUserId]);
 
-  return { groups, allUsers, loading, error };
+  const usersById = useMemo(() => {
+    const map: Record<string, OrgUserProfile> = {};
+    for (const u of allUsers) map[u.user_id] = u;
+    return map;
+  }, [allUsers]);
+
+  return { groups, allUsers, loading, error, usersById };
 }
 
 export { EMPTY_STATE_MESSAGE };
