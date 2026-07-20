@@ -311,8 +311,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                 <div>
                   <label htmlFor="login-password" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور</label>
                   <div className="relative">
-                    <input id="login-password" type={showPassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                      placeholder="••••••••" className={inp + ' pl-10 pr-10'} autoComplete="current-password" disabled={loading} />
+                    <input id="login-password" dir="ltr" type={showPassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                      placeholder="••••••••" className={inp + ' pl-10 pr-10 !text-left'} autoComplete="current-password" disabled={loading} />
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
                     <button type="button" onClick={() => setShowPassword(v => !v)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
