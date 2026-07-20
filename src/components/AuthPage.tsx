@@ -58,29 +58,41 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     if (!form.email || !form.password) { toast.error('نام کاربری/ایمیل و رمز عبور را وارد کنید'); return; }
     setLoading(true);
     try {
-      let loginEmail = form.email.trim();
-      const isEmail = loginEmail.includes('@');
-      if (!isEmail) {
-        const { data: emailData, error: lookupErr } = await supabase.rpc('get_email_by_username', { p_username: loginEmail });
-        if (lookupErr || !emailData) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
-        loginEmail = emailData as string;
+      const identifier = form.email.trim();
+      const isEmail = identifier.includes('@');
+      let userId: string | undefined;
+      let auditLabel = identifier;
+      if (isEmail) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: identifier, password: form.password });
+        if (error || !data.user) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
+        userId = data.user.id;
+        auditLabel = identifier;
+      } else {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/username-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+          body: JSON.stringify({ username: identifier, password: form.password }),
+        });
+        if (res.status === 401) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
+        if (res.status === 503) { toast.error('در حال حاضر امکان ورود وجود ندارد. لطفاً دوباره تلاش کنید.'); return; }
+        if (!res.ok) { toast.error('در حال حاضر امکان ورود وجود ندارد. لطفاً دوباره تلاش کنید.'); return; }
+        const session = await res.json();
+        if (!session.access_token || !session.refresh_token) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
+        const { data: sessData, error: sessErr } = await supabase.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+        if (sessErr || !sessData.user) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
+        userId = sessData.user.id;
+        auditLabel = identifier;
       }
-      const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: form.password });
-      if (error) {
-        toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.');
-        return;
-      }
-      if (data.user) {
-        // Check if the user account is active
-        const { data: profileData } = await supabase.from('profiles').select('is_active').eq('user_id', data.user.id).maybeSingle();
+      if (userId) {
+        const { data: profileData } = await supabase.from('profiles').select('is_active').eq('user_id', userId).maybeSingle();
         if (profileData && profileData.is_active === false) {
           await supabase.auth.signOut();
           toast.error('حساب کاربری شما غیرفعال شده است. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
           return;
         }
-        await ensureProfile(data.user.id, data.user.email || '');
+        await ensureProfile(userId, '');
         toast.success('با موفقیت وارد شدید');
-        logAudit({ module: 'auth', action: 'login', entity_name: 'user', entity_id: data.user.id, details: `ورود: ${loginEmail}`, severity: 'info' });
+        logAudit({ module: 'auth', action: 'login', entity_name: 'user', entity_id: userId, details: `ورود: ${auditLabel}`, severity: 'info' });
         onSuccess();
       }
     } catch (err: any) { toast.error('در حال حاضر امکان ورود وجود ندارد. لطفاً دوباره تلاش کنید.'); }
