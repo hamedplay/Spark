@@ -10,7 +10,7 @@ import { CalendarMeetingForm } from './CalendarMeetingForm';
 import { MeetingInboxButton } from './MeetingInboxButton';
 import { useUserPreferences } from '../context/UserPreferencesContext';
 
-import { MeetingData, CalendarEntry, CalendarSubscription, ProfileEntry, PendingSchedule, CalendarFormState } from './Calendar/types';
+import { MeetingData, CalendarEntry, CalendarSubscription, PendingSchedule, CalendarFormState } from './Calendar/types';
 import {
   JALAALI_MONTHS,
   PRIORITY_COLORS, SLOT_HEIGHT, HOURS_START, HOURS_END, DEFAULT_CALENDAR_COLOR, VIEW_OPTIONS,
@@ -84,11 +84,10 @@ export function CalendarPage({
   const [showSubscriptionsModal, setShowSubscriptionsModal] = useState(false);
   const [subscriptionsCalendar, setSubscriptionsCalendar] = useState<CalendarEntry | null>(null);
   const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([]);
-  const [allProfiles, setAllProfiles] = useState<ProfileEntry[]>([]);
   const { usersById, loading: orgUsersLoading } = useOrgUsers(currentUserId);
   const resolveName = useCallback((uid: string) =>
-    resolveUserDisplay(usersById, uid, allProfiles.find(p => p.user_id === uid)?.full_name || undefined, orgUsersLoading),
-  [usersById, allProfiles, orgUsersLoading]);
+    resolveUserDisplay(usersById, uid, undefined, orgUsersLoading),
+  [usersById, orgUsersLoading]);
   const [subSearch, setSubSearch] = useState('');
   const [subPermission, setSubPermission] = useState<'view' | 'edit'>('edit');
 
@@ -484,7 +483,7 @@ export function CalendarPage({
       full_name: recipientName,
       representative: m.representative || '',
     };
-  }, [allProfiles, currentUserId]);
+  }, [resolveName, currentUserId]);
 
   // ---- Init ----
   useEffect(() => {
@@ -495,7 +494,6 @@ export function CalendarPage({
     setSidebarJy(now.jy); setSidebarJm(now.jm);
     fetchCurrentUser();
     fetchCalendars();
-    fetchAllProfiles();
 
     const channel = supabase
       .channel(`calendar-realtime-${Date.now()}`)
@@ -746,13 +744,6 @@ export function CalendarPage({
     } catch {}
   };
 
-  const fetchAllProfiles = async () => {
-    try {
-      const { data } = await supabase.from('profiles').select('user_id, full_name, email');
-      setAllProfiles(data || []);
-    } catch {}
-  };
-
   const fetchSubscriptions = async (calendarId: string) => {
     try {
       const { data: subs } = await supabase.from('calendar_subscriptions').select('id, calendar_id, user_id, permission').eq('calendar_id', calendarId);
@@ -806,7 +797,7 @@ export function CalendarPage({
 
   const handleOpenSubscriptions = async (cal: CalendarEntry) => {
     setSubscriptionsCalendar(cal);
-    await Promise.all([fetchSubscriptions(cal.id), fetchAllProfiles()]);
+    await fetchSubscriptions(cal.id);
     setSubSearch('');
     setShowSubscriptionsModal(true);
   };
@@ -1575,7 +1566,6 @@ export function CalendarPage({
         <MeetingDetailModal
           meeting={detailMeeting}
           currentUserId={currentUserId}
-          allProfiles={allProfiles}
           resolveName={resolveName}
           resolveName={resolveName}
           calendars={calendars}
@@ -1862,7 +1852,6 @@ export function CalendarPage({
           calendars={calendars}
           subscribedCalendars={subscribedCalendars}
           meetings={meetings}
-          allProfiles={allProfiles}
           resolveName={resolveName}
           search={calendarListSearch}
           onSearchChange={setCalendarListSearch}
@@ -1878,7 +1867,6 @@ export function CalendarPage({
         <SubscriptionsModal
           calendar={subscriptionsCalendar}
           subscriptions={subscriptions}
-          allProfiles={allProfiles}
           resolveName={resolveName}
           currentUserId={currentUserId}
           subSearch={subSearch}
@@ -2002,8 +1990,7 @@ export function CalendarPage({
               currentUserId={currentUserId}
               getMeetings={getMeetings}
               getMeetingColor={getMeetingColor}
-              allProfiles={allProfiles}
-          resolveName={resolveName}
+              resolveName={resolveName}
               weekDays={weekDays}
               mainMonthDays={mainMonthDays}
               listMeetings={listMeetings}

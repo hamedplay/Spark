@@ -1,7 +1,7 @@
 import React from 'react';
 import { Clock, MapPin, X, Plus, Users, Calendar, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { MeetingData, ProfileEntry } from './types';
+import { MeetingData } from './types';
 import {
   JALAALI_MONTHS, JALAALI_WEEKDAYS,
   HOURS_START, HOURS_END,
@@ -21,7 +21,6 @@ export interface CalendarViewProps {
   // Meeting data
   getMeetings: (jy: number, jm: number, jd: number) => MeetingData[];
   getMeetingColor: (m: MeetingData) => string;
-  allProfiles: ProfileEntry[];
   resolveName: (uid: string) => string;
   weekDays: Array<{ jy: number; jm: number; jd: number; weekday: number }>;
   mainMonthDays: Array<number | null>;
@@ -207,7 +206,7 @@ function computeOverlapLayers(mts: MeetingData[]): OverlapInfo[] {
 export function CalendarViews(p: CalendarViewProps) {
   const { viewMode, slotHeight, totalSlots, hideOffHours, workStartMin, workEndMin,
     visibleStartHour, visibleEndHour, currentTime, currentUserId,
-    getMeetings, getMeetingColor, allProfiles, resolveName,
+    getMeetings, getMeetingColor, resolveName,
     isToday, isSelected, toFarsiTime,
     isDragging, dragStartSlot, dragEndSlot, dragDate,
     dragMoveMeeting, dragMoveOriginalSlot, dragMoveOriginalEndSlot,
