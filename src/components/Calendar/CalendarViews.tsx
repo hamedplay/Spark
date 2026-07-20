@@ -748,14 +748,14 @@ export function CalendarViews(p: CalendarViewProps) {
                   setMonthDayPopup({ jy: currentJy, jm: currentJm, jd: day, x: rect.left, y: rect.bottom });
                 }}
                 className={`min-h-[60px] sm:min-h-[90px] p-0.5 sm:p-1 border-b border-r border-gray-100 dark:border-gray-700 cursor-pointer transition-colors hover:bg-blue-50/40 dark:hover:bg-blue-900/10 ${isSel ? 'bg-blue-50 dark:bg-blue-900/20' : hasHoliday ? 'bg-red-50/40 dark:bg-red-900/10' : ''}`}>
-                <div className="flex items-center justify-between">
+                <div className="relative flex items-center justify-between">
                   <button type="button" aria-label={`اقدامات روز ${day}`} title="مشاهده و ایجاد برنامه‌های این روز"
                     onClick={e => { e.stopPropagation(); setSelectedJy(currentJy); setSelectedJm(currentJm); setSelectedJd(day); const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMonthDayPopup({ jy: currentJy, jm: currentJm, jd: day, x: rect.left, y: rect.bottom }); }}
                     className={`text-[10px] sm:text-xs font-medium w-5 h-5 sm:w-6 sm:h-6 inline-flex items-center justify-center rounded-full transition-colors hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${isTd ? 'bg-blue-500 text-white' : (isFri || hasHoliday) ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>{day}</button>
                   {onCreateMeetingForDay && (
                     <button type="button" title="تنظیم جلسه" aria-label={`تنظیم جلسه برای روز ${day}`}
                       onClick={e => { e.stopPropagation(); onCreateMeetingForDay(currentJy, currentJm, day); }}
-                      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+                      className="absolute top-0 left-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
                       <CalendarPlus className="w-3.5 h-3.5" />
                     </button>
                   )}
