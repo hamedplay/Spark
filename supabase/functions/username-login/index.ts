@@ -49,9 +49,8 @@ Deno.serve(async (req: Request) => {
     );
 
     const { data: email, error: lookupErr } = await admin.rpc("get_email_by_username", { p_username: trimmedUsername });
-    if (lookupErr || !email || typeof email !== "string" || email.length === 0) {
-      return json(INVALID_CREDENTIALS, 401);
-    }
+    const usernameExists = !lookupErr && typeof email === "string" && email.length > 0;
+    const candidateEmail = usernameExists ? (email as string) : `invalid-${crypto.randomUUID()}@example.invalid`;
 
     const anon = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -59,8 +58,8 @@ Deno.serve(async (req: Request) => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    const { data: signInData, error: signInErr } = await anon.auth.signInWithPassword({ email, password });
-    if (signInErr || !signInData.session) {
+    const { data: signInData, error: signInErr } = await anon.auth.signInWithPassword({ email: candidateEmail, password });
+    if (!usernameExists || signInErr || !signInData.session) {
       return json(INVALID_CREDENTIALS, 401);
     }
 
