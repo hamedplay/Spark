@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, MapPin, X, Plus, Users, Calendar, ChevronRight } from 'lucide-react';
+import { Clock, MapPin, X, Plus, Users, Calendar, ChevronRight, CalendarPlus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { MeetingData } from './types';
 import {
@@ -118,6 +118,7 @@ export interface CalendarViewProps {
 
   // Popup setters
   setMonthDayPopup: (v: any) => void;
+  onCreateMeetingForDay?: (jy: number, jm: number, jd: number) => void;
 
   // Preview popup
   previewMeeting: MeetingData | null;
@@ -224,7 +225,7 @@ export function CalendarViews(p: CalendarViewProps) {
     commitDrag, handleHourColTouchStart, handleHourColTouchMove, handleHourColTouchEnd,
     adjustSlotHeight, handleEditMeeting, handleBlockClick,
     setSelectedJy, setSelectedJm, setSelectedJd, setViewMode,
-    setMonthDayPopup, previewMeeting, previewPos, setPreviewMeeting, setDetailMeeting,
+    setMonthDayPopup, onCreateMeetingForDay, previewMeeting, previewPos, setPreviewMeeting, setDetailMeeting,
     expandedMeetingId, setExpandedMeetingId,
     selectedJy, selectedJm, selectedJd, currentJy, currentJm,
     getOccasionsForDay, getAllDayEventsForDay, fetchAllDayEvents, isInAllDayDragRange,
@@ -743,13 +744,20 @@ export function CalendarViews(p: CalendarViewProps) {
               <div key={day}
                 onClick={e => {
                   setSelectedJy(currentJy); setSelectedJm(currentJm); setSelectedJd(day);
-                  if (dm.length > 0 || dayOcc.length > 0) {
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                    setMonthDayPopup({ jy: currentJy, jm: currentJm, jd: day, x: rect.left, y: rect.bottom });
-                  }
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setMonthDayPopup({ jy: currentJy, jm: currentJm, jd: day, x: rect.left, y: rect.bottom });
                 }}
                 className={`min-h-[60px] sm:min-h-[90px] p-0.5 sm:p-1 border-b border-r border-gray-100 dark:border-gray-700 cursor-pointer transition-colors hover:bg-blue-50/40 dark:hover:bg-blue-900/10 ${isSel ? 'bg-blue-50 dark:bg-blue-900/20' : hasHoliday ? 'bg-red-50/40 dark:bg-red-900/10' : ''}`}>
-                <span className={`text-[10px] sm:text-xs font-medium w-5 h-5 sm:w-6 sm:h-6 inline-flex items-center justify-center rounded-full ${isTd ? 'bg-blue-500 text-white' : (isFri || hasHoliday) ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>{day}</span>
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] sm:text-xs font-medium w-5 h-5 sm:w-6 sm:h-6 inline-flex items-center justify-center rounded-full ${isTd ? 'bg-blue-500 text-white' : (isFri || hasHoliday) ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>{day}</span>
+                  {onCreateMeetingForDay && (
+                    <button type="button" title="تنظیم جلسه" aria-label="تنظیم جلسه برای این روز"
+                      onClick={e => { e.stopPropagation(); onCreateMeetingForDay(currentJy, currentJm, day); }}
+                      className="p-1 rounded-md text-gray-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+                      <CalendarPlus className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
                 {dayOcc.length > 0 && (
                   <div className="space-y-0.5 mt-0.5">
                     {dayOcc.slice(0, 1).map((o: any) => (

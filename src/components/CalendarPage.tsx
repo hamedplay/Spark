@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { usePermissions } from '../context/PermissionsContext';
-import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin, RefreshCw, ChevronDown, X, Plus, Users, Search, PanelRight, Trash2, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin, RefreshCw, ChevronDown, X, Plus, Users, Search, PanelRight, Trash2, RotateCcw, CalendarPlus } from 'lucide-react';
 import { CalendarViews } from './Calendar/CalendarViews';
 import { supabase } from '../lib/supabase';
 import { insertNotification as insertNotificationFromTemplate } from '../lib/notifications';
@@ -1037,6 +1037,11 @@ export function CalendarPage({
     setShowMeetingForm(true);
   };
 
+  const handleCreateMeetingForDay = useCallback((jy: number, jm: number, jd: number) => {
+    setPrefillData({ dateJy: jy, dateJm: jm, dateJd: jd });
+    setShowMeetingForm(true);
+  }, []);
+
   const handleEditMeeting = (m: MeetingData) => {
     const hasRepeat = !!(m.repeat_type && m.repeat_type !== 'none');
     if (hasRepeat) { setRepeatEditDialog({ meeting: m }); setDetailMeeting(null); setPreviewMeeting(null); }
@@ -1721,7 +1726,13 @@ export function CalendarPage({
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button onClick={() => { setMonthDayPopup(null); handleCreateMeetingForDay(jy, jm, jd); }}
+                    title="تنظیم جلسه" aria-label="تنظیم جلسه برای این روز"
+                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-blue-500 transition-colors">
+                    <CalendarPlus className="w-4 h-4" />
+                  </button>
                   <button onClick={() => { setMonthDayPopup(null); setAllDayFormDate({ jy, jm, jd }); setShowAllDayForm(true); }}
+                    title="ایجاد برنامه روزانه" aria-label="ایجاد برنامه روزانه برای این روز"
                     className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-blue-500 transition-colors">
                     <Plus className="w-4 h-4" />
                   </button>
@@ -2062,6 +2073,7 @@ export function CalendarPage({
               setSelectedJd={setSelectedJd}
               setViewMode={setViewMode as (v: string) => void}
               setMonthDayPopup={setMonthDayPopup}
+              onCreateMeetingForDay={handleCreateMeetingForDay}
               previewMeeting={previewMeeting}
               previewPos={previewPos}
               setPreviewMeeting={setPreviewMeeting}
