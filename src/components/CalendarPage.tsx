@@ -1726,17 +1726,17 @@ export function CalendarPage({
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => { setMonthDayPopup(null); handleCreateMeetingForDay(jy, jm, jd); }}
+                  <button type="button" onClick={() => { setMonthDayPopup(null); handleCreateMeetingForDay(jy, jm, jd); }}
                     title="تنظیم جلسه" aria-label="تنظیم جلسه برای این روز"
                     className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-blue-500 transition-colors">
                     <CalendarPlus className="w-4 h-4" />
                   </button>
-                  <button onClick={() => { setMonthDayPopup(null); setAllDayFormDate({ jy, jm, jd }); setShowAllDayForm(true); }}
+                  <button type="button" onClick={() => { setMonthDayPopup(null); setAllDayFormDate({ jy, jm, jd }); setShowAllDayForm(true); }}
                     title="ایجاد برنامه روزانه" aria-label="ایجاد برنامه روزانه برای این روز"
                     className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-blue-500 transition-colors">
                     <Plus className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setMonthDayPopup(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 transition-colors">
+                  <button type="button" onClick={() => setMonthDayPopup(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -1748,7 +1748,7 @@ export function CalendarPage({
                 {dayEvs.map(ev => (
                   <div key={ev.id} className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center justify-between ${ev.type === 'leave' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'}`}>
                     <span>{ev.title}</span>
-                    <button onClick={async () => { await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70"><X className="w-3 h-3" /></button>
+                    <button type="button" onClick={async () => { await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70"><X className="w-3 h-3" /></button>
                   </div>
                 ))}
                 {dm.length === 0 && occ.length === 0 && dayEvs.length === 0 && (
@@ -1757,7 +1757,7 @@ export function CalendarPage({
                 {dm.map(m => {
                   const c = getMeetingColor(m);
                   return (
-                    <button key={m.id} onClick={() => { setMonthDayPopup(null); setDetailMeeting(m); }}
+                    <button type="button" key={m.id} onClick={() => { setMonthDayPopup(null); setDetailMeeting(m); }}
                       className="w-full text-right flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: c }} />
                       <div className="flex-1 min-w-0">
@@ -1769,7 +1769,7 @@ export function CalendarPage({
                 })}
               </div>
               <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
-                <button onClick={() => { setMonthDayPopup(null); setSelectedJy(jy); setSelectedJm(jm); setSelectedJd(jd); setViewMode('day'); }}
+                <button type="button" onClick={() => { setMonthDayPopup(null); setSelectedJy(jy); setSelectedJm(jm); setSelectedJd(jd); setViewMode('day'); }}
                   className="w-full py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors">
                   نمایش روزانه
                 </button>
