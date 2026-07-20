@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, User, Phone, Smartphone, ChevronRight } from 'lucide-react';
+import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, User, Phone, Smartphone, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { supabase, ensureProfile, handleSupabaseError, testSupabaseConnection } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';
@@ -40,6 +40,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     testSupabaseConnection().then(ok => setConnectionStatus(ok ? 'connected' : 'disconnected')).catch(() => setConnectionStatus('disconnected'));
@@ -58,16 +59,15 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     setLoading(true);
     try {
       let loginEmail = form.email.trim();
-      // If input doesn't look like an email, treat it as a username
-      if (!loginEmail.includes('@')) {
+      const isEmail = loginEmail.includes('@');
+      if (!isEmail) {
         const { data: emailData, error: lookupErr } = await supabase.rpc('get_email_by_username', { p_username: loginEmail });
-        if (lookupErr || !emailData) { toast.error('نام کاربری یافت نشد'); return; }
+        if (lookupErr || !emailData) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
         loginEmail = emailData as string;
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: form.password });
       if (error) {
-        const msg = handleSupabaseError(error).message;
-        toast.error(msg || 'ایمیل یا رمز عبور اشتباه است');
+        toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.');
         return;
       }
       if (data.user) {
@@ -83,7 +83,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         logAudit({ module: 'auth', action: 'login', entity_name: 'user', entity_id: data.user.id, details: `ورود: ${loginEmail}`, severity: 'info' });
         onSuccess();
       }
-    } catch (err: any) { toast.error(handleSupabaseError(err).message); }
+    } catch (err: any) { toast.error('در حال حاضر امکان ورود وجود ندارد. لطفاً دوباره تلاش کنید.'); }
     finally { setLoading(false); }
   };
 
@@ -289,19 +289,24 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             {mode === 'login' && loginMethod === 'email' && (
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ایمیل یا نام کاربری</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری یا ایمیل</label>
                   <div className="relative">
                     <input type="text" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                      placeholder="example@domain.com یا username" className={inp} dir="ltr" disabled={loading} />
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      placeholder="نام کاربری یا ایمیل خود را وارد کنید" className={inp + ' pl-10'} autoComplete="username" spellCheck={false} autoCapitalize="off" dir="ltr" disabled={loading} />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور</label>
                   <div className="relative">
-                    <input type="password" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                      placeholder="••••••••" className={inp} disabled={loading} />
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input type={showPassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                      placeholder="••••••••" className={inp + ' pl-10 pr-10'} autoComplete="current-password" disabled={loading} />
+                    <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
+                    <button type="button" onClick={() => setShowPassword(v => !v)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                      aria-label={showPassword ? 'مخفی کردن رمز عبور' : 'نمایش رمز عبور'} aria-pressed={showPassword}>
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
                 <button type="submit" disabled={loading}
