@@ -301,17 +301,17 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             {mode === 'login' && loginMethod === 'email' && (
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری یا ایمیل</label>
+                  <label htmlFor="login-identifier" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری یا ایمیل</label>
                   <div className="relative">
-                    <input type="text" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                    <input id="login-identifier" type="text" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
                       placeholder="نام کاربری یا ایمیل خود را وارد کنید" className={inp + ' pl-10'} autoComplete="username" spellCheck={false} autoCapitalize="off" dir="ltr" disabled={loading} />
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور</label>
+                  <label htmlFor="login-password" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور</label>
                   <div className="relative">
-                    <input type={showPassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                    <input id="login-password" type={showPassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
                       placeholder="••••••••" className={inp + ' pl-10 pr-10'} autoComplete="current-password" disabled={loading} />
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
                     <button type="button" onClick={() => setShowPassword(v => !v)}
