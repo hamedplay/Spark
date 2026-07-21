@@ -606,16 +606,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
       if (prefillMeetingId) {
         // Detect first-time scheduling vs edit (for correct notification type)
-        // Read previous participants BEFORE update so the diff is computed against pre-edit state.
         const { data: existingMtg } = await supabase
           .from('meetings')
-          .select('start_time, participant_user_ids')
+          .select('start_time')
           .eq('id', prefillMeetingId)
           .maybeSingle();
         const isFirstSchedule = !existingMtg?.start_time;
-        const previousParticipantIds = Array.from(new Set(
-          ((existingMtg?.participant_user_ids || []) as string[]).filter(id => id !== userId)
-        ));
 
         const updateRecord: any = {
           subject, request_date: gregDate,
@@ -624,7 +620,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           location, representative, phone, notes: notes || null, priority,
           status: 'archived', status_type: 'scheduled',
           notify_users: Array.from(new Set([userId, ...selectedNotifyUsers.map(u => u.id)])),
-          participant_user_ids: selectedParticipants.map(p => p.id),
           external_participants: selectedExternal,
           repeat_type: repeatEnabled ? repeatType : 'none',
           repeat_interval: repeatEnabled ? repeatInterval : null,
@@ -647,7 +642,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             duration: startTime && endTime ? `${startTime} - ${endTime}` : '',
             status: 'archived', status_type: 'scheduled',
             notify_users: updateRecord.notify_users,
-            participant_user_ids: updateRecord.participant_user_ids,
+            participant_user_ids: selectedParticipants.map(p => p.id),
             external_participants: selectedExternal,
             repeat_type: updateRecord.repeat_type, repeat_interval: updateRecord.repeat_interval,
             repeat_end_date: updateRecord.repeat_end_date, repeat_weekday: updateRecord.repeat_weekday,
@@ -679,28 +674,25 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
         }
 
-        // Sync meeting_inbox approval records with participant diff.
-        // previousParticipantIds was read BEFORE the update (above) for an accurate diff.
-        const nextParticipantIds = Array.from(new Set(
-          selectedParticipants.map(p => p.id).filter(id => id !== userId)
-        ));
-        const addedParticipantIds = nextParticipantIds.filter(id => !previousParticipantIds.includes(id));
-        const retainedParticipantIds = nextParticipantIds.filter(id => previousParticipantIds.includes(id));
-        const removedParticipantIds = previousParticipantIds.filter(id => !nextParticipantIds.includes(id));
-
-        // Remove inbox entries for removed participants (any status)
-        if (removedParticipantIds.length > 0) {
-          await supabase.from('meeting_inbox')
-            .delete()
-            .eq('meeting_id', prefillMeetingId)
-            .in('user_id', removedParticipantIds);
-        }
-        // Insert pending approval for added participants only (retained status preserved)
-        if (addedParticipantIds.length > 0) {
-          await supabase.from('meeting_inbox').upsert(
-            addedParticipantIds.map(uid => ({ meeting_id: prefillMeetingId, user_id: uid, status: 'pending' })),
-            { onConflict: 'meeting_id,user_id' }
-          );
+        // Atomic participant sync via RPC: validates authorization, same-org, active, hidden;
+        // locks meeting row, computes diff, updates participant_user_ids and meeting_inbox in one transaction.
+        // Bulk-edit path (prefillEditAllIds) still uses the direct update above for participant_user_ids.
+        let addedParticipantIds: string[] = [];
+        let retainedParticipantIds: string[] = [];
+        let removedParticipantIds: string[] = [];
+        if (!prefillEditAllIds || prefillEditAllIds.length === 0) {
+          const { data: syncResult, error: syncError } = await supabase.rpc('sync_meeting_participants_v2', {
+            p_meeting_id: prefillMeetingId,
+            p_participant_user_ids: selectedParticipants.map(p => p.id),
+          });
+          if (syncError) throw new Error(syncError.message || 'خطا در همگام‌سازی شرکت‌کنندگان');
+          addedParticipantIds = (syncResult?.added_participant_ids || []) as string[];
+          retainedParticipantIds = (syncResult?.retained_participant_ids || []) as string[];
+          removedParticipantIds = (syncResult?.removed_participant_ids || []) as string[];
+        } else {
+          addedParticipantIds = selectedParticipants.map(p => p.id).filter(id => id !== userId);
+          retainedParticipantIds = [];
+          removedParticipantIds = [];
         }
 
         const creatorAction: MeetingAction = isFirstSchedule ? 'created' : 'change';
