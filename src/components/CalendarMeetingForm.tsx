@@ -7,7 +7,7 @@ import { CirclePlus as PlusCircle, Loader as Loader2, UserPlus, Bell, Repeat, Me
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail, AgendaItem } from '../types';
-import { useOrgUsers } from '../lib/useOrgUsers';
+import { useOrgUsers, FALLBACK_NAME, LOADING_NAME } from '../lib/useOrgUsers';
 
 interface ExternalSmsResult {
   ok: boolean;
@@ -380,7 +380,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [editingAgendaIdx, setEditingAgendaIdx] = useState<number | null>(null);
 
   // Org users for grouped pickers
-  const { groups: orgGroups, allUsers: orgAllUsers, loading: orgUsersLoading } = useOrgUsers(userId);
+  const { groups: orgGroups, allUsers: orgAllUsers, loading: orgUsersLoading, usersById } = useOrgUsers(userId);
 
   const systemUserGroups = orgGroups.map(g => ({
     label: g.unit_name,
@@ -394,13 +394,40 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   }));
 
   // تبدیل user_id به نام نمایشی بر اساس داده‌های useOrgUsers (بدون query مستقیم profiles)
-  const resolveUserName = (uid: string): string =>
-    orgAllUsers.find(u => u.user_id === uid)?.full_name?.trim()
-    || selectedParticipants.find(p => p.id === uid)?.name?.trim()
-    || selectedNotifyUsers.find(u => u.id === uid)?.name?.trim()
-    || 'همکار گرامی';
+  const isPlaceholderName = (name: string): boolean => {
+    const trimmed = name.trim();
+    if (!trimmed) return true;
+    return trimmed === 'همکار گرامی' || trimmed === FALLBACK_NAME || trimmed === LOADING_NAME;
+  };
+
+  const resolveUserName = (uid: string): string => {
+    if (orgUsersLoading) return LOADING_NAME;
+    const user = usersById[uid];
+    if (user?.full_name?.trim()) return user.full_name.trim();
+    const storedName = selectedParticipants.find(p => p.id === uid)?.name?.trim()
+      || selectedNotifyUsers.find(u => u.id === uid)?.name?.trim();
+    if (storedName && !isPlaceholderName(storedName)) return storedName;
+    return FALLBACK_NAME;
+  };
   const resolveUsersByIds = (ids: string[]): { id: string; name: string }[] =>
     ids.map(id => ({ id, name: resolveUserName(id) }));
+
+  // Rehydrate display names once the org user directory finishes loading
+  useEffect(() => {
+    if (orgUsersLoading) return;
+    setSelectedParticipants(prev => prev.map(p => {
+      const realName = usersById[p.id]?.full_name?.trim();
+      if (realName) return { ...p, name: realName };
+      if (isPlaceholderName(p.name)) return { ...p, name: FALLBACK_NAME };
+      return p;
+    }));
+    setSelectedNotifyUsers(prev => prev.map(u => {
+      const realName = usersById[u.id]?.full_name?.trim();
+      if (realName) return { ...u, name: realName };
+      if (isPlaceholderName(u.name)) return { ...u, name: FALLBACK_NAME };
+      return u;
+    }));
+  }, [orgUsersLoading, usersById]);
 
   useEffect(() => {
     (async () => {
