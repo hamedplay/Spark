@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { insertNotification, getSmsTemplates, fillPlaceholders } from '../lib/notifications';
 import type { SmsDispatchResult } from '../lib/notifications';
@@ -393,41 +393,43 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     }),
   }));
 
-  // تبدیل user_id به نام نمایشی بر اساس داده‌های useOrgUsers (بدون query مستقیم profiles)
+  // Display names are derived at render time from the org directory (usersById),
+  // never stored as fallback strings in state. State holds only IDs (+ a vestigial
+  // name used solely as a secondary fallback for users absent from the directory).
   const isPlaceholderName = (name: string): boolean => {
     const trimmed = name.trim();
     if (!trimmed) return true;
-    return trimmed === 'همکار گرامی' || trimmed === FALLBACK_NAME || trimmed === LOADING_NAME;
+    if (trimmed === 'همکار گرامی' || trimmed === FALLBACK_NAME || trimmed === LOADING_NAME) return true;
+    // UUID or email are not valid display names
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) return true;
+    if (/^\S+@\S+\.\S+$/.test(trimmed)) return true;
+    return false;
   };
 
-  const resolveUserName = (uid: string): string => {
+  const resolveDisplayName = (uid: string, storedName?: string): string => {
     if (orgUsersLoading) return LOADING_NAME;
     const user = usersById[uid];
     if (user?.full_name?.trim()) return user.full_name.trim();
-    const storedName = selectedParticipants.find(p => p.id === uid)?.name?.trim()
-      || selectedNotifyUsers.find(u => u.id === uid)?.name?.trim();
     if (storedName && !isPlaceholderName(storedName)) return storedName;
     return FALLBACK_NAME;
   };
-  const resolveUsersByIds = (ids: string[]): { id: string; name: string }[] =>
-    ids.map(id => ({ id, name: resolveUserName(id) }));
 
-  // Rehydrate display names once the org user directory finishes loading
-  useEffect(() => {
-    if (orgUsersLoading) return;
-    setSelectedParticipants(prev => prev.map(p => {
-      const realName = usersById[p.id]?.full_name?.trim();
-      if (realName) return { ...p, name: realName };
-      if (isPlaceholderName(p.name)) return { ...p, name: FALLBACK_NAME };
-      return p;
-    }));
-    setSelectedNotifyUsers(prev => prev.map(u => {
-      const realName = usersById[u.id]?.full_name?.trim();
-      if (realName) return { ...u, name: realName };
-      if (isPlaceholderName(u.name)) return { ...u, name: FALLBACK_NAME };
-      return u;
-    }));
-  }, [orgUsersLoading, usersById]);
+  // Derived display items — the single source of truth for rendered names
+  const participantDisplayItems = useMemo(
+    () => selectedParticipants.map(p => ({ id: p.id, name: resolveDisplayName(p.id, p.name) })),
+    [selectedParticipants, usersById, orgUsersLoading],
+  );
+  const notifyDisplayItems = useMemo(
+    () => selectedNotifyUsers.map(u => ({ id: u.id, name: resolveDisplayName(u.id, u.name) })),
+    [selectedNotifyUsers, usersById, orgUsersLoading],
+  );
+  const managerDisplayName = useMemo(
+    () => meetingManager ? resolveDisplayName(meetingManager) : '',
+    [meetingManager, usersById, orgUsersLoading],
+  );
+
+  // Resolve a user's name for notification payloads (same source as display)
+  const resolveUserName = (uid: string): string => resolveDisplayName(uid);
 
   useEffect(() => {
     (async () => {
@@ -494,7 +496,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       if (prefillData.repeatWeekday !== undefined) setRepeatWeekday(prefillData.repeatWeekday);
     }
     if (prefillData.participantUserIds && prefillData.participantUserIds.length > 0) {
-      setSelectedParticipants(resolveUsersByIds(prefillData.participantUserIds));
+      setSelectedParticipants(prefillData.participantUserIds.map((id: string) => ({ id, name: '' })));
     }
   }, [prefillData]);
 
@@ -503,12 +505,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (!data) return;
 
     if ((data.participant_user_ids || []).length > 0) {
-      setSelectedParticipants(resolveUsersByIds(data.participant_user_ids as string[]));
+      setSelectedParticipants((data.participant_user_ids as string[]).map((id: string) => ({ id, name: '' })));
     }
     if ((data.notify_users || []).length > 0) {
       const notifyIds = (data.notify_users as string[]);
       // Exclude the current user (creator) from the visible notify list since they're auto-included
-      setSelectedNotifyUsers(resolveUsersByIds(notifyIds));
+      setSelectedNotifyUsers(notifyIds.map((id: string) => ({ id, name: '' })));
     }
     if ((data.external_participants || []).length > 0) {
       setSelectedExternal(data.external_participants as string[]);
@@ -818,7 +820,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         if (me) throw me;
         if (md) {
           if (selectedParticipants.length > 0) {
-            await supabase.from('participants').insert(selectedParticipants.map(p => ({ meeting_id: md.id, name: p.name })));
+            await supabase.from('participants').insert(participantDisplayItems.map(p => ({ meeting_id: md.id, name: p.name })));
           }
           // Save agenda items
           if (agendaEnabled && agendaItems.length > 0) {
@@ -1218,8 +1220,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           placeholder="جستجوی کاربران..."
           options={[]}
           groups={systemUserGroups}
-          selected={selectedParticipants}
-          onAdd={item => setSelectedParticipants(p => [...p, item])}
+          selected={participantDisplayItems}
+          onAdd={item => setSelectedParticipants(p => p.some(x => x.id === item.id) ? p : [...p, item])}
           onRemove={id => setSelectedParticipants(p => p.filter(x => x.id !== id))}
           tagColor="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
         />
@@ -1231,8 +1233,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           placeholder="جستجوی کاربران..."
           options={[]}
           groups={systemUserGroups}
-          selected={selectedNotifyUsers}
-          onAdd={item => setSelectedNotifyUsers(p => [...p, item])}
+          selected={notifyDisplayItems}
+          onAdd={item => setSelectedNotifyUsers(p => p.some(x => x.id === item.id) ? p : [...p, item])}
           onRemove={id => setSelectedNotifyUsers(p => p.filter(x => x.id !== id))}
           tagColor="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
         />
@@ -1326,8 +1328,11 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             <select value={meetingManager} onChange={e => setMeetingManager(e.target.value)}
               className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
               <option value="">بدون مدیر</option>
-              {selectedParticipants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {participantDisplayItems.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            {meetingManager && managerDisplayName && (
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{managerDisplayName}</div>
+            )}
           </div>
         )}
 
@@ -1548,7 +1553,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
                       <select value={agendaForm.presenter} onChange={e => setAgendaForm(f => ({ ...f, presenter: e.target.value }))}
                         className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-600 dark:text-white text-sm">
                         <option value="">بدون ارائه‌دهنده</option>
-                        {selectedParticipants.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                        {participantDisplayItems.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                         {selectedExternal.map(name => <option key={name} value={name}>{name}</option>)}
                       </select>
                     </div>
