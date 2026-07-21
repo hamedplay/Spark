@@ -2,6 +2,12 @@ import { supabase } from './supabase';
 import { renderTemplate, validatePayloadForEvent } from '../config/templateCatalog';
 import type { RenderTemplateResult } from '../config/templateCatalog';
 
+export interface NotifyChannels {
+  inApp?: boolean;  // default true
+  sms?: boolean;    // default true
+  bale?: boolean;   // default true
+}
+
 export interface NotifyPayload {
   userId: string;
   category: string;    // 'chat' | 'meeting' | 'task' | 'note' | 'calendar' | 'system'
@@ -17,6 +23,10 @@ export interface NotifyPayload {
   senderName?: string | null;
   senderAvatarUrl?: string | null;
   actionUrl?: string | null;
+  // Channel control — when omitted, all channels fire (backward compatible)
+  channels?: NotifyChannels;
+  // Idempotency key — when set, passed to create_notification for unique constraint
+  eventKey?: string | null;
 }
 
 export interface SmsDispatchResult {
@@ -196,38 +206,51 @@ export async function insertNotification(payload: NotifyPayload): Promise<SmsDis
   const title = template ? fillPlaceholders(template.title, vars) : payload.fallbackTitle;
   const message = template ? fillPlaceholders(template.body, vars) : payload.fallbackMessage;
 
-  await supabase.rpc('create_notification', {
-    p_user_id: payload.userId,
-    p_title: title,
-    p_message: message,
-    p_type: payload.category as 'meeting' | 'task' | 'note' | 'chat' | 'channel' | 'call' | 'system',
-    p_action_url: payload.actionUrl ?? null,
-    p_template_category: payload.category,
-    p_template_event_type: payload.eventType,
-    p_template_audience: audience,
-  });
+  const ch = payload.channels;
+  const inAppEnabled = ch?.inApp !== false;
+  const smsEnabled = ch?.sms !== false;
+  const baleEnabled = ch?.bale !== false;
 
-  // Resolve SMS message (dedicated template or fallback to notification body)
-  const smsTemplates = await getSmsTemplates();
-  const smsBody =
-    smsTemplates.get(`${payload.category}:${payload.eventType}:${audience}`) ||
-    smsTemplates.get(`${payload.category}:${payload.eventType}:all`) ||
-    message;
-  const smsMessage = fillPlaceholders(smsBody, vars);
+  if (inAppEnabled) {
+    await supabase.rpc('create_notification', {
+      p_user_id: payload.userId,
+      p_title: title,
+      p_message: message,
+      p_type: payload.category as 'meeting' | 'task' | 'note' | 'chat' | 'channel' | 'call' | 'system',
+      p_action_url: payload.actionUrl ?? null,
+      p_template_category: payload.category,
+      p_template_event_type: payload.eventType,
+      p_template_audience: audience,
+      p_event_key: payload.eventKey ?? null,
+    });
+  }
 
-  // Dispatch SMS via server-side dispatch mode — returns structured result
-  const smsResult = await dispatchSms(
-    payload.userId,
-    payload.category,
-    payload.eventType,
-    audience,
-    smsMessage,
-    payload.senderId,
-  );
+  let smsResult: SmsDispatchResult = { ok: true, status: 'skipped', reason: 'CHANNEL_DISABLED' };
+  if (smsEnabled) {
+    // Resolve SMS message (dedicated template or fallback to notification body)
+    const smsTemplates = await getSmsTemplates();
+    const smsBody =
+      smsTemplates.get(`${payload.category}:${payload.eventType}:${audience}`) ||
+      smsTemplates.get(`${payload.category}:${payload.eventType}:all`) ||
+      message;
+    const smsMessage = fillPlaceholders(smsBody, vars);
+
+    // Dispatch SMS via server-side dispatch mode — returns structured result
+    smsResult = await dispatchSms(
+      payload.userId,
+      payload.category,
+      payload.eventType,
+      audience,
+      smsMessage,
+      payload.senderId,
+    );
+  }
 
   // Fire-and-forget — send Bale message if user has connected Bale account
-  const baleText = title !== message ? `${title}\n${message}` : message;
-  dispatchBale(payload.userId, baleText);
+  if (baleEnabled) {
+    const baleText = title !== message ? `${title}\n${message}` : message;
+    dispatchBale(payload.userId, baleText);
+  }
 
   return smsResult;
 }
