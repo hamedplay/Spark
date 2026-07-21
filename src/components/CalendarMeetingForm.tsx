@@ -606,12 +606,16 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
       if (prefillMeetingId) {
         // Detect first-time scheduling vs edit (for correct notification type)
+        // Read previous participants BEFORE update so the diff is computed against pre-edit state.
         const { data: existingMtg } = await supabase
           .from('meetings')
-          .select('start_time')
+          .select('start_time, participant_user_ids')
           .eq('id', prefillMeetingId)
           .maybeSingle();
         const isFirstSchedule = !existingMtg?.start_time;
+        const previousParticipantIds = Array.from(new Set(
+          ((existingMtg?.participant_user_ids || []) as string[]).filter(id => id !== userId)
+        ));
 
         const updateRecord: any = {
           subject, request_date: gregDate,
@@ -676,15 +680,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         }
 
         // Sync meeting_inbox approval records with participant diff.
-        // Read previous participants from DB (not frontend state) for security.
-        const { data: prevMtg } = await supabase
-          .from('meetings')
-          .select('participant_user_ids')
-          .eq('id', prefillMeetingId)
-          .maybeSingle();
-        const previousParticipantIds = Array.from(new Set(
-          ((prevMtg?.participant_user_ids || []) as string[]).filter(id => id !== userId)
-        ));
+        // previousParticipantIds was read BEFORE the update (above) for an accurate diff.
         const nextParticipantIds = Array.from(new Set(
           selectedParticipants.map(p => p.id).filter(id => id !== userId)
         ));
