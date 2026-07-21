@@ -675,17 +675,35 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
         }
 
-        // Create/refresh inbox invitations for participants only (notify_users see meeting directly via RLS, no inbox needed)
-        const participantsForInvite = selectedParticipants
-          .map(p => p.id)
-          .filter(id => id !== userId);
-        if (participantsForInvite.length > 0) {
+        // Sync meeting_inbox approval records with participant diff.
+        // Read previous participants from DB (not frontend state) for security.
+        const { data: prevMtg } = await supabase
+          .from('meetings')
+          .select('participant_user_ids')
+          .eq('id', prefillMeetingId)
+          .maybeSingle();
+        const previousParticipantIds = Array.from(new Set(
+          ((prevMtg?.participant_user_ids || []) as string[]).filter(id => id !== userId)
+        ));
+        const nextParticipantIds = Array.from(new Set(
+          selectedParticipants.map(p => p.id).filter(id => id !== userId)
+        ));
+        const addedParticipantIds = nextParticipantIds.filter(id => !previousParticipantIds.includes(id));
+        const retainedParticipantIds = nextParticipantIds.filter(id => previousParticipantIds.includes(id));
+        const removedParticipantIds = previousParticipantIds.filter(id => !nextParticipantIds.includes(id));
+
+        // Remove inbox entries for removed participants (any status)
+        if (removedParticipantIds.length > 0) {
           await supabase.from('meeting_inbox')
             .delete()
             .eq('meeting_id', prefillMeetingId)
-            .in('status', ['pending', 'declined']);
-          await supabase.from('meeting_inbox').insert(
-            participantsForInvite.map(uid => ({ meeting_id: prefillMeetingId, user_id: uid, status: 'pending' }))
+            .in('user_id', removedParticipantIds);
+        }
+        // Insert pending approval for added participants only (retained status preserved)
+        if (addedParticipantIds.length > 0) {
+          await supabase.from('meeting_inbox').upsert(
+            addedParticipantIds.map(uid => ({ meeting_id: prefillMeetingId, user_id: uid, status: 'pending' })),
+            { onConflict: 'meeting_id,user_id' }
           );
         }
 
@@ -694,10 +712,16 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
 
         const internalSmsResults: SmsDispatchResult[] = [];
-        if (participantIds.length) {
-          const participantAction: MeetingAction = isFirstSchedule ? 'invite' : 'change';
-          const participantEventType = getMeetingTemplateKey('participant', participantAction);
-          const results = await Promise.all(participantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: participantEventType, audience: 'participants', fallbackTitle: isFirstSchedule ? 'دعوت به جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
+        // Added participants receive invitation (same as initial create), never "change" SMS
+        if (addedParticipantIds.length) {
+          const addedEventType = getMeetingTemplateKey('participant', 'invite');
+          const results = await Promise.all(addedParticipantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: addedEventType, audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
+          internalSmsResults.push(...results);
+        }
+        // Retained participants receive "change" notification only on edit (not first schedule)
+        if (!isFirstSchedule && retainedParticipantIds.length) {
+          const retainedEventType = getMeetingTemplateKey('participant', 'change');
+          const results = await Promise.all(retainedParticipantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: retainedEventType, audience: 'participants', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `جلسه "${subject}" ویرایش شد — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
           internalSmsResults.push(...results);
         }
         if (observerIds.length) {
