@@ -22,6 +22,7 @@ async function sendSmsToExternals(
   message: string,
   triggeredByUserId?: string | null,
   placeholders?: Record<string, string>,
+  eventType: 'invite' | 'change' = 'invite',
 ): Promise<ExternalSmsResult> {
   if (!externalNames.length) return { ok: true, sent: 0, skipped: 0 };
 
@@ -42,8 +43,11 @@ async function sendSmsToExternals(
   if (placeholders) {
     const smsTemplates = await getSmsTemplates();
     const templateBody =
-      smsTemplates.get('meeting:invite:external') ||
-      smsTemplates.get('meeting:invite:all');
+      smsTemplates.get(`meeting:${eventType}:external`) ||
+      smsTemplates.get(`meeting:${eventType}:all`) ||
+      (eventType === 'change'
+        ? smsTemplates.get('meeting:invite:external') || smsTemplates.get('meeting:invite:all')
+        : undefined);
     if (templateBody) {
       smsMessage = fillPlaceholders(templateBody, placeholders);
     }
@@ -57,7 +61,7 @@ async function sendSmsToExternals(
         message: smsMessage,
         triggeredByUserId: triggeredByUserId ?? null,
         category: 'meeting',
-        eventType: 'invite',
+        eventType,
       },
     });
 
@@ -145,10 +149,11 @@ type CommitSnapshot = {
   sendSms: boolean;
   agendaEnabled: boolean;
   agendaItems: AgendaItem[];
+  prevExternalByMeetingId: Record<string, string[]>;
 };
 
 const IMPORTANT_FIELDS = ['subject', 'request_date', 'start_time', 'end_time', 'location', 'conference_room_id'] as const;
-const MINOR_FIELDS = ['phone', 'representative', 'meeting_manager', 'notes', 'priority'] as const;
+const MINOR_FIELDS = ['phone', 'representative', 'meeting_manager', 'notes', 'priority', 'reminder_minutes', 'calendar_id', 'send_sms', 'members_only'] as const;
 
 const FIELD_LABELS: Record<string, string> = {
   subject: 'موضوع جلسه',
@@ -163,11 +168,34 @@ const FIELD_LABELS: Record<string, string> = {
   meeting_manager: 'مدیر جلسه',
   notes: 'توضیحات',
   priority: 'اولویت',
+  reminder_minutes: 'تنظیمات یادآوری',
+  calendar_id: 'تقویم انتخابی',
+  send_sms: 'تنظیمات ارسال پیامک',
+  members_only: 'نمایش فقط برای اعضا',
+  repeat_type: 'تنظیمات تکرار',
+  agenda: 'دستور جلسه',
+  external_participants: 'شرکت‌کنندگان خارجی',
 };
 
 function normalizeStr(v: unknown): string {
   if (v == null) return '';
   return String(v).trim();
+}
+
+function arraysEqualAsSets(a: unknown[], b: unknown[]): boolean {
+  const sa = new Set(a.filter((x): x is string => typeof x === 'string' && !!x));
+  const sb = new Set(b.filter((x): x is string => typeof x === 'string' && !!x));
+  if (sa.size !== sb.size) return false;
+  for (const v of sa) if (!sb.has(v)) return false;
+  return true;
+}
+
+function agendaItemsEqual(a: AgendaItem[] | null | undefined, b: AgendaItem[] | null | undefined): boolean {
+  // Content + order comparison: title, presenter, duration_minutes, sequence.
+  const norm = (items: AgendaItem[]) => items.map(i =>
+    `${(i.title || '').trim()}|${(i.presenter || '').trim()}|${i.duration_minutes ?? ''}`
+  ).join('\n');
+  return norm(a || []) === norm(b || []);
 }
 
 function computeChangeSet(existing: Record<string, any>, next: Record<string, any>): MeetingChangeSet {
@@ -189,6 +217,17 @@ function computeChangeSet(existing: Record<string, any>, next: Record<string, an
     }
   }
 
+  // Repeat settings (minor)
+  const exRepeat = [existing.repeat_type || 'none', existing.repeat_interval ?? null, existing.repeat_end_date ?? null, existing.repeat_weekday ?? null].join('|');
+  const nxRepeat = [next.repeat_type || 'none', next.repeat_interval ?? null, next.repeat_end_date ?? null, next.repeat_weekday ?? null].join('|');
+  if (exRepeat !== nxRepeat) minorFields.push('repeat_type');
+
+  // Agenda items (minor)
+  if (!agendaItemsEqual(existing.agenda_items, next.agenda_items)) minorFields.push('agenda');
+
+  // External participants (member change, not important)
+  const externalChanged = !arraysEqualAsSets(existing.external_participants || [], next.external_participants || []);
+
   const prevParticipants = new Set<string>((existing.participant_user_ids || []).filter((x: string) => x));
   const nextParticipants = new Set<string>((next.participant_user_ids || []).filter((x: string) => x));
   const participantChanged =
@@ -202,7 +241,7 @@ function computeChangeSet(existing: Record<string, any>, next: Record<string, an
     [...nextNotify].some(id => !prevNotify.has(id));
 
   const hasNonParticipantChanges = importantFields.length > 0 || minorFields.length > 0;
-  const hasAnyChanges = hasNonParticipantChanges || participantChanged || notifyUsersChanged;
+  const hasAnyChanges = hasNonParticipantChanges || participantChanged || notifyUsersChanged || externalChanged;
 
   return { importantFields, minorFields, participantChanged, notifyUsersChanged, hasNonParticipantChanges, hasAnyChanges };
 }
@@ -737,10 +776,22 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const bulkIds = (prefillEditAllIds && prefillEditAllIds.length > 0) ? prefillEditAllIds : [prefillMeetingId];
         const { data: existingRows } = await supabase
           .from('meetings')
-          .select('id, subject, request_date, start_time, end_time, location, representative, phone, notes, priority, meeting_manager, is_online, conference_room_id, participant_user_ids, notify_users')
+          .select('id, subject, request_date, start_time, end_time, location, representative, phone, notes, priority, meeting_manager, is_online, conference_room_id, participant_user_ids, notify_users, external_participants, reminder_minutes, calendar_id, send_sms, members_only, repeat_type, repeat_interval, repeat_end_date, repeat_weekday')
           .in('id', bulkIds);
         const existingMap = new Map<string, any>();
         for (const r of (existingRows || [])) existingMap.set(r.id, r);
+        // Fetch agenda items separately (separate table) so computeChangeSet can diff them.
+        const { data: prevAgendaRows } = await supabase
+          .from('meeting_agenda_items')
+          .select('meeting_id, title, presenter, duration_minutes, sort_order')
+          .in('meeting_id', bulkIds)
+          .order('sort_order');
+        for (const a of (prevAgendaRows || [])) {
+          const row = existingMap.get(a.meeting_id);
+          if (!row) continue;
+          if (!row.agenda_items) row.agenda_items = [];
+          row.agenda_items.push({ title: a.title, presenter: a.presenter, duration_minutes: a.duration_minutes });
+        }
         const existingMtg = existingMap.get(prefillMeetingId) || null;
         const isFirstSchedule = !existingMtg?.start_time;
 
@@ -751,6 +802,18 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           conference_room_id: conferenceRoomId,
           participant_user_ids: selectedParticipants.map(p => p.id),
           notify_users: Array.from(new Set([userId, ...selectedNotifyUsers.map(u => u.id)])),
+          external_participants: selectedExternal,
+          reminder_minutes: reminderMinutes || null,
+          calendar_id: selectedCalendarId || null,
+          send_sms: sendSms,
+          members_only: (selectedParticipants.length > 0 || selectedNotifyUsers.filter(u => u.id !== userId).length > 0)
+            ? true
+            : ((selectedCalendarId && selectedCalendar?.type === 'shared') ? membersOnly : false),
+          repeat_type: repeatEnabled ? repeatType : 'none',
+          repeat_interval: repeatEnabled ? repeatInterval : null,
+          repeat_end_date: repeatEnabled ? repeatEndDate : null,
+          repeat_weekday: repeatEnabled && repeatType === 'weekly' ? repeatWeekday : null,
+          agenda_items: agendaEnabled ? agendaItems : [],
         };
 
         // Aggregate ChangeSet across ALL meetings in a bulk edit so the decision modal
@@ -838,14 +901,20 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           joinLink, gregDate,
           selectedParticipantIds: selectedParticipants.map(p => p.id),
           selectedExternal, sendSms, agendaEnabled, agendaItems,
+          prevExternalByMeetingId: Object.fromEntries(
+            bulkIds.map((id: string) => [
+              id,
+              ((existingMap.get(id)?.external_participants || []) as string[]).filter((x: string) => !!x),
+            ])
+          ),
         };
 
-        if (changeSet.hasNonParticipantChanges) {
+        if (changeSet.importantFields.length > 0) {
           // Open decision modal; commit deferred to user choice
           setEditDecision({ changeSet, snapshot });
           return;
         }
-        // Participant-only or notify-only change: commit directly, no change notifications
+        // Minor or participant-only or notify-only change: commit directly, no change notifications
         await commitEdit(snapshot, false);
       } else {
         const { data: md, error: me } = await supabase.from('meetings').insert([record]).select().single();
@@ -989,6 +1058,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
 
       const internalSmsResults: SmsDispatchResult[] = [];
+      const externalSmsResults: ExternalSmsResult[] = [];
       const bulkMeetingDetails = new Map<string, { subject: string; request_date: string; start_time: string | null; end_time: string | null }>();
       if (meetingDiffs.length > 1) {
         const bulkIds = meetingDiffs.map(d => d.meeting_id);
@@ -1026,6 +1096,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           meeting_time: mtgTimeStr,
         };
 
+        const mtgChangeSet = snapshot.changeSetsByMeetingId[diff.meeting_id];
         // Added participants ALWAYS get invite (independent of notify-existing decision)
         if (diff.added_participant_ids.length) {
           const addedEventType = getMeetingTemplateKey('participant', 'invite');
@@ -1037,8 +1108,18 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
+        // Removed participants get cancel (existing template event) — only for those actually removed
+        if (diff.removed_participant_ids.length) {
+          const removedEventType = getMeetingTemplateKey('participant', 'cancel');
+          for (const uid of diff.removed_participant_ids) {
+            const dedupeKey = `${diff.meeting_id}:${uid}:${removedEventType}`;
+            if (sentNotificationKeys.has(dedupeKey)) continue;
+            sentNotificationKeys.add(dedupeKey);
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: removedEventType, audience: 'participants', fallbackTitle: 'لغو دعوت', fallbackMessage: `دعوت شما برای جلسه "${mtgSubject}" لغو شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
+            internalSmsResults.push(result);
+          }
+        }
         // Retained participants get change ONLY when user chose to notify AND this specific meeting has non-participant changes
-        const mtgChangeSet = snapshot.changeSetsByMeetingId[diff.meeting_id];
         if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && diff.retained_participant_ids.length) {
           const retainedEventType = getMeetingTemplateKey('participant', 'change');
           for (const uid of diff.retained_participant_ids) {
@@ -1051,7 +1132,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         }
         // Per-meeting observer diff: added/retained/removed computed against THIS meeting's prior notify_users
         const prevNotifyForMeeting = new Set<string>((snapshot.previousNotifyUserIdsByMeetingId[diff.meeting_id] || []).filter((x: string) => x));
-        const nextNotifySet = new Set<string>(observerIds);
         const addedObserverIds = observerIds.filter(id => !prevNotifyForMeeting.has(id));
         const retainedObserverIds = observerIds.filter(id => prevNotifyForMeeting.has(id));
 
@@ -1066,6 +1146,18 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
+        // Removed observers get cancel (existing template event)
+        const removedObserverIds = [...prevNotifyForMeeting].filter(id => !observerIds.includes(id));
+        if (removedObserverIds.length) {
+          const removedObserverEventType = getMeetingTemplateKey('observer', 'cancel');
+          for (const uid of removedObserverIds) {
+            const dedupeKey = `${diff.meeting_id}:${uid}:${removedObserverEventType}`;
+            if (sentNotificationKeys.has(dedupeKey)) continue;
+            sentNotificationKeys.add(dedupeKey);
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: removedObserverEventType, audience: 'observers', fallbackTitle: 'لغو اطلاع', fallbackMessage: `اطلاع‌رسانی شما برای جلسه "${mtgSubject}" لغو شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
+            internalSmsResults.push(result);
+          }
+        }
         // Retained observers get change only when user chose to notify AND this specific meeting has non-participant changes
         if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && retainedObserverIds.length) {
           const retainedObserverEventType = getMeetingTemplateKey('observer', 'change');
@@ -1077,11 +1169,53 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
+
+        // External participants diff (per-meeting): trim + normalize + dedup, no new schema.
+        // sendSms gates whether any SMS is sent; without it, meeting info is still saved.
+        if (sendSms && selectedExternal.length > 0) {
+          const extFallbackSms = `دعوت به جلسه: «${mtgSubject}» | تاریخ: ${mtgJalaaliDate || meetingDateStr} | ساعت: ${mtgTimeStr}${mtgSmsPlaceholders.location_part}`;
+          // Normalize for comparison only: trim, collapse internal whitespace, casefold.
+          // Original names are preserved for storage/SMS; dedup by normalized key.
+          const normName = (n: string) => (n || '').trim().replace(/\s+/g, ' ').toLowerCase();
+          const prevExt = new Set<string>(
+            (snapshot.prevExternalByMeetingId[diff.meeting_id] || [])
+              .map(normName).filter((x: string) => !!x)
+          );
+          // Preserve original names; dedup by normalized key so duplicates get one SMS.
+          const seenNorm = new Set<string>();
+          const nextExt: string[] = [];
+          for (const raw of selectedExternal) {
+            const key = normName(raw);
+            if (!key || seenNorm.has(key)) continue;
+            seenNorm.add(key);
+            nextExt.push(raw);
+          }
+          const newExt = nextExt.filter(n => !prevExt.has(normName(n)));
+          const retainedExt = nextExt.filter(n => prevExt.has(normName(n)));
+          // New externals: invite only (independent of notifyExistingParticipants).
+          // Retained externals: change only when notify flag set AND non-participant changes exist.
+          // Removed externals: no cancel SMS (no cancel event for externals; out of scope).
+          // A person never receives both invite and change in the same operation: new→invite, retained→change.
+          if (newExt.length > 0) {
+            const extResult = await sendSmsToExternals(newExt, contacts, extFallbackSms, userId, mtgSmsPlaceholders, 'invite');
+            if (extResult) externalSmsResults.push(extResult);
+          }
+          if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && retainedExt.length > 0) {
+            const extChangeFallback = `تغییر جلسه: «${mtgSubject}» | تاریخ: ${mtgJalaaliDate || meetingDateStr} | ساعت: ${mtgTimeStr}${mtgSmsPlaceholders.location_part}`;
+            const extChangeResult = await sendSmsToExternals(retainedExt, contacts, extChangeFallback, userId, mtgSmsPlaceholders, 'change');
+            if (extChangeResult) externalSmsResults.push(extChangeResult);
+          }
+        }
       }
+      // Aggregate external SMS results across all meetings in the bulk edit
       let externalSmsResult: ExternalSmsResult | null = null;
-      if (sendSms && notifyExistingParticipants && selectedExternal.length > 0) {
-        const fallbackSms = `دعوت به جلسه: «${subject}» | تاریخ: ${meetingDateStr} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
-        externalSmsResult = await sendSmsToExternals(selectedExternal, contacts, fallbackSms, userId, smsPlaceholders);
+      if (externalSmsResults.length > 0) {
+        externalSmsResult = externalSmsResults.reduce((acc, r) => ({
+          ok: acc.ok && r.ok,
+          sent: acc.sent + r.sent,
+          skipped: acc.skipped + r.skipped,
+          error: acc.error || r.error,
+        }));
       }
       showSmsSummary(internalSmsResults, externalSmsResult);
 
