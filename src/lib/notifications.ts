@@ -46,13 +46,6 @@ async function getTemplates(): Promise<Map<string, { id: string; title: string; 
     if (!map.has(key)) {
       map.set(key, { id: t.id, title: t.title, body: t.body, updatedAt: t.updated_at });
     }
-    // Also register under 'all' as fallback if this is audience-specific
-    if (t.audience !== 'all') {
-      const allKey = `${t.category}:${t.event_type}:all`;
-      if (!map.has(allKey)) {
-        map.set(allKey, { id: t.id, title: t.title, body: t.body, updatedAt: t.updated_at });
-      }
-    }
   }
   templateCache = map;
   cacheLoadedAt = Date.now();
@@ -72,12 +65,6 @@ async function getSmsTemplates(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   for (const t of (data || [])) {
     map.set(`${t.category}:${t.event_type}:${t.audience}`, t.body);
-    // also register under 'all' as fallback
-    if (t.audience !== 'all') {
-      if (!map.has(`${t.category}:${t.event_type}:all`)) {
-        map.set(`${t.category}:${t.event_type}:all`, t.body);
-      }
-    }
   }
   smsTemplateCache = map;
   smsCacheLoadedAt = Date.now();
