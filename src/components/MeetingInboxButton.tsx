@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Inbox, Check, UserCheck, X, MapPin, Clock, Calendar, Search, ChevronRight, Users, Building2, ChevronDown, Circle as XCircle, CircleAlert as AlertCircle, RefreshCw } from 'lucide-react';
+import { Inbox, Check, UserCheck, X, MapPin, Clock, Calendar, Search, ChevronRight, Users, Building2, ChevronDown, Circle as XCircle, CircleAlert as AlertCircle, RefreshCw, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { insertNotification } from '../lib/notifications';
 import { getMeetingTemplateKey } from '../config/templateCatalog';
@@ -50,6 +50,9 @@ export function MeetingInboxButton() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [delegateForEntry, setDelegateForEntry] = useState<InboxEntry | null>(null);
   const [declineConfirmEntry, setDeclineConfirmEntry] = useState<InboxEntry | null>(null);
+  const [conflictEntry, setConflictEntry] = useState<InboxEntry | null>(null);
+  const [conflicts, setConflicts] = useState<any[]>([]);
+  const [conflictMeetingId, setConflictMeetingId] = useState<string | null>(null);
   const [delegateSearch, setDelegateSearch] = useState('');
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
@@ -145,43 +148,80 @@ export function MeetingInboxButton() {
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('meeting_inbox')
-        .update({ status: 'accepted' })
-        .eq('id', entry.id);
-      if (error) throw error;
-
-      // Notify organizer
-      await insertNotification({
-        userId: meeting.user_id,
-        category: 'meeting',
-        eventType: getMeetingTemplateKey('organizer', 'confirmed'),
-        fallbackTitle: 'تأیید شرکت در جلسه',
-        fallbackMessage: `${getProfileName(currentUserId)} شرکت در جلسه «${meeting.subject}» را تأیید کرد`,
-        placeholders: {
-          meeting_subject: meeting.subject,
-          meeting_date: formatMeetingDate(meeting),
-          start_time: meeting.start_time || '',
-          end_time: meeting.end_time || '',
-          participant_name: getProfileName(currentUserId),
-          recipient_greeting: `${getProfileName(meeting.user_id)} گرامی`,
-          full_name: getProfileName(meeting.user_id),
-          organizer_name: getProfileName(meeting.user_id),
-          location: meeting.location || '',
-        },
-        senderId: currentUserId,
-        senderName: getProfileName(currentUserId),
-        actionUrl: 'calendar',
+      const { data, error } = await supabase.rpc('accept_meeting_invitation_v2', {
+        p_meeting_inbox_id: entry.id,
+        p_allow_conflict: false,
       });
-
-      setEntries(prev => prev.filter(e => e.id !== entry.id));
-      setMeetings(prev => { const n = { ...prev }; delete n[entry.meeting_id]; return n; });
-      toast.success(`جلسه «${meeting.subject}» تأیید شد و در تقویم ثبت شد`);
+      if (error) throw error;
+      const result = (data || []) as any[];
+      const row = Array.isArray(result) ? result[0] : result;
+      if (row?.requires_confirmation) {
+        setConflictEntry(entry);
+        setConflicts(row.conflicts || []);
+        setConflictMeetingId(row.meeting_id || null);
+        return;
+      }
+      if (!row?.accepted) {
+        throw new Error('ACCEPT_FAILED');
+      }
+      await afterAccept(entry, meeting);
     } catch {
       toast.error('خطا در تأیید جلسه');
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmAcceptWithConflict = async () => {
+    if (!conflictEntry) return;
+    const meeting = meetings[conflictEntry.meeting_id];
+    if (!meeting || !currentUserId) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('accept_meeting_invitation_v2', {
+        p_meeting_inbox_id: conflictEntry.id,
+        p_allow_conflict: true,
+      });
+      if (error) throw error;
+      const result = (data || []) as any[];
+      const row = Array.isArray(result) ? result[0] : result;
+      if (!row?.accepted) throw new Error('ACCEPT_FAILED');
+      await afterAccept(conflictEntry, meeting);
+      setConflictEntry(null);
+      setConflicts([]);
+      setConflictMeetingId(null);
+    } catch {
+      toast.error('خطا در تأیید جلسه');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const afterAccept = async (entry: InboxEntry, meeting: any) => {
+    await insertNotification({
+      userId: meeting.user_id,
+      category: 'meeting',
+      eventType: getMeetingTemplateKey('organizer', 'confirmed'),
+      fallbackTitle: 'تأیید شرکت در جلسه',
+      fallbackMessage: `${getProfileName(currentUserId)} شرکت در جلسه «${meeting.subject}» را تأیید کرد`,
+      placeholders: {
+        meeting_subject: meeting.subject,
+        meeting_date: formatMeetingDate(meeting),
+        start_time: meeting.start_time || '',
+        end_time: meeting.end_time || '',
+        participant_name: getProfileName(currentUserId),
+        recipient_greeting: `${getProfileName(meeting.user_id)} گرامی`,
+        full_name: getProfileName(meeting.user_id),
+        organizer_name: getProfileName(meeting.user_id),
+        location: meeting.location || '',
+      },
+      senderId: currentUserId,
+      senderName: getProfileName(currentUserId),
+      actionUrl: 'calendar',
+    });
+    setEntries(prev => prev.filter(e => e.id !== entry.id));
+    setMeetings(prev => { const n = { ...prev }; delete n[entry.meeting_id]; return n; });
+    toast.success(`جلسه «${meeting.subject}» تأیید شد و در تقویم ثبت شد`);
   };
 
   const handleDecline = async (entry: InboxEntry) => {
@@ -657,6 +697,57 @@ export function MeetingInboxButton() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Conflict warning modal */}
+      {conflictEntry && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" dir="rtl">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-2xl overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20">
+              <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800 dark:text-white">تداخل زمانی جلسه</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">این جلسه با جلسه یا جلسات زیر تداخل زمانی دارد. آیا با وجود تداخل مایل به تأیید جلسه هستید؟</p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-2 max-h-[50vh] overflow-y-auto">
+              {conflicts.map((c, i) => {
+                let jDate = c.meeting_date || '';
+                try { const m = moment(c.meeting_date); if (m.isValid()) jDate = m.format('jYYYY/jMM/jDD'); } catch { /* ignore */ }
+                return (
+                  <div key={i} className="flex items-start gap-2 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+                    <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{c.title || '—'}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {jDate}{c.start_time ? ` | ${c.start_time}` : ''}{c.end_time ? ` - ${c.end_time}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-gray-100 dark:border-gray-700">
+              <button
+                onClick={confirmAcceptWithConflict}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                تأیید با وجود تداخل
+              </button>
+              <button
+                onClick={() => { setConflictEntry(null); setConflicts([]); setConflictMeetingId(null); }}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95"
+              >
+                انصراف
+              </button>
+            </div>
           </div>
         </div>
       )}
