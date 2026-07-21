@@ -636,13 +636,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         };
 
         if (prefillEditAllIds && prefillEditAllIds.length > 0) {
-          // Bulk update: apply changes to all repeat instances (keeping each one's own date)
+          // Bulk update: apply detail changes to all repeat instances (participant_user_ids handled by bulk RPC below)
           const baseFields = { subject, location, representative, phone, notes: notes || null, priority,
             start_time: startTime, end_time: endTime,
             duration: startTime && endTime ? `${startTime} - ${endTime}` : '',
             status: 'archived', status_type: 'scheduled',
             notify_users: updateRecord.notify_users,
-            participant_user_ids: selectedParticipants.map(p => p.id),
             external_participants: selectedExternal,
             repeat_type: updateRecord.repeat_type, repeat_interval: updateRecord.repeat_interval,
             repeat_end_date: updateRecord.repeat_end_date, repeat_weekday: updateRecord.repeat_weekday,
@@ -675,12 +674,23 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         }
 
         // Atomic participant sync via RPC: validates authorization, same-org, active, hidden;
-        // locks meeting row, computes diff, updates participant_user_ids and meeting_inbox in one transaction.
-        // Bulk-edit path (prefillEditAllIds) still uses the direct update above for participant_user_ids.
+        // locks meeting row(s), computes diff, updates participant_user_ids and meeting_inbox in one transaction.
         let addedParticipantIds: string[] = [];
         let retainedParticipantIds: string[] = [];
         let removedParticipantIds: string[] = [];
-        if (!prefillEditAllIds || prefillEditAllIds.length === 0) {
+        if (prefillEditAllIds && prefillEditAllIds.length > 0) {
+          // Bulk edit: sync participants for all meetings atomically
+          const { data: bulkResult, error: syncError } = await supabase.rpc('sync_meeting_participants_bulk_v2', {
+            p_meeting_ids: prefillEditAllIds,
+            p_participant_user_ids: selectedParticipants.map(p => p.id),
+          });
+          if (syncError) throw new Error(syncError.message || 'خطا در همگام‌سازی شرکت‌کنندگان');
+          // Aggregate diff across all meetings for notification classification
+          const rows = (bulkResult || []) as Array<{ added_participant_ids: string[]; retained_participant_ids: string[]; removed_participant_ids: string[] }>;
+          addedParticipantIds = [...new Set(rows.flatMap(r => r.added_participant_ids || []))];
+          retainedParticipantIds = [...new Set(rows.flatMap(r => r.retained_participant_ids || []))];
+          removedParticipantIds = [...new Set(rows.flatMap(r => r.removed_participant_ids || []))];
+        } else {
           const { data: syncResult, error: syncError } = await supabase.rpc('sync_meeting_participants_v2', {
             p_meeting_id: prefillMeetingId,
             p_participant_user_ids: selectedParticipants.map(p => p.id),
@@ -689,10 +699,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           addedParticipantIds = (syncResult?.added_participant_ids || []) as string[];
           retainedParticipantIds = (syncResult?.retained_participant_ids || []) as string[];
           removedParticipantIds = (syncResult?.removed_participant_ids || []) as string[];
-        } else {
-          addedParticipantIds = selectedParticipants.map(p => p.id).filter(id => id !== userId);
-          retainedParticipantIds = [];
-          removedParticipantIds = [];
         }
 
         const creatorAction: MeetingAction = isFirstSchedule ? 'created' : 'change';
