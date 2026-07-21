@@ -675,9 +675,13 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
         // Atomic participant sync via RPC: validates authorization, same-org, active, hidden;
         // locks meeting row(s), computes diff, updates participant_user_ids and meeting_inbox in one transaction.
-        let addedParticipantIds: string[] = [];
-        let retainedParticipantIds: string[] = [];
-        let removedParticipantIds: string[] = [];
+        type MeetingParticipantDiff = {
+          meeting_id: string;
+          added_participant_ids: string[];
+          retained_participant_ids: string[];
+          removed_participant_ids: string[];
+        };
+        let meetingDiffs: MeetingParticipantDiff[] = [];
         if (prefillEditAllIds && prefillEditAllIds.length > 0) {
           // Bulk edit: sync participants for all meetings atomically
           const { data: bulkResult, error: syncError } = await supabase.rpc('sync_meeting_participants_bulk_v2', {
@@ -685,20 +689,19 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             p_participant_user_ids: selectedParticipants.map(p => p.id),
           });
           if (syncError) throw new Error(syncError.message || 'خطا در همگام‌سازی شرکت‌کنندگان');
-          // Aggregate diff across all meetings for notification classification
-          const rows = (bulkResult || []) as Array<{ added_participant_ids: string[]; retained_participant_ids: string[]; removed_participant_ids: string[] }>;
-          addedParticipantIds = [...new Set(rows.flatMap(r => r.added_participant_ids || []))];
-          retainedParticipantIds = [...new Set(rows.flatMap(r => r.retained_participant_ids || []))];
-          removedParticipantIds = [...new Set(rows.flatMap(r => r.removed_participant_ids || []))];
+          meetingDiffs = (bulkResult || []) as MeetingParticipantDiff[];
         } else {
           const { data: syncResult, error: syncError } = await supabase.rpc('sync_meeting_participants_v2', {
             p_meeting_id: prefillMeetingId,
             p_participant_user_ids: selectedParticipants.map(p => p.id),
           });
           if (syncError) throw new Error(syncError.message || 'خطا در همگام‌سازی شرکت‌کنندگان');
-          addedParticipantIds = (syncResult?.added_participant_ids || []) as string[];
-          retainedParticipantIds = (syncResult?.retained_participant_ids || []) as string[];
-          removedParticipantIds = (syncResult?.removed_participant_ids || []) as string[];
+          meetingDiffs = [{
+            meeting_id: prefillMeetingId,
+            added_participant_ids: (syncResult?.added_participant_ids || []) as string[],
+            retained_participant_ids: (syncResult?.retained_participant_ids || []) as string[],
+            removed_participant_ids: (syncResult?.removed_participant_ids || []) as string[],
+          }];
         }
 
         const creatorAction: MeetingAction = isFirstSchedule ? 'created' : 'change';
@@ -706,17 +709,70 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
 
         const internalSmsResults: SmsDispatchResult[] = [];
-        // Added participants receive invitation (same as initial create), never "change" SMS
-        if (addedParticipantIds.length) {
-          const addedEventType = getMeetingTemplateKey('participant', 'invite');
-          const results = await Promise.all(addedParticipantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: addedEventType, audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
-          internalSmsResults.push(...results);
+        // For bulk edits, fetch per-meeting details (subject, date, time) so each notification
+        // references the correct meeting. Single-edit uses the form state directly.
+        const bulkMeetingDetails = new Map<string, { subject: string; request_date: string; start_time: string | null; end_time: string | null }>();
+        if (meetingDiffs.length > 1) {
+          const bulkIds = meetingDiffs.map(d => d.meeting_id);
+          const { data: bulkMeetings } = await supabase
+            .from('meetings')
+            .select('id, subject, request_date, start_time, end_time')
+            .in('id', bulkIds);
+          for (const m of (bulkMeetings || [])) {
+            bulkMeetingDetails.set(m.id, { subject: m.subject, request_date: m.request_date, start_time: m.start_time, end_time: m.end_time });
+          }
         }
-        // Retained participants receive "change" notification only on edit (not first schedule)
-        if (!isFirstSchedule && retainedParticipantIds.length) {
-          const retainedEventType = getMeetingTemplateKey('participant', 'change');
-          const results = await Promise.all(retainedParticipantIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: retainedEventType, audience: 'participants', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `جلسه "${subject}" ویرایش شد — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
-          internalSmsResults.push(...results);
+
+        // Local dedup Set: prevents duplicate notifications within the same submit only.
+        // Key format: `${meetingId}:${recipientId}:${eventType}` — a participant in two
+        // different meetings gets two separate invites, which is correct.
+        const sentNotificationKeys = new Set<string>();
+
+        for (const diff of meetingDiffs) {
+          const isBulk = meetingDiffs.length > 1;
+          const mtgSubject = isBulk ? (bulkMeetingDetails.get(diff.meeting_id)?.subject || subject) : subject;
+          const mtgDate = isBulk ? (bulkMeetingDetails.get(diff.meeting_id)?.request_date || gregDate) : gregDate;
+          const mtgStartTime = isBulk ? (bulkMeetingDetails.get(diff.meeting_id)?.start_time || startTime) : startTime;
+          const mtgEndTime = isBulk ? (bulkMeetingDetails.get(diff.meeting_id)?.end_time || endTime) : endTime;
+          const mtgTimeStr = mtgStartTime && mtgEndTime ? `${mtgStartTime}-${mtgEndTime}` : mtgStartTime || '';
+          let mtgJalaaliDate = '';
+          if (mtgDate) {
+            try {
+              const jMoment = moment(mtgDate);
+              if (jMoment.isValid()) mtgJalaaliDate = jMoment.format('jYYYY/jMM/jDD');
+            } catch { /* ignore parse error */ }
+          }
+          const mtgSmsPlaceholders: Record<string, string> = {
+            ...smsPlaceholders,
+            meeting_subject: mtgSubject,
+            meeting_date: mtgJalaaliDate,
+            start_time: mtgStartTime || '',
+            end_time: mtgEndTime || '',
+            meeting_time: mtgTimeStr,
+          };
+
+          // Added participants receive invitation (same as initial create), never "change" SMS
+          if (diff.added_participant_ids.length) {
+            const addedEventType = getMeetingTemplateKey('participant', 'invite');
+            for (const uid of diff.added_participant_ids) {
+              const dedupeKey = `${diff.meeting_id}:${uid}:${addedEventType}`;
+              if (sentNotificationKeys.has(dedupeKey)) continue;
+              sentNotificationKeys.add(dedupeKey);
+              const result = await insertNotification({ userId: uid, category: 'meeting', eventType: addedEventType, audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${mtgSubject}" دعوت شدید — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
+              internalSmsResults.push(result);
+            }
+          }
+          // Retained participants receive "change" notification only on edit (not first schedule)
+          if (!isFirstSchedule && diff.retained_participant_ids.length) {
+            const retainedEventType = getMeetingTemplateKey('participant', 'change');
+            for (const uid of diff.retained_participant_ids) {
+              const dedupeKey = `${diff.meeting_id}:${uid}:${retainedEventType}`;
+              if (sentNotificationKeys.has(dedupeKey)) continue;
+              sentNotificationKeys.add(dedupeKey);
+              const result = await insertNotification({ userId: uid, category: 'meeting', eventType: retainedEventType, audience: 'participants', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `جلسه "${mtgSubject}" ویرایش شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
+              internalSmsResults.push(result);
+            }
+          }
         }
         if (observerIds.length) {
           const observerAction: MeetingAction = isFirstSchedule ? 'invite' : 'change';
