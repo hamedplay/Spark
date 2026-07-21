@@ -135,6 +135,7 @@ type CommitSnapshot = {
   agendaSummary: string;
   participantNameMap: Record<string, string>;
   observerIds: string[];
+  prevNotifyUserIds: string[];
   joinLink: string;
   gregDate: string;
   selectedParticipantIds: string[];
@@ -144,7 +145,7 @@ type CommitSnapshot = {
   agendaItems: AgendaItem[];
 };
 
-const IMPORTANT_FIELDS = ['subject', 'request_date', 'start_time', 'end_time', 'location'] as const;
+const IMPORTANT_FIELDS = ['subject', 'request_date', 'start_time', 'end_time', 'location', 'conference_room_id'] as const;
 const MINOR_FIELDS = ['phone', 'representative', 'meeting_manager', 'notes', 'priority'] as const;
 
 const FIELD_LABELS: Record<string, string> = {
@@ -154,6 +155,7 @@ const FIELD_LABELS: Record<string, string> = {
   end_time: 'ساعت پایان',
   location: 'محل برگزاری',
   is_online: 'نوع برگزاری',
+  conference_room_id: 'اتاق جلسه آنلاین',
   phone: 'شماره تماس',
   representative: 'نماینده',
   meeting_manager: 'مدیر جلسه',
@@ -729,22 +731,48 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       }
 
       if (prefillMeetingId) {
-        // --- Prepare phase: fetch existing meeting, compute ChangeSet, decide ---
-        const { data: existingMtg } = await supabase
+        // --- Prepare phase: fetch existing meeting(s), compute ChangeSet, decide ---
+        const bulkIds = (prefillEditAllIds && prefillEditAllIds.length > 0) ? prefillEditAllIds : [prefillMeetingId];
+        const { data: existingRows } = await supabase
           .from('meetings')
-          .select('subject, request_date, start_time, end_time, location, representative, phone, notes, priority, meeting_manager, is_online, participant_user_ids, notify_users')
-          .eq('id', prefillMeetingId)
-          .maybeSingle();
+          .select('id, subject, request_date, start_time, end_time, location, representative, phone, notes, priority, meeting_manager, is_online, conference_room_id, participant_user_ids, notify_users')
+          .in('id', bulkIds);
+        const existingMap = new Map<string, any>();
+        for (const r of (existingRows || [])) existingMap.set(r.id, r);
+        const existingMtg = existingMap.get(prefillMeetingId) || null;
         const isFirstSchedule = !existingMtg?.start_time;
 
         const nextFields: Record<string, any> = {
           subject, request_date: gregDate, start_time: startTime, end_time: endTime,
           location, representative, phone, notes: notes || null, priority,
           meeting_manager: meetingManager || null, is_online: isOnline,
+          conference_room_id: conferenceRoomId,
           participant_user_ids: selectedParticipants.map(p => p.id),
           notify_users: Array.from(new Set([userId, ...selectedNotifyUsers.map(u => u.id)])),
         };
-        const changeSet = computeChangeSet(existingMtg || {}, nextFields);
+
+        // Aggregate ChangeSet across ALL meetings in a bulk edit so the decision modal
+        // reflects the true scope of changes, not just the first meeting.
+        const aggregatedChangeSet: MeetingChangeSet = {
+          importantFields: [], minorFields: [],
+          participantChanged: false, notifyUsersChanged: false,
+          hasNonParticipantChanges: false, hasAnyChanges: false,
+        };
+        const importantSet = new Set<string>();
+        const minorSet = new Set<string>();
+        for (const id of bulkIds) {
+          const ex = existingMap.get(id) || {};
+          const cs = computeChangeSet(ex, nextFields);
+          for (const f of cs.importantFields) importantSet.add(f);
+          for (const f of cs.minorFields) minorSet.add(f);
+          if (cs.participantChanged) aggregatedChangeSet.participantChanged = true;
+          if (cs.notifyUsersChanged) aggregatedChangeSet.notifyUsersChanged = true;
+          if (cs.hasNonParticipantChanges) aggregatedChangeSet.hasNonParticipantChanges = true;
+          if (cs.hasAnyChanges) aggregatedChangeSet.hasAnyChanges = true;
+        }
+        aggregatedChangeSet.importantFields = [...importantSet];
+        aggregatedChangeSet.minorFields = [...minorSet];
+        const changeSet = aggregatedChangeSet;
 
         if (!changeSet.hasAnyChanges) {
           toast('تغییری شناسایی نشد');
@@ -793,7 +821,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const snapshot: CommitSnapshot = {
           updateRecord, baseFields, isFirstSchedule, senderName,
           meetingDateStr, meetingTimeStr, smsPlaceholders, agendaSummary,
-          participantNameMap, observerIds, joinLink, gregDate,
+          participantNameMap, observerIds,
+          prevNotifyUserIds: (existingMtg?.notify_users || []).filter((x: string) => x && x !== userId),
+          joinLink, gregDate,
           selectedParticipantIds: selectedParticipants.map(p => p.id),
           selectedExternal, sendSms, agendaEnabled, agendaItems,
         };
@@ -1007,11 +1037,19 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
         }
       }
-      // Observers get change ONLY when user chose to notify
-      if (notifyExistingParticipants && observerIds.length) {
-        const observerAction: MeetingAction = isFirstSchedule ? 'invite' : 'change';
-        const observerEventType = getMeetingTemplateKey('observer', observerAction);
-        const results = await Promise.all(observerIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: observerEventType, audience: 'observers', fallbackTitle: isFirstSchedule ? 'اطلاع از جلسه' : 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
+      // Observers (notify_users): newly added get invite (create contract), retained get change only on yes
+      const prevNotifySet = new Set<string>((snapshot.prevNotifyUserIds || []).filter((x: string) => x));
+      const addedObserverIds = observerIds.filter(id => !prevNotifySet.has(id));
+      const retainedObserverIds = observerIds.filter(id => prevNotifySet.has(id));
+
+      if (addedObserverIds.length) {
+        const addedObserverEventType = getMeetingTemplateKey('observer', 'invite');
+        const results = await Promise.all(addedObserverIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: addedObserverEventType, audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
+        internalSmsResults.push(...results);
+      }
+      if (notifyExistingParticipants && !isFirstSchedule && retainedObserverIds.length) {
+        const retainedObserverEventType = getMeetingTemplateKey('observer', 'change');
+        const results = await Promise.all(retainedObserverIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: retainedObserverEventType, audience: 'observers', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
         internalSmsResults.push(...results);
       }
       let externalSmsResult: ExternalSmsResult | null = null;
