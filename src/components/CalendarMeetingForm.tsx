@@ -136,6 +136,7 @@ type CommitSnapshot = {
   participantNameMap: Record<string, string>;
   observerIds: string[];
   prevNotifyUserIds: string[];
+  changeSetsByMeetingId: Record<string, MeetingChangeSet>;
   joinLink: string;
   gregDate: string;
   selectedParticipantIds: string[];
@@ -753,6 +754,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
         // Aggregate ChangeSet across ALL meetings in a bulk edit so the decision modal
         // reflects the true scope of changes, not just the first meeting.
+        // Also keep per-meeting ChangeSet so commit can gate change notifications per-meeting.
+        const changeSetsByMeetingId: Record<string, MeetingChangeSet> = {};
         const aggregatedChangeSet: MeetingChangeSet = {
           importantFields: [], minorFields: [],
           participantChanged: false, notifyUsersChanged: false,
@@ -763,6 +766,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         for (const id of bulkIds) {
           const ex = existingMap.get(id) || {};
           const cs = computeChangeSet(ex, nextFields);
+          changeSetsByMeetingId[id] = cs;
           for (const f of cs.importantFields) importantSet.add(f);
           for (const f of cs.minorFields) minorSet.add(f);
           if (cs.participantChanged) aggregatedChangeSet.participantChanged = true;
@@ -823,6 +827,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           meetingDateStr, meetingTimeStr, smsPlaceholders, agendaSummary,
           participantNameMap, observerIds,
           prevNotifyUserIds: (existingMtg?.notify_users || []).filter((x: string) => x && x !== userId),
+          changeSetsByMeetingId,
           joinLink, gregDate,
           selectedParticipantIds: selectedParticipants.map(p => p.id),
           selectedExternal, sendSms, agendaEnabled, agendaItems,
@@ -1025,8 +1030,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
-        // Retained participants get change ONLY when user chose to notify
-        if (notifyExistingParticipants && !isFirstSchedule && diff.retained_participant_ids.length) {
+        // Retained participants get change ONLY when user chose to notify AND this specific meeting has non-participant changes
+        const mtgChangeSet = snapshot.changeSetsByMeetingId[diff.meeting_id];
+        if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && diff.retained_participant_ids.length) {
           const retainedEventType = getMeetingTemplateKey('participant', 'change');
           for (const uid of diff.retained_participant_ids) {
             const dedupeKey = `${diff.meeting_id}:${uid}:${retainedEventType}`;
@@ -1036,20 +1042,25 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
+        // Retained observers (notify_users) get change only when user chose to notify AND this specific meeting has non-participant changes
+        if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && retainedObserverIds.length) {
+          const retainedObserverEventType = getMeetingTemplateKey('observer', 'change');
+          for (const uid of retainedObserverIds) {
+            const dedupeKey = `${diff.meeting_id}:${uid}:${retainedObserverEventType}`;
+            if (sentNotificationKeys.has(dedupeKey)) continue;
+            sentNotificationKeys.add(dedupeKey);
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: retainedObserverEventType, audience: 'observers', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${mtgSubject}" ثبت شده‌اید — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
+            internalSmsResults.push(result);
+          }
+        }
       }
-      // Observers (notify_users): newly added get invite (create contract), retained get change only on yes
+      // Observers (notify_users): newly added get invite (create contract), independent of yes/no and per-meeting
       const prevNotifySet = new Set<string>((snapshot.prevNotifyUserIds || []).filter((x: string) => x));
       const addedObserverIds = observerIds.filter(id => !prevNotifySet.has(id));
-      const retainedObserverIds = observerIds.filter(id => prevNotifySet.has(id));
 
       if (addedObserverIds.length) {
         const addedObserverEventType = getMeetingTemplateKey('observer', 'invite');
         const results = await Promise.all(addedObserverIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: addedObserverEventType, audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
-        internalSmsResults.push(...results);
-      }
-      if (notifyExistingParticipants && !isFirstSchedule && retainedObserverIds.length) {
-        const retainedObserverEventType = getMeetingTemplateKey('observer', 'change');
-        const results = await Promise.all(retainedObserverIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: retainedObserverEventType, audience: 'observers', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
         internalSmsResults.push(...results);
       }
       let externalSmsResult: ExternalSmsResult | null = null;
