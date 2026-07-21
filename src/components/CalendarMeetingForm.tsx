@@ -136,6 +136,7 @@ type CommitSnapshot = {
   participantNameMap: Record<string, string>;
   observerIds: string[];
   prevNotifyUserIds: string[];
+  previousNotifyUserIdsByMeetingId: Record<string, string[]>;
   changeSetsByMeetingId: Record<string, MeetingChangeSet>;
   joinLink: string;
   gregDate: string;
@@ -827,6 +828,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           meetingDateStr, meetingTimeStr, smsPlaceholders, agendaSummary,
           participantNameMap, observerIds,
           prevNotifyUserIds: (existingMtg?.notify_users || []).filter((x: string) => x && x !== userId),
+          previousNotifyUserIdsByMeetingId: Object.fromEntries(
+            bulkIds.map((id: string) => [
+              id,
+              ((existingMap.get(id)?.notify_users || []) as string[]).filter((x: string) => x && x !== userId),
+            ])
+          ),
           changeSetsByMeetingId,
           joinLink, gregDate,
           selectedParticipantIds: selectedParticipants.map(p => p.id),
@@ -1042,7 +1049,24 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
-        // Retained observers (notify_users) get change only when user chose to notify AND this specific meeting has non-participant changes
+        // Per-meeting observer diff: added/retained/removed computed against THIS meeting's prior notify_users
+        const prevNotifyForMeeting = new Set<string>((snapshot.previousNotifyUserIdsByMeetingId[diff.meeting_id] || []).filter((x: string) => x));
+        const nextNotifySet = new Set<string>(observerIds);
+        const addedObserverIds = observerIds.filter(id => !prevNotifyForMeeting.has(id));
+        const retainedObserverIds = observerIds.filter(id => prevNotifyForMeeting.has(id));
+
+        // Added observers get invite (create contract), independent of yes/no and per-meeting
+        if (addedObserverIds.length) {
+          const addedObserverEventType = getMeetingTemplateKey('observer', 'invite');
+          for (const uid of addedObserverIds) {
+            const dedupeKey = `${diff.meeting_id}:${uid}:${addedObserverEventType}`;
+            if (sentNotificationKeys.has(dedupeKey)) continue;
+            sentNotificationKeys.add(dedupeKey);
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: addedObserverEventType, audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${mtgSubject}" ثبت شده‌اید — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' });
+            internalSmsResults.push(result);
+          }
+        }
+        // Retained observers get change only when user chose to notify AND this specific meeting has non-participant changes
         if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && retainedObserverIds.length) {
           const retainedObserverEventType = getMeetingTemplateKey('observer', 'change');
           for (const uid of retainedObserverIds) {
@@ -1053,15 +1077,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
-      }
-      // Observers (notify_users): newly added get invite (create contract), independent of yes/no and per-meeting
-      const prevNotifySet = new Set<string>((snapshot.prevNotifyUserIds || []).filter((x: string) => x));
-      const addedObserverIds = observerIds.filter(id => !prevNotifySet.has(id));
-
-      if (addedObserverIds.length) {
-        const addedObserverEventType = getMeetingTemplateKey('observer', 'invite');
-        const results = await Promise.all(addedObserverIds.map(uid => insertNotification({ userId: uid, category: 'meeting', eventType: addedObserverEventType, audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${meetingDateStr ? ` در ${meetingDateStr}` : ''}${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar' })));
-        internalSmsResults.push(...results);
       }
       let externalSmsResult: ExternalSmsResult | null = null;
       if (sendSms && notifyExistingParticipants && selectedExternal.length > 0) {
