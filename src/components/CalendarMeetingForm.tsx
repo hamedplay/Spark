@@ -124,6 +124,7 @@ type MeetingChangeSet = {
   minorFields: string[];
   participantChanged: boolean;
   notifyUsersChanged: boolean;
+  externalChanged: boolean;
   hasNonParticipantChanges: boolean;
   hasAnyChanges: boolean;
 };
@@ -142,6 +143,7 @@ type CommitSnapshot = {
   prevNotifyUserIds: string[];
   previousNotifyUserIdsByMeetingId: Record<string, string[]>;
   changeSetsByMeetingId: Record<string, MeetingChangeSet>;
+  prevAgendaByMeetingId: Record<string, AgendaItem[]>;
   joinLink: string;
   gregDate: string;
   selectedParticipantIds: string[];
@@ -152,8 +154,8 @@ type CommitSnapshot = {
   prevExternalByMeetingId: Record<string, string[]>;
 };
 
-const IMPORTANT_FIELDS = ['subject', 'request_date', 'start_time', 'end_time', 'location', 'conference_room_id'] as const;
-const MINOR_FIELDS = ['phone', 'representative', 'meeting_manager', 'notes', 'priority', 'reminder_minutes', 'calendar_id', 'send_sms', 'members_only'] as const;
+const IMPORTANT_FIELDS = ['subject', 'request_date', 'start_time', 'end_time', 'location', 'conference_room_id', 'is_online'] as const;
+const MINOR_FIELDS = ['phone', 'representative', 'meeting_manager', 'notes', 'priority', 'reminder_minutes', 'calendar_id', 'send_sms', 'members_only', 'repeat_type', 'repeat_interval', 'repeat_end_date', 'repeat_weekday', 'agenda_items'] as const;
 
 const FIELD_LABELS: Record<string, string> = {
   subject: 'موضوع جلسه',
@@ -182,9 +184,12 @@ function normalizeStr(v: unknown): string {
   return String(v).trim();
 }
 
-function arraysEqualAsSets(a: unknown[], b: unknown[]): boolean {
-  const sa = new Set(a.filter((x): x is string => typeof x === 'string' && !!x));
-  const sb = new Set(b.filter((x): x is string => typeof x === 'string' && !!x));
+const normalizeExternalName = (value: string): string =>
+  (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+function externalArraysEqual(a: string[], b: string[]): boolean {
+  const sa = new Set(a.map(normalizeExternalName).filter((x: string) => !!x));
+  const sb = new Set(b.map(normalizeExternalName).filter((x: string) => !!x));
   if (sa.size !== sb.size) return false;
   for (const v of sa) if (!sb.has(v)) return false;
   return true;
@@ -207,26 +212,19 @@ function computeChangeSet(existing: Record<string, any>, next: Record<string, an
       importantFields.push(f);
     }
   }
-  if (!!existing.is_online !== !!next.is_online) {
-    importantFields.push('is_online');
-  }
 
   for (const f of MINOR_FIELDS) {
+    if (f === 'agenda_items') {
+      if (!agendaItemsEqual(existing.agenda_items, next.agenda_items)) minorFields.push('agenda');
+      continue;
+    }
     if (normalizeStr(existing[f]) !== normalizeStr(next[f])) {
       minorFields.push(f);
     }
   }
 
-  // Repeat settings (minor)
-  const exRepeat = [existing.repeat_type || 'none', existing.repeat_interval ?? null, existing.repeat_end_date ?? null, existing.repeat_weekday ?? null].join('|');
-  const nxRepeat = [next.repeat_type || 'none', next.repeat_interval ?? null, next.repeat_end_date ?? null, next.repeat_weekday ?? null].join('|');
-  if (exRepeat !== nxRepeat) minorFields.push('repeat_type');
-
-  // Agenda items (minor)
-  if (!agendaItemsEqual(existing.agenda_items, next.agenda_items)) minorFields.push('agenda');
-
   // External participants (member change, not important)
-  const externalChanged = !arraysEqualAsSets(existing.external_participants || [], next.external_participants || []);
+  const externalChanged = !externalArraysEqual(existing.external_participants || [], next.external_participants || []);
 
   const prevParticipants = new Set<string>((existing.participant_user_ids || []).filter((x: string) => x));
   const nextParticipants = new Set<string>((next.participant_user_ids || []).filter((x: string) => x));
@@ -243,7 +241,7 @@ function computeChangeSet(existing: Record<string, any>, next: Record<string, an
   const hasNonParticipantChanges = importantFields.length > 0 || minorFields.length > 0;
   const hasAnyChanges = hasNonParticipantChanges || participantChanged || notifyUsersChanged || externalChanged;
 
-  return { importantFields, minorFields, participantChanged, notifyUsersChanged, hasNonParticipantChanges, hasAnyChanges };
+  return { importantFields, minorFields, participantChanged, notifyUsersChanged, externalChanged, hasNonParticipantChanges, hasAnyChanges };
 }
 
 interface CalendarMeetingFormProps {
@@ -781,16 +779,20 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const existingMap = new Map<string, any>();
         for (const r of (existingRows || [])) existingMap.set(r.id, r);
         // Fetch agenda items separately (separate table) so computeChangeSet can diff them.
-        const { data: prevAgendaRows } = await supabase
+        const { data: prevAgendaRows, error: prevAgendaError } = await supabase
           .from('meeting_agenda_items')
           .select('meeting_id, title, presenter, duration_minutes, sort_order')
           .in('meeting_id', bulkIds)
           .order('sort_order');
-        for (const a of (prevAgendaRows || [])) {
+        if (prevAgendaError) throw new Error('خطا در آماده‌سازی ویرایش جلسه؛ لطفاً دوباره تلاش کنید');
+        const prevAgendaByMeetingId: Record<string, AgendaItem[]> = {};
+        for (const a of (prevAgendaRows ?? [])) {
           const row = existingMap.get(a.meeting_id);
           if (!row) continue;
           if (!row.agenda_items) row.agenda_items = [];
           row.agenda_items.push({ title: a.title, presenter: a.presenter, duration_minutes: a.duration_minutes });
+          if (!prevAgendaByMeetingId[a.meeting_id]) prevAgendaByMeetingId[a.meeting_id] = [];
+          prevAgendaByMeetingId[a.meeting_id].push({ title: a.title, presenter: a.presenter, duration_minutes: a.duration_minutes });
         }
         const existingMtg = existingMap.get(prefillMeetingId) || null;
         const isFirstSchedule = !existingMtg?.start_time;
@@ -822,7 +824,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const changeSetsByMeetingId: Record<string, MeetingChangeSet> = {};
         const aggregatedChangeSet: MeetingChangeSet = {
           importantFields: [], minorFields: [],
-          participantChanged: false, notifyUsersChanged: false,
+          participantChanged: false, notifyUsersChanged: false, externalChanged: false,
           hasNonParticipantChanges: false, hasAnyChanges: false,
         };
         const importantSet = new Set<string>();
@@ -835,6 +837,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           for (const f of cs.minorFields) minorSet.add(f);
           if (cs.participantChanged) aggregatedChangeSet.participantChanged = true;
           if (cs.notifyUsersChanged) aggregatedChangeSet.notifyUsersChanged = true;
+          if (cs.externalChanged) aggregatedChangeSet.externalChanged = true;
           if (cs.hasNonParticipantChanges) aggregatedChangeSet.hasNonParticipantChanges = true;
           if (cs.hasAnyChanges) aggregatedChangeSet.hasAnyChanges = true;
         }
@@ -898,6 +901,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             ])
           ),
           changeSetsByMeetingId,
+          prevAgendaByMeetingId,
           joinLink, gregDate,
           selectedParticipantIds: selectedParticipants.map(p => p.id),
           selectedExternal, sendSms, agendaEnabled, agendaItems,
@@ -1009,10 +1013,11 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         if (error) throw error;
       }
 
-      // 2. Save agenda items
-      await supabase.from('meeting_agenda_items').delete().eq('meeting_id', prefillMeetingId);
+      // 2. Save agenda items (delete + insert). Error aborts before any notifications.
+      const { error: agendaDelError } = await supabase.from('meeting_agenda_items').delete().eq('meeting_id', prefillMeetingId);
+      if (agendaDelError) throw new Error('خطا در ذخیره دستور جلسه؛ لطفاً دوباره تلاش کنید');
       if (agendaEnabled && agendaItems.length > 0) {
-        await supabase.from('meeting_agenda_items').insert(
+        const { error: agendaInsError } = await supabase.from('meeting_agenda_items').insert(
           agendaItems.map((item, idx) => ({
             meeting_id: prefillMeetingId,
             title: item.title,
@@ -1021,6 +1026,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             sort_order: idx,
           }))
         );
+        if (agendaInsError) throw new Error('خطا در ذخیره دستور جلسه؛ لطفاً دوباره تلاش کنید');
       }
 
       // 3. Atomic participant sync via RPC; diff comes from RPC output, not frontend state
@@ -1119,8 +1125,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
-        // Retained participants get change ONLY when user chose to notify AND this specific meeting has non-participant changes
-        if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && diff.retained_participant_ids.length) {
+        // Retained participants get change ONLY when user chose to notify AND this specific meeting has important changes
+        if (notifyExistingParticipants && !isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && diff.retained_participant_ids.length) {
           const retainedEventType = getMeetingTemplateKey('participant', 'change');
           for (const uid of diff.retained_participant_ids) {
             const dedupeKey = `${diff.meeting_id}:${uid}:${retainedEventType}`;
@@ -1158,8 +1164,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             internalSmsResults.push(result);
           }
         }
-        // Retained observers get change only when user chose to notify AND this specific meeting has non-participant changes
-        if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && retainedObserverIds.length) {
+        // Retained observers get change only when user chose to notify AND this specific meeting has important changes
+        if (notifyExistingParticipants && !isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && retainedObserverIds.length) {
           const retainedObserverEventType = getMeetingTemplateKey('observer', 'change');
           for (const uid of retainedObserverIds) {
             const dedupeKey = `${diff.meeting_id}:${uid}:${retainedObserverEventType}`;
@@ -1200,7 +1206,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             const extResult = await sendSmsToExternals(newExt, contacts, extFallbackSms, userId, mtgSmsPlaceholders, 'invite');
             if (extResult) externalSmsResults.push(extResult);
           }
-          if (notifyExistingParticipants && !isFirstSchedule && mtgChangeSet?.hasNonParticipantChanges && retainedExt.length > 0) {
+          if (notifyExistingParticipants && !isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && retainedExt.length > 0) {
             const extChangeFallback = `تغییر جلسه: «${mtgSubject}» | تاریخ: ${mtgJalaaliDate || meetingDateStr} | ساعت: ${mtgTimeStr}${mtgSmsPlaceholders.location_part}`;
             const extChangeResult = await sendSmsToExternals(retainedExt, contacts, extChangeFallback, userId, mtgSmsPlaceholders, 'change');
             if (extChangeResult) externalSmsResults.push(extChangeResult);
