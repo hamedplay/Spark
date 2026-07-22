@@ -8,16 +8,27 @@ import { useOrgUsers } from '../lib/useOrgUsers';
 import { useDraggableFab, panelStyle } from '../lib/useDraggableFab';
 import { gregorianToJalali } from '../lib/sparkDateUtils';
 
-function formatMeetingDate(meeting: { request_date?: string | null }): string {
-  if (!meeting.request_date) return '';
-  const date = new Date(meeting.request_date);
-  if (Number.isNaN(date.getTime())) return '';
+function formatJalaliDate(value?: string | null): string {
+  if (!value) return 'تاریخ نامشخص';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'تاریخ نامشخص';
   return new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     timeZone: 'Asia/Tehran',
   }).format(date);
+}
+
+function formatMeetingDate(meeting: { request_date?: string | null }): string {
+  if (!meeting.request_date) return '';
+  return formatJalaliDate(meeting.request_date);
+}
+
+function formatConflictTime(value?: string | null): string {
+  if (!value) return '';
+  const match = String(value).match(/(\d{2}):(\d{2})/);
+  return match ? `${match[1]}:${match[2]}` : '';
 }
 
 interface InboxEntry {
@@ -716,16 +727,27 @@ export function MeetingInboxButton() {
             </div>
             <div className="px-5 py-4 space-y-2 max-h-[50vh] overflow-y-auto">
               {conflicts.map((c, i) => {
-                let jDate = c.meeting_date || '';
-                try { const m = moment(c.meeting_date); if (m.isValid()) jDate = m.format('jYYYY/jMM/jDD'); } catch { /* ignore */ }
+                const conflictTitle =
+                  typeof c.title === 'string' && c.title.trim()
+                    ? c.title.trim()
+                    : 'موضوع جلسه مشخص نیست';
+                const formattedDate = formatJalaliDate(c.meeting_date);
+                const start = formatConflictTime(c.start_time);
+                const end = formatConflictTime(c.end_time);
+                let formattedTimeRange: string;
+                if (start && end) formattedTimeRange = `${start} تا ${end}`;
+                else if (start) formattedTimeRange = `شروع: ${start}`;
+                else formattedTimeRange = 'ساعت نامشخص';
                 return (
-                  <div key={i} className="flex items-start gap-2 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-                    <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{c.title || '—'}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {jDate}{c.start_time ? ` | ${c.start_time}` : ''}{c.end_time ? ` - ${c.end_time}` : ''}
-                      </p>
+                  <div key={i} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 space-y-2">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-white">{conflictTitle}</p>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>{formattedDate}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>{formattedTimeRange}</span>
                     </div>
                   </div>
                 );
