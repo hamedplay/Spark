@@ -257,7 +257,11 @@ function PhoneLoginToggleCard() {
           <div>
             <h4 className="font-semibold text-gray-800 dark:text-white">ورود با شماره موبایل</h4>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {enabled ? (ready ? 'فعال و آماده' : 'فعال ولی سرویس‌دهنده انتخاب نشده') : 'غیرفعال'}
+              {enabled
+                ? (ready
+                    ? 'فعال و آماده'
+                    : 'فعال ولی نیازمند تنظیم Auth Hook یا سرویس‌دهنده')
+                : 'غیرفعال'}
             </p>
           </div>
         </div>
@@ -1169,7 +1173,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
         return (
           <div className="space-y-5">
             <SectionCard title="امنیت و دسترسی" icon={Shield} color="red">
-              {cfgs('security').map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
+              {cfgs('security').filter(c => c.key !== 'phone_login_enabled').map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
             <PhoneLoginToggleCard />
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">

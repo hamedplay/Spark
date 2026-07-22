@@ -118,6 +118,7 @@ export const TEMPLATE_PLACEHOLDERS: TemplatePlaceholder[] = [
   { key: 'report_link',     label: 'لینک گزارش',             example: 'https://...' },
   { key: 'channel_name',     label: 'نام کانال',              example: 'کانال اطلاع‌رسانی' },
   { key: 'channel_type',     label: 'نوع کانال',              example: 'کانال' },
+  { key: 'otp',              label: 'کد یک‌بارمصرف',           example: '123456' },
 ];
 
 export const PLACEHOLDER_KEYS: string[] = TEMPLATE_PLACEHOLDERS.map(p => p.key);

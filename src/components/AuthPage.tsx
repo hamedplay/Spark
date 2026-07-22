@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, User, Phone, Smartphone, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { supabase, ensureProfile, handleSupabaseError, testSupabaseConnection } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
+import { normalizeIranPhone } from '../lib/phoneNormalize';
 import toast from 'react-hot-toast';
 
 type AuthMode = 'login' | 'register' | 'reset';
@@ -168,28 +169,38 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const handleSendOtp = async () => {
     if (!phone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
     if (!authConfig?.phone_login_ready) { toast.error('ورود با شماره موبایل در حال حاضر فعال نیست.'); return; }
-    const normalized = phone.startsWith('0') ? '+98' + phone.slice(1) : phone.startsWith('9') ? '+98' + phone : phone;
+    const normalized = normalizeIranPhone(phone);
+    if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
     setOtpLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: normalized,
-        options: { shouldCreateUser: false, channel: 'sms' },
+      // Use server-side edge function to prevent enumeration
+      // Always returns the same response regardless of whether the phone exists
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-phone-login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+        body: JSON.stringify({ phone: normalized }),
       });
-      // Generic message — never reveal whether the phone number exists
-      if (error) { toast.error('در صورت معتبر بودن شماره، کد ورود برای شما ارسال می‌شود.'); return; }
+      // Always show the same message — never reveal whether the phone exists
       setOtpSent(true);
       setCountdown(60);
-      toast.success('در صورت معتبر بودن شماره، کد ورود برای شما ارسال می‌شود.');
-    } catch (err: any) { toast.error('در صورت معتبر بودن شماره، کد ورود برای شما ارسال می‌شود.'); }
+      toast.success('اگر شماره معتبر و سرویس در دسترس باشد، کد ورود ارسال می‌شود.');
+    } catch (err: any) {
+      // Same generic message on error
+      setOtpSent(true);
+      setCountdown(60);
+      toast.success('اگر شماره معتبر و سرویس در دسترس باشد، کد ورود ارسال می‌شود.');
+    }
     finally { setOtpLoading(false); }
   };
 
   const handleVerifyOtp = async () => {
     if (!otp.trim() || otp.length < 4) { toast.error('کد تأیید را وارد کنید'); return; }
-    const normalized = phone.startsWith('0') ? '+98' + phone.slice(1) : phone.startsWith('9') ? '+98' + phone : phone;
+    const normalized = normalizeIranPhone(phone);
+    if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
+    const e164 = `+${normalized}`;
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({ phone: normalized, token: otp, type: 'sms' });
+      const { data, error } = await supabase.auth.verifyOtp({ phone: e164, token: otp, type: 'sms' });
       if (error) { toast.error('کد نادرست است یا منقضی شده'); return; }
       if (data.user) {
         const { data: profileData } = await supabase.from('profiles').select('user_id, phone, is_active').eq('user_id', data.user.id).maybeSingle();
@@ -204,10 +215,10 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
           toast.error('حساب کاربری شما غیرفعال شده است. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
           return;
         }
-        // Compare normalized phone numbers (auth vs profile)
-        const authPhone = (data.user.phone || '').replace(/\D/g, '');
-        const profilePhone = (profileData.phone || '').replace(/\D/g, '');
-        if (authPhone && profilePhone && authPhone !== profilePhone) {
+        // Compare normalized phone numbers (auth vs profile) — empty/mismatch rejects
+        const authPhone = normalizeIranPhone(data.user.phone);
+        const profilePhone = normalizeIranPhone(profileData.phone);
+        if (!authPhone || !profilePhone || authPhone !== profilePhone) {
           await supabase.auth.signOut();
           toast.error('شماره موبایل با حساب کاربری تطابق ندارد.', { duration: 6000 });
           return;

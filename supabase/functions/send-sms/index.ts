@@ -12,11 +12,11 @@ const PHONE_RE = /^(\+?98|0098|0)?9[0-9]{9}$/;
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("0098")) return digits.slice(2);
-  if (digits.startsWith("98") && digits.length === 12) return digits;
-  if (digits.startsWith("0") && digits.length === 11) return "98" + digits.slice(1);
-  if (digits.length === 10) return "98" + digits;
-  return digits;
+  if (/^00989\d{9}$/.test(digits)) return digits.slice(2);
+  if (/^989\d{9}$/.test(digits)) return digits;
+  if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
+  if (/^9\d{9}$/.test(digits)) return `98${digits}`;
+  return "";
 }
 
 function isValidPhone(raw: string): boolean {

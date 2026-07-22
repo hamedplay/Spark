@@ -9,13 +9,13 @@ function maskPhone(phone: string): string {
   return phone.slice(0, 3) + "****" + phone.slice(-4);
 }
 
-function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("0098")) return digits.slice(2);
-  if (digits.startsWith("98") && digits.length === 12) return digits;
-  if (digits.startsWith("0") && digits.length === 11) return "98" + digits.slice(1);
-  if (digits.length === 10) return "98" + digits;
-  return digits;
+function normalizeIranPhone(value?: string | null): string {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (/^00989\d{9}$/.test(digits)) return digits.slice(2);
+  if (/^989\d{9}$/.test(digits)) return digits;
+  if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
+  if (/^9\d{9}$/.test(digits)) return `98${digits}`;
+  return '';
 }
 
 function errorResponse(httpCode: number, message: string) {
@@ -73,6 +73,24 @@ Deno.serve(async (req: Request) => {
     }
 
     const maskedPhone = maskPhone(phone);
+
+    // ── 2b. Idempotency: check webhook-id ────────────────────────────────────
+    const webhookId = req.headers.get("webhook-id") || "";
+    if (webhookId) {
+      const { data: existing } = await supabase
+        .from("auth_hook_events")
+        .select("webhook_id")
+        .eq("webhook_id", webhookId)
+        .maybeSingle();
+      if (existing) {
+        console.log("[auth-send-sms-hook] duplicate webhook-id, skipping", webhookId);
+        return successResponse();
+      }
+      await supabase.from("auth_hook_events").insert({
+        webhook_id: webhookId,
+        event_type: "send_sms",
+      });
+    }
 
     // ── 3. Check phone_login_enabled ─────────────────────────────────────────
     const supabase = createClient(
@@ -137,7 +155,11 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 7. Dispatch via send-sms engine (auth_otp mode) ───────────────────────
-    const normalizedPhone = normalizePhone(phone);
+    const normalizedPhone = normalizeIranPhone(phone);
+    if (!normalizedPhone) {
+      console.log("[auth-send-sms-hook] invalid phone format, rejecting", maskedPhone);
+      return errorResponse(400, "Invalid phone format");
+    }
 
     const sendResp = await fetch(
       `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
