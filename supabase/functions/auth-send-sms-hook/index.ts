@@ -39,7 +39,6 @@ function successResponse() {
 Deno.serve(async (req: Request) => {
   const deadlineAt = Date.now() + HOOK_DEADLINE_MS;
 
-  // ── 0. Build supabase client FIRST ───────────────────────────────────────
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -47,7 +46,6 @@ Deno.serve(async (req: Request) => {
   );
 
   try {
-    // ── 1. Standard Webhook signature verification ───────────────────────────
     const secret = Deno.env.get("SEND_SMS_HOOK_SECRET");
     if (!secret) {
       console.log("[auth-send-sms-hook] SEND_SMS_HOOK_SECRET not configured");
@@ -65,14 +63,12 @@ Deno.serve(async (req: Request) => {
       return errorResponse(401, "Invalid signature");
     }
 
-    // ── 2. Require webhook-id header ─────────────────────────────────────────
     const webhookId = req.headers.get("webhook-id") || "";
     if (!webhookId) {
       console.log("[auth-send-sms-hook] missing webhook-id header, rejecting");
       return errorResponse(400, "Missing webhook-id header");
     }
 
-    // ── 3. Parse and validate payload ────────────────────────────────────────
     const body = JSON.parse(rawBody);
     const user = body?.user;
     const sms = body?.sms;
@@ -90,7 +86,6 @@ Deno.serve(async (req: Request) => {
 
     const maskedPhone = maskPhone(phone);
 
-    // ── 4. Atomic idempotency reservation via RPC ───────────────────────────
     let reservation: string;
     try {
       const { data: rpcResult, error: rpcError } = await supabase.rpc(
@@ -117,9 +112,6 @@ Deno.serve(async (req: Request) => {
       return errorResponse(503, "Request already processing");
     }
 
-    // reservation === 'reserved' or 'retry_allowed' → proceed
-
-    // ── 5. Check phone_login_enabled ─────────────────────────────────────────
     const { data: enabledRow, error: enabledErr } = await supabase
       .from("system_config")
       .select("value")
@@ -140,7 +132,6 @@ Deno.serve(async (req: Request) => {
       return errorResponse(403, "Phone login is disabled");
     }
 
-    // ── 6. Read selected provider ID ─────────────────────────────────────────
     const { data: providerRow, error: providerErr } = await supabase
       .from("system_config")
       .select("value")
@@ -161,7 +152,6 @@ Deno.serve(async (req: Request) => {
       return errorResponse(503, "SMS provider unavailable");
     }
 
-    // ── 7. Check provider is active ──────────────────────────────────────────
     const { data: provider, error: provErr } = await supabase
       .from("sms_providers")
       .select("id, is_active")
@@ -174,7 +164,6 @@ Deno.serve(async (req: Request) => {
       return errorResponse(503, "SMS provider unavailable");
     }
 
-    // ── 8. Read auth/login_otp template ──────────────────────────────────────
     const { data: template } = await supabase
       .from("sms_templates")
       .select("body, is_active")
@@ -190,7 +179,6 @@ Deno.serve(async (req: Request) => {
       message = `کد ورود شما به سامانه اسپارک: ${otp}\nاین کد را در اختیار دیگران قرار ندهید.`;
     }
 
-    // ── 9. Normalize phone ───────────────────────────────────────────────────
     const normalizedPhone = normalizeIranPhone(phone);
     if (!normalizedPhone) {
       console.log("[auth-send-sms-hook] invalid phone format, rejecting", maskedPhone);
@@ -198,7 +186,6 @@ Deno.serve(async (req: Request) => {
       return errorResponse(400, "Invalid phone format");
     }
 
-    // ── 10. Check deadline before dispatching to provider ────────────────────
     const timeoutMs = Math.min(2500, remainingMs(deadlineAt) - 300);
     if (timeoutMs <= 0) {
       console.log("[auth-send-sms-hook] hook deadline exceeded before provider dispatch");
@@ -206,7 +193,6 @@ Deno.serve(async (req: Request) => {
       return errorResponse(504, "Hook deadline exceeded");
     }
 
-    // ── 11. Dispatch via send-sms engine (auth_otp mode, single hop) ──────────
     const providerController = new AbortController();
     const providerTimer = setTimeout(() => providerController.abort(), timeoutMs);
 
@@ -248,12 +234,9 @@ Deno.serve(async (req: Request) => {
         return errorResponse(502, "SMS dispatch failed");
       }
 
-      // Mark as sent — if complete RPC fails, try sent_unconfirmed.
-      // If both RPCs fail, return success anyway so GoTrue does NOT retry
-      // (preventing duplicate SMS). The event stays in 'processing' with
-      // its 5-minute lock, so a retry before lock expiry returns 'locked'.
-      // Exactly-once for an external provider is not absolute, but
-      // immediate duplicate delivery is controlled.
+      // ── Final status tracking ──────────────────────────────────────────
+      let finalDispatchStatus: 'sent' | 'sent_unconfirmed' = 'sent';
+
       const { error: completeErr } = await supabase.rpc(
         "complete_auth_hook_event",
         { p_webhook_id: webhookId },
@@ -265,35 +248,31 @@ Deno.serve(async (req: Request) => {
           { p_webhook_id: webhookId },
         );
         if (markErr) {
-          // Both RPCs failed — log operational error (no OTP, no full phone)
-          // and return success so GoTrue does not retry.
+          // Both RPCs failed — event stays in 'processing' with its 12-minute lock.
+          // Return success so GoTrue does NOT retry (preventing duplicate SMS).
+          // Exactly-once for an external provider is not absolute, but
+          // immediate duplicate delivery is controlled.
           console.log("[auth-send-sms-hook] both complete and mark RPCs failed; event remains processing with lock");
-          await supabase.from("sms_dispatch_logs").insert({
-            target_phone: "[REDACTED]",
-            category: "auth",
-            event_type: "login_otp",
-            audience: "all",
-            message: "[AUTH_OTP_REDACTED]",
-            status: "sent_unconfirmed",
-            error_text: "COMPLETE_AND_MARK_RPC_FAILED",
-            provider_id: providerId,
-          });
+          finalDispatchStatus = 'sent_unconfirmed';
+        } else {
+          finalDispatchStatus = 'sent_unconfirmed';
         }
       }
 
+      // ── Single dispatch log insert ──────────────────────────────────────
       await supabase.from("sms_dispatch_logs").insert({
         target_phone: normalizedPhone,
         category: "auth",
         event_type: "login_otp",
         audience: "all",
         message: "[AUTH_OTP_REDACTED]",
-        status: "sent",
+        status: finalDispatchStatus,
         provider_id: providerId,
         pack_id: result.packId ?? null,
         message_ids: result.messageIds ?? null,
       });
 
-      console.log("[auth-send-sms-hook] OTP dispatched for", maskedPhone);
+      console.log("[auth-send-sms-hook] OTP dispatched for", maskedPhone, "status:", finalDispatchStatus);
       return successResponse();
 
     } catch (providerErr: any) {

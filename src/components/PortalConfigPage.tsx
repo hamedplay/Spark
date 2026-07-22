@@ -222,13 +222,14 @@ function PhoneLoginToggleCard() {
   const [operatorConfirmed, setOperatorConfirmed] = useState(false);
   const [e2eVerified, setE2eVerified] = useState(false);
   const [testMode, setTestMode] = useState(false);
-  const [testPhone, setTestPhone] = useState('');
+  const [testPhoneMasked, setTestPhoneMasked] = useState('');
   const [testPhoneInput, setTestPhoneInput] = useState('');
   const [providerId, setProviderId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingTest, setSavingTest] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminStatus, setAdminStatus] = useState<{ test_mode: boolean; test_phone_masked: string; provider_ready: boolean; operator_confirmed: boolean; e2e_verified: boolean; public_enabled: boolean } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -240,6 +241,7 @@ function PhoneLoginToggleCard() {
     setProviderReady(row?.provider_ready ?? false);
     setOperatorConfirmed(row?.operator_confirmed ?? false);
     setE2eVerified(row?.e2e_verified ?? false);
+    setTestMode(row?.phone_login_test_mode ?? false);
     const { data: providerRow } = await supabase
       .from('system_config')
       .select('value')
@@ -247,21 +249,6 @@ function PhoneLoginToggleCard() {
       .eq('key', 'phone_login_sms_provider_id')
       .maybeSingle();
     setProviderId(providerRow?.value ?? null);
-    const { data: tmRow } = await supabase
-      .from('system_config')
-      .select('value')
-      .eq('section', 'security')
-      .eq('key', 'phone_login_test_mode')
-      .maybeSingle();
-    setTestMode(tmRow?.value === 'true');
-    const { data: tpRow } = await supabase
-      .from('system_config')
-      .select('value')
-      .eq('section', 'security')
-      .eq('key', 'phone_login_test_phone')
-      .maybeSingle();
-    setTestPhone(tpRow?.value || '');
-    setTestPhoneInput(tpRow?.value || '');
     // Check admin status
     const { data: userData } = await supabase.auth.getUser();
     if (userData?.user) {
@@ -270,7 +257,15 @@ function PhoneLoginToggleCard() {
         .select('is_admin')
         .eq('user_id', userData.user.id)
         .maybeSingle();
-      setIsAdmin(profile?.is_admin === true);
+      const admin = profile?.is_admin === true;
+      setIsAdmin(admin);
+      if (admin) {
+        const { data: adminData } = await supabase.rpc('get_phone_login_admin_status');
+        const aRow = Array.isArray(adminData) ? adminData[0] : adminData;
+        setAdminStatus(aRow ?? null);
+        setTestPhoneMasked(aRow?.test_phone_masked ?? '');
+        setTestMode(aRow?.test_mode ?? false);
+      }
     }
     setLoading(false);
   }, []);
@@ -328,21 +323,22 @@ function PhoneLoginToggleCard() {
       return;
     }
     setTestMode(v);
-    setTestPhone(v ? testPhoneInput : '');
+    setTestPhoneMasked(v ? testPhoneInput.replace(/^(\d{6}).*(\d{3})$/, '$1****$2') : '');
     setSavingTest(false);
     toast.success(v ? 'حالت تست فعال شد' : 'حالت تست غیرفعال شد');
-    logAudit({ module: 'security', action: v ? 'test_mode_enabled' : 'test_mode_disabled', entity_name: testPhoneInput, severity: 'warning' });
+    const maskedForAudit = v ? testPhoneInput.replace(/^(\d{6}).*(\d{3})$/, '$1****$2') : 'disabled';
+    logAudit({ module: 'security', action: v ? 'test_mode_enabled' : 'test_mode_disabled', entity_name: maskedForAudit, severity: 'warning' });
   };
 
   if (loading) return null;
 
   const readinessItems = [
-    { label: 'Provider آماده', ok: providerReady },
-    { label: 'Edge Function Secrets تأیید نشده', ok: false },
-    { label: 'Auth Hook تأیید نشده', ok: operatorConfirmed },
-    { label: 'حالت تست غیرفعال', ok: !testMode, neutral: true },
-    { label: 'تست E2E انجام نشده', ok: e2eVerified, neutral: true },
-    { label: 'ورود عمومی غیرفعال', ok: false, neutral: true },
+    { label: providerReady ? 'Provider آماده' : 'Provider آماده نیست', ok: providerReady },
+    { label: 'Edge Function Secrets نیازمند تأیید اپراتور', ok: false, neutral: true },
+    { label: operatorConfirmed ? 'Auth Hook تأیید شده' : 'Auth Hook تأیید نشده', ok: operatorConfirmed },
+    { label: testMode ? 'حالت تست فعال' : 'حالت تست غیرفعال', ok: testMode, neutral: true },
+    { label: e2eVerified ? 'تست E2E موفق' : 'تست E2E انجام نشده', ok: e2eVerified, neutral: true },
+    { label: enabled ? 'ورود عمومی فعال' : 'ورود عمومی غیرفعال', ok: enabled, neutral: true },
   ];
 
   return (
@@ -392,14 +388,17 @@ function PhoneLoginToggleCard() {
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">شماره مجاز برای تست</label>
-            <input
-              type="tel"
-              value={testPhoneInput}
-              onChange={e => setTestPhoneInput(e.target.value)}
-              disabled={testMode}
-              placeholder="09xxxxxxxxx"
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors disabled:opacity-50"
-            />
+            {testMode ? (
+              <p className="text-sm font-mono text-gray-600 dark:text-gray-400 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-xl">{testPhoneMasked || '****'}</p>
+            ) : (
+              <input
+                type="tel"
+                value={testPhoneInput}
+                onChange={e => setTestPhoneInput(e.target.value)}
+                placeholder="09xxxxxxxxx"
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors"
+              />
+            )}
           </div>
         </div>
       )}

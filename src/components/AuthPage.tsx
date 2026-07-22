@@ -15,6 +15,8 @@ interface AuthPageProps {
 interface PublicAuthConfig {
   phone_login_enabled: boolean;
   phone_login_ready: boolean;
+  phone_login_test_mode: boolean;
+  phone_login_test_ready: boolean;
 }
 
 export function AuthPage({ onSuccess }: AuthPageProps) {
@@ -41,8 +43,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   useEffect(() => {
     supabase.rpc('get_public_auth_config').then(({ data }) => {
       const row = Array.isArray(data) ? data[0] : data;
-      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false });
-    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false }));
+      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false });
+    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false }));
   }, []);
 
   // Email/password form
@@ -168,7 +170,9 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   // ── Phone OTP ─────────────────────────────────────────────────────────────────
   const handleSendOtp = async () => {
     if (!phone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
-    if (!authConfig?.phone_login_ready) { toast.error('ورود با شماره موبایل در حال حاضر فعال نیست.'); return; }
+    const isPublicReady = authConfig?.phone_login_ready === true;
+    const isTestModeActive = authConfig?.phone_login_test_mode === true && authConfig?.phone_login_test_ready === true;
+    if (!isPublicReady && !isTestModeActive) { toast.error('ورود با شماره موبایل در حال حاضر فعال نیست.'); return; }
     const normalized = normalizeIranPhone(phone);
     if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
     setOtpLoading(true);
@@ -176,7 +180,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       // Use server-side edge function to prevent enumeration
       // Always returns the same response regardless of whether the phone exists
       await supabase.functions.invoke('request-phone-login-otp', {
-        body: { phone: normalized },
+        body: { phone },
       });
       // Always show the same message — never reveal whether the phone exists
       setOtpSent(true);
@@ -285,36 +289,46 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             </h2>
 
             {/* Login method tabs (only on login) */}
-            {mode === 'login' && (
+            {mode === 'login' && (() => {
+              const phoneTabEnabled = authConfig?.phone_login_enabled === true
+                || (authConfig?.phone_login_test_mode === true && authConfig?.phone_login_test_ready === true);
+              const isTestBadge = !authConfig?.phone_login_enabled && phoneTabEnabled;
+              return (
               <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 mb-6">
                 <button onClick={() => setLoginMethod('email')}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'email' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
                   <Mail className="w-4 h-4" /> ایمیل
                 </button>
                 <button onClick={() => setLoginMethod('phone')}
-                  disabled={!authConfig?.phone_login_enabled}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'} ${!authConfig?.phone_login_enabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                  disabled={!phoneTabEnabled}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'} ${!phoneTabEnabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
                   <Smartphone className="w-4 h-4" /> موبایل
+                  {isTestBadge && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full">حالت تست</span>}
                 </button>
               </div>
-            )}
+              );
+            })()}
 
             {/* ── Phone OTP login ────────────────────────────────────── */}
-            {mode === 'login' && loginMethod === 'phone' && (
+            {mode === 'login' && loginMethod === 'phone' && (() => {
+              const isPublicReady = authConfig?.phone_login_ready === true;
+              const isTestModeActive = authConfig?.phone_login_test_mode === true && authConfig?.phone_login_test_ready === true;
+              const showForm = isPublicReady || isTestModeActive;
+              return (
               <div className="space-y-4">
-                {!authConfig?.phone_login_enabled && (
+                {isTestModeActive && !isPublicReady && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>حالت تست فعال است. فقط شماره تعیین‌شده می‌تواند کد دریافت کند.</span>
+                  </div>
+                )}
+                {!showForm && (
                   <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl p-3 flex gap-2 text-xs text-gray-500 dark:text-gray-400">
                     <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                     <span>ورود با شماره موبایل در حال حاضر فعال نیست.</span>
                   </div>
                 )}
-                {authConfig?.phone_login_enabled && !authConfig?.phone_login_ready && (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>ورود با شماره موبایل فعال است اما سرویس‌دهنده پیامک انتخاب نشده است.</span>
-                  </div>
-                )}
-                {authConfig?.phone_login_ready && (
+                {showForm && (
                 <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">شماره موبایل</label>
@@ -355,7 +369,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                   ورود با ایمیل
                 </button>
               </div>
-            )}
+              );
+            })()}
 
             {/* ── Email login ────────────────────────────────────── */}
             {mode === 'login' && loginMethod === 'email' && (
