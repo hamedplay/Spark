@@ -132,17 +132,8 @@ Deno.serve(async (req: Request) => {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
 
-    // ── Resolve pepper (env var first, then system_config) ───────────────────
-    let pepper = Deno.env.get("PHONE_RATE_LIMIT_PEPPER") || "";
-    if (!pepper) {
-      const { data: pepperRow } = await supabase
-        .from("system_config")
-        .select("value")
-        .eq("section", "security")
-        .eq("key", "phone_rate_limit_pepper")
-        .maybeSingle();
-      pepper = pepperRow?.value || "";
-    }
+    // ── Resolve pepper (env var only — never from DB) ───────────────────────
+    const pepper = Deno.env.get("PHONE_RATE_LIMIT_PEPPER") || "";
     if (!pepper || pepper.length < 32) {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }

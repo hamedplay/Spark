@@ -201,6 +201,16 @@ function SectionCard({ title, icon: Icon, color = 'blue', children }: { title: s
   );
 }
 
+// ─── Hidden security config keys (never shown in generic config list) ────────
+const HIDDEN_SECURITY_CONFIG_KEYS = new Set([
+  'phone_login_enabled',
+  'phone_login_hook_operator_confirmed',
+  'phone_login_e2e_verified',
+  'send_sms_hook_secret',
+  'phone_rate_limit_pepper',
+  'phone_login_allowed_origins',
+]);
+
 // ─── Phone Login Toggle Card (security section) ─────────────────────────────
 function PhoneLoginToggleCard() {
   const [enabled, setEnabled] = useState(false);
@@ -1196,7 +1206,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
         return (
           <div className="space-y-5">
             <SectionCard title="امنیت و دسترسی" icon={Shield} color="red">
-              {cfgs('security').filter(c => c.key !== 'phone_login_enabled').map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
+              {cfgs('security').filter(c => !HIDDEN_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
             <PhoneLoginToggleCard />
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">

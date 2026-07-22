@@ -48,16 +48,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ── 1. Standard Webhook signature verification ───────────────────────────
-    let secret = Deno.env.get("SEND_SMS_HOOK_SECRET") || "";
-    if (!secret) {
-      const { data: secretRow } = await supabase
-        .from("system_config")
-        .select("value")
-        .eq("section", "security")
-        .eq("key", "send_sms_hook_secret")
-        .maybeSingle();
-      secret = secretRow?.value || "";
-    }
+    const secret = Deno.env.get("SEND_SMS_HOOK_SECRET");
     if (!secret) {
       console.log("[auth-send-sms-hook] SEND_SMS_HOOK_SECRET not configured");
       return errorResponse(500, "Hook secret not configured");
@@ -257,13 +248,14 @@ Deno.serve(async (req: Request) => {
         return errorResponse(502, "SMS dispatch failed");
       }
 
-      // Mark as sent
+      // Mark as sent — if complete RPC fails, mark as sent_unconfirmed
       const { error: completeErr } = await supabase.rpc(
         "complete_auth_hook_event",
         { p_webhook_id: webhookId },
       );
       if (completeErr) {
-        console.log("[auth-send-sms-hook] complete_auth_hook_event RPC failed:", completeErr.message);
+        console.log("[auth-send-sms-hook] complete_auth_hook_event RPC failed, marking sent_unconfirmed:", completeErr.message);
+        await supabase.rpc("mark_sent_unconfirmed_auth_hook_event", { p_webhook_id: webhookId });
       }
 
       await supabase.from("sms_dispatch_logs").insert({
