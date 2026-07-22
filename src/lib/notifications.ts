@@ -212,7 +212,7 @@ export async function insertNotification(payload: NotifyPayload): Promise<SmsDis
   const baleEnabled = ch?.bale !== false;
 
   if (inAppEnabled) {
-    await supabase.rpc('create_notification', {
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('create_notification', {
       p_user_id: payload.userId,
       p_title: title,
       p_message: message,
@@ -223,6 +223,14 @@ export async function insertNotification(payload: NotifyPayload): Promise<SmsDis
       p_template_audience: audience,
       p_event_key: payload.eventKey ?? null,
     });
+
+    if (rpcError) {
+      return { ok: false, status: 'failed', errorCode: 'RPC_ERROR', error: rpcError.message };
+    }
+    // Duplicate event_key — skip SMS and Bale to prevent duplicate dispatch
+    if (rpcResult?.created === false) {
+      return { ok: true, status: 'skipped', reason: 'DUPLICATE_EVENT_KEY' };
+    }
   }
 
   let smsResult: SmsDispatchResult = { ok: true, status: 'skipped', reason: 'CHANNEL_DISABLED' };

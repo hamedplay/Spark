@@ -22,7 +22,7 @@ async function sendSmsToExternals(
   message: string,
   triggeredByUserId?: string | null,
   placeholders?: Record<string, string>,
-  eventType: 'invite' | 'change' = 'invite',
+  eventType: 'invite' | 'change' | 'cancel' = 'invite',
 ): Promise<ExternalSmsResult> {
   if (!externalNames.length) return { ok: true, sent: 0, skipped: 0 };
 
@@ -152,6 +152,9 @@ type CommitSnapshot = {
   agendaEnabled: boolean;
   agendaItems: AgendaItem[];
   prevExternalByMeetingId: Record<string, string[]>;
+  isOnline: boolean;
+  wasOnline: boolean;
+  prevRoomId: string | null;
 };
 
 const IMPORTANT_FIELDS = ['subject', 'request_date', 'start_time', 'end_time', 'location', 'conference_room_id', 'is_online'] as const;
@@ -637,8 +640,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   }, [prefillData]);
 
   const loadMeetingParticipants = async (meetingId: string) => {
-    const { data } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants, meeting_manager').eq('id', meetingId).maybeSingle();
+    const { data } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants, meeting_manager, is_online, conference_room_id').eq('id', meetingId).maybeSingle();
     if (!data) return;
+    if (data.is_online !== undefined && data.is_online !== null) setIsOnline(!!data.is_online);
 
     if ((data.participant_user_ids || []).length > 0) {
       setSelectedParticipants((data.participant_user_ids as string[]).map((id: string) => ({ id, name: '' })));
@@ -797,23 +801,19 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const existingMtg = existingMap.get(prefillMeetingId) || null;
         const isFirstSchedule = !existingMtg?.start_time;
 
-        // Conference room logic: only create new room when transitioning offline→online.
-        // Preserve existing room when staying online; null it when going offline.
+        // Conference room: in prepare phase, just load existing state. NO room creation here.
+        // Room creation happens in commitEdit ONLY after user confirms.
         const wasOnline = !!existingMtg?.is_online;
         const prevRoomId = existingMtg?.conference_room_id || null;
-        if (isOnline && !wasOnline) {
-          // offline→online: create new room
-          const room = await createConferenceRoom(subject);
-          conferenceRoomId = room?.id || null;
-          conferenceRoomCode = room?.code || null;
-        } else if (isOnline && wasOnline) {
-          // staying online: preserve existing room
+        if (isOnline && wasOnline && prevRoomId) {
+          // staying online: preserve existing room, fetch code for joinLink
           conferenceRoomId = prevRoomId;
-          // re-fetch room code for joinLink
-          if (prevRoomId) {
-            const { data: roomRow } = await supabase.from('conference_rooms').select('code').eq('id', prevRoomId).maybeSingle();
-            conferenceRoomCode = roomRow?.code || null;
-          }
+          const { data: roomRow } = await supabase.from('conference_rooms').select('code').eq('id', prevRoomId).maybeSingle();
+          conferenceRoomCode = roomRow?.code || null;
+        } else if (isOnline && !wasOnline) {
+          // offline→online: DON'T create room yet. Will be created in commitEdit.
+          conferenceRoomId = null;
+          conferenceRoomCode = null;
         } else {
           // going offline: clear room association
           conferenceRoomId = null;
@@ -938,15 +938,16 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
               ((existingMap.get(id)?.external_participants || []) as string[]).filter((x: string) => !!x),
             ])
           ),
+          isOnline,
+          wasOnline,
+          prevRoomId,
         };
 
-        if (changeSet.importantFields.length > 0) {
-          // Open decision modal; commit deferred to user choice
+        if (changeSet.hasAnyChanges) {
+          // Open decision modal for ANY real change; commit deferred to user choice
           setEditDecision({ changeSet, snapshot });
           return;
         }
-        // Minor or participant-only or notify-only change: commit directly, no change notifications
-        await commitEdit(snapshot, false);
       } else {
         const { data: md, error: me } = await supabase.from('meetings').insert([record]).select().single();
         if (me) throw me;
@@ -1023,6 +1024,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const commitEdit = async (snapshot: CommitSnapshot, notifyExistingParticipants: boolean) => {
     if (!userId || !prefillMeetingId) return;
     setCommitting(true);
+    const operationId = (crypto as any)?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     try {
       const {
         updateRecord, baseFields, isFirstSchedule, senderName,
@@ -1038,6 +1040,14 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       } else {
         const { error } = await supabase.from('meetings').update(updateRecord).eq('id', prefillMeetingId);
         if (error) throw error;
+      }
+
+      // 1b. Conference room: create ONLY after successful save, only for offline→online transition
+      if (snapshot.isOnline && !snapshot.wasOnline) {
+        const room = await createConferenceRoom(subject);
+        if (room?.id) {
+          await supabase.from('meetings').update({ conference_room_id: room.id }).eq('id', prefillMeetingId);
+        }
       }
 
       // 2. Save agenda items (delete + insert). Error aborts before any notifications.
@@ -1085,17 +1095,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         }];
       }
 
-      // 4. Notifications — only after successful save + sync
-      // Creator/editor notification: only on important changes or first schedule.
+      // 4. Notifications — only after successful save + sync, and only if user chose to notify
+      // Creator/editor notification: ONLY on first schedule (create flow), never on edit.
       // No SMS or Bale for creator — only in-app notification + toast.
-      const hasImportantChanges = meetingDiffs.some(d => {
-        const cs = snapshot.changeSetsByMeetingId[d.meeting_id];
-        return (cs?.importantFields.length ?? 0) > 0;
-      });
-      if (isFirstSchedule || hasImportantChanges) {
-        const creatorAction: MeetingAction = isFirstSchedule ? 'created' : 'change';
-        const creatorEventType = getMeetingTemplateKey('creator', creatorAction);
-        await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: isFirstSchedule ? 'جلسه زمان‌بندی شد' : 'جلسه ویرایش شد', fallbackMessage: `جلسه "${subject}" ${isFirstSchedule ? 'زمان‌بندی' : 'ویرایش'} شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar', channels: { inApp: true, sms: false, bale: false }, eventKey: `${prefillMeetingId}:${userId}:${creatorEventType}` });
+      if (isFirstSchedule) {
+        const creatorEventType = getMeetingTemplateKey('creator', 'created');
+        await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: 'جلسه زمان‌بندی شد', fallbackMessage: `جلسه "${subject}" زمان‌بندی شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar', channels: { inApp: true, sms: false, bale: false }, eventKey: `${prefillMeetingId}:${userId}:${creatorEventType}:${operationId}` });
       }
 
       const internalSmsResults: SmsDispatchResult[] = [];
@@ -1113,6 +1118,15 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       }
 
       const sentNotificationKeys = new Set<string>();
+
+      // If user chose "without notifications", skip ALL notification dispatch.
+      // Meeting data, participants, observers, inbox, and agenda are already saved.
+      if (!notifyExistingParticipants) {
+        showSmsSummary(internalSmsResults, null);
+        setEditDecision(null);
+        onSuccess(subject, !!prefillMeetingId);
+        return;
+      }
 
       for (const diff of meetingDiffs) {
         const isBulk = meetingDiffs.length > 1;
@@ -1138,91 +1152,87 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         };
 
         const mtgChangeSet = snapshot.changeSetsByMeetingId[diff.meeting_id];
-        // Added participants ALWAYS get invite (independent of notify-existing decision)
+        // Added participants → invite only
         if (diff.added_participant_ids.length) {
           const addedEventType = getMeetingTemplateKey('participant', 'invite');
           for (const uid of diff.added_participant_ids) {
-            const dedupeKey = `${diff.meeting_id}:${uid}:${addedEventType}`;
+            const dedupeKey = `${operationId}:${diff.meeting_id}:${uid}:participants:${addedEventType}`;
             if (sentNotificationKeys.has(dedupeKey)) continue;
             sentNotificationKeys.add(dedupeKey);
-            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: addedEventType, audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${mtgSubject}" دعوت شدید — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${diff.meeting_id}:${uid}:${addedEventType}` });
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: addedEventType, audience: 'participants', fallbackTitle: 'دعوت به جلسه', fallbackMessage: `شما به جلسه "${mtgSubject}" دعوت شدید — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${operationId}:${diff.meeting_id}:${uid}:participants:${addedEventType}` });
             internalSmsResults.push(result);
           }
         }
-        // Removed participants get cancel (existing template event) — only for those actually removed
+        // Removed participants → cancel only
         if (diff.removed_participant_ids.length) {
           const removedEventType = getMeetingTemplateKey('participant', 'cancel');
           for (const uid of diff.removed_participant_ids) {
-            const dedupeKey = `${diff.meeting_id}:${uid}:${removedEventType}`;
+            const dedupeKey = `${operationId}:${diff.meeting_id}:${uid}:participants:${removedEventType}`;
             if (sentNotificationKeys.has(dedupeKey)) continue;
             sentNotificationKeys.add(dedupeKey);
-            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: removedEventType, audience: 'participants', fallbackTitle: 'لغو دعوت', fallbackMessage: `دعوت شما برای جلسه "${mtgSubject}" لغو شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${diff.meeting_id}:${uid}:${removedEventType}` });
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: removedEventType, audience: 'participants', fallbackTitle: 'لغو دعوت', fallbackMessage: `دعوت شما برای جلسه "${mtgSubject}" لغو شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${operationId}:${diff.meeting_id}:${uid}:participants:${removedEventType}` });
             internalSmsResults.push(result);
           }
         }
-        // Retained participants get change ONLY when user chose to notify AND this specific meeting has important changes
-        if (notifyExistingParticipants && !isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && diff.retained_participant_ids.length) {
+        // Retained participants → change only when important fields changed
+        if (!isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && diff.retained_participant_ids.length) {
           const retainedEventType = getMeetingTemplateKey('participant', 'change');
           for (const uid of diff.retained_participant_ids) {
-            const dedupeKey = `${diff.meeting_id}:${uid}:${retainedEventType}`;
+            const dedupeKey = `${operationId}:${diff.meeting_id}:${uid}:participants:${retainedEventType}`;
             if (sentNotificationKeys.has(dedupeKey)) continue;
             sentNotificationKeys.add(dedupeKey);
-            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: retainedEventType, audience: 'participants', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `جلسه "${mtgSubject}" ویرایش شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${diff.meeting_id}:${uid}:${retainedEventType}` });
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: retainedEventType, audience: 'participants', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `جلسه "${mtgSubject}" ویرایش شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${operationId}:${diff.meeting_id}:${uid}:participants:${retainedEventType}` });
             internalSmsResults.push(result);
           }
         }
-        // Per-meeting observer diff: added/retained/removed computed against THIS meeting's prior notify_users
+        // Per-meeting observer diff
         const prevNotifyForMeeting = new Set<string>((snapshot.previousNotifyUserIdsByMeetingId[diff.meeting_id] || []).filter((x: string) => x));
         const addedObserverIds = observerIds.filter(id => !prevNotifyForMeeting.has(id));
         const retainedObserverIds = observerIds.filter(id => prevNotifyForMeeting.has(id));
+        const removedObserverIds = [...prevNotifyForMeeting].filter(id => !observerIds.includes(id));
 
-        // Added observers get invite (create contract), independent of yes/no and per-meeting
+        // Added observers → invite
         if (addedObserverIds.length) {
           const addedObserverEventType = getMeetingTemplateKey('observer', 'invite');
           for (const uid of addedObserverIds) {
-            const dedupeKey = `${diff.meeting_id}:${uid}:${addedObserverEventType}`;
+            const dedupeKey = `${operationId}:${diff.meeting_id}:${uid}:observers:${addedObserverEventType}`;
             if (sentNotificationKeys.has(dedupeKey)) continue;
             sentNotificationKeys.add(dedupeKey);
-            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: addedObserverEventType, audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${mtgSubject}" ثبت شده‌اید — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${diff.meeting_id}:${uid}:${addedObserverEventType}` });
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: addedObserverEventType, audience: 'observers', fallbackTitle: 'اطلاع از جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${mtgSubject}" ثبت شده‌اید — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${operationId}:${diff.meeting_id}:${uid}:observers:${addedObserverEventType}` });
             internalSmsResults.push(result);
           }
         }
-        // Removed observers get cancel (existing template event)
-        const removedObserverIds = [...prevNotifyForMeeting].filter(id => !observerIds.includes(id));
+        // Removed observers → cancel
         if (removedObserverIds.length) {
           const removedObserverEventType = getMeetingTemplateKey('observer', 'cancel');
           for (const uid of removedObserverIds) {
-            const dedupeKey = `${diff.meeting_id}:${uid}:${removedObserverEventType}`;
+            const dedupeKey = `${operationId}:${diff.meeting_id}:${uid}:observers:${removedObserverEventType}`;
             if (sentNotificationKeys.has(dedupeKey)) continue;
             sentNotificationKeys.add(dedupeKey);
-            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: removedObserverEventType, audience: 'observers', fallbackTitle: 'لغو اطلاع', fallbackMessage: `اطلاع‌رسانی شما برای جلسه "${mtgSubject}" لغو شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${diff.meeting_id}:${uid}:${removedObserverEventType}` });
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: removedObserverEventType, audience: 'observers', fallbackTitle: 'لغو اطلاع', fallbackMessage: `اطلاع‌رسانی شما برای جلسه "${mtgSubject}" لغو شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${operationId}:${diff.meeting_id}:${uid}:observers:${removedObserverEventType}` });
             internalSmsResults.push(result);
           }
         }
-        // Retained observers get change only when user chose to notify AND this specific meeting has important changes
-        if (notifyExistingParticipants && !isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && retainedObserverIds.length) {
+        // Retained observers → change only when important fields changed
+        if (!isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && retainedObserverIds.length) {
           const retainedObserverEventType = getMeetingTemplateKey('observer', 'change');
           for (const uid of retainedObserverIds) {
-            const dedupeKey = `${diff.meeting_id}:${uid}:${retainedObserverEventType}`;
+            const dedupeKey = `${operationId}:${diff.meeting_id}:${uid}:observers:${retainedObserverEventType}`;
             if (sentNotificationKeys.has(dedupeKey)) continue;
             sentNotificationKeys.add(dedupeKey);
-            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: retainedObserverEventType, audience: 'observers', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `شما به عنوان مطلع جلسه "${mtgSubject}" ثبت شده‌اید — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${diff.meeting_id}:${uid}:${retainedObserverEventType}` });
+            const result = await insertNotification({ userId: uid, category: 'meeting', eventType: retainedObserverEventType, audience: 'observers', fallbackTitle: 'تغییر در جلسه', fallbackMessage: `جلسه "${mtgSubject}" ویرایش شد — ${mtgTimeStr}${mtgJalaaliDate ? ` در ${mtgJalaaliDate}` : ''}${agendaSummary}`, placeholders: { ...mtgSmsPlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' }, senderId: userId, senderName: senderName, actionUrl: 'calendar', eventKey: `${operationId}:${diff.meeting_id}:${uid}:observers:${retainedObserverEventType}` });
             internalSmsResults.push(result);
           }
         }
 
-        // External participants diff (per-meeting): trim + normalize + dedup, no new schema.
-        // sendSms gates whether any SMS is sent; without it, meeting info is still saved.
+        // External participants diff (per-meeting)
         if (sendSms && selectedExternal.length > 0) {
           const extFallbackSms = `دعوت به جلسه: «${mtgSubject}» | تاریخ: ${mtgJalaaliDate || meetingDateStr} | ساعت: ${mtgTimeStr}${mtgSmsPlaceholders.location_part}`;
-          // Normalize for comparison only: trim, collapse internal whitespace, casefold.
-          // Original names are preserved for storage/SMS; dedup by normalized key.
           const normName = (n: string) => (n || '').trim().replace(/\s+/g, ' ').toLowerCase();
           const prevExt = new Set<string>(
             (snapshot.prevExternalByMeetingId[diff.meeting_id] || [])
               .map(normName).filter((x: string) => !!x)
           );
-          // Preserve original names; dedup by normalized key so duplicates get one SMS.
           const seenNorm = new Set<string>();
           const nextExt: string[] = [];
           for (const raw of selectedExternal) {
@@ -1233,18 +1243,24 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
           const newExt = nextExt.filter(n => !prevExt.has(normName(n)));
           const retainedExt = nextExt.filter(n => prevExt.has(normName(n)));
-          // New externals: invite only (independent of notifyExistingParticipants).
-          // Retained externals: change only when notify flag set AND non-participant changes exist.
-          // Removed externals: no cancel SMS (no cancel event for externals; out of scope).
-          // A person never receives both invite and change in the same operation: new→invite, retained→change.
+          const removedExt = (snapshot.prevExternalByMeetingId[diff.meeting_id] || [])
+            .filter(n => !new Set(nextExt.map(normName)).has(normName(n)));
+          // Added externals → invite
           if (newExt.length > 0) {
             const extResult = await sendSmsToExternals(newExt, contacts, extFallbackSms, userId, mtgSmsPlaceholders, 'invite');
             if (extResult) externalSmsResults.push(extResult);
           }
-          if (notifyExistingParticipants && !isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && retainedExt.length > 0) {
+          // Retained externals → change only when important fields changed
+          if (!isFirstSchedule && (mtgChangeSet?.importantFields.length ?? 0) > 0 && retainedExt.length > 0) {
             const extChangeFallback = `تغییر جلسه: «${mtgSubject}» | تاریخ: ${mtgJalaaliDate || meetingDateStr} | ساعت: ${mtgTimeStr}${mtgSmsPlaceholders.location_part}`;
             const extChangeResult = await sendSmsToExternals(retainedExt, contacts, extChangeFallback, userId, mtgSmsPlaceholders, 'change');
             if (extChangeResult) externalSmsResults.push(extChangeResult);
+          }
+          // Removed externals → cancel
+          if (removedExt.length > 0) {
+            const extCancelFallback = `لغو دعوت: جلسه «${mtgSubject}» در تاریخ ${mtgJalaaliDate || meetingDateStr} لغو شد.`;
+            const extCancelResult = await sendSmsToExternals(removedExt, contacts, extCancelFallback, userId, mtgSmsPlaceholders, 'cancel');
+            if (extCancelResult) externalSmsResults.push(extCancelResult);
           }
         }
       }
@@ -2047,8 +2063,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
                 <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-800 dark:text-white">نحوه ثبت تغییرات جلسه</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">آیا این تغییرات به شرکت‌کنندگان فعلی اطلاع‌رسانی شود؟</p>
+                <p className="text-sm font-bold text-gray-800 dark:text-white">ثبت تغییرات جلسه</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">تغییراتی در اطلاعات یا اعضای جلسه ایجاد شده است. نحوه ثبت تغییرات را انتخاب کنید.</p>
               </div>
             </div>
             <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
@@ -2071,32 +2087,38 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
               {editDecision.changeSet.participantChanged && (
                 <p className="text-xs text-blue-600 dark:text-blue-400">تغییر در فهرست شرکت‌کنندگان</p>
               )}
+              {editDecision.changeSet.notifyUsersChanged && (
+                <p className="text-xs text-blue-600 dark:text-blue-400">تغییر در فهرست مطلعین</p>
+              )}
+              {editDecision.changeSet.externalChanged && (
+                <p className="text-xs text-blue-600 dark:text-blue-400">تغییر در فهرست شرکت‌کنندگان خارجی</p>
+              )}
               <p className="text-xs text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-100 dark:border-gray-700">
-                افراد جدید در هر دو حالت دعوت‌نامه جلسه را دریافت خواهند کرد.
+                در حالت ثبت با اطلاع‌رسانی، افراد اضافه‌شده دعوت‌نامه، افراد حذف‌شده پیام لغو دعوت و اعضای باقی‌مانده در صورت تغییر اطلاعات جلسه پیام تغییر دریافت می‌کنند. در حالت ثبت بدون اطلاع‌رسانی، تغییرات فقط در سامانه ذخیره می‌شوند و هیچ پیامی ارسال نخواهد شد.
               </p>
             </div>
             <div className="flex flex-col gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-700">
               <button
                 onClick={() => commitEdit(editDecision.snapshot, true)}
                 disabled={committing}
-                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 ${editDecision.changeSet.importantFields.length > 0 ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 bg-teal-600 text-white hover:bg-teal-700"
               >
                 {committing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-                ثبت و اطلاع‌رسانی
+                ثبت تغییرات با اطلاع‌رسانی
               </button>
               <button
                 onClick={() => commitEdit(editDecision.snapshot, false)}
                 disabled={committing}
-                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 ${editDecision.changeSet.importantFields.length === 0 ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
               >
-                ثبت بدون اطلاع‌رسانی
+                ثبت تغییرات بدون اطلاع‌رسانی
               </button>
               <button
                 onClick={() => setEditDecision(null)}
                 disabled={committing}
                 className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
               >
-                انصراف
+                بازگشت به ویرایش
               </button>
             </div>
           </div>
