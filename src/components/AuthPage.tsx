@@ -21,6 +21,10 @@ interface PublicAuthConfig {
   phone_password_recovery_ready: boolean;
   phone_password_recovery_test_mode: boolean;
   phone_password_recovery_test_ready: boolean;
+  recovery_template_ready: boolean;
+  recovery_secret_confirmed: boolean;
+  recovery_ttl_valid: boolean;
+  recovery_ttl_seconds: number;
 }
 
 export function AuthPage({ onSuccess }: AuthPageProps) {
@@ -47,8 +51,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   useEffect(() => {
     supabase.rpc('get_public_auth_config').then(({ data }) => {
       const row = Array.isArray(data) ? data[0] : data;
-      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false });
-    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false }));
+      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600 });
+    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600 }));
   }, []);
 
   // Email/password form
@@ -214,10 +218,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         body: { challenge_id: recoveryChallengeId, otp: recoveryOtp },
       });
       if (error || !data?.ok) {
-        toast.error(data?.error === 'OTP_EXPIRED' ? 'کد منقضی شده است'
-          : data?.error === 'MAX_ATTEMPTS_EXCEEDED' ? 'تعداد تلاش‌ها بیش از حد مجاز'
-          : data?.error === 'CHALLENGE_LOCKED' ? 'چالش قفل شده است'
-          : 'کد نادرست است یا منقضی شده');
+        toast.error('کد نامعتبر است، منقضی شده یا امکان ادامه بازیابی وجود ندارد.');
         return;
       }
       // Store reset token in memory only (not localStorage)
@@ -240,11 +241,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         body: { challenge_id: recoveryChallengeId, reset_token: recoveryResetToken, new_password: recoveryPassword },
       });
       if (error || !data?.ok) {
-        toast.error(data?.error === 'RESET_TOKEN_EXPIRED' ? 'زمان بازیابی منقضی شده. لطفاً دوباره تلاش کنید.'
-          : data?.error === 'MAX_ATTEMPTS_EXCEEDED' ? 'تعداد تلاش‌ها بیش از حد مجاز'
-          : data?.error === 'PASSWORD_TOO_SHORT' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد'
-          : data?.error === 'PASSWORD_WEAK' ? 'رمز عبور باید شامل حروف و عدد باشد'
-          : 'خطا در تغییر رمز عبور');
+        toast.error('کد نامعتبر است، منقضی شده یا امکان ادامه بازیابی وجود ندارد.');
         return;
       }
       // Clear all sensitive state

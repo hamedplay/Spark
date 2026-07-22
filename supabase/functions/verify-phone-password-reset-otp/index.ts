@@ -1,15 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-function normalizeIranPhone(value?: string | null): string {
-  const digits = String(value || '').replace(/\D/g, '');
-  if (/^00989\d{9}$/.test(digits)) return digits.slice(2);
-  if (/^989\d{9}$/.test(digits)) return digits;
-  if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
-  if (/^9\d{9}$/.test(digits)) return `98${digits}`;
-  return '';
-}
-
 async function hmacHash(value: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(secret),
@@ -17,16 +8,6 @@ async function hmacHash(value: string, secret: string): Promise<string> {
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const bufA = enc.encode(a);
-  const bufB = enc.encode(b);
-  if (bufA.length !== bufB.length) return false;
-  let diff = 0;
-  for (let i = 0; i < bufA.length; i++) diff |= bufA[i] ^ bufB[i];
-  return diff === 0;
 }
 
 function getClientIP(req: Request): string {
@@ -49,6 +30,8 @@ function corsHeaders(allowedOrigin: string | null): Record<string, string> {
 const TARGET_MIN_MS = 1500;
 const TARGET_MAX_MS = 1700;
 
+const GENERIC_ERROR = JSON.stringify({ ok: false, error: "INVALID_OR_EXPIRED_CODE" });
+
 async function finishResponse(
   startedAt: number,
   response: Response,
@@ -64,6 +47,11 @@ async function finishResponse(
     status: response.status,
     headers: { ...response.headers, ...cors },
   });
+}
+
+function genericErrorResponse(cors: Record<string, string>): Response {
+  return new Response(GENERIC_ERROR,
+    { status: 400, headers: { "Content-Type": "application/json", ...cors } });
 }
 
 Deno.serve(async (req: Request) => {
@@ -90,181 +78,175 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return await finishResponse(startedAt,
-      new Response(JSON.stringify({ ok: false, error: "INVALID_REQUEST" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+  }
+
+  const contentType = req.headers.get("Content-Type") || "";
+  if (!contentType.includes("application/json")) {
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+  }
+
+  let bodyText: string;
+  try {
+    bodyText = await req.text();
+  } catch {
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+  }
+  if (bodyText.length > 4096) {
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
   }
 
   try {
     if (!allowedOrigin) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_REQUEST" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    const body = await req.json();
+    let body: { challenge_id?: string; otp?: string };
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+
     const challengeId: string | undefined = body.challenge_id;
     const otp: string | undefined = body.otp;
 
     if (!challengeId || !otp || otp.length < 4) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_REQUEST" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
     // Resolve secret
     const secret = Deno.env.get("PHONE_PASSWORD_RESET_SECRET") || "";
     if (!secret || secret.length < 32) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_REQUEST" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // IP rate limit: 10 per IP per 15 min
+    // Atomic IP rate limit
     const clientIP = getClientIP(req);
     const ipHash = await hmacHash(clientIP, secret);
-    const rateWindow = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-    const { count: ipCount } = await supabase
-      .from("phone_otp_rate_limit")
-      .select("id", { count: "exact", head: true })
-      .eq("ip_hash", ipHash)
-      .eq("purpose", "phone_password_recovery_verify")
-      .gte("created_at", rateWindow);
-
-    if ((ipCount || 0) >= 10) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "RATE_LIMITED" }),
-          { status: 429, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    const { data: rlData, error: rlErr } = await supabase.rpc(
+      "consume_phone_password_recovery_verify_limit",
+      {
+        p_ip_hash: ipHash,
+        p_purpose: "phone_password_recovery_verify",
+        p_ip_limit: 10,
+        p_window_seconds: 900,
+      },
+    );
+    if (rlErr || !rlData) {
+      // Fail-closed
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+    const rlRow = Array.isArray(rlData) ? rlData[0] : rlData;
+    if (!rlRow?.allowed) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    await supabase.from("phone_otp_rate_limit").insert({
-      ip_hash: ipHash,
-      phone_hash: "verify:" + challengeId,
-      purpose: "phone_password_recovery_verify",
-    });
-
-    // Fetch challenge
+    // Fetch challenge to get user_id and phone_hash for revalidation
     const { data: challenge, error: challengeErr } = await supabase
       .from("phone_password_reset_challenges")
-      .select("*")
+      .select("id, user_id, phone_hash, status, expires_at, locked_until, otp_attempt_count, max_attempts, otp_hash")
       .eq("id", challengeId)
       .maybeSingle();
 
     if (challengeErr || !challenge) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_CHALLENGE" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Check status
-    if (challenge.status !== "pending") {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "CHALLENGE_NOT_PENDING" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    // Revalidate auth/profile before proceeding
+    const { data: revData, error: revErr } = await supabase.rpc(
+      "revalidate_phone_password_reset_target",
+      {
+        p_user_id: challenge.user_id,
+        p_expected_phone_hash: challenge.phone_hash,
+      },
+    );
+    if (revErr || !revData) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+    const revRow = Array.isArray(revData) ? revData[0] : revData;
+    if (!revRow?.valid) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Check expiry
-    if (new Date(challenge.expires_at) < new Date()) {
-      await supabase
-        .from("phone_password_reset_challenges")
-        .update({ status: "expired" })
-        .eq("id", challengeId);
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "OTP_EXPIRED" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-
-    // Check locked
-    if (challenge.locked_until && new Date(challenge.locked_until) > new Date()) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "CHALLENGE_LOCKED" }),
-          { status: 423, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-
-    // Check attempt count
-    if (challenge.attempt_count >= challenge.max_attempts) {
-      await supabase
-        .from("phone_password_reset_challenges")
-        .update({ status: "locked", locked_until: new Date(Date.now() + 3600000).toISOString() })
-        .eq("id", challengeId);
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "MAX_ATTEMPTS_EXCEEDED" }),
-          { status: 423, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-
-    // Re-check profile is still active and matches
+    // Compute HMAC of the provided OTP for comparison
+    // We need the normalized phone to bind into the hash
+    // The phone_hash in the challenge is HMAC(normalized_phone, secret)
+    // We can't reverse it, so we pass the provided OTP hash to the RPC
+    // The RPC compares against the stored otp_hash
+    // Edge function computes: HMAC(challenge_id:user_id:normalized_phone:otp, secret)
+    // But we don't have normalized_phone here...
+    // Solution: the RPC does the comparison internally using the stored hash
+    // We pass the raw OTP and let the RPC compute the hash
+    // But the RPC can't do HMAC...
+    // Actually, the verify RPC takes p_provided_otp_hash — so the edge function
+    // needs to compute it. But we need normalized_phone for the hash binding.
+    //
+    // We need to get the normalized phone. We can get it from the resolve RPC
+    // or from the profile. Let me fetch the profile phone.
     const { data: profile } = await supabase
       .from("profiles")
-      .select("user_id, phone, is_active")
+      .select("phone")
       .eq("user_id", challenge.user_id)
       .maybeSingle();
 
-    if (!profile || profile.is_active !== true) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_CHALLENGE" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    if (!profile?.phone) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Verify OTP hash (constant-time)
-    const expectedOtpHash = challenge.otp_hash;
+    // Normalize the profile phone
+    const digits = String(profile.phone).replace(/\D/g, '');
+    let normalized = '';
+    if (/^00989\d{9}$/.test(digits)) normalized = digits.slice(2);
+    else if (/^989\d{9}$/.test(digits)) normalized = digits;
+    else if (/^09\d{9}$/.test(digits)) normalized = `98${digits.slice(1)}`;
+    else if (/^9\d{9}$/.test(digits)) normalized = `98${digits}`;
+    else return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+
+    // Verify phone hash matches challenge
+    const computedPhoneHash = await hmacHash(normalized, secret);
+    if (computedPhoneHash !== challenge.phone_hash) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+
+    // Compute provided OTP hash
     const providedOtpHash = await hmacHash(
-      `${challengeId}:${challenge.user_id}:${normalizeIranPhone(profile.phone)}:${otp}`,
+      `${challengeId}:${challenge.user_id}:${normalized}:${otp}`,
       secret,
     );
 
-    if (!timingSafeEqual(expectedOtpHash, providedOtpHash)) {
-      // Increment attempt_count atomically
-      const newAttemptCount = challenge.attempt_count + 1;
-      const updateData: Record<string, unknown> = { attempt_count: newAttemptCount };
-
-      if (newAttemptCount >= challenge.max_attempts) {
-        updateData.status = "locked";
-        updateData.locked_until = new Date(Date.now() + 3600000).toISOString();
-      }
-
-      await supabase
-        .from("phone_password_reset_challenges")
-        .update(updateData)
-        .eq("id", challengeId);
-
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "OTP_INCORRECT" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-
-    // OTP verified — generate reset token (32 bytes)
+    // Generate reset token (32 bytes)
     const resetTokenBytes = new Uint8Array(32);
     crypto.getRandomValues(resetTokenBytes);
     const resetToken = Array.from(resetTokenBytes).map(b => b.toString(16).padStart(2, "0")).join("");
     const resetTokenHash = await hmacHash(resetToken, secret);
+    const resetExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-    // Update challenge to verified
-    const { error: updateErr } = await supabase
-      .from("phone_password_reset_challenges")
-      .update({
-        status: "verified",
-        reset_token_hash: resetTokenHash,
-        reset_expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        verified_at: new Date().toISOString(),
-      })
-      .eq("id", challengeId)
-      .eq("status", "pending");
-
-    if (updateErr) {
-      // Race condition — another request may have already verified
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "CHALLENGE_NOT_PENDING" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    // Atomic verify via RPC
+    const { data: verifyData, error: verifyErr } = await supabase.rpc(
+      "verify_phone_password_reset_challenge",
+      {
+        p_challenge_id: challengeId,
+        p_provided_otp_hash: providedOtpHash,
+        p_reset_token_hash: resetTokenHash,
+        p_reset_expires_at: resetExpiresAt,
+      },
+    );
+    if (verifyErr || !verifyData) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+    const verifyRow = Array.isArray(verifyData) ? verifyData[0] : verifyData;
+    if (!verifyRow?.success) {
+      // RPC failed — do NOT return reset token
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Return reset token to browser (only time it's ever sent)
+    // Success — return reset token to browser (only time it's ever sent)
     return await finishResponse(startedAt,
       new Response(JSON.stringify({ ok: true, reset_token: resetToken }),
         { status: 200, headers: { "Content-Type": "application/json", ...cors } }), cors);
 
   } catch {
-    return await finishResponse(startedAt,
-      new Response(JSON.stringify({ ok: false, error: "INTERNAL_ERROR" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
   }
 });

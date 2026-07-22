@@ -40,16 +40,6 @@ function randomUUID(): string {
   return crypto.randomUUID();
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const bufA = enc.encode(a);
-  const bufB = enc.encode(b);
-  if (bufA.length !== bufB.length) return false;
-  let diff = 0;
-  for (let i = 0; i < bufA.length; i++) diff |= bufA[i] ^ bufB[i];
-  return diff === 0;
-}
-
 const TARGET_MIN_MS = 3000;
 const TARGET_MAX_MS = 3200;
 
@@ -86,7 +76,6 @@ Deno.serve(async (req: Request) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  // Resolve allowed origins
   let allowedOrigin: string | null = null;
   try {
     const allowedStr = Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") || "";
@@ -105,15 +94,19 @@ Deno.serve(async (req: Request) => {
     return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
   }
 
-  // Content-Type check
   const contentType = req.headers.get("Content-Type") || "";
   if (!contentType.includes("application/json")) {
     return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
   }
 
-  // Body size limit (max 4KB)
-  const contentLength = parseInt(req.headers.get("Content-Length") || "0", 10);
-  if (contentLength > 4096) {
+  // Read body as text, enforce real size limit
+  let bodyText: string;
+  try {
+    bodyText = await req.text();
+  } catch {
+    return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+  }
+  if (bodyText.length > 4096) {
     return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
   }
 
@@ -122,9 +115,14 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    const body = await req.json();
-    const rawPhone: string | undefined = body.phone;
+    let body: { phone?: string };
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
 
+    const rawPhone: string | undefined = body.phone;
     const normalized = normalizeIranPhone(rawPhone);
     if (!normalized) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
@@ -141,6 +139,21 @@ Deno.serve(async (req: Request) => {
       && cfg?.phone_password_recovery_test_ready === true;
 
     if (!recoveryReady && !testModeActive) {
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
+
+    // Fail-closed: TTL must be valid
+    if (!cfg?.recovery_ttl_valid) {
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
+
+    // Fail-closed: template must be active
+    if (!cfg?.recovery_template_ready) {
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
+
+    // Fail-closed: secret must be confirmed
+    if (!cfg?.recovery_secret_confirmed) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
@@ -173,131 +186,86 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // Rate limit: 3 per phone per 15 min, 10 per IP per 15 min
-    const rateWindow = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-    const { count: phoneCount } = await supabase
-      .from("phone_otp_rate_limit")
-      .select("id", { count: "exact", head: true })
-      .eq("phone_hash", phoneHash)
-      .eq("purpose", "phone_password_recovery")
-      .gte("created_at", rateWindow);
-
-    if ((phoneCount || 0) >= 3) {
+    // Atomic rate limit (advisory-locked transaction)
+    const { data: rlData, error: rlErr } = await supabase.rpc(
+      "consume_phone_password_recovery_request_limit",
+      {
+        p_phone_hash: phoneHash,
+        p_ip_hash: ipHash,
+        p_purpose: "phone_password_recovery",
+        p_phone_limit: 3,
+        p_ip_limit: 10,
+        p_window_seconds: 900,
+      },
+    );
+    if (rlErr || !rlData) {
+      // Fail-closed on DB error
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
+    const rlRow = Array.isArray(rlData) ? rlData[0] : rlData;
+    if (!rlRow?.allowed) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    const { count: ipCount } = await supabase
-      .from("phone_otp_rate_limit")
-      .select("id", { count: "exact", head: true })
-      .eq("ip_hash", ipHash)
-      .eq("purpose", "phone_password_recovery")
-      .gte("created_at", rateWindow);
-
-    if ((ipCount || 0) >= 10) {
+    // Resolve target user via RPC (no listUsers, no profile iteration)
+    const { data: targetData, error: targetErr } = await supabase.rpc(
+      "resolve_phone_password_reset_target",
+      { p_normalized_phone: normalized },
+    );
+    if (targetErr || !targetData) {
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
+    const targetRow = Array.isArray(targetData) ? targetData[0] : targetData;
+    const targetUserId: string | undefined = targetRow?.user_id;
+    if (!targetUserId) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // Insert rate limit record
-    await supabase.from("phone_otp_rate_limit").insert({
-      phone_hash: phoneHash,
-      ip_hash: ipHash,
-      purpose: "phone_password_recovery",
-    });
-
-    // Find exactly one active profile with this phone
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("user_id, phone, is_active")
-      .not("phone", "is", null);
-
-    let matchingProfileCount = 0;
-    let matchingUserId: string | null = null;
-    for (const p of (profiles || [])) {
-      if (p.phone && normalizeIranPhone(p.phone) === normalized && p.is_active === true) {
-        matchingProfileCount++;
-        matchingUserId = p.user_id;
-      }
-    }
-
-    if (matchingProfileCount !== 1 || !matchingUserId) {
-      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
-    }
-
-    // Check auth.users has exactly one user with this phone
-    const { data: authUsers, error: authErr } = await supabase.auth.admin.listUsers();
-    if (authErr) {
-      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
-    }
-
-    let authMatchCount = 0;
-    let authUserId: string | null = null;
-    for (const u of (authUsers?.users || [])) {
-      if (normalizeIranPhone(u.phone || "") === normalized) {
-        authMatchCount++;
-        authUserId = u.id;
-      }
-    }
-
-    if (authMatchCount !== 1 || !authUserId) {
-      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
-    }
-
-    if (authUserId !== matchingUserId) {
-      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
-    }
-
-    // Resolve TTL
+    // Resolve TTL from config (already validated by RPC, but read for use)
     const { data: ttlRow } = await supabase
       .from("system_config").select("value")
       .eq("section", "security").eq("key", "phone_password_recovery_otp_ttl_seconds")
       .maybeSingle();
-    let ttlSeconds = 600;
-    const ttlVal = parseInt(ttlRow?.value || "600", 10);
-    if (!isNaN(ttlVal) && ttlVal >= 60 && ttlVal <= 86400) ttlSeconds = ttlVal;
+    const ttlVal = parseInt(ttlRow?.value || "0", 10);
+    // Fail-closed: don't guess 600
+    if (isNaN(ttlVal) || ttlVal < 60 || ttlVal > 86400) {
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
 
     // Generate 6-digit OTP with Web Crypto
     const otpBuf = new Uint32Array(1);
     crypto.getRandomValues(otpBuf);
     const otp = String(otpBuf[0] % 1000000).padStart(6, "0");
 
-    // Hash OTP bound to challenge_id, user_id, normalized_phone, otp
-    // We don't have challenge_id yet, so we generate it first
+    // Pre-generate challenge_id for OTP hash binding
     const challengeId = crypto.randomUUID();
-
     const otpHash = await hmacHash(
-      `${challengeId}:${matchingUserId}:${normalized}:${otp}`,
+      `${challengeId}:${targetUserId}:${normalized}:${otp}`,
       secret,
     );
-
     const phoneHashChallenge = await hmacHash(normalized, secret);
+    const expiresAt = new Date(Date.now() + ttlVal * 1000).toISOString();
 
-    const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
-
-    // Invalidate previous pending challenges for this user
-    await supabase
-      .from("phone_password_reset_challenges")
-      .update({ status: "expired" })
-      .eq("user_id", matchingUserId)
-      .eq("status", "pending");
-
-    // Insert challenge
-    const { error: insertErr } = await supabase
-      .from("phone_password_reset_challenges")
-      .insert({
-        id: challengeId,
-        user_id: matchingUserId,
-        phone_hash: phoneHashChallenge,
-        otp_hash: otpHash,
-        status: "pending",
-        expires_at: expiresAt,
-        max_attempts: 5,
-      });
-
-    if (insertErr) {
+    // Atomic challenge creation (advisory-locked, expires old, inserts new)
+    const { data: createData, error: createErr } = await supabase.rpc(
+      "create_phone_password_reset_challenge",
+      {
+        p_user_id: targetUserId,
+        p_phone_hash: phoneHashChallenge,
+        p_otp_hash: otpHash,
+        p_expires_at: expiresAt,
+      },
+    );
+    if (createErr || !createData) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
+    const createRow = Array.isArray(createData) ? createData[0] : createData;
+    if (!createRow?.success || !createRow?.challenge_id) {
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
+    const realChallengeId = createRow.challenge_id;
 
-    // Fetch template
+    // Fetch active template
     const { data: template } = await supabase
       .from("notification_templates")
       .select("body")
@@ -307,30 +275,72 @@ Deno.serve(async (req: Request) => {
       .eq("is_active", true)
       .maybeSingle();
 
-    const messageBody = (template?.body || "کد بازیابی رمز اسپارک: {{otp}}\nاین کد را در اختیار دیگران قرار ندهید.")
-      .replace(/\{\{otp\}\}/g, otp);
+    // Fail-closed: no template = no SMS
+    if (!template?.body) {
+      // Mark challenge as delivery_failed
+      await supabase
+        .from("phone_password_reset_challenges")
+        .update({ status: "delivery_failed", updated_at: new Date().toISOString() })
+        .eq("id", realChallengeId);
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
 
-    // Send SMS via existing send-sms edge function
+    const messageBody = template.body.replace(/\{\{otp\}\}/g, otp);
+
+    // Read provider ID from config
+    const { data: providerRow } = await supabase
+      .from("system_config").select("value")
+      .eq("section", "sms").eq("key", "phone_login_sms_provider_id")
+      .maybeSingle();
+    const providerId = providerRow?.value;
+    if (!providerId) {
+      await supabase
+        .from("phone_password_reset_challenges")
+        .update({ status: "delivery_failed", updated_at: new Date().toISOString() })
+        .eq("id", realChallengeId);
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
+
+    // Send SMS via send-sms edge function with auth_otp mode and providerId
     const e164 = `+${normalized}`;
+    let smsSuccess = false;
     try {
-      await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`, {
+      const smsController = new AbortController();
+      const timeout = setTimeout(() => smsController.abort(), 10000);
+      const smsResp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
         },
         body: JSON.stringify({
-          mode: "send",
+          mode: "auth_otp",
+          providerId: providerId,
           mobiles: [e164],
           message: messageBody,
         }),
+        signal: smsController.signal,
       });
+      clearTimeout(timeout);
+      if (smsResp.ok) {
+        const smsResult = await smsResp.json().catch(() => ({}));
+        smsSuccess = smsResult?.ok === true || smsResult?.success === true;
+      }
     } catch {
-      // SMS failure is not revealed to caller
+      // SMS failure
+    }
+
+    if (!smsSuccess) {
+      // Mark challenge as delivery_failed, return decoy
+      await supabase
+        .from("phone_password_reset_challenges")
+        .update({ status: "delivery_failed", updated_at: new Date().toISOString() })
+        .eq("id", realChallengeId);
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
     // Return success with real challenge_id
-    return await finishResponse(startedAt, okResponse(cors, challengeId), cors);
+    return await finishResponse(startedAt, okResponse(cors, realChallengeId), cors);
 
   } catch {
     return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);

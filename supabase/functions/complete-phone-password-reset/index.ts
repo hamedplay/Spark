@@ -10,16 +10,6 @@ async function hmacHash(value: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const bufA = enc.encode(a);
-  const bufB = enc.encode(b);
-  if (bufA.length !== bufB.length) return false;
-  let diff = 0;
-  for (let i = 0; i < bufA.length; i++) diff |= bufA[i] ^ bufB[i];
-  return diff === 0;
-}
-
 function getClientIP(req: Request): string {
   const xff = req.headers.get("x-forwarded-for") || "";
   const first = xff.split(",")[0]?.trim();
@@ -40,6 +30,8 @@ function corsHeaders(allowedOrigin: string | null): Record<string, string> {
 const TARGET_MIN_MS = 1500;
 const TARGET_MAX_MS = 1700;
 
+const GENERIC_ERROR = JSON.stringify({ ok: false, error: "INVALID_OR_EXPIRED_CODE" });
+
 async function finishResponse(
   startedAt: number,
   response: Response,
@@ -55,6 +47,11 @@ async function finishResponse(
     status: response.status,
     headers: { ...response.headers, ...cors },
   });
+}
+
+function genericErrorResponse(cors: Record<string, string>): Response {
+  return new Response(GENERIC_ERROR,
+    { status: 400, headers: { "Content-Type": "application/json", ...cors } });
 }
 
 Deno.serve(async (req: Request) => {
@@ -81,192 +78,194 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return await finishResponse(startedAt,
-      new Response(JSON.stringify({ ok: false, error: "INVALID_REQUEST" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+  }
+
+  const contentType = req.headers.get("Content-Type") || "";
+  if (!contentType.includes("application/json")) {
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+  }
+
+  let bodyText: string;
+  try {
+    bodyText = await req.text();
+  } catch {
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+  }
+  if (bodyText.length > 4096) {
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
   }
 
   try {
     if (!allowedOrigin) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_REQUEST" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    const body = await req.json();
+    let body: { challenge_id?: string; reset_token?: string; new_password?: string };
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+
     const challengeId: string | undefined = body.challenge_id;
     const resetToken: string | undefined = body.reset_token;
     const newPassword: string | undefined = body.new_password;
 
     if (!challengeId || !resetToken || !newPassword) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_REQUEST" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
     // Password validation
-    if (newPassword.length < 8) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "PASSWORD_TOO_SHORT" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-    if (newPassword.length > 128) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "PASSWORD_TOO_LONG" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
     if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(newPassword)) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "PASSWORD_WEAK" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
     // Resolve secret
     const secret = Deno.env.get("PHONE_PASSWORD_RESET_SECRET") || "";
     if (!secret || secret.length < 32) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_REQUEST" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // IP rate limit: 10 per IP per 15 min
+    // Atomic IP rate limit
     const clientIP = getClientIP(req);
     const ipHash = await hmacHash(clientIP, secret);
-    const rateWindow = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-    const { count: ipCount } = await supabase
-      .from("phone_otp_rate_limit")
-      .select("id", { count: "exact", head: true })
-      .eq("ip_hash", ipHash)
-      .eq("purpose", "phone_password_recovery_complete")
-      .gte("created_at", rateWindow);
-
-    if ((ipCount || 0) >= 10) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "RATE_LIMITED" }),
-          { status: 429, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    const { data: rlData, error: rlErr } = await supabase.rpc(
+      "consume_phone_password_recovery_complete_limit",
+      {
+        p_ip_hash: ipHash,
+        p_purpose: "phone_password_recovery_complete",
+        p_ip_limit: 10,
+        p_window_seconds: 900,
+      },
+    );
+    if (rlErr || !rlData) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+    const rlRow = Array.isArray(rlData) ? rlData[0] : rlData;
+    if (!rlRow?.allowed) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    await supabase.from("phone_otp_rate_limit").insert({
-      ip_hash: ipHash,
-      phone_hash: "complete:" + challengeId,
-      purpose: "phone_password_recovery_complete",
-    });
+    // Compute reset token hash
+    const providedResetTokenHash = await hmacHash(resetToken, secret);
 
-    // Fetch challenge
-    const { data: challenge, error: challengeErr } = await supabase
-      .from("phone_password_reset_challenges")
-      .select("*")
-      .eq("id", challengeId)
-      .maybeSingle();
+    // Generate claim_id
+    const claimId = crypto.randomUUID();
 
-    if (challengeErr || !challenge) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_CHALLENGE" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    // Atomic claim: verified → processing
+    const { data: claimData, error: claimErr } = await supabase.rpc(
+      "claim_phone_password_reset_completion",
+      {
+        p_challenge_id: challengeId,
+        p_provided_reset_token_hash: providedResetTokenHash,
+        p_claim_id: claimId,
+      },
+    );
+    if (claimErr || !claimData) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
-
-    // Challenge rate limit: max 5 attempts
-    if (challenge.attempt_count >= challenge.max_attempts) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "MAX_ATTEMPTS_EXCEEDED" }),
-          { status: 423, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    const claimRow = Array.isArray(claimData) ? claimData[0] : claimData;
+    if (!claimRow?.success || !claimRow?.user_id) {
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
+    const targetUserId = claimRow.user_id;
 
-    // Status must be verified
-    if (challenge.status !== "verified") {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "CHALLENGE_NOT_VERIFIED" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    // Revalidate auth/profile before changing password
+    const { data: revData, error: revErr } = await supabase.rpc(
+      "revalidate_phone_password_reset_target",
+      {
+        p_user_id: targetUserId,
+        p_expected_phone_hash: "",
+      },
+    );
+    if (revErr || !revData) {
+      // Release claim on failure
+      await supabase.rpc("finalize_phone_password_reset_completion", {
+        p_challenge_id: challengeId,
+        p_claim_id: claimId,
+        p_success: false,
+      });
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
-
-    // Check reset expiry
-    if (challenge.reset_expires_at && new Date(challenge.reset_expires_at) < new Date()) {
-      await supabase
-        .from("phone_password_reset_challenges")
-        .update({ status: "expired" })
-        .eq("id", challengeId);
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "RESET_TOKEN_EXPIRED" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-
-    // Verify reset token hash (constant-time)
-    const expectedTokenHash = challenge.reset_token_hash;
-    if (!expectedTokenHash) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_CHALLENGE" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-
-    const providedTokenHash = await hmacHash(resetToken, secret);
-
-    if (!timingSafeEqual(expectedTokenHash, providedTokenHash)) {
-      // Increment attempt_count atomically
-      const newAttemptCount = challenge.attempt_count + 1;
-      const updateData: Record<string, unknown> = { attempt_count: newAttemptCount };
-
-      if (newAttemptCount >= challenge.max_attempts) {
-        updateData.status = "locked";
-        updateData.locked_until = new Date(Date.now() + 3600000).toISOString();
-      }
-
-      await supabase
-        .from("phone_password_reset_challenges")
-        .update(updateData)
-        .eq("id", challengeId);
-
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "INVALID_RESET_TOKEN" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-
-    // Re-check profile is still active
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("user_id, is_active")
-      .eq("user_id", challenge.user_id)
-      .maybeSingle();
-
-    if (!profile || profile.is_active !== true) {
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "PROFILE_INACTIVE" }),
-          { status: 400, headers: { "Content-Type": "application/json", ...cors } }), cors);
-    }
-
-    // Atomically consume the challenge (prevent race condition)
-    const { error: consumeErr } = await supabase
-      .from("phone_password_reset_challenges")
-      .update({
-        status: "consumed",
-        consumed_at: new Date().toISOString(),
-        reset_token_hash: null,
-      })
-      .eq("id", challengeId)
-      .eq("status", "verified");
-
-    if (consumeErr) {
-      // Race condition — another request already consumed
-      return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "CHALLENGE_ALREADY_CONSUMED" }),
-          { status: 409, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    const revRow = Array.isArray(revData) ? revData[0] : revData;
+    if (!revRow?.valid) {
+      await supabase.rpc("finalize_phone_password_reset_completion", {
+        p_challenge_id: challengeId,
+        p_claim_id: claimId,
+        p_success: false,
+      });
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
     // Change password server-side using admin API
     const { error: updatePasswordErr } = await supabase.auth.admin.updateUserById(
-      challenge.user_id,
+      targetUserId,
       { password: newPassword },
     );
 
     if (updatePasswordErr) {
-      // Attempt to revert challenge status so user can retry
-      await supabase
-        .from("phone_password_reset_challenges")
-        .update({ status: "verified", reset_token_hash: expectedTokenHash, consumed_at: null })
-        .eq("id", challengeId);
+      // Release claim: back to verified, increment attempt
+      await supabase.rpc("finalize_phone_password_reset_completion", {
+        p_challenge_id: challengeId,
+        p_claim_id: claimId,
+        p_success: false,
+      });
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+
+    // Finalize as consumed
+    const { data: finData, error: finErr } = await supabase.rpc(
+      "finalize_phone_password_reset_completion",
+      {
+        p_challenge_id: challengeId,
+        p_claim_id: claimId,
+        p_success: true,
+      },
+    );
+
+    if (finErr || !finData) {
+      // Password was changed but finalize failed
+      // Challenge stays in processing — no rollback to verified
+      // Return success to user since password was likely changed
+      // Log operational error
+      try {
+        await supabase.from("audit_logs").insert({
+          module: "auth",
+          action: "phone_password_recovery_finalize_failed",
+          entity_name: "user",
+          entity_id: targetUserId,
+          details: "Finalize failed after password change — challenge stuck in processing",
+          severity: "error",
+        });
+      } catch { /* audit failure should not block */ }
+
+      // Return success — password was changed
+      return await finishResponse(startedAt,
+        new Response(JSON.stringify({ ok: true }),
+          { status: 200, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    }
+
+    const finRow = Array.isArray(finData) ? finData[0] : finData;
+    if (!finRow?.success) {
+      // Finalize failed (claim mismatch etc.) — but password was changed
+      try {
+        await supabase.from("audit_logs").insert({
+          module: "auth",
+          action: "phone_password_recovery_finalize_failed",
+          entity_name: "user",
+          entity_id: targetUserId,
+          details: "Finalize returned failure after password change",
+          severity: "error",
+        });
+      } catch { /* audit failure should not block */ }
 
       return await finishResponse(startedAt,
-        new Response(JSON.stringify({ ok: false, error: "PASSWORD_UPDATE_FAILED" }),
-          { status: 500, headers: { "Content-Type": "application/json", ...cors } }), cors);
+        new Response(JSON.stringify({ ok: true }),
+          { status: 200, headers: { "Content-Type": "application/json", ...cors } }), cors);
     }
 
     // Audit log (no password, no phone, no token)
@@ -275,7 +274,7 @@ Deno.serve(async (req: Request) => {
         module: "auth",
         action: "phone_password_recovery",
         entity_name: "user",
-        entity_id: challenge.user_id,
+        entity_id: targetUserId,
         details: "بازیابی رمز با شماره موبایل",
         severity: "info",
       });
@@ -287,8 +286,6 @@ Deno.serve(async (req: Request) => {
         { status: 200, headers: { "Content-Type": "application/json", ...cors } }), cors);
 
   } catch {
-    return await finishResponse(startedAt,
-      new Response(JSON.stringify({ ok: false, error: "INTERNAL_ERROR" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...cors } }), cors);
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
   }
 });
