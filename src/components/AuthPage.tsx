@@ -323,10 +323,21 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
           toast.error('حساب کاربری شما غیرفعال شده است. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
           return;
         }
-        // Compare normalized phone numbers (auth vs profile) — empty/mismatch rejects
+        // Compare normalized phone numbers (auth vs profile vs OTP) — all three must match
         const authPhone = normalizeIranPhone(data.user.phone);
         const profilePhone = normalizeIranPhone(profileData.phone);
-        if (!authPhone || !profilePhone || authPhone !== profilePhone) {
+        const otpPhone = normalizeIranPhone(phone);
+        if (!profilePhone || profilePhone !== otpPhone) {
+          await supabase.auth.signOut();
+          toast.error('شماره موبایل با حساب کاربری تطابق ندارد.', { duration: 6000 });
+          return;
+        }
+        if (!authPhone) {
+          await supabase.auth.signOut();
+          toast.error('شماره این حساب هنوز در Supabase Auth همگام نشده است.', { duration: 6000 });
+          return;
+        }
+        if (authPhone !== otpPhone) {
           await supabase.auth.signOut();
           toast.error('شماره موبایل با حساب کاربری تطابق ندارد.', { duration: 6000 });
           return;
