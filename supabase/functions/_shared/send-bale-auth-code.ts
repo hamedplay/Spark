@@ -13,6 +13,7 @@ export interface SendBaleAuthCodeOptions {
 export interface BaleAuthCodeResult {
   status: "sent" | "failed" | "skipped";
   reason?: string;
+  persistFailed?: boolean;
 }
 
 const BALE_API_TIMEOUT_MS = 2000;
@@ -108,7 +109,13 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       .maybeSingle();
 
     if (baleCfgErr || !baleCfg || !baleCfg.is_active) {
-      await finalizeDispatch(supabase, dispatchId, "skipped", "BALE_INACTIVE");
+      const persisted = await finalizeDispatch(supabase, dispatchId, "skipped", "BALE_INACTIVE");
+      if (!persisted) {
+        console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+        });
+      }
       console.log("[send-bale-auth-code] bale inactive", {
         purpose,
         eventRef: eventRefPrefix(eventRef),
@@ -119,7 +126,13 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
 
     const botToken = (baleCfg.bot_token ?? "").trim();
     if (!botToken) {
-      await finalizeDispatch(supabase, dispatchId, "skipped", "NO_BOT_TOKEN");
+      const persisted = await finalizeDispatch(supabase, dispatchId, "skipped", "NO_BOT_TOKEN");
+      if (!persisted) {
+        console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+        });
+      }
       console.log("[send-bale-auth-code] no bot token", {
         purpose,
         eventRef: eventRefPrefix(eventRef),
@@ -136,7 +149,13 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       .maybeSingle();
 
     if (mapErr) {
-      await finalizeDispatch(supabase, dispatchId, "failed", "DB_MAPPING_ERROR");
+      const persisted = await finalizeDispatch(supabase, dispatchId, "failed", "DB_MAPPING_ERROR");
+      if (!persisted) {
+        console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+        });
+      }
       console.log("[send-bale-auth-code] mapping query error", {
         purpose,
         eventRef: eventRefPrefix(eventRef),
@@ -146,7 +165,13 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
     }
 
     if (!mapping?.bale_chat_id) {
-      await finalizeDispatch(supabase, dispatchId, "skipped", "NOT_LINKED");
+      const persisted = await finalizeDispatch(supabase, dispatchId, "skipped", "NOT_LINKED");
+      if (!persisted) {
+        console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+        });
+      }
       console.log("[send-bale-auth-code] not linked", {
         purpose,
         eventRef: eventRefPrefix(eventRef),
@@ -157,7 +182,13 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
 
     // 5. Check user preference
     if (mapping.auth_codes_enabled === false) {
-      await finalizeDispatch(supabase, dispatchId, "skipped", "USER_DISABLED");
+      const persisted = await finalizeDispatch(supabase, dispatchId, "skipped", "USER_DISABLED");
+      if (!persisted) {
+        console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+        });
+      }
       console.log("[send-bale-auth-code] user disabled auth codes", {
         purpose,
         eventRef: eventRefPrefix(eventRef),
@@ -179,7 +210,13 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       .maybeSingle();
 
     if (!template?.is_active || !template?.body || !/\{\{\s*otp\s*\}\}/.test(template.body)) {
-      await finalizeDispatch(supabase, dispatchId, "skipped", "TEMPLATE_INACTIVE");
+      const persisted = await finalizeDispatch(supabase, dispatchId, "skipped", "TEMPLATE_INACTIVE");
+      if (!persisted) {
+        console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+        });
+      }
       console.log("[send-bale-auth-code] template inactive", {
         purpose,
         eventRef: eventRefPrefix(eventRef),
@@ -227,8 +264,14 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
         const errorCode = !baleResp.ok
           ? sanitizeErrorCode(baleResp.status, responseText)
           : "BALE_INVALID_RESPONSE";
-        await finalizeDispatch(supabase, dispatchId, "failed", errorCode);
-        await updateMappingStatus(supabase, userId, "failed", errorCode);
+        const dispatchPersisted = await finalizeDispatch(supabase, dispatchId, "failed", errorCode);
+        const mappingPersisted = await updateMappingStatus(supabase, userId, "failed", errorCode);
+        if (!dispatchPersisted || !mappingPersisted) {
+          console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+            purpose,
+            eventRef: eventRefPrefix(eventRef),
+          });
+        }
         console.log("[send-bale-auth-code] bale API invalid response", {
           purpose,
           eventRef: eventRefPrefix(eventRef),
@@ -239,8 +282,22 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
         return { status: "failed", reason: "api_error" };
       }
 
-      await finalizeDispatch(supabase, dispatchId, "sent", undefined);
-      await updateMappingStatus(supabase, userId, "sent", undefined);
+      const dispatchPersisted = await finalizeDispatch(supabase, dispatchId, "sent", undefined);
+      const mappingPersisted = await updateMappingStatus(supabase, userId, "sent", undefined);
+
+      if (!dispatchPersisted || !mappingPersisted) {
+        console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+        });
+        console.log("[send-bale-auth-code] sent (persist failed)", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+          userId,
+        });
+        return { status: "sent", reason: "status_persist_failed", persistFailed: true };
+      }
+
       console.log("[send-bale-auth-code] sent", {
         purpose,
         eventRef: eventRefPrefix(eventRef),
@@ -252,8 +309,14 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       clearTimeout(timer);
       const isTimeout = fetchErr?.name === "AbortError";
       const errorCode = isTimeout ? "BALE_TIMEOUT" : "BALE_NETWORK_ERROR";
-      await finalizeDispatch(supabase, dispatchId, "failed", errorCode);
-      await updateMappingStatus(supabase, userId, "failed", errorCode);
+      const dispatchPersisted = await finalizeDispatch(supabase, dispatchId, "failed", errorCode);
+      const mappingPersisted = await updateMappingStatus(supabase, userId, "failed", errorCode);
+      if (!dispatchPersisted || !mappingPersisted) {
+        console.log("[send-bale-auth-code] STATUS_PERSIST_FAILED", {
+          purpose,
+          eventRef: eventRefPrefix(eventRef),
+        });
+      }
       console.log("[send-bale-auth-code] fetch error", {
         purpose,
         eventRef: eventRefPrefix(eventRef),
@@ -281,38 +344,24 @@ async function finalizeDispatch(
   errorCode?: string,
 ): Promise<boolean> {
   try {
-    const { error, count } = await supabase
+    const { data, error } = await supabase
       .from("bale_auth_code_dispatches")
       .update({
         status,
         completed_at: new Date().toISOString(),
+        processing_expires_at: null,
         error_code: errorCode ?? null,
       })
       .eq("id", dispatchId)
-      .eq("status", "processing");
+      .eq("status", "processing")
+      .select("id");
 
-    if (error) {
-      console.log("[send-bale-auth-code] finalize DB error", {
-        dispatchId,
-        errorCode: "FINALIZE_DB_ERROR",
-      });
-      return false;
-    }
-
-    if (count === 0) {
-      console.log("[send-bale-auth-code] finalize row count 0 (stale)", {
-        dispatchId,
-        errorCode: "FINALIZE_STALE",
-      });
+    if (error || !data || data.length !== 1) {
       return false;
     }
 
     return true;
   } catch {
-    console.log("[send-bale-auth-code] finalize exception", {
-      dispatchId,
-      errorCode: "FINALIZE_EXCEPTION",
-    });
     return false;
   }
 }
@@ -324,37 +373,22 @@ async function updateMappingStatus(
   errorCode?: string,
 ): Promise<boolean> {
   try {
-    const { error, count } = await supabase
+    const { data, error } = await supabase
       .from("user_bale_mapping")
       .update({
         last_auth_code_delivery_at: new Date().toISOString(),
         last_auth_code_delivery_status: status,
         last_auth_code_delivery_error: errorCode ?? null,
       })
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select("user_id");
 
-    if (error) {
-      console.log("[send-bale-auth-code] mapping status DB error", {
-        userId,
-        errorCode: "MAPPING_STATUS_DB_ERROR",
-      });
-      return false;
-    }
-
-    if (count === 0) {
-      console.log("[send-bale-auth-code] mapping status row count 0", {
-        userId,
-        errorCode: "MAPPING_STATUS_STALE",
-      });
+    if (error || !data || data.length !== 1) {
       return false;
     }
 
     return true;
   } catch {
-    console.log("[send-bale-auth-code] mapping status exception", {
-      userId,
-      errorCode: "MAPPING_STATUS_EXCEPTION",
-    });
     return false;
   }
 }
