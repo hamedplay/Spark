@@ -599,31 +599,24 @@ function PasswordRecoveryCard() {
   const handleConfirmSecret = async () => {
     setSecretSaving(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      if (!accessToken) {
-        toast.error('احراز هویت نشده');
-        setSecretSaving(false);
-        return;
+      const { data: result } = await supabase.functions.invoke(
+        'check-phone-password-reset-runtime',
+        { body: {} },
+      );
+      if (
+        result?.ok === true
+        && result?.secret_configured === true
+        && result?.origins_configured === true
+        && result?.runtime_confirmed === true
+      ) {
+        toast.success('Secret بازیابی تأیید شد');
+        logAudit({ module: 'security', action: 'recovery_secret_confirmed', entity_name: 'confirmed', severity: 'warning' });
+        await load();
+      } else {
+        toast.error('Runtime بازیابی رمز کامل پیکربندی نشده است.');
       }
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-phone-password-reset-runtime`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
-      const result = await resp.json();
-      if (!result?.ok || !result?.secret_configured) {
-        toast.error('Secret پیکربندی نشده یا Origins تنظیم نیست');
-        setSecretSaving(false);
-        return;
-      }
-      setSecretConfirmed(true);
-      toast.success('Secret بازیابی تأیید شد');
-      logAudit({ module: 'security', action: 'recovery_secret_confirmed', entity_name: 'confirmed', severity: 'warning' });
     } catch {
-      toast.error('خطا در بررسی Runtime');
+      toast.error('Runtime بازیابی رمز کامل پیکربندی نشده است.');
     }
     setSecretSaving(false);
   };
