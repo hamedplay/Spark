@@ -10,6 +10,15 @@ async function hmacHash(value: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+function timingSafeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 function getClientIP(req: Request): string {
   const xff = req.headers.get("x-forwarded-for") || "";
   const first = xff.split(",")[0]?.trim();
@@ -116,7 +125,6 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Password validation
     if (newPassword.length < 8 || newPassword.length > 128) {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
@@ -124,7 +132,6 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Resolve secret
     const secret = Deno.env.get("PHONE_PASSWORD_RESET_SECRET") || "";
     if (!secret || secret.length < 32) {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
@@ -153,10 +160,9 @@ Deno.serve(async (req: Request) => {
     // Compute reset token hash
     const providedResetTokenHash = await hmacHash(resetToken, secret);
 
-    // Generate claim_id
     const claimId = crypto.randomUUID();
 
-    // Atomic claim: verified → processing
+    // Atomic claim: verified → processing (returns phone_hash)
     const { data: claimData, error: claimErr } = await supabase.rpc(
       "claim_phone_password_reset_completion",
       {
@@ -173,17 +179,14 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
     const targetUserId = claimRow.user_id;
+    const claimPhoneHash = claimRow.phone_hash;
 
-    // Revalidate auth/profile before changing password
+    // Revalidate using RPC with challenge_id
     const { data: revData, error: revErr } = await supabase.rpc(
       "revalidate_phone_password_reset_target",
-      {
-        p_user_id: targetUserId,
-        p_expected_phone_hash: "",
-      },
+      { p_challenge_id: challengeId },
     );
     if (revErr || !revData) {
-      // Release claim on failure
       await supabase.rpc("finalize_phone_password_reset_completion", {
         p_challenge_id: challengeId,
         p_claim_id: claimId,
@@ -192,7 +195,18 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
     const revRow = Array.isArray(revData) ? revData[0] : revData;
-    if (!revRow?.valid) {
+    if (!revRow?.valid || !revRow?.normalized_phone || !revRow?.phone_hash) {
+      await supabase.rpc("finalize_phone_password_reset_completion", {
+        p_challenge_id: challengeId,
+        p_claim_id: claimId,
+        p_success: false,
+      });
+      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+    }
+
+    // Timing-safe comparison of HMAC(normalized_phone, secret) with phone_hash from claim
+    const computedPhoneHash = await hmacHash(revRow.normalized_phone, secret);
+    if (!timingSafeCompare(computedPhoneHash, claimPhoneHash)) {
       await supabase.rpc("finalize_phone_password_reset_completion", {
         p_challenge_id: challengeId,
         p_claim_id: claimId,
@@ -208,7 +222,6 @@ Deno.serve(async (req: Request) => {
     );
 
     if (updatePasswordErr) {
-      // Release claim: back to verified, increment attempt
       await supabase.rpc("finalize_phone_password_reset_completion", {
         p_challenge_id: challengeId,
         p_claim_id: claimId,
@@ -228,10 +241,6 @@ Deno.serve(async (req: Request) => {
     );
 
     if (finErr || !finData) {
-      // Password was changed but finalize failed
-      // Challenge stays in processing — no rollback to verified
-      // Return success to user since password was likely changed
-      // Log operational error
       try {
         await supabase.from("audit_logs").insert({
           module: "auth",
@@ -243,7 +252,6 @@ Deno.serve(async (req: Request) => {
         });
       } catch { /* audit failure should not block */ }
 
-      // Return success — password was changed
       return await finishResponse(startedAt,
         new Response(JSON.stringify({ ok: true }),
           { status: 200, headers: { "Content-Type": "application/json", ...cors } }), cors);
@@ -251,7 +259,6 @@ Deno.serve(async (req: Request) => {
 
     const finRow = Array.isArray(finData) ? finData[0] : finData;
     if (!finRow?.success) {
-      // Finalize failed (claim mismatch etc.) — but password was changed
       try {
         await supabase.from("audit_logs").insert({
           module: "auth",
@@ -268,7 +275,6 @@ Deno.serve(async (req: Request) => {
           { status: 200, headers: { "Content-Type": "application/json", ...cors } }), cors);
     }
 
-    // Audit log (no password, no phone, no token)
     try {
       await supabase.from("audit_logs").insert({
         module: "auth",
@@ -280,7 +286,6 @@ Deno.serve(async (req: Request) => {
       });
     } catch { /* audit failure should not block */ }
 
-    // Success — no session, no token returned
     return await finishResponse(startedAt,
       new Response(JSON.stringify({ ok: true }),
         { status: 200, headers: { "Content-Type": "application/json", ...cors } }), cors);

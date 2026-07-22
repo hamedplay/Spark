@@ -10,6 +10,15 @@ async function hmacHash(value: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+function timingSafeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 function getClientIP(req: Request): string {
   const xff = req.headers.get("x-forwarded-for") || "";
   const first = xff.split(",")[0]?.trim();
@@ -115,7 +124,6 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Resolve secret
     const secret = Deno.env.get("PHONE_PASSWORD_RESET_SECRET") || "";
     if (!secret || secret.length < 32) {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
@@ -134,7 +142,6 @@ Deno.serve(async (req: Request) => {
       },
     );
     if (rlErr || !rlData) {
-      // Fail-closed
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
     const rlRow = Array.isArray(rlData) ? rlData[0] : rlData;
@@ -142,76 +149,28 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Fetch challenge to get user_id and phone_hash for revalidation
-    const { data: challenge, error: challengeErr } = await supabase
-      .from("phone_password_reset_challenges")
-      .select("id, user_id, phone_hash, status, expires_at, locked_until, otp_attempt_count, max_attempts, otp_hash")
-      .eq("id", challengeId)
-      .maybeSingle();
-
-    if (challengeErr || !challenge) {
-      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
-    }
-
-    // Revalidate auth/profile before proceeding
+    // Revalidate using RPC with challenge_id — no direct profile query
     const { data: revData, error: revErr } = await supabase.rpc(
       "revalidate_phone_password_reset_target",
-      {
-        p_user_id: challenge.user_id,
-        p_expected_phone_hash: challenge.phone_hash,
-      },
+      { p_challenge_id: challengeId },
     );
     if (revErr || !revData) {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
     const revRow = Array.isArray(revData) ? revData[0] : revData;
-    if (!revRow?.valid) {
+    if (!revRow?.valid || !revRow?.normalized_phone || !revRow?.phone_hash) {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Compute HMAC of the provided OTP for comparison
-    // We need the normalized phone to bind into the hash
-    // The phone_hash in the challenge is HMAC(normalized_phone, secret)
-    // We can't reverse it, so we pass the provided OTP hash to the RPC
-    // The RPC compares against the stored otp_hash
-    // Edge function computes: HMAC(challenge_id:user_id:normalized_phone:otp, secret)
-    // But we don't have normalized_phone here...
-    // Solution: the RPC does the comparison internally using the stored hash
-    // We pass the raw OTP and let the RPC compute the hash
-    // But the RPC can't do HMAC...
-    // Actually, the verify RPC takes p_provided_otp_hash — so the edge function
-    // needs to compute it. But we need normalized_phone for the hash binding.
-    //
-    // We need to get the normalized phone. We can get it from the resolve RPC
-    // or from the profile. Let me fetch the profile phone.
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("phone")
-      .eq("user_id", challenge.user_id)
-      .maybeSingle();
-
-    if (!profile?.phone) {
-      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
-    }
-
-    // Normalize the profile phone
-    const digits = String(profile.phone).replace(/\D/g, '');
-    let normalized = '';
-    if (/^00989\d{9}$/.test(digits)) normalized = digits.slice(2);
-    else if (/^989\d{9}$/.test(digits)) normalized = digits;
-    else if (/^09\d{9}$/.test(digits)) normalized = `98${digits.slice(1)}`;
-    else if (/^9\d{9}$/.test(digits)) normalized = `98${digits}`;
-    else return await finishResponse(startedAt, genericErrorResponse(cors), cors);
-
-    // Verify phone hash matches challenge
-    const computedPhoneHash = await hmacHash(normalized, secret);
-    if (computedPhoneHash !== challenge.phone_hash) {
+    // Compute HMAC of normalized_phone and compare timing-safe with challenge phone_hash
+    const computedPhoneHash = await hmacHash(revRow.normalized_phone, secret);
+    if (!timingSafeCompare(computedPhoneHash, revRow.phone_hash)) {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
     // Compute provided OTP hash
     const providedOtpHash = await hmacHash(
-      `${challengeId}:${challenge.user_id}:${normalized}:${otp}`,
+      `${challengeId}:${revRow.user_id}:${revRow.normalized_phone}:${otp}`,
       secret,
     );
 
@@ -237,7 +196,6 @@ Deno.serve(async (req: Request) => {
     }
     const verifyRow = Array.isArray(verifyData) ? verifyData[0] : verifyData;
     if (!verifyRow?.success) {
-      // RPC failed — do NOT return reset token
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 

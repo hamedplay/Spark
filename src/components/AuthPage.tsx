@@ -25,6 +25,7 @@ interface PublicAuthConfig {
   recovery_secret_confirmed: boolean;
   recovery_ttl_valid: boolean;
   recovery_ttl_seconds: number;
+  phone_password_recovery_e2e_verified: boolean;
 }
 
 export function AuthPage({ onSuccess }: AuthPageProps) {
@@ -51,8 +52,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   useEffect(() => {
     supabase.rpc('get_public_auth_config').then(({ data }) => {
       const row = Array.isArray(data) ? data[0] : data;
-      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600 });
-    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600 }));
+      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600, phone_password_recovery_e2e_verified: false });
+    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600, phone_password_recovery_e2e_verified: false }));
   }, []);
 
   // Email/password form

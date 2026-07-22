@@ -527,7 +527,7 @@ function PasswordRecoveryCard() {
     setTestMode(row?.phone_password_recovery_test_mode ?? false);
     setProviderReady(row?.provider_ready ?? false);
     setSecretConfirmed(row?.recovery_secret_confirmed ?? false);
-    setE2eVerified(row?.e2e_verified ?? false);
+    setE2eVerified(row?.phone_password_recovery_e2e_verified ?? false);
     setTemplateReady(row?.recovery_template_ready ?? false);
     setTtlValid(row?.recovery_ttl_valid ?? false);
     setTtlSeconds(row?.recovery_ttl_seconds ?? 600);
@@ -598,17 +598,34 @@ function PasswordRecoveryCard() {
 
   const handleConfirmSecret = async () => {
     setSecretSaving(true);
-    const { data, error } = await supabase.rpc('confirm_phone_password_recovery_secret');
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.success !== true || error) {
-      toast.error(row?.error === 'NOT_ADMIN' ? 'فقط ادمین می‌تواند' : 'خطا در تأیید Secret');
-      setSecretSaving(false);
-      return;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        toast.error('احراز هویت نشده');
+        setSecretSaving(false);
+        return;
+      }
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-phone-password-reset-runtime`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+      const result = await resp.json();
+      if (!result?.ok || !result?.secret_configured) {
+        toast.error('Secret پیکربندی نشده یا Origins تنظیم نیست');
+        setSecretSaving(false);
+        return;
+      }
+      setSecretConfirmed(true);
+      toast.success('Secret بازیابی تأیید شد');
+      logAudit({ module: 'security', action: 'recovery_secret_confirmed', entity_name: 'confirmed', severity: 'warning' });
+    } catch {
+      toast.error('خطا در بررسی Runtime');
     }
-    setSecretConfirmed(true);
     setSecretSaving(false);
-    toast.success('Secret بازیابی تأیید شد');
-    logAudit({ module: 'security', action: 'recovery_secret_confirmed', entity_name: 'confirmed', severity: 'warning' });
   };
 
   if (loading) return null;
