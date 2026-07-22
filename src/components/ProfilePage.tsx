@@ -151,6 +151,8 @@ function BaleConnectSection() {
   const [connected, setConnected] = useState<boolean | null>(null); // null = loading
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [authCodesEnabled, setAuthCodesEnabled] = useState(true);
+  const [authCodesSaving, setAuthCodesSaving] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
 
@@ -159,9 +161,10 @@ function BaleConnectSection() {
     if (!user) return false;
     const { data } = await supabase
       .from('user_bale_mapping')
-      .select('bale_chat_id')
+      .select('bale_chat_id, auth_codes_enabled')
       .eq('user_id', user.id)
       .maybeSingle();
+    if (data) setAuthCodesEnabled(data.auth_codes_enabled !== false);
     return !!data;
   };
 
@@ -277,6 +280,37 @@ function BaleConnectSection() {
             {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink className="w-4 h-4" />}
             قطع اتصال
           </button>
+          <div className="flex items-center justify-between gap-3 pt-2 border-t border-teal-200 dark:border-teal-800">
+            <div>
+              <p className="text-sm font-medium text-teal-800 dark:text-teal-200">دریافت کدهای ورود و بازیابی رمز در بله</p>
+              <p className="text-xs text-teal-600 dark:text-teal-400 mt-0.5">کد یکبار مصرف علاوه بر پیامک، در بله نیز ارسال می‌شود.</p>
+            </div>
+            <button
+              onClick={async () => {
+                setAuthCodesSaving(true);
+                try {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (!user) return;
+                  const newVal = !authCodesEnabled;
+                  const { error } = await supabase
+                    .from('user_bale_mapping')
+                    .update({ auth_codes_enabled: newVal })
+                    .eq('user_id', user.id);
+                  if (error) throw error;
+                  setAuthCodesEnabled(newVal);
+                  toast.success(newVal ? 'دریافت کدهای بله فعال شد' : 'دریافت کدهای بله غیرفعال شد');
+                } catch {
+                  toast.error('خطا در تغییر تنظیمات');
+                } finally {
+                  setAuthCodesSaving(false);
+                }
+              }}
+              disabled={authCodesSaving}
+              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${authCodesEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${authCodesSaving ? 'opacity-50' : ''}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${authCodesEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-3">

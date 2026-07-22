@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
+import { sendBaleAuthCode } from "../_shared/send-bale-auth-code.ts";
 
 const HOOK_DEADLINE_MS = 4500;
 
@@ -279,6 +280,32 @@ Deno.serve(async (req: Request) => {
       }
 
       console.log("[auth-send-sms-hook] OTP dispatched for", maskedPhone, "status:", finalDispatchStatus);
+
+      // ── Best-effort Bale OTP delivery (non-blocking) ───────────────────
+      if (user?.id) {
+        try {
+          const { data: baleCfgRow } = await supabase
+            .from("system_config")
+            .select("value")
+            .eq("section", "security")
+            .eq("key", "phone_login_bale_otp_enabled")
+            .maybeSingle();
+          if (baleCfgRow?.value === "true") {
+            EdgeRuntime.waitUntil(
+              sendBaleAuthCode({
+                supabase,
+                userId: user.id,
+                otp,
+                purpose: "phone_login",
+                eventRef: webhookId,
+              }),
+            );
+          }
+        } catch {
+          // best-effort — never affect hook response
+        }
+      }
+
       return successResponse();
 
     } catch (providerErr: any) {

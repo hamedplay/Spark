@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendBaleAuthCode } from "../_shared/send-bale-auth-code.ts";
 
 function normalizeIranPhone(value?: string | null): string {
   const digits = String(value || '').replace(/\D/g, '');
@@ -337,6 +338,29 @@ Deno.serve(async (req: Request) => {
         .update({ status: "delivery_failed", updated_at: new Date().toISOString() })
         .eq("id", realChallengeId);
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
+
+    // ── Best-effort Bale OTP delivery (non-blocking) ─────────────────────
+    try {
+      const { data: baleCfgRow } = await supabase
+        .from("system_config")
+        .select("value")
+        .eq("section", "security")
+        .eq("key", "phone_password_recovery_bale_otp_enabled")
+        .maybeSingle();
+      if (baleCfgRow?.value === "true") {
+        EdgeRuntime.waitUntil(
+          sendBaleAuthCode({
+            supabase,
+            userId: targetUserId,
+            otp,
+            purpose: "phone_password_recovery",
+            eventRef: realChallengeId,
+          }),
+        );
+      }
+    } catch {
+      // best-effort — never affect recovery response
     }
 
     // Return success with real challenge_id
