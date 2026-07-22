@@ -1,13 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-const HOOK_TIMEOUT_MS = 12000;
+const HOOK_TIMEOUT_MS = 4000;
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length <= 4) return "***";
@@ -23,63 +18,58 @@ function normalizePhone(phone: string): string {
   return digits;
 }
 
+function errorResponse(httpCode: number, message: string) {
+  return new Response(
+    JSON.stringify({ error: { http_code: httpCode, message } }),
+    { status: httpCode, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+function successResponse() {
+  return new Response(
+    JSON.stringify({}),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-
-  const json = (data: unknown, status = 200) =>
-    new Response(JSON.stringify(data), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HOOK_TIMEOUT_MS);
 
   try {
-    // ── 1. Validate Auth Hook signature ──────────────────────────────────────
-    // Supabase Auth Hooks send a Bearer JWT in the Authorization header.
-    // For HTTP Send SMS Hook, GoTrue sends the anon key as a Bearer token.
-    const authHeader = req.headers.get("Authorization") ?? "";
-    if (!authHeader.startsWith("Bearer ")) {
-      return json({ error: "Missing or invalid Authorization header" }, 401);
-    }
-    const token = authHeader.slice(7);
-
-    // Accept either the service role key or the anon key (GoTrue sends anon key)
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-
-    const isServiceKey = serviceKey.length > 0 && token === serviceKey;
-    const isAnonKey = anonKey.length > 0 && token === anonKey;
-
-    if (!isServiceKey && !isAnonKey) {
-      return json({ error: "Invalid auth hook signature" }, 401);
+    // ── 1. Standard Webhook signature verification ───────────────────────────
+    const secret = Deno.env.get("SEND_SMS_HOOK_SECRET");
+    if (!secret) {
+      console.log("[auth-send-sms-hook] SEND_SMS_HOOK_SECRET not configured");
+      return errorResponse(500, "Hook secret not configured");
     }
 
-    // ── 2. Parse and validate payload ───────────────────────────────────────
-    const body = await req.json();
+    const base64Secret = secret.replace(/^v1,whsec_/, "");
+    const rawBody = await req.text();
 
-    // Supabase Auth Send SMS Hook payload structure:
-    // {
-    //   "event": "Sms",
-    //   "user": { "id": "...", "phone": "+98...", ... },
-    //   "sms": { "otp": "123456", ... }
-    // }
-    const event = body?.event;
+    const webhook = new Webhook(base64Secret);
+    let verified: unknown;
+    try {
+      verified = webhook.verify(rawBody, Object.fromEntries(req.headers));
+    } catch {
+      console.log("[auth-send-sms-hook] invalid webhook signature");
+      return errorResponse(401, "Invalid signature");
+    }
+
+    // ── 2. Parse and validate payload ────────────────────────────────────────
+    const body = JSON.parse(rawBody);
     const user = body?.user;
     const sms = body?.sms;
 
     if (!user || !sms) {
-      return json({ error: "Invalid hook payload: missing user or sms" }, 400);
+      return errorResponse(400, "Invalid hook payload");
     }
 
     const phone: string | undefined = user.phone;
     const otp: string | undefined = sms.otp;
 
     if (!phone || !otp) {
-      return json({ error: "Invalid hook payload: missing phone or otp" }, 400);
+      return errorResponse(400, "Invalid hook payload");
     }
 
     const maskedPhone = maskPhone(phone);
@@ -100,11 +90,11 @@ Deno.serve(async (req: Request) => {
 
     const phoneLoginEnabled = enabledRow?.value === "true";
     if (!phoneLoginEnabled) {
-      console.log("[auth-send-sms-hook] phone_login_enabled=false, rejecting OTP for", maskedPhone);
-      return json({ error: "Phone login is disabled" }, 403);
+      console.log("[auth-send-sms-hook] phone_login disabled, rejecting", maskedPhone);
+      return errorResponse(403, "Phone login is disabled");
     }
 
-    // ── 4. Read selected provider ID ────────────────────────────────────────
+    // ── 4. Read selected provider ID ─────────────────────────────────────────
     const { data: providerRow } = await supabase
       .from("system_config")
       .select("value")
@@ -114,8 +104,8 @@ Deno.serve(async (req: Request) => {
 
     const providerId = providerRow?.value;
     if (!providerId) {
-      console.log("[auth-send-sms-hook] no provider selected for phone login, rejecting OTP for", maskedPhone);
-      return json({ error: "No SMS provider configured for phone login" }, 503);
+      console.log("[auth-send-sms-hook] no provider selected, rejecting", maskedPhone);
+      return errorResponse(503, "SMS provider unavailable");
     }
 
     // ── 5. Check provider is active ──────────────────────────────────────────
@@ -126,13 +116,13 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (!provider || !provider.is_active) {
-      console.log("[auth-send-sms-hook] selected provider inactive, rejecting OTP for", maskedPhone);
-      return json({ error: "Selected SMS provider is inactive" }, 503);
+      console.log("[auth-send-sms-hook] provider inactive, rejecting", maskedPhone);
+      return errorResponse(503, "SMS provider unavailable");
     }
 
-    // ── 6. Read auth/login_otp template ──────────────────────────────────────
+    // ── 6. Read auth/login_otp template from sms_templates ────────────────────
     const { data: template } = await supabase
-      .from("notification_templates")
+      .from("sms_templates")
       .select("body, is_active")
       .eq("category", "auth")
       .eq("event_type", "login_otp")
@@ -140,14 +130,13 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     let message: string;
-    if (template?.is_active && template?.body) {
+    if (template?.is_active && template?.body && /\{\{\s*otp\s*\}\}/.test(template.body)) {
       message = template.body.replace(/\{\{\s*otp\s*\}\}/g, otp);
     } else {
-      // Secure fallback — never expose OTP in logs
       message = `کد ورود شما به سامانه اسپارک: ${otp}\nاین کد را در اختیار دیگران قرار ندهید.`;
     }
 
-    // ── 7. Dispatch via existing send-sms engine ─────────────────────────────
+    // ── 7. Dispatch via send-sms engine (auth_otp mode) ───────────────────────
     const normalizedPhone = normalizePhone(phone);
 
     const sendResp = await fetch(
@@ -159,7 +148,7 @@ Deno.serve(async (req: Request) => {
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
         },
         body: JSON.stringify({
-          mode: "send",
+          mode: "auth_otp",
           providerId,
           mobiles: [normalizedPhone],
           message,
@@ -172,7 +161,6 @@ Deno.serve(async (req: Request) => {
     const result = await sendResp.json();
 
     if (!result.ok) {
-      // Log redacted error — never log OTP, credentials, or full message
       await supabase.from("sms_dispatch_logs").insert({
         target_phone: normalizedPhone,
         category: "auth",
@@ -180,15 +168,13 @@ Deno.serve(async (req: Request) => {
         audience: "all",
         message: "[AUTH_OTP_REDACTED]",
         status: "failed",
-        error_text: `PROVIDER_ERROR: ${result.error ?? "خطای ناشناخته"}`,
+        error_text: "PROVIDER_ERROR",
         provider_id: providerId,
       });
-      console.log("[auth-send-sms-hook] SMS dispatch failed for", maskedPhone, "- error:", result.error ?? "unknown");
-      // Return error so GoTrue does NOT treat OTP as sent
-      return json({ error: "SMS dispatch failed" }, 502);
+      console.log("[auth-send-sms-hook] dispatch failed for", maskedPhone);
+      return errorResponse(502, "SMS dispatch failed");
     }
 
-    // Log success with redacted message
     await supabase.from("sms_dispatch_logs").insert({
       target_phone: normalizedPhone,
       category: "auth",
@@ -201,13 +187,13 @@ Deno.serve(async (req: Request) => {
       message_ids: result.messageIds ?? null,
     });
 
-    console.log("[auth-send-sms-hook] OTP SMS dispatched for", maskedPhone);
-    return json({ ok: true });
+    console.log("[auth-send-sms-hook] OTP dispatched for", maskedPhone);
+    return successResponse();
 
   } catch (err: any) {
     clearTimeout(timer);
-    // Never log OTP or credentials in error
-    console.log("[auth-send-sms-hook] error:", err?.name === "AbortError" ? "timeout" : "internal_error");
-    return json({ error: "Internal error" }, 500);
+    const isTimeout = err?.name === "AbortError";
+    console.log("[auth-send-sms-hook] error:", isTimeout ? "timeout" : "internal_error");
+    return errorResponse(isTimeout ? 504 : 500, isTimeout ? "Hook timeout" : "Internal error");
   }
 });

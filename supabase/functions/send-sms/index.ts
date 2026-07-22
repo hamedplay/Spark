@@ -235,6 +235,40 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── MODE: auth_otp ─────────────────────────────────────────────────────────
+    // Internal mode for Auth Send SMS Hook. Uses explicit providerId, short timeout.
+    // Does NOT log OTP content — caller (auth-send-sms-hook) handles redacted logging.
+    if (mode === "auth_otp") {
+      const rawMobiles: string[] = body.mobiles || [];
+      const message: string = body.message || "";
+      if (!rawMobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
+      if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" }, 400);
+
+      // Delegate to inner 'send' with explicit providerId and short timeout
+      const innerController = new AbortController();
+      const innerTimer = setTimeout(() => innerController.abort(), 3500);
+      try {
+        const innerResp = await fetch(
+          `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+            },
+            body: JSON.stringify({ mode: "send", mobiles: rawMobiles, message, providerId }),
+            signal: innerController.signal,
+          },
+        );
+        clearTimeout(innerTimer);
+        const result = await innerResp.json();
+        return json(result);
+      } catch {
+        clearTimeout(innerTimer);
+        return json({ ok: false, error: "Timeout" }, 504);
+      }
+    }
+
     // ── MODE: external ─────────────────────────────────────────────────────────
     // SMS dispatch for contacts outside the organization.
     // Client may supply phone numbers (they come from the user's own contacts form).

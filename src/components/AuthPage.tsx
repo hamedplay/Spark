@@ -39,8 +39,9 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
   useEffect(() => {
     supabase.rpc('get_public_auth_config').then(({ data }) => {
-      if (data) setAuthConfig(data as PublicAuthConfig);
-    }).catch(() => setAuthConfig(null));
+      const row = Array.isArray(data) ? data[0] : data;
+      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false });
+    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false }));
   }, []);
 
   // Email/password form
@@ -191,14 +192,26 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       const { data, error } = await supabase.auth.verifyOtp({ phone: normalized, token: otp, type: 'sms' });
       if (error) { toast.error('کد نادرست است یا منقضی شده'); return; }
       if (data.user) {
-        // Verify profile exists and is active
-        const { data: profileData } = await supabase.from('profiles').select('is_active').eq('user_id', data.user.id).maybeSingle();
-        if (profileData && profileData.is_active === false) {
+        const { data: profileData } = await supabase.from('profiles').select('user_id, phone, is_active').eq('user_id', data.user.id).maybeSingle();
+        // Profile must exist — do NOT create via ensureProfile for OTP users
+        if (!profileData) {
+          await supabase.auth.signOut();
+          toast.error('حساب کاربری یافت نشد. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
+          return;
+        }
+        if (profileData.is_active !== true) {
           await supabase.auth.signOut();
           toast.error('حساب کاربری شما غیرفعال شده است. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
           return;
         }
-        await ensureProfile(data.user.id, data.user.phone || '');
+        // Compare normalized phone numbers (auth vs profile)
+        const authPhone = (data.user.phone || '').replace(/\D/g, '');
+        const profilePhone = (profileData.phone || '').replace(/\D/g, '');
+        if (authPhone && profilePhone && authPhone !== profilePhone) {
+          await supabase.auth.signOut();
+          toast.error('شماره موبایل با حساب کاربری تطابق ندارد.', { duration: 6000 });
+          return;
+        }
         toast.success('با موفقیت وارد شدید');
         logAudit({ module: 'auth', action: 'phone_otp_login', entity_name: 'user', entity_id: data.user.id, details: 'ورود با کد یک‌بارمصرف موبایلی', severity: 'info' });
         onSuccess();

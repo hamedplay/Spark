@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Save, Search, Plus, Trash2, CreditCard as Edit2, X, Eye, EyeOff, CircleAlert as AlertCircle, RefreshCw, Wifi, Mail, Lock, Image, Palette, Monitor, UserCog, KeyRound, UserX, UserCheck, History, MapPin, LogIn as LoginIcon, ShieldCheck, Menu, Bot, EllipsisVertical as MoreVertical } from 'lucide-react';
+import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Save, Search, Plus, Trash2, CreditCard as Edit2, X, Eye, EyeOff, CircleAlert as AlertCircle, RefreshCw, Wifi, Mail, Lock, Image, Palette, Monitor, UserCog, KeyRound, UserX, UserCheck, History, MapPin, LogIn as LoginIcon, ShieldCheck, Menu, Bot, EllipsisVertical as MoreVertical, Smartphone } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';
@@ -197,6 +197,77 @@ function SectionCard({ title, icon: Icon, color = 'blue', children }: { title: s
         <h3 className="font-bold text-gray-800 dark:text-white">{title}</h3>
       </div>
       <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-5">{children}</div>
+    </div>
+  );
+}
+
+// ─── Phone Login Toggle Card (security section) ─────────────────────────────
+function PhoneLoginToggleCard() {
+  const [enabled, setEnabled] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.rpc('get_public_auth_config');
+    const row = Array.isArray(data) ? data[0] : data;
+    setEnabled(row?.phone_login_enabled ?? false);
+    setReady(row?.phone_login_ready ?? false);
+    const { data: providerRow } = await supabase
+      .from('system_config')
+      .select('value')
+      .eq('section', 'sms')
+      .eq('key', 'phone_login_sms_provider_id')
+      .maybeSingle();
+    setProviderId(providerRow?.value ?? null);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleToggle = async (v: boolean) => {
+    setSaving(true);
+    const { data, error } = await supabase.rpc('set_phone_login_config', {
+      p_enabled: v,
+      p_provider_id: providerId ?? null,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.success !== true || error) {
+      toast.error(row?.error || error?.message || 'خطا در ذخیره تنظیمات');
+      setSaving(false);
+      return;
+    }
+    setEnabled(v);
+    setReady(v && providerId !== null);
+    setSaving(false);
+    toast.success(v ? 'ورود با موبایل فعال شد' : 'ورود با موبایل غیرفعال شد');
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+            <Smartphone className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-800 dark:text-white">ورود با شماره موبایل</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {enabled ? (ready ? 'فعال و آماده' : 'فعال ولی سرویس‌دهنده انتخاب نشده') : 'غیرفعال'}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => handleToggle(!enabled)}
+          disabled={saving}
+          className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'} ${saving ? 'opacity-50' : ''}`}>
+          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1100,6 +1171,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
             <SectionCard title="امنیت و دسترسی" icon={Shield} color="red">
               {cfgs('security').map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
+            <PhoneLoginToggleCard />
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700">
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
