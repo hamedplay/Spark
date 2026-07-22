@@ -1026,17 +1026,35 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         });
         if (syncError) throw new Error(syncError.message || 'خطا در همگام‌سازی شرکت‌کنندگان');
         meetingDiffs = (bulkResult || []) as MeetingParticipantDiff[];
+        if (import.meta.env?.DEV) {
+          console.debug('[commitEdit] sync_meeting_participants_bulk_v2', {
+            rawBulkResult: bulkResult,
+            meetingDiffs,
+          });
+        }
       } else {
         const { data: syncResult, error: syncError } = await supabase.rpc('sync_meeting_participants_v2', {
           p_meeting_id: prefillMeetingId,
           p_participant_user_ids: selectedParticipantIds,
         });
         if (syncError) throw new Error(syncError.message || 'خطا در همگام‌سازی شرکت‌کنندگان');
+        // RPC returns TABLE(...) → PostgREST wraps in array. Normalize to first row.
+        const normalizedSyncResult = Array.isArray(syncResult) ? syncResult[0] : syncResult;
+        if (import.meta.env?.DEV) {
+          console.debug('[commitEdit] sync_meeting_participants_v2', {
+            rawSyncResult: syncResult,
+            normalizedSyncResult,
+            isArray: Array.isArray(syncResult),
+            added: normalizedSyncResult?.added_participant_ids ?? [],
+            retained: normalizedSyncResult?.retained_participant_ids ?? [],
+            removed: normalizedSyncResult?.removed_participant_ids ?? [],
+          });
+        }
         meetingDiffs = [{
           meeting_id: prefillMeetingId,
-          added_participant_ids: (syncResult?.added_participant_ids || []) as string[],
-          retained_participant_ids: (syncResult?.retained_participant_ids || []) as string[],
-          removed_participant_ids: (syncResult?.removed_participant_ids || []) as string[],
+          added_participant_ids: (normalizedSyncResult?.added_participant_ids ?? []) as string[],
+          retained_participant_ids: (normalizedSyncResult?.retained_participant_ids ?? []) as string[],
+          removed_participant_ids: (normalizedSyncResult?.removed_participant_ids ?? []) as string[],
         }];
       }
 
@@ -1045,6 +1063,18 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       // Without notifications: meeting saved, participants/observers/inbox synced, toast shown, zero messages.
       const internalSmsResults: SmsDispatchResult[] = [];
       const externalSmsResults: ExternalSmsResult[] = [];
+
+      if (import.meta.env?.DEV) {
+        console.debug('[commitEdit] notification dispatch', {
+          notifyExistingParticipants,
+          operationId: snapshot.operationId,
+          prefillMeetingId,
+          selectedParticipantIds,
+          prevParticipantIds: snapshot.prevParticipantIds,
+          meetingDiffs,
+          changeSetsByMeetingId: snapshot.changeSetsByMeetingId,
+        });
+      }
 
       if (!notifyExistingParticipants) {
         showSmsSummary(internalSmsResults, null);
@@ -1208,6 +1238,30 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           error: acc.error || r.error,
         }));
       }
+      // False-success prevention: if user chose "with notifications" but zero events were dispatched, warn.
+      const totalEvents = internalSmsResults.length + externalSmsResults.length;
+      if (import.meta.env?.DEV) {
+        console.debug('[commitEdit] dispatch summary', {
+          totalEvents,
+          internalSmsResults,
+          externalSmsResults,
+          meetingDiffs,
+        });
+      }
+      const hasAnyDiff = meetingDiffs.some(d =>
+        d.added_participant_ids.length > 0 ||
+        d.removed_participant_ids.length > 0 ||
+        d.retained_participant_ids.length > 0
+      );
+      if (totalEvents === 0 && hasAnyDiff) {
+        const failedCount = internalSmsResults.filter(r => r.status === 'failed').length;
+        if (failedCount > 0) {
+          toast.success(`تغییرات جلسه ذخیره شد، اما اطلاع‌رسانی برای ${failedCount} نفر ناموفق بود.`);
+        } else {
+          console.warn('[commitEdit] Notification requested but zero events dispatched despite non-empty diff', { meetingDiffs });
+        }
+      }
+
       showSmsSummary(internalSmsResults, externalSmsResult);
 
       setEditDecision(null);

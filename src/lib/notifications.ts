@@ -227,8 +227,10 @@ export async function insertNotification(payload: NotifyPayload): Promise<SmsDis
     if (rpcError) {
       return { ok: false, status: 'failed', errorCode: 'RPC_ERROR', error: rpcError.message };
     }
+    // RPC returns json (single object), but normalize in case PostgREST wraps it.
+    const normalizedRpcResult = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
     // Duplicate event_key — skip SMS and Bale to prevent duplicate dispatch
-    if (rpcResult?.created === false) {
+    if (normalizedRpcResult?.created === false) {
       return { ok: true, status: 'skipped', reason: 'DUPLICATE_EVENT_KEY' };
     }
   }
