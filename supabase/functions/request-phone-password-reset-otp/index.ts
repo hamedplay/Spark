@@ -341,27 +341,15 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Best-effort Bale OTP delivery (non-blocking) ─────────────────────
-    try {
-      const { data: baleCfgRow } = await supabase
-        .from("system_config")
-        .select("value")
-        .eq("section", "security")
-        .eq("key", "phone_password_recovery_bale_otp_enabled")
-        .maybeSingle();
-      if (baleCfgRow?.value === "true") {
-        EdgeRuntime.waitUntil(
-          sendBaleAuthCode({
-            supabase,
-            userId: targetUserId,
-            otp,
-            purpose: "phone_password_recovery",
-            eventRef: realChallengeId,
-          }),
-        );
-      }
-    } catch {
-      // best-effort — never affect recovery response
-    }
+    EdgeRuntime.waitUntil(
+      sendBaleAuthCode({
+        supabase,
+        userId: targetUserId,
+        otp,
+        purpose: "phone_password_recovery",
+        eventRef: realChallengeId,
+      }),
+    );
 
     // Return success with real challenge_id
     return await finishResponse(startedAt, okResponse(cors, realChallengeId), cors);

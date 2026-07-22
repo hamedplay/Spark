@@ -16,9 +16,16 @@ export interface BaleAuthCodeResult {
 }
 
 const BALE_API_TIMEOUT_MS = 2000;
+const PROCESSING_TTL_MINUTES = 5;
 
 function eventRefPrefix(ref: string): string {
   return ref.slice(0, 8);
+}
+
+function purposeConfigKey(purpose: BaleAuthCodePurpose): string {
+  return purpose === "phone_login"
+    ? "phone_login_bale_otp_enabled"
+    : "phone_password_recovery_bale_otp_enabled";
 }
 
 function sanitizeErrorCode(status: number, bodyText: string): string {
@@ -37,7 +44,27 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
   const { supabase, userId, otp, purpose, eventRef } = options;
 
   try {
-    // 1. Reserve dispatch with idempotency
+    // 1. Check global config for this purpose FIRST (before any dispatch reservation)
+    const configKey = purposeConfigKey(purpose);
+    const { data: cfgRow, error: cfgErr } = await supabase
+      .from("system_config")
+      .select("value")
+      .eq("section", "security")
+      .eq("key", configKey)
+      .maybeSingle();
+
+    if (cfgErr || !cfgRow || cfgRow.value !== "true") {
+      console.log("[send-bale-auth-code] global config disabled or query failed", {
+        purpose,
+        eventRef: eventRefPrefix(eventRef),
+        userId,
+      });
+      return { status: "skipped", reason: "global_disabled" };
+    }
+
+    // 2. Reserve dispatch with idempotency + processing TTL
+    const processingExpiresAt = new Date(Date.now() + PROCESSING_TTL_MINUTES * 60 * 1000).toISOString();
+
     const { data: insertData, error: insertError } = await supabase
       .from("bale_auth_code_dispatches")
       .insert({
@@ -45,12 +72,12 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
         purpose,
         user_id: userId,
         status: "processing",
+        processing_expires_at: processingExpiresAt,
       })
       .select("id")
       .maybeSingle();
 
     if (insertError) {
-      // Unique constraint violation = duplicate
       if (insertError.code === "23505") {
         console.log("[send-bale-auth-code] duplicate dispatch skipped", {
           purpose,
@@ -73,14 +100,14 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       return { status: "failed", reason: "no_dispatch_id" };
     }
 
-    // 2. Read Bale channel config
-    const { data: cfg, error: cfgErr } = await supabase
+    // 3. Read Bale channel config
+    const { data: baleCfg, error: baleCfgErr } = await supabase
       .from("social_channel_configs")
       .select("bot_token, is_active")
       .eq("channel", "bale")
       .maybeSingle();
 
-    if (cfgErr || !cfg || !cfg.is_active) {
+    if (baleCfgErr || !baleCfg || !baleCfg.is_active) {
       await finalizeDispatch(supabase, dispatchId, "skipped", "BALE_INACTIVE");
       console.log("[send-bale-auth-code] bale inactive", {
         purpose,
@@ -90,7 +117,7 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       return { status: "skipped", reason: "bale_inactive" };
     }
 
-    const botToken = (cfg.bot_token ?? "").trim();
+    const botToken = (baleCfg.bot_token ?? "").trim();
     if (!botToken) {
       await finalizeDispatch(supabase, dispatchId, "skipped", "NO_BOT_TOKEN");
       console.log("[send-bale-auth-code] no bot token", {
@@ -101,7 +128,7 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       return { status: "skipped", reason: "no_bot_token" };
     }
 
-    // 3. Read user mapping
+    // 4. Read user mapping
     const { data: mapping, error: mapErr } = await supabase
       .from("user_bale_mapping")
       .select("bale_chat_id, auth_codes_enabled")
@@ -128,7 +155,7 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       return { status: "skipped", reason: "not_linked" };
     }
 
-    // 4. Check user preference
+    // 5. Check user preference
     if (mapping.auth_codes_enabled === false) {
       await finalizeDispatch(supabase, dispatchId, "skipped", "USER_DISABLED");
       console.log("[send-bale-auth-code] user disabled auth codes", {
@@ -139,7 +166,7 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
       return { status: "skipped", reason: "user_disabled" };
     }
 
-    // 5. Read template
+    // 6. Read template
     const templateEventType =
       purpose === "phone_login" ? "login_otp_bale" : "password_reset_otp_bale";
 
@@ -163,7 +190,7 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
 
     const messageBody = template.body.replace(/\{\{\s*otp\s*\}\}/g, otp);
 
-    // 6. Send to Bale API
+    // 7. Send to Bale API
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), BALE_API_TIMEOUT_MS);
 
@@ -180,12 +207,29 @@ export async function sendBaleAuthCode(options: SendBaleAuthCodeOptions): Promis
 
       clearTimeout(timer);
 
-      if (!baleResp.ok) {
-        const errBody = await baleResp.text().catch(() => "");
-        const errorCode = sanitizeErrorCode(baleResp.status, errBody);
+      // 8. Validate response thoroughly
+      const responseText = await baleResp.text();
+
+      let responseBody: unknown = null;
+      try {
+        responseBody = JSON.parse(responseText);
+      } catch {
+        responseBody = null;
+      }
+
+      const ok =
+        baleResp.ok === true &&
+        typeof responseBody === "object" &&
+        responseBody !== null &&
+        (responseBody as any).ok === true;
+
+      if (!ok) {
+        const errorCode = !baleResp.ok
+          ? sanitizeErrorCode(baleResp.status, responseText)
+          : "BALE_INVALID_RESPONSE";
         await finalizeDispatch(supabase, dispatchId, "failed", errorCode);
         await updateMappingStatus(supabase, userId, "failed", errorCode);
-        console.log("[send-bale-auth-code] bale API error", {
+        console.log("[send-bale-auth-code] bale API invalid response", {
           purpose,
           eventRef: eventRefPrefix(eventRef),
           userId,
@@ -235,18 +279,41 @@ async function finalizeDispatch(
   dispatchId: string,
   status: "sent" | "failed" | "skipped",
   errorCode?: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await supabase
+    const { error, count } = await supabase
       .from("bale_auth_code_dispatches")
       .update({
         status,
         completed_at: new Date().toISOString(),
         error_code: errorCode ?? null,
       })
-      .eq("id", dispatchId);
+      .eq("id", dispatchId)
+      .eq("status", "processing");
+
+    if (error) {
+      console.log("[send-bale-auth-code] finalize DB error", {
+        dispatchId,
+        errorCode: "FINALIZE_DB_ERROR",
+      });
+      return false;
+    }
+
+    if (count === 0) {
+      console.log("[send-bale-auth-code] finalize row count 0 (stale)", {
+        dispatchId,
+        errorCode: "FINALIZE_STALE",
+      });
+      return false;
+    }
+
+    return true;
   } catch {
-    // best-effort
+    console.log("[send-bale-auth-code] finalize exception", {
+      dispatchId,
+      errorCode: "FINALIZE_EXCEPTION",
+    });
+    return false;
   }
 }
 
@@ -255,9 +322,9 @@ async function updateMappingStatus(
   userId: string,
   status: "sent" | "failed",
   errorCode?: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await supabase
+    const { error, count } = await supabase
       .from("user_bale_mapping")
       .update({
         last_auth_code_delivery_at: new Date().toISOString(),
@@ -265,7 +332,29 @@ async function updateMappingStatus(
         last_auth_code_delivery_error: errorCode ?? null,
       })
       .eq("user_id", userId);
+
+    if (error) {
+      console.log("[send-bale-auth-code] mapping status DB error", {
+        userId,
+        errorCode: "MAPPING_STATUS_DB_ERROR",
+      });
+      return false;
+    }
+
+    if (count === 0) {
+      console.log("[send-bale-auth-code] mapping status row count 0", {
+        userId,
+        errorCode: "MAPPING_STATUS_STALE",
+      });
+      return false;
+    }
+
+    return true;
   } catch {
-    // best-effort
+    console.log("[send-bale-auth-code] mapping status exception", {
+      userId,
+      errorCode: "MAPPING_STATUS_EXCEPTION",
+    });
+    return false;
   }
 }

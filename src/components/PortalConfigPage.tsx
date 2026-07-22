@@ -875,17 +875,21 @@ function BaleOtpConfigCard() {
   const toggle = async (key: string, current: boolean) => {
     setSaving(true);
     try {
-      const newVal = current ? 'false' : 'true';
-      const { error } = await supabase
-        .from('system_config')
-        .update({ value: newVal, updated_at: new Date().toISOString() })
-        .eq('section', 'security')
-        .eq('key', key);
+      const { data, error } = await supabase
+        .rpc('set_bale_auth_otp_config', { p_key: key, p_enabled: !current });
       if (error) throw error;
+      if (!data || data.ok !== true) {
+        const errMsg = data?.error || 'UNKNOWN';
+        if (errMsg === 'FORBIDDEN') toast.error('دسترسی ادمین لازم است');
+        else if (errMsg === 'INVALID_KEY') toast.error('کلید نامعتبر');
+        else if (errMsg === 'PROFILE_INACTIVE') toast.error('پروفایل غیرفعال');
+        else if (errMsg === 'UNAUTHORIZED') toast.error('احراز هویت لازم است');
+        else toast.error('خطا در ذخیره تنظیمات');
+        return;
+      }
       if (key === 'phone_login_bale_otp_enabled') setLoginBaleEnabled(!current);
       if (key === 'phone_password_recovery_bale_otp_enabled') setRecoveryBaleEnabled(!current);
       toast.success('ذخیره شد');
-      logAudit({ module: 'security', action: 'config_updated', entity_name: `security.${key}`, details: `مقدار جدید: ${newVal}`, severity: 'warning' });
     } catch {
       toast.error('خطا در ذخیره تنظیمات');
     } finally {

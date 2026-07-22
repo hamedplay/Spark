@@ -289,14 +289,17 @@ function BaleConnectSection() {
               onClick={async () => {
                 setAuthCodesSaving(true);
                 try {
-                  const { data: { user } } = await supabase.auth.getUser();
-                  if (!user) return;
                   const newVal = !authCodesEnabled;
-                  const { error } = await supabase
-                    .from('user_bale_mapping')
-                    .update({ auth_codes_enabled: newVal })
-                    .eq('user_id', user.id);
+                  const { data, error } = await supabase
+                    .rpc('set_my_bale_auth_codes_enabled', { p_enabled: newVal });
                   if (error) throw error;
+                  if (!data || data.ok !== true) {
+                    const errMsg = data?.error || 'UNKNOWN';
+                    if (errMsg === 'MAPPING_NOT_FOUND') toast.error('اتصال بله یافت نشد');
+                    else if (errMsg === 'UNAUTHORIZED') toast.error('احراز هویت لازم است');
+                    else toast.error('خطا در تغییر تنظیمات');
+                    return;
+                  }
                   setAuthCodesEnabled(newVal);
                   toast.success(newVal ? 'دریافت کدهای بله فعال شد' : 'دریافت کدهای بله غیرفعال شد');
                 } catch {

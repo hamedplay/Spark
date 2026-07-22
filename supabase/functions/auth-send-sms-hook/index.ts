@@ -283,27 +283,15 @@ Deno.serve(async (req: Request) => {
 
       // ── Best-effort Bale OTP delivery (non-blocking) ───────────────────
       if (user?.id) {
-        try {
-          const { data: baleCfgRow } = await supabase
-            .from("system_config")
-            .select("value")
-            .eq("section", "security")
-            .eq("key", "phone_login_bale_otp_enabled")
-            .maybeSingle();
-          if (baleCfgRow?.value === "true") {
-            EdgeRuntime.waitUntil(
-              sendBaleAuthCode({
-                supabase,
-                userId: user.id,
-                otp,
-                purpose: "phone_login",
-                eventRef: webhookId,
-              }),
-            );
-          }
-        } catch {
-          // best-effort — never affect hook response
-        }
+        EdgeRuntime.waitUntil(
+          sendBaleAuthCode({
+            supabase,
+            userId: user.id,
+            otp,
+            purpose: "phone_login",
+            eventRef: webhookId,
+          }),
+        );
       }
 
       return successResponse();
