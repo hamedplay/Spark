@@ -151,6 +151,12 @@ function App() {
     checkAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Recovery Guard: if sessionStorage flag is set, do NOT treat as authenticated
+      const isRecovery = sessionStorage.getItem('spark-phone-password-recovery') === 'true';
+      if (isRecovery) {
+        setIsAuthenticated(false);
+        return;
+      }
       setIsAuthenticated(!!session);
       if (!session) {
         setMeetings([]);
@@ -285,6 +291,14 @@ function App() {
         console.error("Auth session error:", error);
         localStorage.removeItem('meeting-manager-auth');
         await supabase.auth.signOut();
+        setIsAuthenticated(false);
+        setLoading(false);
+        return;
+      }
+
+      // Recovery Guard: if sessionStorage flag is set, do NOT treat as authenticated
+      const isRecovery = sessionStorage.getItem('spark-phone-password-recovery') === 'true';
+      if (isRecovery) {
         setIsAuthenticated(false);
         setLoading(false);
         return;

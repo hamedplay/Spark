@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 type AuthMode = 'login' | 'register' | 'reset';
 type LoginMethod = 'email' | 'phone';
+type PasswordRecoveryStep = 'phone' | 'otp' | 'new_password' | 'success';
 
 interface AuthPageProps {
   onSuccess: () => void;
@@ -58,6 +59,16 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [countdown, setCountdown] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
 
+  // ── Password recovery state (independent from login OTP) ────────────
+  const [recoveryStep, setRecoveryStep] = useState<PasswordRecoveryStep>('phone');
+  const [recoveryPhone, setRecoveryPhone] = useState('');
+  const [recoveryOtp, setRecoveryOtp] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState('');
+  const [recoveryCountdown, setRecoveryCountdown] = useState(0);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryShowPassword, setRecoveryShowPassword] = useState(false);
+
   useEffect(() => {
     testSupabaseConnection().then(ok => setConnectionStatus(ok ? 'connected' : 'disconnected')).catch(() => setConnectionStatus('disconnected'));
   }, []);
@@ -67,6 +78,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [countdown]);
+
+  useEffect(() => {
+    if (recoveryCountdown <= 0) return;
+    const t = setTimeout(() => setRecoveryCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [recoveryCountdown]);
 
   // ── Email/username login ─────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
@@ -153,18 +170,106 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     finally { setLoading(false); }
   };
 
-  // ── Reset password ────────────────────────────────────────────────────────────
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.email) { toast.error('ایمیل خود را وارد کنید'); return; }
-    setLoading(true);
+  // ── Password recovery: request OTP via edge function ───────────────────────
+  const handleRequestPasswordResetOtp = async () => {
+    if (!recoveryPhone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
+    const normalized = normalizeIranPhone(recoveryPhone);
+    if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
+    setRecoveryLoading(true);
+    sessionStorage.setItem('spark-phone-password-recovery', 'true');
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(form.email.trim());
+      await supabase.functions.invoke('request-phone-password-reset-otp', {
+        body: { phone: recoveryPhone },
+      });
+    } catch {
+      // Same generic message on error
+    } finally {
+      setRecoveryLoading(false);
+    }
+    // Always proceed to OTP step with generic message
+    setRecoveryStep('otp');
+    setRecoveryCountdown(60);
+    toast.success('اگر شماره واردشده متعلق به یک حساب فعال باشد، کد بازیابی ارسال می‌شود.');
+  };
+
+  // ── Password recovery: verify OTP ──────────────────────────────────────────
+  const handleRecoveryVerifyOtp = async () => {
+    if (!recoveryOtp.trim() || recoveryOtp.length < 4) { toast.error('کد تأیید را وارد کنید'); return; }
+    const normalized = normalizeIranPhone(recoveryPhone);
+    if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
+    const e164 = `+${normalized}`;
+    setRecoveryLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({ phone: e164, token: recoveryOtp, type: 'sms' });
+      if (error || !data.user) {
+        toast.error('کد نادرست است یا منقضی شده');
+        return;
+      }
+      // Validate profile exists and is active
+      const { data: profileData } = await supabase.from('profiles').select('user_id, phone, is_active').eq('user_id', data.user.id).maybeSingle();
+      if (!profileData) {
+        await supabase.auth.signOut();
+        toast.error('خطا در تأیید حساب. لطفاً دوباره تلاش کنید.', { duration: 6000 });
+        return;
+      }
+      if (profileData.is_active !== true) {
+        await supabase.auth.signOut();
+        toast.error('خطا در تأیید حساب. لطفاً دوباره تلاش کنید.', { duration: 6000 });
+        return;
+      }
+      // Compare normalized phone numbers
+      const authPhone = normalizeIranPhone(data.user.phone);
+      const profilePhone = normalizeIranPhone(profileData.phone);
+      if (!authPhone || !profilePhone || authPhone !== profilePhone) {
+        await supabase.auth.signOut();
+        toast.error('خطا در تأیید حساب. لطفاً دوباره تلاش کنید.', { duration: 6000 });
+        return;
+      }
+      // Success — proceed to new password step (do NOT call onSuccess)
+      setRecoveryStep('new_password');
+    } catch {
+      toast.error('خطا در تأیید کد');
+    } finally { setRecoveryLoading(false); }
+  };
+
+  // ── Password recovery: set new password ─────────────────────────────────────
+  const handleRecoverySetPassword = async () => {
+    if (recoveryPassword.length < 8) { toast.error('رمز عبور باید حداقل ۸ کاراکتر باشد'); return; }
+    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(recoveryPassword)) { toast.error('رمز عبور باید شامل حروف و عدد باشد'); return; }
+    if (recoveryPassword !== recoveryConfirmPassword) { toast.error('رمز عبور و تکرار آن مطابقت ندارند'); return; }
+    setRecoveryLoading(true);
+    try {
+      const { data: { user }, error } = await supabase.auth.updateUser({ password: recoveryPassword });
       if (error) { toast.error(handleSupabaseError(error).message); return; }
-      toast.success('لینک بازیابی به ایمیل شما ارسال شد');
-      setMode('login');
-    } catch (err: any) { toast.error(handleSupabaseError(err).message); }
-    finally { setLoading(false); }
+      if (user) {
+        logAudit({ module: 'auth', action: 'phone_password_recovery', entity_name: 'user', entity_id: user.id, details: 'بازیابی رمز با شماره موبایل', severity: 'info' });
+      }
+      // Sign out immediately — user must log in with new password
+      await supabase.auth.signOut();
+      sessionStorage.removeItem('spark-phone-password-recovery');
+      // Clear all recovery state
+      setRecoveryPhone('');
+      setRecoveryOtp('');
+      setRecoveryPassword('');
+      setRecoveryConfirmPassword('');
+      setRecoveryStep('success');
+      toast.success('رمز عبور با موفقیت تغییر کرد. اکنون با رمز جدید وارد شوید.');
+    } catch (err: any) {
+      toast.error(handleSupabaseError(err).message);
+    } finally { setRecoveryLoading(false); }
+  };
+
+  // ── Password recovery: cancel ───────────────────────────────────────────────
+  const handleRecoveryCancel = async () => {
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
+    sessionStorage.removeItem('spark-phone-password-recovery');
+    setRecoveryPhone('');
+    setRecoveryOtp('');
+    setRecoveryPassword('');
+    setRecoveryConfirmPassword('');
+    setRecoveryStep('phone');
+    setRecoveryCountdown(0);
+    setMode('login');
   };
 
   // ── Phone OTP ─────────────────────────────────────────────────────────────────
@@ -464,26 +569,99 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
               </form>
             )}
 
-            {/* ── Reset password ────────────────────────────────── */}
-            {mode === 'reset' && (
-              <form onSubmit={handleResetPassword} className="space-y-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">ایمیل خود را وارد کنید تا لینک بازیابی برایتان ارسال شود.</p>
+            {/* ── Password recovery (phone OTP) ─────────────────────── */}
+            {mode === 'reset' && recoveryStep === 'phone' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">بازیابی رمز عبور<br />شماره موبایل خود را وارد کنید تا کد تأیید برایتان ارسال شود.</p>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ایمیل</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">شماره موبایل</label>
                   <div className="relative">
-                    <input type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                      placeholder="example@domain.com" className={inp} dir="ltr" disabled={loading} />
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input type="tel" value={recoveryPhone} onChange={e => setRecoveryPhone(e.target.value)}
+                      placeholder="مثال: 09123456789" className={inp} dir="ltr" disabled={recoveryLoading} />
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   </div>
                 </div>
-                <button type="submit" disabled={loading}
+                <button onClick={handleRequestPasswordResetOtp} disabled={recoveryLoading || !recoveryPhone.trim()}
                   className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
-                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><KeyRound className="w-5 h-5" />ارسال لینک بازیابی</>}
+                  {recoveryLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Smartphone className="w-5 h-5" />ارسال کد بازیابی</>}
                 </button>
                 <button type="button" onClick={() => setMode('login')} className="w-full text-sm text-teal-600 dark:text-teal-400 hover:underline pt-1">
                   <span className="flex items-center justify-center gap-1"><ChevronRight className="w-4 h-4" />بازگشت به ورود</span>
                 </button>
-              </form>
+              </div>
+            )}
+
+            {mode === 'reset' && recoveryStep === 'otp' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">اگر شماره واردشده متعلق به یک حساب فعال باشد، کد بازیابی ارسال می‌شود.</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">کد تأیید</label>
+                  <input type="text" value={recoveryOtp} onChange={e => setRecoveryOtp(e.target.value.replace(/\D/g, '').slice(0,6))}
+                    placeholder="کد ۶ رقمی" className={inp + ' text-center text-xl tracking-[0.5em] font-mono'} dir="ltr" maxLength={6} />
+                </div>
+                <button onClick={handleRecoveryVerifyOtp} disabled={recoveryLoading || recoveryOtp.length < 4}
+                  className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
+                  {recoveryLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowRight className="w-5 h-5" />تأیید کد</>}
+                </button>
+                <button onClick={() => { if (recoveryCountdown === 0) { handleRequestPasswordResetOtp(); } }}
+                  disabled={recoveryCountdown > 0}
+                  className="w-full text-sm text-teal-600 dark:text-teal-400 disabled:text-gray-400 py-2 transition-colors">
+                  {recoveryCountdown > 0 ? `ارسال مجدد پس از ${recoveryCountdown} ثانیه` : 'ارسال مجدد کد'}
+                </button>
+                <button type="button" onClick={handleRecoveryCancel} className="w-full text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors py-2">
+                  انصراف و بازگشت به ورود
+                </button>
+              </div>
+            )}
+
+            {mode === 'reset' && recoveryStep === 'new_password' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">رمز عبور جدید را وارد کنید.</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور جدید</label>
+                  <div className="relative">
+                    <input type={recoveryShowPassword ? 'text' : 'password'} value={recoveryPassword}
+                      onChange={e => setRecoveryPassword(e.target.value)}
+                      placeholder="حداقل ۸ کاراکتر (حروف و عدد)" className={inp + ' pl-10 pr-10'} dir="ltr"
+                      autoComplete="new-password" minLength={8} disabled={recoveryLoading} />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <button type="button" onClick={() => setRecoveryShowPassword(v => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md">
+                      {recoveryShowPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تکرار رمز عبور جدید</label>
+                  <div className="relative">
+                    <input type={recoveryShowPassword ? 'text' : 'password'} value={recoveryConfirmPassword}
+                      onChange={e => setRecoveryConfirmPassword(e.target.value)}
+                      placeholder="••••••••" className={inp + ' pl-10'} dir="ltr"
+                      autoComplete="new-password" minLength={8} disabled={recoveryLoading} />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  </div>
+                </div>
+                <button onClick={handleRecoverySetPassword} disabled={recoveryLoading}
+                  className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
+                  {recoveryLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><KeyRound className="w-5 h-5" />تغییر رمز عبور</>}
+                </button>
+                <button type="button" onClick={handleRecoveryCancel} className="w-full text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors py-2">
+                  انصراف و بازگشت به ورود
+                </button>
+              </div>
+            )}
+
+            {mode === 'reset' && recoveryStep === 'success' && (
+              <div className="space-y-4 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-green-50 dark:bg-green-900/30 flex items-center justify-center mx-auto">
+                  <KeyRound className="w-8 h-8 text-green-500" />
+                </div>
+                <p className="text-sm text-gray-700 dark:text-gray-300">رمز عبور با موفقیت تغییر کرد. اکنون با رمز جدید وارد شوید.</p>
+                <button type="button" onClick={() => { setRecoveryStep('phone'); setMode('login'); }}
+                  className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors">
+                  <ArrowRight className="w-5 h-5" />بازگشت به ورود
+                </button>
+              </div>
             )}
           </div>
         </div>

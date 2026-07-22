@@ -213,6 +213,8 @@ const HIDDEN_SECURITY_CONFIG_KEYS = new Set([
   'phone_login_test_phone',
   'phone_login_otp_ttl_seconds',
   'phone_login_otp_ttl_operator_confirmed',
+  'phone_password_recovery_enabled',
+  'phone_password_recovery_e2e_verified',
 ]);
 
 // ─── Phone Login Toggle Card (security section) ─────────────────────────────
@@ -487,6 +489,113 @@ function PhoneLoginToggleCard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Password Recovery Card (security section) ──────────────────────────────
+function PasswordRecoveryCard() {
+  const [enabled, setEnabled] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [providerReady, setProviderReady] = useState(false);
+  const [operatorConfirmed, setOperatorConfirmed] = useState(false);
+  const [otpTtlConfirmed, setOtpTtlConfirmed] = useState(false);
+  const [e2eVerified, setE2eVerified] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.rpc('get_public_auth_config');
+    const row = Array.isArray(data) ? data[0] : data;
+    setEnabled(row?.phone_password_recovery_ready ?? false);
+    setReady(row?.phone_password_recovery_ready ?? false);
+    setProviderReady(row?.provider_ready ?? false);
+    setOperatorConfirmed(row?.operator_confirmed ?? false);
+    setOtpTtlConfirmed(row?.otp_ttl_operator_confirmed ?? false);
+    // Check e2e_verified for recovery
+    const { data: e2eRow } = await supabase.from('system_config').select('value').eq('section', 'security').eq('key', 'phone_password_recovery_e2e_verified').maybeSingle();
+    setE2eVerified(e2eRow?.value === 'true');
+    // Check admin
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user) {
+      const { data: profile } = await supabase.from('profiles').select('is_admin').eq('user_id', userData.user.id).maybeSingle();
+      setIsAdmin(profile?.is_admin === true);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleToggle = async (v: boolean) => {
+    setSaving(true);
+    const { data, error } = await supabase.rpc('set_phone_password_recovery_config', { p_enabled: v });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.success !== true || error) {
+      const errMap: Record<string, string> = {
+        NOT_AUTHENTICATED: 'احراز هویت نشده',
+        NOT_ADMIN: 'فقط ادمین می‌تواند',
+        PROVIDER_REQUIRED: 'سرویس‌دهنده انتخاب نشده',
+        PROVIDER_NOT_READY: 'سرویس‌دهنده فعال نیست',
+        HOOK_NOT_CONFIRMED: 'Auth Hook تأیید نشده',
+        TTL_NOT_CONFIRMED: 'TTL تأیید نشده',
+        INVALID_TTL: 'TTL نامعتبر',
+        E2E_NOT_VERIFIED: 'تست E2E بازیابی انجام نشده',
+      };
+      toast.error(errMap[row?.error] || error?.message || 'خطا');
+      setSaving(false);
+      return;
+    }
+    setEnabled(v);
+    setSaving(false);
+    toast.success(v ? 'بازیابی رمز با موبایل فعال شد' : 'بازیابی رمز با موبایل غیرفعال شد');
+    logAudit({ module: 'security', action: v ? 'password_recovery_enabled' : 'password_recovery_disabled', entity_name: v ? 'enabled' : 'disabled', severity: 'warning' });
+  };
+
+  if (loading) return null;
+
+  const items = [
+    { label: providerReady ? 'Provider آماده' : 'Provider آماده نیست', ok: providerReady },
+    { label: operatorConfirmed ? 'Auth Hook تأیید شده' : 'Auth Hook تأیید نشده', ok: operatorConfirmed },
+    { label: otpTtlConfirmed ? 'TTL تأیید شده' : 'TTL تأیید نشده', ok: otpTtlConfirmed },
+    { label: e2eVerified ? 'تست E2E بازیابی رمز موفق' : 'تست E2E بازیابی رمز انجام نشده', ok: e2eVerified },
+    { label: enabled ? 'بازیابی رمز موبایلی فعال' : 'بازیابی رمز موبایلی غیرفعال', ok: enabled, neutral: true },
+  ];
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400">
+            <KeyRound className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-800 dark:text-white">بازیابی رمز با موبایل</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {ready ? 'فعال و آماده' : 'غیرفعال'}
+            </p>
+          </div>
+        </div>
+        {isAdmin && (
+          <button
+            onClick={() => handleToggle(!enabled)}
+            disabled={saving}
+            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${saving ? 'opacity-50' : ''}`}>
+            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
+        )}
+      </div>
+      <div className="mt-4 space-y-1.5">
+        {items.map((item, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <span className={`w-2 h-2 rounded-full ${item.ok ? 'bg-green-500' : item.neutral ? 'bg-gray-300 dark:bg-gray-600' : 'bg-amber-400'}`} />
+            <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}>
+              {item.label}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1391,6 +1500,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
               {cfgs('security').filter(c => !HIDDEN_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
             <PhoneLoginToggleCard />
+            <PasswordRecoveryCard />
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700">
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
