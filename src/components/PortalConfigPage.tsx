@@ -259,7 +259,8 @@ function PhoneLoginToggleCard() {
       .eq('section', 'sms')
       .eq('key', 'phone_login_sms_provider_id')
       .maybeSingle();
-    setProviderId(providerRow?.value ?? null);
+    const providerValue = providerRow?.value?.trim();
+    setProviderId(providerValue ? providerValue : null);
     // Check admin status
     const { data: userData } = await supabase.auth.getUser();
     if (userData?.user) {
@@ -288,7 +289,7 @@ function PhoneLoginToggleCard() {
     setSaving(true);
     const { data, error } = await supabase.rpc('set_phone_login_config', {
       p_enabled: v,
-      p_provider_id: providerId ?? null,
+      p_provider_id: providerId || null,
     });
     const row = Array.isArray(data) ? data[0] : data;
     if (row?.success !== true || error) {
