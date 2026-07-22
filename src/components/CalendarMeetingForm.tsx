@@ -1238,14 +1238,14 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           error: acc.error || r.error,
         }));
       }
-      // False-success prevention: if user chose "with notifications" but zero events were dispatched, warn.
+      // False-success prevention: compute real success/failure from dispatch results.
+      const succeeded = internalSmsResults.filter(r => r.status === 'sent' || r.status === 'skipped').length;
+      const failed = internalSmsResults.filter(r => r.status === 'failed').length;
       const totalEvents = internalSmsResults.length + externalSmsResults.length;
       if (import.meta.env?.DEV) {
         console.debug('[commitEdit] dispatch summary', {
-          totalEvents,
-          internalSmsResults,
-          externalSmsResults,
-          meetingDiffs,
+          totalEvents, succeeded, failed,
+          internalSmsResults, externalSmsResults, meetingDiffs,
         });
       }
       const hasAnyDiff = meetingDiffs.some(d =>
@@ -1253,13 +1253,14 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         d.removed_participant_ids.length > 0 ||
         d.retained_participant_ids.length > 0
       );
-      if (totalEvents === 0 && hasAnyDiff) {
-        const failedCount = internalSmsResults.filter(r => r.status === 'failed').length;
-        if (failedCount > 0) {
-          toast.success(`تغییرات جلسه ذخیره شد، اما اطلاع‌رسانی برای ${failedCount} نفر ناموفق بود.`);
-        } else {
-          console.warn('[commitEdit] Notification requested but zero events dispatched despite non-empty diff', { meetingDiffs });
-        }
+      if (failed > 0) {
+        toast.error(`تغییرات جلسه ذخیره شد، اما اطلاع‌رسانی برای ${failed} نفر ناموفق بود.`);
+      } else if (succeeded > 0) {
+        toast.success('تغییرات جلسه ذخیره شد و اطلاع‌رسانی انجام شد.');
+      } else if (hasAnyDiff) {
+        // User chose "with notifications", diff is non-empty, but zero events dispatched — surface as error.
+        console.warn('[commitEdit] Notification requested but zero events dispatched despite non-empty diff', { meetingDiffs });
+        toast.error('تغییرات جلسه ذخیره شد، اما هیچ اطلاع‌رسانی انجام نشد. لطفاً مجدداً تلاش کنید.');
       }
 
       showSmsSummary(internalSmsResults, externalSmsResult);
