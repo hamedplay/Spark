@@ -3,6 +3,16 @@ import { supabase } from '../lib/supabase';
 import { insertNotification, getSmsTemplates, fillPlaceholders } from '../lib/notifications';
 import type { SmsDispatchResult } from '../lib/notifications';
 import { getMeetingTemplateKey, type MeetingRecipientRole, type MeetingAction } from '../config/templateCatalog';
+import {
+  computeMeetingChangeSet,
+  computeParticipantDiff,
+  computeObserverDiff,
+  computeExternalDiff,
+  buildMeetingNotificationPlan,
+  FIELD_LABELS,
+  normalizeExternalName,
+} from '../lib/meetingEditDiff';
+import type { MeetingChangeSet, ParticipantDiff, ObserverDiff, ExternalDiff, NotificationPlan } from '../lib/meetingEditDiff';
 import { CirclePlus as PlusCircle, Loader as Loader2, UserPlus, Bell, Repeat, MessageSquare, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, X, Plus, Users, Video, BookUser, Save, CreditCard as Edit2, Building2, ChevronDown, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -119,17 +129,8 @@ interface CalendarEntry {
   is_personal_public?: boolean;
 }
 
-type MeetingChangeSet = {
-  importantFields: string[];
-  minorFields: string[];
-  participantChanged: boolean;
-  notifyUsersChanged: boolean;
-  externalChanged: boolean;
-  hasNonParticipantChanges: boolean;
-  hasAnyChanges: boolean;
-};
-
 type CommitSnapshot = {
+  operationId: string;
   updateRecord: Record<string, any>;
   baseFields: Record<string, any> | null;
   isFirstSchedule: boolean;
@@ -155,97 +156,9 @@ type CommitSnapshot = {
   isOnline: boolean;
   wasOnline: boolean;
   prevRoomId: string | null;
+  prevParticipantIds: string[];
+  prevObserverIds: string[];
 };
-
-const IMPORTANT_FIELDS = ['subject', 'request_date', 'start_time', 'end_time', 'location', 'conference_room_id', 'is_online'] as const;
-const MINOR_FIELDS = ['phone', 'representative', 'meeting_manager', 'notes', 'priority', 'reminder_minutes', 'calendar_id', 'send_sms', 'members_only', 'repeat_type', 'repeat_interval', 'repeat_end_date', 'repeat_weekday', 'agenda_items'] as const;
-
-const FIELD_LABELS: Record<string, string> = {
-  subject: 'موضوع جلسه',
-  request_date: 'تاریخ جلسه',
-  start_time: 'ساعت شروع',
-  end_time: 'ساعت پایان',
-  location: 'محل برگزاری',
-  is_online: 'نوع برگزاری',
-  conference_room_id: 'اتاق جلسه آنلاین',
-  phone: 'شماره تماس',
-  representative: 'نماینده',
-  meeting_manager: 'مدیر جلسه',
-  notes: 'توضیحات',
-  priority: 'اولویت',
-  reminder_minutes: 'تنظیمات یادآوری',
-  calendar_id: 'تقویم انتخابی',
-  send_sms: 'تنظیمات ارسال پیامک',
-  members_only: 'نمایش فقط برای اعضا',
-  repeat_type: 'تنظیمات تکرار',
-  agenda: 'دستور جلسه',
-  external_participants: 'شرکت‌کنندگان خارجی',
-};
-
-function normalizeStr(v: unknown): string {
-  if (v == null) return '';
-  return String(v).trim();
-}
-
-const normalizeExternalName = (value: string): string =>
-  (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
-
-function externalArraysEqual(a: string[], b: string[]): boolean {
-  const sa = new Set(a.map(normalizeExternalName).filter((x: string) => !!x));
-  const sb = new Set(b.map(normalizeExternalName).filter((x: string) => !!x));
-  if (sa.size !== sb.size) return false;
-  for (const v of sa) if (!sb.has(v)) return false;
-  return true;
-}
-
-function agendaItemsEqual(a: AgendaItem[] | null | undefined, b: AgendaItem[] | null | undefined): boolean {
-  // Content + order comparison: title, presenter, duration_minutes, sequence.
-  const norm = (items: AgendaItem[]) => items.map(i =>
-    `${(i.title || '').trim()}|${(i.presenter || '').trim()}|${i.duration_minutes ?? ''}`
-  ).join('\n');
-  return norm(a || []) === norm(b || []);
-}
-
-function computeChangeSet(existing: Record<string, any>, next: Record<string, any>): MeetingChangeSet {
-  const importantFields: string[] = [];
-  const minorFields: string[] = [];
-
-  for (const f of IMPORTANT_FIELDS) {
-    if (normalizeStr(existing[f]) !== normalizeStr(next[f])) {
-      importantFields.push(f);
-    }
-  }
-
-  for (const f of MINOR_FIELDS) {
-    if (f === 'agenda_items') {
-      if (!agendaItemsEqual(existing.agenda_items, next.agenda_items)) minorFields.push('agenda');
-      continue;
-    }
-    if (normalizeStr(existing[f]) !== normalizeStr(next[f])) {
-      minorFields.push(f);
-    }
-  }
-
-  // External participants (member change, not important)
-  const externalChanged = !externalArraysEqual(existing.external_participants || [], next.external_participants || []);
-
-  const prevParticipants = new Set<string>((existing.participant_user_ids || []).filter((x: string) => x));
-  const nextParticipants = new Set<string>((next.participant_user_ids || []).filter((x: string) => x));
-  const participantChanged =
-    prevParticipants.size !== nextParticipants.size ||
-    [...nextParticipants].some(id => !prevParticipants.has(id));
-
-  const prevNotify = new Set<string>((existing.notify_users || []).filter((x: string) => x));
-  const nextNotify = new Set<string>((next.notify_users || []).filter((x: string) => x));
-  const notifyUsersChanged =
-    prevNotify.size !== nextNotify.size ||
-    [...nextNotify].some(id => !prevNotify.has(id));
-
-  const hasNonParticipantChanges = importantFields.length > 0 || minorFields.length > 0;
-  const hasAnyChanges = hasNonParticipantChanges || participantChanged || notifyUsersChanged || externalChanged;
-
-  return { importantFields, minorFields, participantChanged, notifyUsersChanged, externalChanged, hasNonParticipantChanges, hasAnyChanges };
-}
 
 interface CalendarMeetingFormProps {
   onSuccess: (subject?: string, isUpdate?: boolean) => void;
@@ -694,10 +607,11 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       const m = moment(`${scheduleDate.jy}/${scheduleDate.jm}/${scheduleDate.jd}`, 'jYYYY/jM/jD');
       const gregDate = m.toDate().toISOString();
 
-      // Create conference room first if this is an online meeting
+      // Create conference room ONLY for new meetings (Create flow), not Edit.
+      // In Edit, room creation happens in commitEdit after user confirms.
       let conferenceRoomId: string | null = null;
       let conferenceRoomCode: string | null = null;
-      if (isOnline) {
+      if (!prefillMeetingId && isOnline) {
         const room = await createConferenceRoom(subject);
         conferenceRoomId = room?.id || null;
         conferenceRoomCode = room?.code || null;
@@ -768,8 +682,29 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       let participantNameMap: Record<string, string> = {};
       const participantIds = selectedParticipants.map(p => p.id).filter(id => id !== userId);
       const observerIds = selectedNotifyUsers.map(u => u.id).filter(id => id !== userId);
-      const recipientIds = [...participantIds, ...observerIds];
-      for (const uid of recipientIds) {
+      // For Create flow, only next recipients are needed.
+      // For Edit flow, we also need names for previously selected users who may be removed.
+      let prevParticipantIds: string[] = [];
+      let prevObserverIds: string[] = [];
+      if (prefillMeetingId) {
+        const bulkIds = (prefillEditAllIds && prefillEditAllIds.length > 0) ? prefillEditAllIds : [prefillMeetingId];
+        const { data: existingRows } = await supabase
+          .from('meetings')
+          .select('id, participant_user_ids, notify_users')
+          .in('id', bulkIds);
+        for (const r of (existingRows || [])) {
+          for (const uid of (r.participant_user_ids || [])) {
+            if (uid && uid !== userId) prevParticipantIds.push(uid);
+          }
+          for (const uid of (r.notify_users || [])) {
+            if (uid && uid !== userId) prevObserverIds.push(uid);
+          }
+        }
+        prevParticipantIds = [...new Set(prevParticipantIds)];
+        prevObserverIds = [...new Set(prevObserverIds)];
+      }
+      const allRecipientIds = [...new Set([...participantIds, ...observerIds, ...prevParticipantIds, ...prevObserverIds])];
+      for (const uid of allRecipientIds) {
         participantNameMap[uid] = resolveUserName(uid);
       }
 
@@ -857,7 +792,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const minorSet = new Set<string>();
         for (const id of bulkIds) {
           const ex = existingMap.get(id) || {};
-          const cs = computeChangeSet(ex, nextFields);
+          const cs = computeMeetingChangeSet(ex, nextFields);
           changeSetsByMeetingId[id] = cs;
           for (const f of cs.importantFields) importantSet.add(f);
           for (const f of cs.minorFields) minorSet.add(f);
@@ -916,7 +851,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           };
         }
 
+        const operationId = (crypto as any)?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const snapshot: CommitSnapshot = {
+          operationId,
           updateRecord, baseFields, isFirstSchedule, senderName,
           meetingDateStr, meetingTimeStr, smsPlaceholders, agendaSummary,
           participantNameMap, observerIds,
@@ -941,6 +878,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           isOnline,
           wasOnline,
           prevRoomId,
+          prevParticipantIds,
+          prevObserverIds,
         };
 
         if (changeSet.hasAnyChanges) {
@@ -1021,10 +960,13 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     finally { setLoading(false); }
   };
 
+  const commitLockRef = useRef(false);
   const commitEdit = async (snapshot: CommitSnapshot, notifyExistingParticipants: boolean) => {
     if (!userId || !prefillMeetingId) return;
+    if (commitLockRef.current) return;
+    commitLockRef.current = true;
     setCommitting(true);
-    const operationId = (crypto as any)?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { operationId } = snapshot;
     try {
       const {
         updateRecord, baseFields, isFirstSchedule, senderName,
@@ -1042,12 +984,15 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         if (error) throw error;
       }
 
-      // 1b. Conference room: create ONLY after successful save, only for offline→online transition
+      // 1b. Conference room: create ONLY after successful save, only for offline→online transition.
+      // If room creation fails, throw so the meeting doesn't end up with is_online=true and conference_room_id=null.
       if (snapshot.isOnline && !snapshot.wasOnline) {
         const room = await createConferenceRoom(subject);
-        if (room?.id) {
-          await supabase.from('meetings').update({ conference_room_id: room.id }).eq('id', prefillMeetingId);
+        if (!room?.id) {
+          throw new Error('خطا در ایجاد اتاق جلسه آنلاین؛ لطفاً دوباره تلاش کنید');
         }
+        const { error: roomUpdateError } = await supabase.from('meetings').update({ conference_room_id: room.id }).eq('id', prefillMeetingId);
+        if (roomUpdateError) throw roomUpdateError;
       }
 
       // 2. Save agenda items (delete + insert). Error aborts before any notifications.
@@ -1095,16 +1040,26 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         }];
       }
 
-      // 4. Notifications — only after successful save + sync, and only if user chose to notify
-      // Creator/editor notification: ONLY on first schedule (create flow), never on edit.
+      // 4. Notifications — only after successful save + sync, and only if user chose to notify.
+      // In Edit flow, ALL notifications (including isFirstSchedule creator notification) are gated on notify flag.
+      // Without notifications: meeting saved, participants/observers/inbox synced, toast shown, zero messages.
+      const internalSmsResults: SmsDispatchResult[] = [];
+      const externalSmsResults: ExternalSmsResult[] = [];
+
+      if (!notifyExistingParticipants) {
+        showSmsSummary(internalSmsResults, null);
+        setEditDecision(null);
+        onSuccess(subject, !!prefillMeetingId);
+        return;
+      }
+
+      // Creator/editor notification: ONLY on first schedule (create flow), never on subsequent edits.
       // No SMS or Bale for creator — only in-app notification + toast.
       if (isFirstSchedule) {
         const creatorEventType = getMeetingTemplateKey('creator', 'created');
-        await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: 'جلسه زمان‌بندی شد', fallbackMessage: `جلسه "${subject}" زمان‌بندی شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar', channels: { inApp: true, sms: false, bale: false }, eventKey: `${prefillMeetingId}:${userId}:${creatorEventType}:${operationId}` });
+        await insertNotification({ userId, category: 'meeting', eventType: creatorEventType, fallbackTitle: 'جلسه زمان‌بندی شد', fallbackMessage: `جلسه "${subject}" زمان‌بندی شد${agendaSummary}`, placeholders: { ...smsPlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` }, senderId: userId, senderName: senderName, actionUrl: 'calendar', channels: { inApp: true, sms: false, bale: false }, eventKey: `${operationId}:${prefillMeetingId}:${userId}:creator:${creatorEventType}` });
       }
 
-      const internalSmsResults: SmsDispatchResult[] = [];
-      const externalSmsResults: ExternalSmsResult[] = [];
       const bulkMeetingDetails = new Map<string, { subject: string; request_date: string; start_time: string | null; end_time: string | null }>();
       if (meetingDiffs.length > 1) {
         const bulkIds = meetingDiffs.map(d => d.meeting_id);
@@ -1118,15 +1073,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       }
 
       const sentNotificationKeys = new Set<string>();
-
-      // If user chose "without notifications", skip ALL notification dispatch.
-      // Meeting data, participants, observers, inbox, and agenda are already saved.
-      if (!notifyExistingParticipants) {
-        showSmsSummary(internalSmsResults, null);
-        setEditDecision(null);
-        onSuccess(subject, !!prefillMeetingId);
-        return;
-      }
 
       for (const diff of meetingDiffs) {
         const isBulk = meetingDiffs.length > 1;
@@ -1225,26 +1171,14 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           }
         }
 
-        // External participants diff (per-meeting)
-        if (sendSms && selectedExternal.length > 0) {
+        // External participants diff (per-meeting) — process even when next is empty so removed externals get cancel SMS.
+        if (sendSms) {
           const extFallbackSms = `دعوت به جلسه: «${mtgSubject}» | تاریخ: ${mtgJalaaliDate || meetingDateStr} | ساعت: ${mtgTimeStr}${mtgSmsPlaceholders.location_part}`;
-          const normName = (n: string) => (n || '').trim().replace(/\s+/g, ' ').toLowerCase();
-          const prevExt = new Set<string>(
-            (snapshot.prevExternalByMeetingId[diff.meeting_id] || [])
-              .map(normName).filter((x: string) => !!x)
-          );
-          const seenNorm = new Set<string>();
-          const nextExt: string[] = [];
-          for (const raw of selectedExternal) {
-            const key = normName(raw);
-            if (!key || seenNorm.has(key)) continue;
-            seenNorm.add(key);
-            nextExt.push(raw);
-          }
-          const newExt = nextExt.filter(n => !prevExt.has(normName(n)));
-          const retainedExt = nextExt.filter(n => prevExt.has(normName(n)));
-          const removedExt = (snapshot.prevExternalByMeetingId[diff.meeting_id] || [])
-            .filter(n => !new Set(nextExt.map(normName)).has(normName(n)));
+          const prevExternalForMeeting = snapshot.prevExternalByMeetingId[diff.meeting_id] || [];
+          const extDiff = computeExternalDiff(prevExternalForMeeting, selectedExternal);
+          const newExt = extDiff.added;
+          const retainedExt = extDiff.retained;
+          const removedExt = extDiff.removed;
           // Added externals → invite
           if (newExt.length > 0) {
             const extResult = await sendSmsToExternals(newExt, contacts, extFallbackSms, userId, mtgSmsPlaceholders, 'invite');
@@ -1282,6 +1216,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       toast.error(err?.message || 'خطا در ثبت جلسه');
     } finally {
       setCommitting(false);
+      commitLockRef.current = false;
     }
   };
 
