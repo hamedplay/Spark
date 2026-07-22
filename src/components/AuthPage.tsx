@@ -175,10 +175,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     try {
       // Use server-side edge function to prevent enumeration
       // Always returns the same response regardless of whether the phone exists
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-phone-login-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
-        body: JSON.stringify({ phone: normalized }),
+      await supabase.functions.invoke('request-phone-login-otp', {
+        body: { phone: normalized },
       });
       // Always show the same message — never reveal whether the phone exists
       setOtpSent(true);

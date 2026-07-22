@@ -258,9 +258,11 @@ function PhoneLoginToggleCard() {
             <h4 className="font-semibold text-gray-800 dark:text-white">ورود با شماره موبایل</h4>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               {enabled
-                ? (ready
-                    ? 'فعال و آماده'
-                    : 'فعال ولی نیازمند تنظیم Auth Hook یا سرویس‌دهنده')
+                ? (!providerId
+                    ? 'سرویس‌دهنده انتخاب نشده'
+                    : !ready
+                        ? 'نیازمند تنظیم Auth Hook یا تست End-to-End'
+                        : 'فعال و آماده')
                 : 'غیرفعال'}
             </p>
           </div>

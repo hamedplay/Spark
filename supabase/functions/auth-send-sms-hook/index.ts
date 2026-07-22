@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 
 const HOOK_TIMEOUT_MS = 4000;
+const PROVIDER_TIMEOUT_MS = 3000;
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length <= 4) return "***";
@@ -36,6 +37,13 @@ Deno.serve(async (req: Request) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HOOK_TIMEOUT_MS);
 
+  // ── 0. Build supabase client FIRST — before any use ────────────────────────
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
   try {
     // ── 1. Standard Webhook signature verification ───────────────────────────
     const secret = Deno.env.get("SEND_SMS_HOOK_SECRET");
@@ -56,7 +64,14 @@ Deno.serve(async (req: Request) => {
       return errorResponse(401, "Invalid signature");
     }
 
-    // ── 2. Parse and validate payload ────────────────────────────────────────
+    // ── 2. Require webhook-id header ─────────────────────────────────────────
+    const webhookId = req.headers.get("webhook-id") || "";
+    if (!webhookId) {
+      console.log("[auth-send-sms-hook] missing webhook-id header, rejecting");
+      return errorResponse(400, "Missing webhook-id header");
+    }
+
+    // ── 3. Parse and validate payload ────────────────────────────────────────
     const body = JSON.parse(rawBody);
     const user = body?.user;
     const sms = body?.sms;
@@ -74,71 +89,91 @@ Deno.serve(async (req: Request) => {
 
     const maskedPhone = maskPhone(phone);
 
-    // ── 2b. Idempotency: check webhook-id ────────────────────────────────────
-    const webhookId = req.headers.get("webhook-id") || "";
-    if (webhookId) {
-      const { data: existing } = await supabase
-        .from("auth_hook_events")
-        .select("webhook_id")
-        .eq("webhook_id", webhookId)
-        .maybeSingle();
-      if (existing) {
-        console.log("[auth-send-sms-hook] duplicate webhook-id, skipping", webhookId);
-        return successResponse();
+    // ── 4. Atomic idempotency reservation via RPC ───────────────────────────
+    let reservation: string;
+    try {
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        "reserve_auth_hook_event",
+        { p_webhook_id: webhookId },
+      );
+      if (rpcError) {
+        console.log("[auth-send-sms-hook] idempotency RPC error, fail-closed:", rpcError.message);
+        return errorResponse(500, "Idempotency check failed");
       }
-      await supabase.from("auth_hook_events").insert({
-        webhook_id: webhookId,
-        event_type: "send_sms",
-      });
+      reservation = rpcResult as string;
+    } catch (err: any) {
+      console.log("[auth-send-sms-hook] idempotency RPC exception, fail-closed:", err?.message);
+      return errorResponse(500, "Idempotency check failed");
     }
 
-    // ── 3. Check phone_login_enabled ─────────────────────────────────────────
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
+    if (reservation === "already_sent") {
+      console.log("[auth-send-sms-hook] duplicate webhook-id already sent:", webhookId);
+      return successResponse();
+    }
 
-    const { data: enabledRow } = await supabase
+    if (reservation === "locked") {
+      console.log("[auth-send-sms-hook] webhook-id locked (processing):", webhookId);
+      return successResponse();
+    }
+
+    // reservation === 'reserved' or 'retry_allowed' → proceed
+
+    // ── 5. Check phone_login_enabled ─────────────────────────────────────────
+    const { data: enabledRow, error: enabledErr } = await supabase
       .from("system_config")
       .select("value")
       .eq("section", "security")
       .eq("key", "phone_login_enabled")
       .maybeSingle();
 
+    if (enabledErr) {
+      console.log("[auth-send-sms-hook] config query error, fail-closed:", enabledErr.message);
+      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "CONFIG_ERROR" });
+      return errorResponse(500, "Configuration check failed");
+    }
+
     const phoneLoginEnabled = enabledRow?.value === "true";
     if (!phoneLoginEnabled) {
       console.log("[auth-send-sms-hook] phone_login disabled, rejecting", maskedPhone);
+      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "LOGIN_DISABLED" });
       return errorResponse(403, "Phone login is disabled");
     }
 
-    // ── 4. Read selected provider ID ─────────────────────────────────────────
-    const { data: providerRow } = await supabase
+    // ── 6. Read selected provider ID ─────────────────────────────────────────
+    const { data: providerRow, error: providerErr } = await supabase
       .from("system_config")
       .select("value")
       .eq("section", "sms")
       .eq("key", "phone_login_sms_provider_id")
       .maybeSingle();
 
-    const providerId = providerRow?.value;
-    if (!providerId) {
-      console.log("[auth-send-sms-hook] no provider selected, rejecting", maskedPhone);
+    if (providerErr) {
+      console.log("[auth-send-sms-hook] provider config error, fail-closed:", providerErr.message);
+      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "PROVIDER_CONFIG_ERROR" });
       return errorResponse(503, "SMS provider unavailable");
     }
 
-    // ── 5. Check provider is active ──────────────────────────────────────────
-    const { data: provider } = await supabase
+    const providerId = providerRow?.value;
+    if (!providerId) {
+      console.log("[auth-send-sms-hook] no provider selected, rejecting", maskedPhone);
+      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "NO_PROVIDER" });
+      return errorResponse(503, "SMS provider unavailable");
+    }
+
+    // ── 7. Check provider is active ──────────────────────────────────────────
+    const { data: provider, error: provErr } = await supabase
       .from("sms_providers")
       .select("id, is_active")
       .eq("id", providerId)
       .maybeSingle();
 
-    if (!provider || !provider.is_active) {
+    if (provErr || !provider || !provider.is_active) {
       console.log("[auth-send-sms-hook] provider inactive, rejecting", maskedPhone);
+      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "PROVIDER_INACTIVE" });
       return errorResponse(503, "SMS provider unavailable");
     }
 
-    // ── 6. Read auth/login_otp template from sms_templates ────────────────────
+    // ── 8. Read auth/login_otp template ──────────────────────────────────────
     const { data: template } = await supabase
       .from("sms_templates")
       .select("body, is_active")
@@ -154,63 +189,83 @@ Deno.serve(async (req: Request) => {
       message = `کد ورود شما به سامانه اسپارک: ${otp}\nاین کد را در اختیار دیگران قرار ندهید.`;
     }
 
-    // ── 7. Dispatch via send-sms engine (auth_otp mode) ───────────────────────
+    // ── 9. Normalize phone ───────────────────────────────────────────────────
     const normalizedPhone = normalizeIranPhone(phone);
     if (!normalizedPhone) {
       console.log("[auth-send-sms-hook] invalid phone format, rejecting", maskedPhone);
+      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "INVALID_PHONE" });
       return errorResponse(400, "Invalid phone format");
     }
 
-    const sendResp = await fetch(
-      `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+    // ── 10. Dispatch via send-sms engine (auth_otp mode, single hop) ──────────
+    const providerController = new AbortController();
+    const providerTimer = setTimeout(() => providerController.abort(), PROVIDER_TIMEOUT_MS);
+
+    try {
+      const sendResp = await fetch(
+        `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+          },
+          body: JSON.stringify({
+            mode: "auth_otp",
+            providerId,
+            mobiles: [normalizedPhone],
+            message,
+          }),
+          signal: providerController.signal,
         },
-        body: JSON.stringify({
-          mode: "auth_otp",
-          providerId,
-          mobiles: [normalizedPhone],
-          message,
-        }),
-        signal: controller.signal,
-      },
-    );
+      );
 
-    clearTimeout(timer);
-    const result = await sendResp.json();
+      clearTimeout(providerTimer);
+      clearTimeout(timer);
+      const result = await sendResp.json();
 
-    if (!result.ok) {
+      if (!result.ok) {
+        await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "PROVIDER_ERROR" });
+        await supabase.from("sms_dispatch_logs").insert({
+          target_phone: normalizedPhone,
+          category: "auth",
+          event_type: "login_otp",
+          audience: "all",
+          message: "[AUTH_OTP_REDACTED]",
+          status: "failed",
+          error_text: "PROVIDER_ERROR",
+          provider_id: providerId,
+        });
+        console.log("[auth-send-sms-hook] dispatch failed for", maskedPhone);
+        return errorResponse(502, "SMS dispatch failed");
+      }
+
+      // Mark as sent
+      await supabase.rpc("complete_auth_hook_event", { p_webhook_id: webhookId });
+
       await supabase.from("sms_dispatch_logs").insert({
         target_phone: normalizedPhone,
         category: "auth",
         event_type: "login_otp",
         audience: "all",
         message: "[AUTH_OTP_REDACTED]",
-        status: "failed",
-        error_text: "PROVIDER_ERROR",
+        status: "sent",
         provider_id: providerId,
+        pack_id: result.packId ?? null,
+        message_ids: result.messageIds ?? null,
       });
-      console.log("[auth-send-sms-hook] dispatch failed for", maskedPhone);
-      return errorResponse(502, "SMS dispatch failed");
+
+      console.log("[auth-send-sms-hook] OTP dispatched for", maskedPhone);
+      return successResponse();
+
+    } catch (providerErr: any) {
+      clearTimeout(providerTimer);
+      clearTimeout(timer);
+      const isTimeout = providerErr?.name === "AbortError";
+      console.log("[auth-send-sms-hook] provider error:", isTimeout ? "timeout" : "error");
+      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: isTimeout ? "PROVIDER_TIMEOUT" : "PROVIDER_EXCEPTION" });
+      return errorResponse(isTimeout ? 504 : 502, isTimeout ? "Provider timeout" : "SMS dispatch failed");
     }
-
-    await supabase.from("sms_dispatch_logs").insert({
-      target_phone: normalizedPhone,
-      category: "auth",
-      event_type: "login_otp",
-      audience: "all",
-      message: "[AUTH_OTP_REDACTED]",
-      status: "sent",
-      provider_id: providerId,
-      pack_id: result.packId ?? null,
-      message_ids: result.messageIds ?? null,
-    });
-
-    console.log("[auth-send-sms-hook] OTP dispatched for", maskedPhone);
-    return successResponse();
 
   } catch (err: any) {
     clearTimeout(timer);

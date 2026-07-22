@@ -87,7 +87,7 @@ Deno.serve(async (req: Request) => {
     const supabase = adminClient();
 
     const body = await req.json();
-    const mode: string = body.mode || "send";
+    let mode: string = body.mode || "send";
     let providerId: string | undefined = body.providerId;
 
     // test_connection and provider management require admin
@@ -236,37 +236,17 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── MODE: auth_otp ─────────────────────────────────────────────────────────
-    // Internal mode for Auth Send SMS Hook. Uses explicit providerId, short timeout.
-    // Does NOT log OTP content — caller (auth-send-sms-hook) handles redacted logging.
+    // Internal mode for Auth Send SMS Hook. Uses explicit providerId.
+    // Falls through to the same provider dispatch logic as 'send' mode —
+    // no recursive self-call. The caller handles redacted logging.
     if (mode === "auth_otp") {
       const rawMobiles: string[] = body.mobiles || [];
       const message: string = body.message || "";
       if (!rawMobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
       if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" }, 400);
-
-      // Delegate to inner 'send' with explicit providerId and short timeout
-      const innerController = new AbortController();
-      const innerTimer = setTimeout(() => innerController.abort(), 3500);
-      try {
-        const innerResp = await fetch(
-          `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
-            },
-            body: JSON.stringify({ mode: "send", mobiles: rawMobiles, message, providerId }),
-            signal: innerController.signal,
-          },
-        );
-        clearTimeout(innerTimer);
-        const result = await innerResp.json();
-        return json(result);
-      } catch {
-        clearTimeout(innerTimer);
-        return json({ ok: false, error: "Timeout" }, 504);
-      }
+      // Rewrite mode to 'send' and fall through to provider logic below
+      mode = "send";
+      // Keep providerId from the auth_otp request — it's already set above
     }
 
     // ── MODE: external ─────────────────────────────────────────────────────────

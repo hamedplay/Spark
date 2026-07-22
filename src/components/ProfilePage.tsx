@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { User, Mail, Phone, Building, MapPin, Camera, Loader as Loader2, Save, Briefcase, Hash, Users, CreditCard, ChevronDown, ChevronUp, CircleCheck as CheckCircle2, Crown, Building2, Link2, MessageCircle, AtSign, Unlink, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { normalizeIranPhone } from '../lib/phoneNormalize';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 
@@ -545,7 +544,7 @@ export function ProfilePage() {
       // date fields: send null instead of empty string to avoid Postgres date parse error
       const payload: Pick<Profile, 'full_name' | 'phone' | 'national_id' | 'birth_date' | 'gender' | 'city' | 'bio' | 'employee_id' | 'hire_date' | 'location'> & { updated_at: string } = {
         full_name: profile.full_name,
-        phone: normalizeIranPhone(profile.phone) || null,
+        phone: profile.phone,
         national_id: profile.national_id,
         birth_date: profile.birth_date ?? null,
         gender: profile.gender,
