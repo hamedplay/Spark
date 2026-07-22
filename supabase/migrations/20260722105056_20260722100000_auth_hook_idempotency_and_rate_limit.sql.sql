@@ -22,8 +22,6 @@ CREATE INDEX IF NOT EXISTS idx_auth_hook_events_expires_at
   ON public.auth_hook_events (expires_at);
 
 -- ── Atomic reservation RPC ──────────────────────────────────────────────
--- Returns 'reserved' for first call, 'already_sent' if status=sent,
--- 'locked' if processing and lock valid, 'retry_allowed' if failed or lock expired.
 CREATE OR REPLACE FUNCTION public.reserve_auth_hook_event(p_webhook_id text)
 RETURNS text
 LANGUAGE plpgsql
@@ -33,7 +31,6 @@ AS $$
 DECLARE
   v_row public.auth_hook_events%ROWTYPE;
 BEGIN
-  -- Try atomic INSERT first (primary key collision = duplicate)
   BEGIN
     INSERT INTO public.auth_hook_events (webhook_id, status, locked_until, attempt_count)
     VALUES (p_webhook_id, 'processing', now() + interval '5 minutes', 1)
@@ -47,7 +44,6 @@ BEGIN
     RAISE;
   END;
 
-  -- Row exists — check current state
   SELECT * INTO v_row FROM public.auth_hook_events WHERE webhook_id = p_webhook_id FOR UPDATE;
 
   IF v_row.status = 'sent' THEN
@@ -58,7 +54,6 @@ BEGIN
     RETURN 'locked';
   END IF;
 
-  -- Either 'failed' or 'processing' with expired lock → allow retry
   UPDATE public.auth_hook_events
   SET status = 'processing',
       locked_until = now() + interval '5 minutes',
@@ -130,8 +125,7 @@ REVOKE ALL ON FUNCTION public.cleanup_auth_hook_events() FROM PUBLIC, anon, auth
 GRANT EXECUTE ON FUNCTION public.cleanup_auth_hook_events() TO service_role;
 
 -- ═══════════════════════════════════════════════════════════════════════
--- phone_otp_rate_limit — Atomic rate limiting for request-phone-login-otp
--- Uses pg_advisory_xact_lock for true atomicity under concurrent load
+-- phone_otp_rate_limit — Atomic rate limiting with advisory locks
 -- ═══════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS public.phone_otp_rate_limit (
@@ -152,11 +146,6 @@ CREATE INDEX IF NOT EXISTS idx_phone_otp_rl_ip_hash
   ON public.phone_otp_rate_limit (ip_hash, created_at);
 
 -- ── Atomic consume RPC with advisory locks ──────────────────────────────
--- Locks are acquired in deterministic order (phone first, then IP) to
--- prevent deadlocks. Both locks are transaction-scoped (released on
--- COMMIT/ROLLBACK), so they cannot leak across connections.
---
--- Returns JSON: {"allowed": true/false, "retry_after_seconds": N}
 CREATE OR REPLACE FUNCTION public.consume_phone_otp_rate_limit(
   p_phone_hash text,
   p_ip_hash text
@@ -171,7 +160,6 @@ DECLARE
   v_ip_count integer;
   v_window timestamptz := now() - interval '60 seconds';
 BEGIN
-  -- Acquire advisory locks in deterministic order to prevent deadlocks
   PERFORM pg_advisory_xact_lock(
     hashtextextended('phone:' || p_phone_hash, 0)
   );
@@ -180,7 +168,6 @@ BEGIN
     hashtextextended('ip:' || p_ip_hash, 0)
   );
 
-  -- Now safe to count + insert atomically within this transaction
   SELECT count(*) INTO v_phone_count
   FROM public.phone_otp_rate_limit
   WHERE phone_hash = p_phone_hash AND created_at >= v_window;
@@ -202,7 +189,6 @@ BEGIN
 
   RETURN json_build_object('allowed', true, 'retry_after_seconds', 0);
 EXCEPTION WHEN OTHERS THEN
-  -- Any DB error — fail-closed, never fail-open
   RETURN json_build_object('allowed', false, 'retry_after_seconds', 60);
 END;
 $$;

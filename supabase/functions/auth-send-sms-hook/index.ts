@@ -2,8 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 
-const HOOK_TIMEOUT_MS = 4000;
-const PROVIDER_TIMEOUT_MS = 3000;
+const HOOK_DEADLINE_MS = 4500;
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length <= 4) return "***";
@@ -17,6 +16,10 @@ function normalizeIranPhone(value?: string | null): string {
   if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
   if (/^9\d{9}$/.test(digits)) return `98${digits}`;
   return '';
+}
+
+function remainingMs(deadlineAt: number): number {
+  return Math.max(0, deadlineAt - Date.now());
 }
 
 function errorResponse(httpCode: number, message: string) {
@@ -34,10 +37,9 @@ function successResponse() {
 }
 
 Deno.serve(async (req: Request) => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HOOK_TIMEOUT_MS);
+  const deadlineAt = Date.now() + HOOK_DEADLINE_MS;
 
-  // ── 0. Build supabase client FIRST — before any use ────────────────────────
+  // ── 0. Build supabase client FIRST ───────────────────────────────────────
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -46,7 +48,16 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ── 1. Standard Webhook signature verification ───────────────────────────
-    const secret = Deno.env.get("SEND_SMS_HOOK_SECRET");
+    let secret = Deno.env.get("SEND_SMS_HOOK_SECRET") || "";
+    if (!secret) {
+      const { data: secretRow } = await supabase
+        .from("system_config")
+        .select("value")
+        .eq("section", "security")
+        .eq("key", "send_sms_hook_secret")
+        .maybeSingle();
+      secret = secretRow?.value || "";
+    }
     if (!secret) {
       console.log("[auth-send-sms-hook] SEND_SMS_HOOK_SECRET not configured");
       return errorResponse(500, "Hook secret not configured");
@@ -56,9 +67,8 @@ Deno.serve(async (req: Request) => {
     const rawBody = await req.text();
 
     const webhook = new Webhook(base64Secret);
-    let verified: unknown;
     try {
-      verified = webhook.verify(rawBody, Object.fromEntries(req.headers));
+      webhook.verify(rawBody, Object.fromEntries(req.headers));
     } catch {
       console.log("[auth-send-sms-hook] invalid webhook signature");
       return errorResponse(401, "Invalid signature");
@@ -113,7 +123,7 @@ Deno.serve(async (req: Request) => {
 
     if (reservation === "locked") {
       console.log("[auth-send-sms-hook] webhook-id locked (processing):", webhookId);
-      return successResponse();
+      return errorResponse(503, "Request already processing");
     }
 
     // reservation === 'reserved' or 'retry_allowed' → proceed
@@ -197,9 +207,17 @@ Deno.serve(async (req: Request) => {
       return errorResponse(400, "Invalid phone format");
     }
 
-    // ── 10. Dispatch via send-sms engine (auth_otp mode, single hop) ──────────
+    // ── 10. Check deadline before dispatching to provider ────────────────────
+    const timeoutMs = Math.min(2500, remainingMs(deadlineAt) - 300);
+    if (timeoutMs <= 0) {
+      console.log("[auth-send-sms-hook] hook deadline exceeded before provider dispatch");
+      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "DEADLINE_EXCEEDED" });
+      return errorResponse(504, "Hook deadline exceeded");
+    }
+
+    // ── 11. Dispatch via send-sms engine (auth_otp mode, single hop) ──────────
     const providerController = new AbortController();
-    const providerTimer = setTimeout(() => providerController.abort(), PROVIDER_TIMEOUT_MS);
+    const providerTimer = setTimeout(() => providerController.abort(), timeoutMs);
 
     try {
       const sendResp = await fetch(
@@ -221,7 +239,6 @@ Deno.serve(async (req: Request) => {
       );
 
       clearTimeout(providerTimer);
-      clearTimeout(timer);
       const result = await sendResp.json();
 
       if (!result.ok) {
@@ -241,7 +258,13 @@ Deno.serve(async (req: Request) => {
       }
 
       // Mark as sent
-      await supabase.rpc("complete_auth_hook_event", { p_webhook_id: webhookId });
+      const { error: completeErr } = await supabase.rpc(
+        "complete_auth_hook_event",
+        { p_webhook_id: webhookId },
+      );
+      if (completeErr) {
+        console.log("[auth-send-sms-hook] complete_auth_hook_event RPC failed:", completeErr.message);
+      }
 
       await supabase.from("sms_dispatch_logs").insert({
         target_phone: normalizedPhone,
@@ -260,7 +283,6 @@ Deno.serve(async (req: Request) => {
 
     } catch (providerErr: any) {
       clearTimeout(providerTimer);
-      clearTimeout(timer);
       const isTimeout = providerErr?.name === "AbortError";
       console.log("[auth-send-sms-hook] provider error:", isTimeout ? "timeout" : "error");
       await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: isTimeout ? "PROVIDER_TIMEOUT" : "PROVIDER_EXCEPTION" });
@@ -268,7 +290,6 @@ Deno.serve(async (req: Request) => {
     }
 
   } catch (err: any) {
-    clearTimeout(timer);
     const isTimeout = err?.name === "AbortError";
     console.log("[auth-send-sms-hook] error:", isTimeout ? "timeout" : "internal_error");
     return errorResponse(isTimeout ? 504 : 500, isTimeout ? "Hook timeout" : "Internal error");

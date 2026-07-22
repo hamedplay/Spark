@@ -89,6 +89,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     let mode: string = body.mode || "send";
     let providerId: string | undefined = body.providerId;
+    const isAuthOtp = mode === 'auth_otp';
 
     // test_connection and provider management require admin
     if (mode === "test_connection" && !caller.isAdmin) {
@@ -246,7 +247,7 @@ Deno.serve(async (req: Request) => {
       if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" }, 400);
       // Rewrite mode to 'send' and fall through to provider logic below
       mode = "send";
-      // Keep providerId from the auth_otp request — it's already set above
+      // isAuthOtp is already captured above; providerId is already set
     }
 
     // ── MODE: external ─────────────────────────────────────────────────────────
@@ -417,7 +418,8 @@ Deno.serve(async (req: Request) => {
         method: "GET" | "POST" = "GET",
       ): Promise<{ ok: boolean; status: number; body: string; durationMs: number; t0: number; error?: string }> => {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 13000);
+        const restTimeoutMs = isAuthOtp ? 2500 : 13000;
+        const timer = setTimeout(() => controller.abort(), restTimeoutMs);
         const t0 = Date.now();
         try {
           let fetchUrl = url;
@@ -437,7 +439,7 @@ Deno.serve(async (req: Request) => {
         } catch (e: unknown) {
           clearTimeout(timer);
           const msg = (e instanceof Error && (e as Error & { name?: string }).name === "AbortError")
-            ? "اتصال timeout شد (13s)"
+            ? `اتصال timeout شد (${restTimeoutMs}ms)`
             : (e instanceof Error ? e.message : String(e));
           return { ok: false, status: 0, body: "", durationMs: Date.now() - t0, t0, error: msg };
         }
@@ -1085,6 +1087,9 @@ Deno.serve(async (req: Request) => {
     const sendReqTimestamp = new Date().toISOString();
     const sendT0 = Date.now();
 
+    const restProviderTimeoutMs = isAuthOtp ? 2500 : 13000;
+    const restController = new AbortController();
+    const restTimer = setTimeout(() => restController.abort(), restProviderTimeoutMs);
     let smsRaw: Response;
     try {
       smsRaw = await fetch(sendReqUrl, {
@@ -1095,8 +1100,11 @@ Deno.serve(async (req: Request) => {
           "X-API-KEY": apiKey,
         },
         body: sendReqBody,
+        signal: restController.signal,
       });
+      clearTimeout(restTimer);
     } catch (e: any) {
+      clearTimeout(restTimer);
       const durationMs = Date.now() - sendT0;
       const debugEntry = {
         soapAction: "POST /v1/send/likeToLike",

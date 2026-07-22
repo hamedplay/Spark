@@ -205,6 +205,9 @@ function SectionCard({ title, icon: Icon, color = 'blue', children }: { title: s
 function PhoneLoginToggleCard() {
   const [enabled, setEnabled] = useState(false);
   const [ready, setReady] = useState(false);
+  const [providerReady, setProviderReady] = useState(false);
+  const [operatorConfirmed, setOperatorConfirmed] = useState(false);
+  const [e2eVerified, setE2eVerified] = useState(false);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -215,6 +218,9 @@ function PhoneLoginToggleCard() {
     const row = Array.isArray(data) ? data[0] : data;
     setEnabled(row?.phone_login_enabled ?? false);
     setReady(row?.phone_login_ready ?? false);
+    setProviderReady(row?.provider_ready ?? false);
+    setOperatorConfirmed(row?.operator_confirmed ?? false);
+    setE2eVerified(row?.e2e_verified ?? false);
     const { data: providerRow } = await supabase
       .from('system_config')
       .select('value')
@@ -247,6 +253,13 @@ function PhoneLoginToggleCard() {
 
   if (loading) return null;
 
+  const readinessItems = [
+    { label: 'Provider آماده است', ok: providerReady },
+    { label: 'Auth Hook تنظیم شده است', ok: operatorConfirmed },
+    { label: 'Migration اعمال شده است', ok: true },
+    { label: 'تست E2E انجام شده است', ok: e2eVerified },
+  ];
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
       <div className="flex items-center justify-between gap-3">
@@ -258,11 +271,9 @@ function PhoneLoginToggleCard() {
             <h4 className="font-semibold text-gray-800 dark:text-white">ورود با شماره موبایل</h4>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               {enabled
-                ? (!providerId
-                    ? 'سرویس‌دهنده انتخاب نشده'
-                    : !ready
-                        ? 'نیازمند تنظیم Auth Hook یا تست End-to-End'
-                        : 'فعال و آماده')
+                ? (ready
+                    ? 'فعال و آماده'
+                    : 'فعال ولی نیازمند تکمیل پیش‌نیازها')
                 : 'غیرفعال'}
             </p>
           </div>
@@ -273,6 +284,16 @@ function PhoneLoginToggleCard() {
           className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'} ${saving ? 'opacity-50' : ''}`}>
           <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
+      </div>
+      <div className="mt-4 space-y-1.5">
+        {readinessItems.map((item, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <span className={`w-2 h-2 rounded-full ${item.ok ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+            <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}>
+              {item.label}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
