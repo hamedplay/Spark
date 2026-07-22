@@ -215,6 +215,10 @@ const HIDDEN_SECURITY_CONFIG_KEYS = new Set([
   'phone_login_otp_ttl_operator_confirmed',
   'phone_password_recovery_enabled',
   'phone_password_recovery_e2e_verified',
+  'phone_password_recovery_test_mode',
+  'phone_password_recovery_test_phone',
+  'phone_password_recovery_secret_operator_confirmed',
+  'phone_password_recovery_otp_ttl_seconds',
 ]);
 
 // ─── Phone Login Toggle Card (security section) ─────────────────────────────
@@ -497,9 +501,10 @@ function PhoneLoginToggleCard() {
 function PasswordRecoveryCard() {
   const [enabled, setEnabled] = useState(false);
   const [ready, setReady] = useState(false);
+  const [testReady, setTestReady] = useState(false);
+  const [testMode, setTestMode] = useState(false);
   const [providerReady, setProviderReady] = useState(false);
-  const [operatorConfirmed, setOperatorConfirmed] = useState(false);
-  const [otpTtlConfirmed, setOtpTtlConfirmed] = useState(false);
+  const [secretConfirmed, setSecretConfirmed] = useState(false);
   const [e2eVerified, setE2eVerified] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -509,15 +514,15 @@ function PasswordRecoveryCard() {
     setLoading(true);
     const { data } = await supabase.rpc('get_public_auth_config');
     const row = Array.isArray(data) ? data[0] : data;
-    setEnabled(row?.phone_password_recovery_ready ?? false);
+    setEnabled(row?.phone_password_recovery_enabled ?? false);
     setReady(row?.phone_password_recovery_ready ?? false);
+    setTestReady(row?.phone_password_recovery_test_ready ?? false);
+    setTestMode(row?.phone_password_recovery_test_mode ?? false);
     setProviderReady(row?.provider_ready ?? false);
-    setOperatorConfirmed(row?.operator_confirmed ?? false);
-    setOtpTtlConfirmed(row?.otp_ttl_operator_confirmed ?? false);
-    // Check e2e_verified for recovery
+    const { data: secretRow } = await supabase.from('system_config').select('value').eq('section', 'security').eq('key', 'phone_password_recovery_secret_operator_confirmed').maybeSingle();
+    setSecretConfirmed(secretRow?.value === 'true');
     const { data: e2eRow } = await supabase.from('system_config').select('value').eq('section', 'security').eq('key', 'phone_password_recovery_e2e_verified').maybeSingle();
     setE2eVerified(e2eRow?.value === 'true');
-    // Check admin
     const { data: userData } = await supabase.auth.getUser();
     if (userData?.user) {
       const { data: profile } = await supabase.from('profiles').select('is_admin').eq('user_id', userData.user.id).maybeSingle();
@@ -536,12 +541,11 @@ function PasswordRecoveryCard() {
       const errMap: Record<string, string> = {
         NOT_AUTHENTICATED: 'احراز هویت نشده',
         NOT_ADMIN: 'فقط ادمین می‌تواند',
-        PROVIDER_REQUIRED: 'سرویس‌دهنده انتخاب نشده',
         PROVIDER_NOT_READY: 'سرویس‌دهنده فعال نیست',
-        HOOK_NOT_CONFIRMED: 'Auth Hook تأیید نشده',
-        TTL_NOT_CONFIRMED: 'TTL تأیید نشده',
-        INVALID_TTL: 'TTL نامعتبر',
+        TEMPLATE_NOT_READY: 'قالب پیامک بازیابی ساخته نشده',
+        SECRET_NOT_CONFIRMED: 'Secret بازیابی تأیید نشده',
         E2E_NOT_VERIFIED: 'تست E2E بازیابی انجام نشده',
+        INVALID_TTL: 'TTL نامعتبر',
       };
       toast.error(errMap[row?.error] || error?.message || 'خطا');
       setSaving(false);
@@ -557,8 +561,8 @@ function PasswordRecoveryCard() {
 
   const items = [
     { label: providerReady ? 'Provider آماده' : 'Provider آماده نیست', ok: providerReady },
-    { label: operatorConfirmed ? 'Auth Hook تأیید شده' : 'Auth Hook تأیید نشده', ok: operatorConfirmed },
-    { label: otpTtlConfirmed ? 'TTL تأیید شده' : 'TTL تأیید نشده', ok: otpTtlConfirmed },
+    { label: secretConfirmed ? 'Secret بازیابی تأیید شده' : 'Secret بازیابی تأیید نشده', ok: secretConfirmed },
+    { label: testReady ? 'پیش‌نیازهای تست آماده' : 'پیش‌نیازهای تست آماده نیست', ok: testReady },
     { label: e2eVerified ? 'تست E2E بازیابی رمز موفق' : 'تست E2E بازیابی رمز انجام نشده', ok: e2eVerified },
     { label: enabled ? 'بازیابی رمز موبایلی فعال' : 'بازیابی رمز موبایلی غیرفعال', ok: enabled, neutral: true },
   ];

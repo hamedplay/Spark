@@ -18,6 +18,9 @@ interface PublicAuthConfig {
   phone_login_ready: boolean;
   phone_login_test_mode: boolean;
   phone_login_test_ready: boolean;
+  phone_password_recovery_ready: boolean;
+  phone_password_recovery_test_mode: boolean;
+  phone_password_recovery_test_ready: boolean;
 }
 
 export function AuthPage({ onSuccess }: AuthPageProps) {
@@ -44,8 +47,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   useEffect(() => {
     supabase.rpc('get_public_auth_config').then(({ data }) => {
       const row = Array.isArray(data) ? data[0] : data;
-      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false });
-    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false }));
+      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false });
+    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false }));
   }, []);
 
   // Email/password form
@@ -59,7 +62,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [countdown, setCountdown] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
 
-  // ── Password recovery state (independent from login OTP) ────────────
+  // ── Password recovery state (scoped challenge, no Supabase session) ─
   const [recoveryStep, setRecoveryStep] = useState<PasswordRecoveryStep>('phone');
   const [recoveryPhone, setRecoveryPhone] = useState('');
   const [recoveryOtp, setRecoveryOtp] = useState('');
@@ -68,6 +71,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [recoveryCountdown, setRecoveryCountdown] = useState(0);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryShowPassword, setRecoveryShowPassword] = useState(false);
+  const [recoveryChallengeId, setRecoveryChallengeId] = useState<string | null>(null);
+  const [recoveryResetToken, setRecoveryResetToken] = useState<string | null>(null);
 
   useEffect(() => {
     testSupabaseConnection().then(ok => setConnectionStatus(ok ? 'connected' : 'disconnected')).catch(() => setConnectionStatus('disconnected'));
@@ -170,103 +175,100 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     finally { setLoading(false); }
   };
 
+  // ── Check if recovery form should be shown ──────────────────────────────────
+  const isRecoveryAvailable = authConfig?.phone_password_recovery_ready === true
+    || (authConfig?.phone_password_recovery_test_mode === true
+        && authConfig?.phone_password_recovery_test_ready === true);
+
   // ── Password recovery: request OTP via edge function ───────────────────────
   const handleRequestPasswordResetOtp = async () => {
     if (!recoveryPhone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
     const normalized = normalizeIranPhone(recoveryPhone);
     if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
     setRecoveryLoading(true);
-    sessionStorage.setItem('spark-phone-password-recovery', 'true');
     try {
-      await supabase.functions.invoke('request-phone-password-reset-otp', {
+      const { data, error } = await supabase.functions.invoke('request-phone-password-reset-otp', {
         body: { phone: recoveryPhone },
       });
+      // Always store challenge_id (real or decoy) — response is identical
+      const challengeId = data?.challenge_id || crypto.randomUUID();
+      setRecoveryChallengeId(challengeId);
     } catch {
-      // Same generic message on error
+      // Generate a decoy challenge_id so the flow looks identical
+      setRecoveryChallengeId(crypto.randomUUID());
     } finally {
       setRecoveryLoading(false);
     }
-    // Always proceed to OTP step with generic message
     setRecoveryStep('otp');
     setRecoveryCountdown(60);
     toast.success('اگر شماره واردشده متعلق به یک حساب فعال باشد، کد بازیابی ارسال می‌شود.');
   };
 
-  // ── Password recovery: verify OTP ──────────────────────────────────────────
+  // ── Password recovery: verify OTP via edge function ─────────────────────────
   const handleRecoveryVerifyOtp = async () => {
     if (!recoveryOtp.trim() || recoveryOtp.length < 4) { toast.error('کد تأیید را وارد کنید'); return; }
-    const normalized = normalizeIranPhone(recoveryPhone);
-    if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
-    const e164 = `+${normalized}`;
+    if (!recoveryChallengeId) { toast.error('خطا در فرآیند بازیابی. لطفاً دوباره تلاش کنید.'); return; }
     setRecoveryLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({ phone: e164, token: recoveryOtp, type: 'sms' });
-      if (error || !data.user) {
-        toast.error('کد نادرست است یا منقضی شده');
+      const { data, error } = await supabase.functions.invoke('verify-phone-password-reset-otp', {
+        body: { challenge_id: recoveryChallengeId, otp: recoveryOtp },
+      });
+      if (error || !data?.ok) {
+        toast.error(data?.error === 'OTP_EXPIRED' ? 'کد منقضی شده است'
+          : data?.error === 'MAX_ATTEMPTS_EXCEEDED' ? 'تعداد تلاش‌ها بیش از حد مجاز'
+          : data?.error === 'CHALLENGE_LOCKED' ? 'چالش قفل شده است'
+          : 'کد نادرست است یا منقضی شده');
         return;
       }
-      // Validate profile exists and is active
-      const { data: profileData } = await supabase.from('profiles').select('user_id, phone, is_active').eq('user_id', data.user.id).maybeSingle();
-      if (!profileData) {
-        await supabase.auth.signOut();
-        toast.error('خطا در تأیید حساب. لطفاً دوباره تلاش کنید.', { duration: 6000 });
-        return;
-      }
-      if (profileData.is_active !== true) {
-        await supabase.auth.signOut();
-        toast.error('خطا در تأیید حساب. لطفاً دوباره تلاش کنید.', { duration: 6000 });
-        return;
-      }
-      // Compare normalized phone numbers
-      const authPhone = normalizeIranPhone(data.user.phone);
-      const profilePhone = normalizeIranPhone(profileData.phone);
-      if (!authPhone || !profilePhone || authPhone !== profilePhone) {
-        await supabase.auth.signOut();
-        toast.error('خطا در تأیید حساب. لطفاً دوباره تلاش کنید.', { duration: 6000 });
-        return;
-      }
-      // Success — proceed to new password step (do NOT call onSuccess)
+      // Store reset token in memory only (not localStorage)
+      setRecoveryResetToken(data.reset_token);
       setRecoveryStep('new_password');
     } catch {
       toast.error('خطا در تأیید کد');
     } finally { setRecoveryLoading(false); }
   };
 
-  // ── Password recovery: set new password ─────────────────────────────────────
+  // ── Password recovery: set new password via edge function ────────────────────
   const handleRecoverySetPassword = async () => {
     if (recoveryPassword.length < 8) { toast.error('رمز عبور باید حداقل ۸ کاراکتر باشد'); return; }
     if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(recoveryPassword)) { toast.error('رمز عبور باید شامل حروف و عدد باشد'); return; }
     if (recoveryPassword !== recoveryConfirmPassword) { toast.error('رمز عبور و تکرار آن مطابقت ندارند'); return; }
+    if (!recoveryChallengeId || !recoveryResetToken) { toast.error('خطا در فرآیند بازیابی. لطفاً دوباره تلاش کنید.'); return; }
     setRecoveryLoading(true);
     try {
-      const { data: { user }, error } = await supabase.auth.updateUser({ password: recoveryPassword });
-      if (error) { toast.error(handleSupabaseError(error).message); return; }
-      if (user) {
-        logAudit({ module: 'auth', action: 'phone_password_recovery', entity_name: 'user', entity_id: user.id, details: 'بازیابی رمز با شماره موبایل', severity: 'info' });
+      const { data, error } = await supabase.functions.invoke('complete-phone-password-reset', {
+        body: { challenge_id: recoveryChallengeId, reset_token: recoveryResetToken, new_password: recoveryPassword },
+      });
+      if (error || !data?.ok) {
+        toast.error(data?.error === 'RESET_TOKEN_EXPIRED' ? 'زمان بازیابی منقضی شده. لطفاً دوباره تلاش کنید.'
+          : data?.error === 'MAX_ATTEMPTS_EXCEEDED' ? 'تعداد تلاش‌ها بیش از حد مجاز'
+          : data?.error === 'PASSWORD_TOO_SHORT' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد'
+          : data?.error === 'PASSWORD_WEAK' ? 'رمز عبور باید شامل حروف و عدد باشد'
+          : 'خطا در تغییر رمز عبور');
+        return;
       }
-      // Sign out immediately — user must log in with new password
-      await supabase.auth.signOut();
-      sessionStorage.removeItem('spark-phone-password-recovery');
-      // Clear all recovery state
+      // Clear all sensitive state
       setRecoveryPhone('');
       setRecoveryOtp('');
       setRecoveryPassword('');
       setRecoveryConfirmPassword('');
+      setRecoveryChallengeId(null);
+      setRecoveryResetToken(null);
       setRecoveryStep('success');
       toast.success('رمز عبور با موفقیت تغییر کرد. اکنون با رمز جدید وارد شوید.');
-    } catch (err: any) {
-      toast.error(handleSupabaseError(err).message);
+    } catch {
+      toast.error('خطا در تغییر رمز عبور');
     } finally { setRecoveryLoading(false); }
   };
 
   // ── Password recovery: cancel ───────────────────────────────────────────────
-  const handleRecoveryCancel = async () => {
-    try { await supabase.auth.signOut(); } catch { /* ignore */ }
-    sessionStorage.removeItem('spark-phone-password-recovery');
+  const handleRecoveryCancel = () => {
     setRecoveryPhone('');
     setRecoveryOtp('');
     setRecoveryPassword('');
     setRecoveryConfirmPassword('');
+    setRecoveryChallengeId(null);
+    setRecoveryResetToken(null);
     setRecoveryStep('phone');
     setRecoveryCountdown(0);
     setMode('login');
@@ -569,8 +571,19 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
               </form>
             )}
 
-            {/* ── Password recovery (phone OTP) ─────────────────────── */}
-            {mode === 'reset' && recoveryStep === 'phone' && (
+            {/* ── Password recovery (scoped challenge) ──────────────────── */}
+            {mode === 'reset' && !isRecoveryAvailable && (
+              <div className="space-y-4 text-center">
+                <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl p-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">بازیابی رمز با موبایل در حال حاضر فعال نیست.</p>
+                </div>
+                <button type="button" onClick={() => setMode('login')} className="w-full text-sm text-teal-600 dark:text-teal-400 hover:underline pt-1">
+                  <span className="flex items-center justify-center gap-1"><ChevronRight className="w-4 h-4" />بازگشت به ورود</span>
+                </button>
+              </div>
+            )}
+
+            {mode === 'reset' && isRecoveryAvailable && recoveryStep === 'phone' && (
               <div className="space-y-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400 text-center">بازیابی رمز عبور<br />شماره موبایل خود را وارد کنید تا کد تأیید برایتان ارسال شود.</p>
                 <div>
