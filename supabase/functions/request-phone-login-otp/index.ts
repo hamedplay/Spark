@@ -10,7 +10,6 @@ function normalizeIranPhone(value?: string | null): string {
   return '';
 }
 
-// ── HMAC-SHA256 with server-side pepper ────────────────────────────────────
 async function hmacHash(value: string, pepper: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -23,7 +22,6 @@ async function hmacHash(value: string, pepper: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-// ── Trusted gateway IP extraction (IPv4 + IPv6) ────────────────────────────
 function getClientIP(req: Request): string {
   const xff = req.headers.get("x-forwarded-for") || "";
   const first = xff.split(",")[0]?.trim();
@@ -33,7 +31,6 @@ function getClientIP(req: Request): string {
   return "unknown";
 }
 
-// ── CORS helpers ───────────────────────────────────────────────────────────
 function corsHeaders(allowedOrigin: string | null): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": allowedOrigin || "null",
@@ -42,7 +39,6 @@ function corsHeaders(allowedOrigin: string | null): Record<string, string> {
   };
 }
 
-// ── Consistent timing: 5200–5400ms total ────────────────────────────────────
 const TARGET_MIN_MS = 5200;
 const TARGET_MAX_MS = 5400;
 
@@ -79,19 +75,10 @@ Deno.serve(async (req: Request) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  // ── Resolve allowed origins (env var first, then system_config) ──────────
+  // ── Resolve allowed origins (env var only) ────────────────────────────────
   let allowedOrigin: string | null = null;
   try {
-    let allowedStr = Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") || "";
-    if (!allowedStr) {
-      const { data } = await supabase
-        .from("system_config")
-        .select("value")
-        .eq("section", "security")
-        .eq("key", "phone_login_allowed_origins")
-        .maybeSingle();
-      allowedStr = data?.value || "";
-    }
+    const allowedStr = Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") || "";
     const allowed = allowedStr.split(",").map(s => s.trim()).filter(Boolean);
     const origin = req.headers.get("Origin") || "";
     if (origin && allowed.includes(origin)) allowedOrigin = origin;
@@ -99,7 +86,6 @@ Deno.serve(async (req: Request) => {
 
   const cors = corsHeaders(allowedOrigin);
 
-  // ── OPTIONS preflight ─────────────────────────────────────────────────────
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: cors });
   }
@@ -121,18 +107,53 @@ Deno.serve(async (req: Request) => {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
 
-    // ── Check phone_login_enabled + ready ────────────────────────────────────
+    // ── Check auth config (public + test readiness) ──────────────────────────
     const { data: cfgRow, error: cfgErr } = await supabase.rpc("get_public_auth_config");
     if (cfgErr) {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
     const cfg = Array.isArray(cfgRow) ? cfgRow[0] : cfgRow;
-    const ready = cfg?.phone_login_ready === true;
-    if (!ready) {
+    const publicReady = cfg?.phone_login_ready === true;
+    const testReady = cfg?.phone_login_test_ready === true;
+
+    // ── Determine if this request is allowed ──────────────────────────────────
+    let allowDispatch = false;
+
+    if (publicReady) {
+      // Public mode: all valid phones allowed
+      allowDispatch = true;
+    } else if (testReady) {
+      // Test mode: only the designated test phone is allowed
+      const { data: testModeRow } = await supabase
+        .from("system_config")
+        .select("value")
+        .eq("section", "security")
+        .eq("key", "phone_login_test_mode")
+        .maybeSingle();
+      const testModeEnabled = testModeRow?.value === "true";
+
+      if (testModeEnabled) {
+        const { data: testPhoneRow } = await supabase
+          .from("system_config")
+          .select("value")
+          .eq("section", "security")
+          .eq("key", "phone_login_test_phone")
+          .maybeSingle();
+        const testPhone = testPhoneRow?.value || "";
+        const normalizedTestPhone = normalizeIranPhone(testPhone);
+
+        if (normalizedTestPhone && normalized === normalizedTestPhone) {
+          allowDispatch = true;
+        }
+      }
+    }
+
+    if (!allowDispatch) {
+      // Generic response — no information leak
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
 
-    // ── Resolve pepper (env var only — never from DB) ───────────────────────
+    // ── Resolve pepper (env var only — never from DB or vault) ────────────────
     const pepper = Deno.env.get("PHONE_RATE_LIMIT_PEPPER") || "";
     if (!pepper || pepper.length < 32) {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);

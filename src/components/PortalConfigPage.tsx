@@ -209,18 +209,26 @@ const HIDDEN_SECURITY_CONFIG_KEYS = new Set([
   'send_sms_hook_secret',
   'phone_rate_limit_pepper',
   'phone_login_allowed_origins',
+  'phone_login_test_mode',
+  'phone_login_test_phone',
 ]);
 
 // ─── Phone Login Toggle Card (security section) ─────────────────────────────
 function PhoneLoginToggleCard() {
   const [enabled, setEnabled] = useState(false);
   const [ready, setReady] = useState(false);
+  const [testReady, setTestReady] = useState(false);
   const [providerReady, setProviderReady] = useState(false);
   const [operatorConfirmed, setOperatorConfirmed] = useState(false);
   const [e2eVerified, setE2eVerified] = useState(false);
+  const [testMode, setTestMode] = useState(false);
+  const [testPhone, setTestPhone] = useState('');
+  const [testPhoneInput, setTestPhoneInput] = useState('');
   const [providerId, setProviderId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingTest, setSavingTest] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -228,6 +236,7 @@ function PhoneLoginToggleCard() {
     const row = Array.isArray(data) ? data[0] : data;
     setEnabled(row?.phone_login_enabled ?? false);
     setReady(row?.phone_login_ready ?? false);
+    setTestReady(row?.phone_login_test_ready ?? false);
     setProviderReady(row?.provider_ready ?? false);
     setOperatorConfirmed(row?.operator_confirmed ?? false);
     setE2eVerified(row?.e2e_verified ?? false);
@@ -238,6 +247,31 @@ function PhoneLoginToggleCard() {
       .eq('key', 'phone_login_sms_provider_id')
       .maybeSingle();
     setProviderId(providerRow?.value ?? null);
+    const { data: tmRow } = await supabase
+      .from('system_config')
+      .select('value')
+      .eq('section', 'security')
+      .eq('key', 'phone_login_test_mode')
+      .maybeSingle();
+    setTestMode(tmRow?.value === 'true');
+    const { data: tpRow } = await supabase
+      .from('system_config')
+      .select('value')
+      .eq('section', 'security')
+      .eq('key', 'phone_login_test_phone')
+      .maybeSingle();
+    setTestPhone(tpRow?.value || '');
+    setTestPhoneInput(tpRow?.value || '');
+    // Check admin status
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('user_id', userData.user.id)
+        .maybeSingle();
+      setIsAdmin(profile?.is_admin === true);
+    }
     setLoading(false);
   }, []);
 
@@ -256,18 +290,59 @@ function PhoneLoginToggleCard() {
       return;
     }
     setEnabled(v);
-    setReady(v && providerId !== null);
+    setReady(v && testReady && e2eVerified);
     setSaving(false);
     toast.success(v ? 'ورود با موبایل فعال شد' : 'ورود با موبایل غیرفعال شد');
+  };
+
+  const handleTestModeToggle = async (v: boolean) => {
+    if (v && !testReady) {
+      toast.error('پیش‌نیازهای تست آماده نیست (Provider یا Auth Hook)');
+      return;
+    }
+    if (v && !testPhoneInput) {
+      toast.error('شماره تست وارد کنید');
+      return;
+    }
+    setSavingTest(true);
+    const { data, error } = await supabase.rpc('set_phone_login_test_mode', {
+      p_test_mode: v,
+      p_test_phone: v ? testPhoneInput : null,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.success !== true || error) {
+      const errMap: Record<string, string> = {
+        NOT_AUTHENTICATED: 'احراز هویت نشده',
+        NOT_ADMIN: 'فقط ادمین می‌تواند',
+        NO_PROVIDER: 'سرویس‌دهنده انتخاب نشده',
+        PROVIDER_NOT_READY: 'سرویس‌دهنده فعال نیست',
+        OPERATOR_NOT_CONFIRMED: 'Auth Hook تأیید نشده',
+        INVALID_PHONE: 'شماره نامعتبر',
+        PHONE_NOT_IN_ACTIVE_PROFILE: 'شماره در پروفایل فعال نیست',
+        PHONE_NOT_IN_AUTH: 'شماره در Auth نیست',
+        PHONE_DUPLICATE: 'شماره تکراری است',
+        AUTH_PROFILE_MISMATCH: 'عدم تطابق Auth و Profile',
+      };
+      toast.error(errMap[row?.error] || error?.message || 'خطا');
+      setSavingTest(false);
+      return;
+    }
+    setTestMode(v);
+    setTestPhone(v ? testPhoneInput : '');
+    setSavingTest(false);
+    toast.success(v ? 'حالت تست فعال شد' : 'حالت تست غیرفعال شد');
+    logAudit({ module: 'security', action: v ? 'test_mode_enabled' : 'test_mode_disabled', entity_name: testPhoneInput, severity: 'warning' });
   };
 
   if (loading) return null;
 
   const readinessItems = [
-    { label: 'Provider آماده است', ok: providerReady },
-    { label: 'Auth Hook تنظیم شده است', ok: operatorConfirmed },
-    { label: 'Migration اعمال شده است', ok: true },
-    { label: 'تست E2E انجام شده است', ok: e2eVerified },
+    { label: 'Provider آماده', ok: providerReady },
+    { label: 'Edge Function Secrets تأیید نشده', ok: false },
+    { label: 'Auth Hook تأیید نشده', ok: operatorConfirmed },
+    { label: 'حالت تست غیرفعال', ok: !testMode, neutral: true },
+    { label: 'تست E2E انجام نشده', ok: e2eVerified, neutral: true },
+    { label: 'ورود عمومی غیرفعال', ok: false, neutral: true },
   ];
 
   return (
@@ -280,11 +355,7 @@ function PhoneLoginToggleCard() {
           <div>
             <h4 className="font-semibold text-gray-800 dark:text-white">ورود با شماره موبایل</h4>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {enabled
-                ? (ready
-                    ? 'فعال و آماده'
-                    : 'فعال ولی نیازمند تکمیل پیش‌نیازها')
-                : 'غیرفعال'}
+              {ready ? 'فعال و آماده' : 'غیرفعال'}
             </p>
           </div>
         </div>
@@ -298,13 +369,40 @@ function PhoneLoginToggleCard() {
       <div className="mt-4 space-y-1.5">
         {readinessItems.map((item, i) => (
           <div key={i} className="flex items-center gap-2 text-xs">
-            <span className={`w-2 h-2 rounded-full ${item.ok ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+            <span className={`w-2 h-2 rounded-full ${item.ok ? 'bg-green-500' : item.neutral ? 'bg-gray-300 dark:bg-gray-600' : 'bg-amber-400'}`} />
             <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}>
               {item.label}
             </span>
           </div>
         ))}
       </div>
+      {isAdmin && (
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">حالت تست ورود موبایلی</p>
+              <p className="text-xs text-gray-400">فقط برای شماره تعیین‌شده OTP ارسال می‌کند</p>
+            </div>
+            <button
+              onClick={() => handleTestModeToggle(!testMode)}
+              disabled={savingTest || !testReady}
+              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${testMode ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'} ${(savingTest || !testReady) ? 'opacity-50' : ''}`}>
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${testMode ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">شماره مجاز برای تست</label>
+            <input
+              type="tel"
+              value={testPhoneInput}
+              onChange={e => setTestPhoneInput(e.target.value)}
+              disabled={testMode}
+              placeholder="09xxxxxxxxx"
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors disabled:opacity-50"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

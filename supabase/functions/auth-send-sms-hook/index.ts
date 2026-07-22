@@ -248,14 +248,37 @@ Deno.serve(async (req: Request) => {
         return errorResponse(502, "SMS dispatch failed");
       }
 
-      // Mark as sent — if complete RPC fails, mark as sent_unconfirmed
+      // Mark as sent — if complete RPC fails, try sent_unconfirmed.
+      // If both RPCs fail, return success anyway so GoTrue does NOT retry
+      // (preventing duplicate SMS). The event stays in 'processing' with
+      // its 5-minute lock, so a retry before lock expiry returns 'locked'.
+      // Exactly-once for an external provider is not absolute, but
+      // immediate duplicate delivery is controlled.
       const { error: completeErr } = await supabase.rpc(
         "complete_auth_hook_event",
         { p_webhook_id: webhookId },
       );
       if (completeErr) {
-        console.log("[auth-send-sms-hook] complete_auth_hook_event RPC failed, marking sent_unconfirmed:", completeErr.message);
-        await supabase.rpc("mark_sent_unconfirmed_auth_hook_event", { p_webhook_id: webhookId });
+        console.log("[auth-send-sms-hook] complete_auth_hook_event failed, attempting sent_unconfirmed");
+        const { error: markErr } = await supabase.rpc(
+          "mark_sent_unconfirmed_auth_hook_event",
+          { p_webhook_id: webhookId },
+        );
+        if (markErr) {
+          // Both RPCs failed — log operational error (no OTP, no full phone)
+          // and return success so GoTrue does not retry.
+          console.log("[auth-send-sms-hook] both complete and mark RPCs failed; event remains processing with lock");
+          await supabase.from("sms_dispatch_logs").insert({
+            target_phone: "[REDACTED]",
+            category: "auth",
+            event_type: "login_otp",
+            audience: "all",
+            message: "[AUTH_OTP_REDACTED]",
+            status: "sent_unconfirmed",
+            error_text: "COMPLETE_AND_MARK_RPC_FAILED",
+            provider_id: providerId,
+          });
+        }
       }
 
       await supabase.from("sms_dispatch_logs").insert({
