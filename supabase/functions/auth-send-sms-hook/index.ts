@@ -102,6 +102,11 @@ Deno.serve(async (req: Request) => {
       return errorResponse(500, "Idempotency check failed");
     }
 
+    if (reservation === "config_error") {
+      console.log("[auth-send-sms-hook] idempotency config error, fail-closed");
+      return errorResponse(500, "Idempotency config error");
+    }
+
     if (reservation === "already_sent") {
       console.log("[auth-send-sms-hook] duplicate webhook-id already sent:", webhookId);
       return successResponse();
@@ -248,10 +253,8 @@ Deno.serve(async (req: Request) => {
           { p_webhook_id: webhookId },
         );
         if (markErr) {
-          // Both RPCs failed — event stays in 'processing' with its 12-minute lock.
+          // Both RPCs failed — event stays in 'processing' with its TTL-based lock.
           // Return success so GoTrue does NOT retry (preventing duplicate SMS).
-          // Exactly-once for an external provider is not absolute, but
-          // immediate duplicate delivery is controlled.
           console.log("[auth-send-sms-hook] both complete and mark RPCs failed; event remains processing with lock");
           finalDispatchStatus = 'sent_unconfirmed';
         } else {
@@ -260,7 +263,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // ── Single dispatch log insert ──────────────────────────────────────
-      await supabase.from("sms_dispatch_logs").insert({
+      const { error: logError } = await supabase.from("sms_dispatch_logs").insert({
         target_phone: normalizedPhone,
         category: "auth",
         event_type: "login_otp",
@@ -271,6 +274,9 @@ Deno.serve(async (req: Request) => {
         pack_id: result.packId ?? null,
         message_ids: result.messageIds ?? null,
       });
+      if (logError) {
+        console.log("[auth-send-sms-hook] dispatch log insert error (sanitized):", logError.message);
+      }
 
       console.log("[auth-send-sms-hook] OTP dispatched for", maskedPhone, "status:", finalDispatchStatus);
       return successResponse();

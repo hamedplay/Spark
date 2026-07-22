@@ -175,6 +175,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     if (!isPublicReady && !isTestModeActive) { toast.error('ورود با شماره موبایل در حال حاضر فعال نیست.'); return; }
     const normalized = normalizeIranPhone(phone);
     if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
+    void normalized;
     setOtpLoading(true);
     try {
       // Use server-side edge function to prevent enumeration
@@ -290,9 +291,10 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
             {/* Login method tabs (only on login) */}
             {mode === 'login' && (() => {
-              const phoneTabEnabled = authConfig?.phone_login_enabled === true
-                || (authConfig?.phone_login_test_mode === true && authConfig?.phone_login_test_ready === true);
-              const isTestBadge = !authConfig?.phone_login_enabled && phoneTabEnabled;
+              const isPublicReady = authConfig?.phone_login_ready === true;
+              const isTestModeActive = authConfig?.phone_login_test_mode === true && authConfig?.phone_login_test_ready === true;
+              const phoneTabEnabled = isPublicReady || isTestModeActive;
+              const isTestBadge = !isPublicReady && isTestModeActive;
               return (
               <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 mb-6">
                 <button onClick={() => setLoginMethod('email')}

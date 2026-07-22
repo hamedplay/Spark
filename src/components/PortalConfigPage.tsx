@@ -323,11 +323,12 @@ function PhoneLoginToggleCard() {
       return;
     }
     setTestMode(v);
-    setTestPhoneMasked(v ? testPhoneInput.replace(/^(\d{6}).*(\d{3})$/, '$1****$2') : '');
+    const maskedPhone = row?.test_phone_masked || 'masked';
+    setTestPhoneMasked(v ? maskedPhone : '');
+    setTestPhoneInput('');
     setSavingTest(false);
     toast.success(v ? 'حالت تست فعال شد' : 'حالت تست غیرفعال شد');
-    const maskedForAudit = v ? testPhoneInput.replace(/^(\d{6}).*(\d{3})$/, '$1****$2') : 'disabled';
-    logAudit({ module: 'security', action: v ? 'test_mode_enabled' : 'test_mode_disabled', entity_name: maskedForAudit, severity: 'warning' });
+    logAudit({ module: 'security', action: v ? 'test_mode_enabled' : 'test_mode_disabled', entity_name: v ? maskedPhone : 'disabled', severity: 'warning' });
   };
 
   if (loading) return null;
