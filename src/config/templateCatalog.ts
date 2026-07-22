@@ -20,6 +20,7 @@ export const TEMPLATE_CATEGORIES: TemplateCategory[] = [
   { key: 'note',     label: 'یادداشت‌ها' },
   { key: 'report',   label: 'گزارشات' },
   { key: 'system',   label: 'سیستم' },
+  { key: 'auth',     label: 'احراز هویت' },
 ];
 
 export function categoryLabel(key: string): string {
@@ -52,6 +53,7 @@ export const TEMPLATE_EVENT_TYPES: TemplateEventType[] = [
   { key: 'meeting_confirmed',                label: 'تأیید جلسه' },
   { key: 'meeting_declined',                 label: 'رد جلسه' },
   { key: 'meeting_representative_assigned',  label: 'انتخاب به‌عنوان جانشین' },
+  { key: 'login_otp',     label: 'کد ورود' },
   { key: 'custom',        label: 'سفارشی' },
 ];
 
@@ -517,6 +519,16 @@ export const TEMPLATE_EVENTS: TemplateEventDefinition[] = [
     supportedChannels: ['notification', 'sms'],
     audiences: ['all'],
     requiredPlaceholders: ['alert_message'],
+    optionalPlaceholders: [],
+  },
+  // Auth events
+  {
+    key: 'login_otp',
+    category: 'auth',
+    label: 'کد ورود موبایلی',
+    supportedChannels: ['sms'],
+    audiences: ['all'],
+    requiredPlaceholders: ['otp'],
     optionalPlaceholders: [],
   },
   // Calendar events

@@ -357,6 +357,115 @@ function ProviderForm({ provider, onSave, onCancel }: {
   );
 }
 
+// ─── Phone Login Provider Card ──────────────────────────────────────────────
+function PhoneLoginProviderCard({ providers }: { providers: SmsProvider[] }) {
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
+  const [phoneLoginEnabled, setPhoneLoginEnabled] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [enabledRes, providerRes] = await Promise.all([
+      supabase.from('system_config').select('value').eq('section', 'security').eq('key', 'phone_login_enabled').maybeSingle(),
+      supabase.from('system_config').select('value').eq('section', 'sms').eq('key', 'phone_login_sms_provider_id').maybeSingle(),
+    ]);
+    setPhoneLoginEnabled(enabledRes.data?.value === 'true');
+    setSelectedProviderId(providerRes.data?.value ?? null);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const activeProviders = providers.filter(p => p.is_active);
+  const selectedProvider = providers.find(p => p.id === selectedProviderId);
+  const selectedIsActive = selectedProvider?.is_active === true;
+
+  let statusLabel = '';
+  let statusColor = '';
+  if (!phoneLoginEnabled) {
+    statusLabel = 'قابلیت ورود موبایلی غیرفعال است';
+    statusColor = 'text-gray-500 dark:text-gray-400';
+  } else if (!selectedProviderId) {
+    statusLabel = 'فعال ولی سرویس‌دهنده انتخاب نشده';
+    statusColor = 'text-amber-600 dark:text-amber-400';
+  } else if (!selectedIsActive) {
+    statusLabel = 'سرویس‌دهنده انتخابی غیرفعال است';
+    statusColor = 'text-red-500 dark:text-red-400';
+  } else {
+    statusLabel = 'فعال و آماده';
+    statusColor = 'text-green-600 dark:text-green-400';
+  }
+
+  const handleSelect = async (id: string | null) => {
+    setSaving(true);
+    await supabase.from('system_config').upsert(
+      { section: 'sms', key: 'phone_login_sms_provider_id', value: id, value_type: 'string', label: 'سرویس‌دهنده پیامک ورود موبایلی' },
+      { onConflict: 'section,key' },
+    );
+    setSelectedProviderId(id);
+    setSaving(false);
+    toast.success(id ? 'سرویس‌دهنده ورود موبایلی انتخاب شد' : 'انتخاب سرویس‌دهنده پاک شد');
+  };
+
+  const toggleEnabled = async (v: boolean) => {
+    setSaving(true);
+    await supabase.from('system_config').upsert(
+      { section: 'security', key: 'phone_login_enabled', value: String(v), value_type: 'boolean', label: 'ورود با شماره موبایل' },
+      { onConflict: 'section,key' },
+    );
+    setPhoneLoginEnabled(v);
+    setSaving(false);
+    toast.success(v ? 'ورود با موبایل فعال شد' : 'ورود با موبایل غیرفعال شد');
+  };
+
+  if (loading) return <div className="py-4 text-center"><Loader2 className="w-4 h-4 animate-spin mx-auto text-gray-300" /></div>;
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+            <Phone className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-800 dark:text-white">پیامک احراز هویت و ورود</h4>
+            <p className={`text-xs font-medium ${statusColor}`}>{statusLabel}</p>
+          </div>
+        </div>
+        <Toggle value={phoneLoginEnabled} onChange={toggleEnabled} color="bg-blue-500" />
+      </div>
+
+      {phoneLoginEnabled && (
+        <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">سرویس‌دهنده ارسال کد ورود</label>
+          {activeProviders.length === 0 ? (
+            <p className="text-xs text-gray-400">هیچ سرویس‌دهنده فعالی موجود نیست. ابتدا یک سرویس‌دهنده فعال کنید.</p>
+          ) : (
+            <div className="relative">
+              <select
+                value={selectedProviderId || ''}
+                onChange={e => handleSelect(e.target.value || null)}
+                disabled={saving}
+                className="appearance-none w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white"
+              >
+                <option value="">— انتخاب کنید —</option>
+                {activeProviders.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.title} ({p.provider_type === 'rahyab' ? 'SOAP' : p.provider_type === 'rahyab_rest' ? 'REST' : 'REST API'})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+          )}
+          {saving && <p className="text-xs text-gray-400">در حال ذخیره...</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProvidersTab() {
   const [providers, setProviders] = useState<SmsProvider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -471,6 +580,8 @@ function ProvidersTab() {
           </div>
         ))}
       </div>
+
+      {!loading && providers.length > 0 && <PhoneLoginProviderCard providers={providers} />}
     </div>
   );
 }

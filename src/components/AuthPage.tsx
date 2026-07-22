@@ -11,6 +11,11 @@ interface AuthPageProps {
   onSuccess: () => void;
 }
 
+interface PublicAuthConfig {
+  phone_login_enabled: boolean;
+  phone_login_ready: boolean;
+}
+
 export function AuthPage({ onSuccess }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
@@ -19,6 +24,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [siteTitle, setSiteTitle] = useState('اسپارک سامانه هوشمند مدیریت سازمانی');
   const [siteDescription, setSiteDescription] = useState('مدیریت حرفه‌ای جلسات، پیگیری اقدامات و همکاری تیمی در یک پلتفرم');
   const [, setLogoUrl] = useState('');
+  const [authConfig, setAuthConfig] = useState<PublicAuthConfig | null>(null);
 
   useEffect(() => {
     supabase.from('system_config').select('key,value,section').in('key', ['site_title', 'site_description', 'logo_url']).then(({ data }) => {
@@ -29,6 +35,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         if (row.key === 'logo_url' && row.value) setLogoUrl(row.value);
       });
     });
+  }, []);
+
+  useEffect(() => {
+    supabase.rpc('get_public_auth_config').then(({ data }) => {
+      if (data) setAuthConfig(data as PublicAuthConfig);
+    }).catch(() => setAuthConfig(null));
   }, []);
 
   // Email/password form
@@ -154,15 +166,20 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   // ── Phone OTP ─────────────────────────────────────────────────────────────────
   const handleSendOtp = async () => {
     if (!phone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
+    if (!authConfig?.phone_login_ready) { toast.error('ورود با شماره موبایل در حال حاضر فعال نیست.'); return; }
     const normalized = phone.startsWith('0') ? '+98' + phone.slice(1) : phone.startsWith('9') ? '+98' + phone : phone;
     setOtpLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone: normalized });
-      if (error) { toast.error('خطا در ارسال کد: ' + error.message); return; }
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: normalized,
+        options: { shouldCreateUser: false, channel: 'sms' },
+      });
+      // Generic message — never reveal whether the phone number exists
+      if (error) { toast.error('در صورت معتبر بودن شماره، کد ورود برای شما ارسال می‌شود.'); return; }
       setOtpSent(true);
       setCountdown(60);
-      toast.success('کد تأیید ارسال شد');
-    } catch (err: any) { toast.error('خطا در ارسال کد'); }
+      toast.success('در صورت معتبر بودن شماره، کد ورود برای شما ارسال می‌شود.');
+    } catch (err: any) { toast.error('در صورت معتبر بودن شماره، کد ورود برای شما ارسال می‌شود.'); }
     finally { setOtpLoading(false); }
   };
 
@@ -174,8 +191,16 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       const { data, error } = await supabase.auth.verifyOtp({ phone: normalized, token: otp, type: 'sms' });
       if (error) { toast.error('کد نادرست است یا منقضی شده'); return; }
       if (data.user) {
+        // Verify profile exists and is active
+        const { data: profileData } = await supabase.from('profiles').select('is_active').eq('user_id', data.user.id).maybeSingle();
+        if (profileData && profileData.is_active === false) {
+          await supabase.auth.signOut();
+          toast.error('حساب کاربری شما غیرفعال شده است. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
+          return;
+        }
         await ensureProfile(data.user.id, data.user.phone || '');
         toast.success('با موفقیت وارد شدید');
+        logAudit({ module: 'auth', action: 'phone_otp_login', entity_name: 'user', entity_id: data.user.id, details: 'ورود با کد یک‌بارمصرف موبایلی', severity: 'info' });
         onSuccess();
       }
     } catch (err: any) { toast.error('خطا در تأیید کد'); }
@@ -245,7 +270,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                   <Mail className="w-4 h-4" /> ایمیل
                 </button>
                 <button onClick={() => setLoginMethod('phone')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+                  disabled={!authConfig?.phone_login_enabled}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'} ${!authConfig?.phone_login_enabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
                   <Smartphone className="w-4 h-4" /> موبایل
                 </button>
               </div>
@@ -254,10 +280,20 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             {/* ── Phone OTP login ────────────────────────────────────── */}
             {mode === 'login' && loginMethod === 'phone' && (
               <div className="space-y-4">
-                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>ورود با شماره موبایل در حال راه‌اندازی است. در صورت نیاز به فعال‌سازی SMS با ادمین تماس بگیرید.</span>
-                </div>
+                {!authConfig?.phone_login_enabled && (
+                  <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl p-3 flex gap-2 text-xs text-gray-500 dark:text-gray-400">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>ورود با شماره موبایل در حال حاضر فعال نیست.</span>
+                  </div>
+                )}
+                {authConfig?.phone_login_enabled && !authConfig?.phone_login_ready && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>ورود با شماره موبایل فعال است اما سرویس‌دهنده پیامک انتخاب نشده است.</span>
+                  </div>
+                )}
+                {authConfig?.phone_login_ready && (
+                <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">شماره موبایل</label>
                   <div className="relative">
@@ -290,6 +326,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                       {countdown > 0 ? `ارسال مجدد پس از ${countdown} ثانیه` : 'ارسال مجدد کد'}
                     </button>
                   </div>
+                )}
+                </>
                 )}
                 <button onClick={() => setLoginMethod('email')} className="w-full text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors py-2">
                   ورود با ایمیل
