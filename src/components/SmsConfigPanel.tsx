@@ -375,7 +375,8 @@ function PhoneLoginProviderCard({ providers }: { providers: SmsProvider[] }) {
       .eq('section', 'sms')
       .eq('key', 'phone_login_sms_provider_id')
       .maybeSingle();
-    setSelectedProviderId(providerRow?.value ?? null);
+    const value = providerRow?.value?.trim();
+    setSelectedProviderId(value ? value : null);
     setLoading(false);
   }, []);
 
@@ -403,17 +404,17 @@ function PhoneLoginProviderCard({ providers }: { providers: SmsProvider[] }) {
 
   const handleSelect = async (id: string | null) => {
     setSaving(true);
-    const { data, error } = await supabase.rpc('set_phone_login_config', {
-      p_enabled: phoneLoginEnabled,
+    const { data, error } = await supabase.rpc('set_phone_login_sms_provider', {
       p_provider_id: id ?? null,
     });
     const row = Array.isArray(data) ? data[0] : data;
-    if (row?.success !== true || error) {
-      toast.error(row?.error || error?.message || 'خطا در ذخیره تنظیمات');
+    if (error || !row || row.success !== true || row.provider_id !== (id ?? null)) {
+      toast.error(row?.error || error?.message || 'ذخیره سرویس‌دهنده تأیید نشد');
       setSaving(false);
+      await load();
       return;
     }
-    setSelectedProviderId(id);
+    await load();
     setSaving(false);
     toast.success(id ? 'سرویس‌دهنده ورود موبایلی انتخاب شد' : 'انتخاب سرویس‌دهنده پاک شد');
   };
