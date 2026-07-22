@@ -211,6 +211,8 @@ const HIDDEN_SECURITY_CONFIG_KEYS = new Set([
   'phone_login_allowed_origins',
   'phone_login_test_mode',
   'phone_login_test_phone',
+  'phone_login_otp_ttl_seconds',
+  'phone_login_otp_ttl_operator_confirmed',
 ]);
 
 // ─── Phone Login Toggle Card (security section) ─────────────────────────────
@@ -229,7 +231,9 @@ function PhoneLoginToggleCard() {
   const [savingTest, setSavingTest] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [adminStatus, setAdminStatus] = useState<{ test_mode: boolean; test_phone_masked: string; provider_ready: boolean; operator_confirmed: boolean; e2e_verified: boolean; public_enabled: boolean } | null>(null);
+  const [adminStatus, setAdminStatus] = useState<{ test_mode: boolean; test_phone_masked: string; provider_ready: boolean; operator_confirmed: boolean; e2e_verified: boolean; public_enabled: boolean; otp_ttl_seconds: number | null; otp_ttl_operator_confirmed: boolean; lock_seconds: number | null } | null>(null);
+  const [otpTtlInput, setOtpTtlInput] = useState('');
+  const [savingTtl, setSavingTtl] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -265,6 +269,7 @@ function PhoneLoginToggleCard() {
         setAdminStatus(aRow ?? null);
         setTestPhoneMasked(aRow?.test_phone_masked ?? '');
         setTestMode(aRow?.test_mode ?? false);
+        setTestReady(row?.phone_login_test_ready ?? false);
       }
     }
     setLoading(false);
@@ -316,7 +321,9 @@ function PhoneLoginToggleCard() {
         PHONE_NOT_IN_ACTIVE_PROFILE: 'شماره در پروفایل فعال نیست',
         PHONE_NOT_IN_AUTH: 'شماره در Auth نیست',
         PHONE_DUPLICATE: 'شماره تکراری است',
+        PHONE_DUPLICATE_PROFILE: 'این شماره روی بیش از یک پروفایل فعال ثبت شده است',
         AUTH_PROFILE_MISMATCH: 'عدم تطابق Auth و Profile',
+        TTL_NOT_CONFIRMED: 'ابتدا TTL واقعی OTP را تأیید کنید',
       };
       toast.error(errMap[row?.error] || error?.message || 'خطا');
       setSavingTest(false);
@@ -333,10 +340,36 @@ function PhoneLoginToggleCard() {
 
   if (loading) return null;
 
+  const otpTtlConfirmed = adminStatus?.otp_ttl_operator_confirmed ?? false;
+  const otpTtlSeconds = adminStatus?.otp_ttl_seconds ?? null;
+  const lockSeconds = adminStatus?.lock_seconds ?? null;
+
+  const handleConfirmTtl = async () => {
+    const ttl = parseInt(otpTtlInput, 10);
+    if (isNaN(ttl) || ttl < 60 || ttl > 86400) {
+      toast.error('مقدار TTL باید بین ۶۰ و ۸۶۴۰۰ ثانیه باشد');
+      return;
+    }
+    setSavingTtl(true);
+    const { data, error } = await supabase.rpc('set_phone_login_otp_ttl', { p_ttl_seconds: ttl });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.success !== true || error) {
+      toast.error(row?.error || error?.message || 'خطا در ثبت TTL');
+      setSavingTtl(false);
+      return;
+    }
+    setAdminStatus(prev => prev ? { ...prev, otp_ttl_seconds: ttl, otp_ttl_operator_confirmed: true, lock_seconds: row.lock_seconds } : prev);
+    setOtpTtlInput('');
+    setSavingTtl(false);
+    toast.success('TTL ثبت و تأیید شد');
+    logAudit({ module: 'security', action: 'otp_ttl_confirmed', entity_name: `${ttl}s`, severity: 'warning' });
+  };
+
   const readinessItems = [
     { label: providerReady ? 'Provider آماده' : 'Provider آماده نیست', ok: providerReady },
     { label: 'Edge Function Secrets نیازمند تأیید اپراتور', ok: false, neutral: true },
     { label: operatorConfirmed ? 'Auth Hook تأیید شده' : 'Auth Hook تأیید نشده', ok: operatorConfirmed },
+    { label: otpTtlConfirmed ? 'TTL OTP تأیید شده' : 'TTL OTP تأیید نشده', ok: otpTtlConfirmed },
     { label: testMode ? 'حالت تست فعال' : 'حالت تست غیرفعال', ok: testMode, neutral: true },
     { label: e2eVerified ? 'تست E2E موفق' : 'تست E2E انجام نشده', ok: e2eVerified, neutral: true },
     { label: enabled ? 'ورود عمومی فعال' : 'ورود عمومی غیرفعال', ok: enabled, neutral: true },
@@ -375,6 +408,40 @@ function PhoneLoginToggleCard() {
       </div>
       {isAdmin && (
         <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-3">
+          {/* TTL confirmation section */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">تأیید TTL واقعی OTP</p>
+              {otpTtlConfirmed ? (
+                <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full">تأیید شده</span>
+              ) : (
+                <span className="text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full">تأیید نشده</span>
+              )}
+            </div>
+            {otpTtlSeconds !== null && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">TTL ثبت‌شده: {otpTtlSeconds} ثانیه</p>
+            )}
+            {lockSeconds !== null && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">Lock محاسبه‌شده: {lockSeconds} ثانیه</p>
+            )}
+            {!otpTtlConfirmed && (
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={otpTtlInput}
+                  onChange={e => setOtpTtlInput(e.target.value)}
+                  placeholder="TTL واقعی Dashboard (ثانیه)"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                />
+                <button
+                  onClick={handleConfirmTtl}
+                  disabled={savingTtl}
+                  className="px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors whitespace-nowrap">
+                  ثبت و تأیید
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">حالت تست ورود موبایلی</p>
