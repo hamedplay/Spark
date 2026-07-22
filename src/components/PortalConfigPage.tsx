@@ -234,6 +234,7 @@ function PhoneLoginToggleCard() {
   const [adminStatus, setAdminStatus] = useState<{ test_mode: boolean; test_phone_masked: string; provider_ready: boolean; operator_confirmed: boolean; e2e_verified: boolean; public_enabled: boolean; otp_ttl_seconds: number | null; otp_ttl_operator_confirmed: boolean; lock_seconds: number | null } | null>(null);
   const [otpTtlInput, setOtpTtlInput] = useState('');
   const [savingTtl, setSavingTtl] = useState(false);
+  const [editTtl, setEditTtl] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -324,6 +325,7 @@ function PhoneLoginToggleCard() {
         PHONE_DUPLICATE_PROFILE: 'این شماره روی بیش از یک پروفایل فعال ثبت شده است',
         AUTH_PROFILE_MISMATCH: 'عدم تطابق Auth و Profile',
         TTL_NOT_CONFIRMED: 'ابتدا TTL واقعی OTP را تأیید کنید',
+        PUBLIC_LOGIN_ENABLED: 'ورود عمومی فعال است؛ ابتدا آن را غیرفعال کنید',
       };
       toast.error(errMap[row?.error] || error?.message || 'خطا');
       setSavingTest(false);
@@ -360,6 +362,7 @@ function PhoneLoginToggleCard() {
     }
     setAdminStatus(prev => prev ? { ...prev, otp_ttl_seconds: ttl, otp_ttl_operator_confirmed: true, lock_seconds: row.lock_seconds } : prev);
     setOtpTtlInput('');
+    setEditTtl(false);
     setSavingTtl(false);
     toast.success('TTL ثبت و تأیید شد');
     logAudit({ module: 'security', action: 'otp_ttl_confirmed', entity_name: `${ttl}s`, severity: 'warning' });
@@ -424,7 +427,14 @@ function PhoneLoginToggleCard() {
             {lockSeconds !== null && (
               <p className="text-xs text-gray-500 dark:text-gray-400">Lock محاسبه‌شده: {lockSeconds} ثانیه</p>
             )}
-            {!otpTtlConfirmed && (
+            {otpTtlConfirmed && !editTtl && (
+              <button
+                onClick={() => { setEditTtl(true); setOtpTtlInput(otpTtlSeconds !== null ? String(otpTtlSeconds) : ''); }}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                ویرایش و تأیید مجدد TTL
+              </button>
+            )}
+            {(!otpTtlConfirmed || editTtl) && (
               <div className="flex gap-2">
                 <input
                   type="number"
@@ -439,6 +449,13 @@ function PhoneLoginToggleCard() {
                   className="px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors whitespace-nowrap">
                   ثبت و تأیید
                 </button>
+                {editTtl && (
+                  <button
+                    onClick={() => { setEditTtl(false); setOtpTtlInput(''); }}
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition-colors whitespace-nowrap">
+                    انصراف
+                  </button>
+                )}
               </div>
             )}
           </div>
