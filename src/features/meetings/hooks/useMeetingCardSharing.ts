@@ -20,7 +20,6 @@ interface UseMeetingCardSharingResult {
   shareImageUrl: string | null;
 
   toggleShareMenu: () => void;
-  closeShareMenu: () => void;
   closeShareDialog: () => void;
 
   handleShareImage: () => Promise<void>;
@@ -48,7 +47,6 @@ export function useMeetingCardSharing({ meeting, agendaItems, setLoading }: UseM
   }, []);
 
   const toggleShareMenu = () => setShowShareMenu(v => !v);
-  const closeShareMenu = () => setShowShareMenu(false);
   const closeShareDialog = () => setShowShareDialog(false);
 
   const handleShareImage = async () => {
@@ -154,7 +152,6 @@ export function useMeetingCardSharing({ meeting, agendaItems, setLoading }: UseM
     showShareDialog,
     shareImageUrl,
     toggleShareMenu,
-    closeShareMenu,
     closeShareDialog,
     handleShareImage,
     handleShareText,

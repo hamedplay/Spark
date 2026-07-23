@@ -125,6 +125,31 @@ Deferred to Phase 3:
 - [x] No repository or mapper introduced
 - Inherited Meetings lint debt (15 errors, 2 warnings in CreateMeetingForm; 11 errors, 2 warnings in MeetingCardMain) deferred to cleanup phase
 
+#### Phase 2B2C4 — Extract MeetingCard header and toolbar presentation ✅
+- [x] Create `src/features/meetings/components/MeetingCard/MeetingCardHeader.tsx` (presentational only)
+- [x] Move priority badge, status badge, title, rejected warning, resend/edit-resend/send-users/share/Telegram/edit/Calendar/delete buttons, share dropdown menu into Header
+- [x] Move `priorityColors` and `statusTypeColors` maps into Header
+- [x] Move related Lucide icon imports into Header
+- [x] Header receives explicit props interface; no state setters, no generic actions object
+- [x] `canAddToGoogleCalendar={Boolean(onScheduleInCalendar)}` matches existing icon-button visibility
+- [x] All business handlers (`handleResend`, `setIsEditing`, `setShowUserSelector`, sharing handlers, `handleAddToGoogleCalendar`, `setShowDeleteModal`) remain in MeetingCardMain
+- [x] Bottom green "برنامه‌ریزی در تقویم" scheduling action remains in MeetingCardMain
+- [x] Remove unused `closeShareMenu` from `useMeetingCardSharing` (no consumers)
+- [x] MeetingCardMain line count reduced from 545 to 449 (96 lines removed)
+- [x] `MeetingCardHeader.tsx` is 157 lines (below 220-line component limit)
+- [x] `useMeetingCardSharing.ts` reduced from 164 to 161 lines (closeShareMenu removal)
+- [x] Combined query-match count preserved: 22 (Main) + 0 (Header) + 0 (Sharing) = 22 (identical to baseline)
+- [x] Header has zero Supabase/query/RPC matches
+- [x] Header imports no Supabase, notification, Telegram, html-to-image, moment-jalaali, src/app, repositories, services, or hooks
+- [x] Scoped lint unchanged: 5 problems (5 errors, 0 warnings) — no increase
+- [x] Header has zero lint errors and warnings
+- [x] `useMeetingCardSharing.ts` remains lint-clean
+- [x] No repository, service, mapper, hook, context, reducer, or state store introduced
+- [x] No extracted file imports from `src/app`
+- [x] No Meetings public export changes
+- [x] No explicit `any` introduced in new code
+- Inherited Meetings lint debt deferred to cleanup phase
+
 #### Phase 2B2C3 — Extract MeetingCard sharing hook ✅
 - [x] Create `src/features/meetings/hooks/useMeetingCardSharing.ts` (sharing state, refs, outside-click effect, sharing handlers)
 - [x] Move `showShareMenu`, `showShareDialog`, `shareImageUrl` state to hook
@@ -193,7 +218,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2C4. continue splitting MeetingCardMain by responsibility
+2B2C5. continue splitting MeetingCardMain by responsibility
 2B2D. split CreateMeetingForm by responsibility
 2C. calendar
 2D. tasks
@@ -261,3 +286,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2C1 | scoped lint: 13 problems (11 errors, 2 warnings) — improved from 14 | pass  |
 | 2B2C2 | scoped lint: 7 problems (7 errors, 0 warnings) — improved from 13 | pass  |
 | 2B2C3 | scoped lint: 5 problems (5 errors, 0 warnings) — improved from 7 | pass  |
+| 2B2C4 | scoped lint: 5 problems (5 errors, 0 warnings) — no increase | pass  |
