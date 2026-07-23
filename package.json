@@ -10,8 +10,9 @@
     "preview": "node node_modules/vite/bin/vite.js preview",
     "clean-test-data": "node scripts/clean-test-data.js",
     "set-admin": "node scripts/set-admin.js",
-    "test": "npm run test:recurrence",
-    "test:recurrence": "node --import tsx --test tests/meetings/buildRecurringMeetingRecords.test.ts"
+    "test": "npm run test:recurrence && npm run test:meeting-record",
+    "test:recurrence": "node --import tsx --test tests/meetings/buildRecurringMeetingRecords.test.ts",
+    "test:meeting-record": "node --import tsx --test tests/meetings/buildMeetingPersistenceRecord.test.ts"
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.5",

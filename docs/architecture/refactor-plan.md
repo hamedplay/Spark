@@ -129,6 +129,31 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3B4 — Primary meeting-record characterization tests ✅
+- [x] Create `tests/meetings/buildMeetingPersistenceRecord.test.ts` outside `src` — production `tsconfig.app.json` unchanged
+- [x] Use Node's built-in `node:test` + `node:assert/strict`; `tsx` only as the TypeScript runtime — no new dependencies
+- [x] Tests import only the builder and Node built-ins — no React, Supabase, repositories, form components, Moment, toast, or browser APIs
+- [x] One input fixture (`createInput`) with representative defaults; overrides via `Partial<BuildMeetingPersistenceRecordInput>`
+- [x] Exactly six characterization tests:
+  1. `builds the legacy manual-request record` — full `assert.deepEqual`, `status: 'open'`, nullable repeat/reminder/manager/calendar fields, `start_time`/`end_time` absent
+  2. `builds a closed calendar-scheduled record with a time-range duration` — `status: 'closed'`, `duration: '09:00 - 10:30'`, times present, unrelated fields preserved
+  3. `preserves optional times without changing manual duration or status` — non-calendar with times keeps `status: 'open'`, `duration: requestDuration`, times present
+  4. `falls back to request duration when the calendar time pair is incomplete` — `status: 'closed'`, `duration: requestDuration`, times absent (legacy mixed behavior)
+  5. `deduplicates notification users in legacy insertion order without mutating input` — `['notify-2','owner-1','notify-2','notify-3']` → `['owner-1','notify-2','notify-3']`; full `JSON.stringify` input immutability; participant/external arrays preserved
+  6. `maps enabled weekly and monthly repeat fields with legacy nullability` — weekly keeps `repeat_weekday: 4`; monthly sets `repeat_weekday: null`; notes/reminder/manager/calendar mapped; `send_sms: false`
+- [x] Assertions use only `assert.equal`, `assert.deepEqual`, `assert.ok` — no snapshots, no algorithm duplication, no casts, no `@ts-ignore`, no explicit `any`
+- [x] Strengthened existing recurrence Weekly test: capture `JSON.stringify(input.baseRecord)` before the builder and assert equality after — verifies full serializable base record, not just `status`/`id`
+- [x] Existing narrower recurrence assertions retained; recurrence fixtures, dates, expected records, names, and behavior unchanged
+- [x] Package scripts: `test:meeting-record` added; `test` alias updated to `npm run test:recurrence && npm run test:meeting-record`; `test:recurrence` preserved; no watch/coverage/CI/wildcard/parallel scripts
+- [x] No dependency installed or updated; `package-lock.json` unchanged
+- [x] Production files unchanged: `buildMeetingPersistenceRecord.ts`, `buildRecurringMeetingRecords.ts`, `meetingPersistence.ts`, `CreateMeetingForm.tsx`, repositories, `vite.config.ts`, `tsconfig.*`, `eslint.config.js`
+- [x] No public Meetings export changed
+- [x] Test result: 6 recurrence + 6 meeting-record = 12 tests, 12 pass, 0 fail
+- [x] `npm test` passes
+- [x] Build passes
+- [x] Both test files, both builders, and persistence type lint-clean (zero errors and warnings)
+- [x] No explicit `any`; no Supabase/repository import in tests; no snapshots
+
 #### Phase 3B3 — Recurring-meeting characterization-test harness ✅
 - [x] Install `tsx@4.23.1` as the only new development dependency (exact version, `--save-dev --save-exact`)
 - [x] Add scripts `test` (alias) and `test:recurrence` to `package.json`; preserve all existing scripts exactly
@@ -724,7 +749,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3B4. characterize the primary meeting-record builder
+3C1. remove remaining CreateMeetingForm lint debt without behavior changes
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -803,3 +828,4 @@ Phases 2–7 as described in the phased checklist.
 | 3B1    | scoped lint: 7 problems (5 errors, 2 warnings) — improved; new files zero; repository zero | pass  |
 | 3B2    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; new builder zero | pass  |
 | 3B3    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; test file + builder + types zero; 6 tests pass | pass  |
+| 3B4    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; both test files + both builders + types zero; 12 tests pass | pass  |

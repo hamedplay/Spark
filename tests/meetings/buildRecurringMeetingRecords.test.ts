@@ -114,6 +114,9 @@ test('generates weekly Saturday records in legacy order', () => {
     repeatEndDate: localEndOfDay(2026, 0, 17),
   });
 
+  const serializedBaseRecord =
+    JSON.stringify(input.baseRecord);
+
   const expectedDates = [
     localDate(2026, 0, 3),
     localDate(2026, 0, 10),
@@ -144,6 +147,11 @@ test('generates weekly Saturday records in legacy order', () => {
   );
   const actualJalaali = result.map((r) => r.request_jalaali_date);
   assert.deepEqual(actualJalaali, expectedJalaali);
+
+  assert.equal(
+    JSON.stringify(input.baseRecord),
+    serializedBaseRecord
+  );
 
   assert.equal(
     input.baseRecord.status,
