@@ -24,9 +24,10 @@ import {
   updatePrimaryMeeting,
 } from '../repositories/meetingPersistenceRepository';
 import { buildMeetingPersistenceRecord } from '../builders/buildMeetingPersistenceRecord';
-import type {
-  MeetingPersistenceRecord,
-} from '../types/meetingPersistence';
+import {
+  buildRecurringMeetingRecords,
+  type RecurringMeetingBaseRecord,
+} from '../builders/buildRecurringMeetingRecords';
 import { insertMeetingParticipantSnapshots } from '../repositories/meetingParticipantsRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
@@ -375,99 +376,21 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   };
 
   // ---- Repeat meeting creation (fixed) ----
-  type RepeatBaseRecord =
-    MeetingPersistenceRecord & {
-      id?: string;
-    };
-
   const createRepeatMeetings = async (
     _originalId: string,
-    baseRecord: RepeatBaseRecord
+    baseRecord: RecurringMeetingBaseRecord
   ) => {
-    const type = repeatType;
-    const interval = repeatInterval;
-    const endDate = repeatEndDate;
+    void _originalId;
 
-    let endMs: number;
-    if (endDate.includes('/') && endDate.split('/').length === 3) {
-      const [jy, jm, jd] = endDate.split('/').map(Number);
-      const gregDate = moment(`${jy}/${jm}/${jd}`, 'jYYYY/jM/jD').toDate();
-      gregDate.setHours(23, 59, 59, 999);
-      endMs = gregDate.getTime();
-    } else {
-      endMs = new Date(endDate).getTime();
-    }
-    if (isNaN(endMs)) return;
-
-    const baseDate = new Date(baseRecord.request_date);
-    const {
-      id: ignoredRecordId,
-      ...baseWithoutId
-    } = baseRecord;
-    void ignoredRecordId;
-    const repeatMeetings: MeetingPersistenceRecord[] = [];
-
-    if (type === 'weekly') {
-      // targetDay: 0=شنبه(Sat), 1=یکشنبه(Sun), ... 6=جمعه(Fri)
-      // JS getDay(): 0=Sun,1=Mon,...,6=Sat
-      const jsDayMap = [6, 0, 1, 2, 3, 4, 5]; // index=our weekday, value=JS day
-      const targetJsDay = jsDayMap[repeatWeekday];
-
-      // Find the first occurrence of targetJsDay strictly after baseDate
-      let currentDate = new Date(baseDate);
-      currentDate.setDate(currentDate.getDate() + 1); // at least one day after base
-      const diff = (targetJsDay - currentDate.getDay() + 7) % 7;
-      currentDate.setDate(currentDate.getDate() + diff);
-
-      while (currentDate.getTime() <= endMs) {
-        const jDate = moment(currentDate).format('jYYYY/jMM/jDD');
-        repeatMeetings.push({ ...baseWithoutId, request_date: currentDate.toISOString(), request_jalaali_date: jDate, status: 'open' });
-        currentDate = new Date(currentDate.getTime() + 7 * interval * 86400000);
-      }
-    } else if (type === 'monthly') {
-      const jsDayMap = [6, 0, 1, 2, 3, 4, 5];
-
-      if (repeatMonthlyMode === 'specific') {
-        // Same Gregorian day-of-month, every `interval` months
-        let y = baseDate.getFullYear();
-        let mo = baseDate.getMonth() + interval;
-        const day = baseDate.getDate();
-
-        while (true) {
-          const d = new Date(y, mo, day);
-          if (d.getTime() > endMs) break;
-          if (d.getTime() > baseDate.getTime()) {
-            const jDate = moment(d).format('jYYYY/jMM/jDD');
-            repeatMeetings.push({ ...baseWithoutId, request_date: d.toISOString(), request_jalaali_date: jDate, status: 'open' });
-          }
-          mo += interval;
-          if (mo >= 12) { y += Math.floor(mo / 12); mo = mo % 12; }
-        }
-      } else {
-        // First or last specific weekday of month
-        const targetJsDay = jsDayMap[repeatMonthlyWeekday];
-        let y = baseDate.getFullYear();
-        let mo = baseDate.getMonth() + interval;
-
-        while (true) {
-          if (mo >= 12) { y += Math.floor(mo / 12); mo = mo % 12; }
-          let targetDate: Date;
-          if (repeatMonthlyMode === 'first') {
-            targetDate = new Date(y, mo, 1);
-            while (targetDate.getDay() !== targetJsDay) targetDate.setDate(targetDate.getDate() + 1);
-          } else {
-            targetDate = new Date(y, mo + 1, 0);
-            while (targetDate.getDay() !== targetJsDay) targetDate.setDate(targetDate.getDate() - 1);
-          }
-          if (targetDate.getTime() > endMs) break;
-          if (targetDate.getTime() > baseDate.getTime()) {
-            const jDate = moment(targetDate).format('jYYYY/jMM/jDD');
-            repeatMeetings.push({ ...baseWithoutId, request_date: targetDate.toISOString(), request_jalaali_date: jDate, status: 'open' });
-          }
-          mo += interval;
-        }
-      }
-    }
+    const repeatMeetings = buildRecurringMeetingRecords({
+      baseRecord,
+      repeatType,
+      repeatInterval,
+      repeatEndDate,
+      repeatWeekday,
+      repeatMonthlyMode,
+      repeatMonthlyWeekday,
+    });
 
     if (repeatMeetings.length > 0) {
       const repeatError = await insertRecurringMeetingBatch(repeatMeetings);

@@ -129,6 +129,41 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3B2 — Extract the recurring-meeting record generator ✅
+- [x] Create `src/features/meetings/builders/buildRecurringMeetingRecords.ts` — pure function, no React/Supabase/repositories/toast/console/Auth/audit/browser storage/UI/state setters
+- [x] Export `buildRecurringMeetingRecords(input): MeetingPersistenceRecord[]`, `MeetingRepeatMonthlyMode`, `RecurringMeetingBaseRecord`, `BuildRecurringMeetingRecordsInput`
+- [x] Move end-date parsing, Jalali end-date conversion, end-of-day adjustment, invalid-end-date early return, base-date construction, optional `id` stripping, weekly `jsDayMap`, weekly first-occurrence calculation, weekly loop, monthly specific-day loop, monthly first-weekday loop, monthly last-weekday loop, Jalali output formatting, repeated-record construction, and `status: 'open'` override into the builder
+- [x] Weekly algorithm preserved exactly: `jsDayMap`, `targetJsDay`, `+1` day, `diff` modulo, millisecond advance (`7 * interval * 86400000`)
+- [x] Monthly specific-day algorithm preserved exactly: `new Date(y, mo, day)`, no day clamping, JS rollover behavior, month normalization order
+- [x] Monthly first/last weekday algorithm preserved exactly: day-1 start for first, day-0-of-next-month start for last, forward/backward movement, `targetDate > baseDate` guard, `targetDate > endMs` termination
+- [x] Invalid-end-date behavior returns `[]` unchanged
+- [x] Optional `id` omitted from generated records via typed destructure
+- [x] All generated records override `status` to `'open'`
+- [x] Keep async wrapper `createRepeatMeetings` in the form — `void _originalId` preserved
+- [x] Keep `insertRecurringMeetingBatch` call, `console.error('Repeat insert error:', ...)`, Persian error toast, Persian success toast, and workflow continuation in the form
+- [x] Keep `repeatEnabled`/`meetingData`/`repeatEndDate` guards and ordering relative to participant and Agenda persistence unchanged
+- [x] Remove local `RepeatBaseRecord` type alias; import `RecurringMeetingBaseRecord` from the builder
+- [x] Remove unused `MeetingPersistenceRecord` import from the form
+- [x] Recurrence loops and date-generation logic now exist only in the builder
+- [x] No `repeatMeetings.push` remains in the form
+- [x] Not exported through the public Meetings `index.ts`
+- [x] No service, repository, hook, class, mapper, schema library, context, reducer, dependency-injection layer, or generic abstraction created
+- [x] Parent meetings-table operations: 0 (unchanged)
+- [x] Repository meetings-table operations: 3 (primary update + primary create + recurring batch insert) — unchanged
+- [x] Scoped parent lint: 7 problems (5 errors, 2 warnings) — no increase
+- [x] New builder lint: zero errors and warnings
+- [x] Repository and types lint: zero errors and warnings
+- [x] No new explicit `any` introduced
+- [x] No UI component modified
+- [x] No public Meetings export changed
+- [x] No API, database schema, UI, Auth, Agenda, participant, contact, audit, toast, reset, or submission behavior changes
+- [x] No new dependency or generic abstraction added
+
+Legacy risks:
+Recurring meetings do not receive participant snapshots.
+Recurring meetings do not receive separate Agenda rows.
+Recurring insert failure does not abort the main workflow.
+
 #### Phase 3B1 — Type and extract the primary meeting persistence-record builder ✅
 - [x] Create `src/features/meetings/types/meetingPersistence.ts` with `MeetingPersistenceStatus`, `MeetingPersistenceRepeatType`, and `MeetingPersistenceRecord` (status and repeat_type now string-literal unions instead of `string`)
 - [x] Move `MeetingPersistenceRecord` out of `meetingPersistenceRepository.ts` into the new types file; repository imports the type, does not re-export it
@@ -662,7 +697,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3B2. type and extract the recurring-meeting record generator
+3B3. add a minimal recurrence characterization-test harness
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -739,3 +774,4 @@ Phases 2–7 as described in the phased checklist.
 | 3A4B   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3A4C   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3B1    | scoped lint: 7 problems (5 errors, 2 warnings) — improved; new files zero; repository zero | pass  |
+| 3B2    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; new builder zero | pass  |
