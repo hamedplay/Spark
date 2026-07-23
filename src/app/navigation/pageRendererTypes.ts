@@ -1,0 +1,45 @@
+import { Meeting } from '../../types';
+import { SparkMeetingPrefill } from '../../components/Spark/SparkAssistant';
+
+export interface PageRendererProps {
+  activePage: import('../navigation/useNavigation').PageId;
+  setActivePage: (page: import('../navigation/useNavigation').PageId) => void;
+  isAdmin: boolean;
+  currentUserId: string | null;
+  userPermissions: Record<string, boolean> | null | undefined;
+  meetings: Meeting[];
+  pendingMeetingsCount: number;
+  fetchMeetings: () => Promise<void>;
+  fetchPendingMeetingsCount: () => Promise<void>;
+  searchTerm: string;
+  setSearchTerm: (v: string) => void;
+  statusFilter: 'all' | 'open' | 'archived';
+  setStatusFilter: (v: 'all' | 'open' | 'archived') => void;
+  priorityFilter: 'all' | 'high' | 'medium' | 'low';
+  setPriorityFilter: (v: 'all' | 'high' | 'medium' | 'low') => void;
+  showPendingMeetingsModal: boolean;
+  setShowPendingMeetingsModal: (v: boolean) => void;
+  pendingSchedule: { meetingId: string; meeting: Meeting } | null;
+  setPendingSchedule: (v: { meetingId: string; meeting: Meeting } | null) => void;
+  chatMentionParticipants: string[];
+  setChatMentionParticipants: (v: string[]) => void;
+  chatMeetingNotes: string;
+  setChatMeetingNotes: (v: string) => void;
+  taskPrefillDescription: string;
+  setTaskPrefillDescription: (v: string) => void;
+  taskPrefillMessageId: string;
+  setTaskPrefillMessageId: (v: string) => void;
+  sparkMeetingPrefill: SparkMeetingPrefill | null;
+  setSparkMeetingPrefill: (v: SparkMeetingPrefill | null) => void;
+  sparkExternalCommand: string | null;
+  setSparkExternalCommand: (v: string | null) => void;
+  sparkCalendarView: string | null;
+  setSparkCalendarView: (v: string | null) => void;
+  sparkNavigateDate: { jy: number; jm: number; jd: number; view?: string } | null;
+  setSparkNavigateDate: (v: { jy: number; jm: number; jd: number; view?: string } | null) => void;
+  sparkCalendarMeetingPrefill: unknown;
+  setSparkCalendarMeetingPrefill: (v: unknown) => void;
+  chatInitUserId: string | null;
+  setChatInitUserId: (v: string | null) => void;
+  sparkVisible: boolean;
+}
