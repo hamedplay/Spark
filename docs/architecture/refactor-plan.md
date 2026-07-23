@@ -125,6 +125,29 @@ Deferred to Phase 3:
 - [x] No repository or mapper introduced
 - Inherited Meetings lint debt (15 errors, 2 warnings in CreateMeetingForm; 11 errors, 2 warnings in MeetingCardMain) deferred to cleanup phase
 
+#### Phase 2B2C2 — Extract MeetingCard read-model hook ✅
+- [x] Create `src/features/meetings/types/meetingCard.ts` with shared `ParticipantStatusEntry` type
+- [x] Update `ParticipantStatusPanel.tsx` to consume shared type (no local duplicate)
+- [x] Create `src/features/meetings/hooks/useMeetingCardReadModel.ts` (read-side state + effects only)
+- [x] Move `participantStatuses`, `delegateNames`, `currentUserId`, `agendaItems` state to hook
+- [x] Move `supabase.auth.getUser()` effect to hook
+- [x] Move `meeting_agenda_items` query effect to hook
+- [x] Move `meeting_inbox` + delegate-profile query effect to hook
+- [x] Use `MeetingWithParticipantIds` structural type instead of explicit `any` for participant IDs
+- [x] Use `participantUserIdsKey` in effect deps instead of inline cast expression
+- [x] Connect hook to `MeetingCardMain`; remove old inline states and effects
+- [x] MeetingCardMain line count reduced from 684 to 636
+- [x] Combined query-match count preserved: 22 (Main) + 4 (hook) = 26 (identical to baseline)
+- [x] Scoped lint improved: 13 → 7 problems (7 errors, 0 warnings)
+- [x] New hook and type file have zero lint errors and warnings
+- [x] ParticipantStatusPanel remains lint-clean
+- [x] No mutation, RPC, sharing, editing, deletion, notification, Telegram, or Calendar behavior moved
+- [x] No repository, service, mapper, context, reducer, or state store introduced
+- [x] No extracted file imports from `src/app`
+- [x] No Meetings public export changes
+- [x] No explicit `any` introduced in new code
+- Inherited Meetings lint debt deferred to cleanup phase
+
 #### Phase 2B2C1 — Extract presentational UI from MeetingCardMain ✅
 - [x] Extract `DeleteMeetingModal.tsx` (confirmation flow, loading state, callbacks)
 - [x] Extract `MeetingDetails.tsx` (date, time, location, representative, phone, notes, agenda display)
@@ -143,7 +166,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2C2. continue splitting MeetingCardMain by responsibility
+2B2C3. continue splitting MeetingCardMain by responsibility
 2B2D. split CreateMeetingForm by responsibility
 2C. calendar
 2D. tasks
@@ -209,3 +232,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2A  | scoped lint: pre-existing errors only (no new issues) | pass  |
 | 2B2B  | scoped lint: 26 errors, 4 warnings (identical before/after) | pass  |
 | 2B2C1 | scoped lint: 13 problems (11 errors, 2 warnings) — improved from 14 | pass  |
+| 2B2C2 | scoped lint: 7 problems (7 errors, 0 warnings) — improved from 13 | pass  |

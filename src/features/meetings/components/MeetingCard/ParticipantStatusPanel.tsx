@@ -1,10 +1,6 @@
 import { User } from 'lucide-react';
 import { Meeting } from '../../../../types';
-
-interface ParticipantStatusEntry {
-  status: 'pending' | 'accepted' | 'declined' | 'delegated';
-  delegate_to?: string | null;
-}
+import type { ParticipantStatusEntry } from '../../types/meetingCard';
 
 interface ParticipantStatusPanelProps {
   meeting: Meeting;

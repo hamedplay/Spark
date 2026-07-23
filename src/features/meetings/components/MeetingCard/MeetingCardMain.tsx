@@ -6,7 +6,6 @@ import { ParticipantStatusPanel } from './ParticipantStatusPanel';
 import { MeetingShareDialog } from './MeetingShareDialog';
 import { MeetingShareCard } from './MeetingShareCard';
 import { Meeting } from '../../../../types';
-import type { AgendaItem } from '../../../../types';
 import { supabase } from '../../../../lib/supabase';
 import { sendMeetingToTelegram } from '../../../../lib/telegram';
 import { insertNotification } from '../../../../lib/notifications';
@@ -16,6 +15,7 @@ import { toPng } from 'html-to-image';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
 import { CreateMeetingForm } from '../CreateMeetingForm';
+import { useMeetingCardReadModel } from '../../hooks/useMeetingCardReadModel';
 import moment from 'moment-jalaali';
 
 interface MeetingCardMainProps {
@@ -39,6 +39,14 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   const shareCardRef = useRef<HTMLDivElement>(null);
   const shareMenuRef = useRef<HTMLDivElement>(null);
 
+  const {
+    agendaItems,
+    participantUserIds,
+    participantStatuses,
+    delegateNames,
+    isCreator,
+  } = useMeetingCardReadModel(meeting);
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) {
@@ -48,62 +56,6 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-
-  // Participant inbox statuses (for creator view)
-  const [participantStatuses, setParticipantStatuses] = useState<
-    Record<string, { status: 'pending' | 'accepted' | 'declined' | 'delegated'; delegate_to?: string | null }>
-  >({});
-  const [delegateNames, setDelegateNames] = useState<Record<string, string>>({});
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
-
-  React.useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setCurrentUserId(user.id);
-    });
-  }, []);
-
-  React.useEffect(() => {
-    if (!meeting.id) return;
-    supabase
-      .from('meeting_agenda_items')
-      .select('*')
-      .eq('meeting_id', meeting.id)
-      .order('sort_order')
-      .then(({ data }) => { if (data) setAgendaItems(data as AgendaItem[]); });
-  }, [meeting.id]);
-
-  React.useEffect(() => {
-    const isCreator = meeting.user_id && currentUserId && meeting.user_id === currentUserId;
-    if (!isCreator || !meeting.id) return;
-    const participantIds: string[] = (meeting as any).participant_user_ids ?? [];
-    if (participantIds.length === 0) return;
-
-    supabase
-      .from('meeting_inbox')
-      .select('user_id, status, delegate_to')
-      .eq('meeting_id', meeting.id)
-      .then(({ data }) => {
-        if (!data) return;
-        const map: Record<string, { status: any; delegate_to?: string | null }> = {};
-        const delegateIds: string[] = [];
-        for (const row of data) {
-          map[row.user_id] = { status: row.status, delegate_to: row.delegate_to };
-          if (row.delegate_to) delegateIds.push(row.delegate_to);
-        }
-        setParticipantStatuses(map);
-
-        if (delegateIds.length > 0) {
-          supabase.from('profiles').select('user_id, full_name, email').in('user_id', delegateIds).then(({ data: profiles }) => {
-            if (!profiles) return;
-            const names: Record<string, string> = {};
-            for (const p of profiles) names[p.user_id] = p.full_name || p.email || p.user_id;
-            setDelegateNames(names);
-          });
-        }
-      });
-  }, [meeting.id, currentUserId, meeting.user_id, (meeting as any).participant_user_ids?.join(',')]);
-
 
   const priorityColors = {
     high: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
@@ -608,10 +560,10 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
 
         <ParticipantStatusPanel
           meeting={meeting}
-          participantUserIds={(meeting as any).participant_user_ids ?? []}
+          participantUserIds={participantUserIds}
           participantStatuses={participantStatuses}
           delegateNames={delegateNames}
-          isCreator={!!(meeting.user_id && currentUserId && meeting.user_id === currentUserId)}
+          isCreator={isCreator}
         />
       </div>
 
@@ -682,3 +634,6 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
     </div>
   );
 }
+
+
+export { MeetingCardMain }
