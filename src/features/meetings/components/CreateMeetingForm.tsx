@@ -12,6 +12,11 @@ import {
   createExternalMeetingContact,
   saveRepresentativeMeetingContact,
 } from '../repositories/meetingContactsRepository';
+import {
+  fetchMeetingAgendaItems,
+  insertMeetingAgendaItems,
+  replaceMeetingAgendaItems,
+} from '../repositories/meetingAgendaRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
@@ -201,19 +206,10 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       // Load agenda items when editing an existing meeting
       if (prefillData.meetingId) {
         (async () => {
-          const { data: items } = await supabase
-            .from('meeting_agenda_items')
-            .select('*')
-            .eq('meeting_id', prefillData.meetingId!)
-            .order('sort_order');
-          if (items && items.length > 0) {
+          const items = await fetchMeetingAgendaItems(prefillData.meetingId!);
+          if (items.length > 0) {
             setAgendaEnabled(true);
-            setAgendaItems(items.map((it: any) => ({
-              title: it.title,
-              presenter: it.presenter,
-              duration_minutes: it.duration_minutes,
-              sort_order: it.sort_order,
-            })));
+            setAgendaItems(items);
           }
         })();
       }
@@ -304,12 +300,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         if (error) throw error;
 
         if (agendaEnabled) {
-          await supabase.from('meeting_agenda_items').delete().eq('meeting_id', prefillMeetingId);
-          if (agendaItems.length > 0) {
-            await supabase.from('meeting_agenda_items').insert(
-              agendaItems.map((item, i) => ({ ...item, meeting_id: prefillMeetingId, sort_order: i }))
-            );
-          }
+          await replaceMeetingAgendaItems(prefillMeetingId, agendaItems);
         }
 
         logAudit({ module: 'meetings', action: 'meeting_updated', entity_name: subject, entity_id: prefillMeetingId, details: `جلسه "${subject}" ویرایش شد`, severity: 'info' });
@@ -328,9 +319,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         }
 
         if (agendaEnabled && agendaItems.length > 0 && meetingData) {
-          await supabase.from('meeting_agenda_items').insert(
-            agendaItems.map((item, i) => ({ ...item, meeting_id: meetingData.id, sort_order: i }))
-          );
+          await insertMeetingAgendaItems(meetingData.id, agendaItems);
         }
 
         logAudit({ module: 'meetings', action: 'meeting_created', entity_name: subject, entity_id: meetingData?.id, details: `جلسه جدید "${subject}" ثبت شد`, severity: 'info' });

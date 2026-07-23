@@ -129,6 +129,32 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3A2 — Extract meeting Agenda repository ✅
+- [x] Create `src/features/meetings/repositories/meetingAgendaRepository.ts` (Supabase access only)
+- [x] Export only `fetchMeetingAgendaItems`, `insertMeetingAgendaItems`, `replaceMeetingAgendaItems`
+- [x] Use `MeetingAgendaInput = Pick<AgendaItem, 'title' | 'presenter' | 'duration_minutes' | 'sort_order'>`
+- [x] Preserve exact query chains:
+  - `fetchMeetingAgendaItems`: `.from('meeting_agenda_items').select('*').eq('meeting_id', meetingId).order('sort_order')`, throw on error, returns only `{title, presenter, duration_minutes, sort_order}` (preserves nullable presenter/duration)
+  - `insertMeetingAgendaItems`: `.insert(items.map((item, index) => ({ ...item, meeting_id: meetingId, sort_order: index })))`, throw on error, no `.select()`/`.single()`, returns early when `items.length === 0`
+  - `replaceMeetingAgendaItems`: sequential delete `.delete().eq('meeting_id', meetingId)` (throw immediately on failure), then calls `insertMeetingAgendaItems` when items exist — no transaction or RPC
+- [x] Repository imports only the existing Supabase client and `AgendaItem` type — no React, toast, Auth, UI components, Meetings hooks, `src/app`, state setters, or other repositories
+- [x] Errors are thrown, not caught/hidden in the repository
+- [x] Not exported from the public Meetings `index.ts`
+- [x] Replace prefill Agenda query with `fetchMeetingAgendaItems(prefillData.meetingId!)` — parent still guards `items.length > 0` to set `agendaEnabled`/`agendaItems`; empty result does not enable Agenda
+- [x] Replace existing-meeting update with `replaceMeetingAgendaItems(prefillMeetingId, agendaItems)` — `agendaEnabled` guard stays in parent (enabled+empty → delete only; disabled → no-op; enabled+items → delete+insert)
+- [x] Replace new-meeting Agenda insert with `insertMeetingAgendaItems(meetingData.id, agendaItems)` — `agendaEnabled && agendaItems.length > 0 && meetingData` guard stays in parent
+- [x] Removed the old Agenda row-mapping `any` (the repository now returns the required shape)
+- [x] Parent `meeting_agenda_items` match count: 4 before, 0 after
+- [x] Repository `meeting_agenda_items` match count: 3 (one fetch, one insert, one delete)
+- [x] Combined Supabase/query/RPC count: 13 before, 12 after (9 parent + 3 repository) — decrease of 1 reflects removal of the inline prefill query's `supabase` reference
+- [x] Scoped parent lint: 12 problems (10 errors, 2 warnings) before → 11 problems (9 errors, 2 warnings) after — decrease of 1 reflects removal of the Agenda row-mapping `any`
+- [x] Repository lint: zero errors and warnings
+- [x] No new explicit `any` introduced
+- [x] Agenda UI (`AgendaEditor.tsx`) not modified
+- [x] No public Meetings export changed
+- [x] No database schema, RPC, Auth, recurrence, contacts, meeting payload or submission behavior changes
+- [x] Agenda state, enablement guards, and orchestration remain in the form
+
 #### Phase 3A1 — Extract Meetings contact data-access repository ✅
 - [x] Create `src/features/meetings/repositories/meetingContactsRepository.ts` (Supabase access only)
 - [x] Export only `fetchMeetingContacts`, `createExternalMeetingContact`, `saveRepresentativeMeetingContact`
@@ -493,7 +519,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3A2. extract meeting Agenda repository
+3A3. extract meeting prefill read repository
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -564,3 +590,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D9 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
 | 2B2D10 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
 | 3A1    | scoped lint: 12 problems (10 errors, 2 warnings) — no increase; repository zero | pass  |
+| 3A2    | scoped lint: 11 problems (9 errors, 2 warnings) — decrease of 1 (Agenda `any` removed); repository zero | pass  |
