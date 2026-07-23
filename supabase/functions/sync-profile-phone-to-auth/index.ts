@@ -26,6 +26,9 @@ function maskPhone(phone: string): string {
 interface SyncCheckResult {
   ok: boolean;
   error?: string;
+  auth_error_message?: string;
+  auth_error_status?: number;
+  auth_error_code?: string;
   profile_exists?: boolean;
   profile_active?: boolean;
   profile_phone_masked?: string;
@@ -33,6 +36,19 @@ interface SyncCheckResult {
   auth_phone_masked?: string | null;
   already_synced?: boolean;
   conflict?: boolean;
+  message?: string;
+}
+
+const ADMIN_UPDATE_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("TIMEOUT")), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -46,9 +62,12 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
     const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      supabaseUrl,
+      serviceRoleKey,
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
@@ -83,7 +102,7 @@ Deno.serve(async (req: Request) => {
     // 3. Parse request body
     const body = await req.json();
     const targetUserId: string | undefined = body.user_id;
-    const action: string = body.action || "check"; // "check" or "sync"
+    const action: string = body.action || "check";
 
     if (!targetUserId) {
       return new Response(JSON.stringify({ ok: false, error: "USER_ID_REQUIRED" }),
@@ -120,7 +139,7 @@ Deno.serve(async (req: Request) => {
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // 6. Check phone uniqueness in active profiles
+    // 6. Check phone uniqueness via detailed resolver
     const { data: profilePhoneCount, error: countErr } = await supabase
       .rpc("resolve_phone_password_reset_target_detailed", {
         p_normalized_phone: normalizedPhone,
@@ -155,32 +174,18 @@ Deno.serve(async (req: Request) => {
     const authPhoneNorm = authPhoneRaw ? normalizeIranPhone(authPhoneRaw) : "";
     const authPhoneMasked = authPhoneNorm ? maskPhone(authPhoneNorm) : null;
 
-    // 8. Check if phone is on a different auth user
-    let conflict = false;
-    if (authPhoneNorm && authPhoneNorm === normalizedPhone) {
-      // Same phone — check it's not on another user
-      const { data: conflictCheck } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .neq("user_id", targetUserId)
-        .eq("is_active", true);
-      // We can't directly query auth.users via the client, but the resolve
-      // function already checked uniqueness. If resolveStatus is MATCHED,
-      // there's exactly one profile + one auth user with this phone.
-    }
-
-    // 9. Determine status
+    // 8. Determine status
     let alreadySynced = false;
     if (authPhoneNorm === normalizedPhone && resolveStatus === "MATCHED") {
       alreadySynced = true;
     }
 
-    // Check if auth phone belongs to a different user
+    let conflict = false;
     if (authPhoneNorm && authPhoneNorm === normalizedPhone && resolveStatus === "AUTH_PROFILE_MISMATCH") {
       conflict = true;
     }
 
-    // 10. Build check response
+    // 9. Build check response
     const checkResult: SyncCheckResult = {
       ok: true,
       profile_exists: true,
@@ -197,13 +202,12 @@ Deno.serve(async (req: Request) => {
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // 11. Sync action
+    // 10. Sync action
     if (action !== "sync") {
       return new Response(JSON.stringify({ ok: false, error: "INVALID_ACTION" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // Fail if already synced (idempotent success)
     if (alreadySynced) {
       return new Response(JSON.stringify({
         ...checkResult,
@@ -213,7 +217,6 @@ Deno.serve(async (req: Request) => {
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // Fail if conflict (phone on another auth user)
     if (conflict) {
       return new Response(JSON.stringify({
         ...checkResult,
@@ -223,7 +226,6 @@ Deno.serve(async (req: Request) => {
         { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // Fail if auth user already has a different phone
     if (authPhoneNorm && authPhoneNorm !== normalizedPhone) {
       return new Response(JSON.stringify({
         ...checkResult,
@@ -233,7 +235,6 @@ Deno.serve(async (req: Request) => {
         { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // Fail if profile phone is not unique
     if (resolveStatus === "PROFILE_DUPLICATE" || resolveStatus === "AUTH_PHONE_DUPLICATE") {
       return new Response(JSON.stringify({
         ...checkResult,
@@ -243,25 +244,77 @@ Deno.serve(async (req: Request) => {
         { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // 12. Update auth user phone via Admin API
-    const e164 = `+${normalizedPhone}`;
-    const { error: updateErr } = await supabase.auth.admin.updateUserById(targetUserId, {
-      phone: e164,
-      phone_confirm: true,
+    // 11. Update auth user phone via Admin API
+    const e164Phone = `+${normalizedPhone}`;
+
+    console.log("PHONE_SYNC_BEFORE_AUTH_UPDATE", {
+      targetUserId,
+      phoneMasked: profilePhoneMasked,
     });
 
-    if (updateErr) {
+    const updateStartAt = Date.now();
+
+    let updateResult: { data: unknown; error: { message?: string; status?: number; code?: string; name?: string } | null } | { timedOut: true };
+
+    try {
+      updateResult = await withTimeout(
+        supabase.auth.admin.updateUserById(targetUserId, {
+          phone: e164Phone,
+          phone_confirm: true,
+        }),
+        ADMIN_UPDATE_TIMEOUT_MS,
+      );
+    } catch (timeoutErr) {
+      const elapsedMs = Date.now() - updateStartAt;
+      console.error("PHONE_SYNC_AUTH_UPDATE_TIMEOUT", {
+        targetUserId,
+        phoneMasked: profilePhoneMasked,
+        elapsedMs,
+        message: timeoutErr instanceof Error ? timeoutErr.message : "unknown",
+      });
+
+      return new Response(JSON.stringify({
+        ...checkResult,
+        ok: false,
+        error: "AUTH_UPDATE_TIMEOUT",
+        auth_error_message: `Request timed out after ${ADMIN_UPDATE_TIMEOUT_MS}ms`,
+        auth_error_status: 408,
+        auth_error_code: "TIMEOUT",
+      } satisfies SyncCheckResult),
+        { status: 504, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+
+    const elapsedMs = Date.now() - updateStartAt;
+    const updateError = (updateResult as { error: { message?: string; status?: number; code?: string; name?: string } | null }).error;
+
+    console.log("PHONE_SYNC_AFTER_AUTH_UPDATE", {
+      targetUserId,
+      elapsedMs,
+      success: !updateError,
+    });
+
+    if (updateError) {
+      console.error("PHONE_SYNC_AUTH_UPDATE_FAILED", {
+        message: updateError.message,
+        status: updateError.status,
+        code: updateError.code,
+        name: updateError.name,
+      });
+
       return new Response(JSON.stringify({
         ...checkResult,
         ok: false,
         error: "AUTH_UPDATE_FAILED",
-      }),
+        auth_error_message: updateError.message || "Unknown auth error",
+        auth_error_status: updateError.status || 0,
+        auth_error_code: updateError.code || "UNKNOWN",
+      } satisfies SyncCheckResult),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // 13. Log audit
+    // 12. Log audit
     try {
-      await supabase.from("audit_logs").insert({
+      await supabase.from("audit_log").insert({
         user_id: callerId,
         module: "security",
         action: "sync_profile_phone_to_auth",
