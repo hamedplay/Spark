@@ -12,14 +12,11 @@ function normalizeIranPhone(value?: string | null): string {
 
 async function hmacHash(value: string, pepper: string): Promise<string> {
   const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(pepper),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
+    "raw", new TextEncoder().encode(pepper),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join("");
 }
 
 function getClientIP(req: Request): string {
@@ -75,7 +72,6 @@ Deno.serve(async (req: Request) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  // ── Resolve allowed origins (env var only) ────────────────────────────────
   let allowedOrigin: string | null = null;
   try {
     const allowedStr = Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") || "";
@@ -101,13 +97,14 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
     const rawPhone: string | undefined = body.phone;
+    const isAdminContext: boolean = body._admin_context === true;
 
     const normalized = normalizeIranPhone(rawPhone);
     if (!normalized) {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
 
-    // ── Check auth config (public + test readiness) ──────────────────────────
+    // ── Check auth config ──────────────────────────────────────────────────
     const { data: cfgRow, error: cfgErr } = await supabase.rpc("get_public_auth_config");
     if (cfgErr) {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
@@ -116,28 +113,21 @@ Deno.serve(async (req: Request) => {
     const publicReady = cfg?.phone_login_ready === true;
     const testReady = cfg?.phone_login_test_ready === true;
 
-    // ── Determine if this request is allowed ──────────────────────────────────
     let allowDispatch = false;
 
     if (publicReady) {
-      // Public mode: all valid phones allowed
       allowDispatch = true;
     } else if (testReady) {
-      // Test mode: only the designated test phone is allowed
       const { data: testModeRow } = await supabase
-        .from("system_config")
-        .select("value")
-        .eq("section", "security")
-        .eq("key", "phone_login_test_mode")
+        .from("system_config").select("value")
+        .eq("section", "security").eq("key", "phone_login_test_mode")
         .maybeSingle();
       const testModeEnabled = testModeRow?.value === "true";
 
       if (testModeEnabled) {
         const { data: testPhoneRow } = await supabase
-          .from("system_config")
-          .select("value")
-          .eq("section", "security")
-          .eq("key", "phone_login_test_phone")
+          .from("system_config").select("value")
+          .eq("section", "security").eq("key", "phone_login_test_phone")
           .maybeSingle();
         const testPhone = testPhoneRow?.value || "";
         const normalizedTestPhone = normalizeIranPhone(testPhone);
@@ -149,17 +139,82 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!allowDispatch) {
-      // Generic response — no information leak
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
 
-    // ── Resolve pepper (env var only — never from DB or vault) ────────────────
+    // ── Resolve profile + auth user BEFORE sending OTP ──────────────────────
+    // 1. Find active profile with this phone
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_id, phone, is_active")
+      .eq("is_active", true)
+      .filter("phone", "eq", normalized)
+      .maybeSingle();
+
+    // Also try raw phone format in case profiles store un-normalized
+    let resolvedProfile = profile;
+    if (!resolvedProfile) {
+      const { data: profileByRaw } = await supabase
+        .from("profiles")
+        .select("user_id, phone, is_active")
+        .eq("is_active", true)
+        .filter("phone", "ilike", `%${normalized.slice(-10)}%`)
+        .maybeSingle();
+      resolvedProfile = profileByRaw;
+    }
+
+    if (!resolvedProfile) {
+      if (isAdminContext) {
+        return new Response(JSON.stringify({ ok: false, error: "NO_PROFILE_FOR_PHONE" }),
+          { status: 404, headers: { "Content-Type": "application/json", ...cors } });
+      }
+      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+    }
+
+    // 2. Find auth user with same UUID
+    const { data: authUser, error: authErr } = await supabase.auth.admin.getUserById(resolvedProfile.user_id);
+    if (authErr || !authUser?.user) {
+      if (isAdminContext) {
+        return new Response(JSON.stringify({ ok: false, error: "AUTH_USER_NOT_FOUND" }),
+          { status: 404, headers: { "Content-Type": "application/json", ...cors } });
+      }
+      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+    }
+
+    // 3. Check auth.users.phone matches
+    const authPhoneNorm = normalizeIranPhone(authUser.user.phone);
+    if (authPhoneNorm !== normalized) {
+      if (isAdminContext) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: "AUTH_PHONE_MISMATCH",
+          detail: "Profile phone does not match auth.users.phone. Sync required.",
+        }),
+          { status: 409, headers: { "Content-Type": "application/json", ...cors } });
+      }
+      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+    }
+
+    // 4. Check phone is not on another auth user
+    const { data: conflictCheck } = await supabase.auth.admin.listUsers();
+    const phoneOnOther = conflictCheck?.users?.some(
+      (u: { id: string; phone?: string }) =>
+        u.id !== resolvedProfile.user_id && normalizeIranPhone(u.phone) === normalized,
+    );
+    if (phoneOnOther) {
+      if (isAdminContext) {
+        return new Response(JSON.stringify({ ok: false, error: "PHONE_USED_BY_OTHER_AUTH_USER" }),
+          { status: 409, headers: { "Content-Type": "application/json", ...cors } });
+      }
+      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+    }
+
+    // ── Rate limit ──────────────────────────────────────────────────────────
     const pepper = Deno.env.get("PHONE_RATE_LIMIT_PEPPER") || "";
     if (!pepper || pepper.length < 32) {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
 
-    // ── HMAC-hashed phone and IP ──────────────────────────────────────────────
     let phoneHash: string;
     let ipHash: string;
     try {
@@ -170,7 +225,6 @@ Deno.serve(async (req: Request) => {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
 
-    // ── Atomic rate limit via RPC ─────────────────────────────────────────────
     let rateLimitResult: { allowed: boolean; retry_after_seconds: number };
     try {
       const { data: rlRaw, error: rlErr } = await supabase.rpc(
@@ -189,7 +243,7 @@ Deno.serve(async (req: Request) => {
       return await finishPublicResponse(startedAt, publicResponse(cors), cors);
     }
 
-    // ── Call signInWithOtp server-side ────────────────────────────────────────
+    // ── Call signInWithOtp with shouldCreateUser: false ─────────────────────
     const e164 = `+${normalized}`;
     try {
       await supabase.auth.signInWithOtp({
