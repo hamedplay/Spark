@@ -129,6 +129,37 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3B1 — Type and extract the primary meeting persistence-record builder ✅
+- [x] Create `src/features/meetings/types/meetingPersistence.ts` with `MeetingPersistenceStatus`, `MeetingPersistenceRepeatType`, and `MeetingPersistenceRecord` (status and repeat_type now string-literal unions instead of `string`)
+- [x] Move `MeetingPersistenceRecord` out of `meetingPersistenceRepository.ts` into the new types file; repository imports the type, does not re-export it
+- [x] Create `src/features/meetings/builders/buildMeetingPersistenceRecord.ts` — pure function, no React/Supabase/Moment/toast/audit/browser APIs/logging, no mutation of input
+- [x] Replace the inline primary record object in `CreateMeetingForm` with `buildMeetingPersistenceRecord(...)` — `meetingRecord` now inferred as `MeetingPersistenceRecord`
+- [x] Type `createRepeatMeetings` with `RepeatBaseRecord = MeetingPersistenceRecord & { id?: string }` and `repeatMeetings: MeetingPersistenceRecord[]` — function stays in the form
+- [x] Strip optional `id` via typed destructure (`id: ignoredRecordId` + `void ignoredRecordId`) — no lint error
+- [x] Remove the three targeted `any` usages: `meetingRecord: any`, `baseRecord: any`, `repeatMeetings: any[]`
+- [x] Unrelated Auth/error `any` usages left unchanged
+- [x] Validation, Gregorian/Jalali conversion, recurrence algorithms, loops, date calculations, status overrides, request dates, Jalali formatting, and insertion timing all remain in the form
+- [x] All repository calls and Supabase queries unchanged
+- [x] Participant and Agenda persistence unchanged
+- [x] Outer `handleSubmit` try/catch, audit, reset, and `onSuccess` unchanged
+- [x] Not exported through the public Meetings `index.ts`
+- [x] No service, repository, hook, class, mapper, schema library, context, reducer, dependency-injection layer, or generic form model created
+- [x] Parent meetings-table operations: 0 (unchanged)
+- [x] Repository meetings-table operations: 3 (primary update + primary create + recurring batch insert) — unchanged
+- [x] Scoped parent lint: 7 problems (5 errors, 2 warnings) — improved from 11 (removed 4 targeted `any` usages)
+- [x] New-file lint: zero errors and warnings
+- [x] Repository lint: zero errors and warnings
+- [x] No new explicit `any` introduced
+- [x] No UI component modified
+- [x] No public Meetings export changed
+- [x] No API, database schema, UI, Auth, Agenda, participant, contact, audit, toast, reset, or submission behavior changes
+- [x] No new dependency or generic abstraction added
+
+Legacy risks:
+Recurring meetings do not receive participant snapshots.
+Recurring meetings do not receive separate Agenda rows.
+Recurring insert failure does not abort the main workflow.
+
 #### Phase 3A4C — Extract recurring-meeting batch persistence ✅
 - [x] Add `insertRecurringMeetingBatch(records)` to existing `meetingPersistenceRepository.ts` — no new repository file created
 - [x] Preserve exact query `.from('meetings').insert(records)` — no `.select()`, `.single()`, `.upsert()`, RPC, transaction, chunking, retry, logging, toast, empty-array handling, or record transformation
@@ -631,7 +662,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3B1. type and extract the primary meeting-record builder
+3B2. type and extract the recurring-meeting record generator
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -707,3 +738,4 @@ Phases 2–7 as described in the phased checklist.
 | 3A4A   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3A4B   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3A4C   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
+| 3B1    | scoped lint: 7 problems (5 errors, 2 warnings) — improved; new files zero; repository zero | pass  |

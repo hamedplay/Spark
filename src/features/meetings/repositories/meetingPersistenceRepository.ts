@@ -1,39 +1,7 @@
 import { supabase } from '../../../lib/supabase';
-
-export interface MeetingPersistenceRecord {
-  subject: string;
-  request_date: string;
-  request_jalaali_date: string;
-  request_duration: string;
-  duration: string;
-
-  location: string;
-  representative: string;
-  phone: string;
-  notes: string | null;
-
-  priority: string;
-  status: string;
-  status_type: string;
-  user_id: string;
-
-  notify_users: string[];
-  participant_user_ids: string[];
-  external_participants: string[];
-
-  repeat_type: string;
-  repeat_interval: number | null;
-  repeat_end_date: string | null;
-  repeat_weekday: number | null;
-
-  reminder_minutes: number | null;
-  send_sms: boolean;
-  meeting_manager: string | null;
-  calendar_id: string | null;
-
-  start_time?: string;
-  end_time?: string;
-}
+import type {
+  MeetingPersistenceRecord,
+} from '../types/meetingPersistence';
 
 export async function updatePrimaryMeeting(
   meetingId: string,

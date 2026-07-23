@@ -23,6 +23,10 @@ import {
   insertRecurringMeetingBatch,
   updatePrimaryMeeting,
 } from '../repositories/meetingPersistenceRepository';
+import { buildMeetingPersistenceRecord } from '../builders/buildMeetingPersistenceRecord';
+import type {
+  MeetingPersistenceRecord,
+} from '../types/meetingPersistence';
 import { insertMeetingParticipantSnapshots } from '../repositories/meetingParticipantsRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
@@ -282,29 +286,49 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         gregDate = m.toDate().toISOString();
       } else { toast.error('تاریخ درخواست را وارد کنید'); setLoading(false); return; }
 
-      const meetingRecord: any = {
-        subject, request_date: gregDate, request_jalaali_date: requestJalaaliDate,
-        request_duration: requestDuration,
-        duration: isSchedulingFromCalendar && startTime && endTime ? `${startTime} - ${endTime}` : requestDuration,
-        location, representative, phone, notes: notes || null, priority,
-        status: isSchedulingFromCalendar ? 'closed' : 'open',
-        status_type: statusType, user_id: userId,
-        notify_users: Array.from(new Set([userId, ...selectedNotifyUsers.map(u => u.id)])),
-        participant_user_ids: selectedParticipants.map(p => p.id),
-        external_participants: selectedExternal,
-        repeat_type: repeatEnabled ? repeatType : 'none',
-        repeat_interval: repeatEnabled ? repeatInterval : null,
-        repeat_end_date: repeatEnabled ? repeatEndDate : null,
-        repeat_weekday: repeatEnabled && repeatType === 'weekly' ? repeatWeekday : null,
-        reminder_minutes: reminderMinutes || null,
-        send_sms: false, meeting_manager: meetingManager || null,
-        calendar_id: selectedCalendarId || null,
-      };
+      const meetingRecord = buildMeetingPersistenceRecord({
+        subject,
 
-      if (startTime && endTime) {
-        meetingRecord.start_time = startTime;
-        meetingRecord.end_time = endTime;
-      }
+        gregorianRequestDate: gregDate,
+        requestJalaaliDate,
+        requestDuration,
+
+        location,
+        representative,
+        phone,
+        notes,
+
+        priority,
+        statusType,
+        userId,
+
+        notifyUserIds:
+          selectedNotifyUsers.map(
+            (user) => user.id
+          ),
+
+        participantUserIds:
+          selectedParticipants.map(
+            (participant) => participant.id
+          ),
+
+        externalParticipants:
+          selectedExternal,
+
+        repeatEnabled,
+        repeatType,
+        repeatInterval,
+        repeatEndDate,
+        repeatWeekday,
+
+        reminderMinutes,
+        meetingManager,
+        calendarId: selectedCalendarId,
+
+        isSchedulingFromCalendar,
+        startTime,
+        endTime,
+      });
 
       if (prefillMeetingId) {
         await updatePrimaryMeeting(prefillMeetingId, meetingRecord);
@@ -351,7 +375,15 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   };
 
   // ---- Repeat meeting creation (fixed) ----
-  const createRepeatMeetings = async (_originalId: string, baseRecord: any) => {
+  type RepeatBaseRecord =
+    MeetingPersistenceRecord & {
+      id?: string;
+    };
+
+  const createRepeatMeetings = async (
+    _originalId: string,
+    baseRecord: RepeatBaseRecord
+  ) => {
     const type = repeatType;
     const interval = repeatInterval;
     const endDate = repeatEndDate;
@@ -368,8 +400,12 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
     if (isNaN(endMs)) return;
 
     const baseDate = new Date(baseRecord.request_date);
-    const { id: _rid, ...baseWithoutId } = baseRecord;
-    const repeatMeetings: any[] = [];
+    const {
+      id: ignoredRecordId,
+      ...baseWithoutId
+    } = baseRecord;
+    void ignoredRecordId;
+    const repeatMeetings: MeetingPersistenceRecord[] = [];
 
     if (type === 'weekly') {
       // targetDay: 0=شنبه(Sat), 1=یکشنبه(Sun), ... 6=جمعه(Fri)
