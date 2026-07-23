@@ -129,6 +129,26 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3C2 — Move CreateMeetingForm Auth operations behind the Auth feature boundary ✅
+- [x] Created `src/features/auth/services/authOperations.ts` with three stateless, imperative operations: `getCurrentAuthUserId`, `signUpWithPassword`, `signInWithPassword` — no React, no hook, no class, no context, no repository, no error-message mapping, no second Supabase client
+- [x] Defined `PasswordAuthCredentials` and `SignUpWithPasswordInput` interfaces; exported only user-id-or-null results — no Supabase response objects or user objects exposed
+- [x] `getCurrentAuthUserId` preserves the existing ignore-error/treat-absent-user-as-unauthenticated behavior; no `getSession`, no subscription, no sign-out
+- [x] `signUpWithPassword` and `signInWithPassword` re-throw Supabase errors so the form still performs message mapping; no Session/profile queries added
+- [x] Exported the three operations and two interfaces through `src/features/auth/index.ts`; existing `useAuthSession` and `AuthSessionState` exports preserved; Supabase client not exported
+- [x] `CreateMeetingForm.tsx` now imports Auth operations only from `../../auth`; the direct `import { supabase } from '../../../lib/supabase'` is removed
+- [x] Initial user lookup uses `getCurrentAuthUserId()`; contact loading still runs only after a user ID exists, sets both arrays, identical console message, no toast, `[]` dependency
+- [x] Sign-up handler uses `signUpWithPassword` with `window.location.origin` redirect; preserves `e.preventDefault()`, loading, `finally`, `getErrorMessage`, `User already registered` comparison, both Persian messages, success toast
+- [x] Login handler uses `signInWithPassword`; preserves loading, `finally`, `getErrorMessage`, `Invalid login credentials` comparison, both Persian messages, success toast
+- [x] Form-local Auth state (`showAuthError`, `isSignUp`, `authForm`, `loading`, `userId`), toast messages, fallback rendering, and meeting-submission auth guard remain in the form
+- [x] `useAuthSession.ts` unchanged — not imported or invoked by the form
+- [x] `MeetingFormAuthFallback.tsx` unchanged
+- [x] No Auth listener added; no explicit `any` introduced; no public Meetings export changed
+- [x] Scoped lint: 0 errors, 0 warnings (form, Auth service, Auth index, Auth hook)
+- [x] 12 characterization tests pass
+- [x] Build passes
+- [x] Direct Supabase access in `CreateMeetingForm`: before 3 operations + 1 import; after 0
+- [x] **CreateMeetingForm architecture pass complete** (3B1–3C2)
+
 #### Phase 3C1 — Remove CreateMeetingForm lint debt ✅
 - [x] Baseline: 7 problems (5 errors, 2 warnings)
 - [x] Removed obsolete no-op `fetchSystemUsers` (2 errors: `@typescript-eslint/no-unused-vars` for `fetchSystemUsers` and `_currentUserId`)
@@ -763,7 +783,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3C2. move CreateMeetingForm authentication operations behind the Auth feature boundary
+3D1. inventory and extract the first MeetingCard command boundary
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -844,3 +864,4 @@ Phases 2–7 as described in the phased checklist.
 | 3B3    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; test file + builder + types zero; 6 tests pass | pass  |
 | 3B4    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; both test files + both builders + types zero; 12 tests pass | pass  |
 | 3C1    | scoped lint: 0 errors, 0 warnings — form clean; 12 tests pass | pass  |
+| 3C2    | scoped lint: 0 errors, 0 warnings — form + auth service + auth index + auth hook clean; 12 tests pass | pass  |

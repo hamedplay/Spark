@@ -3,7 +3,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { supabase } from '../../../lib/supabase';
+import {
+  getCurrentAuthUserId,
+  signInWithPassword,
+  signUpWithPassword,
+} from '../../auth';
 import { logAudit } from '../../../lib/audit';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -172,13 +176,18 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
 
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
+      const currentUserId =
+        await getCurrentAuthUserId();
+
+      if (currentUserId) {
+        setUserId(currentUserId);
         setShowAuthError(false);
+
         try {
           const contactsData =
-            await fetchMeetingContacts(user.id);
+            await fetchMeetingContacts(
+              currentUserId
+            );
 
           setContacts(contactsData);
           setAllContacts(contactsData);
@@ -296,9 +305,14 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password, options: { emailRedirectTo: window.location.origin } });
-      if (error) throw error;
-      if (data.user) { setUserId(data.user.id); setShowAuthError(false); toast.success('حساب کاربری ایجاد شد'); }
+      const signedUpUserId =
+        await signUpWithPassword({
+          email: authForm.email,
+          password: authForm.password,
+          emailRedirectTo:
+            window.location.origin,
+        });
+      if (signedUpUserId) { setUserId(signedUpUserId); setShowAuthError(false); toast.success('حساب کاربری ایجاد شد'); }
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message === 'User already registered' ? 'این ایمیل قبلاً ثبت شده' : 'خطا در ایجاد حساب');
@@ -309,9 +323,12 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
-      if (error) throw error;
-      if (data.user) { setUserId(data.user.id); setShowAuthError(false); toast.success('وارد شدید'); }
+      const signedInUserId =
+        await signInWithPassword({
+          email: authForm.email,
+          password: authForm.password,
+        });
+      if (signedInUserId) { setUserId(signedInUserId); setShowAuthError(false); toast.success('وارد شدید'); }
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(message === 'Invalid login credentials' ? 'ایمیل یا رمز اشتباه' : 'خطا در ورود');
