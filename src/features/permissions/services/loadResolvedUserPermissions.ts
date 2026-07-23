@@ -1,7 +1,7 @@
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 
 /**
- * Resolves effective permissions for a non-admin user.
+ * Loads and resolves effective permissions for a non-admin user.
  * Returns `null` for full access (when a group grants `all`),
  * otherwise a merged record of granted permission keys.
  *
@@ -10,10 +10,10 @@ import { supabase } from '../../lib/supabase';
  *   2. Organization-level permissions (by primary position level)
  *   3. Position-level overrides
  *
- * This is a pure orchestration over Supabase reads — the merging
- * logic is identical to the original inline implementation in App.tsx.
+ * This function performs Supabase queries and merges results.
+ * The merging logic is identical to the original implementation.
  */
-export async function resolveUserPermissions(
+export async function loadResolvedUserPermissions(
   userId: string,
 ): Promise<Record<string, boolean> | null> {
   // ── ۱. دسترسی‌های گروه‌بندی (روش قدیمی) ──────────────────────────────

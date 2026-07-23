@@ -73,7 +73,30 @@ App additionally wraps content in `PermissionsProvider` and `GlobalCallProvider`
 - [x] Preserve navigation behavior (activePage, mpage, popstate, /admin, conference)
 - [x] No React Router, no DB changes
 
-### Phase 2 — Establish feature boundaries (pending)
+### Phase 2 — Establish feature boundaries
+
+#### Phase 2A — Auth and Permissions ✅
+- [x] Create `features/auth/` boundary (hook, types, index)
+- [x] Create `features/permissions/` boundary (service, component, index)
+- [x] Rename `resolveUserPermissions` → `loadResolvedUserPermissions`
+- [x] Move `AccessDenied` to `features/permissions/components/`
+- [x] Move `checkPermission` + `PAGE_PERMISSION_KEY` to `features/permissions/services/`
+- [x] Update all active imports to use feature public APIs
+- [x] Delete old duplicate files from `src/app/`
+- [x] Add logout safeguard to `useMeetingsData` (clears meetings + pending count)
+- [x] Build passes, scoped lint clean
+
+Remaining Phase 2 order:
+2B. meetings
+2C. calendar
+2D. tasks
+2E. minutes
+2F. contacts
+2G. chat and channels
+2H. reports
+2I. video conference
+2J. Spark AI
+2K. administration
 ### Phase 3 — Introduce repositories and mappers (pending)
 ### Phase 4 — Split oversized feature files (pending)
 ### Phase 5 — Routing modernization (pending)
@@ -95,6 +118,17 @@ App additionally wraps content in `PermissionsProvider` and `GlobalCallProvider`
 - Build: passes.
 - All behavior preserved: auth flow, permission resolution, meetings realtime, maintenance gate, spark visibility, splash, navigation (activePage, mpage, popstate, /admin, conference).
 
+### Phase 2A — Auth and Permissions
+- Created `src/features/auth/` with `hooks/useAuthSession.ts`, `types/authSession.ts`, `index.ts`
+- Created `src/features/permissions/` with `services/loadResolvedUserPermissions.ts`, `services/checkPermission.ts`, `components/AccessDenied.tsx`, `index.ts`
+- Moved auth session + permission loading into feature boundaries
+- Renamed `resolveUserPermissions` → `loadResolvedUserPermissions` (performs Supabase queries, not a pure resolver)
+- Deleted old files: `src/app/hooks/useAuthSession.ts`, `src/app/hooks/resolveUserPermissions.ts`, `src/app/guards/permissions.ts`, `src/app/guards/AccessDenied.tsx`
+- Updated imports in `src/App.tsx` and `src/app/navigation/PageRenderer.tsx`
+- Added logout safeguard in `useMeetingsData`: clears `meetings` and `pendingMeetingsCount` when `isAuthenticated` becomes false
+- Build: passes. Scoped lint: 0 errors, 0 warnings.
+- Import direction: `features/auth` imports from `features/permissions` (public API); no feature imports from `src/app`.
+
 ## Pending phases
 
 Phases 2–7 as described in the phased checklist.
@@ -113,3 +147,4 @@ Phases 2–7 as described in the phased checklist.
 |-------|-------------------------------|-------|
 | 0     | 694 problems (pre-existing)   | pass  |
 | 1     | 681 problems (−13)           | pass  |
+| 2A    | scoped lint: 0 errors, 0 warnings | pass  |

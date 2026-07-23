@@ -27,8 +27,7 @@ import { MinutesMeetingReportPage } from '../../components/Minutes/MinutesMeetin
 import { MinutesReportsPage } from '../../components/Minutes/MinutesReportsPage';
 import { PendingMeetingsModal } from '../../components/MeetingCard/PendingMeetingsModal';
 import { PageId } from '../navigation/useNavigation';
-import { PAGE_PERMISSION_KEY, checkPermission } from '../guards/permissions';
-import { AccessDenied } from '../guards/AccessDenied';
+import { PAGE_PERMISSION_KEY, checkPermission, AccessDenied } from '../../features/permissions';
 import { PageRendererProps } from './pageRendererTypes';
 
 export function renderContent(props: PageRendererProps): React.ReactNode {

@@ -6,7 +6,7 @@ import { supabase } from './lib/supabase';
 import { Toaster } from 'react-hot-toast';
 import { Wrench } from 'lucide-react';
 import { useUserPreferences } from './context/UserPreferencesContext';
-import { useAuthSession } from './app/hooks/useAuthSession';
+import { useAuthSession } from './features/auth';
 import { useMeetingsData } from './app/hooks/useMeetingsData';
 import { useMaintenanceMode } from './app/hooks/useMaintenanceMode';
 import { useSparkVisibility } from './app/hooks/useSparkVisibility';

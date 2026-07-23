@@ -91,7 +91,11 @@ export function useMeetingsData(isAuthenticated: boolean): MeetingsData {
   }, [fetchPendingMeetingsCount]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      setMeetings([]);
+      setPendingMeetingsCount(0);
+      return;
+    }
     fetchMeetings();
 
     const channel = supabase

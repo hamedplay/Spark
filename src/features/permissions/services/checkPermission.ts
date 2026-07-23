@@ -1,6 +1,5 @@
 /**
  * Maps page IDs to permission keys. Pages not listed are always accessible.
- * Extracted verbatim from App.tsx.
  */
 export const PAGE_PERMISSION_KEY: Record<string, string> = {
   meetings: 'meetings',

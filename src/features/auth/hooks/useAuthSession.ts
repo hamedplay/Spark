@@ -1,14 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, handleSupabaseError } from '../../lib/supabase';
-import { resolveUserPermissions } from './resolveUserPermissions';
-
-interface AuthSessionState {
-  isAuthenticated: boolean;
-  loading: boolean;
-  isAdmin: boolean;
-  currentUserId: string | null;
-  userPermissions: Record<string, boolean> | null | undefined;
-}
+import { supabase, handleSupabaseError } from '../../../lib/supabase';
+import { loadResolvedUserPermissions } from '../../permissions';
+import type { AuthSessionState } from '../types/authSession';
 
 export function useAuthSession(): AuthSessionState {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -19,7 +12,7 @@ export function useAuthSession(): AuthSessionState {
 
   const loadUserPermissions = useCallback(async (userId: string) => {
     try {
-      const result = await resolveUserPermissions(userId);
+      const result = await loadResolvedUserPermissions(userId);
       setUserPermissions(result);
     } catch (err) {
       console.error('loadUserPermissions error:', err);
