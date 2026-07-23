@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { logAudit } from '../../../lib/audit';
-import { CirclePlus as PlusCircle, Loader as Loader2, Mail, Lock, UserPlus, Save, Users, X, Plus, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, BookUser, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
+import { CirclePlus as PlusCircle, Loader as Loader2, UserPlus, Save, Users, X, Plus, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, BookUser, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail } from '../../../types';
@@ -9,6 +9,7 @@ import type { AgendaItem } from '../../../types';
 import { useOrgUsers } from '../../../lib/useOrgUsers';
 import { MultiSelectField } from './CreateMeetingForm/MultiSelectField';
 import { MeetingDateTimeFields } from './CreateMeetingForm/MeetingDateTimeFields';
+import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 
 interface CalendarEntry {
   id: string;
@@ -494,36 +495,20 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
 
   if (showAuthError) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-6">{isSignUp ? 'ایجاد حساب کاربری' : 'ورود به سیستم'}</h2>
-          <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-right text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ایمیل</label>
-              <div className="relative">
-                <input type="email" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
-                  className="w-full p-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" required />
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-right text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور</label>
-              <div className="relative">
-                <input type="password" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
-                  className="w-full p-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" required minLength={6} />
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              </div>
-            </div>
-            <button type="submit" disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 disabled:opacity-50">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : isSignUp ? <><UserPlus className="w-5 h-5" />ایجاد حساب</> : <><Mail className="w-5 h-5" />ورود</>}
-            </button>
-          </form>
-          <button onClick={() => setIsSignUp(!isSignUp)} className="mt-4 text-blue-500 hover:text-blue-600">
-            {isSignUp ? 'حساب دارید؟ وارد شوید' : 'حساب ندارید؟ ثبت‌نام'}
-          </button>
-        </div>
-      </div>
+      <MeetingFormAuthFallback
+        isSignUp={isSignUp}
+        email={authForm.email}
+        password={authForm.password}
+        loading={loading}
+        onSubmit={isSignUp ? handleSignUp : handleLogin}
+        onEmailChange={(value) =>
+          setAuthForm({ ...authForm, email: value })
+        }
+        onPasswordChange={(value) =>
+          setAuthForm({ ...authForm, password: value })
+        }
+        onToggleMode={() => setIsSignUp(!isSignUp)}
+      />
     );
   }
 

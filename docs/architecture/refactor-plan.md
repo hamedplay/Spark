@@ -129,6 +129,33 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 2B2D3 — Extract authentication-fallback presentation ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingFormAuthFallback.tsx` (presentational, self-contained)
+- [x] Define explicit props contract: `MeetingFormAuthFallbackProps` (controlled email/password/loading/mode with submit, change, and toggle callbacks)
+- [x] Move authentication fallback container, heading, email field, password field, submit button, loading indicator, login/signup button labels, mode-toggle link, and all related Persian text and CSS classes
+- [x] New component imports only React types and required Lucide icons (`Loader as Loader2`, `Mail`, `Lock`, `UserPlus`)
+- [x] New component imports no Supabase, Auth feature hooks, Meetings hooks, `src/app`, toast, repositories, or services
+- [x] Replace `if (showAuthError)` fallback block in `CreateMeetingForm` with `<MeetingFormAuthFallback />` using controlled props
+- [x] Preserve object-update semantics (`setAuthForm({ ...authForm, email: value })`) — no reducer or new form state abstraction
+- [x] Remove `Mail` and `Lock` from `CreateMeetingForm` icon imports (no longer used in parent); `UserPlus` and `Loader2` remain used elsewhere
+- [x] Auth operations remain in the parent as legacy behavior:
+  - `showAuthError`, `isSignUp`, `authForm`, `loading`, `userId` state
+  - `handleLogin`, `handleSignUp` handlers
+  - `supabase.auth.getUser`, `supabase.auth.signInWithPassword`, `supabase.auth.signUp` calls
+  - success and error toasts, email redirect configuration, post-auth state updates, form submission behavior
+- [x] No Auth feature file modified
+- [x] No explicit `any` introduced
+- [x] CreateMeetingForm line count reduced from 1134 to 1119 (15 lines removed)
+- [x] `MeetingFormAuthFallback.tsx` is 60 lines (below ~120-line target)
+- [x] Scoped lint unchanged: 16 problems (14 errors, 2 warnings) — no increase
+- [x] `MeetingFormAuthFallback.tsx` has zero lint errors and warnings
+- [x] No Supabase query or mutation changed
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No repository, service, hook, context, reducer, or dependency added
+- [x] Auth-boundary redesign deferred until behavior tests exist
+- Inherited CreateMeetingForm lint debt deferred to cleanup phase
+
 #### Phase 2B2D2 — Extract edit-mode Jalali date and time fields ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingDateTimeFields.tsx` (presentational, self-contained)
 - [x] Define explicit props contract: `MeetingDateTimeFieldsProps` (controlled date/start/end with change callbacks)
@@ -265,7 +292,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2D3. extract the authentication fallback presentation
+2B2D4. extract the representative contact-picker presentation
 2C. calendar
 2D. tasks
 2E. minutes
@@ -335,3 +362,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2C4 | scoped lint: 5 problems (5 errors, 0 warnings) — no increase | pass  |
 | 2B2D1 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
 | 2B2D2 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
+| 2B2D3 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
