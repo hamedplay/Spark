@@ -18,6 +18,7 @@ import {
   replaceMeetingAgendaItems,
 } from '../repositories/meetingAgendaRepository';
 import { fetchMeetingPeoplePrefill } from '../repositories/meetingPrefillRepository';
+import { updatePrimaryMeeting, createPrimaryMeeting } from '../repositories/meetingPersistenceRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
@@ -301,8 +302,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       }
 
       if (prefillMeetingId) {
-        const { error } = await supabase.from('meetings').update(meetingRecord).eq('id', prefillMeetingId);
-        if (error) throw error;
+        await updatePrimaryMeeting(prefillMeetingId, meetingRecord);
 
         if (agendaEnabled) {
           await replaceMeetingAgendaItems(prefillMeetingId, agendaItems);
@@ -312,8 +312,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
 
         toast.success('جلسه ویرایش شد');
       } else {
-        const { data: meetingData, error: meetingError } = await supabase.from('meetings').insert([meetingRecord]).select().single();
-        if (meetingError) throw meetingError;
+        const meetingData = await createPrimaryMeeting(meetingRecord);
 
         if (selectedParticipants.length > 0 && meetingData) {
           await supabase.from('participants').insert(selectedParticipants.map(p => ({ meeting_id: meetingData.id, name: p.name })));

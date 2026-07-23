@@ -129,6 +129,33 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3A4A — Extract primary meeting persistence repository ✅
+- [x] Create `src/features/meetings/repositories/meetingPersistenceRepository.ts` (Supabase access only)
+- [x] Define internal write contract `MeetingPersistenceRecord` matching current `meetingRecord` payload exactly — no added or removed fields
+- [x] Export exactly two functions: `updatePrimaryMeeting(meetingId, record)` and `createPrimaryMeeting(record)`
+- [x] Update preserves `.from('meetings').update(record).eq('id', meetingId)` — no `.select()`, `.single()`, extra filter, logging, toast, or retry; throws Supabase error
+- [x] Create preserves `.from('meetings').insert([record]).select().single()` — `.select()` not narrowed to `.select('id')`; throws Supabase error; returns `{ id: data.id }` or `null` when no data
+- [x] Repository imports only the existing Supabase client — no React, toast, audit, moment, Auth, UI components, Meetings hooks, `src/app`, another repository, state setters, or form props
+- [x] Not exported from the public Meetings `index.ts`
+- [x] Replace inline update with `updatePrimaryMeeting(prefillMeetingId, meetingRecord)` — `prefillMeetingId` decision, Agenda replacement, `logAudit`, and success toast remain in the form
+- [x] Replace inline primary insert with `createPrimaryMeeting(meetingRecord)` — participant insertion, recurrence decision/generation, Agenda insertion, audit, and success toast remain in the form
+- [x] All existing `meetingData` / `meetingData.id` / `meetingData?.id` guards preserved unchanged
+- [x] `meetingRecord` construction remains in the form — date conversion, duration, status, notification-user dedup, participant ID mapping, external participants, recurrence fields, reminder, manager, calendar ID, optional start/end all unchanged
+- [x] Recurring-meetings insert remains in the form
+- [x] Participants table insert remains in the form
+- [x] Agenda operations still use the Agenda repository
+- [x] Prefill repository calls unchanged
+- [x] `handleSubmit`, try/catch/finally, loading state, `resetForm`, `onSuccess` all unchanged
+- [x] Parent meetings-table operations: 3 before (update, primary insert, recurring insert), 1 after (recurring insert only)
+- [x] Repository meetings-table operations: 2 (update + primary create)
+- [x] Scoped parent lint: 11 problems (9 errors, 2 warnings) — no increase
+- [x] Repository lint: zero errors and warnings
+- [x] No new explicit `any` introduced
+- [x] No UI component modified
+- [x] No public Meetings export changed
+- [x] No database schema, Auth, payload, UI or submission behavior changes
+- [x] No generic abstraction or dependency added
+
 #### Phase 3A3 — Extract meeting people-prefill repository ✅
 - [x] Create `src/features/meetings/repositories/meetingPrefillRepository.ts` (Supabase access only)
 - [x] Export only `fetchMeetingPeoplePrefill(meetingId)` returning `MeetingPeoplePrefill | null`
@@ -543,7 +570,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3A4. extract primary meeting persistence repository
+3A4B. extract meeting participant-snapshot persistence
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -616,3 +643,4 @@ Phases 2–7 as described in the phased checklist.
 | 3A1    | scoped lint: 12 problems (10 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3A2    | scoped lint: 11 problems (9 errors, 2 warnings) — decrease of 1 (Agenda `any` removed); repository zero | pass  |
 | 3A3    | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
+| 3A4A   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
