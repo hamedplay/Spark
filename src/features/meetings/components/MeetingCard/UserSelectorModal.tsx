@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Building2, Send, X, Loader as Loader2, Search, ChevronDown, ChevronRight, Users } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../../lib/supabase';
 import toast from 'react-hot-toast';
-import { Meeting } from '../../types';
-import { useOrgUsers, OrgUnitGroup, OrgUserProfile, resolveUserDisplay, FALLBACK_NAME } from '../../lib/useOrgUsers';
+import { Meeting } from '../../../../types';
+import { useOrgUsers, OrgUnitGroup, OrgUserProfile, resolveUserDisplay, FALLBACK_NAME } from '../../../../lib/useOrgUsers';
 
 interface UserSelectorModalProps {
   meetingId: string;

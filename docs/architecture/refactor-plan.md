@@ -98,15 +98,23 @@ App additionally wraps content in `PermissionsProvider` and `GlobalCallProvider`
 - [x] Build passes, scoped lint clean
 - [x] No feature imports from `src/app`; used local `MeetingsPageId` type instead of importing `PageId`
 
-Deferred to Phase 2B2:
-- Move `MeetingCard/` folder into `features/meetings/components/`
-- Move `Dashboard.tsx` into `features/meetings/`
+Deferred to Phase 2B2B:
 - Move `CreateMeetingForm.tsx` into `features/meetings/`
-- Move `PendingMeetingsModal.tsx` into `features/meetings/`
 - Introduce meetings repository and mappers
 
+#### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
+- [x] Move `Dashboard.tsx` → `features/meetings/components/MeetingsDashboard.tsx` (renamed Dashboard→MeetingsDashboard, DashboardProps→MeetingsDashboardProps)
+- [x] Move `MeetingCard/` directory → `features/meetings/components/MeetingCard/` (all 6 files, unchanged logic)
+- [x] Update import paths in all relocated files (`../../` → `../../../../`, `../CreateMeetingForm` → `../../../../components/CreateMeetingForm`)
+- [x] Update `MeetingsPage.tsx` to import from local feature components
+- [x] Legacy `CreateMeetingForm.tsx` dependency intentionally retained at `src/components/CreateMeetingForm.tsx`
+- [x] Delete old `src/components/Dashboard.tsx` and `src/components/MeetingCard/` directory
+- [x] Build passes (both pre- and post-deletion)
+- [x] Scoped lint: pre-existing errors only, no new issues introduced
+- [x] No meetings component imports from `src/app`
+
 Remaining Phase 2 order:
-2B2. meetings component migration
+2B2B. CreateMeetingForm migration
 2C. calendar
 2D. tasks
 2E. minutes
@@ -168,3 +176,4 @@ Phases 2–7 as described in the phased checklist.
 | 1     | 681 problems (−13)           | pass  |
 | 2A    | scoped lint: 0 errors, 0 warnings | pass  |
 | 2B1   | scoped lint: 0 errors, 0 warnings | pass  |
+| 2B2A  | scoped lint: pre-existing errors only (no new issues) | pass  |

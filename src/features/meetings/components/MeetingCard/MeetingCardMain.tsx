@@ -1,16 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Loader as Loader2, Send, Share2, UserPlus, CalendarPlus, X, Download, RefreshCw, TriangleAlert as AlertTriangle, Trash2, Image, FileText, ClipboardList, UserCheck } from 'lucide-react';
-import { Meeting } from '../../types';
-import type { AgendaItem } from '../../types';
-import { supabase } from '../../lib/supabase';
-import { sendMeetingToTelegram } from '../../lib/telegram';
-import { insertNotification } from '../../lib/notifications';
-import { getMeetingTemplateKey } from '../../config/templateCatalog';
+import { Meeting } from '../../../../types';
+import type { AgendaItem } from '../../../../types';
+import { supabase } from '../../../../lib/supabase';
+import { sendMeetingToTelegram } from '../../../../lib/telegram';
+import { insertNotification } from '../../../../lib/notifications';
+import { getMeetingTemplateKey } from '../../../../config/templateCatalog';
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
-import { CreateMeetingForm } from '../CreateMeetingForm';
+import { CreateMeetingForm } from '../../../../components/CreateMeetingForm';
 import moment from 'moment-jalaali';
 
 interface MeetingCardMainProps {

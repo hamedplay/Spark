@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, User, X, Check, Loader as Loader2, CircleAlert as AlertCircle, RefreshCw, Phone } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../../lib/supabase';
 import toast from 'react-hot-toast';
 
 interface PendingMeetingsModalProps {

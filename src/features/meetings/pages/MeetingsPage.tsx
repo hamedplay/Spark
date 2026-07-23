@@ -1,7 +1,7 @@
 import { Search, Plus, Bell } from 'lucide-react';
-import { Dashboard } from '../../../components/Dashboard';
-import { MeetingCard } from '../../../components/MeetingCard';
-import { PendingMeetingsModal } from '../../../components/MeetingCard/PendingMeetingsModal';
+import { MeetingsDashboard } from '../components/MeetingsDashboard';
+import { MeetingCard } from '../components/MeetingCard';
+import { PendingMeetingsModal } from '../components/MeetingCard/PendingMeetingsModal';
 import { checkPermission } from '../../permissions';
 import type { MeetingsPageProps } from '../types/meetingsPage';
 
@@ -61,7 +61,7 @@ export function MeetingsPage(props: MeetingsPageProps) {
         </div>
       </div>
 
-      <Dashboard {...stats} />
+      <MeetingsDashboard {...stats} />
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1">

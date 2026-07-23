@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Save, X, Loader as Loader2, Users, ClipboardList, Plus, Pencil, Trash2, Check, UserCheck, Clock } from 'lucide-react';
-import { Meeting } from '../../types';
-import type { AgendaItem } from '../../types';
-import { supabase } from '../../lib/supabase';
+import { Meeting } from '../../../../types';
+import type { AgendaItem } from '../../../../types';
+import { supabase } from '../../../../lib/supabase';
 import toast from 'react-hot-toast';
 import DatePicker from 'react-datepicker';
-import { ContactEmail } from '../../types';
+import { ContactEmail } from '../../../../types';
 
 interface MeetingEditFormProps {
   meeting: Meeting;

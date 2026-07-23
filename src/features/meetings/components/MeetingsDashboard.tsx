@@ -1,13 +1,13 @@
 import { ChartBar as BarChart3, CircleCheck as CheckCircle, Clock, Bell } from 'lucide-react';
 
-interface DashboardProps {
+interface MeetingsDashboardProps {
   totalMeetings: number;
   openMeetings: number;
   completedMeetings: number;
   pendingMeetingsCount?: number;
 }
 
-export function Dashboard({ totalMeetings, openMeetings, completedMeetings, pendingMeetingsCount = 0 }: DashboardProps) {
+export function MeetingsDashboard({ totalMeetings, openMeetings, completedMeetings, pendingMeetingsCount = 0 }: MeetingsDashboardProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">

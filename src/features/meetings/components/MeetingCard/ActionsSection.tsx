@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Plus, Loader as Loader2 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../../lib/supabase';
 import toast from 'react-hot-toast';
-import { Action } from '../../types';
+import { Action } from '../../../../types';
 
 interface ActionsSectionProps {
   meetingId: string;

@@ -1,4 +1,4 @@
-import { Meeting } from '../../types';
+import { Meeting } from '../../../../types';
 import { MeetingCardMain } from './MeetingCardMain';
 
 interface MeetingCardProps {
