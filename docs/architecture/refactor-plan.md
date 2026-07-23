@@ -86,8 +86,27 @@ App additionally wraps content in `PermissionsProvider` and `GlobalCallProvider`
 - [x] Add logout safeguard to `useMeetingsData` (clears meetings + pending count)
 - [x] Build passes, scoped lint clean
 
+#### Phase 2B1 — Meetings feature boundary ✅
+- [x] Move `useMeetingsData` hook to `features/meetings/hooks/`
+- [x] Extract `MeetingsPage` (meetings list composition) to `features/meetings/pages/`
+- [x] Extract `CreateMeetingPage` (create-meeting wrapper) to `features/meetings/pages/`
+- [x] Create `features/meetings/types/meetingsPage.ts` with `MeetingsPageProps` + `CreateMeetingPageProps`
+- [x] Create `features/meetings/index.ts` public API
+- [x] Update `App.tsx` and `PageRenderer.tsx` imports to use feature public API
+- [x] Delete old `src/app/hooks/useMeetingsData.ts`
+- [x] PageRenderer no longer imports Dashboard, MeetingCard, CreateMeetingForm, PendingMeetingsModal
+- [x] Build passes, scoped lint clean
+- [x] No feature imports from `src/app`; used local `MeetingsPageId` type instead of importing `PageId`
+
+Deferred to Phase 2B2:
+- Move `MeetingCard/` folder into `features/meetings/components/`
+- Move `Dashboard.tsx` into `features/meetings/`
+- Move `CreateMeetingForm.tsx` into `features/meetings/`
+- Move `PendingMeetingsModal.tsx` into `features/meetings/`
+- Introduce meetings repository and mappers
+
 Remaining Phase 2 order:
-2B. meetings
+2B2. meetings component migration
 2C. calendar
 2D. tasks
 2E. minutes
@@ -148,3 +167,4 @@ Phases 2–7 as described in the phased checklist.
 | 0     | 694 problems (pre-existing)   | pass  |
 | 1     | 681 problems (−13)           | pass  |
 | 2A    | scoped lint: 0 errors, 0 warnings | pass  |
+| 2B1   | scoped lint: 0 errors, 0 warnings | pass  |

@@ -7,7 +7,7 @@ import { Toaster } from 'react-hot-toast';
 import { Wrench } from 'lucide-react';
 import { useUserPreferences } from './context/UserPreferencesContext';
 import { useAuthSession } from './features/auth';
-import { useMeetingsData } from './app/hooks/useMeetingsData';
+import { useMeetingsData } from './features/meetings';
 import { useMaintenanceMode } from './app/hooks/useMaintenanceMode';
 import { useSparkVisibility } from './app/hooks/useSparkVisibility';
 import { useNavigation, useAdminPathGuard } from './app/navigation/useNavigation';
