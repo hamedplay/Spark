@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Calendar as CalendarIcon, CreditCard as Edit2, Send, Share2, UserPlus, CalendarPlus, RefreshCw, TriangleAlert as AlertTriangle, Trash2, Image, FileText } from 'lucide-react';
 import { DeleteMeetingModal } from './DeleteMeetingModal';
 import { MeetingDetails } from './MeetingDetails';
@@ -7,15 +7,14 @@ import { MeetingShareDialog } from './MeetingShareDialog';
 import { MeetingShareCard } from './MeetingShareCard';
 import { Meeting } from '../../../../types';
 import { supabase } from '../../../../lib/supabase';
-import { sendMeetingToTelegram } from '../../../../lib/telegram';
 import { insertNotification } from '../../../../lib/notifications';
 import { getMeetingTemplateKey } from '../../../../config/templateCatalog';
 import toast from 'react-hot-toast';
-import { toPng } from 'html-to-image';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
 import { CreateMeetingForm } from '../CreateMeetingForm';
 import { useMeetingCardReadModel } from '../../hooks/useMeetingCardReadModel';
+import { useMeetingCardSharing } from '../../hooks/useMeetingCardSharing';
 import moment from 'moment-jalaali';
 
 interface MeetingCardMainProps {
@@ -31,13 +30,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   const [loading, setLoading] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [showUserSelector, setShowUserSelector] = useState(false);
-  const [showShareMenu, setShowShareMenu] = useState(false);
-  const [showShareDialog, setShowShareDialog] = useState(false);
-  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const shareCardRef = useRef<HTMLDivElement>(null);
-  const shareMenuRef = useRef<HTMLDivElement>(null);
 
   const {
     agendaItems,
@@ -47,15 +40,24 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
     isCreator,
   } = useMeetingCardReadModel(meeting);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) {
-        setShowShareMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  const {
+    cardRef,
+    shareCardRef,
+    shareMenuRef,
+    showShareMenu,
+    showShareDialog,
+    shareImageUrl,
+    toggleShareMenu,
+    closeShareDialog,
+    handleShareImage,
+    handleShareText,
+    handleSendToTelegram,
+    handleDownloadShareImage,
+  } = useMeetingCardSharing({
+    meeting,
+    agendaItems,
+    setLoading,
+  });
 
   const priorityColors = {
     high: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
@@ -110,91 +112,6 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       onUpdate();
     } catch {
       toast.error('خطا در ارسال مجدد دعوت‌نامه');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleShareImage = async () => {
-    setShowShareMenu(false);
-    if (!shareCardRef.current) { toast.error('خطا در ایجاد تصویر'); return; }
-    try {
-      setLoading(true);
-      toast.loading('در حال تولید تصویر...');
-      const dataUrl = await toPng(shareCardRef.current, { quality: 0.95, pixelRatio: 2 });
-      toast.dismiss();
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], 'meeting.png', { type: 'image/png' });
-      if (navigator.share && (navigator.canShare?.({ files: [file] }) ?? false)) {
-        await navigator.share({ title: meeting.subject, files: [file] });
-      } else {
-        setShareImageUrl(dataUrl);
-        setShowShareDialog(true);
-      }
-    } catch {
-      toast.dismiss();
-      toast.error('خطا در اشتراک‌گذاری');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleShareText = async () => {
-    setShowShareMenu(false);
-    const dateStr = new Date(meeting.requestDate).toLocaleDateString('fa-IR');
-    const timeStr = meeting.start_time && meeting.end_time
-      ? `${meeting.start_time} - ${meeting.end_time}`
-      : meeting.duration;
-    const agendaText = agendaItems.length > 0
-      ? `📌 دستور جلسه:\n` + agendaItems.map((item, idx) => {
-          const parts = [`${idx + 1}. ${item.title}`];
-          if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
-          if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
-          return parts.join(' | ');
-        }).join('\n')
-      : '';
-    const lines = [
-      `📋 جلسه: ${meeting.subject}`,
-      `📅 تاریخ: ${dateStr}`,
-      `⏰ زمان: ${timeStr}`,
-      `📍 محل: ${meeting.location}`,
-      `👤 نماینده: ${meeting.representative}`,
-      `📞 تلفن: ${meeting.phone}`,
-      meeting.participants.length > 0 ? `👥 شرکت‌کنندگان: ${meeting.participants.join('، ')}` : '',
-      meeting.notes ? `📝 یادداشت: ${meeting.notes}` : '',
-      agendaText,
-      `\nسیستم مدیریت جلسات اسپارک`,
-    ].filter(Boolean).join('\n');
-
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: meeting.subject, text: lines });
-      } else {
-        await navigator.clipboard.writeText(lines);
-        toast.success('متن جلسه در کلیپ‌بورد کپی شد');
-      }
-    } catch {
-      try {
-        await navigator.clipboard.writeText(lines);
-        toast.success('متن جلسه در کلیپ‌بورد کپی شد');
-      } catch {
-        toast.error('خطا در اشتراک‌گذاری متن');
-      }
-    }
-  };
-
-  const handleSendToTelegram = async () => {
-    if (meeting.status_type !== 'requested') {
-      toast.error('فقط جلسات در وضعیت درخواست شده قابل ارسال به مدیر هستند');
-      return;
-    }
-    try {
-      setLoading(true);
-      const imageData = await toPng(cardRef.current, { quality: 0.95, backgroundColor: 'white' });
-      await sendMeetingToTelegram(meeting.id, imageData);
-      toast.success('جلسه با موفقیت به مدیر ارسال شد');
-    } catch (error: any) {
-      toast.error('خطا در ارسال به مدیر');
     } finally {
       setLoading(false);
     }
@@ -493,7 +410,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
               </button>
               <div ref={shareMenuRef} className="relative">
                 <button
-                  onClick={() => setShowShareMenu(v => !v)}
+                  onClick={toggleShareMenu}
                   className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
                   title="اشتراک‌گذاری"
                 >
@@ -617,15 +534,8 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       {showShareDialog && shareImageUrl && (
         <MeetingShareDialog
           imageUrl={shareImageUrl}
-          onClose={() => setShowShareDialog(false)}
-          onDownload={() => {
-            const a = document.createElement('a');
-            a.href = shareImageUrl;
-            a.download = `meeting-${meeting.id.slice(0, 8)}.png`;
-            a.click();
-            toast.success('تصویر دانلود شد');
-            setShowShareDialog(false);
-          }}
+          onClose={closeShareDialog}
+          onDownload={handleDownloadShareImage}
         />
       )}
 
@@ -634,6 +544,3 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
     </div>
   );
 }
-
-
-export { MeetingCardMain }
