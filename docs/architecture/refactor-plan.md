@@ -129,6 +129,32 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 2B2D5 — Extract external-participant picker presentation ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/ExternalParticipantsField.tsx` (presentational + local dropdown interaction)
+- [x] Define explicit props contract: `ExternalParticipantsFieldProps` and `ExternalContactDraft` (controlled contacts/selectedNames/draft/isAddFormOpen with select, remove, draft-change, add-form-open-change, and add-contact callbacks)
+- [x] Move `externalSearch`, `showExternalDropdown`, `externalSearchRef` state into the new component
+- [x] Move external-dropdown outside-click effect and cleanup into the new component
+- [x] Move `filteredContacts` filtering (name + email match, exclusion of already-selected names, max 8 displayed) into the new component
+- [x] Move external-participants label, selected-name tags, remove buttons, search input, dropdown, contact result rows, keyboard handling (Enter selects first, Escape closes), quick-add button, add-contact form presentation, and `UserPlus`/`X`/`Plus` icon usage
+- [x] New component imports only React hooks, `UserPlus`/`X`/`Plus`, and `ContactEmail` type — no Supabase, toast, Auth, Meetings hooks, `src/app`, repositories, or services
+- [x] Connect component using controlled props preserving callback behavior: `setSelectedExternal` append/remove, draft field mapping, `setShowAddExternal`, `addQuickExternal`
+- [x] Remove parent outside-click effect (no other responsibility remained)
+- [x] Remove `useRef` and `UserPlus` from parent imports (no longer used in parent)
+- [x] `addQuickExternal` remains in the parent with its existing `contacts_email` insert, `.select().single()`, local contacts update, selected-external update, field reset, add-form close, and success/failure toasts
+- [x] Contact fetching, `selectedExternal`, `newExternalName/Email/Phone`, `showAddExternal`, meeting payload, reset, and prefill behavior remain in the parent
+- [x] No explicit `any` introduced in the new component
+- [x] CreateMeetingForm line count reduced from 1084 to 1015 (69 lines removed)
+- [x] `ExternalParticipantsField.tsx` is 134 lines (below ~190-line target)
+- [x] Scoped lint unchanged: 13 problems (11 errors, 2 warnings) — no increase
+- [x] `ExternalParticipantsField.tsx` has zero lint errors and warnings
+- [x] Parent contact/Supabase match count unchanged: 16 before, 16 after
+- [x] New component has zero Supabase/query/mutation matches
+- [x] No Supabase query or mutation changed
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No repository, service, hook, context, reducer, or dependency added
+- Inherited CreateMeetingForm lint debt deferred to cleanup phase
+
 #### Phase 2B2D4 — Extract representative contact-picker field ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/RepresentativeContactField.tsx` (presentational + local picker interaction)
 - [x] Define explicit props contract: `RepresentativeContactFieldProps` (controlled representative/phone/contacts with change and select callbacks)
@@ -322,7 +348,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2D5. extract the external-participant picker presentation
+2B2D6. extract the agenda editor presentation
 2C. calendar
 2D. tasks
 2E. minutes
@@ -394,3 +420,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D2 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
 | 2B2D3 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
 | 2B2D4 | scoped lint: 13 problems (11 errors, 2 warnings) — improved (removed 3 `any` casts) | pass  |
+| 2B2D5 | scoped lint: 13 problems (11 errors, 2 warnings) — no increase | pass  |
