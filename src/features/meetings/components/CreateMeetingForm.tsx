@@ -1,4 +1,8 @@
-import { useState, useEffect } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { supabase } from '../../../lib/supabase';
 import { logAudit } from '../../../lib/audit';
 import { X } from 'lucide-react';
@@ -70,6 +74,21 @@ interface CreateMeetingFormProps {
   } | null;
 }
 
+function getErrorMessage(
+  error: unknown
+): string | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+
+  return undefined;
+}
+
 export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars = [] }: CreateMeetingFormProps) {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -88,11 +107,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
     }),
   }));
 
-  // تبدیل user_id به نام نمایشی بر اساس داده‌های useOrgUsers (بدون query مستقیم profiles)
-  const resolveUserName = (uid: string): string =>
-    allUsers.find(u => u.user_id === uid)?.full_name || 'کاربر سیستم';
-  const resolveUsersByIds = (ids: string[]): { id: string; name: string }[] =>
-    ids.map(id => ({ id, name: resolveUserName(id) }));
+  const allUsersRef = useRef(allUsers);
 
   const [showAuthError, setShowAuthError] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -158,11 +173,45 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) { setUserId(user.id); setShowAuthError(false); fetchContacts(user.id); }
-      else { setShowAuthError(true); }
+      if (user) {
+        setUserId(user.id);
+        setShowAuthError(false);
+        try {
+          const contactsData =
+            await fetchMeetingContacts(user.id);
+
+          setContacts(contactsData);
+          setAllContacts(contactsData);
+        } catch (error) {
+          console.error(
+            'Error fetching contacts:',
+            error
+          );
+        }
+      } else { setShowAuthError(true); }
     };
     getUser();
   }, []);
+
+  useEffect(() => {
+    allUsersRef.current = allUsers;
+  }, [allUsers]);
+
+  const requestDateInitializedRef =
+    useRef(false);
+
+  useEffect(() => {
+    if (requestDateInitializedRef.current) {
+      return;
+    }
+
+    requestDateInitializedRef.current = true;
+
+    if (!requestJalaaliDate) {
+      const m = moment();
+      setRequestJalaaliDate(`${m.jYear()}/${String(m.jMonth() + 1).padStart(2, '0')}/${String(m.jDate()).padStart(2, '0')}`);
+    }
+  }, [requestJalaaliDate]);
 
   useEffect(() => {
     if (prefillData) {
@@ -196,9 +245,21 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         else if (diffMin <= 360) setRequestDuration('نیم روز');
         else setRequestDuration('یک روز');
       }
+      const resolvePrefillUsersByIds = (
+        ids: string[]
+      ): Array<{ id: string; name: string }> =>
+        ids.map((id) => ({
+          id,
+          name:
+            allUsersRef.current.find(
+              (user) => user.user_id === id
+            )?.full_name ||
+            'کاربر سیستم',
+        }));
+
       // Load participants from prefill IDs (name resolution via useOrgUsers data)
       if (prefillData.participantUserIds && prefillData.participantUserIds.length > 0) {
-        setSelectedParticipants(resolveUsersByIds(prefillData.participantUserIds));
+        setSelectedParticipants(resolvePrefillUsersByIds(prefillData.participantUserIds));
       }
       // Load participants, notify users and external participants from existing meeting record (when scheduling from pending)
       if (prefillData.meetingId && (!prefillData.participantUserIds || prefillData.participantUserIds.length === 0)) {
@@ -206,10 +267,10 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
           try {
             const peoplePrefill = await fetchMeetingPeoplePrefill(prefillData.meetingId);
             if (peoplePrefill?.participantUserIds?.length) {
-              setSelectedParticipants(resolveUsersByIds(peoplePrefill.participantUserIds));
+              setSelectedParticipants(resolvePrefillUsersByIds(peoplePrefill.participantUserIds));
             }
             if (peoplePrefill?.notifyUserIds?.length) {
-              setSelectedNotifyUsers(resolveUsersByIds(peoplePrefill.notifyUserIds));
+              setSelectedNotifyUsers(resolvePrefillUsersByIds(peoplePrefill.notifyUserIds));
             }
             if (peoplePrefill?.externalParticipants?.length) {
               setSelectedExternal(peoplePrefill.externalParticipants);
@@ -232,31 +293,16 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
     }
   }, [prefillData]);
 
-  useEffect(() => {
-    if (!requestJalaaliDate) {
-      const m = moment();
-      setRequestJalaaliDate(`${m.jYear()}/${String(m.jMonth() + 1).padStart(2, '0')}/${String(m.jDate()).padStart(2, '0')}`);
-    }
-  }, []);
-
-  // No-op: user list now sourced from useOrgUsers (secure RPC). Kept for call-site stability.
-  const fetchSystemUsers = async (_currentUserId?: string) => {};
-
-  const fetchContacts = async (uid: string) => {
-    try {
-      const data = await fetchMeetingContacts(uid);
-      setContacts(data);
-      setAllContacts(data);
-    } catch (error) { console.error('Error fetching contacts:', error); }
-  };
-
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
       const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password, options: { emailRedirectTo: window.location.origin } });
       if (error) throw error;
       if (data.user) { setUserId(data.user.id); setShowAuthError(false); toast.success('حساب کاربری ایجاد شد'); }
-    } catch (error: any) { toast.error(error.message === 'User already registered' ? 'این ایمیل قبلاً ثبت شده' : 'خطا در ایجاد حساب'); }
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      toast.error(message === 'User already registered' ? 'این ایمیل قبلاً ثبت شده' : 'خطا در ایجاد حساب');
+    }
     finally { setLoading(false); }
   };
 
@@ -266,7 +312,10 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       const { data, error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
       if (error) throw error;
       if (data.user) { setUserId(data.user.id); setShowAuthError(false); toast.success('وارد شدید'); }
-    } catch (error: any) { toast.error(error.message === 'Invalid login credentials' ? 'ایمیل یا رمز اشتباه' : 'خطا در ورود'); }
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      toast.error(message === 'Invalid login credentials' ? 'ایمیل یا رمز اشتباه' : 'خطا در ورود');
+    }
     finally { setLoading(false); }
   };
 
@@ -371,7 +420,11 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
 
       resetForm();
       onSuccess(subject, !!prefillMeetingId);
-    } catch (error: any) { console.error('Error:', error); toast.error(error.message || 'خطا در ثبت جلسه'); }
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      console.error('Error:', error);
+      toast.error(message || 'خطا در ثبت جلسه');
+    }
     finally { setLoading(false); }
   };
 

@@ -129,6 +129,20 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3C1 — Remove CreateMeetingForm lint debt ✅
+- [x] Baseline: 7 problems (5 errors, 2 warnings)
+- [x] Removed obsolete no-op `fetchSystemUsers` (2 errors: `@typescript-eslint/no-unused-vars` for `fetchSystemUsers` and `_currentUserId`)
+- [x] Converted three catch annotations from `any` to `unknown` (3 errors: `@typescript-eslint/no-explicit-any` at lines 259, 269, 374) using a single local `getErrorMessage(error: unknown)` helper — no casts, no `String(error)`
+- [x] Removed local `fetchContacts` helper and inlined its repository call and error handling into the initial Auth effect `getUser` — preserves execution-after-auth, both state arrays, identical console message, no toast, no loading-state change, `[]` dependency
+- [x] Removed component-level `resolveUserName` and `resolveUsersByIds`; added `allUsersRef` synced via a dedicated effect, and `resolvePrefillUsersByIds` defined inside the Prefill effect — fixes `react-hooks/exhaustive-deps` warning for `resolveUsersByIds` without adding `allUsers` to the Prefill dependency array (stays `[prefillData]`)
+- [x] Added `requestDateInitializedRef` one-shot guard to the default request-date effect — fixes `react-hooks/exhaustive-deps` warning for `requestJalaaliDate` while preserving one-time initialization, no auto-fill after manual clear, same Jalali format, same effect order relative to Prefill
+- [x] No `useCallback`, no ESLint disable comments, no `@ts-ignore`, no explicit `any`
+- [x] Scoped lint: 0 errors, 0 warnings
+- [x] 12 characterization tests pass
+- [x] Build passes
+- [x] No production file other than the form changed; no dependency or new file added
+- [x] No public Meetings export changed
+
 #### Phase 3B4 — Primary meeting-record characterization tests ✅
 - [x] Create `tests/meetings/buildMeetingPersistenceRecord.test.ts` outside `src` — production `tsconfig.app.json` unchanged
 - [x] Use Node's built-in `node:test` + `node:assert/strict`; `tsx` only as the TypeScript runtime — no new dependencies
@@ -749,7 +763,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3C1. remove remaining CreateMeetingForm lint debt without behavior changes
+3C2. move CreateMeetingForm authentication operations behind the Auth feature boundary
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -829,3 +843,4 @@ Phases 2–7 as described in the phased checklist.
 | 3B2    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; new builder zero | pass  |
 | 3B3    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; test file + builder + types zero; 6 tests pass | pass  |
 | 3B4    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; both test files + both builders + types zero; 12 tests pass | pass  |
+| 3C1    | scoped lint: 0 errors, 0 warnings — form clean; 12 tests pass | pass  |
