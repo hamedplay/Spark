@@ -129,6 +129,28 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 2B2D6 — Extract agenda editor presentation ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/AgendaEditor.tsx` (presentational + local editing interaction)
+- [x] Define explicit props contract: `AgendaEditorProps` (controlled enabled/items/participantNames/externalNames with enabled-change, items-change, and optional validation-error callbacks)
+- [x] Move `showAgendaForm`, `agendaForm`, `editingAgendaIdx` temporary editing state into the new component (as `showForm`, `form`, `editingIndex`)
+- [x] Move agenda enable/disable presentation, add-agenda button, agenda item form, title field, presenter field, duration field, add/save/cancel controls, agenda item list, edit button, delete button, and all local add/edit/delete handler bodies
+- [x] Move `ClipboardList`, `Pencil`, `Trash2`, `Check`, `Plus` icon usage into the new component (`UserCheck`, `Clock` remain shared in parent)
+- [x] New component imports only React hooks, Lucide icons, and `AgendaItem` type — no Supabase, toast, Auth, Meetings hooks, `src/app`, repositories, or services
+- [x] Connect component with controlled props: `enabled`/`items`/`onEnabledChange`/`onItemsChange`, `participantNames`/`externalNames` for presenter dropdown, optional `onValidationError` for required-field toast
+- [x] `agendaEnabled`, `agendaItems`, `setAgendaEnabled`, `setAgendaItems` remain in the parent
+- [x] Prefill query for `meeting_agenda_items`, row-to-AgendaItem mapping, agenda insert during creation, agenda delete+insert during update, meeting submission, Supabase calls, toast calls, reset, and payload behavior remain in the parent
+- [x] All `meeting_agenda_items` queries and mutations remain in the parent (5 matches before and after)
+- [x] No explicit `any` introduced in the new component
+- [x] CreateMeetingForm line count reduced from 1015 to 875 (140 lines removed)
+- [x] `AgendaEditor.tsx` is 178 lines (below ~200-line target)
+- [x] Scoped lint unchanged: 13 problems (11 errors, 2 warnings) — no increase
+- [x] `AgendaEditor.tsx` has zero lint errors and warnings
+- [x] New component has zero Supabase/query/mutation matches
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No repository, service, hook, context, reducer, or dependency added
+- Inherited CreateMeetingForm lint debt deferred to cleanup phase
+
 #### Phase 2B2D5 — Extract external-participant picker presentation ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/ExternalParticipantsField.tsx` (presentational + local dropdown interaction)
 - [x] Define explicit props contract: `ExternalParticipantsFieldProps` and `ExternalContactDraft` (controlled contacts/selectedNames/draft/isAddFormOpen with select, remove, draft-change, add-form-open-change, and add-contact callbacks)
@@ -348,7 +370,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2D6. extract the agenda editor presentation
+2B2D7. extract the recurrence configuration presentation
 2C. calendar
 2D. tasks
 2E. minutes
@@ -421,3 +443,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D3 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
 | 2B2D4 | scoped lint: 13 problems (11 errors, 2 warnings) — improved (removed 3 `any` casts) | pass  |
 | 2B2D5 | scoped lint: 13 problems (11 errors, 2 warnings) — no increase | pass  |
+| 2B2D6 | scoped lint: 13 problems (11 errors, 2 warnings) — no increase | pass  |
