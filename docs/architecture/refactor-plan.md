@@ -129,6 +129,31 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3A1 — Extract Meetings contact data-access repository ✅
+- [x] Create `src/features/meetings/repositories/meetingContactsRepository.ts` (Supabase access only)
+- [x] Export only `fetchMeetingContacts`, `createExternalMeetingContact`, `saveRepresentativeMeetingContact`
+- [x] Use explicit `MeetingContactInput` interface (userId, name, email, phone)
+- [x] Preserve exact query chains:
+  - `fetchMeetingContacts`: `.from('contacts_email').select('*').eq('user_id', userId).order('name')`, throw on error, return `data ?? []`
+  - `createExternalMeetingContact`: `.insert([...]).select().single()`, throw on error, return inserted contact
+  - `saveRepresentativeMeetingContact`: non-returning `.insert([...])` (no `.select()`/`.single()`), throw on error
+- [x] Repository imports only the existing Supabase client and `ContactEmail` type — no React, toast, Auth hooks, UI components, `src/app`, state setters, meeting form types, or other-feature repositories
+- [x] Errors are thrown, not caught/hidden in the repository
+- [x] Not exported from the public Meetings `index.ts`
+- [x] Replace contact loading in `CreateMeetingForm` with `fetchMeetingContacts(uid)` — parent still calls after authenticated user resolution, sets both `contacts` and `allContacts`, catches errors, logs same message, no toast
+- [x] Replace quick external-contact creation with `createExternalMeetingContact(...)` — `addQuickExternal` remains in parent preserving name/user guard, local `contacts` update, `selectedExternal` update, draft-field reset, add-form closing, success/failure toasts
+- [x] Replace representative-contact save with `saveRepresentativeMeetingContact(...)` — condition `saveContact && !repFromContacts && representative.trim() && userId` remains in parent
+- [x] Parent `contacts_email` match count: 3 before, 0 after
+- [x] Repository `contacts_email` match count: 3 (the three expected operations)
+- [x] Combined Supabase/query/RPC count: 16 before, 16 after (13 parent + 3 repository)
+- [x] Scoped parent lint unchanged: 12 problems (10 errors, 2 warnings) — no increase
+- [x] Repository lint: zero errors and warnings
+- [x] No explicit `any` introduced
+- [x] No UI component modified
+- [x] No public Meetings export changed
+- [x] No database schema, Auth, payload, Agenda, recurrence, or submission change
+- [x] State ownership, guards, toasts, and orchestration remain in the form
+
 #### Phase 2B2D10 — Complete remaining presentational extraction ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingMetadataFields.tsx` (presentational)
 - [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingManagerField.tsx` (presentational)
@@ -467,17 +492,10 @@ Deferred to Phase 3:
 
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
-Remaining Phase 2 order:
-2C. calendar
-2D. tasks
-2E. minutes
-2F. contacts
-2G. chat and channels
-2H. reports
-2I. video conference
-2J. Spark AI
-2K. administration
-### Phase 3 — Introduce repositories and mappers (pending)
+Remaining Phase 3 order:
+3A2. extract meeting Agenda repository
+
+### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
 ### Phase 5 — Routing modernization (pending)
 ### Phase 6 — Testing and CI (pending)
@@ -545,3 +563,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D8 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
 | 2B2D9 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
 | 2B2D10 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
+| 3A1    | scoped lint: 12 problems (10 errors, 2 warnings) — no increase; repository zero | pass  |

@@ -7,6 +7,11 @@ import moment from 'moment-jalaali';
 import { ContactEmail } from '../../../types';
 import type { AgendaItem } from '../../../types';
 import { useOrgUsers } from '../../../lib/useOrgUsers';
+import {
+  fetchMeetingContacts,
+  createExternalMeetingContact,
+  saveRepresentativeMeetingContact,
+} from '../repositories/meetingContactsRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
@@ -227,10 +232,9 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
 
   const fetchContacts = async (uid: string) => {
     try {
-      const { data, error } = await supabase.from('contacts_email').select('*').eq('user_id', uid).order('name');
-      if (error) throw error;
-      setContacts(data || []);
-      setAllContacts(data || []);
+      const data = await fetchMeetingContacts(uid);
+      setContacts(data);
+      setAllContacts(data);
     } catch (error) { console.error('Error fetching contacts:', error); }
   };
 
@@ -336,7 +340,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
 
       // Save contact only when manually entered (not from contacts list)
       if (saveContact && !repFromContacts && representative.trim() && userId) {
-        await supabase.from('contacts_email').insert([{ name: representative, phone, email: '', user_id: userId }]);
+        await saveRepresentativeMeetingContact({ userId, name: representative, phone, email: '' });
       }
 
       resetForm();
@@ -453,9 +457,8 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const addQuickExternal = async () => {
     if (!newExternalName.trim() || !userId) return;
     try {
-      const { data, error } = await supabase.from('contacts_email').insert([{ name: newExternalName, email: newExternalEmail, phone: newExternalPhone, user_id: userId }]).select().single();
-      if (error) throw error;
-      if (data) { setContacts(prev => [...prev, data]); setSelectedExternal(prev => [...prev, newExternalName]); }
+      const data = await createExternalMeetingContact({ userId, name: newExternalName, email: newExternalEmail, phone: newExternalPhone });
+      setContacts(prev => [...prev, data]); setSelectedExternal(prev => [...prev, newExternalName]);
       setNewExternalName(''); setNewExternalEmail(''); setNewExternalPhone(''); setShowAddExternal(false);
       toast.success('مخاطب اضافه شد');
     } catch { toast.error('خطا در افزودن مخاطب'); }
