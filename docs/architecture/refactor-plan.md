@@ -129,6 +129,24 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3D2 — Extract the permanent-delete MeetingCard command ✅
+- [x] Created `src/features/meetings/commands/deleteMeetingPermanently.ts` with `deleteMeetingPermanently(input)` owning: cancellation-recipient construction, profile-name lookup, cancellation-notification fan-out, meeting Inbox deletion, Meeting deletion — no React, toast, Auth, hooks, repositories, or state
+- [x] Preserved recipient construction: participant IDs first, observer IDs second, existing ordering, duplicate IDs retained, no dedup, sender exclusion, all recipients retained when `senderId` is `null`
+- [x] Preserved profile lookup: `profiles` select `user_id, full_name` `in('user_id', recipientIds)`, error ignored, missing profiles produce empty names, recipients without profiles still notified
+- [x] Preserved cancellation notification fan-out: one `Promise.all` over `recipientIds`, participant/observer template selection, cancel action, Persian fallback title/message, placeholder keys, greeting fallback, nullable sender ID, action URL; `insertNotification` return values not inspected; failed results do not abort deletion; thrown errors reject `Promise.all`
+- [x] Preserved deletion order: notifications → `meeting_inbox` delete (awaited, error ignored) → `meetings` delete (error throws)
+- [x] `handlePermanentDelete` now: `setLoading(true)` → `getCurrentAuthUserId()` → `deleteMeetingPermanently(...)` → success toast → `onUpdate()` → catch error toast → `finally setLoading(false)`
+- [x] No early return on missing Auth user — permanent deletion continues with `senderId: null`; all participants/observers remain in notification list
+- [x] Auth lookup, loading, toast, modal state, and `onUpdate` remain in `MeetingCardMain`
+- [x] `DeleteMeetingModal.tsx` and modal callback wiring unchanged
+- [x] Resend, delete-and-revert, rejected-edit resend, and Google Calendar code unchanged
+- [x] Command not exported from `src/features/meetings/index.ts`
+- [x] No explicit `any` introduced in the command
+- [x] Scoped lint: command 0 errors/0 warnings; MeetingCardMain 4 errors (unchanged from 3D1 baseline)
+- [x] 12 characterization tests pass
+- [x] Build passes
+- [x] No public Meetings export changed
+
 #### Phase 3D1 — Inventory and extract the resend-invitations MeetingCard command ✅
 - [x] Recorded MeetingCard command inventory:
   - `handleResend` — Auth lookup, resend RPC, Inbox query, profile query, notification fan-out
@@ -806,7 +824,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3D2. extract the permanent-delete MeetingCard command
+3D3. extract the delete-and-revert MeetingCard command
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -889,3 +907,4 @@ Phases 2–7 as described in the phased checklist.
 | 3C1    | scoped lint: 0 errors, 0 warnings — form clean; 12 tests pass | pass  |
 | 3C2    | scoped lint: 0 errors, 0 warnings — form + auth service + auth index + auth hook clean; 12 tests pass | pass  |
 | 3D1    | scoped lint: command 0/0; MeetingCardMain 4 errors (down from 5); 12 tests pass | pass  |
+| 3D2    | scoped lint: command 0/0; MeetingCardMain 4 errors (unchanged); 12 tests pass | pass  |

@@ -11,6 +11,7 @@ import { insertNotification } from '../../../../lib/notifications';
 import { getMeetingTemplateKey } from '../../../../config/templateCatalog';
 import { getCurrentAuthUserId } from '../../../auth';
 import { resendMeetingInvitations } from '../../commands/resendMeetingInvitations';
+import { deleteMeetingPermanently } from '../../commands/deleteMeetingPermanently';
 import toast from 'react-hot-toast';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
@@ -86,31 +87,28 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   const handlePermanentDelete = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      // Notify participants before deleting
-      const pIds = (meeting.participant_user_ids || []) as string[];
-      const notifyIds = [...pIds, ...((meeting.notify_users || []) as string[])].filter(uid => uid !== user?.id);
-      if (notifyIds.length) {
-        const { data: cancelProfiles } = await supabase.from('profiles').select('user_id, full_name').in('user_id', notifyIds);
-        const cancelNameMap: Record<string, string> = {};
-        for (const p of (cancelProfiles || [])) cancelNameMap[p.user_id] = p.full_name || '';
-        await Promise.all(notifyIds.map(uid =>
-          insertNotification({
-            userId: uid,
-            category: 'meeting',
-            eventType: getMeetingTemplateKey(pIds.includes(uid) ? 'participant' : 'observer', 'cancel'),
-            audience: pIds.includes(uid) ? 'participants' : 'observers',
-            fallbackTitle: 'جلسه لغو شد',
-            fallbackMessage: `جلسه «${meeting.subject}» لغو شده است`,
-            placeholders: { meeting_subject: meeting.subject, full_name: cancelNameMap[uid] || '', recipient_greeting: cancelNameMap[uid] ? `${cancelNameMap[uid]} گرامی` : 'همکار گرامی' },
-            senderId: user?.id ?? null,
-            actionUrl: 'meetings',
-          })
-        ));
-      }
-      await supabase.from('meeting_inbox').delete().eq('meeting_id', meeting.id);
-      const { error } = await supabase.from('meetings').delete().eq('id', meeting.id);
-      if (error) throw error;
+      const currentUserId =
+        await getCurrentAuthUserId();
+
+      await deleteMeetingPermanently({
+        meetingId: meeting.id,
+        meetingSubject: meeting.subject,
+
+        participantUserIds:
+          (
+            meeting.participant_user_ids ||
+            []
+          ) as string[],
+
+        notifyUserIds:
+          (
+            meeting.notify_users ||
+            []
+          ) as string[],
+
+        senderId: currentUserId,
+      });
+
       toast.success('جلسه به طور کامل حذف شد');
       onUpdate();
     } catch {
