@@ -103,7 +103,9 @@ Files above 300 lines need a documented reason in `docs/architecture/refactor-pl
 ## Permission rules
 
 - Centralize frontend permission loading without changing results.
-- Permission resolution is a pure function over already-loaded records.
+- Permission loading may query Supabase through the permissions feature.
+- The effective permission precedence and result contract must remain unchanged.
+- Pure permission checks must operate only on already-loaded permission data.
 - Preserve: admin full access, legacy group merging, org-level grants/denials, position overrides, ordering, fallback.
 - Do not redesign RBAC in this refactor.
 

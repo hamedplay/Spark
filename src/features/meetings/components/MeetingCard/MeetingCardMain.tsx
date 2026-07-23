@@ -1,5 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, CreditCard as Edit2, Loader as Loader2, Send, Share2, UserPlus, CalendarPlus, X, Download, RefreshCw, TriangleAlert as AlertTriangle, Trash2, Image, FileText, ClipboardList, UserCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, CreditCard as Edit2, Send, Share2, UserPlus, CalendarPlus, RefreshCw, TriangleAlert as AlertTriangle, Trash2, Image, FileText } from 'lucide-react';
+import { DeleteMeetingModal } from './DeleteMeetingModal';
+import { MeetingDetails } from './MeetingDetails';
+import { ParticipantStatusPanel } from './ParticipantStatusPanel';
+import { MeetingShareDialog } from './MeetingShareDialog';
+import { MeetingShareCard } from './MeetingShareCard';
 import { Meeting } from '../../../../types';
 import type { AgendaItem } from '../../../../types';
 import { supabase } from '../../../../lib/supabase';
@@ -17,91 +22,6 @@ interface MeetingCardMainProps {
   meeting: Meeting;
   onUpdate: () => void;
   onScheduleInCalendar?: (meeting: Meeting) => void;
-}
-
-// ─── Delete Modal ─────────────────────────────────────────────────────────────
-interface DeleteModalProps {
-  meeting: Meeting;
-  onClose: () => void;
-  onPermanentDelete: () => void;
-  loading: boolean;
-}
-
-function DeleteModal({ meeting, onClose, onPermanentDelete, loading }: DeleteModalProps) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
-        onClick={e => e.stopPropagation()}
-        dir="rtl"
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-          <h3 className="font-semibold text-gray-800 dark:text-white text-base flex items-center gap-2">
-            <Trash2 className="w-4 h-4 text-red-500" />
-            حذف جلسه
-          </h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {!confirmDelete ? (
-          <div className="p-5 space-y-3">
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center pb-1">
-              آیا می‌خواهید جلسه «{meeting.subject}» را حذف کنید؟
-            </p>
-
-            {/* Permanent delete */}
-            <button
-              onClick={() => setConfirmDelete(true)}
-              disabled={loading}
-              className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-400 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group disabled:opacity-50"
-            >
-              <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
-                <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-white">حذف کامل برای همه</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  جلسه به طور دائمی حذف می‌شود و هیچ رکوردی باقی نمی‌ماند
-                </p>
-              </div>
-            </button>
-          </div>
-        ) : (
-          <div className="p-5 space-y-4">
-            <div className="flex flex-col items-center gap-3 py-2">
-              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-red-500" />
-              </div>
-              <p className="text-sm font-semibold text-gray-800 dark:text-white text-center">آیا مطمئن هستید؟</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                این عمل غیرقابل بازگشت است. جلسه «{meeting.subject}» برای همیشه حذف خواهد شد.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={() => { onPermanentDelete(); onClose(); }}
-                disabled={loading}
-                className="py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                حذف کامل
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 // ─── MeetingCardMain ──────────────────────────────────────────────────────────
@@ -684,105 +604,15 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       )}
 
       <div className="flex-1">
-        <div className="space-y-3">
-          <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <CalendarIcon className="w-5 h-5 ml-2 flex-shrink-0" />
-            <span>{new Date(meeting.requestDate).toLocaleDateString('fa-IR')}</span>
-          </div>
-          <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <Clock className="w-5 h-5 ml-2 flex-shrink-0" />
-            {meeting.start_time && meeting.end_time
-              ? <span>{meeting.start_time} - {meeting.end_time}</span>
-              : <span>{meeting.duration}</span>}
-          </div>
-          <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <MapPin className="w-5 h-5 ml-2 flex-shrink-0" />
-            <span>{meeting.location}</span>
-          </div>
-          <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <User className="w-5 h-5 ml-2 flex-shrink-0" />
-            <span>{meeting.representative}</span>
-          </div>
-          <div className="flex items-center text-gray-600 dark:text-gray-300">
-            <Phone className="w-5 h-5 ml-2 flex-shrink-0" />
-            <span>{meeting.phone}</span>
-          </div>
-          {meeting.notes && (
-            <div className="mt-4 text-gray-600 dark:text-gray-300">
-              <p className="whitespace-pre-wrap">{meeting.notes}</p>
-            </div>
-          )}
+        <MeetingDetails meeting={meeting} agendaItems={agendaItems} />
 
-          {/* Agenda items */}
-          {agendaItems.length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5">
-                <ClipboardList className="w-3.5 h-3.5" /> دستور جلسه
-              </p>
-              <div className="space-y-1.5">
-                {agendaItems.map((item, idx) => (
-                  <div key={item.id} className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-700 text-sm">
-                    <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-center font-bold flex-shrink-0 mt-0.5">
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 dark:text-white">{item.title}</p>
-                      <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex-wrap">
-                        {item.presenter && <span className="flex items-center gap-1"><UserCheck className="w-3 h-3" />{item.presenter}</span>}
-                        {item.duration_minutes != null && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{item.duration_minutes} دقیقه</span>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4">
-          {/* Participant status panel (visible to meeting creator) */}
-          {meeting.user_id && currentUserId && meeting.user_id === currentUserId && Object.keys(participantStatuses).length > 0 ? (
-            <div>
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">وضعیت شرکت‌کنندگان</p>
-              <div className="flex flex-wrap gap-2">
-                {(meeting as any).participant_user_ids?.map((uid: string) => {
-                  const entry = participantStatuses[uid];
-                  const statusColor = !entry || entry.status === 'pending'
-                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800'
-                    : entry.status === 'accepted'
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800'
-                    : entry.status === 'delegated'
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800';
-                  const statusLabel = !entry || entry.status === 'pending' ? 'در انتظار'
-                    : entry.status === 'accepted' ? 'پذیرفته'
-                    : entry.status === 'delegated' ? `واگذار شد${entry.delegate_to && delegateNames[entry.delegate_to] ? ` → ${delegateNames[entry.delegate_to]}` : ''}`
-                    : 'رد کرده';
-                  // Find display name from meeting.participants array (index-based fallback)
-                  const participantIdx = ((meeting as any).participant_user_ids as string[]).indexOf(uid);
-                  const displayName = meeting.participants[participantIdx] || uid;
-                  return (
-                    <span key={uid} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${statusColor}`}>
-                      <User className="w-3 h-3 shrink-0" />
-                      <span>{displayName}</span>
-                      <span className="opacity-70">|</span>
-                      <span>{statusLabel}</span>
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {meeting.participants.map((participant, index) => (
-                <span key={index} className="inline-flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-sm">
-                  <User className="w-4 h-4 ml-1 flex-shrink-0" />
-                  {participant}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+        <ParticipantStatusPanel
+          meeting={meeting}
+          participantUserIds={(meeting as any).participant_user_ids ?? []}
+          participantStatuses={participantStatuses}
+          delegateNames={delegateNames}
+          isCreator={!!(meeting.user_id && currentUserId && meeting.user_id === currentUserId)}
+        />
       </div>
 
       {meeting.status === 'open' && (
@@ -813,7 +643,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
 
       {/* Modals */}
       {showDeleteModal && (
-        <DeleteModal
+        <DeleteMeetingModal
           meeting={meeting}
           onClose={() => setShowDeleteModal(false)}
           onPermanentDelete={handlePermanentDelete}
@@ -833,80 +663,22 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       )}
 
       {showShareDialog && shareImageUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowShareDialog(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-              <h3 className="font-semibold text-gray-800 dark:text-white text-base">اشتراک‌گذاری جلسه</h3>
-              <button onClick={() => setShowShareDialog(false)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-4">
-              <img src={shareImageUrl} alt="تصویر جلسه" className="w-full rounded-xl shadow-md mb-4" />
-              <button
-                onClick={() => {
-                  const a = document.createElement('a');
-                  a.href = shareImageUrl;
-                  a.download = `meeting-${meeting.id.slice(0, 8)}.png`;
-                  a.click();
-                  toast.success('تصویر دانلود شد');
-                  setShowShareDialog(false);
-                }}
-                className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl text-sm font-medium transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                دانلود تصویر
-              </button>
-            </div>
-          </div>
-        </div>
+        <MeetingShareDialog
+          imageUrl={shareImageUrl}
+          onClose={() => setShowShareDialog(false)}
+          onDownload={() => {
+            const a = document.createElement('a');
+            a.href = shareImageUrl;
+            a.download = `meeting-${meeting.id.slice(0, 8)}.png`;
+            a.click();
+            toast.success('تصویر دانلود شد');
+            setShowShareDialog(false);
+          }}
+        />
       )}
 
       {/* Hidden share card for image generation */}
-      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -1 }}>
-        <div ref={shareCardRef} style={{ width: 360, backgroundColor: '#fff', fontFamily: 'Vazirmatn, system-ui, sans-serif', direction: 'rtl', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.12)' }}>
-          <div style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-              </svg>
-            </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ color: '#fff', fontWeight: 700, fontSize: 15, margin: 0, lineHeight: 1.4 }}>{meeting.subject}</p>
-              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, margin: '2px 0 0', letterSpacing: 0.5 }}>Spark Meeting Manager</p>
-            </div>
-          </div>
-          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { label: 'تاریخ', value: new Date(meeting.requestDate).toLocaleDateString('fa-IR') },
-              { label: 'زمان', value: meeting.start_time && meeting.end_time ? `${meeting.start_time} — ${meeting.end_time}` : meeting.duration },
-              { label: 'محل برگزاری', value: meeting.location },
-              { label: 'نماینده', value: meeting.representative },
-              { label: 'تلفن تماس', value: meeting.phone },
-              { label: 'یادداشت', value: meeting.notes },
-              { label: 'دستور جلسه', value: agendaItems.length > 0
-                  ? agendaItems.map((item, idx) => {
-                      const parts = [`${idx + 1}. ${item.title}`];
-                      if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
-                      if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
-                      return parts.join(' | ');
-                    }).join('\n')
-                  : '' },
-            ].filter(r => r.value).map(r => (
-              <div key={r.label} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ color: '#6b7280', fontSize: 12, minWidth: 90, flexShrink: 0 }}>{r.label}:</span>
-                <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{r.value}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{ padding: '10px 20px', backgroundColor: '#f0f9ff', borderTop: '1px solid #e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-            </svg>
-            <p style={{ color: '#0ea5e9', fontSize: 11, margin: 0 }}>سیستم مدیریت جلسات اسپارک</p>
-          </div>
-        </div>
-      </div>
+      <MeetingShareCard ref={shareCardRef} meeting={meeting} agendaItems={agendaItems} />
     </div>
   );
 }

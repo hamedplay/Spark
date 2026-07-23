@@ -4,7 +4,7 @@
 
 Single-page React + TypeScript + Vite app. No React Router — navigation uses `activePage` state, `mpage` URL query param (minutes pages), `/admin` path via `pushState`/`popstate`, and `conference` query param for guest join. Supabase provides auth, database, realtime, storage, and edge functions. State is local React state + context providers; no external state library.
 
-`src/App.tsx` (857 lines) is the monolithic entry: auth session, permission loading, meetings fetch + realtime, maintenance mode, spark visibility, splash, navigation, and full page render switch.
+`src/App.tsx` (~135 lines) is a composition shell: wraps providers (PermissionsProvider, GlobalCallProvider) and delegates to `AppShell` for layout, navigation, and page rendering. Auth session, permission loading, meetings fetch + realtime, maintenance mode, spark visibility, and splash are handled by extracted hooks and feature modules.
 
 ### Provider tree (main.tsx)
 `UserPreferencesProvider → ThemeProvider → GoogleOAuthProvider → App`
@@ -101,6 +101,18 @@ App additionally wraps content in `PermissionsProvider` and `GlobalCallProvider`
 Deferred to Phase 3:
 - Introduce meetings repository and mappers
 
+#### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
+- [x] Move `src/components/CreateMeetingForm.tsx` → `src/features/meetings/components/CreateMeetingForm.tsx` (mechanical copy, unchanged logic)
+- [x] Adjust import paths in moved file (`../lib/*` → `../../../lib/*`, `../types` → `../../../types`)
+- [x] Update `CreateMeetingPage.tsx` and `MeetingCardMain.tsx` to import feature-local form
+- [x] Not exported from `features/meetings/index.ts` (internal component)
+- [x] Delete old `src/components/CreateMeetingForm.tsx`
+- [x] Build passes (both pre- and post-deletion)
+- [x] Scoped lint baseline preserved: 26 errors, 4 warnings (identical before/after)
+- [x] No meetings component imports from `src/app`
+- [x] No repository or mapper introduced
+- Inherited Meetings lint debt (15 errors, 2 warnings in CreateMeetingForm; 11 errors, 2 warnings in MeetingCardMain) deferred to cleanup phase
+
 #### Phase 2B2B — Relocate CreateMeetingForm ✅
 - [x] Move `src/components/CreateMeetingForm.tsx` → `src/features/meetings/components/CreateMeetingForm.tsx` (mechanical copy, unchanged logic)
 - [x] Adjust import paths in moved file (`../lib/*` → `../../../lib/*`, `../types` → `../../../types`)
@@ -113,19 +125,25 @@ Deferred to Phase 3:
 - [x] No repository or mapper introduced
 - Inherited Meetings lint debt (15 errors, 2 warnings in CreateMeetingForm; 11 errors, 2 warnings in MeetingCardMain) deferred to cleanup phase
 
+#### Phase 2B2C1 — Extract presentational UI from MeetingCardMain ✅
+- [x] Extract `DeleteMeetingModal.tsx` (confirmation flow, loading state, callbacks)
+- [x] Extract `MeetingDetails.tsx` (date, time, location, representative, phone, notes, agenda display)
+- [x] Extract `ParticipantStatusPanel.tsx` (participant status rendering, delegate names)
+- [x] Extract `MeetingShareDialog.tsx` (image share dialog, download callback)
+- [x] Extract `MeetingShareCard.tsx` (hidden card for html-to-image, forwardRef)
+- [x] All Supabase access, mutations, effects, handlers remain in MeetingCardMain
+- [x] MeetingCardMain line count reduced from 912 to 684
+- [x] Supabase/query/RPC match count unchanged (26)
+- [x] Scoped lint improved: 14 → 13 problems (11 errors, 2 warnings)
+- [x] All 5 new files have zero lint errors and warnings
+- [x] No extracted component imports Supabase or src/app
+- [x] No repository, service, or mapper introduced
+- Inherited Meetings lint debt deferred to cleanup phase
+
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
-- [x] Move `Dashboard.tsx` → `features/meetings/components/MeetingsDashboard.tsx` (renamed Dashboard→MeetingsDashboard, DashboardProps→MeetingsDashboardProps)
-- [x] Move `MeetingCard/` directory → `features/meetings/components/MeetingCard/` (all 6 files, unchanged logic)
-- [x] Update import paths in all relocated files (`../../` → `../../../../`, `../CreateMeetingForm` → `../../../../components/CreateMeetingForm`)
-- [x] Update `MeetingsPage.tsx` to import from local feature components
-- [x] Legacy `CreateMeetingForm.tsx` dependency intentionally retained at `src/components/CreateMeetingForm.tsx`
-- [x] Delete old `src/components/Dashboard.tsx` and `src/components/MeetingCard/` directory
-- [x] Build passes (both pre- and post-deletion)
-- [x] Scoped lint: pre-existing errors only, no new issues introduced
-- [x] No meetings component imports from `src/app`
 
 Remaining Phase 2 order:
-2B2C. split MeetingCardMain by responsibility
+2B2C2. continue splitting MeetingCardMain by responsibility
 2B2D. split CreateMeetingForm by responsibility
 2C. calendar
 2D. tasks
@@ -189,3 +207,5 @@ Phases 2–7 as described in the phased checklist.
 | 2A    | scoped lint: 0 errors, 0 warnings | pass  |
 | 2B1   | scoped lint: 0 errors, 0 warnings | pass  |
 | 2B2A  | scoped lint: pre-existing errors only (no new issues) | pass  |
+| 2B2B  | scoped lint: 26 errors, 4 warnings (identical before/after) | pass  |
+| 2B2C1 | scoped lint: 13 problems (11 errors, 2 warnings) — improved from 14 | pass  |
