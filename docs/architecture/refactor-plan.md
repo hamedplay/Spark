@@ -129,6 +129,33 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3B3 — Recurring-meeting characterization-test harness ✅
+- [x] Install `tsx@4.23.1` as the only new development dependency (exact version, `--save-dev --save-exact`)
+- [x] Add scripts `test` (alias) and `test:recurrence` to `package.json`; preserve all existing scripts exactly
+- [x] Create `tests/meetings/buildRecurringMeetingRecords.test.ts` outside `src` — production `tsconfig.app.json` unchanged
+- [x] Use Node's built-in `node:test` + `node:assert/strict`; `tsx` only as the TypeScript runtime — no Vitest/Jest/Mocha/Chai/Testing Library/jsdom/happy-dom/snapshot/coverage libraries, no `@types/node`, no separate test tsconfig
+- [x] Tests import only the builder, `moment-jalaali`, and Node built-ins — no React, Supabase, repositories, form components, toast, or browser APIs
+- [x] Timezone-safe strategy: local-Date constructors (`localDate`, `localMidnight`, `localEndOfDay`); no `TZ` mutation, no hardcoded UTC timestamps for locally constructed dates
+- [x] One base fixture (`createBaseRecord`) with source `id`, `status: 'closed'`, `start_time: '09:00'`, `end_time: '10:00'`, and representative arrays
+- [x] One input fixture (`createInput`) with defaults `repeatType: 'weekly'`, `repeatInterval: 1`, `repeatWeekday: 0`, `repeatMonthlyMode: 'specific'`, `repeatMonthlyWeekday: 0`
+- [x] Exactly six characterization tests:
+  1. `returns no records for an invalid end date` — asserts exact empty array
+  2. `generates weekly Saturday records in legacy order` — Jan 3/10/17 2026; asserts ordered `request_date`, `status: 'open'`, `id` omitted, fields preserved, `request_jalaali_date` matches `moment(...).format('jYYYY/jMM/jDD')`, and base record immutability
+  3. `preserves JavaScript Date rollover for monthly specific dates` — Jan 31 base → Mar 3, Mar 31 (legacy JS rollover, not corrected to Feb 28/Apr 30)
+  4. `generates the first Saturday of each following month` — Feb 7, Mar 7, Apr 4 2026
+  5. `generates the last Saturday of each following month` — Feb 28, Mar 28, Apr 25 2026
+  6. `uses the Jalali repeat end date through its local end of day` — Jalali base `1404/01/01`, end `1404/01/15`, two expected Saturdays (base+1, base+8) computed relative to base, no hardcoded Gregorian dates
+- [x] Assertions use only `assert.equal`, `assert.deepEqual`, `assert.ok` — no snapshots, no mocking of Date/Moment, no algorithm duplication beyond expected calendar dates
+- [x] Monthly specific-day rollover explicitly characterized as legacy behavior, not corrected behavior
+- [x] Production files unchanged: `buildRecurringMeetingRecords.ts`, `CreateMeetingForm.tsx`, `meetingPersistence.ts`, `meetingPersistenceRepository.ts`, `vite.config.ts`, `tsconfig.*`, `eslint.config.js`
+- [x] No public Meetings export changed
+- [x] Test result: 6 tests, 6 pass, 0 fail
+- [x] `npm test` passes
+- [x] Build passes
+- [x] Test file, recurrence builder, and persistence type lint-clean (zero errors and warnings)
+- [x] No explicit `any` in the test; no Supabase/repository import in the test; no snapshot; no timezone environment mutation
+- [x] Only `tsx` added; `package-lock.json` updated; no existing dependency upgraded
+
 #### Phase 3B2 — Extract the recurring-meeting record generator ✅
 - [x] Create `src/features/meetings/builders/buildRecurringMeetingRecords.ts` — pure function, no React/Supabase/repositories/toast/console/Auth/audit/browser storage/UI/state setters
 - [x] Export `buildRecurringMeetingRecords(input): MeetingPersistenceRecord[]`, `MeetingRepeatMonthlyMode`, `RecurringMeetingBaseRecord`, `BuildRecurringMeetingRecordsInput`
@@ -697,7 +724,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3B3. add a minimal recurrence characterization-test harness
+3B4. characterize the primary meeting-record builder
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -775,3 +802,4 @@ Phases 2–7 as described in the phased checklist.
 | 3A4C   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3B1    | scoped lint: 7 problems (5 errors, 2 warnings) — improved; new files zero; repository zero | pass  |
 | 3B2    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; new builder zero | pass  |
+| 3B3    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; test file + builder + types zero; 6 tests pass | pass  |
