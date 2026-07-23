@@ -125,6 +125,28 @@ Deferred to Phase 3:
 - [x] No repository or mapper introduced
 - Inherited Meetings lint debt (15 errors, 2 warnings in CreateMeetingForm; 11 errors, 2 warnings in MeetingCardMain) deferred to cleanup phase
 
+#### Phase 2B2C — MeetingCard split ✅ (complete at 449 lines)
+- MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
+- Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
+
+#### Phase 2B2D1 — Extract inline MultiSelectField from CreateMeetingForm ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/MultiSelectField.tsx` (presentational, self-contained)
+- [x] Define explicit local types: `MultiSelectOption`, `MultiSelectGroup`, `MultiSelectValue`, `MultiSelectFieldProps`
+- [x] Move inline `MultiSelectField` component (query state, open/close, highlighted index, outside-click listener, search filtering, group rendering, selected filtering, keyboard behavior, max-8 legacy list, Persian text, CSS, dark mode, tag rendering, callback order, input focus, event propagation)
+- [x] Import `MultiSelectField` into `CreateMeetingForm`; remove old inline component after connection
+- [x] New component imports no Supabase, `src/app`, Meetings hooks, repositories, services, or external state libraries
+- [x] Types not exported from public Meetings `index.ts`
+- [x] CreateMeetingForm line count reduced from 1358 to 1224 (134 lines removed)
+- [x] `MultiSelectField.tsx` is 158 lines (below 220-line component limit)
+- [x] Scoped lint unchanged: 16 problems (14 errors, 2 warnings) — no increase
+- [x] `MultiSelectField.tsx` has zero lint errors and warnings
+- [x] No Supabase/query/mutation code changes
+- [x] No explicit `any` added
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No other file refactored
+- Inherited CreateMeetingForm lint debt deferred to cleanup phase
+
 #### Phase 2B2C4 — Extract MeetingCard header and toolbar presentation ✅
 - [x] Create `src/features/meetings/components/MeetingCard/MeetingCardHeader.tsx` (presentational only)
 - [x] Move priority badge, status badge, title, rejected warning, resend/edit-resend/send-users/share/Telegram/edit/Calendar/delete buttons, share dropdown menu into Header
@@ -218,8 +240,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2C5. continue splitting MeetingCardMain by responsibility
-2B2D. split CreateMeetingForm by responsibility
+2B2D2. continue splitting CreateMeetingForm by responsibility
 2C. calendar
 2D. tasks
 2E. minutes
@@ -287,3 +308,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2C2 | scoped lint: 7 problems (7 errors, 0 warnings) — improved from 13 | pass  |
 | 2B2C3 | scoped lint: 5 problems (5 errors, 0 warnings) — improved from 7 | pass  |
 | 2B2C4 | scoped lint: 5 problems (5 errors, 0 warnings) — no increase | pass  |
+| 2B2D1 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
