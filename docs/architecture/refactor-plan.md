@@ -129,6 +129,31 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 2B2D10 — Complete remaining presentational extraction ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingMetadataFields.tsx` (presentational)
+- [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingManagerField.tsx` (presentational)
+- [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingReminderField.tsx` (presentational)
+- [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingFormActions.tsx` (presentational)
+- [x] Move priority, status type, and notes presentation into `MeetingMetadataFields` with controlled props contract
+- [x] Move meeting-manager conditional and selector into `MeetingManagerField` — imports only `MultiSelectValue` type from sibling; preserves visibility-when-participants, participant-derived options, “بدون مدیر”, selected value, help text, `UserCheck` icon, and removal behavior (no automatic reset/validation added)
+- [x] Move reminder selector into `MeetingReminderField` — preserves all reminder values, numeric conversion, labels, `Bell` icon, and position between recurrence and Agenda
+- [x] Move save-contact checkbox, submit button, loading indicator, and create/update/scheduling button text into `MeetingFormActions` — submit button remains `type="submit"`; `handleSubmit` stays in the parent; checkbox visibility computed in parent and passed via `showSaveContact`; three-way button label preserved via `submitLabel: string` prop; cancel/back control remains in parent as `children`
+- [x] Visible field order preserved exactly: MeetingCoreFields → RepresentativeContactField → MeetingMetadataFields → MeetingPeopleFields → ExternalParticipantsField → MeetingManagerField → RecurrenceFields → MeetingReminderField → AgendaEditor → MeetingFormActions
+- [x] All parent state declarations, setters, `handleSubmit`, `meetingRecord`, validation toasts, Supabase calls, Auth handlers, prefill effects, contact loading/insertion, `createRepeatMeetings`, agenda queries/mutations, participant/notification payloads, calendar/date conversion, reset logic, `onSuccess`, and `onCancel` remain in the parent
+- [x] New components import only Lucide icons and sibling `MultiSelectValue` type — no Supabase, toast, Auth, Meetings hooks, repositories, or services
+- [x] No explicit `any` introduced in any new component
+- [x] CreateMeetingForm line count reduced from 688 to 648 (40 lines removed)
+- [x] Component line counts: `MeetingMetadataFields` 47, `MeetingManagerField` 30, `MeetingReminderField` 29, `MeetingFormActions` 42 (all below ~100-line target)
+- [x] Scoped lint unchanged: 12 problems (10 errors, 2 warnings) — no increase
+- [x] All four new files have zero lint errors and warnings
+- [x] Parent Supabase/query/RPC match count unchanged: 16 before, 16 after
+- [x] New components have zero query or mutation matches
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No repository, service, hook, context, reducer, or dependency added
+- **Phase 2B2D presentational decomposition complete.**
+- Remaining parent complexity is business/data orchestration (state ownership, validation, payload construction, Supabase queries, prefill/reset, submission) — deferred to Phase 3.
+
 #### Phase 2B2D9 — Extract participant and notification presentation ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingPeopleFields.tsx` (presentational)
 - [x] Reuse existing internal types `MultiSelectGroup` and `MultiSelectValue` from `MultiSelectField` (no duplication)
@@ -443,7 +468,6 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2D10. extract meeting metadata, reminder, and form-action presentation
 2C. calendar
 2D. tasks
 2E. minutes
@@ -520,3 +544,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D7 | scoped lint: 12 problems (10 errors, 2 warnings) — improved (moved `any` cast removed) | pass  |
 | 2B2D8 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
 | 2B2D9 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
+| 2B2D10 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |

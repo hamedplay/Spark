@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { logAudit } from '../../../lib/audit';
-import { CirclePlus as PlusCircle, Loader as Loader2, Save, X, Bell, UserCheck } from 'lucide-react';
+import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail } from '../../../types';
@@ -14,6 +14,10 @@ import { AgendaEditor } from './CreateMeetingForm/AgendaEditor';
 import { RecurrenceFields } from './CreateMeetingForm/RecurrenceFields';
 import { MeetingCoreFields } from './CreateMeetingForm/MeetingCoreFields';
 import { MeetingPeopleFields } from './CreateMeetingForm/MeetingPeopleFields';
+import { MeetingMetadataFields } from './CreateMeetingForm/MeetingMetadataFields';
+import { MeetingManagerField } from './CreateMeetingForm/MeetingManagerField';
+import { MeetingReminderField } from './CreateMeetingForm/MeetingReminderField';
+import { MeetingFormActions } from './CreateMeetingForm/MeetingFormActions';
 
 interface CalendarEntry {
   id: string;
@@ -537,30 +541,14 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
           }}
         />
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اولویت</label>
-          <select value={priority} onChange={(e) => setPriority(e.target.value)}
-            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-            <option value="high">بالا</option>
-            <option value="medium">متوسط</option>
-            <option value="low">پایین</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">وضعیت</label>
-          <select value={statusType} onChange={(e) => setStatusType(e.target.value)}
-            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-            <option value="requested">درخواست شده</option>
-            <option value="approved">تایید شده</option>
-          </select>
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">یادداشت‌ها</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
-            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-        </div>
+        <MeetingMetadataFields
+          priority={priority}
+          statusType={statusType}
+          notes={notes}
+          onPriorityChange={setPriority}
+          onStatusTypeChange={setStatusType}
+          onNotesChange={setNotes}
+        />
       </div>
 
       {/* Participants & Notify Users */}
@@ -600,19 +588,11 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       />
 
       {/* Meeting Manager */}
-      {selectedParticipants.length > 0 && (
-        <div className="mt-5">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            <div className="flex items-center gap-2"><UserCheck className="w-4 h-4" /> مدیر جلسه</div>
-          </label>
-          <select value={meetingManager} onChange={(e) => setMeetingManager(e.target.value)}
-            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-            <option value="">بدون مدیر</option>
-            {selectedParticipants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <p className="text-xs text-gray-400 mt-1">مدیر جلسه می‌تواند تمام تغییرات جلسه را اعمال کند</p>
-        </div>
-      )}
+      <MeetingManagerField
+        participants={selectedParticipants}
+        managerId={meetingManager}
+        onManagerChange={setMeetingManager}
+      />
 
       {/* Repeat */}
       <RecurrenceFields
@@ -633,21 +613,10 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       />
 
       {/* Reminder */}
-      <div className="mt-5">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          <div className="flex items-center gap-2"><Bell className="w-4 h-4" /> یادآوری</div>
-        </label>
-        <select value={reminderMinutes} onChange={(e) => setReminderMinutes(Number(e.target.value))}
-          className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-          <option value={0}>بدون یادآوری</option>
-          <option value={5}>5 دقیقه قبل</option>
-          <option value={10}>10 دقیقه قبل</option>
-          <option value={15}>15 دقیقه قبل</option>
-          <option value={30}>30 دقیقه قبل</option>
-          <option value={60}>1 ساعت قبل</option>
-          <option value={1440}>1 روز قبل</option>
-        </select>
-      </div>
+      <MeetingReminderField
+        minutes={reminderMinutes}
+        onMinutesChange={setReminderMinutes}
+      />
 
       {/* Agenda */}
       <AgendaEditor
@@ -660,29 +629,20 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         onValidationError={(message) => toast.error(message)}
       />
 
-      {/* Save contact — only show when rep was entered manually */}      {!repFromContacts && representative.trim() && (
-        <div className="mt-4 flex items-center gap-2">
-          <input type="checkbox" id="saveContact" checked={saveContact} onChange={(e) => setSaveContact(e.target.checked)} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
-          <label htmlFor="saveContact" className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
-            <Save className="w-4 h-4" /> ذخیره اطلاعات تماس در دفترچه
-          </label>
-        </div>
-      )}
-
-      {/* Submit */}
-      <div className="mt-6 flex gap-3">
-        <button type="submit" disabled={loading}
-          className="flex-1 flex items-center justify-center gap-2 bg-blue-500 text-white py-2.5 px-4 rounded-lg hover:bg-blue-600 disabled:opacity-50 font-medium">
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
-          {prefillMeetingId ? 'ذخیره تغییرات' : isSchedulingFromCalendar ? 'برنامه‌ریزی و ثبت نهایی' : 'ثبت درخواست جلسه'}
-        </button>
+      <MeetingFormActions
+        showSaveContact={!repFromContacts && representative.trim() !== ''}
+        saveContact={saveContact}
+        loading={loading}
+        submitLabel={prefillMeetingId ? 'ذخیره تغییرات' : isSchedulingFromCalendar ? 'برنامه‌ریزی و ثبت نهایی' : 'ثبت درخواست جلسه'}
+        onSaveContactChange={setSaveContact}
+      >
         {onCancel && (
           <button type="button" onClick={onCancel}
             className="px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition-colors">
             انصراف
           </button>
         )}
-      </div>
+      </MeetingFormActions>
     </form>
   );
 }
