@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { logAudit } from '../../../lib/audit';
-import { CirclePlus as PlusCircle, Loader as Loader2, Save, Users, X, Bell, UserCheck, Clock, Calendar } from 'lucide-react';
+import { CirclePlus as PlusCircle, Loader as Loader2, Save, Users, X, Bell, UserCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail } from '../../../types';
 import type { AgendaItem } from '../../../types';
 import { useOrgUsers } from '../../../lib/useOrgUsers';
 import { MultiSelectField } from './CreateMeetingForm/MultiSelectField';
-import { MeetingDateTimeFields } from './CreateMeetingForm/MeetingDateTimeFields';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
 import { AgendaEditor } from './CreateMeetingForm/AgendaEditor';
 import { RecurrenceFields } from './CreateMeetingForm/RecurrenceFields';
+import { MeetingCoreFields } from './CreateMeetingForm/MeetingCoreFields';
 
 interface CalendarEntry {
   id: string;
@@ -43,11 +43,6 @@ interface CreateMeetingFormProps {
     requestJalaaliDate?: string;
   } | null;
 }
-
-const JALAALI_MONTHS = [
-  'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-  'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
-];
 
 export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars = [] }: CreateMeetingFormProps) {
   const [loading, setLoading] = useState(false);
@@ -496,86 +491,32 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">موضوع جلسه</label>
-          <input required type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
-            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-        </div>
+        <MeetingCoreFields
+          subject={subject}
+          onSubjectChange={setSubject}
 
-        {calendars.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تقویم جلسه</label>
-            <div className="relative">
-              <select value={selectedCalendarId} onChange={(e) => setSelectedCalendarId(e.target.value)}
-                className="w-full p-2 pr-8 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white appearance-none">
-                <option value="">بدون تقویم</option>
-                {calendars.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              {selectedCalendarId && (
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full" style={{ backgroundColor: calendars.find(c => c.id === selectedCalendarId)?.color || '#3b82f6' }} />
-              )}
-            </div>
-          </div>
-        )}
+          calendars={calendars}
+          selectedCalendarId={selectedCalendarId}
+          onSelectedCalendarIdChange={setSelectedCalendarId}
 
-        {isSchedulingFromCalendar && scheduleDate && startTime && endTime ? (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ جلسه</label>
-              <div className="p-2 border border-teal-300 dark:border-teal-600 rounded-lg bg-teal-50 dark:bg-teal-900/20 text-teal-800 dark:text-teal-300 font-medium text-sm">
-                {scheduleDate.jd} {JALAALI_MONTHS[scheduleDate.jm - 1]} {scheduleDate.jy}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">زمان جلسه</label>
-              <div className="flex items-center gap-2 p-2 border border-teal-300 dark:border-teal-600 rounded-lg bg-teal-50 dark:bg-teal-900/20 text-teal-800 dark:text-teal-300 font-medium text-sm">
-                <Clock className="w-4 h-4 shrink-0" />
-                <span>{startTime}</span><span className="text-teal-500">تا</span><span>{endTime}</span>
-              </div>
-            </div>
-          </>
-        ) : prefillMeetingId ? (
-          <MeetingDateTimeFields
-            requestJalaaliDate={requestJalaaliDate}
-            onRequestJalaaliDateChange={setRequestJalaaliDate}
-            startTime={startTime}
-            onStartTimeChange={setStartTime}
-            endTime={endTime}
-            onEndTimeChange={setEndTime}
-          />
-        ) : (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ درخواست (شمسی)</label>
-              <div className="relative">
-                <input type="text" value={requestJalaaliDate} onChange={(e) => setRequestJalaaliDate(e.target.value)}
-                  placeholder="1405/03/01" className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                  disabled={isSchedulingFromCalendar} />
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">مدت زمان درخواستی</label>
-              <select value={requestDuration} onChange={(e) => setRequestDuration(e.target.value)}
-                className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
-                <option value="30 دقیقه">30 دقیقه</option>
-                <option value="45 دقیقه">45 دقیقه</option>
-                <option value="1 ساعت">1 ساعت</option>
-                <option value="1.5 ساعت">1.5 ساعت</option>
-                <option value="2 ساعت">2 ساعت</option>
-                <option value="3 ساعت">3 ساعت</option>
-                <option value="نیم روز">نیم روز</option>
-                <option value="یک روز">یک روز</option>
-              </select>
-            </div>
-          </>
-        )}
+          prefillMeetingId={prefillMeetingId}
+          isSchedulingFromCalendar={isSchedulingFromCalendar}
+          scheduleDate={scheduleDate}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">محل برگزاری</label>
-          <input required type="text" value={location} onChange={(e) => setLocation(e.target.value)}
-            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-        </div>
+          startTime={startTime}
+          onStartTimeChange={setStartTime}
+          endTime={endTime}
+          onEndTimeChange={setEndTime}
+
+          requestJalaaliDate={requestJalaaliDate}
+          onRequestJalaaliDateChange={setRequestJalaaliDate}
+
+          requestDuration={requestDuration}
+          onRequestDurationChange={setRequestDuration}
+
+          location={location}
+          onLocationChange={setLocation}
+        />
 
         <RepresentativeContactField
           representative={representative}

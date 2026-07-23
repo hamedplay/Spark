@@ -129,6 +129,30 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 2B2D8 — Extract core meeting fields presentation ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingCoreFields.tsx` (presentational)
+- [x] Define and export internal types `MeetingCalendarOption` and `MeetingScheduleDate` (not exported from feature public API)
+- [x] Define explicit props contract: `MeetingCoreFieldsProps` (controlled subject, calendar selection, scheduling context, start/end time, request date, duration, location with per-field change callbacks)
+- [x] Move subject label and input, calendars conditional, calendar select, selected-calendar color dot, calendar-scheduling date summary, calendar-scheduling time summary, edit-mode `MeetingDateTimeFields` rendering, normal request-date input, requested-duration selector, and location label and input
+- [x] Move `JALAALI_MONTHS` constant into the new component (no longer in parent)
+- [x] Move `Calendar` and `Clock` icon usage into the new component (no longer in parent)
+- [x] New component imports only `Calendar`/`Clock` from Lucide and `MeetingDateTimeFields` — no Supabase, toast, moment, Auth, Meetings hooks, `src/app`, repositories, or services
+- [x] Connect component with controlled props preserving callback behavior: `setSubject`/`setSelectedCalendarId`/`setStartTime`/`setEndTime`/`setRequestJalaaliDate`/`setRequestDuration`/`setLocation`
+- [x] `RepresentativeContactField` remains immediately after this component
+- [x] All controlled state declarations, prefill logic, default-date effect, `handleSubmit`, date conversion, validation toasts, `meetingRecord`, calendar ID payload, request date and duration payloads, start/end-time payloads, reset behavior, Supabase calls, recurrence generation, and agenda persistence remain in the parent
+- [x] No explicit `any` introduced in the new component
+- [x] CreateMeetingForm line count reduced from 768 to 709 (59 lines removed)
+- [x] `MeetingCoreFields.tsx` is 154 lines (below ~180-line target)
+- [x] Scoped lint unchanged: 12 problems (10 errors, 2 warnings) — no increase
+- [x] `MeetingCoreFields.tsx` has zero lint errors and warnings
+- [x] `MeetingDateTimeFields.tsx` remains lint-clean
+- [x] Parent Supabase/query/RPC match count unchanged: 16 before, 16 after
+- [x] New component has zero query or mutation matches
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No repository, service, hook, context, reducer, or dependency added
+- Inherited CreateMeetingForm lint debt deferred to cleanup phase
+
 #### Phase 2B2D7 — Extract recurrence configuration presentation ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/RecurrenceFields.tsx` (presentational + local end-date-picker interaction)
 - [x] Define explicit props contract: `RecurrenceFieldsProps` with internal `RepeatType` and `RepeatMonthlyMode` types (controlled enabled/type/interval/endDate/weekday/monthlyMode/monthlyWeekday with per-field change callbacks)
@@ -394,7 +418,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2D8. extract the basic meeting fields presentation
+2B2D9. extract participant, notification, and meeting-manager presentation
 2C. calendar
 2D. tasks
 2E. minutes
@@ -469,3 +493,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D5 | scoped lint: 13 problems (11 errors, 2 warnings) — no increase | pass  |
 | 2B2D6 | scoped lint: 13 problems (11 errors, 2 warnings) — no increase | pass  |
 | 2B2D7 | scoped lint: 12 problems (10 errors, 2 warnings) — improved (moved `any` cast removed) | pass  |
+| 2B2D8 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
