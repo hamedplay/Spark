@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { logAudit } from '../../../lib/audit';
-import { CirclePlus as PlusCircle, Loader as Loader2, UserPlus, Save, Users, X, Plus, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, BookUser, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
+import { CirclePlus as PlusCircle, Loader as Loader2, UserPlus, Save, Users, X, Plus, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail } from '../../../types';
@@ -10,6 +10,7 @@ import { useOrgUsers } from '../../../lib/useOrgUsers';
 import { MultiSelectField } from './CreateMeetingForm/MultiSelectField';
 import { MeetingDateTimeFields } from './CreateMeetingForm/MeetingDateTimeFields';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
+import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 
 interface CalendarEntry {
   id: string;
@@ -90,9 +91,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
 
   // Contact picker for representative
   const [allContacts, setAllContacts] = useState<ContactEmail[]>([]);
-  const [showRepPicker, setShowRepPicker] = useState(false);
-  const [repPickerSearch, setRepPickerSearch] = useState('');
-  const repPickerRef = useRef<HTMLDivElement>(null);
 
   // Participants (system users)
   const [selectedParticipants, setSelectedParticipants] = useState<{ id: string; name: string }[]>([]);
@@ -236,7 +234,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (externalSearchRef.current && !externalSearchRef.current.contains(e.target as Node)) setShowExternalDropdown(false);
-      if (repPickerRef.current && !repPickerRef.current.contains(e.target as Node)) setShowRepPicker(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -476,11 +473,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
     (c.email ?? '').toLowerCase().includes(externalSearch.toLowerCase())
   ).filter(c => !selectedExternal.includes(c.name));
 
-  const filteredRepContacts = allContacts.filter(c =>
-    c.name.toLowerCase().includes(repPickerSearch.toLowerCase()) ||
-    (c.phone || '').includes(repPickerSearch)
-  );
-
   const addQuickExternal = async () => {
     if (!newExternalName.trim() || !userId) return;
     try {
@@ -607,51 +599,24 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
             className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
         </div>
 
-        {/* Representative with contact picker */}
-        <div className="relative" ref={repPickerRef}>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نماینده</label>
-          <div className="flex gap-2">
-            <input required type="text" value={representative}
-              onChange={(e) => { setRepresentative(e.target.value); setRepFromContacts(false); }}
-              className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-            <button type="button" onClick={() => { setShowRepPicker(v => !v); setRepPickerSearch(''); }}
-              className="px-2.5 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-              title="انتخاب از مخاطبین">
-              <BookUser className="w-4 h-4" />
-            </button>
-          </div>
-          {showRepPicker && (
-            <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl">
-              <div className="p-2 border-b border-gray-100 dark:border-gray-700">
-                <input autoFocus type="text" value={repPickerSearch} onChange={e => setRepPickerSearch(e.target.value)}
-                  placeholder="جستجو در مخاطبین..." className="w-full px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div className="max-h-48 overflow-y-auto">
-                {filteredRepContacts.length === 0 ? (
-                  <div className="p-3 text-sm text-gray-400 text-center">مخاطبی یافت نشد</div>
-                ) : filteredRepContacts.map(c => (
-                  <button key={c.id} type="button"
-                    onClick={() => {
-                      setRepresentative(c.name);
-                      setPhone((c as any).phone || '');
-                      setRepFromContacts(true);
-                      setShowRepPicker(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm transition-colors">
-                    <span className="font-medium dark:text-white">{c.name}</span>
-                    {(c as any).phone && <span className="text-xs text-gray-400 ltr">{(c as any).phone}</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">شماره تماس</label>
-          <input required type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setRepFromContacts(false); }}
-            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
-        </div>
+        <RepresentativeContactField
+          representative={representative}
+          phone={phone}
+          contacts={allContacts}
+          onRepresentativeChange={(value) => {
+            setRepresentative(value);
+            setRepFromContacts(false);
+          }}
+          onPhoneChange={(value) => {
+            setPhone(value);
+            setRepFromContacts(false);
+          }}
+          onSelectContact={(contact) => {
+            setRepresentative(contact.name);
+            setPhone(contact.phone ?? '');
+            setRepFromContacts(true);
+          }}
+        />
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">اولویت</label>

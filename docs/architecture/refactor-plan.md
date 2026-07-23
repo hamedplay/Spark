@@ -129,6 +129,36 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 2B2D4 — Extract representative contact-picker field ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/RepresentativeContactField.tsx` (presentational + local picker interaction)
+- [x] Define explicit props contract: `RepresentativeContactFieldProps` (controlled representative/phone/contacts with change and select callbacks)
+- [x] Move `showRepPicker`, `repPickerSearch`, `repPickerRef` state into the new component
+- [x] Move representative-picker outside-click effect and cleanup into the new component
+- [x] Move `filteredRepContacts` filtering (case-insensitive name match + phone match) into the new component
+- [x] Move representative label and input, contact-picker button, contact search input, empty-result text, contact result rows, representative phone input, `BookUser` icon usage, and all related Persian text and CSS classes
+- [x] New component imports only React hooks, `BookUser`, and `ContactEmail` type — no Supabase, toast, Auth, Meetings hooks, `src/app`, repositories, or services
+- [x] Connect component using controlled props preserving callback semantics: `setRepresentative`/`setPhone` with `setRepFromContacts(false)` on manual change, `setRepFromContacts(true)` on contact selection
+- [x] Update parent outside-click effect to handle only the external-participant dropdown (removed representative listener)
+- [x] Preserve `mousedown`, external ref containment check, cleanup behavior, and external dropdown closing behavior
+- [x] Remove `BookUser` from parent icon imports (no longer used in parent)
+- [x] Remove moved `(c as any).phone` casts — replaced with `contact.phone` (already optional on `ContactEmail`)
+- [x] Contact queries and mutations remain in the parent:
+  - `allContacts` state and contact fetching
+  - `representative`, `phone`, `repFromContacts` state
+  - `saveContact` and contact insertion
+  - submission and reset behavior
+- [x] No explicit `any` in the new component
+- [x] No unrelated `any` modified in the parent
+- [x] CreateMeetingForm line count reduced from 1119 to 1084 (35 lines removed)
+- [x] `RepresentativeContactField.tsx` is 89 lines (below ~140-line target)
+- [x] Scoped lint improved: 16 → 13 problems (11 errors, 2 warnings) — removed 3 `any` casts from moved code
+- [x] `RepresentativeContactField.tsx` has zero lint errors and warnings
+- [x] No Supabase query or mutation changed
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No repository, service, hook, context, reducer, or dependency added
+- Inherited CreateMeetingForm lint debt deferred to cleanup phase
+
 #### Phase 2B2D3 — Extract authentication-fallback presentation ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingFormAuthFallback.tsx` (presentational, self-contained)
 - [x] Define explicit props contract: `MeetingFormAuthFallbackProps` (controlled email/password/loading/mode with submit, change, and toggle callbacks)
@@ -292,7 +322,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2D4. extract the representative contact-picker presentation
+2B2D5. extract the external-participant picker presentation
 2C. calendar
 2D. tasks
 2E. minutes
@@ -363,3 +393,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D1 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
 | 2B2D2 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
 | 2B2D3 | scoped lint: 16 problems (14 errors, 2 warnings) — no increase | pass  |
+| 2B2D4 | scoped lint: 13 problems (11 errors, 2 warnings) — improved (removed 3 `any` casts) | pass  |
