@@ -129,6 +129,35 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3A4C — Extract recurring-meeting batch persistence ✅
+- [x] Add `insertRecurringMeetingBatch(records)` to existing `meetingPersistenceRepository.ts` — no new repository file created
+- [x] Preserve exact query `.from('meetings').insert(records)` — no `.select()`, `.single()`, `.upsert()`, RPC, transaction, chunking, retry, logging, toast, empty-array handling, or record transformation
+- [x] Repository returns `{ message: string } | null` instead of throwing — preserves existing local error handling, toast, and workflow continuation
+- [x] Primary create and update still throw on errors — return-error policy not applied to them
+- [x] Repository contains no Moment, toast, or console imports
+- [x] Not exported from the public Meetings `index.ts`
+- [x] Replace inline recurring insert with `insertRecurringMeetingBatch(repeatMeetings)` — parent branch unchanged
+- [x] Persian error/success toasts and `console.error('Repeat insert error:', ...)` message unchanged
+- [x] `createRepeatMeetings`, `_originalId`, `baseRecord`, end-date parsing, Jalali-to-Gregorian conversion, weekly/monthly recurrence algorithms, `jsDayMap`, date loops, `repeatMeetings` array construction, `status: 'open'`, `request_date`, `request_jalaali_date`, and non-empty-array guard all remain in the form
+- [x] Recurring insert remains after primary meeting creation, gated on `meetingData` and `repeatEndDate`, and ordered relative to participant and Agenda persistence
+- [x] Outer `handleSubmit` try/catch, audit, reset, and `onSuccess` unchanged
+- [x] Participant and Agenda persistence unchanged
+- [x] Parent meetings-table operations: 1 before (recurring insert), 0 after
+- [x] Repository meetings-table operations: 3 (primary update + primary create + recurring batch insert)
+- [x] All direct `meetings` table access has left the form
+- [x] Scoped parent lint: 11 problems (9 errors, 2 warnings) — no increase
+- [x] Repository lint: zero errors and warnings
+- [x] No new explicit `any` introduced
+- [x] No UI component modified
+- [x] No public Meetings export changed
+- [x] No API, database schema, UI, Auth, Agenda, participant, audit, reset, or submission behavior changes
+- [x] No new file, generic abstraction, or dependency added
+
+Legacy risks:
+Recurring meetings do not receive participant snapshots.
+Recurring meetings do not receive separate Agenda rows.
+Recurring insert failure does not abort the main workflow.
+
 #### Phase 3A4B — Extract meeting participant-snapshot persistence ✅
 - [x] Create `src/features/meetings/repositories/meetingParticipantsRepository.ts` (Supabase access only)
 - [x] Define `MeetingParticipantSnapshotInput` with only `name` — no userId, role, email, or status
@@ -602,7 +631,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3A4C. extract recurring-meeting batch persistence
+3B1. type and extract the primary meeting-record builder
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -677,3 +706,4 @@ Phases 2–7 as described in the phased checklist.
 | 3A3    | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3A4A   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3A4B   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
+| 3A4C   | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |

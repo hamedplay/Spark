@@ -18,7 +18,11 @@ import {
   replaceMeetingAgendaItems,
 } from '../repositories/meetingAgendaRepository';
 import { fetchMeetingPeoplePrefill } from '../repositories/meetingPrefillRepository';
-import { updatePrimaryMeeting, createPrimaryMeeting } from '../repositories/meetingPersistenceRepository';
+import {
+  createPrimaryMeeting,
+  insertRecurringMeetingBatch,
+  updatePrimaryMeeting,
+} from '../repositories/meetingPersistenceRepository';
 import { insertMeetingParticipantSnapshots } from '../repositories/meetingParticipantsRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
@@ -430,7 +434,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
     }
 
     if (repeatMeetings.length > 0) {
-      const { error: repeatError } = await supabase.from('meetings').insert(repeatMeetings);
+      const repeatError = await insertRecurringMeetingBatch(repeatMeetings);
       if (repeatError) { console.error('Repeat insert error:', repeatError); toast.error('خطا در ایجاد جلسات تکراری: ' + repeatError.message); }
       else toast.success(`${repeatMeetings.length} جلسه تکراری ایجاد شد`);
     }

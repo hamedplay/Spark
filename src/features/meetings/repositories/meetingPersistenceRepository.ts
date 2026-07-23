@@ -62,3 +62,15 @@ export async function createPrimaryMeeting(
 
   return { id: data.id };
 }
+
+export async function insertRecurringMeetingBatch(
+  records: MeetingPersistenceRecord[]
+): Promise<{ message: string } | null> {
+  const { error } = await supabase
+    .from('meetings')
+    .insert(records);
+
+  return error
+    ? { message: error.message }
+    : null;
+}
