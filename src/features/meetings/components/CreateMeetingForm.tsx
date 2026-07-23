@@ -17,6 +17,7 @@ import {
   insertMeetingAgendaItems,
   replaceMeetingAgendaItems,
 } from '../repositories/meetingAgendaRepository';
+import { fetchMeetingPeoplePrefill } from '../repositories/meetingPrefillRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
@@ -191,15 +192,19 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       // Load participants, notify users and external participants from existing meeting record (when scheduling from pending)
       if (prefillData.meetingId && (!prefillData.participantUserIds || prefillData.participantUserIds.length === 0)) {
         (async () => {
-          const { data: mtg } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants').eq('id', prefillData.meetingId!).maybeSingle();
-          if (mtg?.participant_user_ids?.length) {
-            setSelectedParticipants(resolveUsersByIds(mtg.participant_user_ids));
-          }
-          if (mtg?.notify_users?.length) {
-            setSelectedNotifyUsers(resolveUsersByIds(mtg.notify_users));
-          }
-          if (mtg?.external_participants?.length) {
-            setSelectedExternal(mtg.external_participants);
+          try {
+            const peoplePrefill = await fetchMeetingPeoplePrefill(prefillData.meetingId);
+            if (peoplePrefill?.participantUserIds?.length) {
+              setSelectedParticipants(resolveUsersByIds(peoplePrefill.participantUserIds));
+            }
+            if (peoplePrefill?.notifyUserIds?.length) {
+              setSelectedNotifyUsers(resolveUsersByIds(peoplePrefill.notifyUserIds));
+            }
+            if (peoplePrefill?.externalParticipants?.length) {
+              setSelectedExternal(peoplePrefill.externalParticipants);
+            }
+          } catch {
+            return;
           }
         })();
       }

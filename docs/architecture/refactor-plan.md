@@ -129,6 +129,30 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3A3 — Extract meeting people-prefill repository ✅
+- [x] Create `src/features/meetings/repositories/meetingPrefillRepository.ts` (Supabase access only)
+- [x] Export only `fetchMeetingPeoplePrefill(meetingId)` returning `MeetingPeoplePrefill | null`
+- [x] Preserve exact query chain: `.from('meetings').select('participant_user_ids, notify_users, external_participants').eq('id', meetingId).maybeSingle()`
+- [x] Throw Supabase error when present; map DB fields explicitly (`participant_user_ids`, `notify_users`, `external_participants`), no fallback empty arrays
+- [x] Repository imports only the existing Supabase client — no React, toast, UI, Auth hooks, `useOrgUsers`, Meetings hooks, `src/app`, state setters, or other repositories
+- [x] Not exported from the public Meetings `index.ts`
+- [x] Replace inline prefill query with `fetchMeetingPeoplePrefill(prefillData.meetingId)` — parent still guards `prefillData.meetingId && (!prefillData.participantUserIds || prefillData.participantUserIds.length === 0)`
+- [x] All three state-update guards remain in parent: `participantUserIds`, `notifyUserIds`, `externalParticipants` — each uses `resolveUsersByIds` which stays in the form
+- [x] Preserve legacy silent-error behavior: repository throws, parent catches with `try { ... } catch { return; }` — no toast, console logging, retry, loading state, or fallback reset
+- [x] Prefill effect structure and dependency list unchanged — no `allUsers`, `resolveUsersByIds`, participant arrays, or repository functions added to deps
+- [x] Parent exact prefill-select match count: 1 before, 0 after
+- [x] Repository prefill-select match count: 1 (the single fetch query)
+- [x] Meetings-table operations: 4 before (prefill select, update, insert, repeat insert), 4 after (3 parent + 1 repository)
+- [x] Scoped parent lint: 11 problems (9 errors, 2 warnings) — no increase
+- [x] Repository lint: zero errors and warnings
+- [x] No new explicit `any` introduced
+- [x] No UI component modified
+- [x] No public Meetings export changed
+- [x] No database schema, Auth, Agenda, contacts, recurrence, meeting payload or submission behavior changes
+- [x] ID-to-display-name resolution remained in the form
+
+Legacy risk: Prefill user-name resolution depends on the timing of organization-user loading and currently remains untested.
+
 #### Phase 3A2 — Extract meeting Agenda repository ✅
 - [x] Create `src/features/meetings/repositories/meetingAgendaRepository.ts` (Supabase access only)
 - [x] Export only `fetchMeetingAgendaItems`, `insertMeetingAgendaItems`, `replaceMeetingAgendaItems`
@@ -519,7 +543,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3A3. extract meeting prefill read repository
+3A4. extract primary meeting persistence repository
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -591,3 +615,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D10 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
 | 3A1    | scoped lint: 12 problems (10 errors, 2 warnings) — no increase; repository zero | pass  |
 | 3A2    | scoped lint: 11 problems (9 errors, 2 warnings) — decrease of 1 (Agenda `any` removed); repository zero | pass  |
+| 3A3    | scoped lint: 11 problems (9 errors, 2 warnings) — no increase; repository zero | pass  |
