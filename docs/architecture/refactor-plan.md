@@ -129,6 +129,30 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 2B2D7 — Extract recurrence configuration presentation ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/RecurrenceFields.tsx` (presentational + local end-date-picker interaction)
+- [x] Define explicit props contract: `RecurrenceFieldsProps` with internal `RepeatType` and `RepeatMonthlyMode` types (controlled enabled/type/interval/endDate/weekday/monthlyMode/monthlyWeekday with per-field change callbacks)
+- [x] Move `showEndDatePicker`, `endDatePickerJy`, `endDatePickerJm` local picker state into the new component
+- [x] Move recurrence enable checkbox, repeat-type selector, repeat-interval selector, end-date text field, end-date picker button, Jalali end-date picker presentation, picker month navigation, day-cell generation and date selection, weekly weekday selection, monthly mode selection, monthly weekday selection, and recurrence-specific weekday/month labels
+- [x] Move `JALAALI_WEEKDAYS` constant into the new component (`JALAALI_MONTHS` remains in parent for the main date picker)
+- [x] Move `Repeat`, `ChevronLeft`, `ChevronRight` icon usage into the new component (`Calendar` remains shared in parent)
+- [x] New component imports only `useState`, `moment-jalaali`, and Lucide icons — no Supabase, toast, Auth, Meetings hooks, `src/app`, repositories, or services
+- [x] Connect component with controlled props preserving callback behavior: `setRepeatEnabled`/`setRepeatType`/`setRepeatInterval`/`setRepeatEndDate`/`setRepeatWeekday`/`setRepeatMonthlyMode`/`setRepeatMonthlyWeekday`
+- [x] Removed the moved monthly-mode `any` cast: replaced `opt.value as any` with a typed `MONTHLY_MODE_OPTIONS` array and direct `onMonthlyModeChange(option.value)` call
+- [x] `repeatEnabled`, `repeatType`, `repeatInterval`, `repeatEndDate`, `repeatWeekday`, `repeatMonthlyMode`, `repeatMonthlyWeekday` and all setters remain in the parent
+- [x] `createRepeatMeetings`, meeting-record recurrence fields, recurring-meeting array generation, weekly/monthly recurrence algorithms, Jalali-to-Gregorian conversion, repeated-meeting Supabase insert, error/success toasts, reset, and submission remain in the parent
+- [x] No explicit `any` introduced in the new component
+- [x] CreateMeetingForm line count reduced from 875 to 768 (107 lines removed)
+- [x] `RecurrenceFields.tsx` is 180 lines (below ~230-line target)
+- [x] Scoped lint improved: 13 problems → 12 problems (10 errors, 2 warnings) — moved `any` cast removed
+- [x] `RecurrenceFields.tsx` has zero lint errors and warnings
+- [x] Parent recurrence/Supabase match count unchanged: 26 before, 26 after
+- [x] New component has zero Supabase/query/mutation/toast matches
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No repository, service, hook, context, reducer, or dependency added
+- Inherited CreateMeetingForm lint debt deferred to cleanup phase
+
 #### Phase 2B2D6 — Extract agenda editor presentation ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/AgendaEditor.tsx` (presentational + local editing interaction)
 - [x] Define explicit props contract: `AgendaEditorProps` (controlled enabled/items/participantNames/externalNames with enabled-change, items-change, and optional validation-error callbacks)
@@ -370,7 +394,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2D7. extract the recurrence configuration presentation
+2B2D8. extract the basic meeting fields presentation
 2C. calendar
 2D. tasks
 2E. minutes
@@ -444,3 +468,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D4 | scoped lint: 13 problems (11 errors, 2 warnings) — improved (removed 3 `any` casts) | pass  |
 | 2B2D5 | scoped lint: 13 problems (11 errors, 2 warnings) — no increase | pass  |
 | 2B2D6 | scoped lint: 13 problems (11 errors, 2 warnings) — no increase | pass  |
+| 2B2D7 | scoped lint: 12 problems (10 errors, 2 warnings) — improved (moved `any` cast removed) | pass  |

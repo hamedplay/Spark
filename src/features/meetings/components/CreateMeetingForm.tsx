@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { logAudit } from '../../../lib/audit';
-import { CirclePlus as PlusCircle, Loader as Loader2, Save, Users, X, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CirclePlus as PlusCircle, Loader as Loader2, Save, Users, X, Bell, UserCheck, Clock, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail } from '../../../types';
@@ -13,6 +13,7 @@ import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFall
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
 import { AgendaEditor } from './CreateMeetingForm/AgendaEditor';
+import { RecurrenceFields } from './CreateMeetingForm/RecurrenceFields';
 
 interface CalendarEntry {
   id: string;
@@ -47,8 +48,6 @@ const JALAALI_MONTHS = [
   'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
   'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
 ];
-
-const JALAALI_WEEKDAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
 
 export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars = [] }: CreateMeetingFormProps) {
   const [loading, setLoading] = useState(false);
@@ -116,9 +115,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const [repeatWeekday, setRepeatWeekday] = useState(0);
   const [repeatMonthlyMode, setRepeatMonthlyMode] = useState<'specific' | 'first' | 'last'>('specific');
   const [repeatMonthlyWeekday, setRepeatMonthlyWeekday] = useState(0);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [endDatePickerJy, setEndDatePickerJy] = useState(() => moment().jYear());
-  const [endDatePickerJm, setEndDatePickerJm] = useState(() => moment().jMonth() + 1);
 
   // Reminder
   const [reminderMinutes, setReminderMinutes] = useState<number>(15);
@@ -699,125 +695,22 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       )}
 
       {/* Repeat */}
-      <div className="mt-5 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600">
-        <div className="flex items-center gap-2 mb-3">
-          <input type="checkbox" id="repeatToggle" checked={repeatEnabled} onChange={(e) => setRepeatEnabled(e.target.checked)} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
-          <label htmlFor="repeatToggle" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-            <Repeat className="w-4 h-4" /> تکرار جلسه
-          </label>
-        </div>
-        {repeatEnabled && (
-          <div className="space-y-3 mt-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">نوع تکرار</label>
-                <select value={repeatType} onChange={(e) => setRepeatType(e.target.value as 'weekly' | 'monthly')}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm">
-                  <option value="weekly">هفتگی</option><option value="monthly">ماهیانه</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">هر چند</label>
-                <select value={repeatInterval} onChange={(e) => setRepeatInterval(Number(e.target.value))}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm">
-                  {[1, 2, 3, 4].map(n => <option key={n} value={n}>هر {n} {repeatType === 'weekly' ? 'هفته' : 'ماه'}</option>)}
-                </select>
-              </div>
-              <div className="relative">
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">تا تاریخ (شمسی)</label>
-                <div className="flex gap-1">
-                  <input type="text" value={repeatEndDate} onChange={(e) => setRepeatEndDate(e.target.value)} placeholder="مثال: 1405/06/31"
-                    className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
-                  <button type="button" onClick={() => setShowEndDatePicker(!showEndDatePicker)}
-                    className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                    <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                  </button>
-                </div>
-                {showEndDatePicker && (
-                  <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-600 p-3 w-64">
-                    <div className="flex items-center justify-between mb-2">
-                      <button type="button" onClick={() => { if (endDatePickerJm > 1) setEndDatePickerJm(m => m - 1); else { setEndDatePickerJm(12); setEndDatePickerJy(y => y - 1); } }}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-                        <ChevronRight className="w-4 h-4 dark:text-white" />
-                      </button>
-                      <span className="text-sm font-semibold dark:text-white">{JALAALI_MONTHS[endDatePickerJm - 1]} {endDatePickerJy}</span>
-                      <button type="button" onClick={() => { if (endDatePickerJm < 12) setEndDatePickerJm(m => m + 1); else { setEndDatePickerJm(1); setEndDatePickerJy(y => y + 1); } }}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-                        <ChevronLeft className="w-4 h-4 dark:text-white" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-7 gap-0.5">
-                      {['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'].map(d => <div key={d} className="text-center text-[10px] text-gray-400 py-0.5">{d}</div>)}
-                      {(() => {
-                        const daysInMonth = endDatePickerJm <= 6 ? 31 : endDatePickerJm <= 11 ? 30 : 29;
-                        const firstDay = moment(`${endDatePickerJy}/${endDatePickerJm}/1`, 'jYYYY/jM/jD').day();
-                        const offset = firstDay === 6 ? 0 : firstDay + 1;
-                        const cells: React.ReactNode[] = [];
-                        for (let i = 0; i < offset; i++) cells.push(<div key={`e${i}`} />);
-                        for (let d = 1; d <= daysInMonth; d++) {
-                          const jDate = `${endDatePickerJy}/${String(endDatePickerJm).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
-                          cells.push(
-                            <button key={d} type="button" onClick={() => { setRepeatEndDate(jDate); setShowEndDatePicker(false); }}
-                              className={`text-xs py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors ${repeatEndDate === jDate ? 'bg-blue-500 text-white' : 'dark:text-white'}`}>
-                              {d}
-                            </button>
-                          );
-                        }
-                        return cells;
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {repeatType === 'weekly' && (
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">روز هفته</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {JALAALI_WEEKDAYS.map((day, i) => (
-                    <button key={i} type="button" onClick={() => setRepeatWeekday(i)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${repeatWeekday === i ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500'}`}>
-                      {day}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {repeatType === 'monthly' && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">نوع تکرار ماهیانه</label>
-                  <div className="flex gap-2">
-                    {[{ value: 'specific', label: 'همان روز ماه' }, { value: 'first', label: 'اولین' }, { value: 'last', label: 'آخرین' }].map(opt => (
-                      <button key={opt.value} type="button" onClick={() => setRepeatMonthlyMode(opt.value as any)}
-                        className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${repeatMonthlyMode === opt.value ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {(repeatMonthlyMode === 'first' || repeatMonthlyMode === 'last') && (
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      {repeatMonthlyMode === 'first' ? 'اولین' : 'آخرین'} روز هفته
-                    </label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {JALAALI_WEEKDAYS.map((day, i) => (
-                        <button key={i} type="button" onClick={() => setRepeatMonthlyWeekday(i)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${repeatMonthlyWeekday === i ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                          {day}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <RecurrenceFields
+        enabled={repeatEnabled}
+        type={repeatType}
+        interval={repeatInterval}
+        endDate={repeatEndDate}
+        weekday={repeatWeekday}
+        monthlyMode={repeatMonthlyMode}
+        monthlyWeekday={repeatMonthlyWeekday}
+        onEnabledChange={setRepeatEnabled}
+        onTypeChange={setRepeatType}
+        onIntervalChange={setRepeatInterval}
+        onEndDateChange={setRepeatEndDate}
+        onWeekdayChange={setRepeatWeekday}
+        onMonthlyModeChange={setRepeatMonthlyMode}
+        onMonthlyWeekdayChange={setRepeatMonthlyWeekday}
+      />
 
       {/* Reminder */}
       <div className="mt-5">
