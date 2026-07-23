@@ -129,6 +129,35 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3D3 — Extract the delete-and-revert MeetingCard command ✅
+- [x] Created `src/features/meetings/commands/deleteAndRevertMeeting.ts` with `deleteAndRevertMeeting(input)` owning nine responsibilities: source Meeting read, participant snapshot read, action read, replacement Meeting insert, participant copy, action copy, cancellation notifications, old Inbox delete, old Meeting delete — no React, toast, Auth, hooks, repositories, or state
+- [x] Preserved source Meeting read: `meetings` select 10 columns, `.maybeSingle()`, error ignored, missing data throws `جلسه یافت نشد`
+- [x] Preserved participant and action reads: errors ignored, `null` behaves as empty array, no `.order()`
+- [x] Preserved replacement Meeting insert payload exactly: `status: 'open'`, `status_type: 'approved'`, scheduling and recurrence fields null, no `request_jalaali_date` or `request_duration`, `.select('id').single()`, insert error throws
+- [x] Preserved participant and action copies: batch inserts, only specified fields, row ordering, insert errors ignored
+- [x] Preserved cancellation recipient construction: participants first, observers second, duplicates retained, current user excluded, no dedup
+- [x] Preserved profile lookup: error ignored, missing profiles produce empty names, all recipients notified
+- [x] Preserved cancellation notification fan-out: one `Promise.all`, participant/observer template selection, cancel action, Persian fallback, placeholder keys, greeting fallback, sender ID, action URL; `insertNotification` returns not inspected
+- [x] Preserved deletion order: old Inbox delete (error ignored) → old Meeting delete (error throws)
+- [x] Full operation order unchanged: source read → participant read → action read → replacement insert → participant copy → action copy → profile read → notifications → Inbox delete → Meeting delete
+- [x] `handleDeleteAndRevert` now: `setLoading(true)` → `getCurrentAuthUserId()` → throw `unauthenticated` if missing → `deleteAndRevertMeeting(...)` → success toast → `onUpdate()` → catch with visible error message → `finally setLoading(false)`
+- [x] Auth lookup, loading, toast, modal state, and `onUpdate` remain in `MeetingCardMain`
+- [x] Missing Auth still produces visible `unauthenticated` message
+- [x] `DeleteMeetingModal.tsx` and modal callback wiring unchanged
+- [x] Permanent-delete, normal resend, rejected-edit resend, and Google Calendar code unchanged
+- [x] Command not exported from `src/features/meetings/index.ts`
+- [x] No explicit `any` introduced in the command
+- [x] Scoped lint: command 0 errors/0 warnings; MeetingCardMain 3 errors (down from 4 — the `handleDeleteAndRevert` `any` is removed; remaining 3 are pre-existing)
+- [x] 12 characterization tests pass
+- [x] Build passes
+- [x] No public Meetings export changed
+- [x] Legacy risks recorded:
+  - Delete-and-revert is not transactional.
+  - Participant/action copy errors are ignored.
+  - Profile and old-Inbox deletion errors are ignored.
+  - A failure after replacement creation can leave both the old and replacement Meetings present.
+  - A thrown notification failure can leave the replacement Meeting created while the old Meeting remains.
+
 #### Phase 3D2 — Extract the permanent-delete MeetingCard command ✅
 - [x] Created `src/features/meetings/commands/deleteMeetingPermanently.ts` with `deleteMeetingPermanently(input)` owning: cancellation-recipient construction, profile-name lookup, cancellation-notification fan-out, meeting Inbox deletion, Meeting deletion — no React, toast, Auth, hooks, repositories, or state
 - [x] Preserved recipient construction: participant IDs first, observer IDs second, existing ordering, duplicate IDs retained, no dedup, sender exclusion, all recipients retained when `senderId` is `null`
@@ -824,7 +853,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3D3. extract the delete-and-revert MeetingCard command
+3D4. extract the rejected-edit resend command
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -908,3 +937,4 @@ Phases 2–7 as described in the phased checklist.
 | 3C2    | scoped lint: 0 errors, 0 warnings — form + auth service + auth index + auth hook clean; 12 tests pass | pass  |
 | 3D1    | scoped lint: command 0/0; MeetingCardMain 4 errors (down from 5); 12 tests pass | pass  |
 | 3D2    | scoped lint: command 0/0; MeetingCardMain 4 errors (unchanged); 12 tests pass | pass  |
+| 3D3    | scoped lint: command 0/0; MeetingCardMain 3 errors (down from 4); 12 tests pass | pass  |

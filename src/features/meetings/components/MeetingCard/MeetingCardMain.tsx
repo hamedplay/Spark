@@ -12,6 +12,7 @@ import { getMeetingTemplateKey } from '../../../../config/templateCatalog';
 import { getCurrentAuthUserId } from '../../../auth';
 import { resendMeetingInvitations } from '../../commands/resendMeetingInvitations';
 import { deleteMeetingPermanently } from '../../commands/deleteMeetingPermanently';
+import { deleteAndRevertMeeting } from '../../commands/deleteAndRevertMeeting';
 import toast from 'react-hot-toast';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
@@ -121,104 +122,32 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   const handleDeleteAndRevert = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('unauthenticated');
+      const currentUserId =
+        await getCurrentAuthUserId();
 
-      // Fetch the full meeting data before deleting
-      const { data: fullMtg } = await supabase
-        .from('meetings')
-        .select('subject, location, representative, phone, notes, priority, participant_user_ids, notify_users, external_participants, meeting_manager')
-        .eq('id', meeting.id)
-        .maybeSingle();
-      if (!fullMtg) throw new Error('جلسه یافت نشد');
-
-      // Fetch participants and actions to copy
-      const { data: oldParticipants } = await supabase
-        .from('participants')
-        .select('name')
-        .eq('meeting_id', meeting.id);
-      const { data: oldActions } = await supabase
-        .from('actions')
-        .select('title, status, assignee')
-        .eq('meeting_id', meeting.id);
-
-      // Create new meeting record with scheduling fields nulled out
-      const { data: newMtg, error: insertErr } = await supabase
-        .from('meetings')
-        .insert([{
-          subject: fullMtg.subject,
-          location: fullMtg.location ?? null,
-          representative: fullMtg.representative ?? null,
-          phone: fullMtg.phone ?? null,
-          notes: fullMtg.notes ?? null,
-          priority: fullMtg.priority,
-          participant_user_ids: fullMtg.participant_user_ids ?? [],
-          notify_users: fullMtg.notify_users ?? [],
-          external_participants: fullMtg.external_participants ?? [],
-          meeting_manager: fullMtg.meeting_manager ?? null,
-          user_id: user.id,
-          status: 'open',
-          status_type: 'approved',
-          request_date: null,
-          start_time: null,
-          end_time: null,
-          duration: null,
-          repeat_type: null,
-          repeat_interval: null,
-          repeat_end_date: null,
-          repeat_weekday: null,
-        }])
-        .select('id')
-        .single();
-      if (insertErr) throw insertErr;
-
-      const newId = newMtg.id;
-
-      // Copy participants table rows
-      if ((oldParticipants ?? []).length > 0) {
-        await supabase.from('participants').insert(
-          (oldParticipants!).map(p => ({ meeting_id: newId, name: p.name }))
-        );
+      if (!currentUserId) {
+        throw new Error('unauthenticated');
       }
 
-      // Copy actions table rows
-      if ((oldActions ?? []).length > 0) {
-        await supabase.from('actions').insert(
-          (oldActions!).map(a => ({ meeting_id: newId, title: a.title, status: a.status, assignee: a.assignee }))
-        );
-      }
-
-      // Notify participants that the scheduled meeting was cancelled (new unscheduled request will be created)
-      const pIds = (fullMtg.participant_user_ids || []) as string[];
-      const notifyIds = [...pIds, ...((fullMtg.notify_users || []) as string[])].filter(uid => uid !== user.id);
-      if (notifyIds.length) {
-        const { data: cancelProfiles2 } = await supabase.from('profiles').select('user_id, full_name').in('user_id', notifyIds);
-        const cancelNameMap2: Record<string, string> = {};
-        for (const p of (cancelProfiles2 || [])) cancelNameMap2[p.user_id] = p.full_name || '';
-        await Promise.all(notifyIds.map(uid =>
-          insertNotification({
-            userId: uid,
-            category: 'meeting',
-            eventType: getMeetingTemplateKey(pIds.includes(uid) ? 'participant' : 'observer', 'cancel'),
-            audience: pIds.includes(uid) ? 'participants' : 'observers',
-            fallbackTitle: 'جلسه لغو شد',
-            fallbackMessage: `جلسه «${fullMtg.subject}» لغو شده است`,
-            placeholders: { meeting_subject: fullMtg.subject, full_name: cancelNameMap2[uid] || '', recipient_greeting: cancelNameMap2[uid] ? `${cancelNameMap2[uid]} گرامی` : 'همکار گرامی' },
-            senderId: user.id,
-            actionUrl: 'meetings',
-          })
-        ));
-      }
-
-      // Delete old meeting_inbox entries then the meeting itself
-      await supabase.from('meeting_inbox').delete().eq('meeting_id', meeting.id);
-      const { error: delErr } = await supabase.from('meetings').delete().eq('id', meeting.id);
-      if (delErr) throw delErr;
+      await deleteAndRevertMeeting({
+        meetingId: meeting.id,
+        currentUserId,
+      });
 
       toast.success('جلسه حذف شد و درخواست جدید ایجاد گردید');
       onUpdate();
-    } catch (err: any) {
-      toast.error(err?.message || 'خطا در حذف و بازگشت جلسه');
+    } catch (error: unknown) {
+      const message =
+        typeof error === 'object' &&
+        error !== null &&
+        'message' in error &&
+        typeof error.message === 'string'
+          ? error.message
+          : undefined;
+
+      toast.error(
+        message || 'خطا در حذف و بازگشت جلسه'
+      );
     } finally {
       setLoading(false);
     }
