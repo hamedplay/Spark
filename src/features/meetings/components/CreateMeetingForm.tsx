@@ -19,6 +19,7 @@ import {
 } from '../repositories/meetingAgendaRepository';
 import { fetchMeetingPeoplePrefill } from '../repositories/meetingPrefillRepository';
 import { updatePrimaryMeeting, createPrimaryMeeting } from '../repositories/meetingPersistenceRepository';
+import { insertMeetingParticipantSnapshots } from '../repositories/meetingParticipantsRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
@@ -315,7 +316,10 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         const meetingData = await createPrimaryMeeting(meetingRecord);
 
         if (selectedParticipants.length > 0 && meetingData) {
-          await supabase.from('participants').insert(selectedParticipants.map(p => ({ meeting_id: meetingData.id, name: p.name })));
+          await insertMeetingParticipantSnapshots(
+            meetingData.id,
+            selectedParticipants
+          );
         }
 
         if (repeatEnabled && meetingData && repeatEndDate) {
