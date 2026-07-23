@@ -244,71 +244,164 @@ Deno.serve(async (req: Request) => {
         { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
-    // 11. Update auth user phone via Admin API
+    // 11. Update auth user phone via raw fetch to GoTrue Admin API
+    //     (SDK updateUserById returns AuthRetryableFetchError with empty body;
+    //      raw fetch lets us capture the real HTTP status, headers, and body.)
     const e164Phone = `+${normalizedPhone}`;
+
+    const authBaseUrl =
+      Deno.env.get("SUPABASE_INTERNAL_URL") ??
+      Deno.env.get("SUPABASE_URL") ??
+      "http://kong:8000";
 
     console.log("PHONE_SYNC_BEFORE_AUTH_UPDATE", {
       targetUserId,
       phoneMasked: profilePhoneMasked,
+      authBaseUrl,
     });
 
-    const updateStartAt = Date.now();
-
-    let updateResult: { data: unknown; error: { message?: string; status?: number; code?: string; name?: string } | null } | { timedOut: true };
-
-    try {
-      updateResult = await withTimeout(
-        supabase.auth.admin.updateUserById(targetUserId, {
-          phone: e164Phone,
-          phone_confirm: true,
-        }),
-        ADMIN_UPDATE_TIMEOUT_MS,
-      );
-    } catch (timeoutErr) {
-      const elapsedMs = Date.now() - updateStartAt;
-      console.error("PHONE_SYNC_AUTH_UPDATE_TIMEOUT", {
-        targetUserId,
-        phoneMasked: profilePhoneMasked,
-        elapsedMs,
-        message: timeoutErr instanceof Error ? timeoutErr.message : "unknown",
-      });
-
-      return new Response(JSON.stringify({
-        ...checkResult,
-        ok: false,
-        error: "AUTH_UPDATE_TIMEOUT",
-        auth_error_message: `Request timed out after ${ADMIN_UPDATE_TIMEOUT_MS}ms`,
-        auth_error_status: 408,
-        auth_error_code: "TIMEOUT",
-      } satisfies SyncCheckResult),
-        { status: 504, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    interface RawAttemptResult {
+      label: string;
+      status: number;
+      contentType: string | null;
+      bodyPreview: string;
+      ok: boolean;
+      elapsedMs: number;
     }
 
-    const elapsedMs = Date.now() - updateStartAt;
-    const updateError = (updateResult as { error: { message?: string; status?: number; code?: string; name?: string } | null }).error;
+    async function rawAuthUpdate(
+      label: string,
+      payload: Record<string, unknown>,
+    ): Promise<RawAttemptResult> {
+      const startAt = Date.now();
+      let resp: Response;
+      try {
+        resp = await fetch(
+          `${authBaseUrl}/auth/v1/admin/users/${targetUserId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": serviceRoleKey,
+              "Authorization": `Bearer ${serviceRoleKey}`,
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(ADMIN_UPDATE_TIMEOUT_MS),
+          },
+        );
+      } catch (fetchErr) {
+        const elapsed = Date.now() - startAt;
+        const errMsg = fetchErr instanceof Error ? fetchErr.message : "unknown";
+        console.error("PHONE_SYNC_RAW_FETCH_ERROR", { label, elapsed, message: errMsg });
+        return {
+          label,
+          status: 0,
+          contentType: null,
+          bodyPreview: `FETCH_ERROR: ${errMsg}`,
+          ok: false,
+          elapsedMs: elapsed,
+        };
+      }
+
+      const elapsed = Date.now() - startAt;
+      const rawBody = await resp.text();
+      const contentType = resp.headers.get("content-type");
+
+      // Sanitize: strip sensitive fields before logging body preview
+      let sanitizedPreview = rawBody.slice(0, 1000);
+      try {
+        const parsed = JSON.parse(rawBody);
+        if (parsed && typeof parsed === "object") {
+          const safe: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(parsed)) {
+            if (["email", "phone", "encrypted_password", "raw_app_meta_data", "raw_user_meta_data"].includes(k)) {
+              safe[k] = "[REDACTED]";
+            } else if (k === "phone_confirmed_at") {
+              safe[k] = v;
+            } else {
+              safe[k] = v;
+            }
+          }
+          sanitizedPreview = JSON.stringify(safe).slice(0, 1000);
+        }
+      } catch { /* not JSON, keep raw preview */ }
+
+      console.log("PHONE_SYNC_RAW_AUTH_RESPONSE", {
+        label,
+        status: resp.status,
+        contentType,
+        bodyPreview: sanitizedPreview,
+        elapsedMs: elapsed,
+      });
+
+      return {
+        label,
+        status: resp.status,
+        contentType,
+        bodyPreview: sanitizedPreview,
+        ok: resp.status >= 200 && resp.status < 300,
+        elapsedMs: elapsed,
+      };
+    }
+
+    // --- Attempt 1: phone + phone_confirm: true ---
+    const attempt1 = await rawAuthUpdate("with_phone_confirm", {
+      phone: e164Phone,
+      phone_confirm: true,
+    });
+
+    const attempts: RawAttemptResult[] = [attempt1];
+
+    // --- Attempt 2 (only if attempt 1 failed): phone only, no phone_confirm ---
+    if (!attempt1.ok) {
+      console.log("PHONE_SYNC_RETRY_WITHOUT_PHONE_CONFIRM", {
+        targetUserId,
+        phoneMasked: profilePhoneMasked,
+      });
+      const attempt2 = await rawAuthUpdate("without_phone_confirm", {
+        phone: e164Phone,
+      });
+      attempts.push(attempt2);
+    }
+
+    const lastAttempt = attempts[attempts.length - 1];
 
     console.log("PHONE_SYNC_AFTER_AUTH_UPDATE", {
       targetUserId,
-      elapsedMs,
-      success: !updateError,
+      elapsedMs: lastAttempt.elapsedMs,
+      success: lastAttempt.ok,
     });
 
-    if (updateError) {
+    // Re-fetch auth user to check final state
+    const { data: postUpdateUser } = await supabase.auth.admin.getUserById(targetUserId);
+    const postPhoneRaw = postUpdateUser?.user?.phone || null;
+    const postPhoneNorm = postPhoneRaw ? normalizeIranPhone(postPhoneRaw) : "";
+    const postPhoneMasked = postPhoneNorm ? maskPhone(postPhoneNorm) : null;
+    const postPhoneConfirmedAt = postUpdateUser?.user?.phone_confirmed_at || null;
+
+    if (!lastAttempt.ok) {
       console.error("PHONE_SYNC_AUTH_UPDATE_FAILED", {
-        message: updateError.message,
-        status: updateError.status,
-        code: updateError.code,
-        name: updateError.name,
+        message: lastAttempt.bodyPreview,
+        status: lastAttempt.status,
+        attempts: attempts.map((a) => ({ label: a.label, status: a.status, ok: a.ok })),
       });
 
       return new Response(JSON.stringify({
         ...checkResult,
         ok: false,
         error: "AUTH_UPDATE_FAILED",
-        auth_error_message: updateError.message || "Unknown auth error",
-        auth_error_status: updateError.status || 0,
-        auth_error_code: updateError.code || "UNKNOWN",
-      } satisfies SyncCheckResult),
+        auth_error_message: lastAttempt.bodyPreview || "Unknown auth error",
+        auth_error_status: lastAttempt.status || 0,
+        auth_error_code: "RAW_FETCH",
+        debug_attempts: attempts.map((a) => ({
+          label: a.label,
+          status: a.status,
+          ok: a.ok,
+          contentType: a.contentType,
+        })),
+        post_phone_masked: postPhoneMasked,
+        post_phone_confirmed_at: postPhoneConfirmedAt,
+      }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
 
@@ -329,6 +422,14 @@ Deno.serve(async (req: Request) => {
       ...checkResult,
       ok: true,
       message: "SYNCED",
+      debug_attempts: attempts.map((a) => ({
+        label: a.label,
+        status: a.status,
+        ok: a.ok,
+        contentType: a.contentType,
+      })),
+      post_phone_masked: postPhoneMasked,
+      post_phone_confirmed_at: postPhoneConfirmedAt,
     }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
 
