@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { DeleteMeetingModal } from './DeleteMeetingModal';
 import { MeetingDetails } from './MeetingDetails';
 import { ParticipantStatusPanel } from './ParticipantStatusPanel';
 import { MeetingShareDialog } from './MeetingShareDialog';
 import { MeetingShareCard } from './MeetingShareCard';
-import { MeetingCardHeader } from './MeetingCardHeader';import { Meeting } from '../../../../types';
+import { MeetingCardHeader } from './MeetingCardHeader';import type { Meeting } from '../../../../types';
+import type { MeetingFormPrefillData } from '../../types/meetingForm';
 import { resendRejectedMeetingAfterEdit } from '../../commands/resendRejectedMeetingAfterEdit';
 import { getCurrentAuthUserId } from '../../../auth';
 import { resendMeetingInvitations } from '../../commands/resendMeetingInvitations';
 import { deleteMeetingPermanently } from '../../commands/deleteMeetingPermanently';
-import { deleteAndRevertMeeting } from '../../commands/deleteAndRevertMeeting';
 import toast from 'react-hot-toast';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
@@ -28,7 +28,7 @@ interface MeetingCardMainProps {
 // ─── MeetingCardMain ──────────────────────────────────────────────────────────
 export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: MeetingCardMainProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editPrefill, setEditPrefill] = useState<any>(null);
+  const [editPrefill, setEditPrefill] = useState<MeetingFormPrefillData | null>(null);
   const [loading, setLoading] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [showUserSelector, setShowUserSelector] = useState(false);
@@ -117,40 +117,6 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
     }
   };
 
-  const handleDeleteAndRevert = async () => {
-    setLoading(true);
-    try {
-      const currentUserId =
-        await getCurrentAuthUserId();
-
-      if (!currentUserId) {
-        throw new Error('unauthenticated');
-      }
-
-      await deleteAndRevertMeeting({
-        meetingId: meeting.id,
-        currentUserId,
-      });
-
-      toast.success('جلسه حذف شد و درخواست جدید ایجاد گردید');
-      onUpdate();
-    } catch (error: unknown) {
-      const message =
-        typeof error === 'object' &&
-        error !== null &&
-        'message' in error &&
-        typeof error.message === 'string'
-          ? error.message
-          : undefined;
-
-      toast.error(
-        message || 'خطا در حذف و بازگشت جلسه'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleAddToGoogleCalendar = () => {
     try {
       const startDate = new Date(meeting.requestDate);
@@ -184,7 +150,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   if (isEditing) {
     const meetingJalaaliDate = (() => {
       if (!editPrefill) {
-        const src = (meeting as any).request_jalaali_date;
+        const src = meeting.request_jalaali_date;
         if (src) return src;
         if (meeting.requestDate) {
           const m = moment(meeting.requestDate);
@@ -193,7 +159,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
       }
       return '';
     })();
-    const prefill = editPrefill || {
+    const prefill: MeetingFormPrefillData = editPrefill ?? {
       subject: meeting.subject,
       location: meeting.location,
       representative: meeting.representative,

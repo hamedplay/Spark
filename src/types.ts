@@ -12,6 +12,7 @@ export interface Meeting {
   id: string;
   subject: string;
   requestDate: string;
+  request_jalaali_date?: string | null;
   duration: string;
   location: string;
   representative: string;

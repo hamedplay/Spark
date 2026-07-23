@@ -129,6 +129,26 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3D5 — Type the MeetingCard edit-prefill boundary and remove remaining lint debt ✅
+- [x] Created `src/features/meetings/types/meetingForm.ts` with `MeetingFormPrefillData` interface (13 optional fields matching the previous inline contract exactly)
+- [x] `CreateMeetingFormProps.prefillData` now uses the shared `MeetingFormPrefillData | null` type; inline contract removed
+- [x] Added `request_jalaali_date?: string | null` to `Meeting` in `src/types.ts` (type-only correction for a field already read by `MeetingCardMain`)
+- [x] `editPrefill` state typed as `MeetingFormPrefillData | null` instead of `any`
+- [x] Removed `meeting as any` cast — now reads `meeting.request_jalaali_date` directly
+- [x] Final prefill object typed as `MeetingFormPrefillData`; `editPrefill ?? {...}` preserves exact fields and `||` fallbacks
+- [x] Removed unused default `React` import (now `import { useState } from 'react'`)
+- [x] Removed dead `handleDeleteAndRevert` function and its `deleteAndRevertMeeting` import — the handler was never wired to any UI or modal (`DeleteMeetingModal` only accepts `onPermanentDelete`); no behavior change
+- [x] `MeetingCardMain` lint: 0 errors, 0 warnings (down from 3 errors)
+- [x] `CreateMeetingForm`, `meetingForm.ts`, `src/types.ts` all lint-clean
+- [x] 12 characterization tests pass
+- [x] Build passes
+- [x] No explicit `any` remains in `MeetingCardMain`
+- [x] No direct Supabase or notification infrastructure access returned to `MeetingCardMain`
+- [x] No command file modified
+- [x] No public Meetings export changed
+- [x] Edit-prefill fields, Jalali-date fallback, edit cleanup, Toast, Auth, and refresh behavior unchanged
+- [x] MeetingCard command/edit-boundary pass complete
+
 #### Phase 3D4 — Extract the rejected-edit resend command ✅
 - [x] Created `src/features/meetings/commands/resendRejectedMeetingAfterEdit.ts` with `resendRejectedMeetingAfterEdit(input)` owning five responsibilities: resend RPC, Meeting participant query, sender exclusion, profile lookup, edited-meeting notification fan-out — no React, toast, Auth, hooks, repositories, or state
 - [x] Preserved RPC behavior: `resend_meeting_invitations` with `p_meeting_id`, awaited, returned error not destructured or thrown, no logging/retry (differs intentionally from `resendMeetingInvitations`)
@@ -875,7 +895,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3D5. type the MeetingCard edit-prefill boundary and remove remaining lint debt
+3E1. extract and characterize the Google Calendar event URL builder
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -961,3 +981,4 @@ Phases 2–7 as described in the phased checklist.
 | 3D2    | scoped lint: command 0/0; MeetingCardMain 4 errors (unchanged); 12 tests pass | pass  |
 | 3D3    | scoped lint: command 0/0; MeetingCardMain 3 errors (down from 4); 12 tests pass | pass  |
 | 3D4    | scoped lint: command 0/0; MeetingCardMain 3 errors (unchanged); 12 tests pass | pass  |
+| 3D5    | scoped lint: MeetingCardMain 0/0 (down from 3); 12 tests pass              | pass  |

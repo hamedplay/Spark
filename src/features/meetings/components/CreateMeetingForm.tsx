@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail } from '../../../types';
 import type { AgendaItem } from '../../../types';
+import type { MeetingFormPrefillData } from '../types/meetingForm';
 import { useOrgUsers } from '../../../lib/useOrgUsers';
 import {
   fetchMeetingContacts,
@@ -60,22 +61,7 @@ interface CreateMeetingFormProps {
   onSuccess: (subject?: string, isUpdate?: boolean) => void;
   onCancel?: () => void;
   calendars?: CalendarEntry[];
-  prefillData?: {
-    subject?: string;
-    location?: string;
-    representative?: string;
-    phone?: string;
-    notes?: string;
-    priority?: string;
-    meetingId?: string;
-    startTime?: string;
-    endTime?: string;
-    dateJy?: number;
-    dateJm?: number;
-    dateJd?: number;
-    participantUserIds?: string[];
-    requestJalaaliDate?: string;
-  } | null;
+  prefillData?: MeetingFormPrefillData | null;
 }
 
 function getErrorMessage(
