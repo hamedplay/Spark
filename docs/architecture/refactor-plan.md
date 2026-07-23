@@ -129,6 +129,28 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3D4 — Extract the rejected-edit resend command ✅
+- [x] Created `src/features/meetings/commands/resendRejectedMeetingAfterEdit.ts` with `resendRejectedMeetingAfterEdit(input)` owning five responsibilities: resend RPC, Meeting participant query, sender exclusion, profile lookup, edited-meeting notification fan-out — no React, toast, Auth, hooks, repositories, or state
+- [x] Preserved RPC behavior: `resend_meeting_invitations` with `p_meeting_id`, awaited, returned error not destructured or thrown, no logging/retry (differs intentionally from `resendMeetingInvitations`)
+- [x] Preserved Meeting participant query: `meetings` select `participant_user_ids`, `.maybeSingle()`, error ignored, missing row behaves as no participants
+- [x] Preserved participant construction: saved ordering, duplicates retained, sender exclusion, no dedup, no observer/notify-user inclusion, no Inbox query, no empty-value filtering
+- [x] Preserved profile lookup: `profiles` select `user_id, full_name` `in('user_id', participantIds)`, error ignored, missing profiles produce empty names, all participants remain recipients
+- [x] Preserved notification fan-out: one `Promise.all` over `participantIds`, participant/invite template, `participants` audience, Persian fallback title and edited-meeting message, placeholder keys, greeting fallback, sender ID, action URL; `insertNotification` returns not inspected; throws reject `Promise.all`
+- [x] `handleEditFormSuccess` now: rejected-status check → Auth lookup → no-user silently skips resend → `resendRejectedMeetingAfterEdit(...)` → success toast → catch error toast → edit cleanup (`setIsEditing(false)`, `setEditPrefill(null)`) and `onUpdate()` always run
+- [x] Auth lookup, rejected-status decision, Toasts, edit cleanup, and `onUpdate` remain in `MeetingCardMain`
+- [x] Absence of Auth user still silently skips resend while completing edit cleanup and refresh
+- [x] RPC, Meeting-read, and Profile-read returned errors remain ignored
+- [x] Notification throws still caught by the component `catch` block
+- [x] `MeetingCardMain` now has zero direct Supabase, notification, or template-key infrastructure access
+- [x] Removed now-unused imports: `supabase`, `insertNotification`, `getMeetingTemplateKey`
+- [x] Normal resend, permanent delete, delete-and-revert, and Google Calendar code unchanged
+- [x] Command not exported from `src/features/meetings/index.ts`
+- [x] No explicit `any` introduced in the command
+- [x] Scoped lint: command 0 errors/0 warnings; MeetingCardMain 3 errors (unchanged from 3D3 — remaining 3 are pre-existing `any` and unused-var, deferred to 3D5)
+- [x] 12 characterization tests pass
+- [x] Build passes
+- [x] No public Meetings export changed
+
 #### Phase 3D3 — Extract the delete-and-revert MeetingCard command ✅
 - [x] Created `src/features/meetings/commands/deleteAndRevertMeeting.ts` with `deleteAndRevertMeeting(input)` owning nine responsibilities: source Meeting read, participant snapshot read, action read, replacement Meeting insert, participant copy, action copy, cancellation notifications, old Inbox delete, old Meeting delete — no React, toast, Auth, hooks, repositories, or state
 - [x] Preserved source Meeting read: `meetings` select 10 columns, `.maybeSingle()`, error ignored, missing data throws `جلسه یافت نشد`
@@ -853,7 +875,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3D4. extract the rejected-edit resend command
+3D5. type the MeetingCard edit-prefill boundary and remove remaining lint debt
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -938,3 +960,4 @@ Phases 2–7 as described in the phased checklist.
 | 3D1    | scoped lint: command 0/0; MeetingCardMain 4 errors (down from 5); 12 tests pass | pass  |
 | 3D2    | scoped lint: command 0/0; MeetingCardMain 4 errors (unchanged); 12 tests pass | pass  |
 | 3D3    | scoped lint: command 0/0; MeetingCardMain 3 errors (down from 4); 12 tests pass | pass  |
+| 3D4    | scoped lint: command 0/0; MeetingCardMain 3 errors (unchanged); 12 tests pass | pass  |

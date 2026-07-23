@@ -6,9 +6,7 @@ import { ParticipantStatusPanel } from './ParticipantStatusPanel';
 import { MeetingShareDialog } from './MeetingShareDialog';
 import { MeetingShareCard } from './MeetingShareCard';
 import { MeetingCardHeader } from './MeetingCardHeader';import { Meeting } from '../../../../types';
-import { supabase } from '../../../../lib/supabase';
-import { insertNotification } from '../../../../lib/notifications';
-import { getMeetingTemplateKey } from '../../../../config/templateCatalog';
+import { resendRejectedMeetingAfterEdit } from '../../commands/resendRejectedMeetingAfterEdit';
 import { getCurrentAuthUserId } from '../../../auth';
 import { resendMeetingInvitations } from '../../commands/resendMeetingInvitations';
 import { deleteMeetingPermanently } from '../../commands/deleteMeetingPermanently';
@@ -210,41 +208,24 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
 
     const handleEditFormSuccess = async () => {
       if (meeting.status_type === 'rejected') {
-        // Edit from a rejected-meeting state: reset declined entries and resend
         try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await supabase.rpc('resend_meeting_invitations', { p_meeting_id: meeting.id });
-            const { data: savedMtg } = await supabase
-              .from('meetings')
-              .select('participant_user_ids')
-              .eq('id', meeting.id)
-              .maybeSingle();
-            const participantIds: string[] = (savedMtg?.participant_user_ids ?? []).filter((uid: string) => uid !== user.id);
-            if (participantIds.length > 0) {
-              const { data: reInviteProfiles } = await supabase.from('profiles').select('user_id, full_name').in('user_id', participantIds);
-              const reInviteNameMap: Record<string, string> = {};
-              for (const p of (reInviteProfiles || [])) reInviteNameMap[p.user_id] = p.full_name || '';
-              await Promise.all(participantIds.map(uid =>
-                insertNotification({
-                  userId: uid,
-                  category: 'meeting',
-                  eventType: getMeetingTemplateKey('participant', 'invite'),
-                  audience: 'participants',
-                  fallbackTitle: `دعوت مجدد به جلسه: ${meeting.subject}`,
-                  fallbackMessage: `جلسه «${meeting.subject}» ویرایش شد و مجدداً برای شما ارسال گردید`,
-                  placeholders: { meeting_subject: meeting.subject, full_name: reInviteNameMap[uid] || '', recipient_greeting: reInviteNameMap[uid] ? `${reInviteNameMap[uid]} گرامی` : 'همکار گرامی' },
-                  senderId: user.id,
-                  actionUrl: 'meetings',
-                })
-              ));
-            }
+          const currentUserId =
+            await getCurrentAuthUserId();
+
+          if (currentUserId) {
+            await resendRejectedMeetingAfterEdit({
+              meetingId: meeting.id,
+              meetingSubject: meeting.subject,
+              senderId: currentUserId,
+            });
+
             toast.success('جلسه ویرایش شد و مجدداً برای شرکت‌کنندگان ارسال گردید');
           }
         } catch {
           toast.error('خطا در ارسال مجدد');
         }
       }
+
       setIsEditing(false);
       setEditPrefill(null);
       onUpdate();
