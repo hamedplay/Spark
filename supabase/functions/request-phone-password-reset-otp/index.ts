@@ -77,12 +77,23 @@ Deno.serve(async (req: Request) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
+  // Read pepper and allowed origins directly from system_config
+  const { data: pepperRow } = await supabase
+    .from("system_config").select("value")
+    .eq("section", "security").eq("key", "phone_auth_pepper")
+    .maybeSingle();
+  const pepper: string = pepperRow?.value || "";
+
+  const { data: originsRow } = await supabase
+    .from("system_config").select("value")
+    .eq("section", "security").eq("key", "phone_login_allowed_origins")
+    .maybeSingle();
+  const allowedOrigins: string[] = (originsRow?.value || "").split(",").map(s => s.trim()).filter(Boolean);
+
   let allowedOrigin: string | null = null;
   try {
-    const allowedStr = Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") || "";
-    const allowed = allowedStr.split(",").map(s => s.trim()).filter(Boolean);
     const origin = req.headers.get("Origin") || "";
-    if (origin && allowed.includes(origin)) allowedOrigin = origin;
+    if (origin && allowedOrigins.includes(origin)) allowedOrigin = origin;
   } catch { /* fail-closed */ }
 
   const cors = corsHeaders(allowedOrigin);
@@ -170,8 +181,8 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Resolve secret
-    const secret = Deno.env.get("PHONE_PASSWORD_RESET_SECRET") || "";
+    // Use pepper from database as the HMAC secret
+    const secret = pepper;
     if (!secret || secret.length < 32) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }

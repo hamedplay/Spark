@@ -305,46 +305,23 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     if (!otp.trim() || otp.length < 4) { toast.error('کد تأیید را وارد کنید'); return; }
     const normalized = normalizeIranPhone(phone);
     if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
-    const e164 = `+${normalized}`;
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({ phone: e164, token: otp, type: 'sms' });
-      if (error) { toast.error('کد نادرست است یا منقضی شده'); return; }
-      if (data.user) {
-        const { data: profileData } = await supabase.from('profiles').select('user_id, phone, is_active').eq('user_id', data.user.id).maybeSingle();
-        // Profile must exist — do NOT create via ensureProfile for OTP users
-        if (!profileData) {
-          await supabase.auth.signOut();
-          toast.error('حساب کاربری یافت نشد. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
-          return;
-        }
-        if (profileData.is_active !== true) {
-          await supabase.auth.signOut();
-          toast.error('حساب کاربری شما غیرفعال شده است. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
-          return;
-        }
-        // Compare normalized phone numbers (auth vs profile vs OTP) — all three must match
-        const authPhone = normalizeIranPhone(data.user.phone);
-        const profilePhone = normalizeIranPhone(profileData.phone);
-        const otpPhone = normalizeIranPhone(phone);
-        if (!profilePhone || profilePhone !== otpPhone) {
-          await supabase.auth.signOut();
-          toast.error('شماره موبایل با حساب کاربری تطابق ندارد.', { duration: 6000 });
-          return;
-        }
-        if (!authPhone) {
-          await supabase.auth.signOut();
-          toast.error('شماره این حساب هنوز در Supabase Auth همگام نشده است.', { duration: 6000 });
-          return;
-        }
-        if (authPhone !== otpPhone) {
-          await supabase.auth.signOut();
-          toast.error('شماره موبایل با حساب کاربری تطابق ندارد.', { duration: 6000 });
-          return;
-        }
+      const { data, error } = await supabase.functions.invoke('verify-phone-login-otp', {
+        body: { phone, otp },
+      });
+      if (error || !data?.ok) { toast.error('کد نادرست است یا منقضی شده'); return; }
+      if (data?.access_token && data?.refresh_token) {
+        const { error: sessErr } = await supabase.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        });
+        if (sessErr) { toast.error('خطا در ایجاد نشست'); return; }
         toast.success('با موفقیت وارد شدید');
-        logAudit({ module: 'auth', action: 'phone_otp_login', entity_name: 'user', entity_id: data.user.id, details: 'ورود با کد یک‌بارمصرف موبایلی', severity: 'info' });
+        logAudit({ module: 'auth', action: 'phone_otp_login', entity_name: 'user', entity_id: data.user_id, details: 'ورود با کد یک‌بارمصرف موبایلی', severity: 'info' });
         onSuccess();
+      } else {
+        toast.error('کد نادرست است یا منقضی شده');
       }
     } catch (err: any) { toast.error('خطا در تأیید کد'); }
     finally { setLoading(false); }
