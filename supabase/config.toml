@@ -10,9 +10,6 @@ verify_jwt = false
 [functions.request-phone-login-otp]
 verify_jwt = false
 
-[functions.verify-phone-login-otp]
-verify_jwt = false
-
 [functions.request-phone-password-reset-otp]
 verify_jwt = false
 
