@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../lib/supabase';
-import { logAudit } from '../lib/audit';
+import { supabase } from '../../../lib/supabase';
+import { logAudit } from '../../../lib/audit';
 import { CirclePlus as PlusCircle, Loader as Loader2, Mail, Lock, UserPlus, Save, Users, X, Plus, Bell, Repeat, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, BookUser, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
-import { ContactEmail } from '../types';
-import type { AgendaItem } from '../types';
-import { useOrgUsers } from '../lib/useOrgUsers';
+import { ContactEmail } from '../../../types';
+import type { AgendaItem } from '../../../types';
+import { useOrgUsers } from '../../../lib/useOrgUsers';
 
 // Tags-inside-input multi-select
 function MultiSelectField({

@@ -53,7 +53,9 @@ feature/
 4. Never change authentication or permission semantics.
 5. Permission precedence: admin → legacy user-group → org-level → position overrides.
 6. Never delete an old implementation until its replacement is connected and builds pass.
-7. No `any`, `@ts-ignore`, or disabled lint rules to hide errors.
+7. Do not introduce new explicit `any` types in newly authored or refactored logic.
+   Pre-existing `any` types outside the current task do not expand task scope.
+   Do not use `@ts-ignore`, disabled lint rules, or unsafe casts to hide new errors.
 8. Preserve URLs, query params, deep links, browser navigation, conference links.
 9. Keep every change reviewable and reversible.
 
@@ -65,7 +67,13 @@ npm run lint
 npm run build
 ```
 
-Run lint and build after every phase. Fix failures before proceeding.
+During incremental phases, lint only touched TypeScript files.
+
+Newly authored or behavior-refactored files must have zero lint errors and warnings.
+
+For a verified mechanical relocation, the before/after lint baseline must remain identical or improve.
+
+Run the full repository lint only at defined quality milestones.
 
 ## Maximum recommended file sizes
 

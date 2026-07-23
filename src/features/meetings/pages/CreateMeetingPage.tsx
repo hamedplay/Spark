@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { CreateMeetingForm } from '../../../components/CreateMeetingForm';
+import { CreateMeetingForm } from '../components/CreateMeetingForm';
 import type { CreateMeetingPageProps } from '../types/meetingsPage';
 
 export function CreateMeetingPage(props: CreateMeetingPageProps) {

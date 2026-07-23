@@ -62,7 +62,7 @@ App additionally wraps content in `PermissionsProvider` and `GlobalCallProvider`
 - [x] Extract `useMaintenanceMode` hook
 - [x] Extract `useSparkVisibility` hook
 - [x] Extract `useAuthSession` hook
-- [x] Extract `resolveUserPermissions` pure function
+- [x] Extract `resolveUserPermissions` (database-loading permission loader, not a pure resolver)
 - [x] Extract `useMeetingsData` hook (fetch + realtime)
 - [x] Extract `useNavigation` + `useAdminPathGuard` (navigation adapter)
 - [x] Extract `permissions.ts` (PAGE_PERMISSION_KEY + checkPermission)
@@ -98,9 +98,20 @@ App additionally wraps content in `PermissionsProvider` and `GlobalCallProvider`
 - [x] Build passes, scoped lint clean
 - [x] No feature imports from `src/app`; used local `MeetingsPageId` type instead of importing `PageId`
 
-Deferred to Phase 2B2B:
-- Move `CreateMeetingForm.tsx` into `features/meetings/`
+Deferred to Phase 3:
 - Introduce meetings repository and mappers
+
+#### Phase 2B2B — Relocate CreateMeetingForm ✅
+- [x] Move `src/components/CreateMeetingForm.tsx` → `src/features/meetings/components/CreateMeetingForm.tsx` (mechanical copy, unchanged logic)
+- [x] Adjust import paths in moved file (`../lib/*` → `../../../lib/*`, `../types` → `../../../types`)
+- [x] Update `CreateMeetingPage.tsx` and `MeetingCardMain.tsx` to import feature-local form
+- [x] Not exported from `features/meetings/index.ts` (internal component)
+- [x] Delete old `src/components/CreateMeetingForm.tsx`
+- [x] Build passes (both pre- and post-deletion)
+- [x] Scoped lint baseline preserved: 26 errors, 4 warnings (identical before/after)
+- [x] No meetings component imports from `src/app`
+- [x] No repository or mapper introduced
+- Inherited Meetings lint debt (15 errors, 2 warnings in CreateMeetingForm; 11 errors, 2 warnings in MeetingCardMain) deferred to cleanup phase
 
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 - [x] Move `Dashboard.tsx` → `features/meetings/components/MeetingsDashboard.tsx` (renamed Dashboard→MeetingsDashboard, DashboardProps→MeetingsDashboardProps)
@@ -114,7 +125,8 @@ Deferred to Phase 2B2B:
 - [x] No meetings component imports from `src/app`
 
 Remaining Phase 2 order:
-2B2B. CreateMeetingForm migration
+2B2C. split MeetingCardMain by responsibility
+2B2D. split CreateMeetingForm by responsibility
 2C. calendar
 2D. tasks
 2E. minutes

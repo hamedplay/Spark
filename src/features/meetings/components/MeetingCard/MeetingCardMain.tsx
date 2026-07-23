@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
-import { CreateMeetingForm } from '../../../../components/CreateMeetingForm';
+import { CreateMeetingForm } from '../CreateMeetingForm';
 import moment from 'moment-jalaali';
 
 interface MeetingCardMainProps {
