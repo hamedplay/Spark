@@ -130,7 +130,7 @@ Deferred to Phase 3:
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
 #### Phase 3D5 — Type the MeetingCard edit-prefill boundary and remove remaining lint debt ✅
-- [x] Created `src/features/meetings/types/meetingForm.ts` with `MeetingFormPrefillData` interface (13 optional fields matching the previous inline contract exactly)
+- [x] Created `src/features/meetings/types/meetingForm.ts` with `MeetingFormPrefillData` interface (14 optional fields matching the previous inline contract exactly)
 - [x] `CreateMeetingFormProps.prefillData` now uses the shared `MeetingFormPrefillData | null` type; inline contract removed
 - [x] Added `request_jalaali_date?: string | null` to `Meeting` in `src/types.ts` (type-only correction for a field already read by `MeetingCardMain`)
 - [x] `editPrefill` state typed as `MeetingFormPrefillData | null` instead of `any`
@@ -138,6 +138,7 @@ Deferred to Phase 3:
 - [x] Final prefill object typed as `MeetingFormPrefillData`; `editPrefill ?? {...}` preserves exact fields and `||` fallbacks
 - [x] Removed unused default `React` import (now `import { useState } from 'react'`)
 - [x] Removed dead `handleDeleteAndRevert` function and its `deleteAndRevertMeeting` import — the handler was never wired to any UI or modal (`DeleteMeetingModal` only accepts `onPermanentDelete`); no behavior change
+- [x] Phase 3D5 cleanup correction: confirmed `handleDeleteAndRevert` had no UI consumer; the unused handler was removed; its now-orphaned command `deleteAndRevertMeeting.ts` was also removed; no runtime behavior changed; no replacement callback or UI behavior was added
 - [x] `MeetingCardMain` lint: 0 errors, 0 warnings (down from 3 errors)
 - [x] `CreateMeetingForm`, `meetingForm.ts`, `src/types.ts` all lint-clean
 - [x] 12 characterization tests pass
@@ -172,6 +173,9 @@ Deferred to Phase 3:
 - [x] No public Meetings export changed
 
 #### Phase 3D3 — Extract the delete-and-revert MeetingCard command ✅
+
+> The extracted delete-and-revert path was subsequently confirmed to have no UI or callback consumer. The dead handler and orphaned command were removed in the Phase 3D5 cleanup correction. Delete-and-revert is not an active reachable capability.
+
 - [x] Created `src/features/meetings/commands/deleteAndRevertMeeting.ts` with `deleteAndRevertMeeting(input)` owning nine responsibilities: source Meeting read, participant snapshot read, action read, replacement Meeting insert, participant copy, action copy, cancellation notifications, old Inbox delete, old Meeting delete — no React, toast, Auth, hooks, repositories, or state
 - [x] Preserved source Meeting read: `meetings` select 10 columns, `.maybeSingle()`, error ignored, missing data throws `جلسه یافت نشد`
 - [x] Preserved participant and action reads: errors ignored, `null` behaves as empty array, no `.order()`
@@ -193,7 +197,7 @@ Deferred to Phase 3:
 - [x] 12 characterization tests pass
 - [x] Build passes
 - [x] No public Meetings export changed
-- [x] Legacy risks recorded:
+- [x] Legacy risks recorded (historical/deferred — the extracted delete-and-revert path was subsequently confirmed to have no UI or callback consumer. The dead handler and orphaned command were removed in the Phase 3D5 cleanup correction. Delete-and-revert is not an active reachable capability.):
   - Delete-and-revert is not transactional.
   - Participant/action copy errors are ignored.
   - Profile and old-Inbox deletion errors are ignored.
