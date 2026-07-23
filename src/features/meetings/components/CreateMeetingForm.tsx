@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { logAudit } from '../../../lib/audit';
-import { CirclePlus as PlusCircle, Loader as Loader2, Save, Users, X, Bell, UserCheck } from 'lucide-react';
+import { CirclePlus as PlusCircle, Loader as Loader2, Save, X, Bell, UserCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail } from '../../../types';
 import type { AgendaItem } from '../../../types';
 import { useOrgUsers } from '../../../lib/useOrgUsers';
-import { MultiSelectField } from './CreateMeetingForm/MultiSelectField';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
 import { AgendaEditor } from './CreateMeetingForm/AgendaEditor';
 import { RecurrenceFields } from './CreateMeetingForm/RecurrenceFields';
 import { MeetingCoreFields } from './CreateMeetingForm/MeetingCoreFields';
+import { MeetingPeopleFields } from './CreateMeetingForm/MeetingPeopleFields';
 
 interface CalendarEntry {
   id: string;
@@ -563,35 +563,14 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         </div>
       </div>
 
-      {/* Participants */}
-      <div className="mt-6">
-        <MultiSelectField
-          label="شرکت‌کنندگان جلسه"
-          icon={<Users className="w-4 h-4" />}
-          placeholder="جستجوی کاربران سامانه..."
-          options={[]}
-          groups={systemUserGroups}
-          selected={selectedParticipants}
-          onAdd={item => setSelectedParticipants(p => [...p, item])}
-          onRemove={id => setSelectedParticipants(p => p.filter(x => x.id !== id))}
-          tagColor="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
-        />
-      </div>
-
-      {/* Notify Users */}
-      <div className="mt-5">
-        <MultiSelectField
-          label="مطلعین جلسه"
-          icon={<Bell className="w-4 h-4" />}
-          placeholder="جستجوی کاربران برای اطلاع‌رسانی..."
-          options={[]}
-          groups={systemUserGroups}
-          selected={selectedNotifyUsers}
-          onAdd={item => setSelectedNotifyUsers(p => [...p, item])}
-          onRemove={id => setSelectedNotifyUsers(p => p.filter(x => x.id !== id))}
-          tagColor="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-        />
-      </div>
+      {/* Participants & Notify Users */}
+      <MeetingPeopleFields
+        groups={systemUserGroups}
+        participants={selectedParticipants}
+        notifyUsers={selectedNotifyUsers}
+        onParticipantsChange={setSelectedParticipants}
+        onNotifyUsersChange={setSelectedNotifyUsers}
+      />
 
       {/* External Participants */}
       <ExternalParticipantsField

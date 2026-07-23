@@ -129,6 +129,31 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 2B2D9 — Extract participant and notification presentation ✅
+- [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingPeopleFields.tsx` (presentational)
+- [x] Reuse existing internal types `MultiSelectGroup` and `MultiSelectValue` from `MultiSelectField` (no duplication)
+- [x] Define explicit props contract: `MeetingPeopleFieldsProps` (controlled groups, participants, notifyUsers with per-field change callbacks)
+- [x] Move participants section, participants `MultiSelectField`, notification-users section, and notification-users `MultiSelectField`
+- [x] Move `Users` icon usage into the new component (no longer in parent); `Bell` retained in parent for reminder section; `UserCheck` retained in parent for manager section
+- [x] Preserve add/remove callback order: `onAdd={(item) => onParticipantsChange([...participants, item])}` / `onRemove={(id) => onParticipantsChange(participants.filter((item) => item.id !== id))}` (and equivalent for notify users)
+- [x] Meeting-manager presentation intentionally retained in the parent to preserve visible field order (manager appears after external participants)
+- [x] Visible field order preserved exactly: participants → notification users → external participants → meeting manager
+- [x] New component imports only `Users`/`Bell` from Lucide and `MultiSelectField` from sibling — no Supabase, toast, moment, `useOrgUsers`, Auth, Meetings hooks, `src/app`, repositories, or services
+- [x] Connect component with controlled props preserving callback behavior: `setSelectedParticipants`/`setSelectedNotifyUsers`
+- [x] `useOrgUsers`, `orgGroups`, `allUsers`, `systemUserGroups` mapping, `resolveUserName`, `resolveUsersByIds`, selected-participant state, selected-notification-user state, meeting-manager state, prefill user resolution, meeting payload fields, reset behavior, Supabase queries, notification behavior, and submission logic all remain in the parent
+- [x] No explicit `any` introduced in the new component
+- [x] CreateMeetingForm line count reduced from 709 to 688 (21 lines removed)
+- [x] `MeetingPeopleFields.tsx` is 58 lines (below ~130-line target)
+- [x] Scoped lint unchanged: 12 problems (10 errors, 2 warnings) — no increase
+- [x] `MeetingPeopleFields.tsx` has zero lint errors and warnings
+- [x] `MultiSelectField.tsx` remains lint-clean
+- [x] Parent Supabase/query/RPC match count unchanged: 16 before, 16 after
+- [x] New component has zero query or mutation matches
+- [x] No UI or runtime behavior changes
+- [x] No public Meetings export changes
+- [x] No repository, service, hook, context, reducer, or dependency added
+- Inherited CreateMeetingForm lint debt deferred to cleanup phase
+
 #### Phase 2B2D8 — Extract core meeting fields presentation ✅
 - [x] Create `src/features/meetings/components/CreateMeetingForm/MeetingCoreFields.tsx` (presentational)
 - [x] Define and export internal types `MeetingCalendarOption` and `MeetingScheduleDate` (not exported from feature public API)
@@ -418,7 +443,7 @@ Deferred to Phase 3:
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 2 order:
-2B2D9. extract participant, notification, and meeting-manager presentation
+2B2D10. extract meeting metadata, reminder, and form-action presentation
 2C. calendar
 2D. tasks
 2E. minutes
@@ -494,3 +519,4 @@ Phases 2–7 as described in the phased checklist.
 | 2B2D6 | scoped lint: 13 problems (11 errors, 2 warnings) — no increase | pass  |
 | 2B2D7 | scoped lint: 12 problems (10 errors, 2 warnings) — improved (moved `any` cast removed) | pass  |
 | 2B2D8 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
+| 2B2D9 | scoped lint: 12 problems (10 errors, 2 warnings) — no increase | pass  |
