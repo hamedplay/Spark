@@ -129,6 +129,29 @@ Deferred to Phase 3:
 - MeetingCardMain reduced from 635 → 449 lines across phases 2B2C1–2B2C4
 - Remaining MeetingCard business operations (deletion, resend, edit, Google Calendar, notifications) deferred to Phase 3
 
+#### Phase 3D1 — Inventory and extract the resend-invitations MeetingCard command ✅
+- [x] Recorded MeetingCard command inventory:
+  - `handleResend` — Auth lookup, resend RPC, Inbox query, profile query, notification fan-out
+  - `handlePermanentDelete` — Auth lookup, cancellation notification fan-out, Inbox deletion, meeting deletion
+  - `handleDeleteAndRevert` — Auth lookup, meeting/participant/action reads, unscheduled meeting creation, participant/action copies, cancellation notifications, old Inbox and meeting deletion
+  - rejected edit-success branch — Auth lookup, resend RPC, participant read, profile read, notification fan-out
+  - `handleAddToGoogleCalendar` — browser URL construction and window opening
+- [x] Created `src/features/meetings/commands/resendMeetingInvitations.ts` with `resendMeetingInvitations(input)` owning: resend RPC, pending Inbox query, profile query, notification fan-out — no React, toast, Auth, hooks, repositories, or state
+- [x] Preserved RPC exactly: `resend_meeting_invitations` with `p_meeting_id`, error-throwing, no retry/logging/fallback
+- [x] Preserved Inbox query exactly: `meeting_inbox` select `user_id` where `status='pending'`, error ignored, `pendingRows ?? []`, row ordering preserved, no dedup, no creator exclusion
+- [x] Preserved profile query exactly: `profiles` select `user_id, full_name` `in('user_id', notifyIds)`, error ignored, missing profiles produce empty names, ordering preserved
+- [x] Preserved notification fan-out: one `Promise.all` over `notifyIds`, same template key, category, audience, Persian fallback text, placeholder keys, greeting fallback, sender ID, action URL; `insertNotification` return values not inspected
+- [x] `handleResend` now: `setLoading(true)` → `getCurrentAuthUserId()` → silent return if no user → `resendMeetingInvitations(...)` → success toast → `onUpdate()` → catch error toast → `finally setLoading(false)`
+- [x] Auth lookup, loading, toast, and `onUpdate` remain in `MeetingCardMain`
+- [x] `MeetingCardHeader` callback wiring unchanged
+- [x] Permanent-delete, delete-and-revert, rejected-edit resend, and Google Calendar code unchanged
+- [x] Command not exported from `src/features/meetings/index.ts`
+- [x] No explicit `any` introduced in the command
+- [x] Scoped lint: command 0 errors/0 warnings; MeetingCardMain 4 errors (down from 5 — the `handleResend` `any` is removed; remaining 4 are pre-existing in other handlers)
+- [x] 12 characterization tests pass
+- [x] Build passes
+- [x] No public Meetings export changed
+
 #### Phase 3C2 — Move CreateMeetingForm Auth operations behind the Auth feature boundary ✅
 - [x] Created `src/features/auth/services/authOperations.ts` with three stateless, imperative operations: `getCurrentAuthUserId`, `signUpWithPassword`, `signInWithPassword` — no React, no hook, no class, no context, no repository, no error-message mapping, no second Supabase client
 - [x] Defined `PasswordAuthCredentials` and `SignUpWithPasswordInput` interfaces; exported only user-id-or-null results — no Supabase response objects or user objects exposed
@@ -783,7 +806,7 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
 Remaining Phase 3 order:
-3D1. inventory and extract the first MeetingCard command boundary
+3D2. extract the permanent-delete MeetingCard command
 
 ### Phase 3 — Introduce repositories and mappers (in progress)
 ### Phase 4 — Split oversized feature files (pending)
@@ -865,3 +888,4 @@ Phases 2–7 as described in the phased checklist.
 | 3B4    | scoped lint: 7 problems (5 errors, 2 warnings) — no increase; both test files + both builders + types zero; 12 tests pass | pass  |
 | 3C1    | scoped lint: 0 errors, 0 warnings — form clean; 12 tests pass | pass  |
 | 3C2    | scoped lint: 0 errors, 0 warnings — form + auth service + auth index + auth hook clean; 12 tests pass | pass  |
+| 3D1    | scoped lint: command 0/0; MeetingCardMain 4 errors (down from 5); 12 tests pass | pass  |

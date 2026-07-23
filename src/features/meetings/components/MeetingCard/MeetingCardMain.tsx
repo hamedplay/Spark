@@ -9,6 +9,8 @@ import { MeetingCardHeader } from './MeetingCardHeader';import { Meeting } from 
 import { supabase } from '../../../../lib/supabase';
 import { insertNotification } from '../../../../lib/notifications';
 import { getMeetingTemplateKey } from '../../../../config/templateCatalog';
+import { getCurrentAuthUserId } from '../../../auth';
+import { resendMeetingInvitations } from '../../commands/resendMeetingInvitations';
 import toast from 'react-hot-toast';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
@@ -62,39 +64,15 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   const handleResend = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const currentUserId =
+        await getCurrentAuthUserId();
+      if (!currentUserId) return;
 
-      // Reset declined inbox entries to pending and clear the rejected flag (via SECURITY DEFINER)
-      const { error } = await supabase.rpc('resend_meeting_invitations', { p_meeting_id: meeting.id });
-      if (error) throw error;
-
-      // Notify participants who had declined
-      const { data: declinedRows } = await supabase
-        .from('meeting_inbox')
-        .select('user_id')
-        .eq('meeting_id', meeting.id)
-        .eq('status', 'pending'); // freshly reset to pending
-
-      const notifyIds = (declinedRows || []).map((r: any) => r.user_id);
-      if (notifyIds.length > 0) {
-        const { data: notifyProfiles } = await supabase.from('profiles').select('user_id, full_name').in('user_id', notifyIds);
-        const nameMap: Record<string, string> = {};
-        for (const p of (notifyProfiles || [])) nameMap[p.user_id] = p.full_name || '';
-        await Promise.all(notifyIds.map((uid: string) =>
-          insertNotification({
-            userId: uid,
-            category: 'meeting',
-            eventType: getMeetingTemplateKey('participant', 'invite'),
-            audience: 'participants',
-            fallbackTitle: `دعوت مجدد به جلسه: ${meeting.subject}`,
-            fallbackMessage: `شما مجدداً به جلسه «${meeting.subject}» دعوت شده‌اید`,
-            placeholders: { meeting_subject: meeting.subject, full_name: nameMap[uid] || '', recipient_greeting: nameMap[uid] ? `${nameMap[uid]} گرامی` : 'همکار گرامی' },
-            senderId: user.id,
-            actionUrl: 'meetings',
-          })
-        ));
-      }
+      await resendMeetingInvitations({
+        meetingId: meeting.id,
+        meetingSubject: meeting.subject,
+        senderId: currentUserId,
+      });
 
       toast.success('دعوت‌نامه مجدداً برای شرکت‌کنندگان ارسال شد');
       onUpdate();
