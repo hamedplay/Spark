@@ -949,9 +949,41 @@ Recorded legacy risks (not fixed in this phase):
 - The Profile dropdown and Layout still install separate beforeinstallprompt listeners.
 - Minutes submenu entries currently bypass the standard permission map.
 
+### Phase 4B — Layout presentation decomposition and lifecycle correction macro pass ✅
+
+Five completed checkpoints:
+
+1. Presence lifecycle controller and four tests — `src/app/layout/services/layoutPresenceLifecycle.ts` created with `startLayoutPresenceLifecycle` owning initial upsert, 60-second heartbeat, `beforeunload` offline marking, and synchronous cleanup; `tests/app/layoutPresenceLifecycle.test.ts` created with four tests covering initial payload, heartbeat status reading with offline skip, beforeunload offline marking, and cleanup clearing interval and removing exact listener; `test:layout-presence` script added
+2. Synchronous React cleanup for Presence — `src/app/layout/hooks/useLayoutUserPresence.ts` created owning Auth user lookup, profile loading, and lifecycle startup; Effect returns synchronous cleanup using disposed flag and stored lifecycle cleanup; late async startup cannot leak after unmount; `Layout.tsx` inline presence Effect replaced with `useLayoutUserPresence()` hook call
+3. Single shared PWA prompt lifecycle — `src/app/layout/hooks/usePwaInstallPrompt.ts` created owning deferred prompt state, `pwa-installable` and `beforeinstallprompt` listeners with named functions, `promptInstall`, and `dismissInstallBanner`; duplicate PWA listener Effects removed from Layout and ProfileDropdown; exactly one listener per event exists; ProfileDropdown receives prompt and callback through props
+4. Password, Settings, and PWA modal extraction — `PasswordModal.tsx`, `UserSettingsModal.tsx`, and `PwaInstallModal.tsx` created under `src/app/layout/components/`; all form state, validation, Auth calls, audit events, theme/preference interactions, standalone/iOS/Android detection, modal overlay, and Persian text preserved exactly; `PwaInstallModal` calls `onPromptInstall` and closes only on `accepted` outcome
+5. Profile dropdown, Top Bar, and Sidebar extraction — `ProfileDropdown.tsx` created with dropdown state, status flyout, status loading/selection, outside-click handling, display name/avatar logic, and `STATUS_OPTIONS`; `LayoutTopBar.tsx` created with NotificationBell, Admin Portal button/dropdown, ProfileDropdown rendering, install shortcut button, and accent line; `LayoutSidebar.tsx` created with mobile menu button/overlay, sidebar shell, collapse toggle, primary navigation rendering, Minutes accordion, icon map, and active-page highlighting; `Layout.tsx` reduced from 1194 to 191 lines owning only props, sidebar/mobile state, sidebar-default Effect, `useLayoutUserPresence`, `usePwaInstallPrompt`, theme accent lookup, logout orchestration, `handlePageChange`, install banner, and composition
+
+Results:
+- 35 total passing tests (6 recurrence + 6 meeting-record + 6 Google Calendar URL + 5 edit-prefill + 8 layout navigation + 4 presence lifecycle)
+- Build success
+- All touched files lint-clean (zero errors and warnings)
+- Layout.tsx: 1194 → 191 lines
+- Component line counts: LayoutSidebar 311, LayoutTopBar 159, PasswordModal 180, PwaInstallModal 185, ProfileDropdown 424, UserSettingsModal 532
+- Hook line counts: useLayoutUserPresence 103, usePwaInstallPrompt 111
+- Service line count: layoutPresenceLifecycle 98
+- No dependency or lockfile changes
+- No production behavior changes except documented lifecycle leak fixes
+
+Corrected risks:
+The Presence interval and beforeunload listener now have
+a React-registered cleanup.
+
+The duplicate PWA prompt listeners were replaced by one
+shared lifecycle hook.
+
+Remaining legacy risk:
+Minutes submenu entries currently bypass the standard
+permission map.
+
 ### Phase 4 — Split oversized feature files (in progress)
 
-Next work item: Phase 4B — Layout presentation decomposition and effect-lifecycle correction macro batch
+Next work item: Phase 4C — User-preferences data boundary and realtime lifecycle macro batch
 ### Phase 5 — Routing modernization (pending)
 ### Phase 6 — Testing and CI (pending)
 ### Phase 7 — Realtime and performance (pending)
