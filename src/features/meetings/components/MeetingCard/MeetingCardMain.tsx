@@ -11,13 +11,14 @@ import { resendRejectedMeetingAfterEdit } from '../../commands/resendRejectedMee
 import { getCurrentAuthUserId } from '../../../auth';
 import { resendMeetingInvitations } from '../../commands/resendMeetingInvitations';
 import { deleteMeetingPermanently } from '../../commands/deleteMeetingPermanently';
+import { buildGoogleCalendarEventUrl } from '../../builders/buildGoogleCalendarEventUrl';
+import { buildMeetingEditPrefill } from '../../builders/buildMeetingEditPrefill';
 import toast from 'react-hot-toast';
 import { ActionsSection } from './ActionsSection';
 import { UserSelectorModal } from './UserSelectorModal';
 import { CreateMeetingForm } from '../CreateMeetingForm';
 import { useMeetingCardReadModel } from '../../hooks/useMeetingCardReadModel';
 import { useMeetingCardSharing } from '../../hooks/useMeetingCardSharing';
-import moment from 'moment-jalaali';
 
 interface MeetingCardMainProps {
   meeting: Meeting;
@@ -119,58 +120,29 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
 
   const handleAddToGoogleCalendar = () => {
     try {
-      const startDate = new Date(meeting.requestDate);
-      const durationInMinutes = parseInt(meeting.duration) || 60;
-      const endDate = new Date(startDate.getTime() + durationInMinutes * 60000);
-      const details = [
-        `نماینده: ${meeting.representative}`,
-        `شماره تماس: ${meeting.phone}`,
-        `شرکت‌کنندگان: ${meeting.participants.join('، ')}`,
-        meeting.notes ? `یادداشت‌ها: ${meeting.notes}` : '',
-        agendaItems.length > 0
-          ? `دستور جلسه:\n` + agendaItems.map((item, idx) => {
-              const parts = [`${idx + 1}. ${item.title}`];
-              if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
-              if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
-              return parts.join(' | ');
-            }).join('\n')
-          : ''
-      ].filter(Boolean).join('\n');
-      const params = new URLSearchParams({
-        action: 'TEMPLATE', text: meeting.subject, details, location: meeting.location,
-        dates: `${startDate.toISOString().replace(/(-|:|\.)/g, '')}/${endDate.toISOString().replace(/(-|:|\.)/g, '')}`,
-        ctz: 'Asia/Tehran', add: (meeting.guest_emails || []).join(',')
-      });
-      window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+      const calendarUrl =
+        buildGoogleCalendarEventUrl({
+          meeting,
+          agendaItems,
+        });
+
+      window.open(
+        calendarUrl,
+        '_blank'
+      );
     } catch {
-      toast.error('خطا در ایجاد رویداد تقویم');
+      toast.error(
+        'خطا در ایجاد رویداد تقویم'
+      );
     }
   };
 
   if (isEditing) {
-    const meetingJalaaliDate = (() => {
-      if (!editPrefill) {
-        const src = meeting.request_jalaali_date;
-        if (src) return src;
-        if (meeting.requestDate) {
-          const m = moment(meeting.requestDate);
-          if (m.isValid()) return `${m.jYear()}/${String(m.jMonth() + 1).padStart(2, '0')}/${String(m.jDate()).padStart(2, '0')}`;
-        }
-      }
-      return '';
-    })();
-    const prefill: MeetingFormPrefillData = editPrefill ?? {
-      subject: meeting.subject,
-      location: meeting.location,
-      representative: meeting.representative,
-      phone: meeting.phone,
-      notes: meeting.notes || '',
-      priority: meeting.priority,
-      meetingId: meeting.id,
-      startTime: meeting.start_time || '',
-      endTime: meeting.end_time || '',
-      requestJalaaliDate: meetingJalaaliDate,
-    };
+    const prefill =
+      buildMeetingEditPrefill({
+        meeting,
+        override: editPrefill,
+      });
 
     const handleEditFormSuccess = async () => {
       if (meeting.status_type === 'rejected') {

@@ -10,9 +10,11 @@
     "preview": "node node_modules/vite/bin/vite.js preview",
     "clean-test-data": "node scripts/clean-test-data.js",
     "set-admin": "node scripts/set-admin.js",
-    "test": "npm run test:recurrence && npm run test:meeting-record",
+    "test": "npm run test:recurrence && npm run test:meeting-record && npm run test:calendar-url && npm run test:meeting-prefill",
     "test:recurrence": "node --import tsx --test tests/meetings/buildRecurringMeetingRecords.test.ts",
-    "test:meeting-record": "node --import tsx --test tests/meetings/buildMeetingPersistenceRecord.test.ts"
+    "test:meeting-record": "node --import tsx --test tests/meetings/buildMeetingPersistenceRecord.test.ts",
+    "test:calendar-url": "node --import tsx --test tests/meetings/buildGoogleCalendarEventUrl.test.ts",
+    "test:meeting-prefill": "node --import tsx --test tests/meetings/buildMeetingEditPrefill.test.ts"
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.5",

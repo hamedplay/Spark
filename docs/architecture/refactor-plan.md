@@ -898,11 +898,32 @@ Legacy risk: Prefill user-name resolution depends on the timing of organization-
 
 #### Phase 2B2A — Relocate Meetings dashboard and MeetingCard family ✅
 
-Remaining Phase 3 order:
-3E1. extract and characterize the Google Calendar event URL builder
+### Phase 3E — MeetingCard pure-utility and characterization macro pass ✅
 
-### Phase 3 — Introduce repositories and mappers (in progress)
+Five completed checkpoints:
+
+1. Google Calendar URL builder extracted — `src/features/meetings/builders/buildGoogleCalendarEventUrl.ts` created as a pure function; `MeetingCardMain` now calls `buildGoogleCalendarEventUrl({ meeting, agendaItems })` inside `handleAddToGoogleCalendar`; `window.open`, `try/catch`, and Persian error Toast remain in the component
+2. Six Calendar characterization tests added — `tests/meetings/buildGoogleCalendarEventUrl.test.ts`; `test:calendar-url` script added
+3. Edit-prefill builder extracted — `src/features/meetings/builders/buildMeetingEditPrefill.ts` created as a pure function (Moment allowed for Jalali fallback); `MeetingCardMain` now calls `buildMeetingEditPrefill({ meeting, override: editPrefill })` in the editing branch; inline Jalali IIFE and inline Prefill object removed; `moment-jalaali` import removed from `MeetingCardMain`
+4. Five Prefill characterization tests added — `tests/meetings/buildMeetingEditPrefill.test.ts`; `test:meeting-prefill` script added
+5. MeetingCard utility pass validated and closed — `test` alias updated to run all four scripts; no Calendar URL construction, Agenda-description construction, or Jalali fallback construction remains in `MeetingCardMain`; `window.open` and Calendar error Toast remain; active Meeting commands unchanged; no direct Supabase or notification infrastructure returned to the component; no Delete-and-Revert path restored
+
+Results:
+- 23 total passing tests (6 recurrence + 6 meeting-record + 6 Google Calendar URL + 5 edit-prefill)
+- Build success
+- Scoped lint success (zero errors and warnings on all touched files)
+- No dependency or lockfile changes
+- No production behavior changes
+- Calendar browser opening and Toast remain in the component
+- Override identity and Jalali fallback are characterized
+- Monthly recurrence legacy behavior remains characterized
+- Active Commands and infrastructure boundaries remain unchanged
+- MeetingCard pure-utility pass complete
+
+### Phase 3 — Introduce repositories and mappers (complete)
 ### Phase 4 — Split oversized feature files (pending)
+
+Next work item: Phase 4A — execute the next architecture macro batch using four to five internally validated checkpoints
 ### Phase 5 — Routing modernization (pending)
 ### Phase 6 — Testing and CI (pending)
 ### Phase 7 — Realtime and performance (pending)
