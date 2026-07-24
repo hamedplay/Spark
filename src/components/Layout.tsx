@@ -1,19 +1,36 @@
 import { useState, useRef, useEffect } from 'react';
 import { LayoutDashboard, SquareCheck as CheckSquare, ChartBar as FileBarChart2, LogOut, StickyNote, Phone, Menu, ChevronRight, Calendar, BookOpen, MessageCircle, Video, LayoutGrid, Settings, X, Bot, Key, Sun, Moon, User, ChevronDown, Check, Palette, Download, Smartphone, Monitor, ExternalLink, MessagesSquare, Bell, LayoutList, CalendarDays, Clock, Eye, EyeOff, LayoutGrid as LayoutCompact, FileText, ClipboardList, SquareCheck as DecisionIcon, TrendingUp, ChartBar as BarChart2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import { NotificationBell } from './NotificationBell';
 import { useTheme, ACCENT_COLORS, AccentKey } from '../context/ThemeContext';
 import { useUserPreferences } from '../context/UserPreferencesContext';
+import type { LayoutUserPermissions, PageId } from '../app/layout/types';
+import {
+  getVisiblePrimaryNavigationItems,
+  getVisibleMinutesNavigationItems,
+  isMinutesPage,
+  resolveActiveMinutesPage,
+} from '../app/layout/navigationMenu';
+import {
+  fetchSidebarDefaultCollapsed,
+  fetchLayoutUserProfile,
+  fetchLayoutUserPresenceStatus,
+  upsertLayoutUserPresence,
+  markLayoutUserOffline,
+} from '../app/layout/repositories/layoutUserRepository';
+import type { LayoutUserProfile, LayoutUserStatus } from '../app/layout/types/layoutUser';
+import type {
+  BeforeInstallPromptEvent,
+  NavigatorWithStandalone,
+  WindowWithDeferredInstallPrompt,
+} from '../app/layout/types/pwa';
+import {
+  getCurrentAuthUserId,
+  updateCurrentUserPassword,
+  signOutCurrentUser,
+} from '../features/auth';
 
-interface UserProfile {
-  full_name: string | null;
-  email: string | null;
-  avatar_url: string | null;
-  position: string | null;
-}
-
-type PageId = 'meetings' | 'create-meeting' | 'tasks' | 'reports' | 'notes' | 'profile' | 'contacts' | 'contacts_email' | 'calendar' | 'tutorial' | 'admin' | 'chat' | 'video-conference' | 'portal-config' | 'spark' | 'channels' | 'groups' | 'minutes' | 'minutes-new' | 'minutes-edit' | 'minutes-detail' | 'minutes-approvals' | 'minutes-my-decisions' | 'minutes-followup' | 'minutes-report' | 'minutes-reports' | 'minutes-dashboard';
+export type { PageId } from '../app/layout/types';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,10 +38,8 @@ interface LayoutProps {
   onPageChange: (page: PageId) => void;
   isAdmin?: boolean;
   sparkVisible?: boolean;
-  userPermissions?: Record<string, boolean> | null | undefined;
+  userPermissions?: LayoutUserPermissions;
 }
-
-export type { PageId };
 
 const STATUS_OPTIONS = [
   { key: 'online',  label: 'آنلاین هستم',   dot: 'bg-green-500' },
@@ -33,8 +48,6 @@ const STATUS_OPTIONS = [
   { key: 'dnd',     label: 'مزاحم نشوید',   dot: 'bg-red-500'   },
   { key: 'offline', label: 'آفلاین',         dot: 'bg-gray-400'  },
 ] as const;
-
-type UserStatus = typeof STATUS_OPTIONS[number]['key'] | 'dnd';
 
 // ── Portal button ──────────────────────────────────────────────────────────────
 function PortalButton({ activePage, onPageChange }: { activePage: PageId; onPageChange: (p: PageId) => void }) {
@@ -87,8 +100,16 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
     if (pwForm.next.length < 6) { setError('رمز عبور باید حداقل ۶ کاراکتر باشد'); return; }
     setPwLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: pwForm.next });
-      if (error) { setError('خطا: ' + error.message); return; }
+      try {
+        await updateCurrentUserPassword(pwForm.next);
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : String(err);
+        setError('خطا: ' + message);
+        return;
+      }
       logAudit({ module: 'auth', action: 'password_changed', details: 'رمز عبور تغییر کرد', severity: 'warning' });
       setSuccess(true);
       setTimeout(onClose, 1500);
@@ -412,7 +433,15 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                     <span className="text-sm text-gray-700 dark:text-gray-300">{item.label}</span>
                   </div>
                   <button
-                    onClick={() => handle({ [item.key]: !val } as any)}
+                    onClick={() => {
+                      type BooleanPreferenceKey =
+                        | 'show_past_meetings'
+                        | 'show_cancelled_meetings'
+                        | 'compact_cards'
+                        | 'notifications_enabled';
+                      const key = item.key as BooleanPreferenceKey;
+                      handle({ [key]: !val });
+                    }}
                     className={`relative w-10 h-5 rounded-full transition-colors ${val ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'}`}
                   >
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${val ? 'right-0.5' : 'left-0.5'}`} />
@@ -439,7 +468,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 function ProfileDropdown({
   userProfile, onPageChange, onLogout,
 }: {
-  userProfile: UserProfile | null;
+  userProfile: LayoutUserProfile | null;
   onPageChange: (p: PageId) => void;
   onLogout: () => void;
 }) {
@@ -448,36 +477,37 @@ function ProfileDropdown({
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showPwaModal, setShowPwaModal] = useState(false);
-  const [status, setStatus] = useState<UserStatus>('online');
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [status, setStatus] = useState<LayoutUserStatus>('online');
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('user_status') as UserStatus | null;
+    const saved = localStorage.getItem('user_status') as LayoutUserStatus | null;
     if (saved) setStatus(saved);
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase.from('user_presence').select('status').eq('user_id', user.id).maybeSingle();
-      if (data?.status) {
-        setStatus(data.status as UserStatus);
-        localStorage.setItem('user_status', data.status);
+      const userId = await getCurrentAuthUserId();
+      if (!userId) return;
+      const stored = await fetchLayoutUserPresenceStatus(userId);
+      if (stored) {
+        setStatus(stored);
+        localStorage.setItem('user_status', stored);
       }
     })();
   }, []);
 
   useEffect(() => {
     // Capture deferred install prompt
-    if ((window as any).deferredInstallPrompt) {
-      setInstallPrompt((window as any).deferredInstallPrompt);
+    const pwaWindow = window as WindowWithDeferredInstallPrompt;
+    if (pwaWindow.deferredInstallPrompt) {
+      setInstallPrompt(pwaWindow.deferredInstallPrompt);
     }
-    const onInstallable = () => setInstallPrompt((window as any).deferredInstallPrompt);
+    const onInstallable = () => setInstallPrompt(pwaWindow.deferredInstallPrompt);
     window.addEventListener('pwa-installable', onInstallable);
     window.addEventListener('beforeinstallprompt', (e: Event) => {
       e.preventDefault();
-      setInstallPrompt(e);
-      (window as any).deferredInstallPrompt = e;
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+      pwaWindow.deferredInstallPrompt = e as BeforeInstallPromptEvent;
     });
     return () => window.removeEventListener('pwa-installable', onInstallable);
   }, []);
@@ -493,17 +523,19 @@ function ProfileDropdown({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const selectStatus = async (s: UserStatus) => {
+  const selectStatus = async (s: LayoutUserStatus) => {
     setStatus(s);
     localStorage.setItem('user_status', s);
     setShowStatusFlyout(false);
     setOpen(false);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from('user_presence').upsert(
-        { user_id: user.id, last_seen: new Date().toISOString(), is_online: s !== 'offline', status: s },
-        { onConflict: 'user_id' }
-      );
+    const userId = await getCurrentAuthUserId();
+    if (userId) {
+      await upsertLayoutUserPresence({
+        userId,
+        status: s,
+        isOnline: s !== 'offline',
+        lastSeen: new Date().toISOString(),
+      });
     }
     logAudit({ module: 'profile', action: 'status_changed', details: `وضعیت به "${STATUS_OPTIONS.find(o => o.key === s)?.label}" تغییر کرد`, severity: 'info' });
   };
@@ -514,12 +546,12 @@ function ProfileDropdown({
     const { outcome } = await installPrompt.userChoice;
     if (outcome === 'accepted') {
       setInstallPrompt(null);
-      (window as any).deferredInstallPrompt = null;
+      (window as WindowWithDeferredInstallPrompt).deferredInstallPrompt = null;
       setShowPwaModal(false);
     }
   };
 
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as NavigatorWithStandalone).standalone;
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isAndroid = /android/i.test(navigator.userAgent);
   const appUrl = window.location.origin;
@@ -790,28 +822,14 @@ function ProfileDropdown({
   );
 }
 
-// Maps each menu item to its permission key
-const MENU_PERMISSION_KEY: Record<string, string> = {
-  'meetings':         'meetings',
-  'calendar':         'calendar',
-  'chat':             'chat',
-  'channels':         'channels',
-  'video-conference': 'video_conference',
-  'tasks':            'tasks',
-  'notes':            'notes',
-  'contacts':         'contacts',
-  'reports':          'reports',
-  'spark':            'spark',
-};
-
 export function Layout({ children, activePage, onPageChange, isAdmin = false, userPermissions, sparkVisible = false }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
     return saved !== null ? saved === 'true' : true;
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<LayoutUserProfile | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const { accent } = useTheme();
   const accentColor = ACCENT_COLORS.find(c => c.key === accent)?.hex ?? '#0d9488';
@@ -820,14 +838,8 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
   useEffect(() => {
     if (localStorage.getItem('sidebar_collapsed') !== null) return;
     (async () => {
-      const { data } = await supabase
-        .from('system_config')
-        .select('value')
-        .eq('section', 'ui')
-        .eq('key', 'sidebar_default_collapsed')
-        .maybeSingle();
-      if (data) {
-        const defaultCollapsed = data.value !== 'false';
+      const defaultCollapsed = await fetchSidebarDefaultCollapsed();
+      if (defaultCollapsed !== null) {
         setIsCollapsed(defaultCollapsed);
         localStorage.setItem('sidebar_collapsed', String(defaultCollapsed));
       }
@@ -836,32 +848,32 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, email, avatar_url, position')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (data) setUserProfile(data as UserProfile);
+      const userId = await getCurrentAuthUserId();
+      if (!userId) return;
+      const profile = await fetchLayoutUserProfile(userId);
+      if (profile) setUserProfile(profile);
 
-      await supabase.from('user_presence').upsert(
-        { user_id: user.id, last_seen: new Date().toISOString(), is_online: true, status: (localStorage.getItem('user_status') as string) || 'online' },
-        { onConflict: 'user_id' }
-      );
+      await upsertLayoutUserPresence({
+        userId,
+        status: (localStorage.getItem('user_status') as LayoutUserStatus) || 'online',
+        isOnline: true,
+        lastSeen: new Date().toISOString(),
+      });
 
       const interval = setInterval(async () => {
-        const s = localStorage.getItem('user_status') || 'online';
+        const s = (localStorage.getItem('user_status') as LayoutUserStatus) || 'online';
         if (s !== 'offline') {
-          await supabase.from('user_presence').upsert(
-            { user_id: user.id, last_seen: new Date().toISOString(), is_online: true, status: s },
-            { onConflict: 'user_id' }
-          );
+          await upsertLayoutUserPresence({
+            userId,
+            status: s,
+            isOnline: true,
+            lastSeen: new Date().toISOString(),
+          });
         }
       }, 60_000);
 
       const markOffline = () => {
-        supabase.from('user_presence').update({ is_online: false }).eq('user_id', user.id).then(() => {});
+        markLayoutUserOffline(userId);
       };
       window.addEventListener('beforeunload', markOffline);
 
@@ -882,9 +894,9 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
       setShowInstallBanner(true);
     };
     window.addEventListener('beforeinstallprompt', handler as EventListener);
-    // Also check if the prompt was already captured before this component mounted
-    if ((window as any).deferredInstallPrompt) {
-      setInstallPrompt((window as any).deferredInstallPrompt);
+    const pwaWindow = window as WindowWithDeferredInstallPrompt;
+    if (pwaWindow.deferredInstallPrompt) {
+      setInstallPrompt(pwaWindow.deferredInstallPrompt);
     }
     return () => window.removeEventListener('beforeinstallprompt', handler as EventListener);
   }, []);
@@ -895,7 +907,7 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
     const { outcome } = await installPrompt.userChoice;
     if (outcome === 'accepted') {
       setInstallPrompt(null);
-      (window as any).deferredInstallPrompt = null;
+      (window as WindowWithDeferredInstallPrompt).deferredInstallPrompt = null;
     }
     setShowInstallBanner(false);
   };
@@ -906,69 +918,51 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
 
   const handleLogout = async () => {
     logAudit({ module: 'auth', action: 'logout', details: 'خروج از سامانه', severity: 'info' });
-    await supabase.auth.signOut();
+    await signOutCurrentUser();
   };
 
-  const allMenuItems = [
-    { id: 'meetings',         title: 'درخواست جلسه',   icon: LayoutDashboard, group: null },
-    { id: 'calendar',         title: 'تقویم',           icon: Calendar,        group: null },
-    { id: 'chat',             title: 'چت سازمانی',      icon: MessageCircle,   group: null },
-    { id: 'channels',         title: 'کانال‌ها',         icon: MessagesSquare,  group: null },
-    { id: 'video-conference', title: 'ویدیو کنفرانس',   icon: Video,           group: null },
-    { id: 'tasks',            title: 'اقدامات',         icon: CheckSquare,     group: null },
-    { id: 'notes',            title: 'یادداشت‌ها',      icon: StickyNote,      group: null },
-    { id: 'contacts',         title: 'مخاطبین',         icon: Phone,           group: null },
-    { id: 'reports',          title: 'گزارشات',         icon: FileBarChart2,   group: null },
-    { id: 'spark',            title: 'اسپارک (دستیار)', icon: Bot,             group: null },
-  ];
-
-  const MINUTES_PAGES = new Set([
-    'minutes', 'minutes-new', 'minutes-edit', 'minutes-detail',
-    'minutes-approvals', 'minutes-my-decisions', 'minutes-followup',
-    'minutes-report', 'minutes-reports', 'minutes-dashboard',
-  ]);
-
-  const minutesSubItems = [
-    { id: 'minutes-dashboard',    title: 'داشبورد',        icon: LayoutDashboard },
-    { id: 'minutes',              title: 'صورت‌جلسات',     icon: FileText        },
-    { id: 'minutes-approvals',    title: 'کارتابل تأیید',  icon: ClipboardList   },
-    { id: 'minutes-my-decisions', title: 'مصوبات من',      icon: DecisionIcon    },
-    { id: 'minutes-followup',     title: 'پیگیری مصوبات',  icon: TrendingUp      },
-    { id: 'minutes-reports',      title: 'گزارش‌ها',       icon: BarChart2       },
-  ];
-
-  // Internal pages that don't appear in menu but should highlight a parent subitem
-  const MINUTES_INTERNAL_PAGE_MAP: Record<string, string> = {
-    'minutes-new':    'minutes',
-    'minutes-edit':   'minutes',
-    'minutes-detail': 'minutes',
-    'minutes-report': 'minutes-reports',
+  const ICON_MAP: Record<PageId, typeof LayoutDashboard> = {
+    'meetings':         LayoutDashboard,
+    'calendar':         Calendar,
+    'chat':             MessageCircle,
+    'channels':         MessagesSquare,
+    'video-conference': Video,
+    'tasks':            CheckSquare,
+    'notes':            StickyNote,
+    'contacts':         Phone,
+    'reports':          FileBarChart2,
+    'spark':            Bot,
+    'minutes-dashboard':    LayoutDashboard,
+    'minutes':              FileText,
+    'minutes-approvals':    ClipboardList,
+    'minutes-my-decisions': DecisionIcon,
+    'minutes-followup':     TrendingUp,
+    'minutes-reports':      BarChart2,
   };
 
-  const [isMinutesMenuOpen, setIsMinutesMenuOpen] = useState(() => MINUTES_PAGES.has(activePage));
+  const [isMinutesMenuOpen, setIsMinutesMenuOpen] = useState(() => isMinutesPage(activePage));
 
   useEffect(() => {
-    if (MINUTES_PAGES.has(activePage)) setIsMinutesMenuOpen(true);
+    if (isMinutesPage(activePage)) setIsMinutesMenuOpen(true);
   }, [activePage]);
 
-  const menuItems = allMenuItems.filter(item => {
-    if (item.id === 'spark' && !sparkVisible) return false;
-    if (isAdmin) return true;
-    const permKey = MENU_PERMISSION_KEY[item.id];
-    if (!permKey) return true;
-    if (userPermissions === null) return true;
-    if (userPermissions === undefined) return false;
-    return !!userPermissions[permKey];
-  });
+  const menuItems = getVisiblePrimaryNavigationItems({
+    isAdmin,
+    sparkVisible: !!sparkVisible,
+    userPermissions,
+  }).map(item => ({
+    ...item,
+    icon: ICON_MAP[item.id],
+  }));
 
-  const visibleMinutesSubItems = minutesSubItems.filter(item => {
-    if (isAdmin) return true;
-    const permKey = MENU_PERMISSION_KEY[item.id];
-    if (!permKey) return true;
-    if (userPermissions === null) return true;
-    if (userPermissions === undefined) return false;
-    return !!userPermissions[permKey];
-  });
+  const visibleMinutesSubItems = getVisibleMinutesNavigationItems({
+    isAdmin,
+    sparkVisible: !!sparkVisible,
+    userPermissions,
+  }).map(item => ({
+    ...item,
+    icon: ICON_MAP[item.id],
+  }));
 
   const handlePageChange = (page: typeof activePage) => {
     onPageChange(page);
@@ -1122,11 +1116,11 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
                   }
                 }}
                 className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${isCollapsed ? 'justify-center px-2' : 'px-2.5'} ${
-                  MINUTES_PAGES.has(activePage)
+                  isMinutesPage(activePage)
                     ? 'shadow-sm'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
                 }`}
-                style={MINUTES_PAGES.has(activePage) ? { backgroundColor: accentColor + '18', color: accentColor } : {}}
+                style={isMinutesPage(activePage) ? { backgroundColor: accentColor + '18', color: accentColor } : {}}
                 title={isCollapsed ? 'صورت‌جلسات و مصوبات' : undefined}
               >
                 <FileText className="w-5 h-5 flex-shrink-0" />
@@ -1149,7 +1143,7 @@ export function Layout({ children, activePage, onPageChange, isAdmin = false, us
                   <div className="pt-0.5 space-y-0.5">
                     {visibleMinutesSubItems.map(sub => {
                       const SubIcon = sub.icon;
-                      const mappedActive = MINUTES_INTERNAL_PAGE_MAP[activePage] ?? activePage;
+                      const mappedActive = resolveActiveMinutesPage(activePage);
                       const isSubActive = mappedActive === sub.id;
                       return (
                         <button

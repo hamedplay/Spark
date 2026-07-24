@@ -921,9 +921,37 @@ Results:
 - MeetingCard pure-utility pass complete
 
 ### Phase 3 — Introduce repositories and mappers (complete)
-### Phase 4 — Split oversized feature files (pending)
+### Phase 4A — Layout infrastructure and navigation foundation macro pass ✅
 
-Next work item: Phase 4A — execute the next architecture macro batch using four to five internally validated checkpoints
+Five completed checkpoints:
+
+1. Shared PageId and Layout permission types — `src/app/layout/types.ts` created with the exact `PageId` union (27 values) and `LayoutUserPermissions` type; `Layout.tsx` imports both and re-exports `PageId` for compatibility
+2. Pure navigation model — `src/app/layout/navigationMenu.ts` created with `PRIMARY_NAVIGATION_ITEMS`, `MINUTES_NAVIGATION_ITEMS`, `MINUTES_PAGES`, `MINUTES_INTERNAL_PAGE_MAP`, and four visibility functions; `Layout.tsx` local menu data and inline filtering removed; Lucide icon mapping kept in Layout keyed by `PageId`
+3. Eight navigation characterization tests — `tests/app/layoutNavigation.test.ts` created; `test:layout-navigation` script added; all eight pass
+4. Password/logout Auth boundary — `updateCurrentUserPassword` and `signOutCurrentUser` added to `authOperations.ts` and exported through `auth/index.ts`; `Layout.tsx` PasswordModal calls `updateCurrentUserPassword` with local error catch preserving `خطا: <message>`; logout calls `signOutCurrentUser` after audit logging
+5. Layout profile/presence/sidebar repository — `src/app/layout/repositories/layoutUserRepository.ts` created with five functions; `Layout.tsx` profile loading, initial presence, heartbeat, status upsert, before-unload offline, and sidebar default all call the repository; `Layout.tsx` contains zero direct Supabase access
+
+Additional completed items:
+6. Typed PWA prompt boundary — `src/app/layout/types/pwa.ts` created with `BeforeInstallPromptEvent`, `WindowWithDeferredInstallPrompt`, `NavigatorWithStandalone`, `PwaInstallChoice`; both PWA listeners in Layout and ProfileDropdown use narrow casts instead of `as any`
+7. Zero direct Supabase access in Layout — confirmed by grep
+8. Boolean UserPreferences `as any` removed — replaced with a local `BooleanPreferenceKey` union and typed switch
+
+Results:
+- 31 total passing tests (6 recurrence + 6 meeting-record + 6 Google Calendar URL + 5 edit-prefill + 8 layout navigation)
+- Build success
+- All new files have zero lint errors and warnings
+- Layout lint: 13 problems → 0 problems (all 12 explicit `any` errors and 1 warning removed)
+- No dependency or lockfile changes
+- No production behavior changes
+
+Recorded legacy risks (not fixed in this phase):
+- The Layout profile/presence effect currently returns its cleanup from inside an async IIFE, so React does not register that cleanup.
+- The Profile dropdown and Layout still install separate beforeinstallprompt listeners.
+- Minutes submenu entries currently bypass the standard permission map.
+
+### Phase 4 — Split oversized feature files (in progress)
+
+Next work item: Phase 4B — Layout presentation decomposition and effect-lifecycle correction macro batch
 ### Phase 5 — Routing modernization (pending)
 ### Phase 6 — Testing and CI (pending)
 ### Phase 7 — Realtime and performance (pending)

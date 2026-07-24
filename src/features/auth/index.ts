@@ -5,6 +5,8 @@ export {
   getCurrentAuthUserId,
   signInWithPassword,
   signUpWithPassword,
+  updateCurrentUserPassword,
+  signOutCurrentUser,
 } from './services/authOperations';
 
 export type {

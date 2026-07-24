@@ -55,3 +55,21 @@ export async function signInWithPassword(
 
   return data.user?.id ?? null;
 }
+
+export async function updateCurrentUserPassword(
+  password: string
+): Promise<void> {
+  const { error } =
+    await supabase.auth.updateUser({
+      password,
+    });
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function signOutCurrentUser():
+  Promise<void> {
+  await supabase.auth.signOut();
+}
