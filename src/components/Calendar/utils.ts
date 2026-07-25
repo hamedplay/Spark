@@ -87,3 +87,22 @@ export function jalaaliDatesBetween(start: { jy: number; jm: number; jd: number 
   }
   return dates;
 }
+
+export function toHijri(date: Date): { hy: number; hm: number; hd: number } {
+  const y = date.getFullYear(), mo = date.getMonth() + 1, d = date.getDate();
+  const N = d + Math.ceil(29.5001 * (mo - 1)) + (y - 1) * 365 + Math.floor((y - 1) / 4) - Math.floor((y - 1) / 100) + Math.floor((y - 1) / 400) + 1721425.5 - 1948438.5;
+  const z = Math.floor(N);
+  const a = Math.floor((z - 1) / 10631);
+  const b = z - 1 - 10631 * a;
+  const c = Math.floor((b - 1) / 354);
+  const hy = 30 * a + c + 1;
+  const rem = b - 354 * c;
+  let hm = 0, hd = 0;
+  const monthLengths = [30,29,30,29,30,29,30,29,30,29,30,29];
+  let cumDays = 0;
+  for (let i = 0; i < 12; i++) {
+    if (rem <= cumDays + monthLengths[i]) { hm = i + 1; hd = rem - cumDays; break; }
+    cumDays += monthLengths[i];
+  }
+  return { hy, hm: hm || 12, hd: hd || 29 };
+}
