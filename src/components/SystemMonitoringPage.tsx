@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { CalendarDays, MessageSquare, SquareCheck as CheckSquare, Users, ListFilter as Filter, Search, EllipsisVertical as MoreVertical, CreditCard as Edit2, Trash2, GitBranch, X, CircleCheck as CheckCircle, Archive, Share2, Calendar, ArrowRight, Circle, Loader as Loader2, RefreshCw, Circle as XCircle, Hash, Lock, Eye, Hash as ChannelIcon } from 'lucide-react';
 import { ConfirmDeleteModal } from './SystemMonitoring/ConfirmDeleteModal';
 import { MeetingFlowModal } from './SystemMonitoring/MeetingFlowModal';
+import { type MeetingRow, type MeetingFlowEvent, type Profile } from './SystemMonitoring/types';
+import { toJalaliTime, INP, SEL } from './SystemMonitoring/utils';
+import { Badge2, DataField } from './SystemMonitoring/DisplayComponents';
+import { JalaliInput } from './SystemMonitoring/JalaliInput';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -9,40 +13,6 @@ import moment from 'moment-jalaali';
 moment.loadPersian({ dialect: 'persian-modern', usePersianDigits: false });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface MeetingRow {
-  id: string;
-  subject: string;
-  request_date: string | null;
-  duration: string | null;
-  location: string | null;
-  representative: string | null;
-  phone: string | null;
-  notes: string | null;
-  priority: string | null;
-  status: string | null;
-  status_type: string | null;
-  created_at: string | null;
-  user_id: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  guest_emails: string[] | null;
-  members_only: boolean | null;
-  repeat_type: string | null;
-  shared_count?: number;
-  creator_name?: string | null;
-  participants?: { id: string; name: string }[];
-  actions?: { id: string; title: string; status: string; assignee: string }[];
-}
-
-export interface MeetingFlowEvent {
-  label: string;
-  date: string | null;
-  actor?: string | null;
-  icon: React.ElementType;
-  color: string;
-  done: boolean;
-}
 
 interface ChatConversation {
   id: string;
@@ -137,12 +107,6 @@ interface GroupTaskRow {
   creator_name?: string | null;
 }
 
-export interface Profile {
-  user_id: string;
-  full_name: string | null;
-  email: string | null;
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const SUPERADMIN_CODE = '19881990';
@@ -162,11 +126,6 @@ function maskConfidential(body: string, msgType: string | null, revealed: boolea
 const toJalali = (d: string | null): string => {
   if (!d) return '—';
   return moment(d).format('jYYYY/jMM/jDD');
-};
-
-export const toJalaliTime = (d: string | null): string => {
-  if (!d) return '—';
-  return moment(d).format('jYYYY/jMM/jDD HH:mm');
 };
 
 // Convert jalali date input (jYYYY/jMM/jDD) to ISO for DB query
@@ -198,36 +157,6 @@ const statusColor: Record<string, string> = {
   in_progress: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
   completed: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
 };
-
-const SEL = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500';
-const INP = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500';
-
-function Badge2({ label, colorCls }: { label: string; colorCls: string }) {
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colorCls}`}>{label}</span>;
-}
-
-function DataField({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-gray-400 dark:text-gray-500">{label}</span>
-      <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">{value ?? '—'}</span>
-    </div>
-  );
-}
-
-// Jalali date input that displays and accepts jYYYY/jMM/jDD
-function JalaliInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
-  return (
-    <input
-      type="text"
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder || 'مثال: 1403/06/15'}
-      className={INP}
-      dir="ltr"
-    />
-  );
-}
 
 // ─── MeetingEditModal (full edit) ─────────────────────────────────────────────
 

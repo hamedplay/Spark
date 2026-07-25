@@ -1,6 +1,7 @@
 import React from 'react';
 import { GitBranch, X, CircleCheck as CheckCircle, Archive, Share2, Calendar, Users, Circle } from 'lucide-react';
-import { type MeetingRow, type MeetingFlowEvent, type Profile, toJalaliTime } from '../SystemMonitoringPage';
+import { type MeetingRow, type MeetingFlowEvent, type Profile } from './types';
+import { toJalaliTime } from './utils';
 
 export function MeetingFlowModal({ meeting, profiles, onClose }: {
   meeting: MeetingRow; profiles: Profile[]; onClose: () => void;
