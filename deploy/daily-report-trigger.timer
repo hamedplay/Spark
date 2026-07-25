@@ -1,0 +1,20 @@
+# /etc/systemd/system/daily-report-trigger.timer
+# Timer unit for daily report scheduler — runs every 5 minutes.
+# Install: sudo cp deploy/daily-report-trigger.timer /etc/systemd/system/
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now daily-report-trigger.timer
+#
+# Persistent=true ensures the timer catches up after server restart,
+# but the edge function itself checks grace period and idempotency.
+
+[Unit]
+Description=Run daily report scheduler every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

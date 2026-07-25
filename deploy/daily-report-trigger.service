@@ -1,0 +1,17 @@
+# /etc/systemd/system/daily-report-trigger.service
+# Service unit for daily report scheduler.
+# Install: sudo cp deploy/daily-report-trigger.service /etc/systemd/system/
+#           sudo cp deploy/daily-report-trigger.timer /etc/systemd/system/
+
+[Unit]
+Description=Trigger daily management meetings report
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/myapp/daily-report.env
+ExecStart=/usr/local/bin/daily-report-trigger.sh
+# Log to journald
+StandardOutput=journal
+StandardError=journal
