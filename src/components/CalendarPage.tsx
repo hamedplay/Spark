@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { usePermissions } from '../context/PermissionsContext';
-import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin, RefreshCw, ChevronDown, X, Plus, Users, Search, PanelRight, Trash2, RotateCcw, CalendarPlus } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { CalendarViews } from './Calendar/CalendarViews';
 import { supabase } from '../lib/supabase';
 import { insertNotification as insertNotificationFromTemplate } from '../lib/notifications';
@@ -15,7 +15,7 @@ import {
   JALAALI_MONTHS,
   PRIORITY_COLORS, SLOT_HEIGHT, HOURS_START, HOURS_END, DEFAULT_CALENDAR_COLOR, VIEW_OPTIONS,
   toJalaali, jalaaliToDate, getJalaaliMonthDays, getJalaaliFirstDayOfWeek,
-  jalaaliToYYYYMMDD, parseRequestDateToDateStr,
+  jalaaliToYYYYMMDD, parseRequestDateToDateStr, jalaaliDatesBetween,
   timeToMinutes, minutesToTime, minutesToSlotIndex,
 } from './Calendar/utils';
 import { CalendarSidebar } from './Calendar/CalendarSidebar';
@@ -24,6 +24,15 @@ import { MeetingDetailModal } from './Calendar/MeetingDetailModal';
 import { CreateEditCalendarModal } from './Calendar/CreateEditCalendarModal';
 import { SubscriptionsModal } from './Calendar/SubscriptionsModal';
 import { CalendarListModal } from './Calendar/CalendarListModal';
+import { ReminderAlertModal } from './Calendar/ReminderAlertModal';
+import { RepeatEditDialog } from './Calendar/RepeatEditDialog';
+import { DeleteMeetingDialog } from './Calendar/DeleteMeetingDialog';
+import { MonthDayPopup } from './Calendar/MonthDayPopup';
+import { AllDayEventForm } from './Calendar/AllDayEventForm';
+import { MoveConfirmDialog } from './Calendar/MoveConfirmDialog';
+import { ResizeConfirmDialog } from './Calendar/ResizeConfirmDialog';
+import { CalendarTopBar } from './Calendar/CalendarTopBar';
+import { MeetingFormDrawer } from './Calendar/MeetingFormDrawer';
 
 type ViewMode = 'month' | 'week' | 'day' | 'list-week' | 'list-month';
 
@@ -698,20 +707,6 @@ export function CalendarPage({
   [allDayEvents]);
 
   // Returns all gregorian dates between two jalaali dates inclusive
-  const jalaaliDatesBetween = (start: { jy: number; jm: number; jd: number }, end: { jy: number; jm: number; jd: number }) => {
-    const startG = jalaaliToDate(start.jy, start.jm, start.jd);
-    const endG = jalaaliToDate(end.jy, end.jm, end.jd);
-    const [from, to] = startG <= endG ? [startG, endG] : [endG, startG];
-    const dates: { jy: number; jm: number; jd: number }[] = [];
-    const cur = new Date(from);
-    while (cur <= to) {
-      const j = toJalaali(cur);
-      dates.push(j);
-      cur.setDate(cur.getDate() + 1);
-    }
-    return dates;
-  };
-
   // Check if a jalaali date is in the drag-select range
   const isInAllDayDragRange = (jy: number, jm: number, jd: number) => {
     if (!allDayDragStart || !allDayDragEnd) return false;
@@ -1511,56 +1506,18 @@ export function CalendarPage({
 
       {/* Reminder alert */}
       {reminderAlert && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" dir="rtl">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setReminderAlert(null)} />
-          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-bounce-in">
-            <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                <Clock className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-sm">یادآوری جلسه</p>
-                <p className="text-white/80 text-xs mt-0.5">
-                  {reminderAlert.minutesBefore >= 60
-                    ? `${reminderAlert.minutesBefore / 60} ساعت دیگر`
-                    : `${reminderAlert.minutesBefore} دقیقه دیگر`}
-                </p>
-              </div>
-            </div>
-            <div className="p-5">
-              <p className="font-semibold text-gray-900 dark:text-white text-base">{reminderAlert.meeting.subject}</p>
-              <div className="mt-2 space-y-1 text-sm text-gray-500 dark:text-gray-400">
-                {reminderAlert.meeting.start_time && (
-                  <p className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{reminderAlert.meeting.start_time}{reminderAlert.meeting.end_time ? ` - ${reminderAlert.meeting.end_time}` : ''}</p>
-                )}
-                {reminderAlert.meeting.location && (
-                  <p className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{reminderAlert.meeting.location}</p>
-                )}
-              </div>
-              <button onClick={() => setReminderAlert(null)} className="mt-4 w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors">
-                باشه، متوجه شدم
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReminderAlertModal alert={reminderAlert} onClose={() => setReminderAlert(null)} />
       )}
 
       {/* Meeting form */}
       {showMeetingForm && (
-        <div className="fixed inset-0 bg-black/40 z-50" onClick={() => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); }}>
-          <div
-            className="absolute inset-y-0 left-0 w-full max-w-lg bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInLeft"
-            style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <CalendarMeetingForm
-              prefillData={prefillData}
-              calendars={[...calendars.filter(c => !c.is_occasions && c.type !== 'private'), ...subscribedCalendars.filter(c => !c.is_occasions && c.type !== 'private')]}
-              onCancel={() => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); }}
-              onSuccess={(subject, isUpdate) => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); fetchMeetings(); if (onScheduleComplete) onScheduleComplete(); sendNotification(isUpdate ? 'جلسه ویرایش شد' : 'جلسه ثبت شد', subject || ''); }}
-            />
-          </div>
-        </div>
+        <MeetingFormDrawer
+          prefillData={prefillData}
+          calendars={calendars}
+          subscribedCalendars={subscribedCalendars}
+          onCancel={() => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); }}
+          onSuccess={(subject, isUpdate) => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); fetchMeetings(); if (onScheduleComplete) onScheduleComplete(); sendNotification(isUpdate ? 'جلسه ویرایش شد' : 'جلسه ثبت شد', subject || ''); }}
+        />
       )}
 
       {/* Meeting detail */}
@@ -1583,61 +1540,26 @@ export function CalendarPage({
 
       {/* Repeat edit scope dialog */}
       {repeatEditDialog && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" dir="rtl">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setRepeatEditDialog(null)} />
-          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
-            <div className="bg-blue-600 px-5 py-4">
-              <h3 className="text-white font-bold">ویرایش جلسه تکراری</h3>
-              <p className="text-blue-100 text-xs mt-1">کدام جلسات تغییر کنند؟</p>
-            </div>
-            <div className="p-5 space-y-3">
-              <button onClick={() => { openEditForm(repeatEditDialog.meeting); setRepeatEditDialog(null); }}
-                className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group">
-                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 transition-colors">
-                  <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:text-white" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-800 dark:text-white text-sm">فقط این جلسه</p>
-                  <p className="text-xs text-gray-400 mt-0.5">تنها همین جلسه تغییر می‌کند</p>
-                </div>
-              </button>
-              <button onClick={async () => {
-                const m = repeatEditDialog.meeting;
-                const { data: allRepeat } = await supabase.from('meetings').select('id').eq('subject', m.subject).eq('user_id', m.user_id || '').gte('request_date', m.request_date);
-                if (allRepeat && allRepeat.length > 0) {
-                  const ids = allRepeat.map((r: any) => r.id);
-                  openEditForm({ ...m, id: m.id, _editAllIds: ids } as any);
-                }
-                setRepeatEditDialog(null);
-              }}
-                className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-orange-500 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all text-right group">
-                <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-orange-500 transition-colors">
-                  <RefreshCw className="w-4 h-4 text-orange-600 dark:text-orange-400 group-hover:text-white" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-800 dark:text-white text-sm">این و جلسات بعدی</p>
-                  <p className="text-xs text-gray-400 mt-0.5">از این جلسه به بعد تغییر می‌کنند</p>
-                </div>
-              </button>
-              <button onClick={async () => {
-                const m = repeatEditDialog.meeting;
-                const { data: allRepeat } = await supabase.from('meetings').select('id').eq('subject', m.subject).eq('user_id', m.user_id || '');
-                if (allRepeat && allRepeat.length > 0) openEditForm({ ...m, id: m.id, _editAllIds: allRepeat.map((r: any) => r.id) } as any);
-                setRepeatEditDialog(null);
-              }}
-                className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group">
-                <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
-                  <Users className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-800 dark:text-white text-sm">همه جلسات</p>
-                  <p className="text-xs text-gray-400 mt-0.5">تمام جلسات تکراری تغییر می‌کنند</p>
-                </div>
-              </button>
-              <button onClick={() => setRepeatEditDialog(null)} className="w-full py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">انصراف</button>
-            </div>
-          </div>
-        </div>
+        <RepeatEditDialog
+          meeting={repeatEditDialog.meeting}
+          onEditSingle={() => { openEditForm(repeatEditDialog.meeting); setRepeatEditDialog(null); }}
+          onEditFollowing={async () => {
+            const m = repeatEditDialog.meeting;
+            const { data: allRepeat } = await supabase.from('meetings').select('id').eq('subject', m.subject).eq('user_id', m.user_id || '').gte('request_date', m.request_date);
+            if (allRepeat && allRepeat.length > 0) {
+              const ids = allRepeat.map((r: any) => r.id);
+              openEditForm({ ...m, id: m.id, _editAllIds: ids } as any);
+            }
+            setRepeatEditDialog(null);
+          }}
+          onEditAll={async () => {
+            const m = repeatEditDialog.meeting;
+            const { data: allRepeat } = await supabase.from('meetings').select('id').eq('subject', m.subject).eq('user_id', m.user_id || '');
+            if (allRepeat && allRepeat.length > 0) openEditForm({ ...m, id: m.id, _editAllIds: allRepeat.map((r: any) => r.id) } as any);
+            setRepeatEditDialog(null);
+          }}
+          onClose={() => setRepeatEditDialog(null)}
+        />
       )}
 
       {/* Preview popup (rendered inside CalendarViews) */}
@@ -1647,59 +1569,13 @@ export function CalendarPage({
         const meeting = meetings.find(x => x.id === deleteMeetingDialog.id);
         const isOwner = meeting?.user_id === currentUserId;
         return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" dir="rtl">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setDeleteMeetingDialog(null)} />
-            <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-              <div className="bg-red-600 px-5 py-4">
-                <h3 className="text-white font-bold text-base">حذف جلسه</h3>
-                {meeting && <p className="text-red-100 text-xs mt-1 truncate">«{meeting.subject}»</p>}
-              </div>
-              <div className="p-5 space-y-3">
-                {isOwner ? (
-                  <>
-                    <button
-                      onClick={() => handleDeleteMeetingConfirm('revert')}
-                      className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group"
-                    >
-                      <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 transition-colors">
-                        <RotateCcw className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:text-white" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white text-sm">حذف و برگشت به درخواست جلسه</p>
-                        <p className="text-xs text-gray-400 mt-0.5">جلسه حذف می‌شود و یک درخواست جلسه جدید با همان اطلاعات ایجاد می‌گردد</p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteMeetingConfirm('full')}
-                      className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group"
-                    >
-                      <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
-                        <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white text-sm">حذف کامل برای همه</p>
-                        <p className="text-xs text-gray-400 mt-0.5">جلسه به طور کامل حذف می‌شود و هیچ رکوردی باقی نمی‌ماند</p>
-                      </div>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => handleDeleteMeetingConfirm('full')}
-                    className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group"
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
-                      <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-800 dark:text-white text-sm">حذف از تقویم من</p>
-                      <p className="text-xs text-gray-400 mt-0.5">جلسه فقط از تقویم شما حذف می‌شود</p>
-                    </div>
-                  </button>
-                )}
-                <button onClick={() => setDeleteMeetingDialog(null)} className="w-full py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">انصراف</button>
-              </div>
-            </div>
-          </div>
+          <DeleteMeetingDialog
+            meeting={meeting}
+            isOwner={isOwner}
+            onRevert={() => handleDeleteMeetingConfirm('revert')}
+            onFull={() => handleDeleteMeetingConfirm('full')}
+            onClose={() => setDeleteMeetingDialog(null)}
+          />
         );
       })()}
 
@@ -1710,137 +1586,39 @@ export function CalendarPage({
         const occ = getOccasionsForDay(jy, jm, jd);
         const dayEvs = getAllDayEventsForDay(jy, jm, jd);
         return (
-          <div className="fixed inset-0 z-[55] pointer-events-none" dir="rtl">
-            <div ref={monthDayPopupRef}
-              className="pointer-events-auto absolute bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 w-72 max-h-80 flex flex-col overflow-hidden"
-              style={{
-                top: Math.min(y + 4, window.innerHeight - 340),
-                left: Math.min(x, window.innerWidth - 300),
-              }}>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${isToday(jy, jm, jd) ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white'}`}>{jd}</div>
-                  <div>
-                    <p className="text-sm font-semibold dark:text-white">{JALAALI_MONTHS[jm - 1]} {jy}</p>
-                    <p className="text-xs text-gray-400">{dm.length} جلسه</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => { setMonthDayPopup(null); handleCreateMeetingForDay(jy, jm, jd); }}
-                    title="تنظیم جلسه" aria-label="تنظیم جلسه برای این روز"
-                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-blue-500 transition-colors">
-                    <CalendarPlus className="w-4 h-4" />
-                  </button>
-                  <button type="button" onClick={() => { setMonthDayPopup(null); setAllDayFormDate({ jy, jm, jd }); setShowAllDayForm(true); }}
-                    title="ایجاد برنامه روزانه" aria-label="ایجاد برنامه روزانه برای این روز"
-                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-blue-500 transition-colors">
-                    <Plus className="w-4 h-4" />
-                  </button>
-                  <button type="button" onClick={() => setMonthDayPopup(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 transition-colors">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="overflow-y-auto flex-1 p-2 space-y-1.5">
-                {occ.map(o => (
-                  <div key={o.id} className={`px-3 py-1.5 rounded-xl text-xs font-medium ${o.is_holiday ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300' : o.is_celebration ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>{o.title}</div>
-                ))}
-                {dayEvs.map(ev => (
-                  <div key={ev.id} className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center justify-between ${ev.type === 'leave' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'}`}>
-                    <span>{ev.title}</span>
-                    <button type="button" onClick={async () => { await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70"><X className="w-3 h-3" /></button>
-                  </div>
-                ))}
-                {dm.length === 0 && occ.length === 0 && dayEvs.length === 0 && (
-                  <div className="text-center py-6 text-gray-400 text-xs">جلسه‌ای ندارد</div>
-                )}
-                {dm.map(m => {
-                  const c = getMeetingColor(m);
-                  return (
-                    <button type="button" key={m.id} onClick={() => { setMonthDayPopup(null); setDetailMeeting(m); }}
-                      className="w-full text-right flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: c }} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold dark:text-white truncate">{m.subject}</p>
-                        {m.start_time && <p className="text-[10px] text-gray-400 mt-0.5">{toFarsiTime(m.start_time)}{m.end_time ? ` – ${toFarsiTime(m.end_time)}` : ''}</p>}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
-                <button type="button" onClick={() => { setMonthDayPopup(null); setSelectedJy(jy); setSelectedJm(jm); setSelectedJd(jd); setViewMode('day'); }}
-                  className="w-full py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors">
-                  نمایش روزانه
-                </button>
-              </div>
-            </div>
-          </div>
+          <MonthDayPopup
+            jy={jy} jm={jm} jd={jd} x={x} y={y}
+            meetings={dm} occasions={occ} dayEvents={dayEvs}
+            isToday={isToday} toFarsiTime={toFarsiTime} getMeetingColor={getMeetingColor}
+            popupRef={monthDayPopupRef}
+            onCreateMeeting={() => { setMonthDayPopup(null); handleCreateMeetingForDay(jy, jm, jd); }}
+            onCreateAllDay={() => { setMonthDayPopup(null); setAllDayFormDate({ jy, jm, jd }); setShowAllDayForm(true); }}
+            onDeleteAllDay={async (id) => { await supabase.from('all_day_events').delete().eq('id', id); fetchAllDayEvents(); }}
+            onMeetingClick={(m) => { setMonthDayPopup(null); setDetailMeeting(m); }}
+            onDayView={() => { setMonthDayPopup(null); setSelectedJy(jy); setSelectedJm(jm); setSelectedJd(jd); setViewMode('day'); }}
+            onClose={() => setMonthDayPopup(null)}
+          />
         );
       })()}
 
       {/* All-day event form */}
       {showAllDayForm && allDayFormDate && (
-        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4" dir="rtl">
-          <div className="absolute inset-0 bg-black/30" onClick={() => { setShowAllDayForm(false); setAllDayFormTitle(''); setAllDayFormEndDate(null); }} />
-          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-xs overflow-hidden border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-              <span className="text-sm font-semibold text-gray-800 dark:text-white">رویداد کل‌روز</span>
-              <button onClick={() => { setShowAllDayForm(false); setAllDayFormTitle(''); setAllDayFormEndDate(null); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="px-4 py-4 space-y-3">
-              {/* Date range display */}
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                {allDayFormEndDate && (allDayFormEndDate.jy !== allDayFormDate.jy || allDayFormEndDate.jm !== allDayFormDate.jm || allDayFormEndDate.jd !== allDayFormDate.jd)
-                  ? `${allDayFormDate.jd} ${JALAALI_MONTHS[allDayFormDate.jm - 1]} تا ${allDayFormEndDate.jd} ${JALAALI_MONTHS[allDayFormEndDate.jm - 1]} ${allDayFormDate.jy}`
-                  : `${allDayFormDate.jd} ${JALAALI_MONTHS[allDayFormDate.jm - 1]} ${allDayFormDate.jy}`
-                }
-              </div>
-
-              {/* Type selector */}
-              <div className="flex gap-1.5">
-                {[{ v: 'meeting', l: 'جلسه' }, { v: 'leave', l: 'مرخصی' }, { v: 'other', l: 'سایر' }].map(opt => (
-                  <button key={opt.v} type="button" onClick={() => setAllDayFormType(opt.v as any)}
-                    className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors ${allDayFormType === opt.v
-                      ? opt.v === 'leave' ? 'bg-orange-100 border-orange-300 text-orange-700 dark:bg-orange-900/30 dark:border-orange-600 dark:text-orange-300'
-                        : opt.v === 'meeting' ? 'bg-sky-100 border-sky-300 text-sky-700 dark:bg-sky-900/30 dark:border-sky-600 dark:text-sky-300'
-                        : 'bg-gray-100 border-gray-300 text-gray-700 dark:bg-gray-700 dark:border-gray-500 dark:text-gray-300'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'}`}>
-                    {opt.l}
-                  </button>
-                ))}
-              </div>
-
-              {/* Title input */}
-              <input autoFocus type="text" value={allDayFormTitle} onChange={e => setAllDayFormTitle(e.target.value)}
-                onKeyDown={async e => {
-                  if (e.key === 'Enter' && allDayFormTitle.trim() && currentUserId) {
-                    const dates = allDayFormEndDate ? jalaaliDatesBetween(allDayFormDate, allDayFormEndDate) : [allDayFormDate];
-                    await supabase.from('all_day_events').insert(dates.map(dt => ({ title: allDayFormTitle.trim(), type: allDayFormType, date_jy: dt.jy, date_jm: dt.jm, date_jd: dt.jd, user_id: currentUserId })));
-                    fetchAllDayEvents(); setShowAllDayForm(false); setAllDayFormTitle(''); setAllDayFormEndDate(null);
-                  }
-                }}
-                placeholder="عنوان رویداد..."
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg dark:bg-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:focus:ring-sky-600 placeholder-gray-300 dark:placeholder-gray-600" />
-
-              {/* Save */}
-              <button
-                onClick={async () => {
-                  if (!allDayFormTitle.trim() || !currentUserId) return;
-                  const dates = allDayFormEndDate ? jalaaliDatesBetween(allDayFormDate, allDayFormEndDate) : [allDayFormDate];
-                  await supabase.from('all_day_events').insert(dates.map(dt => ({ title: allDayFormTitle.trim(), type: allDayFormType, date_jy: dt.jy, date_jm: dt.jm, date_jd: dt.jd, user_id: currentUserId })));
-                  fetchAllDayEvents(); setShowAllDayForm(false); setAllDayFormTitle(''); setAllDayFormEndDate(null);
-                }}
-                disabled={!allDayFormTitle.trim()}
-                className="w-full py-2 text-sm font-semibold rounded-lg transition-colors bg-gray-800 hover:bg-gray-700 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed">
-                ذخیره
-              </button>
-            </div>
-          </div>
-        </div>
+        <AllDayEventForm
+          formDate={allDayFormDate}
+          formEndDate={allDayFormEndDate}
+          title={allDayFormTitle}
+          type={allDayFormType}
+          currentUserId={currentUserId}
+          onTitleChange={setAllDayFormTitle}
+          onTypeChange={setAllDayFormType}
+          onSave={async () => {
+            if (!allDayFormTitle.trim() || !currentUserId) return;
+            const dates = allDayFormEndDate ? jalaaliDatesBetween(allDayFormDate, allDayFormEndDate) : [allDayFormDate];
+            await supabase.from('all_day_events').insert(dates.map(dt => ({ title: allDayFormTitle.trim(), type: allDayFormType, date_jy: dt.jy, date_jm: dt.jm, date_jd: dt.jd, user_id: currentUserId })));
+            fetchAllDayEvents(); setShowAllDayForm(false); setAllDayFormTitle(''); setAllDayFormEndDate(null);
+          }}
+          onClose={() => { setShowAllDayForm(false); setAllDayFormTitle(''); setAllDayFormEndDate(null); }}
+        />
       )}
 
       {/* Create/Edit calendar */}
@@ -1895,100 +1673,33 @@ export function CalendarPage({
         {/* Content */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Top bar */}
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex-wrap sm:flex-nowrap">
-            {/* Mobile sidebar toggle — only visible on small screens */}
-            <button onClick={() => setShowMobileSidebar(true)} className="lg:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0">
-              <Calendar className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-            </button>
-            {/* Desktop sidebar toggle — only visible on large screens */}
-            <button
-              onClick={() => setShowDesktopSidebar(v => !v)}
-              className={`hidden lg:flex p-1.5 rounded-lg flex-shrink-0 transition-colors ${showDesktopSidebar ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
-              title={showDesktopSidebar ? 'پنهان کردن تقویم‌ها' : 'نمایش تقویم‌ها'}
-            >
-              <PanelRight className="w-4 h-4" />
-            </button>
-            <button onClick={goToToday} className="px-2.5 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-white font-medium flex-shrink-0">امروز</button>
-            {/* Search button + panel */}
-            <div ref={searchRef} className="relative flex-shrink-0">
-              <button onClick={() => setShowSearch(v => !v)} className={`p-1.5 rounded-lg transition-colors ${showSearch ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`} title="جستجوی جلسات">
-                <Search className="w-4 h-4" />
-              </button>
-              {showSearch && (
-                <div className="absolute right-0 top-full mt-1.5 w-72 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-[70] overflow-hidden" dir="rtl">
-                  <div className="p-2 border-b border-gray-100 dark:border-gray-700">
-                    <div className="relative">
-                      <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                      <input ref={searchInputRef} type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="جستجوی جلسات..." dir="rtl"
-                        className="w-full pr-8 pl-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:text-white placeholder-gray-400"
-                      />
-                    </div>
-                  </div>
-                  {searchResults.length > 0 ? (
-                    <div className="max-h-64 overflow-y-auto py-1">
-                      {searchResults.map(m => {
-                        const dateStr = parseRequestDateToDateStr(m.request_date);
-                        const j = dateStr ? toJalaali(new Date(dateStr + 'T12:00:00')) : null;
-                        return (
-                          <button key={m.id} onClick={() => navigateToMeeting(m)}
-                            className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 text-right transition-colors">
-                            <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{m.subject}</p>
-                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                {j && <span className="text-xs text-gray-400">{j.jy}/{String(j.jm).padStart(2,'0')}/{String(j.jd).padStart(2,'0')}</span>}
-                                {m.start_time && <span className="text-xs text-blue-500">{m.start_time}</span>}
-                                {m.location && <span className="text-xs text-gray-400 flex items-center gap-0.5"><MapPin className="w-3 h-3" />{m.location}</span>}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : searchQuery.trim() ? (
-                    <div className="py-6 text-center text-sm text-gray-400">جلسه‌ای یافت نشد</div>
-                  ) : (
-                    <div className="py-4 text-center text-xs text-gray-400">موضوع، محل یا نماینده را وارد کنید</div>
-                  )}
-                </div>
-              )}
-            </div>
-            <button onClick={() => fetchMeetings()} disabled={isRefreshing} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"><RefreshCw className={`w-4 h-4 text-gray-500 dark:text-gray-400 ${isRefreshing ? 'animate-spin' : ''}`} /></button>
-            <button onClick={navigatePrev} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0"><ChevronRight className="w-5 h-5 dark:text-white" /></button>
-            <button onClick={navigateNext} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg flex-shrink-0"><ChevronLeft className="w-5 h-5 dark:text-white" /></button>
-            <h2 className="text-sm sm:text-base font-semibold dark:text-white flex-1 text-center min-w-0 truncate">{getNavTitle()}</h2>
-            <div className="relative flex-shrink-0">
-              <button onClick={() => setShowViewDropdown(o => !o)}
-                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 text-xs sm:text-sm border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-white min-w-[70px] sm:min-w-[90px] justify-between">
-                <span className="hidden sm:inline">{VIEW_OPTIONS.find(v => v.key === viewMode)?.label || 'روز'}</span>
-                <span className="sm:hidden">{VIEW_OPTIONS.find(v => v.key === viewMode)?.label?.slice(0,3) || 'روز'}</span>
-                <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </button>
-              {showViewDropdown && (
-                <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 py-1 z-50 min-w-[130px]">
-                  {VIEW_OPTIONS.map(v => (
-                    <button key={v.key} onClick={() => { setViewMode(v.key); setShowViewDropdown(false); }}
-                      className={`w-full text-right px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${viewMode === v.key ? 'text-blue-500 font-semibold' : 'dark:text-white'}`}>
-                      {viewMode === v.key && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
-                      {v.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {(canHideOffHours || prefs.hide_offhours !== undefined) && (
-              <button
-                onClick={() => { const next = !hideOffHours; setHideOffHours(next); updatePrefs({ hide_offhours: next }); }}
-                title={hideOffHours ? 'نمایش ساعات غیرکاری' : 'پنهان کردن ساعات غیرکاری'}
-                className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${hideOffHours ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'}`}
-              >
-                <Clock className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          <CalendarTopBar
+            viewMode={viewMode}
+            navTitle={getNavTitle()}
+            isRefreshing={isRefreshing}
+            showDesktopSidebar={showDesktopSidebar}
+            showSearch={showSearch}
+            showViewDropdown={showViewDropdown}
+            searchQuery={searchQuery}
+            hideOffHours={hideOffHours}
+            canHideOffHours={canHideOffHours}
+            hasHideOffHoursPref={prefs.hide_offhours !== undefined}
+            searchRef={searchRef}
+            searchInputRef={searchInputRef}
+            onToggleMobileSidebar={() => setShowMobileSidebar(true)}
+            onToggleDesktopSidebar={() => setShowDesktopSidebar(v => !v)}
+            onGoToToday={goToToday}
+            onToggleSearch={() => setShowSearch(v => !v)}
+            onSearchChange={setSearchQuery}
+            onRefresh={() => fetchMeetings()}
+            onNavigatePrev={navigatePrev}
+            onNavigateNext={navigateNext}
+            onToggleViewDropdown={() => setShowViewDropdown(o => !o)}
+            onViewModeChange={(v) => { setViewMode(v); setShowViewDropdown(false); }}
+            onToggleHideOffHours={() => { const next = !hideOffHours; setHideOffHours(next); updatePrefs({ hide_offhours: next }); }}
+            searchResults={searchResults}
+            onNavigateToMeeting={navigateToMeeting}
+          />
 
           {/* View */}
           <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900">
@@ -2176,84 +1887,20 @@ export function CalendarPage({
 
       {/* Move confirmation dialog */}
       {pendingMove && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" dir="rtl">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 mx-4 w-full max-w-sm">
-            <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">تأیید جابجایی جلسه</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">آیا از جابجایی این جلسه اطمینان دارید؟</p>
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
-              <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingMove.meeting.subject}</p>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
-                <span className="text-gray-600 dark:text-gray-300">
-                  {(() => { const d = new Date(pendingMove.oldDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
-                  {' — '}
-                  <span dir="ltr">{pendingMove.meeting.start_time} تا {pendingMove.meeting.end_time}</span>
-                </span>
-              </div>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
-                <span className="text-teal-600 dark:text-teal-400 font-medium">
-                  {(() => { const d = new Date(pendingMove.newDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
-                  {' — '}
-                  <span dir="ltr">{pendingMove.updates.start_time} تا {pendingMove.updates.end_time}</span>
-                </span>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setPendingMove(null)}
-                className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={commitMove}
-                className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                تأیید جابجایی
-              </button>
-            </div>
-          </div>
-        </div>
+        <MoveConfirmDialog
+          pendingMove={pendingMove}
+          onConfirm={commitMove}
+          onCancel={() => setPendingMove(null)}
+        />
       )}
 
       {/* Resize confirmation dialog */}
       {pendingResize && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" dir="rtl">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 mx-4 w-full max-w-sm">
-            <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">تأیید تغییر مدت جلسه</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">آیا از تغییر زمان پایان این جلسه اطمینان دارید؟</p>
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
-              <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingResize.meeting.subject}</p>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
-                <span className="text-gray-600 dark:text-gray-300" dir="ltr">
-                  {pendingResize.meeting.start_time} تا {pendingResize.meeting.end_time}
-                </span>
-              </div>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
-                <span className="text-teal-600 dark:text-teal-400 font-medium" dir="ltr">
-                  {pendingResize.meeting.start_time} تا {pendingResize.newEndTime}
-                </span>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setPendingResize(null)}
-                className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={commitResize}
-                className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                تأیید تغییر
-              </button>
-            </div>
-          </div>
-        </div>
+        <ResizeConfirmDialog
+          pendingResize={pendingResize}
+          onConfirm={commitResize}
+          onCancel={() => setPendingResize(null)}
+        />
       )}
 
       {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}

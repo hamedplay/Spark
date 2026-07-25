@@ -73,3 +73,17 @@ export function minutesToTime(minutes: number): string {
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 export function minutesToSlotIndex(minutes: number): number { return Math.round(minutes / 30); }
+
+export function jalaaliDatesBetween(start: { jy: number; jm: number; jd: number }, end: { jy: number; jm: number; jd: number }): { jy: number; jm: number; jd: number }[] {
+  const startG = jalaaliToDate(start.jy, start.jm, start.jd);
+  const endG = jalaaliToDate(end.jy, end.jm, end.jd);
+  const [from, to] = startG <= endG ? [startG, endG] : [endG, startG];
+  const dates: { jy: number; jm: number; jd: number }[] = [];
+  const cur = new Date(from);
+  while (cur <= to) {
+    const j = toJalaali(cur);
+    dates.push(j);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
