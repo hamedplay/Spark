@@ -1,0 +1,274 @@
+import { useState } from 'react';
+import { Calendar as CalendarIcon } from 'lucide-react';
+import { DeleteMeetingModal } from './DeleteMeetingModal';
+import { MeetingDetails } from './MeetingDetails';
+import { ParticipantStatusPanel } from './ParticipantStatusPanel';
+import { MeetingShareDialog } from './MeetingShareDialog';
+import { MeetingShareCard } from './MeetingShareCard';
+import { MeetingCardHeader } from './MeetingCardHeader';import type { Meeting } from '../../../../types';
+import type { MeetingFormPrefillData } from '../../types/meetingForm';
+import { resendRejectedMeetingAfterEdit } from '../../commands/resendRejectedMeetingAfterEdit';
+import { getCurrentAuthUserId } from '../../../auth';
+import { resendMeetingInvitations } from '../../commands/resendMeetingInvitations';
+import { deleteMeetingPermanently } from '../../commands/deleteMeetingPermanently';
+import { buildGoogleCalendarEventUrl } from '../../builders/buildGoogleCalendarEventUrl';
+import { buildMeetingEditPrefill } from '../../builders/buildMeetingEditPrefill';
+import toast from 'react-hot-toast';
+import { ActionsSection } from './ActionsSection';
+import { UserSelectorModal } from './UserSelectorModal';
+import { CreateMeetingForm } from '../CreateMeetingForm';
+import { useMeetingCardReadModel } from '../../hooks/useMeetingCardReadModel';
+import { useMeetingCardSharing } from '../../hooks/useMeetingCardSharing';
+
+interface MeetingCardMainProps {
+  meeting: Meeting;
+  onUpdate: () => void;
+  onScheduleInCalendar?: (meeting: Meeting) => void;
+}
+
+// ─── MeetingCardMain ──────────────────────────────────────────────────────────
+export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: MeetingCardMainProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editPrefill, setEditPrefill] = useState<MeetingFormPrefillData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showActions, setShowActions] = useState(false);
+  const [showUserSelector, setShowUserSelector] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const {
+    agendaItems,
+    participantUserIds,
+    participantStatuses,
+    delegateNames,
+    isCreator,
+  } = useMeetingCardReadModel(meeting);
+
+  const {
+    cardRef,
+    shareCardRef,
+    shareMenuRef,
+    showShareMenu,
+    showShareDialog,
+    shareImageUrl,
+    toggleShareMenu,
+    closeShareDialog,
+    handleShareImage,
+    handleShareText,
+    handleSendToTelegram,
+    handleDownloadShareImage,
+  } = useMeetingCardSharing({
+    meeting,
+    agendaItems,
+    setLoading,
+  });
+
+  const handleResend = async () => {
+    setLoading(true);
+    try {
+      const currentUserId =
+        await getCurrentAuthUserId();
+      if (!currentUserId) return;
+
+      await resendMeetingInvitations({
+        meetingId: meeting.id,
+        meetingSubject: meeting.subject,
+        senderId: currentUserId,
+      });
+
+      toast.success('دعوت‌نامه مجدداً برای شرکت‌کنندگان ارسال شد');
+      onUpdate();
+    } catch {
+      toast.error('خطا در ارسال مجدد دعوت‌نامه');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    setLoading(true);
+    try {
+      const currentUserId =
+        await getCurrentAuthUserId();
+
+      await deleteMeetingPermanently({
+        meetingId: meeting.id,
+        meetingSubject: meeting.subject,
+
+        participantUserIds:
+          (
+            meeting.participant_user_ids ||
+            []
+          ) as string[],
+
+        notifyUserIds:
+          (
+            meeting.notify_users ||
+            []
+          ) as string[],
+
+        senderId: currentUserId,
+      });
+
+      toast.success('جلسه به طور کامل حذف شد');
+      onUpdate();
+    } catch {
+      toast.error('خطا در حذف جلسه');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddToGoogleCalendar = () => {
+    try {
+      const calendarUrl =
+        buildGoogleCalendarEventUrl({
+          meeting,
+          agendaItems,
+        });
+
+      window.open(
+        calendarUrl,
+        '_blank'
+      );
+    } catch {
+      toast.error(
+        'خطا در ایجاد رویداد تقویم'
+      );
+    }
+  };
+
+  if (isEditing) {
+    const prefill =
+      buildMeetingEditPrefill({
+        meeting,
+        override: editPrefill,
+      });
+
+    const handleEditFormSuccess = async () => {
+      if (meeting.status_type === 'rejected') {
+        try {
+          const currentUserId =
+            await getCurrentAuthUserId();
+
+          if (currentUserId) {
+            await resendRejectedMeetingAfterEdit({
+              meetingId: meeting.id,
+              meetingSubject: meeting.subject,
+              senderId: currentUserId,
+            });
+
+            toast.success('جلسه ویرایش شد و مجدداً برای شرکت‌کنندگان ارسال گردید');
+          }
+        } catch {
+          toast.error('خطا در ارسال مجدد');
+        }
+      }
+
+      setIsEditing(false);
+      setEditPrefill(null);
+      onUpdate();
+    };
+
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-2">
+        <CreateMeetingForm
+          onSuccess={handleEditFormSuccess}
+          prefillData={prefill}
+          onCancel={() => { setIsEditing(false); setEditPrefill(null); }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div ref={cardRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow flex flex-col min-h-[500px]">
+      <MeetingCardHeader
+        meeting={meeting}
+        loading={loading}
+        showShareMenu={showShareMenu}
+        shareMenuRef={shareMenuRef}
+        canAddToGoogleCalendar={Boolean(onScheduleInCalendar)}
+        onResend={handleResend}
+        onEdit={() => setIsEditing(true)}
+        onEditAndResend={() => setIsEditing(true)}
+        onOpenUserSelector={() => setShowUserSelector(true)}
+        onToggleShareMenu={toggleShareMenu}
+        onShareImage={handleShareImage}
+        onShareText={handleShareText}
+        onSendToTelegram={handleSendToTelegram}
+        onAddToGoogleCalendar={handleAddToGoogleCalendar}
+        onDelete={() => setShowDeleteModal(true)}
+      />
+
+      <div className="flex-1">
+        <MeetingDetails meeting={meeting} agendaItems={agendaItems} />
+
+        <ParticipantStatusPanel
+          meeting={meeting}
+          participantUserIds={participantUserIds}
+          participantStatuses={participantStatuses}
+          delegateNames={delegateNames}
+          isCreator={isCreator}
+        />
+      </div>
+
+      {meeting.status === 'open' && (
+        <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between items-center">
+            <button
+              onClick={() => setShowActions(!showActions)}
+              className="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 text-sm font-medium"
+            >
+              {showActions ? 'پنهان کردن اقدامات' : 'نمایش/افزودن اقدامات'}
+            </button>
+            {meeting.status_type === 'approved' && onScheduleInCalendar && (
+              <button
+                onClick={() => onScheduleInCalendar(meeting)}
+                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors"
+                title="برنامه‌ریزی در تقویم"
+              >
+                <CalendarIcon className="w-5 h-5" />
+                <span className="text-sm">برنامه‌ریزی در تقویم</span>
+              </button>
+            )}
+          </div>
+          {showActions && (
+            <ActionsSection meetingId={meeting.id} actions={meeting.actions} onUpdate={onUpdate} />
+          )}
+        </div>
+      )}
+
+      {/* Modals */}
+      {showDeleteModal && (
+        <DeleteMeetingModal
+          meeting={meeting}
+          onClose={() => setShowDeleteModal(false)}
+          onPermanentDelete={handlePermanentDelete}
+          loading={loading}
+        />
+      )}
+
+      {showUserSelector && (
+        <UserSelectorModal
+          meetingId={meeting.id}
+          onClose={() => setShowUserSelector(false)}
+          onSuccess={() => {
+            setShowUserSelector(false);
+            toast.success('درخواست جلسه با موفقیت ارسال شد');
+          }}
+        />
+      )}
+
+      {showShareDialog && shareImageUrl && (
+        <MeetingShareDialog
+          imageUrl={shareImageUrl}
+          onClose={closeShareDialog}
+          onDownload={handleDownloadShareImage}
+        />
+      )}
+
+      {/* Hidden share card for image generation */}
+      <MeetingShareCard ref={shareCardRef} meeting={meeting} agendaItems={agendaItems} />
+    </div>
+  );
+}
