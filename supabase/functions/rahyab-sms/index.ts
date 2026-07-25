@@ -1,0 +1,594 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
+
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+// ── SOAP helpers ──────────────────────────────────────────────────────────────
+
+function soapEnvelope(action: string, params: Record<string, string>): string {
+  const inner = Object.entries(params)
+    .map(([k, v]) => `<${k}>${escapeXml(v)}</${k}>`)
+    .join("");
+  return `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <${action} xmlns="http://tempuri.org/">${inner}</${action}>
+  </soap:Body>
+</soap:Envelope>`;
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function extractResult(xml: string, action: string): string {
+  const tag = `${action}Result`;
+  const m = xml.match(new RegExp(`<(?:[^:]+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:[^:]+:)?${tag}>`));
+  if (!m) return "";
+  return m[1]
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .trim();
+}
+
+function maskSensitive(value: string): string {
+  if (!value) return '';
+  if (value.length <= 4) return '***';
+  return '***' + value.slice(-4);
+}
+
+function maskXml(xml: string, keysToMask: string[]): string {
+  let result = xml;
+  for (const key of keysToMask) {
+    result = result.replace(
+      new RegExp(`(<${key}[^>]*>)([\\s\\S]*?)(</${key}>)`, 'gi'),
+      (_, open, val, close) => `${open}${maskSensitive(val.trim())}${close}`,
+    );
+  }
+  return result;
+}
+
+async function callSoap(
+  url: string,
+  action: string,
+  params: Record<string, string>,
+  timeoutMs = 20000,
+): Promise<{
+  ok: boolean;
+  result: string;
+  rawXml?: string;
+  error?: string;
+  responseStatus?: number;
+  responseHeaders?: Record<string, string>;
+  durationMs?: number;
+  requestTimestamp?: string;
+}> {
+  const soapAction = `http://tempuri.org/${action}`;
+  const body = soapEnvelope(action, params);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const t0 = Date.now();
+  const requestTimestamp = new Date().toISOString();
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": `"${soapAction}"`,
+      },
+      body,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const durationMs = Date.now() - t0;
+    const rawXml = await res.text();
+    const responseHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => { responseHeaders[k] = v; });
+    if (!res.ok) {
+      return { ok: false, result: "", rawXml, error: `HTTP ${res.status}`, responseStatus: res.status, responseHeaders, durationMs, requestTimestamp };
+    }
+    const result = extractResult(rawXml, action);
+    return { ok: true, result, rawXml, responseStatus: res.status, responseHeaders, durationMs, requestTimestamp };
+  } catch (e: any) {
+    clearTimeout(timer);
+    const durationMs = Date.now() - t0;
+    const msg = e?.name === "AbortError" ? "اتصال به وب‌سرویس زمان‌بر شد (timeout)" : e.message;
+    return { ok: false, result: "", error: msg, durationMs, requestTimestamp };
+  }
+}
+
+// ── Parse helpers ─────────────────────────────────────────────────────────────
+
+function parseGetInfo(result: string): { ok: boolean; credit: string; expireDate: string; error?: string } {
+  if (!result.startsWith("OK")) return { ok: false, credit: "", expireDate: "", error: result };
+  const parts = result.split(";");
+  return { ok: true, credit: parts[1] ?? "", expireDate: parts[2] ?? "" };
+}
+
+function parseSendOk(result: string): { ok: boolean; returnIds: string[]; error?: string } {
+  if (!result.startsWith("Send OK")) {
+    return { ok: false, returnIds: [], error: result };
+  }
+  const m = result.match(/<ReturnIDs>(.*?)<\/ReturnIDs>/s);
+  const ids = m ? m[1].split(";").filter(id => id && id !== "-1") : [];
+  return { ok: true, returnIds: ids };
+}
+
+function getCdata(inner: string, tag: string): string {
+  const m = inner.match(new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))<\\/${tag}>`));
+  if (!m) return "";
+  return (m[1] ?? m[2] ?? "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim();
+}
+
+function parseReceiveXml(xml: string): { rowId: string; dateTime: string; sender: string; receiver: string; message: string }[] {
+  const items: { rowId: string; dateTime: string; sender: string; receiver: string; message: string }[] = [];
+  const blocks = xml.matchAll(/<sms[^>]*>([\s\S]*?)<\/sms>/g);
+  for (const b of blocks) {
+    const inner = b[1];
+    items.push({
+      rowId:    getCdata(inner, "rowID"),
+      dateTime: getCdata(inner, "time"),
+      sender:   getCdata(inner, "origAddr"),
+      receiver: getCdata(inner, "destAddr"),
+      message:  getCdata(inner, "message"),
+    });
+  }
+  return items;
+}
+
+function parseDelivery(returnIds: string[], result: string): Record<string, number> {
+  const statuses = result.split(";");
+  const map: Record<string, number> = {};
+  returnIds.forEach((id, i) => {
+    const s = statuses[i];
+    if (id && s !== undefined && s.trim() !== "") {
+      map[id.trim()] = parseInt(s.trim(), 10);
+    }
+  });
+  return map;
+}
+
+function adminClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
+
+/**
+ * Validates the caller. Accepts two token forms:
+ *  1. SUPABASE_SERVICE_ROLE_KEY — trusted internal service-to-service call
+ *     (used when send-sms proxies here on behalf of an authenticated admin).
+ *  2. A valid Supabase user JWT belonging to an active admin.
+ *
+ * Returns the authorization level or null if unauthorised.
+ */
+async function authorize(authHeader: string | null): Promise<"service" | "admin" | null> {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+
+  // 1. Constant-time compare against the service role key
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (serviceKey.length > 0) {
+    const enc = new TextEncoder();
+    const a = enc.encode(token);
+    const b = enc.encode(serviceKey);
+    if (a.length === b.length) {
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+      if (diff === 0) return "service";
+    }
+  }
+
+  // 2. Validate as an admin user JWT
+  const supabase = adminClient();
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin, is_active")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!profile?.is_active || !profile?.is_admin) return null;
+  return "admin";
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
+
+  try {
+    // ── Authentication & authorisation ──────────────────────────────────────
+    const callerType = await authorize(req.headers.get("Authorization"));
+    if (!callerType) return json({ ok: false, error: "Unauthorized" }, 401);
+
+    const supabase = adminClient();
+
+    const body = await req.json();
+    const action: string = body.action;
+
+    // ── load_settings (admin only — not for internal service calls) ──────────
+    if (action === "load_settings") {
+      if (callerType !== "admin") return json({ ok: false, error: "Forbidden" }, 403);
+      const { data } = await supabase.from("rahyab_settings").select("*").limit(1).maybeSingle();
+      return json({ ok: true, settings: data });
+    }
+
+    // ── save_settings (admin only) ───────────────────────────────────────────
+    if (action === "save_settings") {
+      if (callerType !== "admin") return json({ ok: false, error: "Forbidden" }, 403);
+      const s = body.settings ?? {};
+      const existing = await supabase.from("rahyab_settings").select("id").limit(1).maybeSingle();
+      if (existing.data?.id) {
+        await supabase.from("rahyab_settings").update({
+          username: s.username ?? "",
+          password: s.password ?? "",
+          short_code: s.short_code ?? "",
+          token: s.token ?? "",
+          soap_url: s.soap_url || "http://RahyabBulk.ir/WebService/sms.asmx",
+          is_active: s.is_active ?? false,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.data.id);
+      } else {
+        await supabase.from("rahyab_settings").insert([{
+          username: s.username ?? "",
+          password: s.password ?? "",
+          short_code: s.short_code ?? "",
+          token: s.token ?? "",
+          soap_url: s.soap_url || "http://RahyabBulk.ir/WebService/sms.asmx",
+          is_active: s.is_active ?? false,
+        }]);
+      }
+      return json({ ok: true });
+    }
+
+    // ── inbox (admin only) ───────────────────────────────────────────────────
+    if (action === "inbox") {
+      if (callerType !== "admin") return json({ ok: false, error: "Forbidden" }, 403);
+      const { data } = await supabase
+        .from("rahyab_inbox")
+        .select("*")
+        .order("received_at", { ascending: false })
+        .limit(200);
+      return json({ ok: true, messages: data ?? [] });
+    }
+
+    // ── Resolve credentials: _providerOverride takes priority over DB ────────
+    const override = body._providerOverride as Record<string, string> | undefined;
+
+    let soapUrl: string;
+    let uUsername: string;
+    let uPassword: string;
+    let uNumber: string;
+
+    if (override) {
+      soapUrl   = override.soap_url   || "http://RahyabBulk.ir/WebService/sms.asmx";
+      uUsername = override.token      || override.username || "";
+      uPassword = override.password   || "12345";
+      uNumber   = override.short_code || "";
+    } else {
+      const { data: settings } = await supabase
+        .from("rahyab_settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+
+      if (!settings) return json({ ok: false, error: "تنظیمات رهیاب رایان پیکربندی نشده است" }, 400);
+
+      soapUrl   = settings.soap_url || "http://RahyabBulk.ir/WebService/sms.asmx";
+      uUsername = settings.token    || settings.username || "";
+      uPassword = settings.password || "";
+      uNumber   = settings.short_code || "";
+    }
+
+    if (!uUsername) return json({ ok: false, error: "نام کاربری یا توکن پیکربندی نشده است" }, 400);
+
+    // ── get_info / test ───────────────────────────────────────────────────────
+    if (action === "get_info" || action === "test") {
+      const debugMode: boolean = body.debug === true;
+      const soapParams = { uUsername, uPassword };
+      const soapBody = soapEnvelope("doGetInfo", soapParams);
+      const requestHeaders = {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": `"http://tempuri.org/doGetInfo"`,
+      };
+      const soap = await callSoap(soapUrl, "doGetInfo", soapParams);
+      const debugEntry = debugMode ? {
+        soapAction: "doGetInfo",
+        url: soapUrl,
+        requestHeaders,
+        requestBody: maskXml(soapBody, ["uPassword"]),
+        requestTimestamp: soap.requestTimestamp,
+        durationMs: soap.durationMs,
+        responseStatus: soap.responseStatus,
+        responseHeaders: soap.responseHeaders,
+        responseBody: soap.rawXml,
+        parsedResult: soap.result || undefined,
+        error: soap.error,
+      } : null;
+      const dbg = debugEntry ? { debug: [debugEntry] } : {};
+      if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP", ...dbg });
+      const info = parseGetInfo(soap.result);
+      if (!info.ok) return json({ ok: false, error: info.error ?? "احراز هویت ناموفق", ...dbg });
+      return json({ ok: true, credit: info.credit, expireDate: info.expireDate, ...dbg });
+    }
+
+    // ── send ──────────────────────────────────────────────────────────────────
+    if (action === "send") {
+      const mobiles: string[] = body.mobiles ?? [];
+      const message: string = body.message ?? "";
+      const isFarsi: boolean = body.isFarsi !== false;
+      const isFlash: boolean = body.isFlash === true;
+      const debugMode: boolean = body.debug === true;
+
+      if (!mobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
+      if (!message.trim()) return json({ ok: false, error: "متن پیام وارد نشده" }, 400);
+      if (!uNumber) return json({ ok: false, error: "شماره اختصاصی پیکربندی نشده است" }, 400);
+
+      const CHUNK = 100;
+      const allIds: string[] = [];
+      const errors: string[] = [];
+      const debugLogs: Array<{
+        soapAction: string;
+        url: string;
+        requestHeaders: Record<string, string>;
+        requestBody: string;
+        requestTimestamp?: string;
+        durationMs?: number;
+        responseStatus?: number;
+        responseHeaders?: Record<string, string>;
+        responseBody?: string;
+        parsedResult?: string;
+        error?: string;
+      }> = [];
+
+      for (let i = 0; i < mobiles.length; i += CHUNK) {
+        const chunk = mobiles.slice(i, i + CHUNK);
+        const soapParams = {
+          uUsername, uPassword, uNumber,
+          uCellphones: chunk.join(";"),
+          uMessage: message,
+          uFarsi: isFarsi ? "true" : "false",
+          uTopic: "false",
+          uFlash: isFlash ? "true" : "false",
+          uUDH: "",
+        };
+        const soapBody = soapEnvelope("doSendSMS", soapParams);
+        const soapActionHeader = `"http://tempuri.org/doSendSMS"`;
+        const requestHeaders = {
+          "Content-Type": "text/xml; charset=utf-8",
+          "SOAPAction": soapActionHeader,
+        };
+
+        const soap = await callSoap(soapUrl, "doSendSMS", soapParams);
+
+        if (debugMode) {
+          debugLogs.push({
+            soapAction: "doSendSMS",
+            url: soapUrl,
+            requestHeaders,
+            requestBody: maskXml(soapBody, ["uPassword"]),
+            requestTimestamp: soap.requestTimestamp,
+            durationMs: soap.durationMs,
+            responseStatus: soap.responseStatus,
+            responseHeaders: soap.responseHeaders,
+            responseBody: soap.rawXml,
+            parsedResult: soap.result,
+            error: soap.error,
+          });
+        }
+
+        if (!soap.ok) { errors.push(soap.error ?? "خطای SOAP"); continue; }
+        const parsed = parseSendOk(soap.result);
+        if (!parsed.ok) { errors.push(parsed.error ?? "ارسال ناموفق"); continue; }
+        allIds.push(...parsed.returnIds);
+
+        if (i + CHUNK < mobiles.length) {
+          await new Promise(r => setTimeout(r, 3100));
+        }
+      }
+
+      return json({
+        ok: errors.length === 0,
+        sent: allIds.length,
+        returnIds: allIds,
+        errors,
+        ...(debugMode ? { debug: debugLogs } : {}),
+      });
+    }
+
+    // ── receive ───────────────────────────────────────────────────────────────
+    if (action === "receive") {
+      const lastRowId: number = body.lastRowId ?? 0;
+
+      const soap = await callSoap(soapUrl, "doReceiveSMS", {
+        uUsername, uPassword, uLastRowID: String(lastRowId),
+      });
+      if (!soap.ok) return json({ ok: false, error: soap.error });
+
+      const messages = parseReceiveXml(soap.result || soap.rawXml || "");
+
+      for (const m of messages) {
+        if (!m.rowId) continue;
+        const received_at = m.dateTime
+          ? new Date(m.dateTime.replace(/(\d{4})\/(\d{2})\/(\d{2})/, "$1-$2-$3")).toISOString()
+          : new Date().toISOString();
+        await supabase.from("rahyab_inbox").upsert(
+          { row_id: parseInt(m.rowId, 10), sender: m.sender, receiver: m.receiver, message: m.message, received_at },
+          { onConflict: "row_id" }
+        ).select();
+      }
+
+      const maxRowId = messages.reduce((max, m) => Math.max(max, parseInt(m.rowId || "0", 10)), lastRowId);
+      return json({ ok: true, count: messages.length, messages, nextRowId: maxRowId });
+    }
+
+    // ── hello_world ───────────────────────────────────────────────────────────
+    if (action === "hello_world") {
+      const debugMode: boolean = body.debug === true;
+      const soapParams = {};
+      const soapBody = soapEnvelope("HelloWorld", soapParams);
+      const requestHeaders = {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": `"http://tempuri.org/HelloWorld"`,
+      };
+      const soap = await callSoap(soapUrl, "HelloWorld", soapParams);
+      const debugEntry = debugMode ? {
+        soapAction: "HelloWorld",
+        url: soapUrl,
+        requestHeaders,
+        requestBody: soapBody,
+        requestTimestamp: soap.requestTimestamp,
+        durationMs: soap.durationMs,
+        responseStatus: soap.responseStatus,
+        responseHeaders: soap.responseHeaders,
+        responseBody: soap.rawXml,
+        parsedResult: soap.result || undefined,
+        error: soap.error,
+      } : null;
+      const dbg = debugEntry ? { debug: [debugEntry] } : {};
+      if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP", ...dbg });
+      return json({ ok: true, result: soap.result, ...dbg });
+    }
+
+    // ── receive_by_flag ───────────────────────────────────────────────────────
+    if (action === "receive_by_flag") {
+      const debugMode: boolean = body.debug === true;
+      const soapParams = { uUsername, uPassword };
+      const soapBody = soapEnvelope("doReceiveSMSByFlag", soapParams);
+      const requestHeaders = {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": `"http://tempuri.org/doReceiveSMSByFlag"`,
+      };
+      const soap = await callSoap(soapUrl, "doReceiveSMSByFlag", soapParams);
+      const debugEntry = debugMode ? {
+        soapAction: "doReceiveSMSByFlag",
+        url: soapUrl,
+        requestHeaders,
+        requestBody: maskXml(soapBody, ["uPassword"]),
+        requestTimestamp: soap.requestTimestamp,
+        durationMs: soap.durationMs,
+        responseStatus: soap.responseStatus,
+        responseHeaders: soap.responseHeaders,
+        responseBody: soap.rawXml,
+        parsedResult: soap.result || undefined,
+        error: soap.error,
+      } : null;
+      const dbg = debugEntry ? { debug: [debugEntry] } : {};
+      if (!soap.ok) return json({ ok: false, error: soap.error, ...dbg });
+      const messages = parseReceiveXml(soap.result || soap.rawXml || "");
+      return json({ ok: true, count: messages.length, messages, ...dbg });
+    }
+
+    // ── get_info_xml ──────────────────────────────────────────────────────────
+    if (action === "get_info_xml") {
+      const debugMode: boolean = body.debug === true;
+      const soapParams = { uUsername, uPassword };
+      const soapBody = soapEnvelope("getInfoXML", soapParams);
+      const requestHeaders = {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": `"http://tempuri.org/getInfoXML"`,
+      };
+      const soap = await callSoap(soapUrl, "getInfoXML", soapParams);
+      const debugEntry = debugMode ? {
+        soapAction: "getInfoXML",
+        url: soapUrl,
+        requestHeaders,
+        requestBody: maskXml(soapBody, ["uPassword"]),
+        requestTimestamp: soap.requestTimestamp,
+        durationMs: soap.durationMs,
+        responseStatus: soap.responseStatus,
+        responseHeaders: soap.responseHeaders,
+        responseBody: soap.rawXml,
+        parsedResult: soap.result || undefined,
+        error: soap.error,
+      } : null;
+      const dbg = debugEntry ? { debug: [debugEntry] } : {};
+      if (!soap.ok) return json({ ok: false, error: soap.error ?? "خطای SOAP", ...dbg });
+      return json({ ok: true, rawXml: soap.rawXml, result: soap.result, ...dbg });
+    }
+
+    // ── get_delivery ──────────────────────────────────────────────────────────
+    if (action === "get_delivery") {
+      const returnIds: string[] = body.returnIds ?? [];
+      if (!returnIds.length) return json({ ok: false, error: "شناسه پیام وارد نشده" }, 400);
+
+      const debugMode: boolean = body.debug === true;
+      const CHUNK = 100;
+      const deliveryMap: Record<string, number> = {};
+      const debugLogs: Array<{
+        soapAction: string;
+        url: string;
+        requestHeaders: Record<string, string>;
+        requestBody: string;
+        requestTimestamp?: string;
+        durationMs?: number;
+        responseStatus?: number;
+        responseHeaders?: Record<string, string>;
+        responseBody?: string;
+        parsedResult?: string;
+        error?: string;
+      }> = [];
+
+      for (let i = 0; i < returnIds.length; i += CHUNK) {
+        const chunk = returnIds.slice(i, i + CHUNK);
+        const soapParams = { uUsername, uReturnIDs: chunk.join(";") };
+        const soapBody = soapEnvelope("doGetDelivery", soapParams);
+        const requestHeaders = {
+          "Content-Type": "text/xml; charset=utf-8",
+          "SOAPAction": `"http://tempuri.org/doGetDelivery"`,
+        };
+        const soap = await callSoap(soapUrl, "doGetDelivery", soapParams);
+        if (debugMode) {
+          debugLogs.push({
+            soapAction: "doGetDelivery",
+            url: soapUrl,
+            requestHeaders,
+            requestBody: soapBody,
+            requestTimestamp: soap.requestTimestamp,
+            durationMs: soap.durationMs,
+            responseStatus: soap.responseStatus,
+            responseHeaders: soap.responseHeaders,
+            responseBody: soap.rawXml,
+            parsedResult: soap.result || undefined,
+            error: soap.error,
+          });
+        }
+        if (soap.ok) Object.assign(deliveryMap, parseDelivery(chunk, soap.result));
+        if (i + CHUNK < returnIds.length) await new Promise(r => setTimeout(r, 1100));
+      }
+
+      return json({
+        ok: true,
+        delivery: deliveryMap,
+        ...(debugMode ? { debug: debugLogs } : {}),
+      });
+    }
+
+    return json({ ok: false, error: `عملیات ناشناخته: ${action}` }, 400);
+
+  } catch (err: any) {
+    return json({ ok: false, error: err?.message ?? "خطای داخلی سرور" }, 500);
+  }
+});
