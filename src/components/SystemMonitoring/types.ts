@@ -92,3 +92,41 @@ export interface ChatConversation {
   message_count?: number;
   messages?: ChatMessage[];
 }
+
+export interface ChannelMsgRow {
+  id: string;
+  channel_id: string;
+  sender_id: string | null;
+  body: string;
+  message_type: string | null;
+  created_at: string;
+  sender_name?: string | null;
+}
+
+export interface ChannelRow {
+  id: string;
+  name: string | null;
+  type: string | null;
+  is_private: boolean | null;
+  created_by: string | null;
+  created_at: string | null;
+  member_count: number | null;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  creator_name?: string | null;
+  message_count?: number;
+  messages?: ChannelMsgRow[];
+}
+
+export interface GroupTaskRow {
+  id: string;
+  channel_id: string;
+  title: string;
+  body: string | null;
+  status: string;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  channel_name?: string | null;
+  creator_name?: string | null;
+}
