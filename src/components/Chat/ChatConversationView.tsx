@@ -15,7 +15,7 @@ import type {
 } from './types';
 
 import { MentionsBar } from './Conversation/MentionsBar';
-import { JumpToDatePicker } from './Conversation/JumpToDatePicker';
+import { ConversationModals } from './Conversation/ConversationModals';
 import { ReminderAlarmModal } from './Conversation/ReminderAlarmModal';
 import { StarredMessagesModal, type StarredItem } from './Conversation/StarredMessagesModal';
 import { RemindersModal } from './Conversation/RemindersModal';
@@ -770,54 +770,31 @@ export function ChatConversationView({
         onScheduleMeetingWithMentions={onNavigateToCalendar ? (ids) => onNavigateToCalendar(ids) : undefined}
       />
 
-      {/* Starred Messages Modal */}
-      {showStarredModal && (
-        <StarredMessagesModal
-          starred={globalStarred}
-          onClose={() => setShowStarredModal(false)}
-          onGoToMessage={(item) => {
-            setShowStarredModal(false);
-            if (item.conversationId === conversation.id) {
-              setTimeout(() => scrollToMessage(item.message.id), 100);
-            }
-          }}
-        />
-      )}
-
-      {/* Reminders Modal */}
-      {showRemindersModal && (
-        <RemindersModal
-          reminders={reminders}
-          onClose={() => setShowRemindersModal(false)}
-          onDismissReminder={dismissReminder}
-          onGoToMessage={scrollToMessage}
-          currentConversationId={conversation.id}
-        />
-      )}
-
-      {/* User Info Panel */}
-      {showInfoPanel && (
-        <UserInfoPanel
-          conversation={conversation}
-          otherName={otherName}
-          isSavedMessages={isSavedMessages}
-          isUserOnline={isUserOnline}
-          getLastSeenText={getLastSeenText}
-          otherUserPresence={otherUserPresence}
-          localStarredCount={localStarredCount}
-          remindersCount={reminders.length}
-          onClose={() => setShowInfoPanel(false)}
-        />
-      )}
-
-      {/* Jump-to-date picker */}
-      {jumpPickerDate && (
-        <JumpToDatePicker
-          initial={jumpPickerDate}
-          onConfirm={(jy, jm, jd) => jumpToDate(jy, jm, jd)}
-          onClose={() => setJumpPickerDate(null)}
-        />
-      )}
+      {/* Modals & panels */}
+      <ConversationModals
+        showStarredModal={showStarredModal}
+        globalStarred={globalStarred}
+        onCloseStarred={() => setShowStarredModal(false)}
+        onGoToStarred={(item) => setShowStarredModal(false)}
+        conversationId={conversation.id}
+        scrollToMessage={scrollToMessage}
+        showRemindersModal={showRemindersModal}
+        reminders={reminders}
+        onCloseReminders={() => setShowRemindersModal(false)}
+        onDismissReminder={dismissReminder}
+        showInfoPanel={showInfoPanel}
+        conversation={conversation}
+        otherName={otherName}
+        isSavedMessages={isSavedMessages}
+        isUserOnline={isUserOnline}
+        getLastSeenText={getLastSeenText}
+        otherUserPresence={otherUserPresence}
+        localStarredCount={localStarredCount}
+        onCloseInfoPanel={() => setShowInfoPanel(false)}
+        jumpPickerDate={jumpPickerDate}
+        onJumpToDate={jumpToDate}
+        onCloseJumpPicker={() => setJumpPickerDate(null)}
+      />
     </div>
   );
 }

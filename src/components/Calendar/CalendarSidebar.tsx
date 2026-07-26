@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, TextAlignJustify as AlignJustify, Chev
 import { CalendarEntry, MeetingData } from './types';
 import { JALAALI_MONTHS, JALAALI_WEEKDAYS_SHORT } from './utils';
 
-interface Props {
+export interface CalendarSidebarProps {
   // Mini calendar
   sidebarJy: number;
   sidebarJm: number;
@@ -55,7 +55,7 @@ export function CalendarSidebar({
   myGroupOpen, sharedGroupOpen, publicGroupOpen,
   onMyGroupToggle, onSharedGroupToggle, onPublicGroupToggle,
   onNewCalendar, onOpenCalendarList,
-}: Props) {
+}: CalendarSidebarProps) {
   const [miniCalOpen, setMiniCalOpen] = useState(true);
   const [calendarsOpen, setCalendarsOpen] = useState(true);
   const privateOwned = calendars.filter(c => c.type === 'private');

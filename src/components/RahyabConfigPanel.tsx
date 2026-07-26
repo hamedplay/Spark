@@ -1,35 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, Save, Loader as Loader2, RefreshCw, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Eye, EyeOff, Send, Inbox, CreditCard, Settings, Info, Wifi, WifiOff, Phone, Terminal, ChevronDown, ChevronUp, Copy } from 'lucide-react';
+import { MessageSquare, Save, Loader as Loader2, RefreshCw, Wifi, WifiOff, Send, Inbox, CreditCard, Settings, Terminal } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import type { RahyabSettings, InboxMessage, DebugLog } from './RahyabConfig/types';
+import { BLANK_SETTINGS, inp, TABS } from './RahyabConfig/types';
+import { SettingsForm } from './RahyabConfig/SettingsForm';
+import { AccountInfo } from './RahyabConfig/AccountInfo';
+import { SendForm } from './RahyabConfig/SendForm';
+import { InboxList } from './RahyabConfig/InboxList';
+import { RequestLogPanel } from './RahyabConfig/RequestLogPanel';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface RahyabSettings {
-  id?: string;
-  username: string;
-  password: string;
-  short_code: string;
-  token: string;
-  soap_url: string;
-  is_active: boolean;
-}
-
-interface InboxMessage {
-  id: string;
-  row_id: number;
-  sender: string;
-  receiver: string;
-  message: string;
-  received_at: string;
-  is_read: boolean;
-}
-
-const BLANK_SETTINGS: RahyabSettings = {
-  username: '', password: '', short_code: '', token: '',
-  soap_url: 'http://RahvabBulk.ir/WebService/sms.asmx', is_active: false,
-};
-
-const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition text-sm';
+// Re-export for backward compatibility (SmsConfig/TestTab imports from here)
+export { RequestLogPanel };
 
 // ── Edge function caller ──────────────────────────────────────────────────────
 async function callRahyab(action: string, extra: Record<string, unknown> = {}) {
@@ -39,14 +21,6 @@ async function callRahyab(action: string, extra: Record<string, unknown> = {}) {
   if (error) throw new Error(error.message);
   return data as any;
 }
-
-// ── TABS ──────────────────────────────────────────────────────────────────────
-const TABS = [
-  { key: 'settings', label: 'تنظیمات',     icon: Settings },
-  { key: 'account',  label: 'حساب کاربری', icon: CreditCard },
-  { key: 'send',     label: 'تست ارسال',   icon: Send },
-  { key: 'inbox',    label: 'صندوق دریافت', icon: Inbox },
-];
 
 // ════════════════════════════════════════════════════════════════════
 //  TAB 1 — Settings
@@ -107,61 +81,7 @@ function SettingsTab() {
 
   return (
     <div className="space-y-5">
-      {/* Security note */}
-      <div className="flex items-start gap-3 px-4 py-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-2xl">
-        <Info className="w-4 h-4 text-teal-500 flex-shrink-0 mt-0.5" />
-        <div className="text-xs text-teal-700 dark:text-teal-300 leading-relaxed space-y-1">
-          <p className="font-medium">نکات امنیتی</p>
-          <p>برای امنیت بیشتر از فیلد <strong>توکن</strong> به جای نام کاربری استفاده کنید. در صورت وجود توکن، نام کاربری نادیده گرفته می‌شود.</p>
-          <p>آدرس وب‌سرویس: <span className="font-mono">http://RahvabBulk.ir/WebService/sms.asmx</span></p>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">توکن (اولویت اول)</label>
-            <input className={inp} value={form.token} onChange={e => set('token', e.target.value)}
-              placeholder="برای امنیت بیشتر از توکن استفاده کنید" dir="ltr" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">نام کاربری</label>
-            <input className={inp} value={form.username} onChange={e => set('username', e.target.value)}
-              placeholder="نام کاربری پنل رهیاب رایان" dir="ltr" />
-          </div>
-          <div className="relative">
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">کلمه عبور</label>
-            <input className={inp + ' pl-10'} type={showPass ? 'text' : 'password'}
-              value={form.password} onChange={e => set('password', e.target.value)} dir="ltr"
-              placeholder="حداقل ۵ کاراکتر" />
-            <button type="button" onClick={() => setShowPass(v => !v)}
-              className="absolute left-3 top-8 text-gray-400 hover:text-gray-600 transition-colors">
-              {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شماره اختصاصی *</label>
-            <input className={inp} value={form.short_code} onChange={e => set('short_code', e.target.value)}
-              placeholder="مثال: 5000123" dir="ltr" />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">آدرس وب‌سرویس SOAP</label>
-            <input className={inp} value={form.soap_url} onChange={e => set('soap_url', e.target.value)} dir="ltr" />
-            <p className="text-xs text-gray-400 mt-1">
-              گزینه‌های جایگزین: <span className="font-mono">https://RahvabBulk.ir:8443/WebService/sms.asmx</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Active toggle */}
-        <div className="flex items-center gap-3 pt-1">
-          <button type="button" onClick={() => set('is_active', !form.is_active)}
-            className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${form.is_active ? 'bg-teal-500' : 'bg-gray-200 dark:bg-gray-600'}`}>
-            <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
-          <span className="text-sm text-gray-700 dark:text-gray-300">این سرویس فعال است</span>
-        </div>
-      </div>
+      <SettingsForm form={form} set={set} showPass={showPass} setShowPass={setShowPass} />
 
       {testResult && (
         <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl border text-sm ${testResult.ok ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'}`}>
@@ -232,40 +152,7 @@ function AccountTab() {
         </button>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl">
-          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-        </div>
-      )}
-
-      {loading && !info && <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-gray-300" /></div>}
-
-      {info && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">اعتبار باقی‌مانده</p>
-            <p className="text-2xl font-bold text-teal-600 dark:text-teal-400" dir="ltr">{info.credit}</p>
-            <p className="text-xs text-gray-400 mt-1">تومان / ریال</p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">تاریخ انقضا</p>
-            <p className="text-2xl font-bold text-gray-700 dark:text-white" dir="ltr">{info.expireDate || '—'}</p>
-          </div>
-        </div>
-      )}
-
-      {info && (
-        <div className="bg-teal-50 dark:bg-teal-900/20 rounded-2xl border border-teal-100 dark:border-teal-800 px-4 py-3">
-          <p className="text-xs text-teal-700 dark:text-teal-300">
-            برای گزارشات تفصیلی‌تر به پنل رهیاب رایان مراجعه کنید:
-            <a href="https://RahvabBulk.ir/" target="_blank" rel="noopener noreferrer"
-              className="font-mono mr-1 underline hover:no-underline" dir="ltr">
-              https://RahvabBulk.ir/
-            </a>
-          </p>
-        </div>
-      )}
+      <AccountInfo info={info} error={error} loading={loading} />
     </div>
   );
 }
@@ -273,254 +160,6 @@ function AccountTab() {
 // ════════════════════════════════════════════════════════════════════
 //  TAB 3 — Test Send
 // ════════════════════════════════════════════════════════════════════
-
-export interface DebugLog {
-  soapAction: string;
-  url: string;
-  requestHeaders: Record<string, string>;
-  requestBody: string;
-  requestTimestamp?: string;
-  durationMs?: number;
-  responseStatus?: number;
-  responseHeaders?: Record<string, string>;
-  responseBody?: string;
-  parsedResult?: string;
-  error?: string;
-}
-
-function statusColor(code?: number) {
-  if (!code) return 'text-gray-400';
-  if (code >= 500) return 'text-red-400';
-  if (code >= 400) return 'text-orange-400';
-  if (code >= 200) return 'text-green-400';
-  return 'text-gray-400';
-}
-
-function statusBg(code?: number) {
-  if (!code) return 'bg-gray-800 text-gray-400';
-  if (code >= 500) return 'bg-red-900/60 text-red-300';
-  if (code >= 400) return 'bg-orange-900/60 text-orange-300';
-  return 'bg-green-900/60 text-green-300';
-}
-
-export function RequestLogPanel({ logs, onClear }: { logs: DebugLog[]; onClear: () => void }) {
-  const [openIdx, setOpenIdx] = useState<number>(0);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [showRespHeaders, setShowRespHeaders] = useState<Record<number, boolean>>({});
-
-  const copy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 1500);
-    });
-  };
-
-  const buildRequestText = (log: DebugLog) =>
-    `POST ${log.url}\n\nHeaders:\n${JSON.stringify(log.requestHeaders, null, 2)}\n\nBody:\n${log.requestBody}`;
-
-  const buildResponseText = (log: DebugLog) =>
-    `Status: ${log.responseStatus ?? 'N/A'}\n\nHeaders:\n${JSON.stringify(log.responseHeaders ?? {}, null, 2)}\n\nBody:\n${log.responseBody ?? log.error ?? ''}`;
-
-  if (!logs.length) return null;
-
-  const reversed = [...logs].reverse();
-
-  return (
-    <div className="rounded-2xl border border-gray-700 dark:border-gray-800 overflow-hidden" dir="ltr">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 border-b border-gray-700 dark:border-gray-800">
-        <Terminal className="w-4 h-4 text-teal-400 flex-shrink-0" />
-        <span className="text-xs font-bold text-teal-400 tracking-widest uppercase">SMS Debug Console</span>
-        <span className="ml-2 text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{logs.length}</span>
-        <button
-          onClick={onClear}
-          className="ml-auto flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-400 transition-colors px-2 py-1 rounded-lg hover:bg-gray-800"
-        >
-          <RefreshCw className="w-3 h-3" />
-          Clear All
-        </button>
-      </div>
-
-      {/* Log entries (latest first) */}
-      <div className="bg-gray-900 divide-y divide-gray-800">
-        {reversed.map((log, i) => {
-          const origIdx = logs.length - 1 - i;
-          const isOpen = openIdx === origIdx;
-          const hasError = !!log.error;
-          const ts = log.requestTimestamp ? new Date(log.requestTimestamp).toLocaleTimeString('fa-IR') : '';
-
-          return (
-            <div key={origIdx}>
-              {/* Row header */}
-              <button
-                onClick={() => setOpenIdx(isOpen ? -1 : origIdx)}
-                className="w-full flex items-center gap-2.5 px-4 py-3 hover:bg-gray-800/70 transition-colors text-left"
-              >
-                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${hasError ? 'bg-red-900/60 text-red-400' : 'bg-green-900/60 text-green-400'}`}>
-                  {hasError ? 'ERR' : 'OK'}
-                </span>
-                <span className="text-xs font-mono text-gray-200 font-semibold">{log.soapAction}</span>
-                {log.responseStatus && (
-                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${statusBg(log.responseStatus)}`}>
-                    {log.responseStatus}
-                  </span>
-                )}
-                {ts && <span className="text-[10px] text-gray-600 font-mono">{ts}</span>}
-                {log.durationMs !== undefined && (
-                  <span className="text-[10px] text-gray-500 font-mono">{log.durationMs}ms</span>
-                )}
-                <span className="text-[10px] text-gray-600 truncate flex-1 font-mono">{log.url}</span>
-                {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />}
-              </button>
-
-              {/* Expanded detail */}
-              {isOpen && (
-                <div className="px-4 pb-5 space-y-4 bg-gray-950/50">
-
-                  {/* ── REQUEST ── */}
-                  <div className="border border-gray-700/60 rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between px-3 py-2 bg-gray-800/80 border-b border-gray-700/60">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-blue-400 bg-blue-900/40 px-2 py-0.5 rounded font-mono">POST</span>
-                        <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">Request</span>
-                      </div>
-                      <button
-                        onClick={() => copy(buildRequestText(log), `req-${origIdx}`)}
-                        className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
-                      >
-                        <Copy className="w-3 h-3" />
-                        {copiedKey === `req-${origIdx}` ? 'Copied!' : 'Copy Request'}
-                      </button>
-                    </div>
-                    <div className="p-3 space-y-3">
-                      {/* URL + meta */}
-                      <div className="space-y-1">
-                        <div className="flex gap-2 text-xs font-mono">
-                          <span className="text-gray-500 flex-shrink-0 w-20">URL</span>
-                          <span className="text-teal-300 break-all">{log.url}</span>
-                        </div>
-                        {log.requestTimestamp && (
-                          <div className="flex gap-2 text-xs font-mono">
-                            <span className="text-gray-500 flex-shrink-0 w-20">Timestamp</span>
-                            <span className="text-gray-400">{log.requestTimestamp}</span>
-                          </div>
-                        )}
-                        {log.durationMs !== undefined && (
-                          <div className="flex gap-2 text-xs font-mono">
-                            <span className="text-gray-500 flex-shrink-0 w-20">Duration</span>
-                            <span className={`font-semibold ${log.durationMs > 5000 ? 'text-red-400' : log.durationMs > 2000 ? 'text-yellow-400' : 'text-green-400'}`}>{log.durationMs} ms</span>
-                          </div>
-                        )}
-                      </div>
-                      {/* Request Headers */}
-                      <div>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Headers</p>
-                        <div className="bg-gray-800 rounded-lg p-2.5 space-y-1">
-                          {Object.entries(log.requestHeaders).map(([k, v]) => (
-                            <div key={k} className="flex gap-2 text-xs font-mono">
-                              <span className="text-purple-400 flex-shrink-0">{k}:</span>
-                              <span className="text-gray-300 break-all">{v}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Request Body */}
-                      <div>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Request Body</p>
-                        <pre className="bg-gray-800 rounded-lg p-2.5 text-[11px] font-mono text-green-300 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed max-h-56 overflow-y-auto">
-                          {log.requestBody}
-                        </pre>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── RESPONSE ── */}
-                  <div className="border border-gray-700/60 rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between px-3 py-2 bg-gray-800/80 border-b border-gray-700/60">
-                      <div className="flex items-center gap-2">
-                        {log.responseStatus ? (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${statusBg(log.responseStatus)}`}>{log.responseStatus}</span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-gray-500 bg-gray-800 px-2 py-0.5 rounded font-mono">N/A</span>
-                        )}
-                        <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">Response</span>
-                      </div>
-                      <button
-                        onClick={() => copy(buildResponseText(log), `res-${origIdx}`)}
-                        className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
-                      >
-                        <Copy className="w-3 h-3" />
-                        {copiedKey === `res-${origIdx}` ? 'Copied!' : 'Copy Response'}
-                      </button>
-                    </div>
-                    <div className="p-3 space-y-3">
-                      {/* Response Status line */}
-                      {log.responseStatus && (
-                        <div className="flex gap-2 text-xs font-mono">
-                          <span className="text-gray-500 flex-shrink-0 w-20">Status</span>
-                          <span className={`font-bold ${statusColor(log.responseStatus)}`}>{log.responseStatus}</span>
-                        </div>
-                      )}
-                      {/* Response Headers (collapsible) */}
-                      {log.responseHeaders && Object.keys(log.responseHeaders).length > 0 && (
-                        <div>
-                          <button
-                            onClick={() => setShowRespHeaders(p => ({ ...p, [origIdx]: !p[origIdx] }))}
-                            className="flex items-center gap-1.5 text-[10px] text-gray-500 uppercase tracking-wider hover:text-gray-300 transition-colors mb-1.5"
-                          >
-                            {showRespHeaders[origIdx] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                            Response Headers ({Object.keys(log.responseHeaders).length})
-                          </button>
-                          {showRespHeaders[origIdx] && (
-                            <div className="bg-gray-800 rounded-lg p-2.5 space-y-1">
-                              {Object.entries(log.responseHeaders).map(([k, v]) => (
-                                <div key={k} className="flex gap-2 text-xs font-mono">
-                                  <span className="text-purple-400 flex-shrink-0">{k}:</span>
-                                  <span className="text-gray-300 break-all">{v}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {/* Response Body / Error */}
-                      {(log.responseBody || log.error) && (
-                        <div>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
-                            {log.error && !log.responseBody ? 'Error' : 'Body'}
-                          </p>
-                          <pre className={`bg-gray-800 rounded-lg p-2.5 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap break-all leading-relaxed max-h-56 overflow-y-auto ${log.error && !log.responseBody ? 'text-red-400' : 'text-blue-300'}`}>
-                            {log.responseBody || log.error}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* ── PARSED ── */}
-                  {log.parsedResult && (
-                    <div className="border border-gray-700/60 rounded-xl overflow-hidden">
-                      <div className="px-3 py-2 bg-gray-800/80 border-b border-gray-700/60">
-                        <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">Parsed Result</span>
-                      </div>
-                      <div className="p-3">
-                        <pre className="text-[11px] font-mono text-yellow-300 whitespace-pre-wrap break-all leading-relaxed">
-                          {log.parsedResult}
-                        </pre>
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function SendTab() {
   const [mobile, setMobile]   = useState('');
   const [message, setMessage] = useState('');
@@ -556,29 +195,7 @@ function SendTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">شماره موبایل گیرنده</label>
-          <input className={inp} value={mobile} onChange={e => setMobile(e.target.value)}
-            placeholder="09123456789" dir="ltr" type="tel" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-            متن پیام
-            <span className="text-gray-400 font-normal mr-2">({message.length} کاراکتر)</span>
-          </label>
-          <textarea className={inp + ' resize-none'} rows={4}
-            value={message} onChange={e => setMessage(e.target.value)}
-            placeholder="متن پیامک آزمایشی..." />
-        </div>
-      </div>
-
-      {result && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl border text-sm ${result.ok ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'}`}>
-          {result.ok ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
-          {result.msg}
-        </div>
-      )}
+      <SendForm mobile={mobile} setMobile={setMobile} message={message} setMessage={setMessage} result={result} />
 
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={send} disabled={sending}
@@ -599,11 +216,6 @@ function SendTab() {
       </div>
 
       {showLog && debugLogs.length > 0 && <RequestLogPanel logs={debugLogs} onClear={() => { setDebugLogs([]); setShowLog(false); }} />}
-
-      <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
-        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-amber-700 dark:text-amber-300">بین هر دو ارسال متوالی حداقل ۳ ثانیه فاصله توسط وب‌سرویس اعمال می‌شود.</p>
-      </div>
     </div>
   );
 }
@@ -657,9 +269,6 @@ function InboxTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {messages.length} پیام — {messages.filter(m => !m.is_read).length} خوانده نشده
-        </p>
         <div className="flex gap-2">
           <button onClick={loadFromDb} disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition">
@@ -674,42 +283,7 @@ function InboxTab() {
         </div>
       </div>
 
-      {loading && messages.length === 0 && (
-        <div className="py-16 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-300" /></div>
-      )}
-
-      {!loading && messages.length === 0 && (
-        <div className="py-16 text-center bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
-          <Inbox className="w-10 h-10 text-gray-200 dark:text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">صندوق دریافت خالی است</p>
-          <button onClick={fetchNew} disabled={fetching}
-            className="mt-3 text-sm text-teal-500 hover:text-teal-600 font-medium">
-            دریافت پیام‌های جدید
-          </button>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {messages.map(msg => (
-          <div key={msg.id}
-            onClick={() => !msg.is_read && markRead(msg.id)}
-            className={`bg-white dark:bg-gray-800 rounded-2xl border p-4 transition cursor-pointer hover:border-gray-200 dark:hover:border-gray-600 ${msg.is_read ? 'border-gray-100 dark:border-gray-700' : 'border-teal-200 dark:border-teal-800 bg-teal-50/30 dark:bg-teal-900/10'}`}
-          >
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-200 font-mono" dir="ltr">{msg.sender}</span>
-                {!msg.is_read && <span className="w-2 h-2 rounded-full bg-teal-500 flex-shrink-0" />}
-              </div>
-              <span className="text-xs text-gray-400 flex-shrink-0" dir="ltr">
-                {new Date(msg.received_at).toLocaleString('fa-IR')}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{msg.message}</p>
-            <p className="text-xs text-gray-300 dark:text-gray-600 mt-1 font-mono" dir="ltr">به: {msg.receiver}</p>
-          </div>
-        ))}
-      </div>
+      <InboxList messages={messages} loading={loading} onMarkRead={markRead} onFetchNew={fetchNew} fetching={fetching} />
     </div>
   );
 }
@@ -779,6 +353,13 @@ function EngineSelector() {
 export function RahyabConfigPanel() {
   const [tab, setTab] = useState<'settings' | 'account' | 'send' | 'inbox'>('settings');
 
+  const TAB_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+    settings: Settings,
+    account: CreditCard,
+    send: Send,
+    inbox: Inbox,
+  };
+
   return (
     <div className="space-y-4" dir="rtl">
       <div className="flex items-start gap-3">
@@ -797,12 +378,15 @@ export function RahyabConfigPanel() {
 
       {/* Tab bar */}
       <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 gap-1">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTab(key as any)}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === key ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-            <Icon className="w-4 h-4" />{label}
-          </button>
-        ))}
+        {TABS.map(({ key, label, icon }) => {
+          const Icon = TAB_ICONS[icon];
+          return (
+            <button key={key} onClick={() => setTab(key as any)}
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === key ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+              <Icon className="w-4 h-4" />{label}
+            </button>
+          );
+        })}
       </div>
 
       {tab === 'settings' && <SettingsTab />}

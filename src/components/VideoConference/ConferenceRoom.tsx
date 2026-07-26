@@ -30,6 +30,8 @@ import { TopBar } from './Room/TopBar';
 import { VideoArea, type TileData } from './Room/VideoArea';
 import { ParticipantsPanel } from './Room/ParticipantsPanel';
 import { SidePanelHeader } from './Room/SidePanelHeader';
+import { SidePanelContainer } from './Room/SidePanelContainer';
+import { RoomOverlays } from './Room/RoomOverlays';
 import { ROLE_PERMISSIONS, ROLE_LABELS, ROLE_COLORS, type RoleType, type Permission } from './Room/roleConstants';
 import { mediaReducer, type MediaState } from './Room/mediaReducer';
 import { MAX_PARTICIPANTS, calculateBitrate, setPreferredCodecs, EMOJIS } from './Room/webrtcHelpers';
@@ -1348,252 +1350,118 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         </div>
 
         {/* Side panel */}
-        {sidePanel && (
-          <>
-            {isMobile && (
-              <div className="absolute inset-0 bg-black/60 z-30" onClick={() => setSidePanel(null)} />
-            )}
-            <div className={`
-              bg-gray-900 border-gray-800 flex flex-col z-40
-              ${isMobile
-                ? 'absolute bottom-0 left-0 right-0 h-[70vh] rounded-t-2xl border-t conf-panel-mobile'
-                : 'w-64 md:w-72 flex-shrink-0 border-r relative'
-              }
-            `}>
-              <div className="flex border-b border-gray-800 flex-shrink-0">
-                {isMobile && (
-                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-gray-600 rounded-full" />
-                )}
-                {sidePanel === 'settings' ? (
-                  <>
-                    <div className="flex-1 flex items-center px-3 py-2.5 gap-2">
-                      <SlidersHorizontal className="w-4 h-4 text-teal-400 flex-shrink-0" />
-                      <span className="text-sm font-medium text-teal-400">تنظیمات</span>
-                    </div>
-                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </>
-                ) : sidePanel === 'diagnostics' ? (
-                  <>
-                    <div className="flex-1 flex items-center px-3 py-2.5 gap-2">
-                      <Activity className="w-4 h-4 text-teal-400 flex-shrink-0" />
-                      <span className="text-sm font-medium text-teal-400">کیفیت اتصال</span>
-                    </div>
-                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {(['chat','participants','polls','whiteboard'] as SidePanel[]).filter(p => {
-                    if (p === 'chat') return room.allow_chat;
-                    if (p === 'whiteboard') return true;
-                    if (p === 'polls') return true;
-                    return true;
-                  }).map(p => (
-                      <button key={p!} onClick={() => togglePanel(p)}
-                        className={`flex-1 py-2.5 text-xs font-medium transition-colors ${sidePanel === p ? 'text-teal-400 border-b-2 border-teal-400' : 'text-gray-500 hover:text-gray-300'}`}>
-                        {p === 'chat' ? 'چت' : p === 'participants' ? (
-                          <span className="flex items-center justify-center gap-1">
-                            افراد
-                            {sortedQueue.length > 0 && (
-                              <span className="w-4 h-4 rounded-full bg-yellow-500 text-black text-[10px] flex items-center justify-center font-bold">
-                                {sortedQueue.length}
-                              </span>
-                            )}
-                          </span>
-                        ) : p === 'polls' ? 'نظرسنجی' : 'وایت‌بورد'}
-                      </button>
-                    ))}
-                    <button onClick={() => setSidePanel(null)} aria-label="بستن پنل" className="px-3 text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {sidePanel === 'chat' && (
-                <ChatPanel
-                  roomId={room.id}
-                  currentUserId={currentUserId}
-                  currentUserName={currentUserName}
-                  messages={messages}
-                  chatEnabled={chatEnabled}
-                  canToggleChat={checkPermission('toggle_chat')}
-                  onToggleChat={toggleChatEnabled}
-                  sendSignal={sendSignalStable}
-                  onOwnMessage={msg => setMessages(prev => [...prev, msg])}
-                />
-              )}
-
-              {sidePanel === 'participants' && (
-                <ParticipantsPanel
-                  allTiles={allTiles}
-                  participants={participants}
-                  myRole={myRole}
-                  isHost={isHost}
-                  hostId={hostId}
-                  myPeerId={myPeerId}
-                  currentUserId={currentUserId}
-                  currentUserName={currentUserName}
-                  pinnedPeerId={pinnedPeerId}
-                  setPinnedPeerId={setPinnedPeerId}
-                  sortedQueue={sortedQueue}
-                  pendingApprovals={pendingApprovals}
-                  onApprove={approveUser}
-                  onReject={rejectUser}
-                  peersSize={peers.size}
-                  showBanList={showBanList}
-                  setShowBanList={setShowBanList}
-                  checkPermission={checkPermission}
-                  muteAll={muteAll}
-                  lowerHand={lowerHand}
-                  changeRole={changeRole}
-                  transferHost={transferHost}
-                  setKickConfirm={setKickConfirm}
-                  setPendingBan={setPendingBan}
-                  setBanReason={setBanReason}
-                  roleDropdown={roleDropdown}
-                  setRoleDropdown={setRoleDropdown}
-                  limitEditor={limitEditor}
-                  setLimitEditor={setLimitEditor}
-                  limitInputs={limitInputs}
-                  setLimitInputs={setLimitInputs}
-                  sendSignalRef={sendSignalRef}
-                  speakingLimitEnabled={speakingLimitEnabled}
-                  tileReactions={tileReactions}
-                  roomId={room.id}
-                />
-              )}
-
-              {sidePanel === 'polls' && <PollPanel roomId={room.id} userId={currentUserId} isHost={checkPermission('manage_polls')} />}
-              {sidePanel === 'whiteboard' && (
-                <div className="flex-1 overflow-hidden min-h-0">
-                  <Whiteboard roomId={room.id} userId={currentUserId} isHost={checkPermission('toggle_whiteboard')} />
-                </div>
-              )}
-              {sidePanel === 'settings' && (
-                <>
-                  <SettingsPanel
-                    videoQuality={videoQuality}
-                    dataSaverMode={dataSaverMode}
-                    isApplying={applyingVideoConstraints}
-                    onChangeQuality={(q) => {
-                      setVideoQuality(q);
-                      applyVideoConstraints(q, dataSaverMode);
-                    }}
-                    onToggleDataSaver={() => {
-                      const next = !dataSaverMode;
-                      setDataSaverMode(next);
-                      applyVideoConstraints(videoQuality, next);
-                    }}
-                  />
-                  {/* Speaking limit toggle — host/admin only */}
-                  {checkPermission('mute_all') && (
-                    <div className="px-4 py-3 border-t border-gray-800 flex items-center justify-between gap-3 flex-shrink-0">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-200">محدودیت زمان صحبت</p>
-                        <p className="text-xs text-gray-500 mt-0.5">محدودیت پیش‌فرض ۶۰ ثانیه — قابل تنظیم برای هر کاربر</p>
-                      </div>
-                      <button
-                        onClick={toggleSpeakingLimit}
-                        aria-pressed={speakingLimitEnabled}
-                        className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${speakingLimitEnabled ? 'bg-teal-600' : 'bg-gray-700'}`}
-                      >
-                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${speakingLimitEnabled ? 'right-0.5' : 'left-0.5'}`} />
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {sidePanel === 'diagnostics' && (
-                <DiagnosticsPanel
-                  myQuality={myQuality}
-                  peers={peers}
-                  peerDiagnostics={peerDiagnostics}
-                  qualityColor={qualityColor}
-                />
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Kick / Ban action menu */}
-      {kickConfirm && (
-        <KickBanModal
-          kickConfirm={kickConfirm}
-          pendingBan={pendingBan}
-          banReason={banReason}
-          setBanReason={setBanReason}
-          canBan={checkPermission('ban')}
-          onKick={async () => { await kickParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName); setKickConfirm(null); }}
-          onSelectBanDuration={(durationMinutes, label) => setPendingBan({ durationMinutes, label })}
-          onConfirmBan={async () => {
-            await banParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName, pendingBan!.durationMinutes, banReason);
-            setKickConfirm(null); setPendingBan(null); setBanReason('');
-          }}
-          onBackFromBan={() => { setPendingBan(null); setBanReason(''); }}
-          onClose={() => { setKickConfirm(null); setPendingBan(null); setBanReason(''); }}
-        />
-      )}
-
-      {/* Host leave confirm */}
-      {showLeaveConfirm && (
-        <LeaveConfirmModal
-          onLeaveOnly={() => doLeave(false)}
-          onEndForAll={() => doLeave(true)}
-          onCancel={() => setShowLeaveConfirm(false)}
-        />
-      )}
-
-      {/* Screen share badge */}
-      {isScreenSharing && !isMobile && (
-        <ScreenShareBadge userName={currentUserName} onStop={stopScreenShare} />
-      )}
-
-      {/* Floating reactions — emoji + sender name */}
-      <FloatingReactions reactions={reactions} />
-
-      {/* Bottom controls */}
-      <div className="bg-gray-900/95 border-t border-gray-800 flex-shrink-0 relative" dir="rtl">
-        {/* Speaking progress bar — shown when user is actively speaking and limit is on */}
-        {speakingLimitEnabled && speakingSecs > 0 && !isMuted && myLimitSecs > 0 && (
-          <SpeakingProgressBar speakingSecs={speakingSecs} limitSecs={myLimitSecs} />
-        )}
-        {/* Emoji picker — rendered here (above overflow-x-auto) so it's never clipped */}
-        {showEmojiPicker && room.allow_reactions && (
-          <EmojiPicker emojis={EMOJIS} onPick={sendEmoji} />
-        )}
-        <BottomControls
-          room={room}
-          isMuted={isMuted}
-          isVideoOff={isVideoOff}
-          isHandRaised={isHandRaised}
-          isScreenSharing={isScreenSharing}
-          isSpeakerMuted={isSpeakerMuted}
-          showEmojiPicker={showEmojiPicker}
+        <SidePanelContainer
           sidePanel={sidePanel}
+          setSidePanel={setSidePanel}
+          togglePanel={togglePanel}
           isMobile={isMobile}
-          showAllControls={showAllControls}
-          unreadCount={unreadCount}
-          sortedQueueLength={sortedQueue.length}
-          pendingApprovalsLength={pendingApprovals.length}
-          canMuteAll={checkPermission('mute_all') && peers.size > 0}
-          onToggleMute={toggleMute}
-          onToggleVideo={toggleVideo}
-          onToggleHand={toggleHand}
-          onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
-          onToggleEmojiPicker={() => setShowEmojiPicker(v => !v)}
-          onTogglePanel={(p) => { togglePanel(p); if (isMobile) setShowAllControls(false); }}
-          onToggleSpeakerMute={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })}
-          onMuteAll={muteAll}
-          onLeave={leaveRoom}
-          onToggleAllControls={() => setShowAllControls(v => !v)}
+          room={room}
+          messages={messages}
+          chatEnabled={chatEnabled}
+          canToggleChat={checkPermission('toggle_chat')}
+          onToggleChat={toggleChatEnabled}
+          sendSignalStable={sendSignalStable}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          onOwnMessage={msg => setMessages(prev => [...prev, msg])}
+          allTiles={allTiles}
+          participants={participants}
+          myRole={myRole}
+          isHost={isHost}
+          hostId={hostId}
+          myPeerId={myPeerId}
+          currentUserNameForPanel={currentUserName}
+          pinnedPeerId={pinnedPeerId}
+          setPinnedPeerId={setPinnedPeerId}
+          sortedQueue={sortedQueue}
+          pendingApprovals={pendingApprovals}
+          onApprove={approveUser}
+          onReject={rejectUser}
+          peersSize={peers.size}
+          showBanList={showBanList}
+          setShowBanList={setShowBanList}
+          checkPermission={checkPermission}
+          muteAll={muteAll}
+          lowerHand={lowerHand}
+          changeRole={changeRole}
+          transferHost={transferHost}
+          setKickConfirm={setKickConfirm}
+          setPendingBan={setPendingBan}
+          setBanReason={setBanReason}
+          roleDropdown={roleDropdown}
+          setRoleDropdown={setRoleDropdown}
+          limitEditor={limitEditor}
+          setLimitEditor={setLimitEditor}
+          limitInputs={limitInputs}
+          setLimitInputs={setLimitInputs}
+          sendSignalRef={sendSignalRef}
+          speakingLimitEnabled={speakingLimitEnabled}
+          tileReactions={tileReactions}
+          roomId={room.id}
+          videoQuality={videoQuality}
+          dataSaverMode={dataSaverMode}
+          applyingVideoConstraints={applyingVideoConstraints}
+          onChangeQuality={(q) => { setVideoQuality(q); applyVideoConstraints(q, dataSaverMode); }}
+          onToggleDataSaver={() => { const next = !dataSaverMode; setDataSaverMode(next); applyVideoConstraints(videoQuality, next); }}
+          onToggleSpeakingLimit={toggleSpeakingLimit}
+          myQuality={myQuality}
+          peers={peers}
+          peerDiagnostics={peerDiagnostics}
+          qualityColor={qualityColor}
         />
       </div>
+
+      {/* Overlays, modals, and bottom controls */}
+      <RoomOverlays
+        kickConfirm={kickConfirm}
+        pendingBan={pendingBan}
+        banReason={banReason}
+        setBanReason={setBanReason}
+        canBan={checkPermission('ban')}
+        onKick={async () => { await kickParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName); setKickConfirm(null); }}
+        onSelectBanDuration={(durationMinutes, label) => setPendingBan({ durationMinutes, label })}
+        onConfirmBan={async () => {
+          await banParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName, pendingBan!.durationMinutes, banReason);
+          setKickConfirm(null); setPendingBan(null); setBanReason('');
+        }}
+        onBackFromBan={() => { setPendingBan(null); setBanReason(''); }}
+        onCloseKickBan={() => { setKickConfirm(null); setPendingBan(null); setBanReason(''); }}
+        showLeaveConfirm={showLeaveConfirm}
+        onLeaveOnly={() => doLeave(false)}
+        onEndForAll={() => doLeave(true)}
+        onCancelLeave={() => setShowLeaveConfirm(false)}
+        isScreenSharing={isScreenSharing}
+        isMobile={isMobile}
+        currentUserName={currentUserName}
+        onStopScreenShare={stopScreenShare}
+        reactions={reactions}
+        room={room}
+        isMuted={isMuted}
+        isVideoOff={isVideoOff}
+        isHandRaised={isHandRaised}
+        isSpeakerMuted={isSpeakerMuted}
+        showEmojiPicker={showEmojiPicker}
+        sidePanel={sidePanel}
+        showAllControls={showAllControls}
+        unreadCount={unreadCount}
+        sortedQueueLength={sortedQueue.length}
+        pendingApprovalsLength={pendingApprovals.length}
+        canMuteAll={checkPermission('mute_all') && peers.size > 0}
+        speakingLimitEnabled={speakingLimitEnabled}
+        speakingSecs={speakingSecs}
+        myLimitSecs={myLimitSecs}
+        onToggleMute={toggleMute}
+        onToggleVideo={toggleVideo}
+        onToggleHand={toggleHand}
+        onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
+        onToggleEmojiPicker={() => setShowEmojiPicker(v => !v)}
+        onTogglePanel={(p) => { togglePanel(p); if (isMobile) setShowAllControls(false); }}
+        onToggleSpeakerMute={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })}
+        onMuteAll={muteAll}
+        onLeave={leaveRoom}
+        onToggleAllControls={() => setShowAllControls(v => !v)}
+        onSendEmoji={sendEmoji}
+      />
       </div>
     </div>
   );
