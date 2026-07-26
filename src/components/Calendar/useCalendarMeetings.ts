@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { supabase } from '../../lib/supabase';
 import {
   PRIORITY_COLORS, DEFAULT_CALENDAR_COLOR,
   jalaaliToYYYYMMDD, parseRequestDateToDateStr,

@@ -1,14 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { insertNotification as insertNotificationFromTemplate } from '../../lib/notifications';
 import toast from 'react-hot-toast';
 import {
   toJalaali, jalaaliToDate, getJalaaliMonthDays, parseRequestDateToDateStr,
-  timeToMinutes,
 } from './utils';
-import type { MeetingData, CalendarEntry, CalendarSubscription, PendingSchedule } from './types';
-
-type ViewMode = 'month' | 'week' | 'day' | 'list-week' | 'list-month';
+import type { MeetingData, CalendarEntry } from './types';
 
 export interface CalendarDataState {
   meetings: MeetingData[];
@@ -73,7 +70,7 @@ export function useCalendarData(
         placeholders: placeholders || { meeting_subject: message },
         senderId: currentUserId || null, actionUrl: type,
       });
-    } catch {}
+    } catch { /* notification best-effort */ }
   }, [currentUserId]);
 
   const buildMeetingPlaceholders = useCallback((m: MeetingData, recipientId?: string): Record<string, string> => {
@@ -204,7 +201,7 @@ export function useCalendarData(
       const newEnabledIds = new Set([...ownCals.map(c => c.id), ...subCals.map(c => c.id)]);
       console.log('[CalendarPage] fetchCalendars → enabledCalendarIds:', [...newEnabledIds], 'ownCals:', ownCals.length, 'subCals:', subCals.length);
       setEnabledCalendarIds(newEnabledIds);
-    } catch {}
+    } catch { /* calendar load best-effort */ }
   }, []);
 
   useEffect(() => { fetchCalendarsRef.current = () => fetchCalendars(); }, [fetchCalendars]);

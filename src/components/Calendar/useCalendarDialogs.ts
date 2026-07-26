@@ -3,9 +3,9 @@ import { supabase } from '../../lib/supabase';
 import { insertNotification as insertNotificationFromTemplate } from '../../lib/notifications';
 import toast from 'react-hot-toast';
 import {
-  toJalaali, parseRequestDateToDateStr, jalaaliDatesBetween,
+  toJalaali, parseRequestDateToDateStr,
 } from './utils';
-import type { MeetingData, CalendarEntry, CalendarSubscription, CalendarFormState, PendingSchedule } from './types';
+import type { MeetingData, CalendarEntry, CalendarFormState, PendingSchedule } from './types';
 
 export interface CalendarDialogsState {
   detailMeeting: MeetingData | null;
@@ -193,7 +193,7 @@ export function useCalendarDialogs(
               actionUrl: 'calendar',
             })
           ));
-        } catch {}
+        } catch { /* cancel notifications best-effort */ }
       };
 
       if (isOwner) {
@@ -432,7 +432,7 @@ export function useCalendarDialogs(
       const { data: subs } = await supabase.from('calendar_subscriptions').select('id, calendar_id, user_id, permission').eq('calendar_id', calendarId);
       if (!subs || subs.length === 0) { setSubscriptions([]); return; }
       setSubscriptions(subs.map((s: any) => ({ ...s, profile: usersById[s.user_id] ? { full_name: usersById[s.user_id].full_name || '', email: '' } : null })));
-    } catch {}
+    } catch { /* subscription fetch best-effort */ }
   };
 
   const handleOpenSubscriptions = async (cal: CalendarEntry) => {
@@ -451,7 +451,7 @@ export function useCalendarDialogs(
       insertNotification(profileUserId, 'اشتراک تقویم', `شما به تقویم "${subscriptionsCalendar.name}" دسترسی پیدا کردید`, 'calendar');
       if (currentUserId) insertNotification(currentUserId, 'کاربر اضافه شد', `کاربر به تقویم "${subscriptionsCalendar.name}" اضافه شد`, 'calendar');
       fetchSubscriptions(subscriptionsCalendar.id);
-    } catch { toast.error('خطا در اضافه کردن کاربر'); }
+    } catch { /* subscription remove best-effort */ }
   };
 
   const handleRemoveSubscription = async (subId: string) => {
@@ -464,14 +464,14 @@ export function useCalendarDialogs(
         if (currentUserId) insertNotification(currentUserId, 'کاربر حذف شد', `کاربر از تقویم "${subscriptionsCalendar.name}" حذف شد`, 'calendar');
       }
       if (subscriptionsCalendar) fetchSubscriptions(subscriptionsCalendar.id);
-    } catch { toast.error('خطا در حذف کاربر'); }
+    } catch { /* subscription remove error */ }
   };
 
   const handleUpdateSubPermission = async (subId: string, perm: 'view' | 'edit') => {
     try {
       await supabase.from('calendar_subscriptions').update({ permission: perm }).eq('id', subId);
       if (subscriptionsCalendar) fetchSubscriptions(subscriptionsCalendar.id);
-    } catch {}
+    } catch { /* permission update best-effort */ }
   };
 
   return {

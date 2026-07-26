@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { usePermissions } from '../context/PermissionsContext';
 import { CalendarViews } from './Calendar/CalendarViews';
 import { supabase } from '../lib/supabase';
-import toast from 'react-hot-toast';
 import { MeetingInboxButton } from './MeetingInboxButton';
 import { useUserPreferences } from '../features/user-preferences';
 
@@ -460,22 +459,11 @@ export function CalendarPage({
     timeGridRef, timeScrollRef, listScrollRef,
     handleHourColTouchStart, handleHourColTouchMove, handleHourColTouchEnd,
     adjustSlotHeight, setViewMode,
+    setSelectedJy, setSelectedJm, setSelectedJd,
+    allDayDragging, allDayDragStart, allDayDragEnd,
+    setAllDayDragStart, setAllDayDragEnd, setAllDayDragging,
     drag, dialogs,
   });
-
-  // Patch the setters that need the real state setters
-  const calendarViewsProps = {
-    ...viewProps,
-    allDayDragging,
-    allDayDragStart,
-    allDayDragEnd,
-    setAllDayDragStart,
-    setAllDayDragEnd,
-    setAllDayDragging,
-    setSelectedJy,
-    setSelectedJm,
-    setSelectedJd,
-  };
 
   if (!currentJy) return null;
 
@@ -680,7 +668,7 @@ export function CalendarPage({
 
           {/* View */}
           <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900">
-            <CalendarViews {...calendarViewsProps} />
+            <CalendarViews {...viewProps} />
           </div>
         </div>
 
@@ -706,7 +694,7 @@ export function CalendarPage({
         publicGroupOpen={publicGroupOpen}
         showOnlyMine={showOnlyMine}
         onToggleMobileSidebar={() => setShowMobileSidebar(false)}
-        onToggleCalendar={id => data.setEnabledCalendarIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; })}
+        onToggleCalendar={id => data.setEnabledCalendarIds(prev => { const next = new Set(prev); if (next.has(id)) { next.delete(id); } else { next.add(id); } return next; })}
         onToggleOccasions={data.handleToggleOccasions}
         onMyGroupToggle={() => setMyGroupOpen(o => !o)}
         onSharedGroupToggle={() => setSharedGroupOpen(o => !o)}
