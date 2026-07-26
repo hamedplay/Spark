@@ -71,6 +71,14 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
         onSparkNavigateDateConsumed={() => setSparkNavigateDate(null)}
         sparkCalendarMeetingPrefill={sparkCalendarMeetingPrefill}
         onSparkCalendarMeetingPrefillConsumed={() => setSparkCalendarMeetingPrefill(null)}
+        onRegisterMinutes={(meetingId) => {
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('meeting', meetingId);
+            window.history.replaceState({}, '', url.toString());
+          } catch { /* noop */ }
+          setActivePage('minutes-new');
+        }}
       />;
     case 'chat':
       return <ChatPage

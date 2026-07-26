@@ -68,6 +68,27 @@ export function clearMinuteIdFromUrl(): void {
   sessionStorage.removeItem(STORAGE_KEY);
 }
 
+// ── Source meeting id (entry from meeting detail → minutes-new) ──────────────
+const MEETING_PARAM = 'meeting';
+
+export function getMeetingIdFromUrl(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get(MEETING_PARAM);
+  return id && id.trim() ? id.trim() : null;
+}
+
+export function setMeetingIdInUrl(id: string): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set(MEETING_PARAM, id);
+  window.history.replaceState({}, '', url.toString());
+}
+
+export function clearMeetingIdFromUrl(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(MEETING_PARAM);
+  window.history.replaceState({}, '', url.toString());
+}
+
 // ── Detail tab in URL (summary/approvals/decisions/attachments/history) ──────
 const TAB_PARAM = 'mtab';
 

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CircleAlert as AlertCircle, Upload, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl, setMeetingIdInUrl, clearMeetingIdFromUrl } from '../../lib/minutesNavigation';
 import { PageHeader, ConfidentialityBadge, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -337,6 +337,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [editError, setEditError] = useState<string | null>(null);
   const [editNotFound, setEditNotFound] = useState(false);
 
+  // New-mode: track the minute id after draft creation so submit uses the real id
+  const [createdMinuteId, setCreatedMinuteId] = useState<string | null>(null);
+
   const title = mode === 'new' ? 'ایجاد صورت‌جلسه' : 'ویرایش صورت‌جلسه';
 
   // ── Edit mode: fetch existing minute and populate form ───────────────
@@ -487,6 +490,26 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       }
     })();
   }, []);
+
+  // ── New-mode: prefill from source meeting (entry via ?meeting=<id>) ────────
+  useEffect(() => {
+    if (mode !== 'new') return;
+    const sourceMeetingId = getMeetingIdFromUrl();
+    if (!sourceMeetingId) return;
+    if (info.meetingId) return; // already prefilled
+    const meeting = meetings.find(m => m.id === sourceMeetingId);
+    if (!meeting) return; // meetings not loaded yet — retry on next change
+    setInfo(prev => ({
+      ...prev,
+      meetingId: meeting.id,
+      meetingTitle: meeting.subject,
+      meetingDate: meeting.request_date || '',
+      startTime: meeting.start_time || '',
+      endTime: meeting.end_time || '',
+      location: meeting.location || '',
+    }));
+    fetchAgendaItems(meeting.id);
+  }, [mode, meetings, info.meetingId, fetchAgendaItems]);
 
   // ── Fetch all profiles ────────────────────────────────────────────────
   useEffect(() => {
@@ -800,9 +823,44 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     }
     setSubmitting(true);
     try {
+      // In new mode, ensure a draft exists before submitting. If we already created one
+      // (createdMinuteId), reuse it; otherwise create it now and capture the real minute id.
+      let submitMinuteId: string | null = mode === 'edit' ? editMinuteId : createdMinuteId;
+      let submitUpdatedAt: string | null = editUpdatedAt;
+      if (mode === 'new' && !submitMinuteId) {
+        const payload = buildDraftPayload();
+        const createPayload = { meeting_id: info.meetingId, ...payload };
+        const { data: createData, error: createErr } = await supabase.rpc('create_minutes_draft', {
+          p_payload: createPayload,
+        });
+        if (createErr) {
+          toast.error('ذخیره پیش‌نویس ناموفق بود. لطفاً دوباره تلاش کنید.');
+          return;
+        }
+        if (createData && createData.success === false) {
+          const code: string = createData.code || createData.error_code || 'INTERNAL_ERROR';
+          const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس ناموفق بود.';
+          toast.error(msg);
+          return;
+        }
+        if (createData && createData.success === true && createData.minute_id) {
+          submitMinuteId = createData.minute_id;
+          submitUpdatedAt = createData.updated_at || null;
+          setCreatedMinuteId(submitMinuteId);
+          setEditUpdatedAt(submitUpdatedAt);
+          if (isDev) console.log('[MinutesSubmit] Created draft on submit, minute_id:', submitMinuteId);
+        } else {
+          toast.error('پاسخ نامعتبر از سرور دریافت شد.');
+          return;
+        }
+      }
+      if (!submitMinuteId) {
+        toast.error('شناسه صورت‌جلسه مشخص نیست. ابتدا پیش‌نویس را ذخیره کنید.');
+        return;
+      }
       const { data, error: rpcError } = await supabase.rpc('submit_minutes_for_approval', {
-        p_minute_id: mode === 'edit' ? (editMinuteId || info.meetingId) : info.meetingId,
-        p_expected_updated_at: editUpdatedAt,
+        p_minute_id: submitMinuteId,
+        p_expected_updated_at: submitUpdatedAt,
         p_approval_mode: info.approvalMode,
       });
       if (rpcError) {
@@ -954,6 +1012,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnitsError={orgUnitsError}
                 onMeetingSelect={handleMeetingSelect}
                 agendaLoading={agendaLoading}
+                mode={mode}
               />
             )}
             {activeSection === 1 && (
@@ -1068,6 +1127,7 @@ interface SectionInfoProps {
   orgUnitsError: string | null;
   onMeetingSelect: (meetingId: string) => void;
   agendaLoading: boolean;
+  mode: 'new' | 'edit';
 }
 
 function SectionInfo({
@@ -1076,6 +1136,7 @@ function SectionInfo({
   profiles, profilesLoading, profilesError,
   orgUnits, orgUnitsLoading, orgUnitsError,
   onMeetingSelect, agendaLoading,
+  mode,
 }: SectionInfoProps) {
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
@@ -1122,7 +1183,8 @@ function SectionInfo({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Meeting selector */}
+        {/* Meeting selector — hidden in new mode (meeting is prefilled from URL) */}
+        {mode === 'edit' && (
         <div className="sm:col-span-2">
           <label htmlFor="meeting-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             انتخاب جلسه <span className="text-red-500">*</span>
@@ -1155,6 +1217,7 @@ function SectionInfo({
             </p>
           )}
         </div>
+        )}
 
         <div className="sm:col-span-2">
           <label htmlFor="meeting-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

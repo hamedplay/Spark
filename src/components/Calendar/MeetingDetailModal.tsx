@@ -26,11 +26,12 @@ interface Props {
   onDelete: (id: string, deleteRepeating?: boolean) => void;
   onShare: (m: MeetingData) => void;
   onGoogleCalendar: (m: MeetingData) => void;
+  onRegisterMinutes: (meetingId: string) => void;
 }
 
 export function MeetingDetailModal({
   meeting: m, currentUserId, resolveName, calendars, subscribedCalendars,
-  getMeetingColor, onClose, onEdit, onDelete, onGoogleCalendar,
+  getMeetingColor, onClose, onEdit, onDelete, onGoogleCalendar, onRegisterMinutes,
 }: Props) {
   const isOwner = m.user_id === currentUserId;
   const isManager = m.meeting_manager === currentUserId;
@@ -40,6 +41,7 @@ export function MeetingDetailModal({
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareChoice, setShowShareChoice] = useState(false);
+  const [showMinutesConfirm, setShowMinutesConfirm] = useState(false);
   const shareCardRef = useRef<HTMLDivElement>(null);
 
   // Per-participant inbox status — only fetched for the meeting owner
@@ -526,9 +528,15 @@ const getJalaliDate = (): string => {
         {/* Actions */}
         <div className="border-t border-gray-100 dark:border-gray-700 p-4 grid grid-cols-2 gap-2 flex-shrink-0">
           {canEdit && (
+            <>
+            <button onClick={() => setShowMinutesConfirm(true)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 text-sm font-medium hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors">
+              <FileText className="w-4 h-4" />
+              ثبت صورتجلسه
+            </button>
             <button onClick={() => onEdit(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
               <Edit2 className="w-4 h-4" />ویرایش
             </button>
+            </>
           )}
           <button onClick={handleNativeShare} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm font-medium hover:bg-green-100 transition-colors">
             <Share2 className="w-4 h-4" />اشتراک‌گذاری
@@ -635,6 +643,32 @@ const getJalaliDate = (): string => {
           </div>
         </div>
       </div>
+
+      {/* Register minutes confirmation */}
+      {showMinutesConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onClick={() => setShowMinutesConfirm(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-gray-800 dark:text-gray-100 mb-2">ثبت صورتجلسه</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">آیا مایل به ثبت صورتجلسه این جلسه هستید؟</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowMinutesConfirm(false); onRegisterMinutes(m.id); }}
+                className="flex-1 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition-colors"
+              >
+                بله
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMinutesConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                خیر
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
