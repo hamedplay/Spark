@@ -1,6 +1,6 @@
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
-  AgendaResultType, DecisionPriority, ApprovalMethod,
+  AgendaResultType, DecisionPriority,
   MinutesStatus, ApprovalMode,
 } from '../types';
 
@@ -116,15 +116,6 @@ export interface DraftDecision {
   additionalNotes: string;
 }
 
-export interface DraftApprover {
-  id: string;
-  name: string;
-  position: string;
-  unit: string;
-  order: number;
-  method: ApprovalMethod;
-}
-
 export interface DraftFinalization {
   signDate: string;
   versionNumber: string;
@@ -137,6 +128,5 @@ export interface MinutesDraftPayload {
   externalParticipants: DraftExternalParticipant[];
   agendaItems: DraftAgendaItem[];
   decisions: DraftDecision[];
-  approvers: DraftApprover[];
   finalization: DraftFinalization;
 }

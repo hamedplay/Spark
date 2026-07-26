@@ -1,6 +1,6 @@
 import type {
   DraftMeetingInfo, DraftInternalParticipant, DraftExternalParticipant,
-  DraftAgendaItem, DraftDecision, DraftApprover, DraftFinalization,
+  DraftAgendaItem, DraftDecision, DraftFinalization,
 } from './types';
 
 export const uid = () => String(Date.now()) + Math.random().toString(36).slice(2, 6);
@@ -80,15 +80,6 @@ export const defaultDecision = (): DraftDecision => ({
   discussionResult: '',
   resultType: 'discussion',
   additionalNotes: '',
-});
-
-export const defaultApprover = (order: number): DraftApprover => ({
-  id: uid(),
-  name: '',
-  position: '',
-  unit: '',
-  order,
-  method: 'digital',
 });
 
 export const defaultFinalization: DraftFinalization = {
