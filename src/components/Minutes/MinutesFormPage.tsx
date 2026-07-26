@@ -114,6 +114,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   // New-mode prefill state — runs once, never overwrites user edits
   const [prefillLoading, setPrefillLoading] = useState(mode === 'new');
   const [prefillError, setPrefillError] = useState<string | null>(null);
+  const [prefillAttempt, setPrefillAttempt] = useState(0);
 
   // Edit-mode state
   const [editMinuteId, setEditMinuteId] = useState<string | null>(null);
@@ -248,10 +249,10 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     })();
   }, [mode, minuteId]);
 
-  // ── New mode: centralized prefill from meeting (runs once) ──────────
+  // ── New mode: centralized prefill from meeting ─────────────────────
   // Reads meetingId only from the `meeting` URL param. Access is checked via
-  // can_create_minutes_for_meeting RPC inside loadMinutesPrefill. Never
-  // overwrites user edits — runs exactly once on mount.
+  // can_create_minutes_for_meeting RPC inside loadMinutesPrefill. Re-runs
+  // when prefillAttempt changes (retry button).
   useEffect(() => {
     if (mode !== 'new') return;
     const meetingId = getMeetingIdFromUrl();
@@ -267,7 +268,15 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         const result = await loadMinutesPrefill(supabase, meetingId);
         if (cancelled) return;
         if (!result.allowed || !result.data) {
-          setPrefillError('دسترسی به این جلسه برای ثبت صورت‌جلسه وجود ندارد.');
+          if (result.errorCode === 'MEETING_NO_PERMISSION') {
+            setPrefillError('شما اجازه ثبت صورت‌جلسه برای این جلسه را ندارید.');
+          } else if (result.errorCode === 'MEETING_NOT_FOUND') {
+            setPrefillError('جلسه موردنظر یافت نشد.');
+          } else if (result.errorCode === 'MEETING_QUERY_ERROR') {
+            setPrefillError('دریافت اطلاعات جلسه ناموفق بود.');
+          } else {
+            setPrefillError('دریافت اطلاعات جلسه ناموفق بود.');
+          }
           setPrefillLoading(false);
           return;
         }
@@ -302,7 +311,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [prefillAttempt]);
 
   // ── Fetch all profiles ────────────────────────────────────────────────
   useEffect(() => {
@@ -904,6 +913,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnitsError={orgUnitsError}
                 prefillLoading={prefillLoading}
                 prefillError={prefillError}
+                onRetryPrefill={() => setPrefillAttempt(n => n + 1)}
                 isMeetingPrefilled={mode === 'new' && !!info.meetingId}
                 agendaLoading={agendaLoading}
                 internalParticipants={internalParticipants}

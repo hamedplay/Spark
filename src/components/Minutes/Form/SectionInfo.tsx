@@ -1,4 +1,4 @@
-import { CircleAlert as AlertCircle, Loader as Loader2, Lock } from 'lucide-react';
+import { CircleAlert as AlertCircle, Loader as Loader2, Lock, RotateCw } from 'lucide-react';
 import { ConfidentialityBadge } from '../MinutesShared';
 import type { ConfidentialityLevel, ApprovalMode } from '../types';
 import type { DraftMeetingInfo, ProfileOption, OrgUnitOption, DraftInternalParticipant } from './types';
@@ -17,6 +17,7 @@ interface SectionInfoProps {
   prefillLoading: boolean;
   prefillError: string | null;
   isMeetingPrefilled: boolean;
+  onRetryPrefill?: () => void;
   agendaLoading: boolean;
   internalParticipants: DraftInternalParticipant[];
 }
@@ -26,6 +27,7 @@ export function SectionInfo({
   profiles, profilesLoading, profilesError,
   orgUnits, orgUnitsLoading, orgUnitsError,
   prefillLoading, prefillError, isMeetingPrefilled, agendaLoading,
+  onRetryPrefill,
   internalParticipants,
 }: SectionInfoProps) {
   const update = (field: keyof DraftMeetingInfo, value: string) =>
@@ -94,7 +96,19 @@ export function SectionInfo({
       {prefillError && (
         <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl text-sm text-red-700 dark:text-red-300">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          {prefillError}
+          <div className="flex-1">
+            {prefillError}
+            {onRetryPrefill && (
+              <button
+                type="button"
+                onClick={onRetryPrefill}
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+              >
+                <RotateCw className="w-3 h-3" />
+                تلاش مجدد
+              </button>
+            )}
+          </div>
         </div>
       )}
       {readOnly && !prefillLoading && !prefillError && (

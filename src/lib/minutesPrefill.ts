@@ -82,8 +82,6 @@ interface MeetingRow {
   start_time: string | null;
   end_time: string | null;
   location: string | null;
-  meeting_type: string | null;
-  org_unit_id: string | null;
   participant_user_ids: string[] | null;
   external_participants: string[] | null;
   meeting_manager: string | null;
@@ -149,7 +147,7 @@ export async function loadMinutesPrefill(
   ] = await Promise.all([
     supabase
       .from('meetings')
-      .select('id, subject, request_date, start_time, end_time, location, meeting_type, org_unit_id, participant_user_ids, external_participants, meeting_manager, user_id')
+      .select('id, subject, request_date, start_time, end_time, location, participant_user_ids, external_participants, meeting_manager, user_id')
       .eq('id', meetingId)
       .maybeSingle(),
     supabase
@@ -163,8 +161,19 @@ export async function loadMinutesPrefill(
       .order('sort_order', { ascending: true }),
   ]);
 
-  if (meetingRes.error || !meetingRes.data) {
-    return { allowed: false, errorCode: 'CHECK_FAILED', existingMinuteId: null, data: null };
+  if (meetingRes.error) {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+      console.error('[MinutesPrefill] meetings query error:', {
+        code: meetingRes.error.code,
+        message: meetingRes.error.message,
+        details: meetingRes.error.details,
+        hint: meetingRes.error.hint,
+      });
+    }
+    return { allowed: false, errorCode: 'MEETING_QUERY_ERROR', existingMinuteId: null, data: null };
+  }
+  if (!meetingRes.data) {
+    return { allowed: false, errorCode: 'MEETING_NOT_FOUND', existingMinuteId: null, data: null };
   }
 
   const meeting = meetingRes.data as MeetingRow;
@@ -250,6 +259,8 @@ export async function loadMinutesPrefill(
 
   // Build info partial — only the meeting-derived fields; secretary/chair/etc
   // remain for the user to select.
+  // meeting_type and org_unit_id do not exist on the meetings table.
+  // These fields are left empty for the user to fill in; no fabricated values.
   const info: Partial<DraftMeetingInfo> = {
     meetingId: meeting.id,
     meetingTitle: meeting.subject || '',
@@ -257,8 +268,9 @@ export async function loadMinutesPrefill(
     startTime: meeting.start_time || '',
     endTime: meeting.end_time || '',
     location: meeting.location || '',
-    meetingType: meeting.meeting_type || '',
-    orgUnitId: meeting.org_unit_id || '',
+    meetingType: '',
+    orgUnitId: '',
+    orgUnitNameSnapshot: '',
   };
 
   return {
