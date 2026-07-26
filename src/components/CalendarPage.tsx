@@ -8,7 +8,7 @@ import { getMeetingTemplateKey } from '../config/templateCatalog';
 import toast from 'react-hot-toast';
 import { CalendarMeetingForm } from './CalendarMeetingForm';
 import { MeetingInboxButton } from './MeetingInboxButton';
-import { useUserPreferences } from '../context/UserPreferencesContext';
+import { useUserPreferences } from '../features/user-preferences';
 
 import { MeetingData, CalendarEntry, CalendarSubscription, PendingSchedule, CalendarFormState } from './Calendar/types';
 import {
