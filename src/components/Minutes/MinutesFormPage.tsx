@@ -514,6 +514,41 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     })();
   }, []);
 
+  // ── Prefill agenda items when meeting is selected ─────────────────────
+  const fetchAgendaItems = useCallback(async (meetingId: string) => {
+    setAgendaLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('meeting_agenda_items')
+        .select('id, title, presenter, duration_minutes, sort_order')
+        .eq('meeting_id', meetingId)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      const items = (data || []) as unknown as AgendaItemOption[];
+      if (items.length > 0) {
+        setAgendaItems(items.map((item, idx) => ({
+          id: uid(),
+          meetingAgendaItemId: item.id,
+          order: idx + 1,
+          title: item.title,
+          description: '',
+          presenter: item.presenter || '',
+          allocatedTime: item.duration_minutes != null ? String(item.duration_minutes) : '',
+          discussionResult: '',
+          resultType: 'discussion',
+          additionalNotes: '',
+        })));
+      } else {
+        setAgendaItems([defaultAgendaItem(1)]);
+      }
+    } catch (err) {
+      toast.error('خطا در بارگذاری دستور جلسات: ' + (err instanceof Error ? err.message : 'نامشخص'));
+      setAgendaItems([defaultAgendaItem(1)]);
+    } finally {
+      setAgendaLoading(false);
+    }
+  }, []);
+
   // ── New-mode: prefill from source meeting (entry via ?meeting=<id>) ────────
   // Validation is server-side: can_create_minutes_for_meeting RPC + RLS-protected
   // meetings query. We do NOT rely on the client-side meetings list, which may be
@@ -559,41 +594,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     })();
     return () => { cancelled = true; };
   }, [mode, info.meetingId, fetchAgendaItems]);
-
-  // ── Prefill agenda items when meeting is selected ─────────────────────
-  const fetchAgendaItems = useCallback(async (meetingId: string) => {
-    setAgendaLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('meeting_agenda_items')
-        .select('id, title, presenter, duration_minutes, sort_order')
-        .eq('meeting_id', meetingId)
-        .order('sort_order', { ascending: true });
-      if (error) throw error;
-      const items = (data || []) as unknown as AgendaItemOption[];
-      if (items.length > 0) {
-        setAgendaItems(items.map((item, idx) => ({
-          id: uid(),
-          meetingAgendaItemId: item.id,
-          order: idx + 1,
-          title: item.title,
-          description: '',
-          presenter: item.presenter || '',
-          allocatedTime: item.duration_minutes != null ? String(item.duration_minutes) : '',
-          discussionResult: '',
-          resultType: 'discussion',
-          additionalNotes: '',
-        })));
-      } else {
-        setAgendaItems([defaultAgendaItem(1)]);
-      }
-    } catch (err) {
-      toast.error('خطا در بارگذاری دستور جلسات: ' + (err instanceof Error ? err.message : 'نامشخص'));
-      setAgendaItems([defaultAgendaItem(1)]);
-    } finally {
-      setAgendaLoading(false);
-    }
-  }, []);
 
   // ── Fetch all profiles ────────────────────────────────────────────────
   useEffect(() => {
