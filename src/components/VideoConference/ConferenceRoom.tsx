@@ -26,88 +26,18 @@ import { KickBanModal, type KickConfirmData, type PendingBanData } from './Room/
 import { ScreenShareBadge, FloatingReactions, EmojiPicker, SpeakingProgressBar } from './Room/Overlays';
 import { DiagnosticsPanel } from './Room/DiagnosticsPanel';
 import { BottomControls } from './Room/BottomControls';
+import { TopBar } from './Room/TopBar';
+import { VideoArea, type TileData } from './Room/VideoArea';
+import { ParticipantsPanel } from './Room/ParticipantsPanel';
+import { SidePanelHeader } from './Room/SidePanelHeader';
+import { ROLE_PERMISSIONS, ROLE_LABELS, ROLE_COLORS, type RoleType, type Permission } from './Room/roleConstants';
+import { mediaReducer, type MediaState } from './Room/mediaReducer';
+import { MAX_PARTICIPANTS, calculateBitrate, setPreferredCodecs, EMOJIS } from './Room/webrtcHelpers';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const MAX_PARTICIPANTS = 20;
-
-function calculateBitrate(width: number, height: number, fps: number) {
-  const pixels = width * height;
-  const factor = fps / 30;
-  const base = pixels * 0.07 * factor;
-  return { min: Math.floor(base * 0.5), max: Math.floor(base * 1.5) };
-}
-
-async function setPreferredCodecs(pc: RTCPeerConnection) {
-  if (!RTCRtpSender.getCapabilities) return;
-  const capabilities = RTCRtpSender.getCapabilities('video');
-  if (!capabilities) return;
-  const preferredMimes = ['video/VP9', 'video/H264', 'video/VP8'];
-  const ordered: RTCRtpCodecCapability[] = [];
-  for (const mime of preferredMimes) {
-    const found = capabilities.codecs.filter(c => c.mimeType.toLowerCase() === mime.toLowerCase());
-    ordered.push(...found);
-  }
-  capabilities.codecs.forEach(c => {
-    if (!ordered.find(oc => oc.mimeType === c.mimeType && oc.sdpFmtpLine === c.sdpFmtpLine)) {
-      ordered.push(c);
-    }
-  });
-  for (const transceiver of pc.getTransceivers()) {
-    if (transceiver.sender.track?.kind === 'video') {
-      try { transceiver.setCodecPreferences(ordered); } catch { /* not supported in all browsers */ }
-    }
-  }
-}
-
-const EMOJIS = ['👍','👏','❤️','😂','😮','🎉','🙌','🔥','💯','✅'];
-
 // ── Media state reducer ───────────────────────────────────────────────────────
-type MediaState = {
-  isMuted: boolean;
-  isVideoOff: boolean;
-  isHandRaised: boolean;
-  isScreenSharing: boolean;
-  isSpeakerMuted: boolean;
-};
-
-type MediaAction =
-  | { type: 'TOGGLE_MUTE' }
-  | { type: 'TOGGLE_VIDEO' }
-  | { type: 'TOGGLE_HAND' }
-  | { type: 'SET_SCREEN_SHARING'; value: boolean }
-  | { type: 'SET_SPEAKER_MUTED'; value: boolean }
-  | { type: 'FORCE_MUTE' }
-  | { type: 'SET_HAND'; value: boolean };
-
-function mediaReducer(state: MediaState, action: MediaAction): MediaState {
-  switch (action.type) {
-    case 'TOGGLE_MUTE': return { ...state, isMuted: !state.isMuted };
-    case 'TOGGLE_VIDEO': return { ...state, isVideoOff: !state.isVideoOff };
-    case 'TOGGLE_HAND': return { ...state, isHandRaised: !state.isHandRaised };
-    case 'SET_SCREEN_SHARING': return { ...state, isScreenSharing: action.value };
-    case 'SET_SPEAKER_MUTED': return { ...state, isSpeakerMuted: action.value };
-    case 'FORCE_MUTE': return { ...state, isMuted: true };
-    case 'SET_HAND': return { ...state, isHandRaised: action.value };
-    default: return state;
-  }
-}
-
-// ── Role-based permissions ────────────────────────────────────────────────────
-type RoleType = 'host' | 'admin' | 'moderator' | 'member' | 'guest';
-type Permission =
-  | 'kick' | 'ban' | 'transfer_host'
-  | 'toggle_chat' | 'toggle_whiteboard'
-  | 'mute_all' | 'mute_user'
-  | 'manage_polls' | 'lower_hand' | 'manage_roles';
-
-const ROLE_PERMISSIONS: Record<RoleType, Set<Permission>> = {
-  host:      new Set(['kick','ban','transfer_host','toggle_chat','toggle_whiteboard','mute_all','mute_user','manage_polls','lower_hand','manage_roles']),
-  admin:     new Set(['kick','ban','toggle_chat','toggle_whiteboard','mute_all','mute_user','manage_polls','lower_hand','manage_roles']),
-  moderator: new Set(['mute_user','manage_polls','lower_hand','manage_roles']),
-  member:    new Set(),
-  guest:     new Set(),
-};
+// (moved to Room/mediaReducer.ts)
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface HandRaiseEntry { peerId: string; name: string; time: number; }
@@ -248,14 +178,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     toast(next ? 'محدودیت زمان صحبت فعال شد' : 'محدودیت زمان صحبت غیرفعال شد');
   }, [speakingLimitEnabled, room.id]);
 
-  const ROLE_LABELS: Record<RoleType, string> = { host: 'میزبان', admin: 'مدیر', moderator: 'ناظر', member: 'عضو', guest: 'مهمان' };
-  const ROLE_COLORS: Record<RoleType, string> = {
-    host: 'text-amber-400 bg-amber-900/30',
-    admin: 'text-blue-400 bg-blue-900/30',
-    moderator: 'text-purple-400 bg-purple-900/30',
-    member: 'text-gray-400 bg-gray-700/50',
-    guest: 'text-gray-500 bg-gray-800/50',
-  };
+  const ROLE_LABELS_REF = ROLE_LABELS;
+  const ROLE_COLORS_REF = ROLE_COLORS;
 
   // Load pending approvals for host/admin
   useEffect(() => {
@@ -1367,30 +1291,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // Sorted hand raise queue (earliest first)
   const sortedQueue = [...handRaiseQueue].sort((a, b) => a.time - b.time);
 
-  const coreControls = (
-    <>
-      <button onClick={toggleMute} title={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-pressed={isMuted}
-        className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
-        {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-      </button>
-      <button onClick={toggleVideo} title={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-pressed={isVideoOff}
-        className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
-        {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
-      </button>
-      {room.allow_chat && (
-        <button onClick={() => togglePanel('chat')} title="چت"
-          className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'chat' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-          <MessageSquare className="w-5 h-5" />
-          {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>}
-        </button>
-      )}
-      <button onClick={leaveRoom} title="پایان جلسه"
-        className="w-12 h-11 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
-        <PhoneOff className="w-5 h-5" />
-      </button>
-    </>
-  );
-
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className={`flex flex-col bg-gray-950 text-white select-none relative ${isFullscreen ? 'fixed inset-0 z-[9999]' : 'h-full'}`} dir="rtl">
@@ -1414,182 +1314,37 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       <div className="relative z-10 flex flex-col h-full">
 
       {/* Top bar */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-900/95 border-b border-gray-800 flex-shrink-0 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-          <span className="font-bold text-sm truncate max-w-[120px] sm:max-w-xs">{room.name || 'جلسه ویدیویی'}</span>
-          {/* Meeting duration / countdown */}
-          {secondsLeft !== null ? (
-            <span className={`text-xs font-mono flex-shrink-0 flex items-center gap-1 ${
-              secondsLeft <= 300 ? 'text-red-400 animate-pulse' : 'text-amber-400'
-            }`}>
-              ⏱ {secondsLeft > 0 ? fmt(secondsLeft) : 'تمام شد'}
-            </span>
-          ) : (
-            <span className="text-gray-400 text-xs font-mono flex-shrink-0">{fmt(duration)}</span>
-          )}
-          <span className={`hidden sm:flex items-center gap-1 text-xs flex-shrink-0 ${qualityColor[myQuality]}`}>
-            <Activity className="w-3 h-3" />{myQuality}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {onInvite && (
-            <button onClick={onInvite} title="دعوت" className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-700 hover:bg-blue-600 rounded-lg text-xs font-medium transition-colors">
-              <UserPlus className="w-3.5 h-3.5" /><span className="hidden sm:inline">دعوت</span>
-            </button>
-          )}
-          <button onClick={copyCode} title="کپی کد جلسه" className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs font-mono transition-colors">
-            {codeCopied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-            <span className="hidden sm:inline">{room.code}</span>
-          </button>
-          {/* Layout mode toggle — 3 modes */}
-          <div className="hidden sm:flex items-center gap-0.5 bg-gray-800 rounded-lg p-0.5">
-            {([
-              { mode: 'gallery', icon: LayoutGrid, title: 'نمای گالری' },
-              { mode: 'speaker', icon: MonitorPlay, title: 'نمای سخنران' },
-              { mode: 'sidebar', icon: PanelRight, title: 'نمای نوار کناری' },
-            ] as const).map(({ mode, icon: Icon, title }) => (
-              <button
-                key={mode}
-                onClick={() => setLayoutMode(mode)}
-                title={title}
-                aria-pressed={layoutMode === mode}
-                className={`p-1.5 rounded-md transition-colors ${layoutMode === mode ? 'bg-teal-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setIsFullscreen(v => !v)} title="تمام‌صفحه" className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors">
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-          <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 rounded-lg text-xs flex-shrink-0">
-            <Users className="w-3.5 h-3.5 text-teal-400" /><span>{allTiles.length}</span>
-          </div>
-        </div>
-      </div>
+      <TopBar
+        room={room}
+        duration={duration}
+        secondsLeft={secondsLeft}
+        fmt={fmt}
+        myQuality={myQuality}
+        qualityColor={qualityColor}
+        onInvite={onInvite}
+        copyCode={copyCode}
+        codeCopied={codeCopied}
+        layoutMode={layoutMode}
+        setLayoutMode={setLayoutMode}
+        isFullscreen={isFullscreen}
+        setIsFullscreen={setIsFullscreen}
+        participantCount={allTiles.length}
+      />
 
       {/* Main area */}
       <div className="flex flex-1 overflow-hidden min-h-0 relative">
         {/* Video area */}
         <div className="flex-1 flex flex-col overflow-hidden p-2 gap-2 min-w-0 relative">
-          {(() => {
-            // Compute ordered tiles — respect saved drag order, fill in any new peers at the end
-            const rawTiles = allTiles;
-            const orderedTiles = [
-              ...tileOrder.map(id => rawTiles.find(t => t.peerId === id)).filter(Boolean) as typeof rawTiles,
-              ...rawTiles.filter(t => !tileOrder.includes(t.peerId)),
-            ];
-
-            // When someone is screen sharing, elevate their tile to the front
-            // (only when no explicit pin is active and no manual drag order includes them)
-            const screenShareTile = orderedTiles.find(t => t.isScreenSharing);
-            const displayTiles = screenShareTile && !pinnedPeerId
-              ? [screenShareTile, ...orderedTiles.filter(t => t.peerId !== screenShareTile.peerId)]
-              : orderedTiles;
-
-            // DnD handlers
-            const onDragStart = (_peerId: string) => { dragSrcRef.current = _peerId; };
-            const onDragOver = (_e: React.DragEvent, peerId: string) => {
-              _e.preventDefault();
-              _e.dataTransfer.dropEffect = 'move';
-            };
-            const onDrop = (e: React.DragEvent, targetId: string) => {
-              e.preventDefault();
-              const srcId = dragSrcRef.current;
-              if (!srcId || srcId === targetId) return;
-              const ids = orderedTiles.map(t => t.peerId);
-              const si = ids.indexOf(srcId);
-              const ti = ids.indexOf(targetId);
-              if (si === -1 || ti === -1) return;
-              const next = [...ids];
-              next.splice(si, 1);
-              next.splice(ti, 0, srcId);
-              setTileOrder(next);
-              dragSrcRef.current = null;
-            };
-
-            const makeDraggable = (peerId: string) => ({
-              draggable: true,
-              onDragStart: () => onDragStart(peerId),
-              onDragOver: (e: React.DragEvent) => onDragOver(e, peerId),
-              onDrop: (e: React.DragEvent) => onDrop(e, peerId),
-              style: { cursor: 'grab' } as React.CSSProperties,
-            });
-
-            if (pinnedPeerId) {
-              return (
-                <div className="flex flex-col flex-1 gap-2 min-h-0">
-                  <div className="flex-1 min-h-0">
-                    {displayTiles.filter(t => t.peerId === pinnedPeerId).map(t => (
-                      <VideoTile key={t.peerId} {...t} isPinned isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(null)} />
-                    ))}
-                  </div>
-                  <div className="flex gap-2 flex-shrink-0 overflow-x-auto pb-1">
-                    {displayTiles.filter(t => t.peerId !== pinnedPeerId).map(t => (
-                      <div key={t.peerId} className="w-36 sm:w-44 flex-shrink-0 aspect-video" {...makeDraggable(t.peerId)}>
-                        <VideoTile {...t} isPinned={false} isHost={t.isHost} activeReaction={tileReactions.get(t.userId)} onPin={() => setPinnedPeerId(t.peerId)} small />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            }
-
-            // ── Gallery ────────────────────────────────────────────────────────
-            if (layoutMode === 'gallery') {
-              return (
-                <GalleryLayout
-                  tiles={displayTiles}
-                  pinnedPeerId={pinnedPeerId}
-                  tileReactions={tileReactions}
-                  makeDraggable={makeDraggable}
-                  onPin={peerId => setPinnedPeerId(p => p === peerId ? null : peerId)}
-                />
-              );
-            }
-
-            // ── Speaker ────────────────────────────────────────────────────────
-            if (layoutMode === 'speaker') {
-              return (
-                <SpeakerLayout
-                  tiles={displayTiles}
-                  tileReactions={tileReactions}
-                  makeDraggable={makeDraggable}
-                  onPinSpeaker={peerId => setPinnedPeerId(peerId)}
-                  onPromoteThumbnail={peerId => setTileOrder(prev => {
-                    const ids = orderedTiles.map(x => x.peerId);
-                    const si = ids.indexOf(peerId);
-                    if (si <= 0) return prev;
-                    const next = [...ids];
-                    next.splice(si, 1);
-                    next.unshift(peerId);
-                    return next;
-                  })}
-                />
-              );
-            }
-
-            // ── Sidebar ────────────────────────────────────────────────────────
-            return (
-              <SidebarLayout
-                tiles={displayTiles}
-                tileReactions={tileReactions}
-                makeDraggable={makeDraggable}
-                onPinMain={peerId => setPinnedPeerId(p => p === peerId ? null : peerId)}
-                onPromoteSidebar={peerId => setTileOrder(prev => {
-                  const ids = orderedTiles.map(x => x.peerId);
-                  const si = ids.indexOf(peerId);
-                  if (si <= 0) return prev;
-                  const next = [...ids];
-                  next.splice(si, 1);
-                  next.unshift(peerId);
-                  return next;
-                })}
-              />
-            );
-          })()}
-
+          <VideoArea
+            allTiles={allTiles}
+            tileOrder={tileOrder}
+            setTileOrder={setTileOrder}
+            pinnedPeerId={pinnedPeerId}
+            setPinnedPeerId={setPinnedPeerId}
+            layoutMode={layoutMode}
+            tileReactions={tileReactions}
+            dragSrcRef={dragSrcRef}
+          />
         </div>
 
         {/* Side panel */}
@@ -1673,189 +1428,43 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               )}
 
               {sidePanel === 'participants' && (
-                <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
-                  {/* Hand raise queue — host/admin/moderator only */}
-                  {checkPermission('lower_hand') && sortedQueue.length > 0 && (
-                    <div className="p-2 bg-yellow-900/20 rounded-xl border border-yellow-700/40">
-                      <p className="text-xs font-semibold text-yellow-400 flex items-center gap-1.5 mb-1.5">
-                        <Hand className="w-3 h-3" />صف دست‌بالاها ({sortedQueue.length})
-                      </p>
-                      {sortedQueue.map((entry, i) => (
-                        <div key={entry.peerId} className="flex items-center gap-2 py-1">
-                          <span className="w-4 h-4 rounded-full bg-yellow-600/40 text-yellow-300 text-[10px] flex items-center justify-center font-bold flex-shrink-0">{i + 1}</span>
-                          <span className="text-sm text-gray-200 flex-1 truncate">{entry.name}</span>
-                          <span className="text-xs text-gray-500 flex-shrink-0">{Math.round((Date.now() - entry.time) / 1000)}ث پیش</span>
-                          <button onClick={() => lowerHand(entry.peerId)}
-                            title="پایین آوردن دست"
-                            aria-label={`پایین آوردن دست ${entry.name}`}
-                            className="p-1 rounded-lg bg-yellow-900/40 hover:bg-yellow-900/70 text-yellow-400 transition-colors flex-shrink-0">
-                            <Hand className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Pending approvals — host/admin only */}
-                  <PendingApprovalsList
-                    approvals={pendingApprovals}
-                    onApprove={approveUser}
-                    onReject={rejectUser}
-                  />
-
-                  {/* Host tools */}
-                  {(checkPermission('mute_all') || checkPermission('kick') || checkPermission('ban')) && (
-                    <div className="p-2 bg-gray-800/60 rounded-xl space-y-1.5 border border-gray-700">
-                      <p className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
-                        <Crown className="w-3 h-3" />ابزار مدیریت
-                      </p>
-                      {checkPermission('mute_all') && peers.size > 0 && (
-                        <button onClick={muteAll}
-                          className="w-full flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-amber-900/40 text-gray-200 hover:text-amber-300 rounded-lg text-xs transition-colors">
-                          <Mic2 className="w-3.5 h-3.5" />قطع میکروفون همه
-                        </button>
-                      )}
-                      {checkPermission('ban') && (
-                        <button onClick={() => setShowBanList(v => !v)}
-                          className="w-full flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-red-900/30 text-gray-200 hover:text-red-300 rounded-lg text-xs transition-colors">
-                          <ShieldOff className="w-3.5 h-3.5" />
-                          {showBanList ? 'بستن لیست مسدودشدگان' : 'لیست مسدودشدگان'}
-                        </button>
-                      )}
-                      {showBanList && <BanList roomId={room.id} />}
-                    </div>
-                  )}
-
-                  {/* Participant list */}
-                  {(() => {
-                    const roleMap = new Map(participants.map(p => [p.user_id, p.role as RoleType]));
-                    return allTiles.map(t => {
-                    const dbRole = t.isLocal ? myRole : (roleMap.get(t.userId) || 'member');
-                    const effectiveRole: RoleType = t.isHost ? 'host' : dbRole;
-                    const assignableRoles: RoleType[] = effectiveRole === 'host' ? [] :
-                      (checkPermission('manage_roles') ? (['admin','moderator','member','guest'] as RoleType[]).filter(r => r !== effectiveRole) : []);
-                    return (
-                    <div key={t.peerId} className="flex items-center gap-2 p-2 bg-gray-800 rounded-xl group relative">
-                      <div className="w-8 h-8 rounded-full bg-teal-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                        {t.displayName[0]?.toUpperCase() || '?'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{t.isLocal ? `${t.displayName} (شما)` : t.displayName}</p>
-                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                          <QualityDot quality={t.networkQuality} />
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${ROLE_COLORS[effectiveRole]}`}>
-                            {effectiveRole === 'host' && <Crown className="w-2.5 h-2.5 inline mr-0.5" />}
-                            {ROLE_LABELS[effectiveRole]}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {t.isMuted && <MicOff className="w-3 h-3 text-red-400" />}
-                        {t.isVideoOff && <VideoOff className="w-3 h-3 text-red-400" />}
-                        {t.isHandRaised && <Hand className="w-3.5 h-3.5 text-yellow-400 animate-bounce" />}
-                        {/* Host lower hand */}
-                        {checkPermission('lower_hand') && !t.isLocal && t.isHandRaised && (
-                          <button onClick={() => lowerHand(t.peerId)}
-                            title="پایین آوردن دست"
-                            className="p-1 rounded-lg hover:bg-yellow-900/40 text-yellow-500 hover:text-yellow-300 transition-colors">
-                            <Hand className="w-3 h-3" />
-                          </button>
-                        )}
-                        {/* Role change */}
-                        {assignableRoles.length > 0 && !t.isLocal && !t.isHost && (
-                          <div className="relative">
-                            <button
-                              onClick={() => setRoleDropdown(d => d === t.peerId ? null : t.peerId)}
-                              title="تغییر نقش"
-                              className="p-1 rounded-lg hover:bg-blue-900/40 text-gray-600 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100">
-                              <ShieldCheck className="w-3.5 h-3.5" />
-                            </button>
-                            {roleDropdown === t.peerId && (
-                              <div className="absolute left-0 top-6 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 py-1 min-w-[100px]" onMouseDown={e => e.stopPropagation()}>
-                                {assignableRoles.map(r => (
-                                  <button key={r} onClick={() => changeRole(t.peerId, t.userId, t.displayName, r)}
-                                    className={`w-full text-right px-3 py-1.5 text-xs hover:bg-gray-800 transition-colors ${ROLE_COLORS[r]}`}>
-                                    {ROLE_LABELS[r]}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {/* Transfer host */}
-                        {checkPermission('transfer_host') && !t.isLocal && !t.isHost && (
-                          <button onClick={() => transferHost(t.peerId, t.userId, t.displayName)}
-                            title="انتقال میزبانی"
-                            aria-label={`انتقال میزبانی به ${t.displayName}`}
-                            className="p-1 rounded-lg bg-transparent hover:bg-amber-900/40 text-gray-600 hover:text-amber-400 transition-colors opacity-0 group-hover:opacity-100">
-                            <ArrowRightLeft className="w-3 h-3" />
-                          </button>
-                        )}
-                        {/* Kick */}
-                        {checkPermission('kick') && !t.isLocal && !t.isHost && (
-                          <button onClick={() => { setKickConfirm({ peerId: t.peerId, userId: t.userId, displayName: t.displayName }); setPendingBan(null); setBanReason(''); }}
-                            title="خارج کردن از جلسه"
-                            className="p-1 rounded-lg bg-red-900/0 hover:bg-red-900/40 text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
-                            <UserX className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {/* Per-user speaking limit */}
-                        {checkPermission('mute_all') && speakingLimitEnabled && !t.isLocal && !t.isHost && (
-                          <div className="relative">
-                            <button
-                              onClick={() => {
-                                setLimitEditor(d => d === t.peerId ? null : t.peerId);
-                                setLimitInputs(prev => ({ ...prev, [t.peerId]: prev[t.peerId] ?? '60' }));
-                              }}
-                              title="تنظیم محدودیت زمان صحبت"
-                              className="p-1 rounded-lg hover:bg-teal-900/40 text-gray-600 hover:text-teal-400 transition-colors opacity-0 group-hover:opacity-100">
-                              <Clock className="w-3.5 h-3.5" />
-                            </button>
-                            {limitEditor === t.peerId && (
-                              <div className="absolute left-0 top-7 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-2 w-40" onMouseDown={e => e.stopPropagation()}>
-                                <p className="text-[10px] text-gray-400 mb-1.5">محدودیت صحبت (ثانیه)</p>
-                                <div className="flex gap-1">
-                                  <input
-                                    type="number"
-                                    min={10}
-                                    max={600}
-                                    value={limitInputs[t.peerId] ?? '60'}
-                                    onChange={e => setLimitInputs(prev => ({ ...prev, [t.peerId]: e.target.value }))}
-                                    className="flex-1 bg-gray-800 text-white text-xs rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-teal-600 w-0"
-                                  />
-                                  <button
-                                    onClick={() => {
-                                      const secs = Math.max(10, Math.min(600, Number(limitInputs[t.peerId]) || 60));
-                                      sendSignalRef.current(t.peerId, 'speaking_limit_change', { targetUserId: t.userId, limitSecs: secs });
-                                      setLimitEditor(null);
-                                      toast.success(`محدودیت صحبت ${t.displayName}: ${secs}ث`);
-                                    }}
-                                    className="px-2 py-1 bg-teal-600 hover:bg-teal-500 rounded-lg text-xs text-white transition-colors flex-shrink-0"
-                                  >
-                                    ثبت
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {/* Pin */}
-                        {!t.isLocal && (
-                          <button onClick={() => setPinnedPeerId(p => p === t.peerId ? null : t.peerId)}
-                            title="پین کردن"
-                            className={`p-1 rounded-lg transition-colors opacity-0 group-hover:opacity-100 ${pinnedPeerId === t.peerId ? 'text-teal-400 bg-teal-900/40 opacity-100' : 'text-gray-600 hover:text-teal-400 hover:bg-teal-900/20'}`}>
-                            <Pin className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    );
-                  });
-                  })()}
-                  {participants.length > allTiles.length && (
-                    <p className="text-xs text-gray-500 text-center py-1">{participants.length} نفر در جلسه</p>
-                  )}
-                </div>
+                <ParticipantsPanel
+                  allTiles={allTiles}
+                  participants={participants}
+                  myRole={myRole}
+                  isHost={isHost}
+                  hostId={hostId}
+                  myPeerId={myPeerId}
+                  currentUserId={currentUserId}
+                  currentUserName={currentUserName}
+                  pinnedPeerId={pinnedPeerId}
+                  setPinnedPeerId={setPinnedPeerId}
+                  sortedQueue={sortedQueue}
+                  pendingApprovals={pendingApprovals}
+                  onApprove={approveUser}
+                  onReject={rejectUser}
+                  peersSize={peers.size}
+                  showBanList={showBanList}
+                  setShowBanList={setShowBanList}
+                  checkPermission={checkPermission}
+                  muteAll={muteAll}
+                  lowerHand={lowerHand}
+                  changeRole={changeRole}
+                  transferHost={transferHost}
+                  setKickConfirm={setKickConfirm}
+                  setPendingBan={setPendingBan}
+                  setBanReason={setBanReason}
+                  roleDropdown={roleDropdown}
+                  setRoleDropdown={setRoleDropdown}
+                  limitEditor={limitEditor}
+                  setLimitEditor={setLimitEditor}
+                  limitInputs={limitInputs}
+                  setLimitInputs={setLimitInputs}
+                  sendSignalRef={sendSignalRef}
+                  speakingLimitEnabled={speakingLimitEnabled}
+                  tileReactions={tileReactions}
+                  roomId={room.id}
+                />
               )}
 
               {sidePanel === 'polls' && <PollPanel roomId={room.id} userId={currentUserId} isHost={checkPermission('manage_polls')} />}
