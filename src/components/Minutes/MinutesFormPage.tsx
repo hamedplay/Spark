@@ -172,7 +172,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_external_participants').select('id, full_name, organization, position, mobile, email, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
-          supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update').eq('minute_id', targetId).order('created_at', { ascending: true }),
+          supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
         ]);
         if (ipRes.data) {
           const rows = ipRes.data as unknown as Record<string, unknown>[];
@@ -232,6 +232,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             dueDate: (r.due_date as string) || '',
             requiresFollowup: (r.requires_followup as boolean) ?? true,
             latestUpdate: (r.latest_update as string) || '',
+            discussionResult: (r.discussion_result as string) || '',
+            resultType: (r.result_type as AgendaResultType) || 'discussion',
+            additionalNotes: (r.additional_notes as string) || '',
           })) : [defaultDecision()]);
         }
       } catch (err) {
@@ -448,6 +451,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         due_date: d.dueDate || null,
         requires_followup: d.requiresFollowup,
         latest_update: d.latestUpdate || null,
+        discussion_result: d.discussionResult || null,
+        result_type: d.resultType || null,
+        additional_notes: d.additionalNotes || null,
       })),
     };
 
@@ -476,6 +482,29 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         if (data && data.success === true) {
           const newId = data.minute_id;
           if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', newId);
+          // Sync decisions via dedicated RPC
+          const decisionsPayload = decisions.map((d) => ({
+            id: d.decisionId || null,
+            agenda_result_id: d.agendaResultId || null,
+            title: d.title.trim(),
+            description: d.description || null,
+            primary_owner_user_id: d.primaryOwnerUserId,
+            responsible_unit_id: d.responsibleUnitId || null,
+            responsible_unit_name_snapshot: d.responsibleUnitNameSnapshot || null,
+            priority: d.priority,
+            start_date: d.startDate || null,
+            due_date: d.dueDate || null,
+            requires_followup: d.requiresFollowup,
+            latest_update: d.latestUpdate || null,
+            discussion_result: d.discussionResult || null,
+            result_type: d.resultType || null,
+            additional_notes: d.additionalNotes || null,
+          }));
+          const { error: syncErr } = await supabase.rpc('_sync_minutes_decisions', {
+            p_minute_id: newId,
+            p_decisions: decisionsPayload,
+          });
+          if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
           toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
           setMinuteIdInUrl(newId);
           setMinutesPageInUrl('minutes-detail');
@@ -516,6 +545,29 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         }
         if (data && data.success === true) {
           if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, data.updated_at);
+          // Sync decisions via dedicated RPC
+          const decisionsPayload = decisions.map((d) => ({
+            id: d.decisionId || null,
+            agenda_result_id: d.agendaResultId || null,
+            title: d.title.trim(),
+            description: d.description || null,
+            primary_owner_user_id: d.primaryOwnerUserId,
+            responsible_unit_id: d.responsibleUnitId || null,
+            responsible_unit_name_snapshot: d.responsibleUnitNameSnapshot || null,
+            priority: d.priority,
+            start_date: d.startDate || null,
+            due_date: d.dueDate || null,
+            requires_followup: d.requiresFollowup,
+            latest_update: d.latestUpdate || null,
+            discussion_result: d.discussionResult || null,
+            result_type: d.resultType || null,
+            additional_notes: d.additionalNotes || null,
+          }));
+          const { error: syncErr } = await supabase.rpc('_sync_minutes_decisions', {
+            p_minute_id: editMinuteId,
+            p_decisions: decisionsPayload,
+          });
+          if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
           toast.success('پیش‌نویس صورت‌جلسه با موفقیت به‌روزرسانی شد.');
           setMinuteIdInUrl(data.minute_id);
           setMinutesPageInUrl('minutes-detail');
@@ -752,6 +804,13 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             {activeSection === 3 && (
               <SectionDecisions
                 decisions={decisions}
+                setDecisions={setDecisions}
+                profiles={profiles}
+                profilesLoading={profilesLoading}
+                orgUnits={orgUnits}
+                orgUnitsLoading={orgUnitsLoading}
+                agendaItems={agendaItems}
+                readOnly={isReadOnly}
                 setDecisions={setDecisions}
                 profiles={profiles}
                 profilesLoading={profilesLoading}

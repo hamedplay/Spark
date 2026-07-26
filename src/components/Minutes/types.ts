@@ -186,6 +186,9 @@ export interface DecisionRow {
   created_by_user_id: string;
   created_at: string;
   updated_at: string;
+  discussion_result: string | null;
+  result_type: AgendaResultType | null;
+  additional_notes: string | null;
 }
 
 // Row returned by get_my_minutes_decisions RPC (decision fields + minute metadata)
@@ -212,7 +215,7 @@ export interface DecisionUpdateRow {
   created_by_name?: string;
 }
 
-// Payload shape accepted by _minutes_decisions_sync (via create/update_minutes_draft)
+// Payload shape accepted by _sync_minutes_decisions RPC
 export interface DecisionDraftPayload {
   id?: string | null;
   agenda_result_id?: string | null;
@@ -226,6 +229,9 @@ export interface DecisionDraftPayload {
   due_date?: string | null;
   requires_followup?: boolean;
   latest_update?: string | null;
+  discussion_result?: string | null;
+  result_type?: AgendaResultType | null;
+  additional_notes?: string | null;
 }
 
 // Result of update_decision_progress RPC

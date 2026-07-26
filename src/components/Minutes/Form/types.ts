@@ -111,6 +111,9 @@ export interface DraftDecision {
   dueDate: string;
   requiresFollowup: boolean;
   latestUpdate: string;
+  discussionResult: string;
+  resultType: AgendaResultType;
+  additionalNotes: string;
 }
 
 export interface DraftApprover {

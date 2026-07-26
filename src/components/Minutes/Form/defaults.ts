@@ -77,6 +77,9 @@ export const defaultDecision = (): DraftDecision => ({
   dueDate: '',
   requiresFollowup: true,
   latestUpdate: '',
+  discussionResult: '',
+  resultType: 'discussion',
+  additionalNotes: '',
 });
 
 export const defaultApprover = (order: number): DraftApprover => ({
