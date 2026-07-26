@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react';
 import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History } from 'lucide-react';
 import toast from 'react-hot-toast';
-import {
-  EmptyState, TableSkeleton,
-} from './MinutesShared';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMinutesTabFromUrl, setMinutesTabInUrl, type MinutesDetailTab } from '../../lib/minutesNavigation';
-import {
-  validateAttachment, MAX_ATTACHMENT_BYTES, type AttachmentRow,
-} from '../../lib/minutesAttachments';
-import type { MinutesStatus, DecisionRow, DecisionUpdateRow } from './types';
+import type { DecisionRow } from './types';
 import { MinutesPrintView } from './MinutesPrintView';
+import { FALLBACK_LOGO } from './MinutesDocumentData';
 import './minutes-print.css';
 import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow, AgendaResultRow, ApprovalRow, ApprovalCommentRow } from './Detail/types';
 import { DetailLoadingView, DetailErrorView, DetailNotFoundView } from './Detail/DetailViews';
@@ -56,6 +51,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [printOwnerNames, setPrintOwnerNames] = useState<Record<string, string>>({});
   const [printLoading, setPrintLoading] = useState(false);
   const [printReady, setPrintReady] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!printReady) return;
@@ -65,6 +61,23 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     });
     return () => cancelAnimationFrame(id);
   }, [printReady]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('system_config')
+          .select('value')
+          .eq('section', 'appearance')
+          .eq('key', 'logo_url')
+          .maybeSingle();
+        if (error) throw error;
+        setLogoUrl(data?.value || FALLBACK_LOGO);
+      } catch {
+        setLogoUrl(FALLBACK_LOGO);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -222,7 +235,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     };
     window.addEventListener('minutes-refresh', handler);
     return () => window.removeEventListener('minutes-refresh', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minuteId]);
 
   const handleApprove = async () => {
@@ -444,6 +456,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
         approvalComments={approvalComments}
         decisions={printDecisions}
         ownerNames={printOwnerNames}
+        logoUrl={logoUrl}
       />
     </div>
   );

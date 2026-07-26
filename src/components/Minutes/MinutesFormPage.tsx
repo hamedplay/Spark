@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl } from '../../lib/minutesNavigation';
 import { loadMinutesPrefill } from '../../lib/minutesPrefill';
 import { checkSystemApproverEligibility } from '../../lib/minutesApprovalEligibility';
+import { FALLBACK_LOGO } from './MinutesDocumentData';
 import { PageHeader, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -98,6 +99,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [agendaItems, setAgendaItems] = useState<DraftAgendaItem[]>([defaultAgendaItem(1)]);
   const [decisions, setDecisions] = useState<DraftDecision[]>([defaultDecision()]);
   const [finalization, setFinalization] = useState<DraftFinalization>(defaultFinalization);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   // Fetched reference data
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
@@ -339,6 +341,25 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         setOrgUnitsError(err instanceof Error ? err.message : 'خطا در بارگذاری واحدها');
       } finally {
         setOrgUnitsLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── Fetch portal logo from system_config ────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('system_config')
+          .select('value')
+          .eq('section', 'appearance')
+          .eq('key', 'logo_url')
+          .maybeSingle();
+        if (error) throw error;
+        if (data?.value) setLogoUrl(data.value);
+        else setLogoUrl(FALLBACK_LOGO);
+      } catch {
+        setLogoUrl(FALLBACK_LOGO);
       }
     })();
   }, []);
@@ -828,7 +849,18 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               />
             )}
             {activeSection === 6 && (
-              <SectionFinal finalization={finalization} setFinalization={setFinalization} />
+              <SectionFinal
+                finalization={finalization}
+                setFinalization={setFinalization}
+                info={info}
+                internalParticipants={internalParticipants}
+                externalParticipants={externalParticipants}
+                agendaItems={agendaItems}
+                decisions={decisions}
+                profiles={profiles}
+                orgUnits={orgUnits}
+                logoUrl={logoUrl}
+              />
             )}
           </div>
 
