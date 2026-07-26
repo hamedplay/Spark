@@ -9,15 +9,18 @@ import {
   computeObserverDiff,
   computeExternalDiff,
   buildMeetingNotificationPlan,
-  FIELD_LABELS,
   normalizeExternalName,
 } from '../lib/meetingEditDiff';
 import type { MeetingChangeSet, ParticipantDiff, ObserverDiff, ExternalDiff, NotificationPlan } from '../lib/meetingEditDiff';
-import { CirclePlus as PlusCircle, Loader as Loader2, UserPlus, Bell, Repeat, MessageSquare, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, X, Plus, Users, Video, BookUser, Save, CreditCard as Edit2, Building2, ChevronDown, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
+import { UserPlus, Bell, Repeat, MessageSquare, UserCheck, Clock, Calendar, ChevronLeft, ChevronRight, X, Plus, Users, Video, BookUser, Save, CreditCard as Edit2, ClipboardList, Pencil, Trash2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import { ContactEmail, AgendaItem } from '../types';
 import { useOrgUsers, FALLBACK_NAME, LOADING_NAME } from '../lib/useOrgUsers';
+import { MultiSelectField } from './CalendarMeetingForm/MultiSelectField';
+import { FormHeader } from './CalendarMeetingForm/FormHeader';
+import { FormFooter } from './CalendarMeetingForm/FormFooter';
+import { EditDecisionModal } from './CalendarMeetingForm/EditDecisionModal';
 
 interface ExternalSmsResult {
   ok: boolean;
@@ -129,7 +132,7 @@ interface CalendarEntry {
   is_personal_public?: boolean;
 }
 
-type CommitSnapshot = {
+export type CommitSnapshot = {
   operationId: string;
   updateRecord: Record<string, any>;
   baseFields: Record<string, any> | null;
@@ -191,166 +194,6 @@ interface CalendarMeetingFormProps {
 
 const JALAALI_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const JALAALI_WEEKDAYS = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنج‌شنبه','جمعه'];
-
-// Multi-select input that shows selected items as tags inside the input box
-function MultiSelectField({
-  label, icon, placeholder, options, groups, selected, onAdd, onRemove, tagColor,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  placeholder: string;
-  options: { id: string; name: string; sub?: string }[];
-  groups?: { label: string; options: { id: string; name: string; sub?: string }[] }[];
-  selected: { id: string; name: string }[];
-  onAdd: (item: { id: string; name: string }) => void;
-  onRemove: (id: string) => void;
-  tagColor: string;
-}) {
-  const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
-  const ref = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  // expand all groups by default when opened
-  useEffect(() => {
-    if (open && groups && expandedUnits.size === 0) {
-      setExpandedUnits(new Set(groups.map(g => g.label)));
-    }
-  }, [open, groups]);
-
-  const allOptions = groups ? groups.flatMap(g => g.options) : options;
-
-  const isSelected = (id: string) => !!selected.find(s => s.id === id);
-
-  const filtered = allOptions.filter(o =>
-    !isSelected(o.id) &&
-    (o.name.toLowerCase().includes(query.toLowerCase()) || (o.sub || '').toLowerCase().includes(query.toLowerCase()))
-  );
-
-  useEffect(() => { setHighlightedIndex(0); }, [query, open]);
-
-  const toggleUnit = (label: string) => setExpandedUnits(prev => {
-    const next = new Set(prev);
-    next.has(label) ? next.delete(label) : next.add(label);
-    return next;
-  });
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (open && filtered.length > 0) {
-        const item = filtered[highlightedIndex] || filtered[0];
-        onAdd({ id: item.id, name: item.name });
-        setQuery('');
-        setHighlightedIndex(0);
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setOpen(true);
-      setHighlightedIndex(i => Math.min(i + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Escape') {
-      setOpen(false);
-    }
-  };
-
-  const renderDropdown = () => {
-    if (query || !groups) {
-      // flat filtered list
-      if (filtered.length === 0) return <div className="p-3 text-sm text-gray-400">کاربری یافت نشد</div>;
-      return filtered.slice(0, 8).map((o, idx) => (
-        <button key={o.id} type="button"
-          onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); }}
-          className={`w-full text-right px-3 py-2 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0 ${idx === highlightedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-600'}`}>
-          <span>{o.name}</span>
-          {o.sub && <span className="text-xs text-gray-400 truncate max-w-[120px]">{o.sub}</span>}
-        </button>
-      ));
-    }
-
-    // grouped display — highlight uses flat filtered index
-    let flatIdx = 0;
-    return groups.map(g => {
-      const groupOptions = g.options.filter(o => !isSelected(o.id));
-      if (groupOptions.length === 0) return null;
-      const expanded = expandedUnits.has(g.label);
-      return (
-        <div key={g.label}>
-          <button type="button" onClick={() => toggleUnit(g.label)}
-            className="w-full flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-600/60 text-right hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors sticky top-0 z-10">
-            <Building2 className="w-3 h-3 text-blue-400 flex-shrink-0" />
-            <span className="flex-1 text-xs font-semibold text-gray-500 dark:text-gray-300 truncate">{g.label}</span>
-            <span className="text-xs text-gray-400">{groupOptions.length}</span>
-            {expanded ? <ChevronDown className="w-3 h-3 text-gray-400" /> : <ChevronRight className="w-3 h-3 text-gray-400" />}
-          </button>
-          {expanded && groupOptions.map(o => {
-            const currentIdx = flatIdx++;
-            return (
-              <button key={o.id} type="button"
-                onClick={() => { onAdd({ id: o.id, name: o.name }); setQuery(''); }}
-                className={`w-full text-right px-4 py-2 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0 pr-6 ${currentIdx === highlightedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-600'}`}>
-                <span>{o.name}</span>
-                {o.sub && <span className="text-xs text-gray-400 truncate max-w-[120px]">{o.sub}</span>}
-              </button>
-            );
-          })}
-        </div>
-      );
-    });
-  };
-
-  const hasItems = query ? filtered.length > 0 : (groups ? groups.some(g => g.options.some(o => !isSelected(o.id))) : filtered.length > 0);
-
-  return (
-    <div ref={ref}>
-      <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-        {icon}{label}
-      </label>
-      <div
-        className="flex flex-wrap gap-1.5 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 cursor-text min-h-[42px]"
-        onClick={() => { setOpen(true); inputRef.current?.focus(); }}
-      >
-        {selected.map(s => (
-          <span key={s.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${tagColor}`}>
-            {s.name}
-            <button type="button" onClick={e => { e.stopPropagation(); onRemove(s.id); }} className="hover:opacity-70">
-              <X className="w-3 h-3" />
-            </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={handleKeyDown}
-          placeholder={selected.length === 0 ? placeholder : ''}
-          className="flex-1 min-w-[120px] outline-none bg-transparent text-sm dark:text-white placeholder-gray-400"
-        />
-      </div>
-      {open && hasItems && (
-        <div className="relative z-20">
-          <div className="absolute w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-52 overflow-y-auto">
-            {renderDropdown()}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendars = [] }: CalendarMeetingFormProps) {
   const [loading, setLoading] = useState(false);
@@ -1428,13 +1271,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full" dir="rtl">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 bg-teal-600">
-        <h2 className="text-base font-bold text-white">تنظیم جلسه در تقویم</h2>
-        <button type="button" onClick={onCancel} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30">
-          <X className="w-5 h-5 text-white" />
-        </button>
-      </div>
+      <FormHeader onClose={onCancel} />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
         {/* Calendar selector */}
@@ -2031,88 +1868,17 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="flex gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
-        <button type="submit" disabled={loading || orgUsersLoading || committing || !!editDecision}
-          className="flex-1 flex items-center justify-center gap-2 bg-teal-600 text-white py-2.5 rounded-xl hover:bg-teal-700 disabled:opacity-50 font-medium text-sm transition-colors">
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
-          ثبت نهایی جلسه
-        </button>
-        <button type="button" onClick={onCancel}
-          className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors">
-          انصراف
-        </button>
-      </div>
+      <FormFooter loading={loading} orgUsersLoading={orgUsersLoading} committing={committing} editDecision={editDecision} onCancel={onCancel} />
 
-      {/* Edit notification decision modal */}
       {editDecision && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" dir="rtl">
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-2xl overflow-hidden">
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20">
-              <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
-                <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-gray-800 dark:text-white">ثبت تغییرات جلسه</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">تغییراتی در اطلاعات یا اعضای جلسه ایجاد شده است. نحوه ثبت تغییرات را انتخاب کنید.</p>
-              </div>
-            </div>
-            <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
-              {editDecision.changeSet.importantFields.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">تغییرات مهم</p>
-                  <ul className="text-xs text-gray-700 dark:text-gray-300 list-disc pr-4 space-y-0.5">
-                    {editDecision.changeSet.importantFields.map(f => <li key={f}>{FIELD_LABELS[f] || f}</li>)}
-                  </ul>
-                </div>
-              )}
-              {editDecision.changeSet.minorFields.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">تغییرات جزئی</p>
-                  <ul className="text-xs text-gray-700 dark:text-gray-300 list-disc pr-4 space-y-0.5">
-                    {editDecision.changeSet.minorFields.map(f => <li key={f}>{FIELD_LABELS[f] || f}</li>)}
-                  </ul>
-                </div>
-              )}
-              {editDecision.changeSet.participantChanged && (
-                <p className="text-xs text-blue-600 dark:text-blue-400">تغییر در فهرست شرکت‌کنندگان</p>
-              )}
-              {editDecision.changeSet.notifyUsersChanged && (
-                <p className="text-xs text-blue-600 dark:text-blue-400">تغییر در فهرست مطلعین</p>
-              )}
-              {editDecision.changeSet.externalChanged && (
-                <p className="text-xs text-blue-600 dark:text-blue-400">تغییر در فهرست شرکت‌کنندگان خارجی</p>
-              )}
-              <p className="text-xs text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-100 dark:border-gray-700">
-                در حالت ثبت با اطلاع‌رسانی، افراد اضافه‌شده دعوت‌نامه، افراد حذف‌شده پیام لغو دعوت و اعضای باقی‌مانده در صورت تغییر اطلاعات جلسه پیام تغییر دریافت می‌کنند. در حالت ثبت بدون اطلاع‌رسانی، تغییرات فقط در سامانه ذخیره می‌شوند و هیچ پیامی ارسال نخواهد شد.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-700">
-              <button
-                onClick={() => commitEdit(editDecision.snapshot, true)}
-                disabled={committing}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 bg-teal-600 text-white hover:bg-teal-700"
-              >
-                {committing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-                ثبت تغییرات با اطلاع‌رسانی
-              </button>
-              <button
-                onClick={() => commitEdit(editDecision.snapshot, false)}
-                disabled={committing}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-              >
-                ثبت تغییرات بدون اطلاع‌رسانی
-              </button>
-              <button
-                onClick={() => setEditDecision(null)}
-                disabled={committing}
-                className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-              >
-                بازگشت به ویرایش
-              </button>
-            </div>
-          </div>
-        </div>
+        <EditDecisionModal
+          changeSet={editDecision.changeSet}
+          snapshot={editDecision.snapshot}
+          committing={committing}
+          onCommitWithNotify={commitEdit}
+          onCommitWithoutNotify={commitEdit}
+          onCancel={() => setEditDecision(null)}
+        />
       )}
     </form>
   );

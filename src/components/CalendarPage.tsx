@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { usePermissions } from '../context/PermissionsContext';
-import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin, RefreshCw, ChevronDown, X, Plus, Users, Search, PanelRight, Trash2, RotateCcw, CalendarPlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin, RefreshCw, ChevronDown, X, Plus, Users, Search, PanelRight, CalendarPlus } from 'lucide-react';
 import { CalendarViews } from './Calendar/CalendarViews';
 import { supabase } from '../lib/supabase';
 import { insertNotification as insertNotificationFromTemplate } from '../lib/notifications';
@@ -24,6 +24,10 @@ import { MeetingDetailModal } from './Calendar/MeetingDetailModal';
 import { CreateEditCalendarModal } from './Calendar/CreateEditCalendarModal';
 import { SubscriptionsModal } from './Calendar/SubscriptionsModal';
 import { CalendarListModal } from './Calendar/CalendarListModal';
+import { ReminderAlertModal } from './Calendar/ReminderAlertModal';
+import { DeleteMeetingDialog } from './Calendar/DeleteMeetingDialog';
+import { MoveConfirmDialog } from './Calendar/MoveConfirmDialog';
+import { ResizeConfirmDialog } from './Calendar/ResizeConfirmDialog';
 
 type ViewMode = 'month' | 'week' | 'day' | 'list-week' | 'list-month';
 
@@ -1510,40 +1514,7 @@ export function CalendarPage({
     <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
 
       {/* Reminder alert */}
-      {reminderAlert && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" dir="rtl">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setReminderAlert(null)} />
-          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-bounce-in">
-            <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                <Clock className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-sm">یادآوری جلسه</p>
-                <p className="text-white/80 text-xs mt-0.5">
-                  {reminderAlert.minutesBefore >= 60
-                    ? `${reminderAlert.minutesBefore / 60} ساعت دیگر`
-                    : `${reminderAlert.minutesBefore} دقیقه دیگر`}
-                </p>
-              </div>
-            </div>
-            <div className="p-5">
-              <p className="font-semibold text-gray-900 dark:text-white text-base">{reminderAlert.meeting.subject}</p>
-              <div className="mt-2 space-y-1 text-sm text-gray-500 dark:text-gray-400">
-                {reminderAlert.meeting.start_time && (
-                  <p className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{reminderAlert.meeting.start_time}{reminderAlert.meeting.end_time ? ` - ${reminderAlert.meeting.end_time}` : ''}</p>
-                )}
-                {reminderAlert.meeting.location && (
-                  <p className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{reminderAlert.meeting.location}</p>
-                )}
-              </div>
-              <button onClick={() => setReminderAlert(null)} className="mt-4 w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors">
-                باشه، متوجه شدم
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ReminderAlertModal reminderAlert={reminderAlert} onDismiss={() => setReminderAlert(null)} />
 
       {/* Meeting form */}
       {showMeetingForm && (
@@ -1647,59 +1618,13 @@ export function CalendarPage({
         const meeting = meetings.find(x => x.id === deleteMeetingDialog.id);
         const isOwner = meeting?.user_id === currentUserId;
         return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" dir="rtl">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setDeleteMeetingDialog(null)} />
-            <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-              <div className="bg-red-600 px-5 py-4">
-                <h3 className="text-white font-bold text-base">حذف جلسه</h3>
-                {meeting && <p className="text-red-100 text-xs mt-1 truncate">«{meeting.subject}»</p>}
-              </div>
-              <div className="p-5 space-y-3">
-                {isOwner ? (
-                  <>
-                    <button
-                      onClick={() => handleDeleteMeetingConfirm('revert')}
-                      className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group"
-                    >
-                      <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 transition-colors">
-                        <RotateCcw className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:text-white" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white text-sm">حذف و برگشت به درخواست جلسه</p>
-                        <p className="text-xs text-gray-400 mt-0.5">جلسه حذف می‌شود و یک درخواست جلسه جدید با همان اطلاعات ایجاد می‌گردد</p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteMeetingConfirm('full')}
-                      className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group"
-                    >
-                      <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
-                        <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white text-sm">حذف کامل برای همه</p>
-                        <p className="text-xs text-gray-400 mt-0.5">جلسه به طور کامل حذف می‌شود و هیچ رکوردی باقی نمی‌ماند</p>
-                      </div>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => handleDeleteMeetingConfirm('full')}
-                    className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-right group"
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-red-500 transition-colors">
-                      <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-800 dark:text-white text-sm">حذف از تقویم من</p>
-                      <p className="text-xs text-gray-400 mt-0.5">جلسه فقط از تقویم شما حذف می‌شود</p>
-                    </div>
-                  </button>
-                )}
-                <button onClick={() => setDeleteMeetingDialog(null)} className="w-full py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">انصراف</button>
-              </div>
-            </div>
-          </div>
+          <DeleteMeetingDialog
+            meeting={meeting}
+            isOwner={isOwner}
+            onConfirmRevert={() => handleDeleteMeetingConfirm('revert')}
+            onConfirmFull={() => handleDeleteMeetingConfirm('full')}
+            onClose={() => setDeleteMeetingDialog(null)}
+          />
         );
       })()}
 
@@ -2175,86 +2100,10 @@ export function CalendarPage({
       )}
 
       {/* Move confirmation dialog */}
-      {pendingMove && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" dir="rtl">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 mx-4 w-full max-w-sm">
-            <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">تأیید جابجایی جلسه</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">آیا از جابجایی این جلسه اطمینان دارید؟</p>
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
-              <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingMove.meeting.subject}</p>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
-                <span className="text-gray-600 dark:text-gray-300">
-                  {(() => { const d = new Date(pendingMove.oldDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
-                  {' — '}
-                  <span dir="ltr">{pendingMove.meeting.start_time} تا {pendingMove.meeting.end_time}</span>
-                </span>
-              </div>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
-                <span className="text-teal-600 dark:text-teal-400 font-medium">
-                  {(() => { const d = new Date(pendingMove.newDateIso + 'T12:00:00'); const j = toJalaali(d); return `${j.jd} ${JALAALI_MONTHS[j.jm - 1]} ${j.jy}`; })()}
-                  {' — '}
-                  <span dir="ltr">{pendingMove.updates.start_time} تا {pendingMove.updates.end_time}</span>
-                </span>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setPendingMove(null)}
-                className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={commitMove}
-                className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                تأیید جابجایی
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MoveConfirmDialog pendingMove={pendingMove} onConfirm={commitMove} onCancel={() => setPendingMove(null)} />
 
       {/* Resize confirmation dialog */}
-      {pendingResize && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" dir="rtl">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 mx-4 w-full max-w-sm">
-            <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">تأیید تغییر مدت جلسه</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">آیا از تغییر زمان پایان این جلسه اطمینان دارید؟</p>
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
-              <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingResize.meeting.subject}</p>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
-                <span className="text-gray-600 dark:text-gray-300" dir="ltr">
-                  {pendingResize.meeting.start_time} تا {pendingResize.meeting.end_time}
-                </span>
-              </div>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
-                <span className="text-teal-600 dark:text-teal-400 font-medium" dir="ltr">
-                  {pendingResize.meeting.start_time} تا {pendingResize.newEndTime}
-                </span>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setPendingResize(null)}
-                className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={commitResize}
-                className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                تأیید تغییر
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ResizeConfirmDialog pendingResize={pendingResize} onConfirm={commitResize} onCancel={() => setPendingResize(null)} />
 
       {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}
       <MeetingInboxButton />
