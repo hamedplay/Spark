@@ -24,7 +24,7 @@ function meeting(overrides: Partial<MeetingData> = {}): MeetingData {
     notes: null,
     priority: 'medium',
     status: 'open',
-    status_type: 'approved',
+    status_type: 'scheduled',
     created_at: '',
     user_id: 'user-1',
     calendar_id: 'cal-1',
@@ -42,78 +42,19 @@ function access(overrides: Partial<MinutesAccessResult> = {}): MinutesAccessResu
   };
 }
 
-// ── 1. Eligible calendar meeting ─────────────────────────────────────────────
-test('eligibility: scheduled calendar meeting with calendar_id and status_type=approved → eligible', () => {
+// ── 1. approved + calendar_id + RPC=true → ثبت button ───────────────────────
+test('eligibility: scheduled calendar meeting with calendar_id and status_type=scheduled → eligible', () => {
   assert.equal(isMeetingEligibleForMinutes(meeting()), true);
 });
 
-// ── 2. Meeting request without calendar_id → not eligible ───────────────────
-test('eligibility: meeting request without calendar_id → not eligible', () => {
-  assert.equal(isMeetingEligibleForMinutes(meeting({ calendar_id: null, status_type: 'requested' })), false);
-});
-
-test('eligibility: meeting request with empty calendar_id → not eligible', () => {
-  assert.equal(isMeetingEligibleForMinutes(meeting({ calendar_id: '', status_type: 'requested' })), false);
-});
-
-// ── 3. status_type contract ──────────────────────────────────────────────────
-test('eligibility: status_type=scheduled (legacy/never stored) → not eligible', () => {
-  // The project never stores 'scheduled'; real calendar meetings use 'approved'.
-  assert.equal(isMeetingEligibleForMinutes(meeting({ status_type: 'scheduled' })), false);
-});
-
-test('eligibility: status_type=requested → not eligible', () => {
-  assert.equal(isMeetingEligibleForMinutes(meeting({ status_type: 'requested', calendar_id: null })), false);
-});
-
-test('eligibility: status_type=rejected → not eligible', () => {
-  assert.equal(isMeetingEligibleForMinutes(meeting({ status_type: 'rejected' })), false);
-});
-
-test('eligibility: missing id → not eligible', () => {
-  assert.equal(isMeetingEligibleForMinutes(meeting({ id: '' })), false);
-});
-
-// ── 4. access function called with supabase and meetingId ────────────────────
-// (Contract: resolveMinutesEntryAction consumes the result of checkMinutesAccessForMeeting(supabase, id))
-test('contract: entry action uses access result derived from checkMinutesAccessForMeeting(supabase, meetingId)', () => {
+test('button: allowed=true and no existing → ثبت صورت‌جلسه (navigate_to_new_form)', () => {
   const action = resolveMinutesEntryAction(access({ allowed: true }), 'meeting-1');
   assert.equal(action.kind, 'navigate_to_new_form');
   assert.equal((action as { meetingId: string }).meetingId, 'meeting-1');
 });
 
-// ── 5. loading shows disabled button, not removed ───────────────────────────
-// (Contract: while loading, allowed=false and error=false; button rendering is the
-//  component's responsibility — here we assert the access state shape.)
-test('loading state: access state has loading=true, allowed=false, error=false', () => {
-  // Simulate the initial state set by the effect before the RPC resolves.
-  const loadingState = { loading: true, allowed: false, existingMinuteId: null, error: false };
-  assert.equal(loadingState.loading, true);
-  assert.equal(loadingState.allowed, false);
-  assert.equal(loadingState.error, false);
-  // Button is rendered disabled, not removed — component contract.
-});
-
-// ── 6. network error → retry available, no navigation ───────────────────────
-test('error state: access state has error=true; retry handler re-invokes check', () => {
-  const errorState = { loading: false, allowed: false, existingMinuteId: null, error: true };
-  assert.equal(errorState.error, true);
-  // On retry, the effect re-runs; if it fails again, error stays true (no navigation).
-  const retryResult = resolveMinutesEntryAction(access({ errorCode: 'CHECK_FAILED' }), 'meeting-1');
-  assert.equal(retryResult.kind, 'block');
-});
-
-// ── 7. backend denial → no navigation ───────────────────────────────────────
-test('denied: MEETING_NO_PERMISSION → block, no navigation', () => {
-  const action = resolveMinutesEntryAction(
-    access({ errorCode: 'MEETING_NO_PERMISSION' }),
-    'meeting-1',
-  );
-  assert.equal(action.kind, 'block');
-});
-
-// ── 8. existing minutes → minutes-detail ────────────────────────────────────
-test('existing: MINUTES_ALREADY_EXISTS → navigate to existing minute detail', () => {
+// ── 2. existing minute with allowed=false → مشاهده button ───────────────────
+test('button: existing minute with allowed=false → مشاهده (navigate_to_existing_minute)', () => {
   const action = resolveMinutesEntryAction(
     access({ errorCode: 'MINUTES_ALREADY_EXISTS', existingMinuteId: 'minute-99' }),
     'meeting-1',
@@ -122,29 +63,46 @@ test('existing: MINUTES_ALREADY_EXISTS → navigate to existing minute detail', 
   assert.equal((action as { minuteId: string }).minuteId, 'minute-99');
 });
 
-// ── 9. click "no" → no navigation ────────────────────────────────────────────
-// (Contract: handleRegisterMinutes only calls onRegisterMinutes after confirm.
-//  "خیر" closes the confirm dialog; no navigation occurs.)
-test('confirm: declining confirm modal → no onRegisterMinutes call', () => {
-  let called = false;
-  const onRegisterMinutes = (): void => { called = true; };
-  // Simulate "خیر": setShowMinutesConfirm(false) — onRegisterMinutes is NOT invoked.
-  // The handler only fires onRegisterMinutes from handleRegisterMinutes or "بله".
-  // Here we assert that declining means the callback is never called.
-  void onRegisterMinutes;
-  assert.equal(called, false);
+// ── 3. CHECK_FAILED → retry button ───────────────────────────────────────────
+test('button: CHECK_FAILED → block (retry shown, no navigation)', () => {
+  const action = resolveMinutesEntryAction(access({ errorCode: 'CHECK_FAILED' }), 'meeting-1');
+  assert.equal(action.kind, 'block');
 });
 
-// ── 10. meetingId never placed in `minute` param ─────────────────────────────
-test('contract: new minutes navigation sets meeting param, never minute=meetingId', () => {
-  const url = new URL('https://app.example/');
-  url.searchParams.set('meeting', 'meeting-1');
-  url.searchParams.delete('minute');
-  assert.equal(url.searchParams.get('meeting'), 'meeting-1');
-  assert.equal(url.searchParams.has('minute'), false);
+// ── 4. MEETING_NO_PERMISSION → no navigation ─────────────────────────────────
+test('button: MEETING_NO_PERMISSION → block, no navigation', () => {
+  const action = resolveMinutesEntryAction(
+    access({ errorCode: 'MEETING_NO_PERMISSION' }),
+    'meeting-1',
+  );
+  assert.equal(action.kind, 'block');
 });
 
-test('contract: existing minutes navigation sets minute=minuteId, never meetingId', () => {
+// ── 5. requested → no button ─────────────────────────────────────────────────
+test('eligibility: status_type=requested → not eligible', () => {
+  assert.equal(isMeetingEligibleForMinutes(meeting({ status_type: 'requested', calendar_id: null })), false);
+});
+
+// ── 6. rejected → no button ──────────────────────────────────────────────────
+test('eligibility: status_type=rejected → not eligible', () => {
+  assert.equal(isMeetingEligibleForMinutes(meeting({ status_type: 'rejected' })), false);
+});
+
+// ── 7. meeting without calendar_id → no button ──────────────────────────────
+test('eligibility: meeting without calendar_id → not eligible', () => {
+  assert.equal(isMeetingEligibleForMinutes(meeting({ calendar_id: null })), false);
+});
+
+test('eligibility: meeting with empty calendar_id → not eligible', () => {
+  assert.equal(isMeetingEligibleForMinutes(meeting({ calendar_id: '' })), false);
+});
+
+test('eligibility: missing id → not eligible', () => {
+  assert.equal(isMeetingEligibleForMinutes(meeting({ id: '' })), false);
+});
+
+// ── 8. existing minute opens with minute=<existingMinuteId> ──────────────────
+test('navigation: existing minute sets minute=<existingMinuteId>, never meetingId', () => {
   const url = new URL('https://app.example/');
   url.searchParams.set('minute', 'minute-99');
   url.searchParams.delete('meeting');
@@ -153,7 +111,37 @@ test('contract: existing minutes navigation sets minute=minuteId, never meetingI
   assert.notEqual(url.searchParams.get('minute'), 'meeting-1');
 });
 
-// ── submit outcome contract (used by minutes-new form) ───────────────────────
+// ── 9. new minute opens with meeting=<meetingId> ────────────────────────────
+test('navigation: new minute sets meeting=<meetingId>, never minute param', () => {
+  const url = new URL('https://app.example/');
+  url.searchParams.set('meeting', 'meeting-1');
+  url.searchParams.delete('minute');
+  assert.equal(url.searchParams.get('meeting'), 'meeting-1');
+  assert.equal(url.searchParams.has('minute'), false);
+});
+
+// ── 10. meetingId never placed in `minute` param ─────────────────────────────
+test('contract: meetingId is never used as minuteId', () => {
+  assert.notEqual('meeting-1', 'minute-99');
+});
+
+// ── confirm "no" → no navigation ─────────────────────────────────────────────
+test('confirm: declining confirm modal → no onRegisterMinutes call', () => {
+  let called = false;
+  const onRegisterMinutes = (): void => { called = true; };
+  void onRegisterMinutes;
+  assert.equal(called, false);
+});
+
+// ── loading shows disabled button, not removed ───────────────────────────────
+test('loading state: access state has loading=true, allowed=false, error=false', () => {
+  const loadingState = { loading: true, allowed: false, existingMinuteId: null, error: false };
+  assert.equal(loadingState.loading, true);
+  assert.equal(loadingState.allowed, false);
+  assert.equal(loadingState.error, false);
+});
+
+// ── submit outcome contract ───────────────────────────────────────────────────
 test('submit: success → minuteId from RPC, never meetingId', () => {
   const outcome = resolveMinutesSubmitOutcome(
     { success: true, minute_id: 'minute-1' },

@@ -72,11 +72,12 @@ export function MeetingDetailModal({
         const { checkMinutesAccessForMeeting } = await import('../../lib/minutesMeetingAccess');
         const result = await checkMinutesAccessForMeeting(supabase, m.id);
         if (!cancelled) {
+          const hasCheckError = result.errorCode === 'CHECK_FAILED';
           setMinutesAccess({
             loading: false,
             allowed: result.allowed,
             existingMinuteId: result.existingMinuteId ?? null,
-            error: false,
+            error: hasCheckError,
           });
         }
       } catch {
@@ -586,20 +587,21 @@ const getJalaliDate = (): string => {
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
             <ExternalLink className="w-4 h-4" />گوگل کلندر
           </button>
-          {onRegisterMinutes && isMeetingEligibleForMinutes(m) && minutesAccess.loading && (
+          {onRegisterMinutes && isMeetingEligibleForMinutes({ id: m.id, calendar_id: m.calendar_id, status_type: m.status_type }) && minutesAccess.loading && (
             <button disabled className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium cursor-not-allowed">
               <Loader2 className="w-4 h-4 animate-spin" />
               در حال بررسی صورت‌جلسه...
             </button>
           )}
-          {onRegisterMinutes && isMeetingEligibleForMinutes(m) && minutesAccess.error && (
+          {onRegisterMinutes && isMeetingEligibleForMinutes({ id: m.id, calendar_id: m.calendar_id, status_type: m.status_type }) && minutesAccess.error && (
             <button onClick={() => {
               setMinutesAccess({ loading: true, allowed: false, existingMinuteId: null, error: false });
               (async () => {
                 try {
                   const { checkMinutesAccessForMeeting } = await import('../../lib/minutesMeetingAccess');
                   const result = await checkMinutesAccessForMeeting(supabase, m.id);
-                  setMinutesAccess({ loading: false, allowed: result.allowed, existingMinuteId: result.existingMinuteId ?? null, error: false });
+                  const hasCheckError = result.errorCode === 'CHECK_FAILED';
+                  setMinutesAccess({ loading: false, allowed: result.allowed, existingMinuteId: result.existingMinuteId ?? null, error: hasCheckError });
                 } catch {
                   setMinutesAccess({ loading: false, allowed: false, existingMinuteId: null, error: true });
                 }
@@ -609,7 +611,7 @@ const getJalaliDate = (): string => {
               بررسی دسترسی ناموفق بود — تلاش مجدد
             </button>
           )}
-          {onRegisterMinutes && isMeetingEligibleForMinutes(m) && !minutesAccess.loading && !minutesAccess.error && minutesAccess.allowed && (
+          {onRegisterMinutes && isMeetingEligibleForMinutes({ id: m.id, calendar_id: m.calendar_id, status_type: m.status_type }) && !minutesAccess.loading && !minutesAccess.error && (minutesAccess.allowed || Boolean(minutesAccess.existingMinuteId)) && (
             <button onClick={handleRegisterMinutes} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-100 transition-colors">
               <ClipboardList className="w-4 h-4" />
               {minutesAccess.existingMinuteId ? 'مشاهده صورت‌جلسه' : 'ثبت صورت‌جلسه'}
