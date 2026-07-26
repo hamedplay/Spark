@@ -348,6 +348,43 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   // New-mode: guard against missing/invalid meetingId (point 2)
   const [noMeetingError, setNoMeetingError] = useState<string | null>(null);
 
+  // ── Prefill agenda items when meeting is selected ─────────────────────
+  // Declared before any useEffect that references it to avoid a temporal dead
+  // zone when the minifier reorders declarations relative to dependency arrays.
+  const fetchAgendaItems = useCallback(async (meetingId: string) => {
+    setAgendaLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('meeting_agenda_items')
+        .select('id, title, presenter, duration_minutes, sort_order')
+        .eq('meeting_id', meetingId)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      const items = (data || []) as unknown as AgendaItemOption[];
+      if (items.length > 0) {
+        setAgendaItems(items.map((item, idx) => ({
+          id: uid(),
+          meetingAgendaItemId: item.id,
+          order: idx + 1,
+          title: item.title,
+          description: '',
+          presenter: item.presenter || '',
+          allocatedTime: item.duration_minutes != null ? String(item.duration_minutes) : '',
+          discussionResult: '',
+          resultType: 'discussion',
+          additionalNotes: '',
+        })));
+      } else {
+        setAgendaItems([defaultAgendaItem(1)]);
+      }
+    } catch (err) {
+      toast.error('خطا در بارگذاری دستور جلسات: ' + (err instanceof Error ? err.message : 'نامشخص'));
+      setAgendaItems([defaultAgendaItem(1)]);
+    } finally {
+      setAgendaLoading(false);
+    }
+  }, []);
+
   // Unmount cleanup: clear the temporary `meeting` param when leaving the new-mode
   // page so it doesn't leak into the destination page or cause a stale prefill on
   // refresh/back. Does NOT touch the `minute` param used by detail/edit pages.
@@ -512,41 +549,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         setMeetingsLoading(false);
       }
     })();
-  }, []);
-
-  // ── Prefill agenda items when meeting is selected ─────────────────────
-  const fetchAgendaItems = useCallback(async (meetingId: string) => {
-    setAgendaLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('meeting_agenda_items')
-        .select('id, title, presenter, duration_minutes, sort_order')
-        .eq('meeting_id', meetingId)
-        .order('sort_order', { ascending: true });
-      if (error) throw error;
-      const items = (data || []) as unknown as AgendaItemOption[];
-      if (items.length > 0) {
-        setAgendaItems(items.map((item, idx) => ({
-          id: uid(),
-          meetingAgendaItemId: item.id,
-          order: idx + 1,
-          title: item.title,
-          description: '',
-          presenter: item.presenter || '',
-          allocatedTime: item.duration_minutes != null ? String(item.duration_minutes) : '',
-          discussionResult: '',
-          resultType: 'discussion',
-          additionalNotes: '',
-        })));
-      } else {
-        setAgendaItems([defaultAgendaItem(1)]);
-      }
-    } catch (err) {
-      toast.error('خطا در بارگذاری دستور جلسات: ' + (err instanceof Error ? err.message : 'نامشخص'));
-      setAgendaItems([defaultAgendaItem(1)]);
-    } finally {
-      setAgendaLoading(false);
-    }
   }, []);
 
   // ── New-mode: prefill from source meeting (entry via ?meeting=<id>) ────────
