@@ -339,6 +339,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
 
   // New-mode: track the minute id after draft creation so submit uses the real id
   const [createdMinuteId, setCreatedMinuteId] = useState<string | null>(null);
+  // New-mode: guard against missing/invalid meetingId (point 2)
+  const [noMeetingError, setNoMeetingError] = useState<string | null>(null);
 
   const title = mode === 'new' ? 'ایجاد صورت‌جلسه' : 'ویرایش صورت‌جلسه';
 
@@ -495,21 +497,29 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   useEffect(() => {
     if (mode !== 'new') return;
     const sourceMeetingId = getMeetingIdFromUrl();
-    if (!sourceMeetingId) return;
+    if (!sourceMeetingId) {
+      setNoMeetingError('برای ثبت صورت‌جلسه باید از صفحه جزئیات جلسه وارد شوید.');
+      return;
+    }
     if (info.meetingId) return; // already prefilled
-    const meeting = meetings.find(m => m.id === sourceMeetingId);
-    if (!meeting) return; // meetings not loaded yet — retry on next change
-    setInfo(prev => ({
-      ...prev,
-      meetingId: meeting.id,
-      meetingTitle: meeting.subject,
-      meetingDate: meeting.request_date || '',
-      startTime: meeting.start_time || '',
-      endTime: meeting.end_time || '',
-      location: meeting.location || '',
-    }));
-    fetchAgendaItems(meeting.id);
-  }, [mode, meetings, info.meetingId, fetchAgendaItems]);
+    if (!meetingsLoading && meetings.length > 0) {
+      const meeting = meetings.find(m => m.id === sourceMeetingId);
+      if (!meeting) {
+        setNoMeetingError('جلسه موردنظر یافت نشد یا شما به آن دسترسی ندارید.');
+        return;
+      }
+      setInfo(prev => ({
+        ...prev,
+        meetingId: meeting.id,
+        meetingTitle: meeting.subject,
+        meetingDate: meeting.request_date || '',
+        startTime: meeting.start_time || '',
+        endTime: meeting.end_time || '',
+        location: meeting.location || '',
+      }));
+      fetchAgendaItems(meeting.id);
+    }
+  }, [mode, meetings, meetingsLoading, info.meetingId, fetchAgendaItems]);
 
   // ── Fetch all profiles ────────────────────────────────────────────────
   useEffect(() => {
@@ -744,6 +754,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', newId);
           toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
           setMinuteIdInUrl(newId);
+          clearMeetingIdFromUrl();
           setMinutesPageInUrl('minutes-detail');
           onNavigate('minutes-detail');
           return;
@@ -784,6 +795,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, data.updated_at);
           toast.success('پیش‌نویس صورت‌جلسه با موفقیت به‌روزرسانی شد.');
           setMinuteIdInUrl(data.minute_id);
+          clearMeetingIdFromUrl();
           setMinutesPageInUrl('minutes-detail');
           onNavigate('minutes-detail');
           return;
@@ -885,6 +897,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       if (data && data.success === true) {
         toast.success('صورت‌جلسه برای تأیید ارسال شد.');
         if (data.minute_id) setMinuteIdInUrl(data.minute_id);
+        clearMeetingIdFromUrl();
         setMinutesPageInUrl('minutes-detail');
         onNavigate('minutes-detail');
         return;
@@ -929,6 +942,24 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         <PageHeader title={title} />
         <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">
           {editError}
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'new' && noMeetingError) {
+    return (
+      <div dir="rtl" className="space-y-5">
+        <PageHeader title={title} />
+        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 text-sm text-amber-700 dark:text-amber-400 space-y-3">
+          <p>{noMeetingError}</p>
+          <button
+            type="button"
+            onClick={() => { clearMeetingIdFromUrl(); onNavigate('calendar'); }}
+            className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition-colors"
+          >
+            بازگشت به تقویم
+          </button>
         </div>
       </div>
     );

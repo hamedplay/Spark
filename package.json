@@ -23,7 +23,9 @@
     "test:notification-lifecycle": "node --import tsx --test tests/notifications/notificationBellLifecycle.test.ts",
     "test:notification-producer-model": "node --import tsx --test tests/notifications/notificationProducerModel.test.ts",
     "test:notification-template-cache": "node --import tsx --test tests/notifications/notificationTemplateCache.test.ts",
-    "test:notification-producer": "node --import tsx --test tests/notifications/notificationProducer.test.ts"
+    "test:notification-producer": "node --import tsx --test tests/notifications/notificationProducer.test.ts",
+    "test:minutes-access": "node --import tsx --test tests/minutes/minutesMeetingAccess.test.ts",
+    "test": "npm run test:recurrence && npm run test:meeting-record && npm run test:calendar-url && npm run test:meeting-prefill && npm run test:layout-navigation && npm run test:layout-presence && npm run test:user-preferences-mapping && npm run test:user-preferences-lifecycle && npm run test:notification-model && npm run test:notification-lifecycle && npm run test:notification-producer-model && npm run test:notification-template-cache && npm run test:notification-producer && npm run test:minutes-access"
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.5",

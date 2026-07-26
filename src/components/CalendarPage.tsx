@@ -48,7 +48,7 @@ interface CalendarPageProps {
   onSparkNavigateDateConsumed?: () => void;
   sparkCalendarMeetingPrefill?: any;
   onSparkCalendarMeetingPrefillConsumed?: () => void;
-  onRegisterMinutes?: (meetingId: string) => void;
+  onRegisterMinutes?: (meetingId: string, existingMinuteId?: string | null) => void;
 }
 
 export function CalendarPage({

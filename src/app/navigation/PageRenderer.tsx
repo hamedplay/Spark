@@ -71,13 +71,20 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
         onSparkNavigateDateConsumed={() => setSparkNavigateDate(null)}
         sparkCalendarMeetingPrefill={sparkCalendarMeetingPrefill}
         onSparkCalendarMeetingPrefillConsumed={() => setSparkCalendarMeetingPrefill(null)}
-        onRegisterMinutes={(meetingId) => {
+        onRegisterMinutes={(meetingId, existingMinuteId) => {
           try {
             const url = new URL(window.location.href);
-            url.searchParams.set('meeting', meetingId);
-            window.history.replaceState({}, '', url.toString());
+            if (existingMinuteId) {
+              url.searchParams.set('minute', existingMinuteId);
+              url.searchParams.delete('meeting');
+              window.history.replaceState({}, '', url.toString());
+              setActivePage('minutes-detail');
+            } else {
+              url.searchParams.set('meeting', meetingId);
+              window.history.replaceState({}, '', url.toString());
+              setActivePage('minutes-new');
+            }
           } catch { /* noop */ }
-          setActivePage('minutes-new');
         }}
       />;
     case 'chat':

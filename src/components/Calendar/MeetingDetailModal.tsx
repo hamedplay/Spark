@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
 import moment from 'moment-jalaali';
+import { checkMinutesAccessForMeeting } from '../../lib/minutesMeetingAccess';
 
 interface AgendaItem {
   id: string;
@@ -26,7 +27,7 @@ interface Props {
   onDelete: (id: string, deleteRepeating?: boolean) => void;
   onShare: (m: MeetingData) => void;
   onGoogleCalendar: (m: MeetingData) => void;
-  onRegisterMinutes: (meetingId: string) => void;
+  onRegisterMinutes: (meetingId: string, existingMinuteId?: string | null) => void;
 }
 
 export function MeetingDetailModal({
@@ -42,7 +43,26 @@ export function MeetingDetailModal({
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareChoice, setShowShareChoice] = useState(false);
   const [showMinutesConfirm, setShowMinutesConfirm] = useState(false);
+  const [minutesChecking, setMinutesChecking] = useState(false);
+  const [minutesPermission, setMinutesPermission] = useState<boolean | null>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!m?.id) return;
+    setMinutesPermission(null);
+    supabase
+      .rpc('can_create_minutes_for_meeting', { p_meeting_id: m.id })
+      .then(({ data }: { data: boolean | null }) => {
+        if (!cancelled) setMinutesPermission(data === true);
+      })
+      .catch(() => {
+        if (!cancelled) setMinutesPermission(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [m?.id]);
 
   // Per-participant inbox status — only fetched for the meeting owner
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, 'pending' | 'accepted' | 'declined' | 'delegated'>>({});
@@ -527,11 +547,38 @@ const getJalaliDate = (): string => {
 
         {/* Actions */}
         <div className="border-t border-gray-100 dark:border-gray-700 p-4 grid grid-cols-2 gap-2 flex-shrink-0">
-          {canEdit && (
+          {minutesPermission && (
             <>
-            <button onClick={() => setShowMinutesConfirm(true)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 text-sm font-medium hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors">
+            <button
+              type="button"
+              disabled={minutesChecking}
+              onClick={async () => {
+                if (!m?.id) return;
+                setMinutesChecking(true);
+                try {
+                  const access = await checkMinutesAccessForMeeting(supabase, m.id);
+                  if (access.errorCode === 'MINUTES_ALREADY_EXISTS' && access.existingMinuteId) {
+                    toast('برای این جلسه قبلاً صورتجلسه ثبت شده است. به جزئیات آن منتقل می‌شوید.', { icon: 'ℹ️' });
+                    onRegisterMinutes(access.existingMinuteId);
+                    return;
+                  }
+                  if (access.errorCode === 'MEETING_NO_PERMISSION') {
+                    toast.error('شما مجوز ثبت صورتجلسه برای این جلسه را ندارید.');
+                    return;
+                  }
+                  if (access.errorCode === 'CHECK_FAILED') {
+                    toast.error('بررسی امکان ثبت صورتجلسه ناموفق بود. دوباره تلاش کنید.');
+                    return;
+                  }
+                  setShowMinutesConfirm(true);
+                } finally {
+                  setMinutesChecking(false);
+                }
+              }}
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 text-sm font-medium hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors disabled:opacity-60"
+            >
               <FileText className="w-4 h-4" />
-              ثبت صورتجلسه
+              {minutesChecking ? 'در حال بررسی...' : 'ثبت صورتجلسه'}
             </button>
             <button onClick={() => onEdit(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
               <Edit2 className="w-4 h-4" />ویرایش
