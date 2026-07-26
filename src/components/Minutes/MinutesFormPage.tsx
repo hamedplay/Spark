@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl } from '../../lib/minutesNavigation';
 import { loadMinutesPrefill } from '../../lib/minutesPrefill';
+import { checkSystemApproverEligibility } from '../../lib/minutesApprovalEligibility';
 import { PageHeader, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -13,12 +14,12 @@ import type {
 import type {
   ProfileOption, OrgUnitOption,
   DraftMeetingInfo, DraftInternalParticipant, DraftExternalParticipant,
-  DraftAgendaItem, DraftDecision, DraftApprover, DraftFinalization,
+  DraftAgendaItem, DraftDecision, DraftFinalization,
   MinutesDraftPayload,
 } from './Form/types';
 import {
   uid, defaultInfo, defaultInternalParticipant, defaultExternalParticipant,
-  defaultAgendaItem, defaultDecision, defaultApprover, defaultFinalization,
+  defaultAgendaItem, defaultDecision, defaultFinalization,
 } from './Form/defaults';
 import { SectionInfo } from './Form/SectionInfo';
 import { SectionParticipants } from './Form/SectionParticipants';
@@ -96,7 +97,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [externalParticipants, setExternalParticipants] = useState<DraftExternalParticipant[]>([defaultExternalParticipant()]);
   const [agendaItems, setAgendaItems] = useState<DraftAgendaItem[]>([defaultAgendaItem(1)]);
   const [decisions, setDecisions] = useState<DraftDecision[]>([defaultDecision()]);
-  const [approvers, setApprovers] = useState<DraftApprover[]>([defaultApprover(1)]);
   const [finalization, setFinalization] = useState<DraftFinalization>(defaultFinalization);
 
   // Fetched reference data
@@ -350,10 +350,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       externalParticipants,
       agendaItems,
       decisions,
-      approvers,
       finalization,
     }),
-    [info, internalParticipants, externalParticipants, agendaItems, decisions, approvers, finalization],
+    [info, internalParticipants, externalParticipants, agendaItems, decisions, finalization],
   );
 
   const validate = (): string | null => {
@@ -600,13 +599,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       toast.error('لطفاً ابتدا جلسه را انتخاب و پیش‌نویس را ذخیره کنید.');
       return;
     }
-    // For system mode, verify at least one eligible approver exists
+    // For system mode, verify at least one internal participant with a valid user_id exists
     if (info.approvalMode === 'system') {
-      const eligible = internalParticipants.filter(
-        p => p.userId && p.attendanceStatus && ['present', 'online', 'late', 'delegate_attended'].includes(p.attendanceStatus)
-      );
-      if (eligible.length === 0) {
-        toast.error('در مدل سیستمی حداقل یک شرکت‌کننده داخلی با حساب کاربری و حضور تأییدشده لازم است.');
+      const check = checkSystemApproverEligibility(info.approvalMode, internalParticipants);
+      if (!check.canSubmit) {
+        toast.error(check.errorMessage || 'در مدل سیستمی حداقل یک شرکت‌کننده داخلی با حساب کاربری لازم است.');
         return;
       }
     }
@@ -823,7 +820,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               />
             )}
             {activeSection === 5 && (
-              <SectionApprovers approvers={approvers} setApprovers={setApprovers} />
+              <SectionApprovers
+                approvalMode={info.approvalMode}
+                internalParticipants={internalParticipants}
+                profiles={profiles}
+                readOnly={isNonEditable}
+              />
             )}
             {activeSection === 6 && (
               <SectionFinal finalization={finalization} setFinalization={setFinalization} />

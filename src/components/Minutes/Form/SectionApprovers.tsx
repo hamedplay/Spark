@@ -1,83 +1,107 @@
-import { Plus, Trash2 } from 'lucide-react';
-import type { DraftApprover } from './types';
-import { defaultApprover } from './defaults';
-import { InputField, SelectField, ComingSoonBanner } from './fields';
+import { Users, CircleCheck as CheckCircle2, CircleUser as UserCircle } from 'lucide-react';
+import type { ApprovalMode } from '../types';
+import type { DraftInternalParticipant, ProfileOption } from './types';
 
 interface SectionApproversProps {
-  approvers: DraftApprover[];
-  setApprovers: React.Dispatch<React.SetStateAction<DraftApprover[]>>;
+  approvalMode: ApprovalMode | '';
+  internalParticipants: DraftInternalParticipant[];
+  profiles: ProfileOption[];
+  readOnly: boolean;
 }
 
-export function SectionApprovers({ approvers, setApprovers }: SectionApproversProps) {
+export function SectionApprovers({ approvalMode, internalParticipants, profiles, readOnly }: SectionApproversProps) {
+  const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
+
+  const eligibleApprovers = internalParticipants.filter(p => !!p.userId);
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" dir="rtl">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
         تأییدکنندگان
       </h2>
-      <ComingSoonBanner message="مدیریت تأییدکنندگان در نسخه بعدی فعال خواهد شد. در این مرحله تأییدکنندگان ذخیره نمی‌شوند." />
-      <div className="opacity-50 pointer-events-none">
-        <ApproversForm approvers={approvers} setApprovers={setApprovers} />
-      </div>
-    </div>
-  );
-}
 
-function ApproversForm({ approvers, setApprovers }: SectionApproversProps) {
-  const add = () =>
-    setApprovers(l => [...l, defaultApprover(l.length + 1)]);
+      {!approvalMode && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-4 text-sm text-amber-700 dark:text-amber-400">
+          مدل تأیید هنوز انتخاب نشده است. در بخش «اطلاعات جلسه» مدل تأیید را انتخاب کنید.
+        </div>
+      )}
 
-  const remove = (id: string) =>
-    setApprovers(l => l.filter(a => a.id !== id));
-
-  const update = (id: string, field: keyof DraftApprover, value: string) =>
-    setApprovers(l => l.map(a => (a.id === id ? { ...a, [field]: value } : a)));
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">تأییدکنندگان</h2>
-        <button onClick={add} className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-          <Plus className="w-4 h-4" /> افزودن
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
-        <label className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-          <input type="radio" name="approval-method" defaultChecked className="accent-blue-600" />
-          <div>
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">تأیید سیستمی</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">ارسال درخواست دیجیتال</p>
-          </div>
-        </label>
-        <label className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-          <input type="radio" name="approval-method" className="accent-blue-600" />
-          <div>
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">تأیید حضوری</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">ثبت تأیید دستی</p>
-          </div>
-        </label>
-      </div>
-
-      <div className="space-y-3">
-        {approvers.map((a, idx) => (
-          <div key={a.id} className="grid grid-cols-1 sm:grid-cols-4 gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl items-end">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-semibold flex items-center justify-center flex-shrink-0">
-                {idx + 1}
-              </span>
-              <InputField id={`ap-name-${a.id}`} label="نام" placeholder="" value={a.name} onChange={v => update(a.id, 'name', v)} />
+      {approvalMode === 'system' && (
+        <div className="space-y-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-4 text-sm text-blue-700 dark:text-blue-400">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 className="w-4 h-4" />
+              <span className="font-medium">تأیید سیستمی</span>
             </div>
-            <InputField id={`ap-pos-${a.id}`} label="سمت" placeholder="" value={a.position} onChange={v => update(a.id, 'position', v)} />
-            <InputField id={`ap-unit-${a.id}`} label="واحد" placeholder="" value={a.unit} onChange={v => update(a.id, 'unit', v)} />
-            <div className="flex items-end gap-2">
-              <SelectField id={`ap-method-${a.id}`} label="نوع تأیید" options={[{ value: 'digital', label: 'سیستمی' }, { value: 'in_person', label: 'حضوری' }]} value={a.method} onChange={v => update(a.id, 'method', v)} />
-              <button onClick={() => remove(a.id)} aria-label="حذف تأییدکننده" className="p-2 rounded-xl text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+            <p className="leading-relaxed">
+              صورت‌جلسه برای تمام شرکت‌کنندگان داخلی دارای حساب سامانه به‌صورت خودکار ارسال می‌شود. حضور در جلسه شرط افزودن به تأییدکنندگان نیست. پس از تأیید همه، تأیید دبیر و سپس رئیس جلسه برای انتشار لازم است.
+            </p>
           </div>
-        ))}
-      </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-4 h-4 text-gray-500" />
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                تأییدکنندگان خودکار ({eligibleApprovers.length} نفر)
+              </h3>
+            </div>
+            {eligibleApprovers.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                هیچ شرکت‌کننده داخلی با حساب کاربری وجود ندارد. ابتدا در بخش «شرکت‌کنندگان» افراد را اضافه کنید.
+              </p>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <ul className="divide-y divide-gray-50 dark:divide-gray-700">
+                  {eligibleApprovers.map((p, idx) => {
+                    const profile = profiles.find(x => x.user_id === p.userId);
+                    const label = profile ? profileLabel(profile) : (p.nameSnapshot || p.userId);
+                    const sublabelParts: string[] = [];
+                    if (profile?.position) sublabelParts.push(profile.position);
+                    if (p.orgUnitNameSnapshot) sublabelParts.push(p.orgUnitNameSnapshot);
+                    return (
+                      <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+                        <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-semibold flex items-center justify-center flex-shrink-0">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{label}</p>
+                          {sublabelParts.length > 0 && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{sublabelParts.join(' — ')}</p>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-400">تأیید سیستمی</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {approvalMode === 'in_person' && (
+        <div className="space-y-4">
+          <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl p-4 text-sm text-emerald-700 dark:text-emerald-400">
+            <div className="flex items-center gap-2 mb-1">
+              <UserCircle className="w-4 h-4" />
+              <span className="font-medium">تأیید حضوری</span>
+            </div>
+            <p className="leading-relaxed">
+              در تأیید حضوری، تأیید شرکت‌کنندگان سیستمی وجود ندارد و رکورد تأییدی ساخته نمی‌شود. دبیر تأیید می‌کند که صورت‌جلسه در جلسه حضوری تأیید شده، سپس رئیس جلسه آن را منتشر می‌کند.
+            </p>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            لیست تأییدکنندگان در این روش نمایش داده نمی‌شود.
+          </p>
+        </div>
+      )}
+
+      {readOnly && approvalMode && (
+        <p className="text-xs text-gray-400">
+          مدل تأیید پس از اولین ارسال قابل تغییر نیست.
+        </p>
+      )}
     </div>
   );
 }
