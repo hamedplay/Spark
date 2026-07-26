@@ -412,7 +412,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               isAdmin={isAdmin}
             />
           )}
-          {activeTab === 'attachments' && <TabAttachments minuteId={minute.id} canManage={canManage} />}
+          {activeTab === 'attachments' && <TabAttachments minuteId={minute.id} canManage={canManage} revisionNumber={minute.revision_number} />}
           {activeTab === 'approvals' && (
             <TabApprovals
               approvals={approvals}

@@ -860,6 +860,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 profiles={profiles}
                 orgUnits={orgUnits}
                 logoUrl={logoUrl}
+                minuteId={mode === 'edit' ? editMinuteId : workingMinuteId}
+                canManage={true}
               />
             )}
           </div>

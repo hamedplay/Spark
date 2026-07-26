@@ -24,6 +24,8 @@ const EXT_MIME: Record<string, string> = {
   zip: 'application/zip',
 };
 
+export type AttachmentKind = 'general' | 'signed_final';
+
 export interface AttachmentRow {
   id: string;
   minute_id: string;
@@ -37,6 +39,8 @@ export interface AttachmentRow {
   uploaded_by_user_id: string;
   description: string | null;
   created_at: string;
+  attachment_kind: AttachmentKind;
+  revision_number: number | null;
   uploader_name?: string | null;
 }
 
@@ -74,18 +78,13 @@ function mimesCompatible(declared: string, expected: string): boolean {
   return false;
 }
 
-function sanitizeFilename(name: string): string {
-  // Keep persian letters, digits, dot, dash, underscore; replace the rest with _
-  const base = name.replace(/[\s]+/g, '_');
-  const cleaned = base.replace(/[^\p{L}\p{N}._-]/gu, '_');
-  return cleaned.slice(0, 120) || 'file';
-}
-
 export interface UploadOptions {
   minuteId: string;
   agendaResultId?: string | null;
   decisionId?: string | null;
   description?: string | null;
+  attachmentKind?: AttachmentKind;
+  revisionNumber?: number | null;
   onProgress?: (pct: number) => void;
 }
 
@@ -120,6 +119,7 @@ export async function uploadMinuteAttachment(
       mime_type: v.mime || file.type || 'application/octet-stream',
       size_bytes: file.size,
       description: opts.description ?? null,
+      attachment_kind: opts.attachmentKind ?? 'general',
     }),
   });
   if (!efRes.ok) {
@@ -153,7 +153,7 @@ export async function uploadMinuteAttachment(
   // 4. Fetch the created row.
   const { data: row, error: selErr } = await supabase
     .from('minutes_attachments')
-    .select('id,minute_id,agenda_result_id,decision_id,storage_path,original_filename,stored_filename,mime_type,size_bytes,uploaded_by_user_id,description,created_at')
+    .select('id,minute_id,agenda_result_id,decision_id,storage_path,original_filename,stored_filename,mime_type,size_bytes,uploaded_by_user_id,description,created_at,attachment_kind,revision_number')
     .eq('id', attachmentId)
     .maybeSingle();
   if (selErr || !row) throw new Error('ساخت رکورد پیوست موفق بود اما بارگذاری اطلاعات ناموفق بود.');
@@ -167,13 +167,14 @@ function translateRpcError(msg?: string): string {
   if (msg.includes('TARGET_MISMATCH')) return 'بند یا مصوبه انتخاب‌شده متعلق به این صورت‌جلسه نیست.';
   if (msg.includes('INVALID_SIZE')) return 'حجم فایل نامعتبر است.';
   if (msg.includes('INVALID_INPUT')) return 'نام فایل یا اطلاعات نامعتبر است.';
+  if (msg.includes('INVALID_KIND')) return 'نوع پیوست نامعتبر است.';
   return 'ساخت رکورد پیوست ناموفق بود.';
 }
 
 export async function listMinuteAttachments(minuteId: string): Promise<AttachmentRow[]> {
   const { data, error } = await supabase
     .from('minutes_attachments')
-    .select('id,minute_id,agenda_result_id,decision_id,storage_path,original_filename,stored_filename,mime_type,size_bytes,uploaded_by_user_id,description,created_at')
+    .select('id,minute_id,agenda_result_id,decision_id,storage_path,original_filename,stored_filename,mime_type,size_bytes,uploaded_by_user_id,description,created_at,attachment_kind,revision_number')
     .eq('minute_id', minuteId)
     .is('deleted_at', null)
     .order('created_at', { ascending: true });
@@ -236,6 +237,21 @@ function translateSignedError(msg: string): string {
   if (msg.includes('NOT_AUTHORIZED')) return 'شما اجازه دانلود این پیوست را ندارید.';
   if (msg.includes('NOT_FOUND')) return 'پیوست یافت نشد.';
   return 'ساخت لینک دانلود ناموفق بود.';
+}
+
+export async function getLatestSignedFinalAttachment(minuteId: string): Promise<AttachmentRow | null> {
+  const { data, error } = await supabase.rpc('get_latest_signed_final_attachment', {
+    p_minute_id: minuteId,
+  });
+  if (error) throw new Error(translateSignedError(error.message));
+  if (!data) return null;
+  const row = data as AttachmentRow;
+  if (!row.id) return null;
+  return row;
+}
+
+export async function getSignedFinalDownloadUrl(attachmentId: string): Promise<string> {
+  return getAttachmentDownloadUrl(attachmentId);
 }
 
 export function formatBytes(n: number): string {

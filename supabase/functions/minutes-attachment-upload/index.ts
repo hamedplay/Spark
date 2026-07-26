@@ -48,6 +48,8 @@ Deno.serve(async (req: Request) => {
     mime_type: string;
     size_bytes: number;
     description?: string | null;
+    attachment_kind?: string;
+    revision_number?: number | null;
   };
   try {
     body = await req.json();
@@ -76,6 +78,8 @@ Deno.serve(async (req: Request) => {
       p_mime_type: body.mime_type,
       p_size_bytes: body.size_bytes,
       p_description: body.description ?? null,
+      p_attachment_kind: body.attachment_kind ?? "general",
+      p_revision_number: body.revision_number ?? null,
     },
   );
   if (beginErr || !beginData) {
