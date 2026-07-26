@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Clock, MapPin, Users, User, Phone, Bell, RefreshCw, UserPlus, Share2, ExternalLink, Trash2, CreditCard as Edit2, Video, Copy, Check, FileText, Image, CalendarDays, CircleCheck as CheckCircle2, Circle as XCircle, Circle as HelpCircle, UserCheck, ClipboardList } from 'lucide-react';
+import { X, Clock, MapPin, Users, User, Phone, Bell, RefreshCw, UserPlus, Share2, ExternalLink, Trash2, CreditCard as Edit2, Video, Copy, Check, FileText, Image, CalendarDays, CircleCheck as CheckCircle2, Circle as XCircle, Circle as HelpCircle, UserCheck, ClipboardList, Loader as Loader2, CircleAlert as AlertCircle } from 'lucide-react';
 import { MeetingData, CalendarEntry } from './types';
 import { supabase } from '../../lib/supabase';
+import { isMeetingEligibleForMinutes } from '../../lib/isMeetingEligibleForMinutes';
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
 import moment from 'moment-jalaali';
@@ -59,7 +60,7 @@ export function MeetingDetailModal({
 
   useEffect(() => {
     if (!onRegisterMinutes) return;
-    const eligible = m.status_type === 'scheduled' && !!m.calendar_id;
+    const eligible = isMeetingEligibleForMinutes({ id: m.id, calendar_id: m.calendar_id, status_type: m.status_type });
     if (!eligible) {
       setMinutesAccess({ loading: false, allowed: false, existingMinuteId: null, error: false });
       return;
@@ -69,7 +70,7 @@ export function MeetingDetailModal({
     (async () => {
       try {
         const { checkMinutesAccessForMeeting } = await import('../../lib/minutesMeetingAccess');
-        const result = await checkMinutesAccessForMeeting(m.id);
+        const result = await checkMinutesAccessForMeeting(supabase, m.id);
         if (!cancelled) {
           setMinutesAccess({
             loading: false,
@@ -585,7 +586,30 @@ const getJalaliDate = (): string => {
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
             <ExternalLink className="w-4 h-4" />گوگل کلندر
           </button>
-          {onRegisterMinutes && m.status_type === 'scheduled' && m.calendar_id && !minutesAccess.loading && !minutesAccess.error && (minutesAccess.allowed || minutesAccess.existingMinuteId) && (
+          {onRegisterMinutes && isMeetingEligibleForMinutes(m) && minutesAccess.loading && (
+            <button disabled className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium cursor-not-allowed">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              در حال بررسی صورت‌جلسه...
+            </button>
+          )}
+          {onRegisterMinutes && isMeetingEligibleForMinutes(m) && minutesAccess.error && (
+            <button onClick={() => {
+              setMinutesAccess({ loading: true, allowed: false, existingMinuteId: null, error: false });
+              (async () => {
+                try {
+                  const { checkMinutesAccessForMeeting } = await import('../../lib/minutesMeetingAccess');
+                  const result = await checkMinutesAccessForMeeting(supabase, m.id);
+                  setMinutesAccess({ loading: false, allowed: result.allowed, existingMinuteId: result.existingMinuteId ?? null, error: false });
+                } catch {
+                  setMinutesAccess({ loading: false, allowed: false, existingMinuteId: null, error: true });
+                }
+              })();
+            }} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-sm font-medium hover:bg-amber-100 transition-colors">
+              <AlertCircle className="w-4 h-4" />
+              بررسی دسترسی ناموفق بود — تلاش مجدد
+            </button>
+          )}
+          {onRegisterMinutes && isMeetingEligibleForMinutes(m) && !minutesAccess.loading && !minutesAccess.error && minutesAccess.allowed && (
             <button onClick={handleRegisterMinutes} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-100 transition-colors">
               <ClipboardList className="w-4 h-4" />
               {minutesAccess.existingMinuteId ? 'مشاهده صورت‌جلسه' : 'ثبت صورت‌جلسه'}
