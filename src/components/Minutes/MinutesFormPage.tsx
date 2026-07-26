@@ -489,110 +489,197 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     return null;
   };
 
-  // ── Central draft id resolver ───────────────────────────────────────────
-  // Guarantees a real `minutes.id` is available before any update/submit.
-  // Never uses meetingId as a minuteId. Guards against concurrent calls via
-  // a shared in-flight Promise ref so double-click / save+submit cannot create
-  // two drafts.
-  const inflightDraftRef = useRef<Promise<string | null> | null>(null);
+  // ── Central minute resolver + saver ──────────────────────────────────────
+  // Guarantees a real `minutes.id` AND a fresh `updated_at` are available
+  // before any submit. Never uses meetingId as a minuteId. When
+  // `saveCurrentValues` is true, the current form state is persisted via
+  // create_minutes_draft (new) or update_minutes_draft (existing) before
+  // returning, so submit always acts on the latest version.
+  interface WorkingMinuteResult {
+    minuteId: string;
+    updatedAt: string;
+  }
 
-  const ensureWorkingMinuteId = async (): Promise<string | null> => {
-    // 1. Already have a working minute id (created earlier this session)
-    if (workingMinuteId) return workingMinuteId;
-    // 2. Edit mode: use the real existing minute id, never the meeting id
-    if (mode === 'edit' && editMinuteId) return editMinuteId;
-    // 3. New mode: create the draft once
-    if (mode !== 'new') return null;
+  // A single shared operation lock covers create + update + submit so that
+  // double-click, save+submit, or submit+submit cannot race. We do NOT rely
+  // solely on React state (whose updates are async) for this guard.
+  const inflightOpRef = useRef<Promise<WorkingMinuteResult | null> | null>(null);
 
-    // Reuse an in-flight creation to dedupe double-click / concurrent calls
-    if (inflightDraftRef.current) return inflightDraftRef.current;
+  const ensureWorkingMinute = async (options: {
+    saveCurrentValues: boolean;
+    navigateAfterSave: boolean;
+  }): Promise<WorkingMinuteResult | null> => {
+    // Reuse any in-flight operation to dedupe concurrent calls.
+    if (inflightOpRef.current) return inflightOpRef.current;
 
     const sourceMeetingId = getMeetingIdFromUrl();
-    if (!sourceMeetingId) {
-      toast.error('برای ثبت صورت‌جلسه باید از جزئیات یک جلسه تقویمی وارد شوید.');
+    const existingMinuteId = workingMinuteId ?? (mode === 'edit' ? editMinuteId : null);
+
+    // New mode with no draft yet → must create.
+    if (!existingMinuteId) {
+      if (mode !== 'new') return null;
+      if (!sourceMeetingId) {
+        toast.error('برای ثبت صورت‌جلسه باید از جزئیات یک جلسه تقویمی وارد شوید.');
+        return null;
+      }
+      const validationError = validate();
+      if (validationError) {
+        toast.error(validationError);
+        return null;
+      }
+
+      const creation = (async (): Promise<WorkingMinuteResult | null> => {
+        setSavingDraft(true);
+        try {
+          const createPayload = { meeting_id: sourceMeetingId, ...buildMinutesDraftPayload() };
+          if (isDev) console.log('[MinutesDraftRPCPayload]', createPayload);
+          const { data, error: rpcError } = await supabase.rpc('create_minutes_draft', {
+            p_payload: createPayload,
+          });
+          if (rpcError) {
+            if (isDev) console.error('[MinutesDraftRPC] Supabase error:', rpcError);
+            toast.error('ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.');
+            return null;
+          }
+          if (data && data.success === false) {
+            const code: string = data.code || data.error_code || 'INTERNAL_ERROR';
+            if (code === 'MINUTES_ALREADY_EXISTS') {
+              const { data: existing } = await supabase
+                .from('minutes')
+                .select('id')
+                .eq('meeting_id', sourceMeetingId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              const existingId = (existing as { id: string } | null)?.id ?? null;
+              toast.error('برای این جلسه قبلاً صورت‌جلسه ثبت شده است.');
+              if (existingId) {
+                setMinuteIdInUrl(existingId);
+                setMinutesPageInUrl('minutes-detail');
+                onNavigate('minutes-detail');
+              }
+              return null;
+            }
+            const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.';
+            if (isDev) console.error('[MinutesDraftRPC] Business error:', code, data.message);
+            toast.error(msg);
+            return null;
+          }
+          if (data && data.success === true && data.minute_id) {
+            const newId = data.minute_id as string;
+            if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', newId);
+            const { error: syncErr } = await supabase.rpc('_sync_minutes_decisions', {
+              p_minute_id: newId,
+              p_decisions: decisionsPayload(),
+            });
+            if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
+            // create_minutes_draft does NOT return updated_at; query it.
+            const { data: minRow } = await supabase
+              .from('minutes')
+              .select('updated_at')
+              .eq('id', newId)
+              .maybeSingle();
+            const realUpdatedAt = (minRow as { updated_at: string } | null)?.updated_at ?? null;
+            if (!realUpdatedAt) {
+              toast.error('ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.');
+              return null;
+            }
+            setEditUpdatedAt(realUpdatedAt);
+            setWorkingMinuteId(newId);
+            setMinuteIdInUrl(newId);
+            return { minuteId: newId, updatedAt: realUpdatedAt };
+          }
+          if (isDev) console.error('[MinutesDraftRPC] Unexpected response:', data);
+          toast.error('پاسخ نامعتبر از سرور دریافت شد.');
+          return null;
+        } catch (err) {
+          if (isDev) console.error('[MinutesDraftRPC] Exception:', err);
+          toast.error('خطای غیرمنتظره رخ داد. فرم حفظ شد؛ لطفاً دوباره تلاش کنید.');
+          return null;
+        } finally {
+          setSavingDraft(false);
+          inflightOpRef.current = null;
+        }
+      })();
+
+      inflightOpRef.current = creation;
+      return creation;
+    }
+
+    // Existing minute (edit or already-created draft). When saveCurrentValues
+    // is requested, always update before returning so submit uses the latest.
+    if (!options.saveCurrentValues) {
+      // Read-only resolve: return current id + updatedAt without updating.
+      if (!editUpdatedAt) {
+        toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
+        return null;
+      }
+      return { minuteId: existingMinuteId, updatedAt: editUpdatedAt };
+    }
+
+    if (!editUpdatedAt) {
+      toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
       return null;
     }
 
-    const validationError = validate();
-    if (validationError) {
-      toast.error(validationError);
-      return null;
-    }
-
-    const creation = (async (): Promise<string | null> => {
+    const update = (async (): Promise<WorkingMinuteResult | null> => {
       setSavingDraft(true);
       try {
-        const draftPayload = buildMinutesDraftPayload();
-        const createPayload = { meeting_id: sourceMeetingId, ...draftPayload };
-        if (isDev) console.log('[MinutesDraftRPCPayload]', createPayload);
-        const { data, error: rpcError } = await supabase.rpc('create_minutes_draft', {
-          p_payload: createPayload,
+        const { data, error: rpcError } = await supabase.rpc('update_minutes_draft', {
+          p_minute_id: existingMinuteId,
+          p_expected_updated_at: editUpdatedAt,
+          p_payload: buildMinutesDraftPayload(),
         });
         if (rpcError) {
-          if (isDev) console.error('[MinutesDraftRPC] Supabase error:', rpcError);
-          toast.error('ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.');
+          if (isDev) console.error('[MinutesUpdateRPC] Supabase error:', rpcError);
+          toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
           return null;
         }
         if (data && data.success === false) {
           const code: string = data.code || data.error_code || 'INTERNAL_ERROR';
-          if (code === 'MINUTES_ALREADY_EXISTS') {
-            // Duplicate: find the existing minute and navigate to it.
-            const { data: existing } = await supabase
-              .from('minutes')
-              .select('id')
-              .eq('meeting_id', sourceMeetingId)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            const existingId = (existing as { id: string } | null)?.id ?? null;
-            toast.error('برای این جلسه قبلاً صورت‌جلسه ثبت شده است.');
-            if (existingId) {
-              setMinuteIdInUrl(existingId);
-              setMinutesPageInUrl('minutes-detail');
-              onNavigate('minutes-detail');
-            }
-            return null;
+          if (code === 'MINUTES_VERSION_CONFLICT') {
+            toast.error('این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.');
+          } else if (code === 'MINUTES_NO_PERMISSION') {
+            toast.error('شما اجازه ویرایش این صورت‌جلسه را ندارید.');
+          } else if (code === 'MINUTE_NOT_FOUND') {
+            toast.error('صورت‌جلسه یافت نشد.');
+          } else {
+            toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
           }
-          const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.';
-          if (isDev) console.error('[MinutesDraftRPC] Business error:', code, data.message);
-          toast.error(msg);
           return null;
         }
-        if (data && data.success === true && data.minute_id) {
-          const newId = data.minute_id as string;
-          if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', newId);
-          // Sync decisions via dedicated RPC
+        if (data && data.success === true) {
+          const returnedUpdatedAt = data.updated_at as string | undefined;
+          if (!returnedUpdatedAt) {
+            toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
+            return null;
+          }
+          if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, returnedUpdatedAt);
           const { error: syncErr } = await supabase.rpc('_sync_minutes_decisions', {
-            p_minute_id: newId,
+            p_minute_id: existingMinuteId,
             p_decisions: decisionsPayload(),
           });
           if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
-          // Fetch the real updated_at (create_minutes_draft does not return it)
-          const { data: minRow } = await supabase
-            .from('minutes')
-            .select('updated_at')
-            .eq('id', newId)
-            .maybeSingle();
-          if (minRow) setEditUpdatedAt((minRow as { updated_at: string }).updated_at);
-          setWorkingMinuteId(newId);
-          setMinuteIdInUrl(newId);
-          return newId;
+          setEditUpdatedAt(returnedUpdatedAt);
+          setWorkingMinuteId(existingMinuteId);
+          setMinuteIdInUrl(existingMinuteId);
+          return { minuteId: existingMinuteId, updatedAt: returnedUpdatedAt };
         }
-        if (isDev) console.error('[MinutesDraftRPC] Unexpected response:', data);
+        if (isDev) console.error('[MinutesUpdateRPC] Unexpected response:', data);
         toast.error('پاسخ نامعتبر از سرور دریافت شد.');
         return null;
       } catch (err) {
-        if (isDev) console.error('[MinutesDraftRPC] Exception:', err);
+        if (isDev) console.error('[MinutesUpdateRPC] Exception:', err);
         toast.error('خطای غیرمنتظره رخ داد. فرم حفظ شد؛ لطفاً دوباره تلاش کنید.');
         return null;
       } finally {
         setSavingDraft(false);
-        inflightDraftRef.current = null;
+        inflightOpRef.current = null;
       }
     })();
 
-    inflightDraftRef.current = creation;
-    return creation;
+    inflightOpRef.current = update;
+    return update;
   };
 
   const handleSaveDraft = async () => {
@@ -606,58 +693,13 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
 
     setSavingDraft(true);
     try {
-      const minuteId = await ensureWorkingMinuteId();
-      if (!minuteId) return; // creation failed; toast already shown
-
-      // If we just created it, the draft is already saved — sync done above.
-      // Only update when there's an existing minute (edit or second save in new).
-      const needsUpdate = mode === 'edit' || workingMinuteId === minuteId;
-      if (needsUpdate && editUpdatedAt) {
-        const { data, error: rpcError } = await supabase.rpc('update_minutes_draft', {
-          p_minute_id: minuteId,
-          p_expected_updated_at: editUpdatedAt,
-          p_payload: buildMinutesDraftPayload(),
-        });
-        if (rpcError) {
-          if (isDev) console.error('[MinutesUpdateRPC] Supabase error:', rpcError);
-          toast.error('به‌روزرسانی پیش‌نویس ناموفق بود.');
-          return;
-        }
-        if (data && data.success === false) {
-          const code: string = data.code || data.error_code || 'INTERNAL_ERROR';
-          if (code === 'MINUTES_VERSION_CONFLICT') {
-            toast.error('این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.');
-          } else if (code === 'MINUTES_NO_PERMISSION') {
-            toast.error('شما اجازه ویرایش این صورت‌جلسه را ندارید.');
-          } else if (code === 'MINUTE_NOT_FOUND') {
-            toast.error('صورت‌جلسه یافت نشد.');
-          } else {
-            const msg = RPC_ERROR_MESSAGES[code] || 'به‌روزرسانی پیش‌نویس ناموفق بود.';
-            toast.error(msg);
-          }
-          return;
-        }
-        if (data && data.success === true) {
-          if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, data.updated_at);
-          const { error: syncErr } = await supabase.rpc('_sync_minutes_decisions', {
-            p_minute_id: minuteId,
-            p_decisions: decisionsPayload(),
-          });
-          if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
-          if (data.updated_at) setEditUpdatedAt(data.updated_at as string);
-          toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
-          setMinuteIdInUrl(minuteId);
-          setMinutesPageInUrl('minutes-detail');
-          onNavigate('minutes-detail');
-          return;
-        }
-        if (isDev) console.error('[MinutesUpdateRPC] Unexpected response:', data);
-        toast.error('پاسخ نامعتبر از سرور دریافت شد.');
-        return;
-      }
-      // Newly created draft — already saved, no update needed.
+      const saved = await ensureWorkingMinute({
+        saveCurrentValues: true,
+        navigateAfterSave: true,
+      });
+      if (!saved) return; // toast already shown
       toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
-      setMinuteIdInUrl(minuteId);
+      setMinuteIdInUrl(saved.minuteId);
       setMinutesPageInUrl('minutes-detail');
       onNavigate('minutes-detail');
     } catch (err) {
@@ -676,7 +718,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       toast.error('لطفاً مدل تأیید را انتخاب کنید.');
       return;
     }
-    // For system mode, verify at least one internal participant with a valid user_id exists
     if (info.approvalMode === 'system') {
       const check = checkSystemApproverEligibility(info.approvalMode, internalParticipants);
       if (!check.canSubmit) {
@@ -686,39 +727,17 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     }
     setSubmitting(true);
     try {
-      // 1. Ensure a real minute id exists (create draft if needed, or update existing)
-      const minuteId = await ensureWorkingMinuteId();
-      if (!minuteId) return; // creation/update failed; toast already shown
+      // 1. Persist current form values and get a fresh minuteId + updatedAt.
+      const saved = await ensureWorkingMinute({
+        saveCurrentValues: true,
+        navigateAfterSave: false,
+      });
+      if (!saved) return; // create/update failed; toast already shown
 
-      // 2. Update the draft with current form values before submitting
-      if (editUpdatedAt) {
-        const { data: updateData, error: updateErr } = await supabase.rpc('update_minutes_draft', {
-          p_minute_id: minuteId,
-          p_expected_updated_at: editUpdatedAt,
-          p_payload: buildMinutesDraftPayload(),
-        });
-        if (updateErr) {
-          toast.error('ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.');
-          return;
-        }
-        if (updateData && updateData.success === false) {
-          const code: string = updateData.code || updateData.error_code || 'INTERNAL_ERROR';
-          if (code === 'MINUTES_VERSION_CONFLICT') {
-            toast.error('این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.');
-          } else {
-            toast.error('ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.');
-          }
-          return;
-        }
-        if (updateData && updateData.success === true && updateData.updated_at) {
-          setEditUpdatedAt(updateData.updated_at as string);
-        }
-      }
-
-      // 3. Submit the real minute id — never the meeting id
+      // 2. Submit using the real minute id and the updatedAt just returned.
       const { data, error: rpcError } = await supabase.rpc('submit_minutes_for_approval', {
-        p_minute_id: minuteId,
-        p_expected_updated_at: editUpdatedAt,
+        p_minute_id: saved.minuteId,
+        p_expected_updated_at: saved.updatedAt,
         p_approval_mode: info.approvalMode,
       });
       if (rpcError) {

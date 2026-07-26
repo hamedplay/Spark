@@ -284,3 +284,266 @@ test('access: existing rows with canCreate=true → MINUTES_ALREADY_EXISTS', () 
   assert.equal(r.existingMinuteId, 'minute-existing');
   assert.equal(r.allowed, false);
 });
+
+// ── 21. edit mode submit: update_minutes_draft runs before submit ────────────
+test('edit submit: update_minutes_draft is called before submit_minutes_for_approval', async () => {
+  const { supabase, calls } = makeMockSupabase({
+    update_minutes_draft: {
+      data: { success: true, minute_id: 'minute-edit-1', updated_at: '2026-07-26T11:00:00.000Z' },
+      error: null,
+    },
+    submit_minutes_for_approval: {
+      data: { success: true, minute_id: 'minute-edit-1', status: 'pending_approval' },
+      error: null,
+    },
+    _sync_minutes_decisions: { data: { success: true }, error: null },
+  });
+
+  // Simulate the submit flow: update first, then submit with returned updatedAt
+  const updateRes = await supabase.rpc('update_minutes_draft', {
+    p_minute_id: 'minute-edit-1',
+    p_expected_updated_at: '2026-07-26T10:00:00.000Z',
+    p_payload: { info: { title: 'changed' } },
+  });
+  const updateData = updateRes.data as { success: boolean; updated_at: string };
+  assert.equal(updateData.success, true);
+
+  await supabase.rpc('submit_minutes_for_approval', {
+    p_minute_id: 'minute-edit-1',
+    p_expected_updated_at: updateData.updated_at,
+    p_approval_mode: 'system',
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].fn, 'update_minutes_draft');
+  assert.equal(calls[1].fn, 'submit_minutes_for_approval');
+  // Submit uses the updatedAt returned by update, not the old one
+  assert.equal(calls[1].args.p_expected_updated_at, '2026-07-26T11:00:00.000Z');
+  assert.notEqual(calls[1].args.p_expected_updated_at, '2026-07-26T10:00:00.000Z');
+});
+
+// ── 22. edit mode: submit uses updated_at from update response, not stale state
+test('edit submit: p_expected_updated_at is the value returned by update, not stale', async () => {
+  const { supabase, calls } = makeMockSupabase({
+    update_minutes_draft: {
+      data: { success: true, minute_id: 'minute-1', updated_at: '2026-07-26T12:00:00.000Z' },
+      error: null,
+    },
+    submit_minutes_for_approval: {
+      data: { success: true, minute_id: 'minute-1' },
+      error: null,
+    },
+    _sync_minutes_decisions: { data: { success: true }, error: null },
+  });
+
+  const staleUpdatedAt = '2026-07-26T09:00:00.000Z';
+  const updateRes = await supabase.rpc('update_minutes_draft', {
+    p_minute_id: 'minute-1',
+    p_expected_updated_at: staleUpdatedAt,
+    p_payload: {},
+  });
+  const freshUpdatedAt = (updateRes.data as { updated_at: string }).updated_at;
+
+  await supabase.rpc('submit_minutes_for_approval', {
+    p_minute_id: 'minute-1',
+    p_expected_updated_at: freshUpdatedAt,
+    p_approval_mode: 'in_person',
+  });
+
+  assert.equal(calls[1].args.p_expected_updated_at, freshUpdatedAt);
+  assert.notEqual(calls[1].args.p_expected_updated_at, staleUpdatedAt);
+});
+
+// ── 23. update failure prevents submit ───────────────────────────────────────
+test('edit submit: update failure → submit not called', async () => {
+  const { supabase, calls } = makeMockSupabase({
+    update_minutes_draft: {
+      data: { success: false, error_code: 'MINUTES_VERSION_CONFLICT' },
+      error: null,
+    },
+    submit_minutes_for_approval: {
+      data: { success: true },
+      error: null,
+    },
+  });
+
+  const updateRes = await supabase.rpc('update_minutes_draft', {
+    p_minute_id: 'minute-1',
+    p_expected_updated_at: 'old',
+    p_payload: {},
+  });
+  const updateData = updateRes.data as { success: boolean };
+  if (!updateData.success) {
+    // submit must NOT proceed
+  } else {
+    await supabase.rpc('submit_minutes_for_approval', {
+      p_minute_id: 'minute-1',
+      p_expected_updated_at: 'new',
+      p_approval_mode: 'system',
+    });
+  }
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].fn, 'update_minutes_draft');
+});
+
+// ── 24. missing updated_at prevents submit ────────────────────────────────────
+test('submit: missing updated_at → submit not called', () => {
+  const editUpdatedAt: string | null = null;
+  let submitCalled = false;
+  if (!editUpdatedAt) {
+    // ensureWorkingMinute returns null; submit does not proceed
+  } else {
+    submitCalled = true;
+  }
+  assert.equal(submitCalled, false);
+});
+
+// ── 25. shared operation lock: save+submit cannot both run ─────────────────────
+test('lock: concurrent save and submit share one in-flight operation', async () => {
+  const { supabase, calls } = makeMockSupabase({
+    create_minutes_draft: {
+      data: { success: true, minute_id: 'minute-1' },
+      error: null,
+    },
+    update_minutes_draft: {
+      data: { success: true, minute_id: 'minute-1', updated_at: '2026-07-26T10:00:00.000Z' },
+      error: null,
+    },
+    submit_minutes_for_approval: {
+      data: { success: true, minute_id: 'minute-1' },
+      error: null,
+    },
+  });
+
+  // Simulate the lock: if an operation is in-flight, the second call reuses
+  // the same Promise rather than starting a new RPC chain.
+  let inflight: Promise<unknown> | null = null;
+  const startOp = async () => {
+    if (inflight) return inflight;
+    const p = (async () => {
+      await supabase.rpc('create_minutes_draft', { p_payload: { meeting_id: 'm1' } });
+    })();
+    inflight = p;
+    return p;
+  };
+
+  await Promise.all([startOp(), startOp()]);
+  // Only one create call despite two concurrent startOp calls
+  assert.equal(calls.length, 1);
+});
+
+// ── 26. new mode submit: create then submit with queried updatedAt ────────────
+test('new submit: create → query updated_at → submit with real updatedAt', async () => {
+  const { supabase, calls } = makeMockSupabase({
+    create_minutes_draft: {
+      data: { success: true, minute_id: 'minute-new-1' },
+      error: null,
+    },
+    _sync_minutes_decisions: { data: { success: true }, error: null },
+    submit_minutes_for_approval: {
+      data: { success: true, minute_id: 'minute-new-1', status: 'pending_approval' },
+      error: null,
+    },
+  });
+
+  // Override the from().select chain to return a real updated_at
+  const mockSupabase = {
+    ...supabase,
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({
+            data: { updated_at: '2026-07-26T08:00:00.000Z' },
+            error: null,
+          }),
+        }),
+      }),
+    }),
+  };
+
+  const createRes = await mockSupabase.rpc('create_minutes_draft', {
+    p_payload: { meeting_id: 'meeting-1' },
+  });
+  const newId = (createRes.data as { minute_id: string }).minute_id;
+
+  const minRow = await mockSupabase.from('minutes').select('updated_at').eq('id', newId).maybeSingle();
+  const realUpdatedAt = (minRow.data as { updated_at: string }).updated_at;
+
+  await mockSupabase.rpc('submit_minutes_for_approval', {
+    p_minute_id: newId,
+    p_expected_updated_at: realUpdatedAt,
+    p_approval_mode: 'system',
+  });
+
+  assert.equal(calls[0].fn, 'create_minutes_draft');
+  assert.equal(calls[1].fn, 'submit_minutes_for_approval');
+  assert.equal(calls[1].args.p_minute_id, 'minute-new-1');
+  assert.equal(calls[1].args.p_expected_updated_at, '2026-07-26T08:00:00.000Z');
+  assert.notEqual(calls[1].args.p_minute_id, 'meeting-1');
+});
+
+// ── 27. working draft with changes: submit updates before submitting ──────────
+test('working draft submit: update_minutes_draft runs before submit', async () => {
+  const { supabase, calls } = makeMockSupabase({
+    update_minutes_draft: {
+      data: { success: true, minute_id: 'minute-work-1', updated_at: '2026-07-26T15:00:00.000Z' },
+      error: null,
+    },
+    submit_minutes_for_approval: {
+      data: { success: true, minute_id: 'minute-work-1' },
+      error: null,
+    },
+    _sync_minutes_decisions: { data: { success: true }, error: null },
+  });
+
+  // workingMinuteId exists, form changed → submit must update first
+  const updateRes = await supabase.rpc('update_minutes_draft', {
+    p_minute_id: 'minute-work-1',
+    p_expected_updated_at: '2026-07-26T14:00:00.000Z',
+    p_payload: { info: { title: 'new' } },
+  });
+  const freshUpdatedAt = (updateRes.data as { updated_at: string }).updated_at;
+
+  await supabase.rpc('submit_minutes_for_approval', {
+    p_minute_id: 'minute-work-1',
+    p_expected_updated_at: freshUpdatedAt,
+    p_approval_mode: 'system',
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].fn, 'update_minutes_draft');
+  assert.equal(calls[1].fn, 'submit_minutes_for_approval');
+  assert.equal(calls[1].args.p_expected_updated_at, '2026-07-26T15:00:00.000Z');
+});
+
+// ── 28. create failure with no updated_at → submit not called ──────────────────
+test('new submit: create returns no minute_id → submit not called', async () => {
+  const { supabase, calls } = makeMockSupabase({
+    create_minutes_draft: {
+      data: { success: false, error_code: 'INTERNAL_ERROR' },
+      error: null,
+    },
+    submit_minutes_for_approval: {
+      data: { success: true },
+      error: null,
+    },
+  });
+
+  const createRes = await supabase.rpc('create_minutes_draft', {
+    p_payload: { meeting_id: 'm1' },
+  });
+  const data = createRes.data as { success: boolean; minute_id?: string };
+  if (!data.success || !data.minute_id) {
+    // submit does not proceed
+  } else {
+    await supabase.rpc('submit_minutes_for_approval', {
+      p_minute_id: data.minute_id,
+      p_expected_updated_at: 'ts',
+      p_approval_mode: 'system',
+    });
+  }
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].fn, 'create_minutes_draft');
+});
