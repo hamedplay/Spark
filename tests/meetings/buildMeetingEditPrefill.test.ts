@@ -109,19 +109,27 @@ test('derives the Jalali request date from the Gregorian date', () => {
 });
 
 test('uses an empty Jalali date for an invalid Gregorian date', () => {
-  const result = buildMeetingEditPrefill(
-    createInput({
-      meeting: {
-        requestDate: 'invalid-date',
-        request_jalaali_date: null,
-      },
-    })
-  );
+  // moment.js logs a deprecation warning via console.warn for invalid input.
+  // Suppress it so the test log stays clean.
+  const originalWarn = console.warn;
+  console.warn = (() => undefined) as typeof console.warn;
+  try {
+    const result = buildMeetingEditPrefill(
+      createInput({
+        meeting: {
+          requestDate: 'invalid-date',
+          request_jalaali_date: null,
+        },
+      })
+    );
 
-  assert.equal(
-    result.requestJalaaliDate,
-    ''
-  );
+    assert.equal(
+      result.requestJalaaliDate,
+      ''
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test('builds the exact legacy edit-prefill shape', () => {

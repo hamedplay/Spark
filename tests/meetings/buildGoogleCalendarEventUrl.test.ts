@@ -227,13 +227,21 @@ test('preserves guest email ordering', () => {
 });
 
 test('throws for an invalid request date', () => {
-  assert.throws(() => {
-    buildGoogleCalendarEventUrl(
-      createInput({
-        meeting: {
-          requestDate: 'invalid-date',
-        },
-      })
-    );
-  });
+  // moment.js logs a deprecation warning via console.warn for invalid input.
+  // Suppress it so the test log stays clean.
+  const originalWarn = console.warn;
+  console.warn = (() => undefined) as typeof console.warn;
+  try {
+    assert.throws(() => {
+      buildGoogleCalendarEventUrl(
+        createInput({
+          meeting: {
+            requestDate: 'invalid-date',
+          },
+        })
+      );
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
 });

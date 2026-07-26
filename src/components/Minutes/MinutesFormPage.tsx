@@ -3,6 +3,7 @@ import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText,
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl, setMeetingIdInUrl, clearMeetingIdFromUrl } from '../../lib/minutesNavigation';
+import { checkMinutesAccessForMeeting } from '../../lib/minutesMeetingAccess';
 import { PageHeader, ConfidentialityBadge, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -342,6 +343,21 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   // New-mode: guard against missing/invalid meetingId (point 2)
   const [noMeetingError, setNoMeetingError] = useState<string | null>(null);
 
+  // Unmount cleanup: clear the temporary `meeting` param when leaving the new-mode
+  // page so it doesn't leak into the destination page or cause a stale prefill on
+  // refresh/back. Does NOT touch the `minute` param used by detail/edit pages.
+  useEffect(() => {
+    if (mode !== 'new') return;
+    return () => {
+      // Only clear `meeting`; preserve `minute`/`mpage` for the destination page.
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('meeting')) {
+        url.searchParams.delete('meeting');
+        window.history.replaceState({}, '', url.toString());
+      }
+    };
+  }, [mode]);
+
   const title = mode === 'new' ? 'ایجاد صورت‌جلسه' : 'ویرایش صورت‌جلسه';
 
   // ── Edit mode: fetch existing minute and populate form ───────────────
@@ -494,6 +510,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   }, []);
 
   // ── New-mode: prefill from source meeting (entry via ?meeting=<id>) ────────
+  // Validation is server-side: can_create_minutes_for_meeting RPC + RLS-protected
+  // meetings query. We do NOT rely on the client-side meetings list, which may be
+  // incomplete due to pagination/filtering.
   useEffect(() => {
     if (mode !== 'new') return;
     const sourceMeetingId = getMeetingIdFromUrl();
@@ -502,24 +521,39 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       return;
     }
     if (info.meetingId) return; // already prefilled
-    if (!meetingsLoading && meetings.length > 0) {
-      const meeting = meetings.find(m => m.id === sourceMeetingId);
-      if (!meeting) {
+    let cancelled = false;
+    (async () => {
+      const access = await checkMinutesAccessForMeeting(supabase, sourceMeetingId);
+      if (cancelled) return;
+      if (access.errorCode === 'MEETING_NO_PERMISSION' || access.errorCode === 'CHECK_FAILED') {
+        setNoMeetingError('جلسه موردنظر یافت نشد یا شما به آن دسترسی ندارید.');
+        return;
+      }
+      if (access.errorCode === 'MINUTES_ALREADY_EXISTS' && access.existingMinuteId) {
+        toast('برای این جلسه قبلاً صورتجلسه ثبت شده است. به جزئیات آن منتقل می‌شوید.', { icon: 'ℹ️' });
+        setMinuteIdInUrl(access.existingMinuteId);
+        clearMeetingIdFromUrl();
+        setMinutesPageInUrl('minutes-detail');
+        onNavigate('minutes-detail');
+        return;
+      }
+      if (!access.allowed || !access.prefill) {
         setNoMeetingError('جلسه موردنظر یافت نشد یا شما به آن دسترسی ندارید.');
         return;
       }
       setInfo(prev => ({
         ...prev,
-        meetingId: meeting.id,
-        meetingTitle: meeting.subject,
-        meetingDate: meeting.request_date || '',
-        startTime: meeting.start_time || '',
-        endTime: meeting.end_time || '',
-        location: meeting.location || '',
+        meetingId: access.prefill!.meetingId,
+        meetingTitle: access.prefill!.subject,
+        meetingDate: access.prefill!.requestDate || '',
+        startTime: access.prefill!.startTime || '',
+        endTime: access.prefill!.endTime || '',
+        location: access.prefill!.location || '',
       }));
-      fetchAgendaItems(meeting.id);
-    }
-  }, [mode, meetings, meetingsLoading, info.meetingId, fetchAgendaItems]);
+      fetchAgendaItems(access.prefill.meetingId);
+    })();
+    return () => { cancelled = true; };
+  }, [mode, info.meetingId, fetchAgendaItems]);
 
   // ── Fetch all profiles ────────────────────────────────────────────────
   useEffect(() => {
@@ -851,6 +885,26 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         }
         if (createData && createData.success === false) {
           const code: string = createData.code || createData.error_code || 'INTERNAL_ERROR';
+          if (code === 'MINUTES_ALREADY_EXISTS') {
+            // Race condition: another request created the minutes between our precheck
+            // and this draft creation. Navigate to the existing minute instead of
+            // showing a raw error.
+            const { data: existing } = await supabase
+              .from('minutes')
+              .select('id')
+              .eq('meeting_id', info.meetingId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (existing?.id) {
+              toast('برای این جلسه قبلاً صورتجلسه ثبت شده است. به جزئیات آن منتقل می‌شوید.', { icon: 'ℹ️' });
+              setMinuteIdInUrl(existing.id);
+              clearMeetingIdFromUrl();
+              setMinutesPageInUrl('minutes-detail');
+              onNavigate('minutes-detail');
+              return;
+            }
+          }
           const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس ناموفق بود.';
           toast.error(msg);
           return;
@@ -973,7 +1027,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         title={title}
         actions={
           <button
-            onClick={() => onNavigate('minutes')}
+            onClick={() => { clearMeetingIdFromUrl(); onNavigate('minutes'); }}
             className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm transition-colors"
           >
             <X className="w-4 h-4" />
@@ -1105,7 +1159,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 {savingDraft ? 'در حال ذخیره...' : 'ذخیره پیش‌نویس'}
               </button>
               <button
-                onClick={() => onNavigate('minutes-detail')}
+                onClick={() => { clearMeetingIdFromUrl(); onNavigate('minutes-detail'); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 <Eye className="w-4 h-4" />
