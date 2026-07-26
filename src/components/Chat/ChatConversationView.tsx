@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronRight, Search, Phone, Video, Info, Star, Bell, X, Clock, MessageCircle, AtSign, CircleCheck as CheckCircle, Bookmark, CalendarDays } from 'lucide-react';
+import { MessageCircle, CalendarDays } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ChatMessage } from './ChatMessage';
 import { ChatInputBar } from './ChatInputBar';
-import { UserAvatar } from './ChatConversationItem';
 import { loadChatTheme } from './ChatSettingsPage';
 import type { ChatThemeSettings } from './ChatSettingsPage';
 import moment from 'moment-jalaali';
@@ -14,6 +13,15 @@ import type {
   ConversationWithProfile, MessageWithMeta, ChatMessage as ChatMsg,
   UserProfile, ReactionCount, MessageStatus, ChatReminder,
 } from './types';
+
+import { MentionsBar } from './Conversation/MentionsBar';
+import { JumpToDatePicker } from './Conversation/JumpToDatePicker';
+import { ReminderAlarmModal } from './Conversation/ReminderAlarmModal';
+import { StarredMessagesModal, type StarredItem } from './Conversation/StarredMessagesModal';
+import { RemindersModal } from './Conversation/RemindersModal';
+import { UserInfoPanel } from './Conversation/UserInfoPanel';
+import { ConversationHeader } from './Conversation/ConversationHeader';
+import { SearchBar } from './Conversation/SearchBar';
 
 interface Props {
   conversation: ConversationWithProfile;
@@ -28,12 +36,6 @@ interface Props {
   onStartCall?: (callType: 'audio' | 'video') => void;
   onOpenDirectChat?: (userId: string) => void;
   msgRefreshKey?: number;
-}
-
-interface StarredItem {
-  message: MessageWithMeta;
-  conversationId: string;
-  otherUserName: string;
 }
 
 export function ChatConversationView({
@@ -674,192 +676,37 @@ export function ChatConversationView({
 
   return (
     <div className="flex flex-col h-full overflow-hidden" dir="rtl">
-      {/* Reminder alarm — full-screen call-like modal */}
-      {reminderAlarm && (
-        <div
-          className="fixed inset-0 flex items-center justify-center bg-black/75 backdrop-blur-sm"
-          style={{ zIndex: 9998 }}
-          onMouseDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Pulsing amber ring */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-80 h-80 rounded-full border-4 border-amber-400 animate-ping opacity-20" />
-          </div>
-          <div className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border-4 border-amber-400">
-            <div className="bg-amber-400 px-6 py-5 flex items-center gap-3">
-              <Bell className="w-9 h-9 text-white animate-bounce flex-shrink-0" />
-              <div>
-                <p className="text-white font-bold text-xl">یادآوری!</p>
-                <p className="text-amber-900 text-sm mt-0.5 font-medium">
-                  {moment((reminderAlarm as any).remind_at).format('HH:mm — jYYYY/jMM/jDD')}
-                </p>
-              </div>
-            </div>
-            <div className="px-6 py-6">
-              {(reminderAlarm as any).chat_messages?.body && (
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3 mb-4 border border-gray-100 dark:border-gray-700">
-                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed line-clamp-3">
-                    {(reminderAlarm as any).chat_messages.body}
-                  </p>
-                </div>
-              )}
-              {reminderAlarm.note && (
-                <p className="text-gray-800 dark:text-white text-base leading-relaxed font-medium">{reminderAlarm.note}</p>
-              )}
-              <p className="text-xs text-amber-500 mt-3 text-center animate-pulse">یادآوری رسیده است</p>
-            </div>
-            <div className="px-6 pb-6 flex gap-3">
-              <button
-                onClick={dismissReminderAlarm}
-                className="flex-1 flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-white font-bold py-3.5 rounded-2xl transition-colors text-base shadow-lg"
-              >
-                <CheckCircle className="w-5 h-5" /> متوجه شدم
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ReminderAlarmModal reminderAlarm={reminderAlarm} onDismiss={dismissReminderAlarm} />
 
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex-shrink-0 min-w-0">
-        <button onClick={onBack} className="lg:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg flex-shrink-0">
-          <ChevronRight className="w-5 h-5 dark:text-white" />
-        </button>
-        {/* Avatar with status dot */}
-        <div className="relative flex-shrink-0">
-          {isSavedMessages ? (
-            <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center">
-              <Bookmark className="w-4 h-4 text-white" />
-            </div>
-          ) : (
-            <>
-              <UserAvatar name={otherName} size="sm" avatarUrl={conversation.otherUser.avatar_url} />
-              {(() => {
-                const online = isUserOnline(otherUserPresence?.last_seen);
-                const dotColor = online ? 'bg-green-500' : 'bg-gray-400';
-                return <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-900 ${dotColor}`} />;
-              })()}
-            </>
-          )}
-        </div>
-        {/* On desktop: show name + status; on mobile: avatar only */}
-        <div className="hidden sm:block flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 dark:text-white text-sm truncate">{otherName}</h3>
-          {isSavedMessages ? (
-            <p className="text-xs text-teal-500 truncate">پیام‌های شخصی شما</p>
-          ) : (
-            (() => {
-              const online = isUserOnline(otherUserPresence?.last_seen);
-              return (
-                <p className={`text-xs truncate ${online ? 'text-green-500' : 'text-gray-400'}`}>
-                  {getLastSeenText(otherUserPresence?.last_seen)}
-                </p>
-              );
-            })()
-          )}
-        </div>
-        {/* On mobile: spacer to push icons to end */}
-        <div className="flex-1 sm:hidden" />
+      <ConversationHeader
+        onBack={onBack}
+        isSavedMessages={isSavedMessages}
+        otherName={otherName}
+        conversation={conversation}
+        otherUserPresence={otherUserPresence}
+        isUserOnline={isUserOnline}
+        getLastSeenText={getLastSeenText}
+        localStarredCount={localStarredCount}
+        remindersCount={reminders.length}
+        showSearch={showSearch}
+        onToggleSearch={() => { setShowSearch(v => !v); if (showSearch) setSearchQuery(''); }}
+        onOpenStarred={() => { setShowStarredModal(true); fetchGlobalStarred(); }}
+        onOpenReminders={() => { setShowRemindersModal(true); fetchReminders(); }}
+        onStartCall={onStartCall}
+        onJumpToDate={() => {
+          const now = moment();
+          setJumpPickerDate({ jy: now.jYear(), jm: now.jMonth() + 1, jd: now.jDate() });
+        }}
+        showInfoPanel={showInfoPanel}
+        onToggleInfoPanel={() => setShowInfoPanel(v => !v)}
+      />
 
-        {/* Action icons — all visible on all screen sizes */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          {/* Starred messages */}
-          <button
-            onClick={() => { setShowStarredModal(true); fetchGlobalStarred(); }}
-            className="relative flex items-center justify-center p-2 rounded-xl transition-colors text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-            title="پیام‌های نشانه‌دار"
-          >
-            <Star className={`w-4 h-4 ${localStarredCount > 0 ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-            {localStarredCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-yellow-400 text-white text-[8px] font-bold rounded-full flex items-center justify-center">
-                {localStarredCount}
-              </span>
-            )}
-          </button>
-          {/* Reminders */}
-          <button
-            onClick={() => { setShowRemindersModal(true); fetchReminders(); }}
-            className="relative flex items-center justify-center p-2 rounded-xl transition-colors text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-            title="یادآوری‌ها"
-          >
-            <Bell className="w-4 h-4" />
-            {reminders.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 text-white text-[8px] font-bold rounded-full flex items-center justify-center">
-                {reminders.length}
-              </span>
-            )}
-          </button>
-          {/* Search */}
-          <button
-            onClick={() => { setShowSearch(v => !v); if (showSearch) setSearchQuery(''); }}
-            className={`p-2 rounded-xl transition-colors ${showSearch ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-600' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500'}`}
-            title="جستجو در پیام‌ها"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-          {/* Voice call */}
-          {!isSavedMessages && (
-            <button
-              onClick={() => onStartCall?.('audio')}
-              className="p-2 rounded-xl transition-colors hover:bg-teal-50 dark:hover:bg-teal-900/20 text-teal-600 dark:text-teal-400"
-              title="تماس صوتی"
-            >
-              <Phone className="w-4 h-4" />
-            </button>
-          )}
-          {/* Video call */}
-          {!isSavedMessages && (
-            <button
-              onClick={() => onStartCall?.('video')}
-              className="p-2 rounded-xl transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400"
-              title="تماس تصویری"
-            >
-              <Video className="w-4 h-4" />
-            </button>
-          )}
-          {/* Jump to date */}
-          <button
-            onClick={() => {
-              const now = moment();
-              setJumpPickerDate({ jy: now.jYear(), jm: now.jMonth() + 1, jd: now.jDate() });
-            }}
-            className="p-2 rounded-xl transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"
-            title="رفتن به تاریخ"
-          >
-            <CalendarDays className="w-4 h-4" />
-          </button>
-          <button onClick={() => setShowInfoPanel(v => !v)} className={`hidden sm:flex p-2 rounded-xl text-gray-500 transition-colors items-center justify-center ${showInfoPanel ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-600' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`} title="اطلاعات">
-            <Info className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Search bar */}
       {showSearch && (
-        <div className="flex-shrink-0 px-4 py-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input
-              autoFocus
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="جستجو در پیام‌های این گفتگو..."
-              className="w-full pr-9 pl-8 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-teal-400 dark:text-white placeholder-gray-400"
-              dir="rtl"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-          {searchQuery && (
-            <p className="text-[11px] text-gray-400 mt-1 text-right">
-              {messages.filter(m => m.body?.toLowerCase().includes(searchQuery.toLowerCase())).length} نتیجه
-            </p>
-          )}
-        </div>
+        <SearchBar
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          resultCount={messages.filter(m => m.body?.toLowerCase().includes(searchQuery.toLowerCase())).length}
+        />
       )}
 
       {/* Mentions bar — shows unread @mentions in this conversation */}
@@ -964,173 +811,42 @@ export function ChatConversationView({
 
       {/* Starred Messages Modal */}
       {showStarredModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-16 px-4" dir="rtl">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[75vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-              <div className="flex items-center gap-2">
-                <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-                <h3 className="font-bold text-gray-900 dark:text-white text-base">پیام‌های نشانه‌دار ({globalStarred.length})</h3>
-              </div>
-              <button onClick={() => setShowStarredModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1">
-              {globalStarred.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 opacity-50">
-                  <Star className="w-10 h-10 text-gray-300" />
-                  <p className="text-gray-400 text-sm">هیچ پیام نشانه‌داری وجود ندارد</p>
-                </div>
-              ) : globalStarred.map(item => (
-                <div
-                  key={item.message.id}
-                  onClick={() => {
-                    setShowStarredModal(false);
-                    if (item.conversationId === conversation.id) {
-                      setTimeout(() => scrollToMessage(item.message.id), 100);
-                    }
-                  }}
-                  className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-b border-gray-50 dark:border-gray-800 cursor-pointer group transition-colors"
-                >
-                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 flex-shrink-0 mt-1" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{item.otherUserName}</span>
-                      <span className="text-[10px] text-gray-400">{moment(item.message.created_at).format('HH:mm jYYYY/jMM/jDD')}</span>
-                    </div>
-                    <p className="text-sm text-gray-800 dark:text-white line-clamp-2 leading-relaxed">{item.message.body || '📎 فایل'}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <MessageCircle className="w-3 h-3 text-gray-400" />
-                      <span className="text-[10px] text-gray-400">گفتگو با {item.otherUserName}</span>
-                      {item.conversationId === conversation.id && (
-                        <span className="text-[10px] text-teal-500 mr-1 group-hover:underline">رفتن به پیام ↩</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <StarredMessagesModal
+          starred={globalStarred}
+          onClose={() => setShowStarredModal(false)}
+          onGoToMessage={(item) => {
+            setShowStarredModal(false);
+            if (item.conversationId === conversation.id) {
+              setTimeout(() => scrollToMessage(item.message.id), 100);
+            }
+          }}
+        />
       )}
 
       {/* Reminders Modal */}
       {showRemindersModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-16 px-4" dir="rtl">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[75vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-              <div className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-amber-500" />
-                <h3 className="font-bold text-gray-900 dark:text-white text-base">یادآوری‌های فعال ({reminders.length})</h3>
-              </div>
-              <button onClick={() => setShowRemindersModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1">
-              {reminders.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 opacity-50">
-                  <Bell className="w-10 h-10 text-gray-300" />
-                  <p className="text-gray-400 text-sm">یادآوری فعالی وجود ندارد</p>
-                </div>
-              ) : reminders.map((r: any) => {
-                const msgBody = r.chat_messages?.body;
-                const msgId = r.chat_messages?.id;
-                const msgConvId = r.chat_messages?.conversation_id;
-                return (
-                  <div key={r.id} className="flex items-start gap-4 px-6 py-4 border-b border-gray-50 dark:border-gray-800">
-                    <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-1" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                          {moment(r.remind_at).format('HH:mm — jYYYY/jMM/jDD')}
-                        </span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${moment(r.remind_at).isBefore(moment()) ? 'bg-red-100 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
-                          {moment(r.remind_at).isBefore(moment()) ? 'گذشته' : 'پیش رو'}
-                        </span>
-                      </div>
-                      {msgBody && (
-                        <div
-                          onClick={() => { if (msgConvId === conversation.id && msgId) { setShowRemindersModal(false); setTimeout(() => scrollToMessage(msgId), 100); } }}
-                          className={`text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-lg mb-1 line-clamp-2 ${msgConvId === conversation.id ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700' : ''}`}
-                        >
-                          {msgBody}
-                          {msgConvId === conversation.id && <span className="text-[10px] text-teal-500 mr-1">↩ رفتن</span>}
-                        </div>
-                      )}
-                      {r.note && <p className="text-sm text-gray-800 dark:text-white">{r.note}</p>}
-                    </div>
-                    <button onClick={() => dismissReminder(r.id)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <RemindersModal
+          reminders={reminders}
+          onClose={() => setShowRemindersModal(false)}
+          onDismissReminder={dismissReminder}
+          onGoToMessage={scrollToMessage}
+          currentConversationId={conversation.id}
+        />
       )}
 
       {/* User Info Panel */}
       {showInfoPanel && (
-        <div className="fixed inset-0 z-[200] flex justify-end" dir="rtl">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" onClick={() => setShowInfoPanel(false)} />
-          <div className="relative w-80 bg-white dark:bg-gray-900 h-full shadow-2xl border-r border-gray-100 dark:border-gray-800 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm">اطلاعات گفتگو</h3>
-              <button onClick={() => setShowInfoPanel(false)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex flex-col items-center py-6 px-5 border-b border-gray-100 dark:border-gray-800">
-              {isSavedMessages ? (
-                <div className="w-20 h-20 rounded-full bg-teal-500 flex items-center justify-center mb-3">
-                  <Bookmark className="w-9 h-9 text-white" />
-                </div>
-              ) : (
-                <div className="w-20 h-20 rounded-full overflow-hidden flex-shrink-0">
-                  {conversation.otherUser.avatar_url ? (
-                    <img src={conversation.otherUser.avatar_url} alt={otherName} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-teal-500 flex items-center justify-center text-white text-3xl font-bold">
-                      {otherName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-              )}
-              <h4 className="mt-3 font-bold text-gray-900 dark:text-white text-base">{otherName}</h4>
-              {!isSavedMessages && (
-                <p className={`text-xs mt-1 ${isUserOnline(otherUserPresence?.last_seen) ? 'text-green-500' : 'text-gray-400'}`}>
-                  {getLastSeenText(otherUserPresence?.last_seen)}
-                </p>
-              )}
-              {!isSavedMessages && conversation.otherUser.email && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{conversation.otherUser.email}</p>
-              )}
-            </div>
-            <div className="px-5 py-4 space-y-1">
-              {!isSavedMessages && (
-                <div className="flex items-center justify-between py-2.5 border-b border-gray-50 dark:border-gray-800">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">وضعیت</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${isUserOnline(otherUserPresence?.last_seen) ? 'bg-green-500' : 'bg-gray-400'}`} />
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                      {isUserOnline(otherUserPresence?.last_seen) ? 'آنلاین' : 'آفلاین'}
-                    </span>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center justify-between py-2.5 border-b border-gray-50 dark:border-gray-800">
-                <span className="text-xs text-gray-500 dark:text-gray-400">پیام‌های نشانه‌دار</span>
-                <span className="text-xs font-semibold text-yellow-500">{localStarredCount}</span>
-              </div>
-              <div className="flex items-center justify-between py-2.5 border-b border-gray-50 dark:border-gray-800">
-                <span className="text-xs text-gray-500 dark:text-gray-400">یادآوری‌های فعال</span>
-                <span className="text-xs font-semibold text-amber-500">{reminders.length}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <UserInfoPanel
+          conversation={conversation}
+          otherName={otherName}
+          isSavedMessages={isSavedMessages}
+          isUserOnline={isUserOnline}
+          getLastSeenText={getLastSeenText}
+          otherUserPresence={otherUserPresence}
+          localStarredCount={localStarredCount}
+          remindersCount={reminders.length}
+          onClose={() => setShowInfoPanel(false)}
+        />
       )}
 
       {/* Jump-to-date picker */}
@@ -1141,141 +857,6 @@ export function ChatConversationView({
           onClose={() => setJumpPickerDate(null)}
         />
       )}
-    </div>
-  );
-}
-
-// ─── Mentions Bar ─────────────────────────────────────────────────────────────
-function MentionsBar({
-  items,
-  onScrollTo,
-  onDismiss,
-  onDismissAll,
-}: {
-  items: { id: string; body: string | null; senderName: string }[];
-  onScrollTo: (id: string) => void;
-  onDismiss: (id: string) => void;
-  onDismissAll: () => void;
-}) {
-  const current = items[0];
-  return (
-    <div
-      className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-900/20 border-b border-teal-200 dark:border-teal-800"
-      dir="rtl"
-    >
-      <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center flex-shrink-0">
-        <AtSign className="w-3.5 h-3.5 text-white" />
-      </div>
-      <button
-        onClick={() => { onScrollTo(current.id); onDismiss(current.id); }}
-        className="flex-1 min-w-0 text-right"
-      >
-        <span className="text-xs font-semibold text-teal-700 dark:text-teal-300 truncate block">
-          {current.senderName} شما را منشن کرد
-        </span>
-        {current.body && (
-          <span className="text-[11px] text-teal-600/80 dark:text-teal-400/80 truncate block leading-tight">
-            {current.body.slice(0, 80)}
-          </span>
-        )}
-      </button>
-      {items.length > 1 && (
-        <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold bg-teal-100 dark:bg-teal-900/40 px-1.5 py-0.5 rounded-full flex-shrink-0">
-          {items.length}
-        </span>
-      )}
-      <button
-        onClick={() => { onScrollTo(current.id); onDismiss(current.id); }}
-        className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold hover:underline flex-shrink-0"
-      >
-        رفتن
-      </button>
-      <button
-        onClick={() => onDismiss(current.id)}
-        title="بستن این منشن"
-        className="p-1 text-teal-500 hover:text-teal-700 flex-shrink-0"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
-      {items.length > 1 && (
-        <button
-          onClick={onDismissAll}
-          title="بستن همه"
-          className="text-[10px] text-teal-500 hover:text-teal-700 flex-shrink-0"
-        >
-          همه
-        </button>
-      )}
-    </div>
-  );
-}
-// ─── Jump-to-date picker ──────────────────────────────────────────────────────
-function JumpToDatePicker({
-  initial,
-  onConfirm,
-  onClose,
-}: {
-  initial: { jy: number; jm: number; jd: number };
-  onConfirm: (jy: number, jm: number, jd: number) => void;
-  onClose: () => void;
-}) {
-  const [jy, setJy] = useState(initial.jy);
-  const [jm, setJm] = useState(initial.jm);
-  const [jd, setJd] = useState(initial.jd);
-
-  const MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
-  const daysInMonth = jm <= 6 ? 31 : jm <= 11 ? 30 : (moment.jIsLeapYear(jy) ? 30 : 29);
-  const years = Array.from({ length: 10 }, (_, i) => initial.jy - 5 + i);
-
-  return (
-    <div
-      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
-      dir="rtl"
-    >
-      <div
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-5 w-72"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-blue-500" />
-            رفتن به تاریخ
-          </h3>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex gap-2 mb-4">
-          <select
-            value={jy}
-            onChange={e => setJy(Number(e.target.value))}
-            className="flex-1 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          >
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select
-            value={jm}
-            onChange={e => setJm(Number(e.target.value))}
-            className="flex-1 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          >
-            {MONTHS.map((name, i) => <option key={i+1} value={i+1}>{name}</option>)}
-          </select>
-          <select
-            value={jd}
-            onChange={e => setJd(Number(e.target.value))}
-            className="w-16 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          >
-            {Array.from({ length: daysInMonth }, (_, i) => i+1).map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <button
-          onClick={() => onConfirm(jy, jm, jd)}
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm py-2 rounded-xl transition-colors"
-        >
-          رفتن به این تاریخ
-        </button>
-      </div>
     </div>
   );
 }

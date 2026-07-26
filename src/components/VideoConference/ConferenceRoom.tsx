@@ -21,6 +21,11 @@ import { PendingApprovalsList } from './ApprovalGate';
 import type { PendingApproval } from './ApprovalGate';
 import { BanList } from './BanList';
 import type { VideoQuality } from './SettingsPanel';
+import { LeaveConfirmModal } from './Room/LeaveConfirmModal';
+import { KickBanModal, type KickConfirmData, type PendingBanData } from './Room/KickBanModal';
+import { ScreenShareBadge, FloatingReactions, EmojiPicker, SpeakingProgressBar } from './Room/Overlays';
+import { DiagnosticsPanel } from './Room/DiagnosticsPanel';
+import { BottomControls } from './Room/BottomControls';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -287,9 +292,9 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // Pending approvals (host/admin view)
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   // Kick/ban action menu (null = closed)
-  const [kickConfirm, setKickConfirm] = useState<{ peerId: string; userId: string; displayName: string } | null>(null);
+  const [kickConfirm, setKickConfirm] = useState<KickConfirmData | null>(null);
   // Selected ban duration while waiting for reason input (undefined = not yet chosen)
-  const [pendingBan, setPendingBan] = useState<{ durationMinutes: number | null; label: string } | null>(null);
+  const [pendingBan, setPendingBan] = useState<PendingBanData | null>(null);
   const [banReason, setBanReason] = useState('');
   // Ban list visibility
   const [showBanList, setShowBanList] = useState(false);
@@ -1895,84 +1900,12 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
               )}
 
               {sidePanel === 'diagnostics' && (
-                <div className="flex-1 overflow-y-auto p-3 min-h-0" dir="rtl">
-                  {/* Overall quality */}
-                  <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-2">کیفیت کلی</p>
-                  <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border mb-4 ${
-                    myQuality === 'poor' ? 'bg-red-900/20 border-red-700/40' :
-                    myQuality === 'fair' ? 'bg-amber-900/20 border-amber-700/40' :
-                    'bg-emerald-900/20 border-emerald-700/40'
-                  }`}>
-                    <Activity className={`w-4 h-4 ${qualityColor[myQuality]}`} />
-                    <span className={`text-sm font-semibold ${qualityColor[myQuality]}`}>
-                      {{ excellent: 'عالی', good: 'خوب', fair: 'متوسط', poor: 'ضعیف' }[myQuality]}
-                    </span>
-                    <span className="text-xs text-gray-500 mr-auto">{peers.size} اتصال</span>
-                  </div>
-
-                  {/* Per-peer stats */}
-                  <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-2">اتصال‌ها</p>
-                  <div className="space-y-2">
-                    {[...peers.values()].map(peer => {
-                      const diag = peerDiagnostics.get(peer.peerId);
-                      const isPoor = !!diag && ((diag.rttMs ?? 0) > 400 || (diag.packetLossPct ?? 0) > 5);
-                      const isFair = !isPoor && !!diag && ((diag.rttMs ?? 0) > 150 || (diag.packetLossPct ?? 0) > 1);
-                      const qc = isPoor ? 'text-red-400' : isFair ? 'text-amber-400' : 'text-emerald-400';
-                      return (
-                        <div key={peer.peerId} className="bg-gray-800 rounded-xl p-2.5 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${peer.connectionState === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
-                            <span className="text-xs font-medium text-white truncate flex-1">{peer.displayName}</span>
-                            {diag && (
-                              <span className={`text-[10px] font-medium ${qc}`}>
-                                {isPoor ? 'ضعیف' : isFair ? 'متوسط' : 'خوب'}
-                              </span>
-                            )}
-                          </div>
-                          {diag ? (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                              <div className="flex justify-between">
-                                <span className="text-gray-500">تاخیر</span>
-                                <span className={diag.rttMs !== null && diag.rttMs > 400 ? 'text-red-400' : diag.rttMs !== null && diag.rttMs > 150 ? 'text-amber-400' : 'text-gray-200'}>
-                                  {diag.rttMs !== null ? `${diag.rttMs} ms` : '—'}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-500">افت</span>
-                                <span className={diag.packetLossPct !== null && diag.packetLossPct > 5 ? 'text-red-400' : diag.packetLossPct !== null && diag.packetLossPct > 1 ? 'text-amber-400' : 'text-gray-200'}>
-                                  {diag.packetLossPct !== null ? `${diag.packetLossPct}%` : '—'}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-500">دریافت</span>
-                                <span className="text-gray-200">{diag.inboundBitrateKbps !== null ? `${diag.inboundBitrateKbps} k` : '—'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-500">ارسال</span>
-                                <span className="text-gray-200">{diag.outboundBitrateKbps !== null ? `${diag.outboundBitrateKbps} k` : '—'}</span>
-                              </div>
-                              {diag.selectedCandidatePair && (
-                                <div className="col-span-2 flex justify-between">
-                                  <span className="text-gray-500">مسیر</span>
-                                  <span className="text-gray-200">
-                                    {diag.selectedCandidatePair.localType === 'relay' ? 'TURN' : 'P2P'}
-                                    {' / '}{diag.selectedCandidatePair.protocol?.toUpperCase() ?? '—'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-[11px] text-gray-600 text-center py-1">در حال جمع‌آوری...</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {peers.size === 0 && (
-                      <p className="text-center text-gray-600 text-xs py-6">هنوز کسی در جلسه نیست</p>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-gray-700 text-center mt-4">هر ۵ ثانیه به‌روز می‌شود</p>
-                </div>
+                <DiagnosticsPanel
+                  myQuality={myQuality}
+                  peers={peers}
+                  peerDiagnostics={peerDiagnostics}
+                  qualityColor={qualityColor}
+                />
               )}
             </div>
           </>
@@ -1981,314 +1914,76 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
 
       {/* Kick / Ban action menu */}
       {kickConfirm && (
-        <div role="dialog" aria-modal="true" aria-label="مدیریت کاربر" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 w-full max-w-sm space-y-3" dir="rtl">
-            {/* Header */}
-            <div className="flex items-center gap-3 pb-2 border-b border-gray-800">
-              <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-                {kickConfirm.displayName[0]?.toUpperCase() || '?'}
-              </div>
-              <div>
-                <h3 className="text-white font-bold text-sm">{kickConfirm.displayName}</h3>
-                <p className="text-gray-500 text-xs">{pendingBan ? `مسدودی ${pendingBan.label}` : 'انتخاب عملیات'}</p>
-              </div>
-              <button
-                onClick={() => { setKickConfirm(null); setPendingBan(null); setBanReason(''); }}
-                className="mr-auto p-1 text-gray-500 hover:text-white"
-              ><X className="w-4 h-4" /></button>
-            </div>
-
-            {/* Step 2: reason input after duration selected */}
-            {pendingBan ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1.5">دلیل مسدودسازی <span className="text-gray-600">(اختیاری)</span></label>
-                  <textarea
-                    value={banReason}
-                    onChange={e => setBanReason(e.target.value)}
-                    placeholder="مثلاً: رفتار نامناسب، ارسال اسپم..."
-                    rows={2}
-                    maxLength={200}
-                    autoFocus
-                    className="w-full p-2.5 bg-gray-800 border border-gray-700 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-600 resize-none"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={async () => {
-                      await banParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName, pendingBan.durationMinutes, banReason);
-                      setKickConfirm(null); setPendingBan(null); setBanReason('');
-                    }}
-                    className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-medium transition-colors"
-                  >
-                    تأیید مسدودسازی
-                  </button>
-                  <button
-                    onClick={() => { setPendingBan(null); setBanReason(''); }}
-                    className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm transition-colors"
-                  >
-                    برگشت
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Kick — no ban */}
-                <button
-                  onClick={async () => { await kickParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName); setKickConfirm(null); }}
-                  className="w-full flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-200 transition-colors text-right"
-                >
-                  <UserX className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">اخراج (بدون مسدودی)</p>
-                    <p className="text-xs text-gray-500">کاربر می‌تواند دوباره وارد شود</p>
-                  </div>
-                </button>
-
-                {checkPermission('ban') && (<>
-                  <p className="text-xs text-gray-500 px-1">مسدود کردن:</p>
-                  {([
-                    { label: '۱ دقیقه', min: 1 },
-                    { label: '۵ دقیقه', min: 5 },
-                    { label: '۱۵ دقیقه', min: 15 },
-                    { label: '۳۰ دقیقه', min: 30 },
-                    { label: 'دائمی', min: null },
-                  ] as { label: string; min: number | null }[]).map(({ label, min }) => (
-                    <button
-                      key={label}
-                      onClick={() => setPendingBan({ durationMinutes: min, label })}
-                      className="w-full flex items-center gap-3 p-3 bg-gray-800 hover:bg-red-900/30 rounded-xl text-sm text-gray-200 hover:text-red-300 transition-colors text-right"
-                    >
-                      <ShieldOff className="w-4 h-4 text-red-400 flex-shrink-0" />
-                      <span>مسدودی {label}</span>
-                    </button>
-                  ))}
-                </>)}
-
-                <button
-                  onClick={() => setKickConfirm(null)}
-                  className="w-full py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
-                >
-                  انصراف
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        <KickBanModal
+          kickConfirm={kickConfirm}
+          pendingBan={pendingBan}
+          banReason={banReason}
+          setBanReason={setBanReason}
+          canBan={checkPermission('ban')}
+          onKick={async () => { await kickParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName); setKickConfirm(null); }}
+          onSelectBanDuration={(durationMinutes, label) => setPendingBan({ durationMinutes, label })}
+          onConfirmBan={async () => {
+            await banParticipant(kickConfirm.peerId, kickConfirm.userId, kickConfirm.displayName, pendingBan!.durationMinutes, banReason);
+            setKickConfirm(null); setPendingBan(null); setBanReason('');
+          }}
+          onBackFromBan={() => { setPendingBan(null); setBanReason(''); }}
+          onClose={() => { setKickConfirm(null); setPendingBan(null); setBanReason(''); }}
+        />
       )}
 
       {/* Host leave confirm */}
       {showLeaveConfirm && (
-        <div role="dialog" aria-modal="true" aria-label="خروج از جلسه" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm text-center space-y-4" dir="rtl">
-            <div className="w-14 h-14 rounded-full bg-red-900/40 flex items-center justify-center mx-auto">
-              <PhoneOff className="w-7 h-7 text-red-400" />
-            </div>
-            <div>
-              <h3 className="text-white font-bold text-lg mb-1">خروج از جلسه</h3>
-              <p className="text-gray-400 text-sm">شما میزبان هستید. چه کاری انجام دهید؟</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => doLeave(false)} autoFocus
-                className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors text-sm">
-                فقط خودم خارج شوم (جلسه ادامه دارد)
-              </button>
-              <button onClick={() => doLeave(true)}
-                className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-medium transition-colors text-sm">
-                پایان دادن جلسه برای همه
-              </button>
-              <button onClick={() => setShowLeaveConfirm(false)}
-                className="w-full py-2.5 text-gray-400 hover:text-white text-sm transition-colors">
-                انصراف
-              </button>
-            </div>
-          </div>
-        </div>
+        <LeaveConfirmModal
+          onLeaveOnly={() => doLeave(false)}
+          onEndForAll={() => doLeave(true)}
+          onCancel={() => setShowLeaveConfirm(false)}
+        />
       )}
 
       {/* Screen share badge */}
       {isScreenSharing && !isMobile && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-teal-600/95 rounded-full px-4 py-1.5 flex items-center gap-2 text-sm font-medium text-white shadow-lg">
-          <ScreenShare className="w-4 h-4" />
-          {currentUserName} در حال ارائه صفحه است
-          <button onClick={stopScreenShare} className="mr-1 px-2 py-0.5 rounded-full bg-white/20 hover:bg-white/30 text-xs transition-colors">
-            توقف
-          </button>
-        </div>
+        <ScreenShareBadge userName={currentUserName} onStop={stopScreenShare} />
       )}
 
       {/* Floating reactions — emoji + sender name */}
-      {reactions.map(r => (
-        <div key={r.id} className="fixed pointer-events-none z-[9999] flex flex-col items-center gap-0.5"
-          style={{ left: `${r.x}%`, top: `${r.y}%`, animation: 'float-up 3s ease-out forwards' }}>
-          <span className="text-3xl">{r.emoji}</span>
-          <span className="text-[10px] text-white/80 bg-black/50 rounded-full px-1.5 py-0.5 leading-tight max-w-[72px] truncate">{r.displayName}</span>
-        </div>
-      ))}
+      <FloatingReactions reactions={reactions} />
 
       {/* Bottom controls */}
       <div className="bg-gray-900/95 border-t border-gray-800 flex-shrink-0 relative" dir="rtl">
         {/* Speaking progress bar — shown when user is actively speaking and limit is on */}
         {speakingLimitEnabled && speakingSecs > 0 && !isMuted && myLimitSecs > 0 && (
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gray-800">
-            <div
-              className={`h-full transition-all duration-500 ${speakingSecs >= myLimitSecs * 0.83 ? 'bg-red-500' : speakingSecs >= myLimitSecs * 0.5 ? 'bg-amber-400' : 'bg-teal-400'}`}
-              style={{ width: `${Math.min((speakingSecs / myLimitSecs) * 100, 100)}%` }}
-            />
-          </div>
+          <SpeakingProgressBar speakingSecs={speakingSecs} limitSecs={myLimitSecs} />
         )}
         {/* Emoji picker — rendered here (above overflow-x-auto) so it's never clipped */}
         {showEmojiPicker && room.allow_reactions && (
-          <div role="listbox" aria-label="انتخاب ایموجی"
-            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-800 rounded-2xl p-2 flex flex-wrap gap-1 shadow-2xl border border-gray-700 z-[200] w-52">
-            {EMOJIS.map(e => (
-              <button key={e} onClick={() => sendEmoji(e)} aria-label={`واکنش ${e}`}
-                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-700 text-lg transition-colors">
-                {e}
-              </button>
-            ))}
-          </div>
+          <EmojiPicker emojis={EMOJIS} onPick={sendEmoji} />
         )}
-        {isMobile ? (
-          <>
-            <div className="flex items-center justify-center gap-2 px-3 py-2.5">
-              {coreControls}
-              <button onClick={() => setShowAllControls(v => !v)} aria-label="بیشتر"
-                className="w-11 h-11 rounded-full flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-all flex-shrink-0">
-                {showAllControls ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
-              </button>
-            </div>
-            {showAllControls && (
-              <div className="flex items-center justify-center gap-2 px-3 pb-3 flex-wrap">
-                {room.allow_screen_share && (
-                  <button onClick={isScreenSharing ? stopScreenShare : startScreenShare} title="اشتراک صفحه"
-                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${isScreenSharing ? 'bg-teal-600 hover:bg-teal-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                    {isScreenSharing ? <ScreenShareOff className="w-5 h-5" /> : <ScreenShare className="w-5 h-5" />}
-                  </button>
-                )}
-                <button onClick={toggleHand} title="بلند کردن دست" aria-pressed={isHandRaised}
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${isHandRaised ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                  <Hand className="w-5 h-5" />
-                </button>
-                {room.allow_reactions && (
-                  <button onClick={() => setShowEmojiPicker(v => !v)} title="واکنش"
-                    aria-pressed={showEmojiPicker}
-                    className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${showEmojiPicker ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                    <Smile className="w-5 h-5" />
-                  </button>
-                )}
-                <button onClick={() => { togglePanel('participants'); setShowAllControls(false); }} title="شرکت‌کنندگان"
-                  className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                  <Users className="w-5 h-5" />
-                  {(sortedQueue.length + pendingApprovals.length) > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full text-[9px] text-black flex items-center justify-center font-bold">{sortedQueue.length + pendingApprovals.length}</span>
-                  )}
-                </button>
-                <button onClick={() => { togglePanel('polls'); setShowAllControls(false); }} title="نظرسنجی"
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'polls' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                  <BarChart2 className="w-5 h-5" />
-                </button>
-                <button onClick={() => { togglePanel('whiteboard'); setShowAllControls(false); }} title="وایت‌بورد"
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                  <PenTool className="w-5 h-5" />
-                </button>
-                <button onClick={() => { togglePanel('settings'); setShowAllControls(false); }} title="تنظیمات"
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'settings' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                  <SlidersHorizontal className="w-5 h-5" />
-                </button>
-                <button onClick={() => { togglePanel('diagnostics'); setShowAllControls(false); }} title="کیفیت اتصال"
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${sidePanel === 'diagnostics' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                  <Activity className="w-5 h-5" />
-                </button>
-                <button onClick={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })} title={isSpeakerMuted ? 'فعال کردن صدا' : 'قطع صدا'}
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg ${isSpeakerMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                  {isSpeakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                </button>
-                {checkPermission('mute_all') && (
-                  <button onClick={muteAll} title="قطع میکروفون همه"
-                    className="w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg bg-amber-700 hover:bg-amber-600">
-                    <ShieldAlert className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <div role="toolbar" aria-label="کنترل‌های جلسه" className="flex items-center justify-center gap-2 px-3 py-3 overflow-x-auto">
-            <button onClick={toggleMute} aria-label={isMuted ? 'فعال کردن میکروفون' : 'قطع میکروفون'} aria-pressed={isMuted}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </button>
-            <button onClick={toggleVideo} aria-label={isVideoOff ? 'فعال کردن دوربین' : 'قطع دوربین'} aria-pressed={isVideoOff}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isVideoOff ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
-            </button>
-            {room.allow_screen_share && (
-              <button onClick={isScreenSharing ? stopScreenShare : startScreenShare} aria-label={isScreenSharing ? 'توقف اشتراک صفحه' : 'شروع اشتراک صفحه'} aria-pressed={isScreenSharing}
-                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isScreenSharing ? 'bg-teal-600 hover:bg-teal-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                {isScreenSharing ? <ScreenShareOff className="w-5 h-5" /> : <ScreenShare className="w-5 h-5" />}
-              </button>
-            )}
-            <button onClick={toggleHand} aria-label={isHandRaised ? 'پایین آوردن دست' : 'بلند کردن دست'} aria-pressed={isHandRaised}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isHandRaised ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              <Hand className="w-5 h-5" />
-            </button>
-            {room.allow_reactions && (
-              <div className="flex-shrink-0">
-                <button onClick={() => setShowEmojiPicker(v => !v)} aria-label="ارسال واکنش ایموجی" aria-expanded={showEmojiPicker}
-                  aria-pressed={showEmojiPicker}
-                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg ${showEmojiPicker ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                  <Smile className="w-5 h-5" />
-                </button>
-              </div>
-            )}
-            {room.allow_chat && (
-              <button onClick={() => togglePanel('chat')} aria-label="باز کردن پنل چت" aria-pressed={sidePanel === 'chat'}
-                className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'chat' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                <MessageSquare className="w-5 h-5" />
-                {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>}
-              </button>
-            )}
-            <button onClick={() => togglePanel('participants')} aria-label="باز کردن لیست شرکت‌کنندگان" aria-pressed={sidePanel === 'participants'}
-              className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'participants' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              <Users className="w-5 h-5" />
-              {(sortedQueue.length + pendingApprovals.length) > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full text-xs text-black flex items-center justify-center font-bold">{sortedQueue.length + pendingApprovals.length}</span>
-              )}
-            </button>
-            <button onClick={() => togglePanel('polls')} aria-label="باز کردن نظرسنجی" aria-pressed={sidePanel === 'polls'}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'polls' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              <BarChart2 className="w-5 h-5" />
-            </button>
-            <button onClick={() => togglePanel('whiteboard')} aria-label="باز کردن وایت‌بورد" aria-pressed={sidePanel === 'whiteboard'}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'whiteboard' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              <PenTool className="w-5 h-5" />
-            </button>
-            <button onClick={() => togglePanel('settings')} aria-label="تنظیمات" aria-pressed={sidePanel === 'settings'}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'settings' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              <SlidersHorizontal className="w-5 h-5" />
-            </button>
-            <button onClick={() => togglePanel('diagnostics')} aria-label="کیفیت اتصال" aria-pressed={sidePanel === 'diagnostics'}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${sidePanel === 'diagnostics' ? 'bg-teal-600' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              <Activity className="w-5 h-5" />
-            </button>
-            <div className="w-px h-8 bg-gray-700 flex-shrink-0" />
-            <button onClick={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })} aria-label={isSpeakerMuted ? 'فعال کردن صدای اسپیکر' : 'قطع صدای اسپیکر'} aria-pressed={isSpeakerMuted}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg flex-shrink-0 ${isSpeakerMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 hover:bg-gray-600'}`}>
-              {isSpeakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-            </button>
-            {checkPermission('mute_all') && peers.size > 0 && (
-              <button onClick={muteAll} aria-label="قطع میکروفون همه شرکت‌کنندگان"
-                className="w-12 h-12 rounded-full bg-amber-700 hover:bg-amber-600 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
-                <ShieldAlert className="w-5 h-5" />
-              </button>
-            )}
-            <button onClick={leaveRoom} aria-label="ترک یا پایان جلسه"
-              className="w-14 h-12 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-lg flex-shrink-0">
-              <PhoneOff className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+        <BottomControls
+          room={room}
+          isMuted={isMuted}
+          isVideoOff={isVideoOff}
+          isHandRaised={isHandRaised}
+          isScreenSharing={isScreenSharing}
+          isSpeakerMuted={isSpeakerMuted}
+          showEmojiPicker={showEmojiPicker}
+          sidePanel={sidePanel}
+          isMobile={isMobile}
+          showAllControls={showAllControls}
+          unreadCount={unreadCount}
+          sortedQueueLength={sortedQueue.length}
+          pendingApprovalsLength={pendingApprovals.length}
+          canMuteAll={checkPermission('mute_all') && peers.size > 0}
+          onToggleMute={toggleMute}
+          onToggleVideo={toggleVideo}
+          onToggleHand={toggleHand}
+          onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
+          onToggleEmojiPicker={() => setShowEmojiPicker(v => !v)}
+          onTogglePanel={(p) => { togglePanel(p); if (isMobile) setShowAllControls(false); }}
+          onToggleSpeakerMute={() => dispatch({ type: 'SET_SPEAKER_MUTED', value: !isSpeakerMuted })}
+          onMuteAll={muteAll}
+          onLeave={leaveRoom}
+          onToggleAllControls={() => setShowAllControls(v => !v)}
+        />
       </div>
       </div>
     </div>
