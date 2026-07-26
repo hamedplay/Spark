@@ -1204,3 +1204,45 @@ Phases 2–7 as described in the phased checklist.
 | 3D3    | scoped lint: command 0/0; MeetingCardMain 3 errors (down from 4); 12 tests pass | pass  |
 | 3D4    | scoped lint: command 0/0; MeetingCardMain 3 errors (unchanged); 12 tests pass | pass  |
 | 3D5    | scoped lint: MeetingCardMain 0/0 (down from 3); 12 tests pass              | pass  |
+
+## Minutes signed-final attachment feature (Phases 7–8)
+
+### Completed phases
+- Phase 7 — Signed-final attachment upload infrastructure and UI
+- Phase 8 — End-to-end integration contract tests and limited cleanup
+
+### Additive migrations applied
+- `add_minutes_attachment_kind_and_revision` — adds `minutes_attachments.attachment_kind` (text, NOT NULL, default `general`, CHECK in `general`/`signed_final`) and `minutes_attachments.revision_number` (integer, nullable); adds partial index `idx_minutes_attachments_signed_final`; updates `begin_minutes_attachment_upload` and `create_minutes_attachment_record` RPCs with validated `p_attachment_kind`; adds `get_latest_signed_final_attachment` RPC.
+- `add_revision_number_to_begin_attachment_upload` — adds `p_revision_number` parameter to `begin_minutes_attachment_upload` so signed-final rows record their target minute revision.
+
+### New invariants
+- `meetingId` is never sent as `p_minute_id` to any minutes RPC; only the minute's own id is used.
+- Direct minutes creation without a source meeting is impossible (entry blocked when no meetingId).
+- Duplicate minutes are blocked by the backend (`MINUTES_ALREADY_EXISTS`) and surfaced as navigate-to-existing.
+- Invitation status is derived from the inbox mapping, not user-editable directly; attendance is editable in draft.
+- System approvers are exactly all internal participants with a valid `user_id`; no cap at 6 or 12.
+- Attachment kind is validated server-side; users cannot inject arbitrary values.
+- Signed-final files use the existing private bucket and signed-URL download path; no new bucket or uploader.
+- Old signed-final files are never overwritten or deleted without an explicit user request; multiple historical revisions are retained and the newest is identifiable.
+- Migration is fully backward-compatible: all existing attachments remain `general` with NULL `revision_number`.
+
+### Test result
+- 39 new integration contract tests in `tests/minutes/minutesIntegrationContract.test.ts` (added to `npm test` via `test:minutes-integration`).
+- Full suite: 39 tests pass, 0 fail.
+- Scoped lint on all changed files: 0 errors, 0 warnings.
+- Build: passes.
+
+### Files changed in phases 7–8
+- `supabase/migrations/20260726184630_add_minutes_attachment_kind_and_revision.sql`
+- `supabase/migrations/20260726184736_add_revision_number_to_begin_attachment_upload.sql`
+- `supabase/functions/minutes-attachment-upload/index.ts`
+- `src/lib/minutesAttachmentValidation.ts` (new — pure validation, no supabase import)
+- `src/lib/minutesAttachments.ts`
+- `src/components/Minutes/Shared/AttachmentManager.tsx`
+- `src/components/Minutes/Form/SectionFinal.tsx`
+- `src/components/Minutes/Detail/TabAttachments.tsx`
+- `src/components/Minutes/MinutesDetailPage.tsx`
+- `src/components/Minutes/MinutesFormPage.tsx`
+- `tests/minutes/minutesIntegrationContract.test.ts` (new)
+- `package.json` (new `test:minutes-integration` script and `test` alias update)
+- `docs/architecture/refactor-plan.md` (this section)
