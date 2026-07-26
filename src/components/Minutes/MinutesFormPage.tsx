@@ -115,6 +115,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
 
   // Edit-mode state
   const [editMinuteId, setEditMinuteId] = useState<string | null>(null);
+  const [workingMinuteId, setWorkingMinuteId] = useState<string | null>(null);
   const [editUpdatedAt, setEditUpdatedAt] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(mode === 'edit');
   const [editError, setEditError] = useState<string | null>(null);
@@ -506,6 +507,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           });
           if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
           toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
+          setWorkingMinuteId(newId);
           setMinuteIdInUrl(newId);
           setMinutesPageInUrl('minutes-detail');
           onNavigate('minutes-detail');
@@ -569,6 +571,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           });
           if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
           toast.success('پیش‌نویس صورت‌جلسه با موفقیت به‌روزرسانی شد.');
+          setWorkingMinuteId(data.minute_id);
           setMinuteIdInUrl(data.minute_id);
           setMinutesPageInUrl('minutes-detail');
           onNavigate('minutes-detail');
@@ -810,17 +813,15 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnits={orgUnits}
                 orgUnitsLoading={orgUnitsLoading}
                 agendaItems={agendaItems}
-                readOnly={isReadOnly}
-                setDecisions={setDecisions}
-                profiles={profiles}
-                profilesLoading={profilesLoading}
-                orgUnits={orgUnits}
-                orgUnitsLoading={orgUnitsLoading}
-                agendaItems={agendaItems}
                 readOnly={isNonEditable}
               />
             )}
-            {activeSection === 4 && <SectionAttachments />}
+            {activeSection === 4 && (
+              <SectionAttachments
+                minuteId={mode === 'edit' ? editMinuteId : workingMinuteId}
+                canManage={!isNonEditable}
+              />
+            )}
             {activeSection === 5 && (
               <SectionApprovers approvers={approvers} setApprovers={setApprovers} />
             )}

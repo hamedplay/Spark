@@ -1,17 +1,22 @@
-import { Paperclip } from 'lucide-react';
-import { ComingSoonBanner } from './fields';
+import { AttachmentManager } from '../Shared/AttachmentManager';
 
-export function SectionAttachments() {
-  return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
-        پیوست‌ها
-      </h2>
-      <ComingSoonBanner message="آپلود پیوست در نسخه بعدی فعال خواهد شد." />
-      <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center opacity-50 pointer-events-none">
-        <Paperclip className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-        <p className="text-sm text-gray-400 dark:text-gray-500">آپلود فایل در نسخه بعدی</p>
+export interface SectionAttachmentsProps {
+  minuteId: string | null;
+  canManage: boolean;
+}
+
+export function SectionAttachments({ minuteId, canManage }: SectionAttachmentsProps) {
+  if (!minuteId) {
+    return (
+      <div className="space-y-5" dir="rtl">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
+          پیوست‌ها
+        </h2>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-4 text-sm text-blue-700 dark:text-blue-400">
+          برای بارگذاری پیوست ابتدا باید پیش‌نویس صورت‌جلسه ذخیره شود. روی «ذخیره پیش‌نویس» کلیک کنید تا صورت‌جلسه ایجاد شود.
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+  return <AttachmentManager minuteId={minuteId} canManage={canManage} />;
 }
