@@ -44,6 +44,7 @@ interface CalendarPageProps {
   onSparkNavigateDateConsumed?: () => void;
   sparkCalendarMeetingPrefill?: any;
   onSparkCalendarMeetingPrefillConsumed?: () => void;
+  onRegisterMinutes?: (meetingId: string, existingMinuteId: string | null) => void;
 }
 
 export function CalendarPage({
@@ -52,6 +53,7 @@ export function CalendarPage({
   initialView, onViewConsumed,
   sparkNavigateDate, onSparkNavigateDateConsumed,
   sparkCalendarMeetingPrefill, onSparkCalendarMeetingPrefillConsumed,
+  onRegisterMinutes,
 }: CalendarPageProps) {
   const { prefs, updatePrefs, loading: prefsLoading } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
@@ -1541,7 +1543,6 @@ export function CalendarPage({
           meeting={detailMeeting}
           currentUserId={currentUserId}
           resolveName={resolveName}
-          resolveName={resolveName}
           calendars={calendars}
           subscribedCalendars={subscribedCalendars}
           getMeetingColor={getMeetingColor}
@@ -1550,6 +1551,7 @@ export function CalendarPage({
           onDelete={handleDeleteMeeting}
           onShare={handleShareFromDetail}
           onGoogleCalendar={handleSendToGoogleCalendar}
+          onRegisterMinutes={onRegisterMinutes}
         />
       )}
 

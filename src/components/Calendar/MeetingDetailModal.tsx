@@ -26,11 +26,12 @@ interface Props {
   onDelete: (id: string, deleteRepeating?: boolean) => void;
   onShare: (m: MeetingData) => void;
   onGoogleCalendar: (m: MeetingData) => void;
+  onRegisterMinutes?: (meetingId: string, existingMinuteId: string | null) => void;
 }
 
 export function MeetingDetailModal({
   meeting: m, currentUserId, resolveName, calendars, subscribedCalendars,
-  getMeetingColor, onClose, onEdit, onDelete, onGoogleCalendar,
+  getMeetingColor, onClose, onEdit, onDelete, onGoogleCalendar, onRegisterMinutes,
 }: Props) {
   const isOwner = m.user_id === currentUserId;
   const isManager = m.meeting_manager === currentUserId;
@@ -46,6 +47,54 @@ export function MeetingDetailModal({
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, 'pending' | 'accepted' | 'declined' | 'delegated'>>({});
 
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
+
+  // Minutes access state — checked via RPC, not frontend-only
+  const [minutesAccess, setMinutesAccess] = useState<{
+    loading: boolean;
+    allowed: boolean;
+    existingMinuteId: string | null;
+    error: boolean;
+  }>({ loading: false, allowed: false, existingMinuteId: null, error: false });
+  const [showMinutesConfirm, setShowMinutesConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!onRegisterMinutes) return;
+    const eligible = m.status_type === 'scheduled' && !!m.calendar_id;
+    if (!eligible) {
+      setMinutesAccess({ loading: false, allowed: false, existingMinuteId: null, error: false });
+      return;
+    }
+    let cancelled = false;
+    setMinutesAccess({ loading: true, allowed: false, existingMinuteId: null, error: false });
+    (async () => {
+      try {
+        const { checkMinutesAccessForMeeting } = await import('../../lib/minutesMeetingAccess');
+        const result = await checkMinutesAccessForMeeting(m.id);
+        if (!cancelled) {
+          setMinutesAccess({
+            loading: false,
+            allowed: result.allowed,
+            existingMinuteId: result.existingMinuteId ?? null,
+            error: false,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setMinutesAccess({ loading: false, allowed: false, existingMinuteId: null, error: true });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [m.id, m.status_type, m.calendar_id, onRegisterMinutes]);
+
+  const handleRegisterMinutes = () => {
+    if (!onRegisterMinutes) return;
+    if (minutesAccess.existingMinuteId) {
+      onRegisterMinutes(m.id, minutesAccess.existingMinuteId);
+      return;
+    }
+    setShowMinutesConfirm(true);
+  };
 
   useEffect(() => {
     supabase
@@ -536,6 +585,12 @@ const getJalaliDate = (): string => {
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
             <ExternalLink className="w-4 h-4" />گوگل کلندر
           </button>
+          {onRegisterMinutes && m.status_type === 'scheduled' && m.calendar_id && !minutesAccess.loading && !minutesAccess.error && (minutesAccess.allowed || minutesAccess.existingMinuteId) && (
+            <button onClick={handleRegisterMinutes} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-100 transition-colors">
+              <ClipboardList className="w-4 h-4" />
+              {minutesAccess.existingMinuteId ? 'مشاهده صورت‌جلسه' : 'ثبت صورت‌جلسه'}
+            </button>
+          )}
           <button onClick={() => onDelete(m.id)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-100 transition-colors">
             <Trash2 className="w-4 h-4" />
             {isOwner ? 'حذف برای همه' : 'حذف از تقویم من'}
@@ -635,6 +690,19 @@ const getJalaliDate = (): string => {
           </div>
         </div>
       </div>
+
+      {showMinutesConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-sm w-full p-6" dir="rtl">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">ثبت صورت‌جلسه</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">آیا مایل به ثبت صورتجلسه این جلسه هستید؟</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowMinutesConfirm(false)} className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">خیر</button>
+              <button onClick={() => { setShowMinutesConfirm(false); onRegisterMinutes?.(m.id, null); }} className="px-4 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">بله</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

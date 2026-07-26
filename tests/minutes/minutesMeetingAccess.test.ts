@@ -184,3 +184,45 @@ test('URL cleanup: unmount of minutes-new clears meeting, preserves destination 
   assert.equal(url.searchParams.has('meeting'), false);
   assert.equal(url.searchParams.get('minute'), 'minute-2');
 });
+
+// ── Phase 0: calendar→minutes entry contract ──────────────────────────────
+
+test('entry: allowed meeting without existing minutes → navigate to new form', () => {
+  const action = resolveMinutesEntryAction(access({ allowed: true }), 'meeting-eligible');
+  assert.equal(action.kind, 'navigate_to_new_form');
+  assert.equal((action as { meetingId: string }).meetingId, 'meeting-eligible');
+});
+
+test('entry: meeting with existing minutes → navigate to existing minute detail', () => {
+  const action = resolveMinutesEntryAction(
+    access({ errorCode: 'MINUTES_ALREADY_EXISTS', existingMinuteId: 'minute-existing' }),
+    'meeting-with-minutes',
+  );
+  assert.equal(action.kind, 'navigate_to_existing_minute');
+  assert.equal((action as { minuteId: string }).minuteId, 'minute-existing');
+});
+
+test('entry: unauthorized meeting → block with generic message', () => {
+  const action = resolveMinutesEntryAction(
+    access({ errorCode: 'MEETING_NO_PERMISSION' }),
+    'meeting-unauthorized',
+  );
+  assert.equal(action.kind, 'block');
+  assert.match((action as { message: string }).message, /دسترسی ندارید/);
+});
+
+test('entry: missing meeting ID → block with guidance', () => {
+  const action = resolveMinutesEntryAction(access({ allowed: true }), null);
+  assert.equal(action.kind, 'block');
+  assert.match((action as { message: string }).message, /جزئیات جلسه/);
+});
+
+test('URL cleanup: new-form entry sets meeting, clears old minute, sets mpage', () => {
+  const url = new URL('https://app.example/?minute=minute-old&mpage=minutes');
+  url.searchParams.delete('minute');
+  url.searchParams.set('meeting', 'meeting-1');
+  url.searchParams.set('mpage', 'minutes-new');
+  assert.equal(url.searchParams.get('meeting'), 'meeting-1');
+  assert.equal(url.searchParams.has('minute'), false);
+  assert.equal(url.searchParams.get('mpage'), 'minutes-new');
+});

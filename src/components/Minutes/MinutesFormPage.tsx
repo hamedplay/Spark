@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CircleAlert as AlertCircle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CalendarDays } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl } from '../../lib/minutesNavigation';
 import { PageHeader, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -619,6 +619,24 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       setSubmitting(false);
     }
   };
+
+  // New-mode guard: require a valid meeting param (entry from meeting detail)
+  if (mode === 'new' && !getMeetingIdFromUrl()) {
+    return (
+      <div dir="rtl" className="space-y-5">
+        <PageHeader title={title} />
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <CalendarDays className="w-10 h-10 text-gray-400 mb-3" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">جلسه‌ای انتخاب نشده</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">برای ثبت صورت‌جلسه ابتدا باید یک جلسه را از تقویم انتخاب کنید.</p>
+          <button onClick={() => onNavigate('calendar')} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            <CalendarDays className="w-4 h-4" />
+            رفتن به تقویم
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Edit-mode loading / not-found / error states
   if (mode === 'edit' && editLoading) {

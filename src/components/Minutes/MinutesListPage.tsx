@@ -7,7 +7,7 @@ import {
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
 import {
-  setMinuteIdInUrl, clearMinuteIdFromUrl, setMinutesPageInUrl,
+  setMinuteIdInUrl, setMinutesPageInUrl,
 } from '../../lib/minutesNavigation';
 import type { MinutesStatus, ConfidentialityLevel, MinuteSummary } from './types';
 
@@ -120,11 +120,11 @@ export function MinutesListPage({ onNavigate }: Props) {
         description="مدیریت و پیگیری صورت‌جلسات سازمانی"
         actions={
           <button
-            onClick={() => { clearMinuteIdFromUrl(); setMinutesPageInUrl('minutes-new'); onNavigate('minutes-new'); }}
+            onClick={() => onNavigate('calendar')}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
-            ایجاد صورت‌جلسه
+            انتخاب جلسه از تقویم
           </button>
         }
       />
@@ -214,10 +214,10 @@ export function MinutesListPage({ onNavigate }: Props) {
             description="فیلترها را تغییر دهید یا صورت‌جلسه جدید ایجاد کنید."
             action={
               <button
-                onClick={() => { clearMinuteIdFromUrl(); setMinutesPageInUrl('minutes-new'); onNavigate('minutes-new'); }}
+                onClick={() => onNavigate('calendar')}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
               >
-                <Plus className="w-4 h-4" /> ایجاد صورت‌جلسه
+                <Plus className="w-4 h-4" /> انتخاب جلسه از تقویم
               </button>
             }
           />
