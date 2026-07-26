@@ -8,7 +8,6 @@ import {
 import { supabase } from '../../lib/supabase';
 import {
   setMinuteIdInUrl, clearMinuteIdFromUrl, setMinutesPageInUrl,
-  clearMinutesPageFromUrl, clearMeetingIdFromUrl,
 } from '../../lib/minutesNavigation';
 import type { MinutesStatus, ConfidentialityLevel, MinuteSummary } from './types';
 
@@ -114,14 +113,6 @@ export function MinutesListPage({ onNavigate }: Props) {
     setDeleteTarget(null);
   };
 
-  const goToCalendarForMinutes = () => {
-    clearMinuteIdFromUrl();
-    clearMeetingIdFromUrl();
-    clearMinutesPageFromUrl();
-    toast('برای ثبت صورت‌جلسه، ابتدا جلسه موردنظر را در تقویم باز کرده و از جزئیات جلسه گزینه «ثبت صورت‌جلسه» را انتخاب کنید.', { icon: '📋' });
-    onNavigate('calendar');
-  };
-
   return (
     <div dir="rtl" className="space-y-5">
       <PageHeader
@@ -129,11 +120,11 @@ export function MinutesListPage({ onNavigate }: Props) {
         description="مدیریت و پیگیری صورت‌جلسات سازمانی"
         actions={
           <button
-            onClick={goToCalendarForMinutes}
+            onClick={() => { clearMinuteIdFromUrl(); setMinutesPageInUrl('minutes-new'); onNavigate('minutes-new'); }}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
-            انتخاب جلسه از تقویم
+            ایجاد صورت‌جلسه
           </button>
         }
       />
@@ -223,10 +214,10 @@ export function MinutesListPage({ onNavigate }: Props) {
             description="فیلترها را تغییر دهید یا صورت‌جلسه جدید ایجاد کنید."
             action={
               <button
-                onClick={goToCalendarForMinutes}
+                onClick={() => { clearMinuteIdFromUrl(); setMinutesPageInUrl('minutes-new'); onNavigate('minutes-new'); }}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
               >
-                <Plus className="w-4 h-4" /> انتخاب جلسه از تقویم
+                <Plus className="w-4 h-4" /> ایجاد صورت‌جلسه
               </button>
             }
           />

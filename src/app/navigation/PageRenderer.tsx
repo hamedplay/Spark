@@ -25,21 +25,6 @@ import { PageId } from '../navigation/useNavigation';
 import { PAGE_PERMISSION_KEY, checkPermission, AccessDenied } from '../../features/permissions';
 import { MeetingsPage, CreateMeetingPage } from '../../features/meetings';
 import { PageRendererProps } from './pageRendererTypes';
-import { getMeetingIdFromUrl } from '../../lib/minutesNavigation';
-import { useEffect } from 'react';
-import { Calendar } from 'lucide-react';
-
-function MinutesNewGuard({ onRedirect }: { onRedirect: () => void }) {
-  useEffect(() => { onRedirect(); }, [onRedirect]);
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-4">
-      <Calendar className="w-12 h-12 text-blue-500" />
-      <p className="text-gray-700 dark:text-gray-300 max-w-md">
-        برای ثبت صورت‌جلسه، ابتدا جلسه موردنظر را در تقویم باز کرده و از جزئیات جلسه گزینه «ثبت صورت‌جلسه» را انتخاب کنید.
-      </p>
-    </div>
-  );
-}
 
 export function renderContent(props: PageRendererProps): React.ReactNode {
   const {
@@ -165,13 +150,8 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
       return <MinutesDashboardPage onNavigate={(p) => setActivePage(p as PageId)} />;
     case 'minutes':
       return <MinutesListPage onNavigate={(p) => setActivePage(p as PageId)} />;
-    case 'minutes-new': {
-      const meetingId = getMeetingIdFromUrl();
-      if (!meetingId) {
-        return <MinutesNewGuard onRedirect={() => setActivePage('calendar')} />;
-      }
+    case 'minutes-new':
       return <MinutesFormPage mode="new" onNavigate={(p) => setActivePage(p as PageId)} />;
-    }
     case 'minutes-edit':
       return <MinutesFormPage mode="edit" onNavigate={(p) => setActivePage(p as PageId)} />;
     case 'minutes-detail':
