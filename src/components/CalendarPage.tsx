@@ -19,6 +19,7 @@ import {
   timeToMinutes, minutesToTime, minutesToSlotIndex,
 } from './Calendar/utils';
 import { CalendarSidebar } from './Calendar/CalendarSidebar';
+import { MobileSidebarDrawer } from './Calendar/MobileSidebarDrawer';
 import { useOrgUsers, resolveUserDisplay } from '../lib/useOrgUsers';
 import { MeetingDetailModal } from './Calendar/MeetingDetailModal';
 import { CreateEditCalendarModal } from './Calendar/CreateEditCalendarModal';
@@ -1838,51 +1839,38 @@ export function CalendarPage({
 
       {/* Mobile sidebar drawer */}
       {showMobileSidebar && (
-        <div className="fixed inset-0 z-50 lg:hidden" dir="rtl">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileSidebar(false)} />
-          <div className="absolute inset-y-0 right-0 w-72 bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInRight" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-            {/* Drawer header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-              <span className="text-sm font-bold dark:text-white">تقویم‌ها</span>
-              <button onClick={() => setShowMobileSidebar(false)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                <ChevronRight className="w-5 h-5 dark:text-white" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <CalendarSidebar
-                sidebarJy={sidebarJy}
-                sidebarJm={sidebarJm}
-                sidebarMonthDays={sidebarMonthDays}
-                onSidebarPrev={() => { let nm = sidebarJm - 1, ny = sidebarJy; if (nm < 1) { nm = 12; ny--; } setSidebarJy(ny); setSidebarJm(nm); }}
-                onSidebarNext={() => { let nm = sidebarJm + 1, ny = sidebarJy; if (nm > 12) { nm = 1; ny++; } setSidebarJy(ny); setSidebarJm(nm); }}
-                onSidebarMonthClick={() => { setCurrentJy(sidebarJy); setCurrentJm(sidebarJm); setShowMobileSidebar(false); }}
-                onDayClick={day => { setSelectedJy(sidebarJy); setSelectedJm(sidebarJm); setSelectedJd(day); setCurrentJy(sidebarJy); setCurrentJm(sidebarJm); if (viewMode !== 'day') setViewMode('day'); setShowMobileSidebar(false); }}
-                isToday={isToday}
-                isSelected={isSelected}
-                getMeetingsForDay={getMeetings}
-                calendars={calendars}
-                subscribedCalendars={subscribedCalendars}
-                enabledCalendarIds={enabledCalendarIds}
-                onToggleCalendar={id => setEnabledCalendarIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; })}
-                occasionsEnabled={occasionsEnabled}
-                onToggleOccasions={handleToggleOccasions}
-                myGroupOpen={myGroupOpen}
-                sharedGroupOpen={sharedGroupOpen}
-                publicGroupOpen={publicGroupOpen}
-                onMyGroupToggle={() => setMyGroupOpen(o => !o)}
-                onSharedGroupToggle={() => setSharedGroupOpen(o => !o)}
-                onPublicGroupToggle={() => setPublicGroupOpen(o => !o)}
-                showOnlyMine={showOnlyMine}
-                onShowOnlyMineChange={setShowOnlyMine}
-                onNewCalendar={() => { setShowCreateCalendar(true); setEditingCalendar(null); resetCalendarForm(); setShowMobileSidebar(false); }}
-                onOpenCalendarList={() => { setShowCalendarList(true); setShowMobileSidebar(false); }}
-                onShareCalendar={cal => { handleOpenSubscriptions(cal); setShowMobileSidebar(false); }}
-                onEditCalendar={cal => { setEditingCalendar(cal); setCalendarForm({ name: cal.name, type: cal.type, description: cal.description || '', is_active: cal.is_active, enable_reminder: cal.enable_reminder, create_online_link: false, show_time_overlap: cal.enable_overlap, free_for_all: true, color: cal.color }); setShowCreateCalendar(true); setShowMobileSidebar(false); }}
-                onDeleteCalendar={id => { handleDeleteCalendar(id); setShowMobileSidebar(false); }}
-              />
-            </div>
-          </div>
-        </div>
+        <MobileSidebarDrawer
+          sidebarJy={sidebarJy}
+          sidebarJm={sidebarJm}
+          sidebarMonthDays={sidebarMonthDays}
+          isToday={isToday}
+          isSelected={isSelected}
+          getMeetingsForDay={getMeetings}
+          calendars={calendars}
+          subscribedCalendars={subscribedCalendars}
+          enabledCalendarIds={enabledCalendarIds}
+          occasionsEnabled={occasionsEnabled}
+          onToggleOccasions={handleToggleOccasions}
+          myGroupOpen={myGroupOpen}
+          sharedGroupOpen={sharedGroupOpen}
+          publicGroupOpen={publicGroupOpen}
+          showOnlyMine={showOnlyMine}
+          onSidebarPrev={() => { let nm = sidebarJm - 1, ny = sidebarJy; if (nm < 1) { nm = 12; ny--; } setSidebarJy(ny); setSidebarJm(nm); }}
+          onSidebarNext={() => { let nm = sidebarJm + 1, ny = sidebarJy; if (nm > 12) { nm = 1; ny++; } setSidebarJy(ny); setSidebarJm(nm); }}
+          onSidebarMonthClick={() => { setCurrentJy(sidebarJy); setCurrentJm(sidebarJm); setShowMobileSidebar(false); }}
+          onDayClick={day => { setSelectedJy(sidebarJy); setSelectedJm(sidebarJm); setSelectedJd(day); setCurrentJy(sidebarJy); setCurrentJm(sidebarJm); if (viewMode !== 'day') setViewMode('day'); setShowMobileSidebar(false); }}
+          onToggleCalendar={id => setEnabledCalendarIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; })}
+          onMyGroupToggle={() => setMyGroupOpen(o => !o)}
+          onSharedGroupToggle={() => setSharedGroupOpen(o => !o)}
+          onPublicGroupToggle={() => setPublicGroupOpen(o => !o)}
+          onShowOnlyMineChange={setShowOnlyMine}
+          onNewCalendar={() => { setShowCreateCalendar(true); setEditingCalendar(null); resetCalendarForm(); setShowMobileSidebar(false); }}
+          onOpenCalendarList={() => { setShowCalendarList(true); setShowMobileSidebar(false); }}
+          onShareCalendar={cal => { handleOpenSubscriptions(cal); setShowMobileSidebar(false); }}
+          onEditCalendar={cal => { setEditingCalendar(cal); setCalendarForm({ name: cal.name, type: cal.type, description: cal.description || '', is_active: cal.is_active, enable_reminder: cal.enable_reminder, create_online_link: false, show_time_overlap: cal.enable_overlap, free_for_all: true, color: cal.color }); setShowCreateCalendar(true); setShowMobileSidebar(false); }}
+          onDeleteCalendar={id => { handleDeleteCalendar(id); setShowMobileSidebar(false); }}
+          onClose={() => setShowMobileSidebar(false)}
+        />
       )}
 
       {/* Move confirmation dialog */}

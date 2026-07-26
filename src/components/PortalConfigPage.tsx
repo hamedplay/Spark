@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Save, Search, Plus, Trash2, CreditCard as Edit2, X, Eye, EyeOff, CircleAlert as AlertCircle, RefreshCw, Wifi, Mail, Lock, Image, Palette, Monitor, UserCog, KeyRound, UserX, UserCheck, History, MapPin, LogIn as LoginIcon, ShieldCheck, Menu, Bot, EllipsisVertical as MoreVertical, Smartphone, Loader as Loader2, MessageCircle } from 'lucide-react';
+import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, ChevronDown, ChevronLeft, Save, Search, Plus, Trash2, CreditCard as Edit2, X, RefreshCw, Mail, Palette, Monitor, UserCog, KeyRound, UserX, UserCheck, History, MapPin, Lock, Menu, Bot, Wifi, Image, MoveVertical as MoreVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';
@@ -13,15 +13,19 @@ import { SparkConfigPanel } from './SparkConfigPanel';
 import { SocialNotificationsPanel } from './SocialNotificationsPanel';
 import { DailyReportConfigPanel } from './DailyReportConfigPanel';
 import { SystemMonitoringPage } from './SystemMonitoringPage';
-
 import { AuditLogPage } from './AuditLogPage';
 import { BackupPanel } from './BackupPanel';
 import { IceTesterPanel } from './VideoConference/IceTesterPanel';
-interface ConfigEntry { id: string; section: string; key: string; value: string | null; value_type: string; label: string | null; description: string | null; }
-interface AuditEntry { id: string; user_name: string | null; ip_address: string | null; user_agent: string | null; module: string | null; entity_name: string | null; action: string; details: string | null; severity: string; created_at: string; }
-interface Profile { user_id: string; full_name: string | null; email: string | null; is_admin: boolean | null; is_active: boolean | null; created_at: string | null; avatar_url?: string | null; department?: string | null; position?: string | null; }
+import type { ConfigEntry, AuditEntry, Profile } from './PortalConfig/types';
+import { HIDDEN_SECURITY_CONFIG_KEYS } from './PortalConfig/types';
+import { ConfigField, SectionCard } from './PortalConfig/ConfigField';
+import { PhoneLoginToggleCard } from './PortalConfig/PhoneLoginToggleCard';
+import { PasswordRecoveryCard } from './PortalConfig/PasswordRecoveryCard';
+import { MfaPanel } from './PortalConfig/MfaPanel';
+import { PhoneSyncCard } from './PortalConfig/PhoneSyncCard';
+import { BaleOtpConfigCard } from './PortalConfig/BaleOtpConfigCard';
+import { LoginHistoryList, VisitedUrlsList } from './PortalConfig/AuditSubLists';
 
-// ─── Sidebar nav ──────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { key: 'platform', label: 'تنظیمات پلتفرم', icon: Settings, sub: [
     { key: 'general', label: 'تنظیمات کلی' },
@@ -61,1160 +65,7 @@ const NAV_ITEMS = [
   ]},
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-// Options for known select-type config keys
-const SELECT_OPTIONS: Record<string, { value: string; label: string; description: string }[]> = {
-  ice_transport_policy: [
-    {
-      value: 'p2p-first',
-      label: 'P2P اول، سپس STUN، سپس TURN',
-      description: 'سریع‌ترین اتصال ممکن. ابتدا اتصال مستقیم (LAN)، سپس STUN، در صورت نیاز TURN. برای اکثر محیط‌ها بهترین گزینه است.',
-    },
-    {
-      value: 'auto',
-      label: 'خودکار (پیشنهادی)',
-      description: 'همه مسیرهای ICE (host، srflx، relay) مجاز هستند. WebRTC بهترین را انتخاب می‌کند.',
-    },
-    {
-      value: 'all',
-      label: 'همه مسیرها',
-      description: 'هر مسیر ICE همزمان امتحان می‌شود. سریع اما ممکن است IP واقعی افشا شود.',
-    },
-    {
-      value: 'relay',
-      label: 'فقط TURN (relay)',
-      description: 'همه ترافیک اجباراً از سرور TURN عبور می‌کند. برای شبکه‌های محدود، پشت فایروال، یا حریم خصوصی کامل.',
-    },
-    {
-      value: 'stun-only',
-      label: 'فقط STUN (بدون TURN)',
-      description: 'فقط از STUN برای پیدا کردن آی‌پی عمومی استفاده می‌شود. TURN نادیده گرفته می‌شود. برای شبکه‌های ساده با NAT معمولی.',
-    },
-  ],
-};
-
-// ─── ConfigField ──────────────────────────────────────────────────────────────
-function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: string, value: string) => void }) {
-  const [val, setVal] = useState(entry.value ?? '');
-  const [showPass, setShowPass] = useState(false);
-  const [dirty, setDirty] = useState(false);
-
-  useEffect(() => { setVal(entry.value ?? ''); setDirty(false); }, [entry.value]);
-  const change = (v: string) => { setVal(v); setDirty(v !== (entry.value ?? '')); };
-
-  const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
-
-  const selectOptions = entry.value_type === 'select' ? (SELECT_OPTIONS[entry.key] ?? []) : [];
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{entry.label || entry.key}</label>
-        {dirty && (
-          <button onClick={() => { onSave(entry.id, val); setDirty(false); }}
-            className="flex items-center gap-1 px-2.5 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-medium transition-colors">
-            <Save className="w-3 h-3" /> ذخیره
-          </button>
-        )}
-      </div>
-      {entry.description && entry.value_type !== 'select' && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">{entry.description}</p>
-      )}
-      {entry.value_type === 'boolean' ? (
-        <button onClick={() => { const n = val === 'true' ? 'false' : 'true'; change(n); onSave(entry.id, n); }}
-          className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${val === 'true' ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${val === 'true' ? 'translate-x-6' : 'translate-x-0.5'}`} />
-        </button>
-      ) : entry.value_type === 'password' ? (
-        <div className="relative">
-          <input type={showPass ? 'text' : 'password'} value={val} onChange={e => change(e.target.value)} className={inputCls} />
-          <button onClick={() => setShowPass(v => !v)} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-            {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
-        </div>
-      ) : entry.value_type === 'color' ? (
-        <div className="flex items-center gap-2">
-          <input type="color" value={val || '#3b82f6'} onChange={e => change(e.target.value)}
-            className="w-10 h-10 rounded-xl border border-gray-200 dark:border-gray-600 cursor-pointer p-0.5 bg-white dark:bg-gray-700" />
-          <input type="text" value={val} onChange={e => change(e.target.value)} className={`${inputCls} flex-1`} placeholder="#000000" />
-        </div>
-      ) : entry.value_type === 'number' ? (
-        <input type="number" value={val} onChange={e => change(e.target.value)} className={inputCls} />
-      ) : entry.value_type === 'time' ? (
-        <input type="time" value={val} onChange={e => change(e.target.value)} className={inputCls} />
-      ) : entry.value_type === 'select' && selectOptions.length > 0 ? (
-        <div className="flex flex-col gap-2" dir="rtl">
-          {selectOptions.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => { change(opt.value); onSave(entry.id, opt.value); }}
-              className={`w-full text-right px-3.5 py-2.5 rounded-xl border-2 transition-all ${
-                val === opt.value
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                  : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700 bg-white dark:bg-gray-700'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                  val === opt.value ? 'border-blue-500' : 'border-gray-300 dark:border-gray-500'
-                }`}>
-                  {val === opt.value && <span className="w-2 h-2 rounded-full bg-blue-500" />}
-                </span>
-                <span className={`text-sm font-semibold ${val === opt.value ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}`}>
-                  {opt.label}
-                </span>
-              </div>
-              <p className={`text-xs mt-1 mr-6 text-right leading-relaxed ${val === opt.value ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                {opt.description}
-              </p>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <input type="text" value={val} onChange={e => change(e.target.value)} className={inputCls} />
-      )}
-    </div>
-  );
-}
-
-// ─── Section header ───────────────────────────────────────────────────────────
-function SectionCard({ title, icon: Icon, color = 'blue', children }: { title: string; icon: React.ElementType; color?: string; children: React.ReactNode }) {
-  const colors: Record<string, string> = {
-    blue: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400',
-    green: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
-    amber: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400',
-    red: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400',
-    teal: 'bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400',
-    gray: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
-  };
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700">
-        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${colors[color] || colors.blue}`}>
-          <Icon className="w-4 h-4" />
-        </div>
-        <h3 className="font-bold text-gray-800 dark:text-white">{title}</h3>
-      </div>
-      <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-5">{children}</div>
-    </div>
-  );
-}
-
-// ─── Hidden security config keys (never shown in generic config list) ────────
-const HIDDEN_SECURITY_CONFIG_KEYS = new Set([
-  'phone_login_enabled',
-  'phone_login_hook_operator_confirmed',
-  'phone_login_e2e_verified',
-  'send_sms_hook_secret',
-  'phone_rate_limit_pepper',
-  'phone_login_allowed_origins',
-  'phone_login_test_mode',
-  'phone_login_test_phone',
-  'phone_login_otp_ttl_seconds',
-  'phone_login_otp_ttl_operator_confirmed',
-  'phone_password_recovery_enabled',
-  'phone_password_recovery_e2e_verified',
-  'phone_password_recovery_test_mode',
-  'phone_password_recovery_test_phone',
-  'phone_password_recovery_secret_operator_confirmed',
-  'phone_password_recovery_otp_ttl_seconds',
-]);
-
-// ─── Phone Login Toggle Card (security section) ─────────────────────────────
-function PhoneLoginToggleCard() {
-  const [enabled, setEnabled] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [testReady, setTestReady] = useState(false);
-  const [providerReady, setProviderReady] = useState(false);
-  const [operatorConfirmed, setOperatorConfirmed] = useState(false);
-  const [e2eVerified, setE2eVerified] = useState(false);
-  const [testMode, setTestMode] = useState(false);
-  const [testPhoneMasked, setTestPhoneMasked] = useState('');
-  const [testPhoneInput, setTestPhoneInput] = useState('');
-  const [providerId, setProviderId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [savingTest, setSavingTest] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminStatus, setAdminStatus] = useState<{ test_mode: boolean; test_phone_masked: string; provider_ready: boolean; operator_confirmed: boolean; e2e_verified: boolean; public_enabled: boolean; otp_ttl_seconds: number | null; otp_ttl_operator_confirmed: boolean; lock_seconds: number | null } | null>(null);
-  const [otpTtlInput, setOtpTtlInput] = useState('');
-  const [savingTtl, setSavingTtl] = useState(false);
-  const [editTtl, setEditTtl] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.rpc('get_public_auth_config');
-    const row = Array.isArray(data) ? data[0] : data;
-    setEnabled(row?.phone_login_enabled ?? false);
-    setReady(row?.phone_login_ready ?? false);
-    setTestReady(row?.phone_login_test_ready ?? false);
-    setProviderReady(row?.provider_ready ?? false);
-    setOperatorConfirmed(row?.operator_confirmed ?? false);
-    setE2eVerified(row?.e2e_verified ?? false);
-    setTestMode(row?.phone_login_test_mode ?? false);
-    const { data: providerRow } = await supabase
-      .from('system_config')
-      .select('value')
-      .eq('section', 'sms')
-      .eq('key', 'phone_login_sms_provider_id')
-      .maybeSingle();
-    const providerValue = providerRow?.value?.trim();
-    setProviderId(providerValue ? providerValue : null);
-    // Check admin status
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData?.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('user_id', userData.user.id)
-        .maybeSingle();
-      const admin = profile?.is_admin === true;
-      setIsAdmin(admin);
-      if (admin) {
-        const { data: adminData } = await supabase.rpc('get_phone_login_admin_status');
-        const aRow = Array.isArray(adminData) ? adminData[0] : adminData;
-        setAdminStatus(aRow ?? null);
-        setTestPhoneMasked(aRow?.test_phone_masked ?? '');
-        setTestMode(aRow?.test_mode ?? false);
-        setTestReady(row?.phone_login_test_ready ?? false);
-      }
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const handleToggle = async (v: boolean) => {
-    setSaving(true);
-    const { data, error } = await supabase.rpc('set_phone_login_config', {
-      p_enabled: v,
-      p_provider_id: providerId || null,
-    });
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.success !== true || error) {
-      toast.error(row?.error || error?.message || 'خطا در ذخیره تنظیمات');
-      setSaving(false);
-      return;
-    }
-    setEnabled(v);
-    setReady(v && testReady && e2eVerified);
-    setSaving(false);
-    toast.success(v ? 'ورود با موبایل فعال شد' : 'ورود با موبایل غیرفعال شد');
-  };
-
-  const handleTestModeToggle = async (v: boolean) => {
-    if (v && !testReady) {
-      toast.error('پیش‌نیازهای تست آماده نیست (Provider یا Auth Hook)');
-      return;
-    }
-    if (v && !testPhoneInput) {
-      toast.error('شماره تست وارد کنید');
-      return;
-    }
-    setSavingTest(true);
-    const { data, error } = await supabase.rpc('set_phone_login_test_mode', {
-      p_test_mode: v,
-      p_test_phone: v ? testPhoneInput : null,
-    });
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.success !== true || error) {
-      const errMap: Record<string, string> = {
-        NOT_AUTHENTICATED: 'احراز هویت نشده',
-        NOT_ADMIN: 'فقط ادمین می‌تواند',
-        NO_PROVIDER: 'سرویس‌دهنده انتخاب نشده',
-        PROVIDER_NOT_READY: 'سرویس‌دهنده فعال نیست',
-        OPERATOR_NOT_CONFIRMED: 'Auth Hook تأیید نشده',
-        INVALID_PHONE: 'شماره نامعتبر',
-        PHONE_NOT_IN_ACTIVE_PROFILE: 'شماره در پروفایل فعال نیست',
-        PHONE_NOT_IN_AUTH: 'شماره در Auth نیست',
-        PHONE_DUPLICATE: 'شماره تکراری است',
-        PHONE_DUPLICATE_PROFILE: 'این شماره روی بیش از یک پروفایل فعال ثبت شده است',
-        AUTH_PROFILE_MISMATCH: 'عدم تطابق Auth و Profile',
-        TTL_NOT_CONFIRMED: 'ابتدا TTL واقعی OTP را تأیید کنید',
-        PUBLIC_LOGIN_ENABLED: 'ورود عمومی فعال است؛ ابتدا آن را غیرفعال کنید',
-      };
-      toast.error(errMap[row?.error] || error?.message || 'خطا');
-      setSavingTest(false);
-      return;
-    }
-    setTestMode(v);
-    const maskedPhone = row?.test_phone_masked || 'masked';
-    setTestPhoneMasked(v ? maskedPhone : '');
-    setTestPhoneInput('');
-    setSavingTest(false);
-    toast.success(v ? 'حالت تست فعال شد' : 'حالت تست غیرفعال شد');
-    logAudit({ module: 'security', action: v ? 'test_mode_enabled' : 'test_mode_disabled', entity_name: v ? maskedPhone : 'disabled', severity: 'warning' });
-  };
-
-  if (loading) return null;
-
-  const otpTtlConfirmed = adminStatus?.otp_ttl_operator_confirmed ?? false;
-  const otpTtlSeconds = adminStatus?.otp_ttl_seconds ?? null;
-  const lockSeconds = adminStatus?.lock_seconds ?? null;
-
-  const handleConfirmTtl = async () => {
-    const ttl = parseInt(otpTtlInput, 10);
-    if (isNaN(ttl) || ttl < 60 || ttl > 86400) {
-      toast.error('مقدار TTL باید بین ۶۰ و ۸۶۴۰۰ ثانیه باشد');
-      return;
-    }
-    setSavingTtl(true);
-    const { data, error } = await supabase.rpc('set_phone_login_otp_ttl', { p_ttl_seconds: ttl });
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.success !== true || error) {
-      toast.error(row?.error || error?.message || 'خطا در ثبت TTL');
-      setSavingTtl(false);
-      return;
-    }
-    setAdminStatus(prev => prev ? { ...prev, otp_ttl_seconds: ttl, otp_ttl_operator_confirmed: true, lock_seconds: row.lock_seconds } : prev);
-    setOtpTtlInput('');
-    setEditTtl(false);
-    setSavingTtl(false);
-    toast.success('TTL ثبت و تأیید شد');
-    logAudit({ module: 'security', action: 'otp_ttl_confirmed', entity_name: `${ttl}s`, severity: 'warning' });
-  };
-
-  const readinessItems = [
-    { label: providerReady ? 'Provider آماده' : 'Provider آماده نیست', ok: providerReady },
-    { label: 'Edge Function Secrets نیازمند تأیید اپراتور', ok: false, neutral: true },
-    { label: operatorConfirmed ? 'Auth Hook تأیید شده' : 'Auth Hook تأیید نشده', ok: operatorConfirmed },
-    { label: otpTtlConfirmed ? 'TTL OTP تأیید شده' : 'TTL OTP تأیید نشده', ok: otpTtlConfirmed },
-    { label: testMode ? 'حالت تست فعال' : 'حالت تست غیرفعال', ok: testMode, neutral: true },
-    { label: e2eVerified ? 'تست E2E موفق' : 'تست E2E انجام نشده', ok: e2eVerified, neutral: true },
-    { label: enabled ? 'ورود عمومی فعال' : 'ورود عمومی غیرفعال', ok: enabled, neutral: true },
-  ];
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-            <Smartphone className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <h4 className="font-semibold text-gray-800 dark:text-white">ورود با شماره موبایل</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {ready ? 'فعال و آماده' : 'غیرفعال'}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => handleToggle(!enabled)}
-          disabled={saving}
-          className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'} ${saving ? 'opacity-50' : ''}`}>
-          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
-        </button>
-      </div>
-      <div className="mt-4 space-y-1.5">
-        {readinessItems.map((item, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <span className={`w-2 h-2 rounded-full ${item.ok ? 'bg-green-500' : item.neutral ? 'bg-gray-300 dark:bg-gray-600' : 'bg-amber-400'}`} />
-            <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}>
-              {item.label}
-            </span>
-          </div>
-        ))}
-      </div>
-      {isAdmin && (
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-3">
-          {/* TTL confirmation section */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">تأیید TTL واقعی OTP</p>
-              {otpTtlConfirmed ? (
-                <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full">تأیید شده</span>
-              ) : (
-                <span className="text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full">تأیید نشده</span>
-              )}
-            </div>
-            {otpTtlSeconds !== null && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">TTL ثبت‌شده: {otpTtlSeconds} ثانیه</p>
-            )}
-            {lockSeconds !== null && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">Lock محاسبه‌شده: {lockSeconds} ثانیه</p>
-            )}
-            {otpTtlConfirmed && !editTtl && (
-              <button
-                onClick={() => { setEditTtl(true); setOtpTtlInput(otpTtlSeconds !== null ? String(otpTtlSeconds) : ''); }}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
-                ویرایش و تأیید مجدد TTL
-              </button>
-            )}
-            {(!otpTtlConfirmed || editTtl) && (
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={otpTtlInput}
-                  onChange={e => setOtpTtlInput(e.target.value)}
-                  placeholder="TTL واقعی Dashboard (ثانیه)"
-                  className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                />
-                <button
-                  onClick={handleConfirmTtl}
-                  disabled={savingTtl}
-                  className="px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors whitespace-nowrap">
-                  ثبت و تأیید
-                </button>
-                {editTtl && (
-                  <button
-                    onClick={() => { setEditTtl(false); setOtpTtlInput(''); }}
-                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition-colors whitespace-nowrap">
-                    انصراف
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">حالت تست ورود موبایلی</p>
-              <p className="text-xs text-gray-400">فقط برای شماره تعیین‌شده OTP ارسال می‌کند</p>
-            </div>
-            <button
-              onClick={() => handleTestModeToggle(!testMode)}
-              disabled={savingTest || !testReady}
-              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${testMode ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'} ${(savingTest || !testReady) ? 'opacity-50' : ''}`}>
-              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${testMode ? 'translate-x-6' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">شماره مجاز برای تست</label>
-            {testMode ? (
-              <p className="text-sm font-mono text-gray-600 dark:text-gray-400 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-xl">{testPhoneMasked || '****'}</p>
-            ) : (
-              <input
-                type="tel"
-                value={testPhoneInput}
-                onChange={e => setTestPhoneInput(e.target.value)}
-                placeholder="09xxxxxxxxx"
-                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors"
-              />
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Password Recovery Card (security section) ──────────────────────────────
-function PasswordRecoveryCard() {
-  const [enabled, setEnabled] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [testReady, setTestReady] = useState(false);
-  const [testMode, setTestMode] = useState(false);
-  const [maskedPhone, setMaskedPhone] = useState('');
-  const [testPhoneInput, setTestPhoneInput] = useState('');
-  const [providerReady, setProviderReady] = useState(false);
-  const [secretConfirmed, setSecretConfirmed] = useState(false);
-  const [e2eVerified, setE2eVerified] = useState(false);
-  const [templateReady, setTemplateReady] = useState(false);
-  const [ttlValid, setTtlValid] = useState(false);
-  const [ttlSeconds, setTtlSeconds] = useState(600);
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [testSaving, setTestSaving] = useState(false);
-  const [secretSaving, setSecretSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.rpc('get_public_auth_config');
-    const row = Array.isArray(data) ? data[0] : data;
-    setEnabled(row?.phone_password_recovery_enabled ?? false);
-    setReady(row?.phone_password_recovery_ready ?? false);
-    setTestReady(row?.phone_password_recovery_test_ready ?? false);
-    setTestMode(row?.phone_password_recovery_test_mode ?? false);
-    setProviderReady(row?.provider_ready ?? false);
-    setSecretConfirmed(row?.recovery_secret_confirmed ?? false);
-    setE2eVerified(row?.phone_password_recovery_e2e_verified ?? false);
-    setTemplateReady(row?.recovery_template_ready ?? false);
-    setTtlValid(row?.recovery_ttl_valid ?? false);
-    setTtlSeconds(row?.recovery_ttl_seconds ?? 600);
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData?.user) {
-      const { data: profile } = await supabase.from('profiles').select('is_admin').eq('user_id', userData.user.id).maybeSingle();
-      setIsAdmin(profile?.is_admin === true);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const handleToggle = async (v: boolean) => {
-    setSaving(true);
-    const { data, error } = await supabase.rpc('set_phone_password_recovery_config', { p_enabled: v });
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.success !== true || error) {
-      const errMap: Record<string, string> = {
-        NOT_AUTHENTICATED: 'احراز هویت نشده',
-        NOT_ADMIN: 'فقط ادمین می‌تواند',
-        PROVIDER_NOT_READY: 'سرویس‌دهنده فعال نیست',
-        TEMPLATE_NOT_READY: 'قالب پیامک بازیابی ساخته نشده',
-        SECRET_NOT_CONFIRMED: 'Secret بازیابی تأیید نشده',
-        E2E_NOT_VERIFIED: 'تست E2E بازیابی انجام نشده',
-        INVALID_TTL: 'TTL نامعتبر',
-        TEST_MODE_STILL_ACTIVE: 'ابتدا حالت تست را غیرفعال کنید',
-      };
-      toast.error(errMap[row?.error] || error?.message || 'خطا');
-      setSaving(false);
-      return;
-    }
-    setEnabled(v);
-    setSaving(false);
-    toast.success(v ? 'بازیابی رمز با موبایل فعال شد' : 'بازیابی رمز با موبایل غیرفعال شد');
-    logAudit({ module: 'security', action: v ? 'password_recovery_enabled' : 'password_recovery_disabled', entity_name: v ? 'enabled' : 'disabled', severity: 'warning' });
-  };
-
-  const handleTestModeToggle = async (v: boolean) => {
-    setTestSaving(true);
-    const { data, error } = await supabase.rpc('set_phone_password_recovery_test_mode', {
-      p_enabled: v,
-      p_test_phone: v ? testPhoneInput : '',
-    });
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.success !== true || error) {
-      const errMap: Record<string, string> = {
-        NOT_AUTHENTICATED: 'احراز هویت نشده',
-        NOT_ADMIN: 'فقط ادمین می‌تواند',
-        PROVIDER_NOT_READY: 'سرویس‌دهنده فعال نیست',
-        TEMPLATE_NOT_READY: 'قالب پیامک بازیابی ساخته نشده',
-        SECRET_NOT_CONFIRMED: 'Secret بازیابی تأیید نشده',
-        INVALID_TTL: 'TTL نامعتبر',
-        INVALID_PHONE: 'شماره موبایل نامعتبر',
-        PROFILE_NOT_FOUND: 'شماره در پروفایل فعال ثبت نشده است',
-        PROFILE_DUPLICATE: 'شماره روی بیش از یک پروفایل فعال ثبت شده است',
-        AUTH_PHONE_NOT_FOUND: 'شماره در Supabase Auth ثبت نشده است. ابتدا شماره را همگام کنید.',
-        AUTH_PHONE_DUPLICATE: 'شماره در Auth تکراری است',
-        AUTH_USER_NOT_FOUND: 'کاربر Auth برای این پروفایل یافت نشد',
-        AUTH_PROFILE_MISMATCH: 'شماره Auth متعلق به Profile دیگری است',
-        PHONE_NOT_UNIQUE: 'شماره موبایل منحصر به فرد نیست',
-        TEST_MODE_STILL_ACTIVE: 'حالت تست هنوز فعال است',
-      };
-      toast.error(errMap[row?.error] || error?.message || 'خطا');
-      setTestSaving(false);
-      return;
-    }
-    setTestMode(v);
-    setMaskedPhone(row?.masked_phone || '');
-    setTestSaving(false);
-    toast.success(v ? 'حالت تست فعال شد' : 'حالت تست غیرفعال شد');
-    logAudit({ module: 'security', action: v ? 'recovery_test_mode_enabled' : 'recovery_test_mode_disabled', entity_name: v ? 'enabled' : 'disabled', severity: 'warning' });
-  };
-
-  const handleConfirmSecret = async () => {
-    setSecretSaving(true);
-    try {
-      const { data: result } = await supabase.functions.invoke(
-        'check-phone-password-reset-runtime',
-        { body: {} },
-      );
-      if (
-        result?.ok === true
-        && result?.secret_configured === true
-        && result?.origins_configured === true
-        && result?.runtime_confirmed === true
-      ) {
-        toast.success('Secret بازیابی تأیید شد');
-        logAudit({ module: 'security', action: 'recovery_secret_confirmed', entity_name: 'confirmed', severity: 'warning' });
-        await load();
-      } else {
-        toast.error('Runtime بازیابی رمز کامل پیکربندی نشده است.');
-      }
-    } catch {
-      toast.error('Runtime بازیابی رمز کامل پیکربندی نشده است.');
-    }
-    setSecretSaving(false);
-  };
-
-  if (loading) return null;
-
-  const items = [
-    { label: providerReady ? 'Provider آماده' : 'Provider آماده نیست', ok: providerReady },
-    { label: templateReady ? 'قالب پیامک فعال' : 'قالب پیامک فعال نیست', ok: templateReady },
-    { label: secretConfirmed ? 'Secret بازیابی تأیید شده' : 'Secret بازیابی تأیید نشده', ok: secretConfirmed },
-    { label: ttlValid ? `TTL معتبر (${ttlSeconds} ثانیه)` : 'TTL نامعتبر', ok: ttlValid },
-    { label: e2eVerified ? 'تست E2E بازیابی رمز موفق' : 'تست E2E بازیابی رمز انجام نشده', ok: e2eVerified },
-    { label: enabled ? 'بازیابی رمز موبایلی فعال' : 'بازیابی رمز موبایلی غیرفعال', ok: enabled, neutral: true },
-  ];
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400">
-            <KeyRound className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <h4 className="font-semibold text-gray-800 dark:text-white">بازیابی رمز با موبایل</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {ready ? 'فعال و آماده' : 'غیرفعال'}
-            </p>
-          </div>
-        </div>
-        {isAdmin && (
-          <button
-            onClick={() => handleToggle(!enabled)}
-            disabled={saving || testMode}
-            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${(saving || testMode) ? 'opacity-50' : ''}`}
-            title={testMode ? 'ابتدا حالت تست را غیرفعال کنید' : ''}>
-            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
-        )}
-      </div>
-      <div className="mt-4 space-y-1.5">
-        {items.map((item, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <span className={`w-2 h-2 rounded-full ${item.ok ? 'bg-green-500' : item.neutral ? 'bg-gray-300 dark:bg-gray-600' : 'bg-amber-400'}`} />
-            <span className={item.ok ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}>
-              {item.label}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Secret confirmation button */}
-      {isAdmin && !secretConfirmed && (
-        <button
-          onClick={handleConfirmSecret}
-          disabled={secretSaving}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-xl text-xs font-medium transition-colors border border-amber-200 dark:border-amber-700/40">
-          {secretSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-          تأیید Secret بازیابی رمز
-        </button>
-      )}
-
-      {/* Test mode section */}
-      {isAdmin && (
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-xs font-medium text-gray-600 dark:text-gray-300">حالت تست</span>
-            <button
-              onClick={() => handleTestModeToggle(!testMode)}
-              disabled={testSaving || (testMode ? false : !testReady)}
-              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${testMode ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'} ${(testSaving || (!testMode && !testReady)) ? 'opacity-50' : ''}`}
-              title={!testReady && !testMode ? 'پیش‌نیازهای تست آماده نیست' : ''}>
-              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${testMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-          {testMode && maskedPhone && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">شماره تست: {maskedPhone}</p>
-          )}
-          {!testMode && (
-            <input
-              type="tel"
-              value={testPhoneInput}
-              onChange={e => setTestPhoneInput(e.target.value)}
-              placeholder="مثال: 09123456789"
-              dir="ltr"
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors"
-            />
-          )}
-          {!testReady && !testMode && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">پیش‌نیازها: Provider، قالب، Secret و TTL باید آماده باشند.</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── MFA Panel ────────────────────────────────────────────────────────────────
-function MfaPanel() {
-  const [step, setStep] = useState<'idle' | 'enrolling' | 'verifying' | 'enrolled'>('idle');
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [secret, setSecret] = useState<string | null>(null);
-  const [factorId, setFactorId] = useState<string | null>(null);
-  const [challengeId, setChallengeId] = useState<string | null>(null);
-  const [code, setCode] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [factors, setFactors] = useState<any[]>([]);
-
-  const loadFactors = async () => {
-    const { data } = await supabase.auth.mfa.listFactors();
-    setFactors(data?.totp || []);
-    if ((data?.totp || []).some((f: any) => f.status === 'verified')) setStep('enrolled');
-  };
-
-  useEffect(() => { loadFactors(); }, []);
-
-  const handleEnroll = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Authenticator App' });
-      if (error || !data) { toast.error('خطا در فعال‌سازی MFA: ' + (error?.message || '')); return; }
-      setFactorId(data.id);
-      setQrCode(data.totp.qr_code);
-      setSecret(data.totp.secret);
-      const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId: data.id });
-      if (chErr || !ch) { toast.error('خطا در ایجاد چالش: ' + (chErr?.message || '')); return; }
-      setChallengeId(ch.id);
-      setStep('verifying');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async () => {
-    if (!factorId || !challengeId) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.mfa.verify({ factorId, challengeId, code });
-      if (error) { toast.error('کد اشتباه است: ' + error.message); return; }
-      toast.success('احراز هویت دو مرحله‌ای با موفقیت فعال شد');
-      setCode('');
-      await loadFactors();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUnenroll = async (fId: string) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.mfa.unenroll({ factorId: fId });
-      if (error) { toast.error('خطا در غیرفعال‌سازی: ' + error.message); return; }
-      toast.success('احراز هویت دو مرحله‌ای غیرفعال شد');
-      setStep('idle');
-      setQrCode(null);
-      setSecret(null);
-      await loadFactors();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (step === 'enrolled') {
-    const verifiedFactor = factors.find((f: any) => f.status === 'verified');
-    return (
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-700/40">
-          <ShieldCheck className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-green-700 dark:text-green-300">احراز هویت دو مرحله‌ای فعال است</p>
-            <p className="text-xs text-green-600/80 dark:text-green-400/70 mt-0.5">حساب شما با برنامه احراز هویت محافظت می‌شود</p>
-          </div>
-        </div>
-        {verifiedFactor && (
-          <button onClick={() => handleUnenroll(verifiedFactor.id)} disabled={loading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium transition-colors border border-red-200 dark:border-red-700/40">
-            <X className="w-4 h-4" />
-            غیرفعال کردن MFA
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  if (step === 'verifying') {
-    return (
-      <div className="flex flex-col gap-4">
-        {qrCode && (
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-sm text-gray-600 dark:text-gray-400 text-center">کد QR را با برنامه احراز هویت (مثل Google Authenticator) اسکن کنید:</p>
-            <img src={qrCode} alt="QR Code" className="w-40 h-40 rounded-xl border border-gray-200 dark:border-gray-600 bg-white p-2" />
-            {secret && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center font-mono bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg break-all">
-                {secret}
-              </p>
-            )}
-          </div>
-        )}
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">کد ۶ رقمی از برنامه:</label>
-          <input type="text" inputMode="numeric" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-            placeholder="000000"
-            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-center tracking-widest font-mono" />
-        </div>
-        <div className="flex gap-2">
-          <button onClick={handleVerify} disabled={loading || code.length !== 6}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
-            <ShieldCheck className="w-4 h-4" /> تایید و فعال‌سازی
-          </button>
-          <button onClick={() => { setStep('idle'); setQrCode(null); setSecret(null); setCode(''); }}
-            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition-colors">
-            انصراف
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        احراز هویت دو مرحله‌ای (MFA) لایه امنیتی اضافه‌ای به حساب شما اضافه می‌کند. برای ورود، علاوه بر رمز عبور، به یک کد زمانی از برنامه احراز هویت نیاز دارید.
-      </p>
-      <button onClick={handleEnroll} disabled={loading}
-        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
-        <KeyRound className="w-4 h-4" />
-        فعال‌سازی احراز هویت دو مرحله‌ای
-      </button>
-    </div>
-  );
-}
-
-// ─── Phone Sync Card (security section) ──────────────────────────────────────
-function PhoneSyncCard() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<Profile[]>([]);
-  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
-  const [checkResult, setCheckResult] = useState<any>(null);
-  const [checking, setChecking] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_admin')
-          .eq('user_id', userData.user.id)
-          .maybeSingle();
-        setIsAdmin(profile?.is_admin === true);
-      }
-      setLoading(false);
-    })();
-  }, []);
-
-  const handleSearch = async () => {
-    if (!searchTerm.trim()) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
-      .eq('is_active', true)
-      .limit(10);
-    setSearchResults((data || []) as Profile[]);
-  };
-
-  const handleCheck = async () => {
-    if (!selectedUser) return;
-    setChecking(true);
-    setCheckResult(null);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
-      if (!token) { toast.error('نشست معتبر نیست'); return; }
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-profile-phone-to-auth`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({ user_id: selectedUser.user_id, action: 'check' }),
-        }
-      );
-      const json = await res.json();
-      if (!res.ok) {
-        toast.error(json.error || 'خطا در بررسی');
-        return;
-      }
-      setCheckResult(json);
-    } catch {
-      toast.error('خطا در ارتباط با سرور');
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  const handleSync = async () => {
-    if (!selectedUser) return;
-    setSyncing(true);
-    setShowConfirm(false);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
-      if (!token) { toast.error('نشست معتبر نیست'); return; }
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-profile-phone-to-auth`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({ user_id: selectedUser.user_id, action: 'sync' }),
-        }
-      );
-      const json = await res.json();
-      if (!res.ok) {
-        const errMap: Record<string, string> = {
-          NOT_ADMIN: 'فقط ادمین می‌تواند',
-          PROFILE_NOT_FOUND: 'پروفایل یافت نشد',
-          PROFILE_INACTIVE: 'پروفایل غیرفعال است',
-          PROFILE_PHONE_INVALID: 'شماره پروفایل نامعتبر است',
-          AUTH_USER_NOT_FOUND: 'کاربر Auth یافت نشد',
-          CONFLICT_PHONE_ON_ANOTHER_USER: 'شماره روی کاربر دیگری در Auth ثبت شده',
-          AUTH_PHONE_CONFLICT: 'کاربر Auth شماره متفاوتی دارد',
-          PHONE_DUPLICATE: 'شماره تکراری است',
-          AUTH_UPDATE_FAILED: 'خطا در به‌روزرسانی Auth',
-        };
-        toast.error(errMap[json.error] || json.error || 'خطا در همگام‌سازی');
-        return;
-      }
-      setCheckResult(json);
-      toast.success(json.message === 'ALREADY_SYNCED' ? 'شماره قبلاً همگام شده' : 'شماره با موفقیت همگام شد');
-      logAudit({ module: 'security', action: 'sync_profile_phone_to_auth', entity_name: selectedUser.user_id, severity: 'warning' });
-    } catch {
-      toast.error('خطا در ارتباط با سرور');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  if (loading || !isAdmin) return null;
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
-          <RefreshCw className="w-4 h-4" />
-        </div>
-        <div>
-          <h3 className="font-bold text-gray-800 dark:text-white">همگام‌سازی شماره Profile با Supabase Auth</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">شماره پروفایل را به‌صورت امن در Auth ثبت می‌کند</p>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {/* Search */}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="نام، ایمیل یا شماره..."
-            className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
-          />
-          <button
-            onClick={handleSearch}
-            className="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition-colors whitespace-nowrap flex items-center gap-1"
-          >
-            <Search className="w-4 h-4" /> جستجو
-          </button>
-        </div>
-
-        {/* Search results */}
-        {searchResults.length > 0 && (
-          <div className="space-y-1 max-h-40 overflow-y-auto">
-            {searchResults.map(p => (
-              <button
-                key={p.user_id}
-                onClick={() => { setSelectedUser(p); setCheckResult(null); }}
-                className={`w-full text-right px-3 py-2 rounded-xl text-sm transition-colors ${
-                  selectedUser?.user_id === p.user_id
-                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                    : 'bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300'
-                }`}
-              >
-                {p.full_name || 'بدون نام'} — {p.email || ''}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Selected user + check/sync */}
-        {selectedUser && (
-          <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {selectedUser.full_name || 'بدون نام'}
-              </p>
-              <span className="text-xs text-gray-400">{selectedUser.email || ''}</span>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={handleCheck}
-                disabled={checking}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition-colors disabled:opacity-50"
-              >
-                <Search className="w-4 h-4" /> بررسی
-              </button>
-              <button
-                onClick={() => setShowConfirm(true)}
-                disabled={syncing}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} /> همگام‌سازی امن
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Check result */}
-        {checkResult && (
-          <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-1.5">
-            <div className="flex items-center gap-2 text-xs">
-              <span className={`w-2 h-2 rounded-full ${checkResult.profile_exists ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-gray-600 dark:text-gray-300">پروفایل: {checkResult.profile_exists ? 'موجود' : 'یافت نشد'}</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className={`w-2 h-2 rounded-full ${checkResult.profile_active ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-gray-600 dark:text-gray-300">وضعیت: {checkResult.profile_active ? 'فعال' : 'غیرفعال'}</span>
-            </div>
-            {checkResult.profile_phone_masked !== undefined && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">شماره پروفایل: {checkResult.profile_phone_masked || '—'}</p>
-            )}
-            <div className="flex items-center gap-2 text-xs">
-              <span className={`w-2 h-2 rounded-full ${checkResult.auth_user_exists ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-gray-600 dark:text-gray-300">Auth User: {checkResult.auth_user_exists ? 'موجود' : 'یافت نشد'}</span>
-            </div>
-            {checkResult.auth_phone_masked !== undefined && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                شماره Auth: {checkResult.auth_phone_masked || 'ثبت نشده'}
-              </p>
-            )}
-            {checkResult.already_synced && (
-              <p className="text-xs text-green-600 dark:text-green-400 font-medium">همگام‌سازی قبلاً انجام شده</p>
-            )}
-            {checkResult.conflict && (
-              <p className="text-xs text-red-600 dark:text-red-400 font-medium">تداخل: شماره روی کاربر دیگری در Auth</p>
-            )}
-            {checkResult.message && checkResult.message !== 'ALREADY_SYNCED' && (
-              <p className="text-xs text-green-600 dark:text-green-400 font-medium">{checkResult.message === 'SYNCED' ? 'همگام‌سازی موفق' : checkResult.message}</p>
-            )}
-          </div>
-        )}
-
-        {/* Confirmation modal */}
-        {showConfirm && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full space-y-4">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-500" />
-                <h3 className="font-bold text-gray-800 dark:text-white">تأیید همگام‌سازی</h3>
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                شماره پروفایل کاربر «{selectedUser?.full_name || '—'}» در Supabase Auth ثبت می‌شود. این عملیات قابل بازگشت است. ادامه می‌دهید؟
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowConfirm(false)}
-                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition-colors"
-                >
-                  انصراف
-                </button>
-                <button
-                  onClick={handleSync}
-                  disabled={syncing}
-                  className="flex-1 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
-                >
-                  {syncing ? 'در حال...' : 'تأیید و همگام‌سازی'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Main component ───────────────────────────────────────────────────────────
 interface Props { currentUserId: string; }
-
-function BaleOtpConfigCard() {
-  const [loginBaleEnabled, setLoginBaleEnabled] = useState(false);
-  const [recoveryBaleEnabled, setRecoveryBaleEnabled] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    const { data } = await supabase
-      .from('system_config')
-      .select('key, value')
-      .eq('section', 'security')
-      .in('key', ['phone_login_bale_otp_enabled', 'phone_password_recovery_bale_otp_enabled']);
-    if (data) {
-      for (const row of data) {
-        if (row.key === 'phone_login_bale_otp_enabled') setLoginBaleEnabled(row.value === 'true');
-        if (row.key === 'phone_password_recovery_bale_otp_enabled') setRecoveryBaleEnabled(row.value === 'true');
-      }
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const toggle = async (key: string, current: boolean) => {
-    setSaving(true);
-    try {
-      const { data, error } = await supabase
-        .rpc('set_bale_auth_otp_config', { p_key: key, p_enabled: !current });
-      if (error) throw error;
-      if (!data || data.ok !== true) {
-        const errMsg = data?.error || 'UNKNOWN';
-        if (errMsg === 'FORBIDDEN') toast.error('دسترسی ادمین لازم است');
-        else if (errMsg === 'INVALID_KEY') toast.error('کلید نامعتبر');
-        else if (errMsg === 'PROFILE_INACTIVE') toast.error('پروفایل غیرفعال');
-        else if (errMsg === 'UNAUTHORIZED') toast.error('احراز هویت لازم است');
-        else toast.error('خطا در ذخیره تنظیمات');
-        return;
-      }
-      if (key === 'phone_login_bale_otp_enabled') setLoginBaleEnabled(!current);
-      if (key === 'phone_password_recovery_bale_otp_enabled') setRecoveryBaleEnabled(!current);
-      toast.success('ذخیره شد');
-    } catch {
-      toast.error('خطا در ذخیره تنظیمات');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400">
-          <MessageCircle className="w-4 h-4" />
-        </div>
-        <div>
-          <h3 className="font-bold text-gray-800 dark:text-white">ارسال کدهای احراز هویت در بله</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">کانال تکمیلی — پیامک کانال اصلی و الزامی باقی می‌ماند</p>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-          <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">ارسال کد ورود در بله</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">کد یکبار مصرف ورود علاوه بر پیامک، در بله نیز ارسال شود</p>
-          </div>
-          <button
-            onClick={() => toggle('phone_login_bale_otp_enabled', loginBaleEnabled)}
-            disabled={saving}
-            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${loginBaleEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${saving ? 'opacity-50' : ''}`}
-          >
-            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${loginBaleEnabled ? 'left-7' : 'left-1'}`} />
-          </button>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-          <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">ارسال کد بازیابی رمز در بله</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">کد یکبار مصرف بازیابی رمز علاوه بر پیامک، در بله نیز ارسال شود</p>
-          </div>
-          <button
-            onClick={() => toggle('phone_password_recovery_bale_otp_enabled', recoveryBaleEnabled)}
-            disabled={saving}
-            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${recoveryBaleEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${saving ? 'opacity-50' : ''}`}
-          >
-            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${recoveryBaleEnabled ? 'left-7' : 'left-1'}`} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function PortalConfigPage({ currentUserId }: Props) {
   const [activeSection, setActiveSection] = useState('general');
@@ -1223,32 +74,14 @@ export function PortalConfigPage({ currentUserId }: Props) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Profile[]>([]);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
-
-  // Audit log state
   const [auditFilter] = useState<{ severity: string; search: string }>({ severity: 'all', search: '' });
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
 
-  // User management modals
-  type UserModal = 'edit' | 'password' | 'delete' | 'access' | 'activity' | 'logins' | 'urls' | 'add' | null;
-  const [userModal, setUserModal] = useState<UserModal>(null);
-  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
-  const [userMenuOpen, setUserMenuOpen] = useState<string | null>(null);
-  const userMenuRef = useRef<HTMLDivElement | null>(null);
-
-  // Modal form state
-  const [editForm, setEditForm] = useState({ full_name: '', email: '', department: '', position: '' });
-  const [newPassword, setNewPassword] = useState('');
-  const [showNewPass, setShowNewPass] = useState(false);
-  const [addForm, setAddForm] = useState({ full_name: '', email: '', password: '', department: '', position: '', is_admin: false });
-  const [userActivity, setUserActivity] = useState<AuditEntry[]>([]);
-  const [userSearch, setUserSearch] = useState('');
-
-  // Load configs
   const loadConfigs = useCallback(async () => {
     const { data } = await supabase.from('system_config').select('*').order('section').order('key');
     if (data) setConfigs(data as ConfigEntry[]);
   }, []);
 
-  // Load audit logs
   const loadAuditLogs = useCallback(async () => {
     let q = supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(200);
     if (auditFilter.severity !== 'all') q = q.eq('severity', auditFilter.severity);
@@ -1257,39 +90,23 @@ export function PortalConfigPage({ currentUserId }: Props) {
     if (data) setAuditLogs(data as AuditEntry[]);
   }, [auditFilter]);
 
-  // Load profiles
-  const loadProfiles = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (data) setProfiles(data as Profile[]);
-  }, []);
-
-  // Load truly online users (last seen within 3 minutes)
   const loadOnlineUsers = useCallback(async () => {
     const threshold = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-    const { data: presenceRows } = await supabase
-      .from('user_presence')
-      .select('user_id, last_seen, is_online')
-      .gte('last_seen', threshold);
+    const { data: presenceRows } = await supabase.from('user_presence').select('user_id, last_seen, is_online').gte('last_seen', threshold);
     if (!presenceRows || presenceRows.length === 0) { setOnlineUsers([]); return; }
     const onlineIds = presenceRows.map((r: any) => r.user_id);
-    const { data: pData } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('user_id', onlineIds);
+    const { data: pData } = await supabase.from('profiles').select('*').in('user_id', onlineIds);
     setOnlineUsers((pData || []) as Profile[]);
   }, []);
 
-  // Load groups
   const loadGroups = useCallback(async () => {
     const { data } = await supabase.from('user_groups').select('*').order('name');
     if (!data) return;
-    // Count members
     await Promise.all(data.map(async g => {
       await supabase.from('user_group_members').select('id', { count: 'exact', head: true }).eq('group_id', g.id);
     }));
   }, []);
 
-  // Load stats
   const loadStats = useCallback(async () => {
     await Promise.all([
       supabase.from('meetings').select('id', { count: 'exact', head: true }),
@@ -1304,17 +121,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
   useEffect(() => { if (activeSection === 'audit_log') loadAuditLogs(); }, [activeSection, auditFilter]);
   useEffect(() => { if (activeSection === 'users_online') loadOnlineUsers(); }, [activeSection]);
 
-  // Close user action dropdown on outside click
-  useEffect(() => {
-    if (!userMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(null);
-      else setUserMenuOpen(null);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [userMenuOpen]);
-
   const saveConfig = async (id: string, value: string) => {
     const cfg = configs.find(c => c.id === id);
     const { error } = await supabase.from('system_config').update({ value, updated_by: currentUserId, updated_at: new Date().toISOString() }).eq('id', id);
@@ -1326,7 +132,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
 
   const cfgs = (section: string) => configs.filter(c => c.section === section);
 
-  // Upload an image to portal-assets bucket and save the public URL to system_config
   const uploadAsset = async (configKey: string, file: File) => {
     const ext = file.name.split('.').pop();
     const path = `${configKey}-${Date.now()}.${ext}`;
@@ -1336,79 +141,14 @@ export function PortalConfigPage({ currentUserId }: Props) {
       if (uploadError) { toast.error('خطا در آپلود فایل'); return; }
       const { data: urlData } = supabase.storage.from('portal-assets').getPublicUrl(path);
       const publicUrl = urlData.publicUrl;
-      // Find config entry by key and save
       const entry = configs.find(c => c.section === 'appearance' && c.key === configKey);
       if (entry) { await saveConfig(entry.id, publicUrl); }
       else {
-        // upsert
         await supabase.from('system_config').upsert({ section: 'appearance', key: configKey, value: publicUrl, value_type: 'string', label: configKey }, { onConflict: 'section,key' });
         await loadConfigs();
       }
       toast.success('آپلود شد');
     } finally { setUploadingKey(null); }
-  };
-
-  const toggleAdmin = async (uid: string, current: boolean | null) => {
-    const target = profiles.find(p => p.user_id === uid);
-    const { error } = await supabase.from('profiles').update({ is_admin: !current }).eq('user_id', uid);
-    if (error) { toast.error('خطا'); return; }
-    setProfiles(prev => prev.map(p => p.user_id === uid ? { ...p, is_admin: !current } : p));
-    toast.success('به‌روزرسانی شد');
-    logAudit({ module: 'user_management', action: !current ? 'grant_admin' : 'revoke_admin', entity_name: target?.full_name || target?.email || uid, entity_id: uid, details: `دسترسی ادمین ${!current ? 'داده شد' : 'گرفته شد'}`, severity: 'warning' });
-  };
-
-  // ── User management actions ────────────────────────────────────────────────
-  const openUserModal = (modal: UserModal, user: Profile) => {
-    setSelectedUser(user);
-    setUserModal(modal);
-    setUserMenuOpen(null);
-    if (modal === 'edit') setEditForm({ full_name: user.full_name || '', email: user.email || '', department: user.department || '', position: user.position || '' });
-    if (modal === 'activity') {
-      supabase.from('audit_log').select('*').eq('user_id', user.user_id).order('created_at', { ascending: false }).limit(100)
-        .then(({ data }) => { if (data) setUserActivity(data as AuditEntry[]); });
-    }
-  };
-
-  const saveUserEdit = async () => {
-    if (!selectedUser) return;
-    const { error } = await supabase.from('profiles').update({ full_name: editForm.full_name, department: editForm.department, position: editForm.position }).eq('user_id', selectedUser.user_id);
-    if (error) { toast.error('خطا در ویرایش'); return; }
-    toast.success('ویرایش شد');
-    setUserModal(null);
-    loadProfiles();
-  };
-
-  const changeUserPassword = async () => {
-    if (!newPassword || newPassword.length < 6) { toast.error('رمز عبور حداقل ۶ کاراکتر'); return; }
-    // Admin password reset via supabase admin API is done via edge function or service key
-    // For now we update a flag and toast — in production use admin.updateUserById
-    toast.success('درخواست تغییر رمز ثبت شد — لینک بازیابی برای کاربر ارسال می‌شود');
-    setUserModal(null);
-    setNewPassword('');
-  };
-
-  const deleteUser = async () => {
-    if (!selectedUser) return;
-    const { error } = await supabase.from('profiles').update({ is_active: false }).eq('user_id', selectedUser.user_id);
-    if (error) { toast.error('خطا'); return; }
-    toast.success('کاربر غیرفعال شد (حساب کاربری نگهداری شد)');
-    setUserModal(null);
-    loadProfiles();
-  };
-
-  const addUser = async () => {
-    if (!addForm.email || !addForm.password) { toast.error('ایمیل و رمز عبور الزامی است'); return; }
-    if (addForm.password.length < 6) { toast.error('رمز عبور حداقل ۶ کاراکتر'); return; }
-    // Create user via Supabase Auth signUp then update profile
-    const { data, error } = await supabase.auth.signUp({ email: addForm.email.trim(), password: addForm.password, options: { data: { full_name: addForm.full_name } } });
-    if (error) { toast.error(error.message); return; }
-    if (data.user) {
-      await supabase.from('profiles').upsert({ user_id: data.user.id, email: addForm.email.trim(), full_name: addForm.full_name, department: addForm.department, position: addForm.position, is_admin: addForm.is_admin, is_active: true });
-      toast.success('کاربر ایجاد شد');
-      setUserModal(null);
-      setAddForm({ full_name: '', email: '', password: '', department: '', position: '', is_admin: false });
-      loadProfiles();
-    }
   };
 
   const toggleGroup = (key: string) => {
@@ -1418,10 +158,8 @@ export function PortalConfigPage({ currentUserId }: Props) {
     });
   };
 
-  // ── Render content ──────────────────────────────────────────────────────────
   const renderContent = () => {
     switch (activeSection) {
-      // ── General ──────────────────────────────────────────────────────────
       case 'general':
         return (
           <div className="space-y-5">
@@ -1431,7 +169,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── UI Settings ───────────────────────────────────────────────────────
       case 'ui_settings':
         return (
           <div className="space-y-5">
@@ -1451,23 +188,19 @@ export function PortalConfigPage({ currentUserId }: Props) {
                       <div>
                         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">منوی کناری به صورت پیش‌فرض بسته باشد</p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                          {isCollapsed
-                            ? 'در ورود اولیه، منوی کناری به صورت آیکن‌تنها نمایش داده می‌شود'
-                            : 'در ورود اولیه، منوی کناری کامل (با نام‌ها) نمایش داده می‌شود'}
+                          {isCollapsed ? 'در ورود اولیه، منوی کناری به صورت آیکن‌تنها نمایش داده می‌شود' : 'در ورود اولیه، منوی کناری کامل (با نام‌ها) نمایش داده می‌شود'}
                         </p>
                       </div>
                       <button
                         onClick={async () => {
                           const newVal = isCollapsed ? 'false' : 'true';
-                          if (entry) {
-                            await saveConfig(entry.id, newVal);
-                          } else {
+                          if (entry) { await saveConfig(entry.id, newVal); }
+                          else {
                             await supabase.from('system_config').upsert({ section: 'ui', key: 'sidebar_default_collapsed', value: newVal, value_type: 'boolean', label: 'منوی کناری به صورت پیش‌فرض بسته باشد' }, { onConflict: 'section,key' });
                             await loadConfigs();
                           }
                         }}
-                        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${isCollapsed ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-                      >
+                        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${isCollapsed ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                         <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${isCollapsed ? 'left-7' : 'left-1'}`} />
                       </button>
                     </div>
@@ -1478,7 +211,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Appearance ───────────────────────────────────────────────────────
       case 'appearance':
         return (
           <div className="space-y-5">
@@ -1486,7 +218,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
               {cfgs('appearance').map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
 
-            {/* Splash screen toggle */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
               <h4 className="font-bold text-gray-800 dark:text-white mb-1 flex items-center gap-2">
                 <Monitor className="w-4 h-4 text-teal-500" />انیمیشن ورود (Splash Screen)
@@ -1501,15 +232,13 @@ export function PortalConfigPage({ currentUserId }: Props) {
                     <button
                       onClick={async () => {
                         const newVal = isEnabled ? 'false' : 'true';
-                        if (entry) {
-                          await saveConfig(entry.id, newVal);
-                        } else {
+                        if (entry) { await saveConfig(entry.id, newVal); }
+                        else {
                           await supabase.from('system_config').upsert({ section: 'appearance', key: 'splash_enabled', value: newVal, value_type: 'boolean', label: 'انیمیشن ورود' }, { onConflict: 'section,key' });
                           await loadConfigs();
                         }
                       }}
-                      className={`relative w-12 h-6 rounded-full transition-colors ${isEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-                    >
+                      className={`relative w-12 h-6 rounded-full transition-colors ${isEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                       <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${isEnabled ? 'left-7' : 'left-1'}`} />
                     </button>
                   </div>
@@ -1532,11 +261,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                       <input type="file" accept={accept} className="hidden"
                         onChange={e => { const f = e.target.files?.[0]; if (f) uploadAsset(key, f); e.target.value = ''; }} />
                       <div className="w-20 h-14 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center overflow-hidden">
-                        {current ? (
-                          <img src={current} alt={label} className="w-full h-full object-contain p-1" />
-                        ) : (
-                          <Image className="w-6 h-6 text-gray-400" />
-                        )}
+                        {current ? (<img src={current} alt={label} className="w-full h-full object-contain p-1" />) : (<Image className="w-6 h-6 text-gray-400" />)}
                       </div>
                       <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</p>
                       <p className="text-xs text-gray-400">انواع مجاز: {fmt}</p>
@@ -1557,7 +282,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Regional ─────────────────────────────────────────────────────────
       case 'regional':
         return (
           <div className="space-y-5">
@@ -1577,7 +301,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
                       const next = active ? days.filter(d => d !== day) : [...days, day];
                       saveConfig(entry.id, next.join(','));
                     }}
-                    className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${active ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-green-400'}`}>
+                      className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${active ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-green-400'}`}>
                       {day}
                     </button>
                   );
@@ -1587,337 +311,9 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Users list ────────────────────────────────────────────────────────
       case 'users_list':
         return <UserManagementPanel currentUserId={currentUserId} />;
-      case '_users_list_old': {
-        const filtered = profiles.filter(p =>
-          !userSearch || (p.full_name || '').includes(userSearch) || (p.email || '').includes(userSearch) || (p.department || '').includes(userSearch)
-        );
-        return (
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-500" />فهرست کاربران
-                <span className="text-sm font-normal text-gray-400">({profiles.length})</span>
-              </h3>
-              <div className="flex gap-2">
-                <div className="relative">
-                  <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                  <input value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="جستجو..."
-                    className="pr-8 pl-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-48" />
-                </div>
-                <button onClick={loadProfiles} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors" title="بارگذاری مجدد"><RefreshCw className="w-4 h-4" /></button>
-                <button onClick={() => setUserModal('add')}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-medium transition-colors">
-                  <Plus className="w-4 h-4" />افزودن کاربر
-                </button>
-              </div>
-            </div>
 
-            {/* Table */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 dark:bg-gray-700/50 text-right">
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">کاربر</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">ایمیل</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">واحد / سمت</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 text-center">ادمین</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 text-center">وضعیت</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 text-center">تاریخ ثبت</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 text-center">عملیات</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {filtered.map(p => (
-                      <tr key={p.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                              {(p.full_name || p.email || '?')[0].toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="font-medium text-gray-800 dark:text-white flex items-center gap-1">
-                                {p.full_name || '—'}
-                                {p.user_id === currentUserId && <span className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded-full">شما</span>}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs font-mono">{p.email}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
-                          {p.department && <div>{p.department}</div>}
-                          {p.position && <div className="text-gray-400">{p.position}</div>}
-                          {!p.department && !p.position && '—'}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button onClick={() => toggleAdmin(p.user_id, p.is_admin)}
-                            className={`w-9 h-5 rounded-full relative transition-colors ${p.is_admin ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-600'}`}>
-                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${p.is_admin ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${p.is_active !== false ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${p.is_active !== false ? 'bg-green-500' : 'bg-red-500'}`} />
-                            {p.is_active !== false ? 'فعال' : 'غیرفعال'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center text-xs text-gray-400">{p.created_at ? new Date(p.created_at).toLocaleDateString('fa-IR') : '—'}</td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="relative inline-block" ref={el => { if (userMenuOpen === p.user_id) (userMenuRef as any).current = el; }}>
-                            <button onClick={() => setUserMenuOpen(userMenuOpen === p.user_id ? null : p.user_id)}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors">
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                            {userMenuOpen === p.user_id && (
-                              <div className="absolute left-0 top-full mt-1 w-52 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden" dir="rtl"
-                                onClick={e => e.stopPropagation()}>
-                                {[
-                                  { icon: Edit2, label: 'ویرایش اطلاعات', modal: 'edit' as UserModal, color: 'text-blue-500' },
-                                  { icon: KeyRound, label: 'تغییر رمز عبور', modal: 'password' as UserModal, color: 'text-amber-500' },
-                                  { icon: p.is_active !== false ? UserX : UserCheck, label: p.is_active !== false ? 'غیرفعال کردن' : 'فعال کردن', modal: 'delete' as UserModal, color: p.is_active !== false ? 'text-red-500' : 'text-green-500' },
-                                  { icon: ShieldCheck, label: 'مشاهده حقوق دسترسی', modal: 'access' as UserModal, color: 'text-teal-500' },
-                                  { icon: Activity, label: 'فعالیت‌های کاربر', modal: 'activity' as UserModal, color: 'text-purple-500' },
-                                  { icon: History, label: 'تاریخچه ورودها', modal: 'logins' as UserModal, color: 'text-gray-500' },
-                                  { icon: MapPin, label: 'آدرس‌های مراجعه شده', modal: 'urls' as UserModal, color: 'text-orange-500' },
-                                ].map(({ icon: Icon, label, modal, color }) => (
-                                  <button key={modal} onClick={() => openUserModal(modal, p)}
-                                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right">
-                                    <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />
-                                    <span className="text-sm text-gray-700 dark:text-gray-200">{label}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={7} className="text-center py-12 text-gray-400">کاربری یافت نشد</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* ── Modals ──────────────────────────────────────────────────── */}
-            {userModal && selectedUser && (
-              <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setUserModal(null)} dir="rtl">
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-
-                  {/* ── Edit user ── */}
-                  {userModal === 'edit' && (
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-5">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><Edit2 className="w-5 h-5 text-blue-500" />ویرایش کاربر</h3>
-                        <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
-                      </div>
-                      <div className="space-y-4">
-                        {[['نام و نام خانوادگی', 'full_name'], ['واحد سازمانی', 'department'], ['سمت', 'position']].map(([lbl, key]) => (
-                          <div key={key}>
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{lbl}</label>
-                            <input value={(editForm as any)[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
-                              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                          </div>
-                        ))}
-                        <div className="pt-2 flex gap-2">
-                          <button onClick={saveUserEdit} className="flex-1 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"><Save className="w-4 h-4" />ذخیره</button>
-                          <button onClick={() => setUserModal(null)} className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition-colors">انصراف</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Change password ── */}
-                  {userModal === 'password' && (
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-5">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><KeyRound className="w-5 h-5 text-amber-500" />تغییر رمز عبور</h3>
-                        <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
-                      </div>
-                      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 mb-4 text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                        رمز جدید برای کاربر <strong>{selectedUser.full_name || selectedUser.email}</strong> تنظیم خواهد شد.
-                      </div>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">رمز عبور جدید</label>
-                          <div className="relative">
-                            <input type={showNewPass ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pl-10" />
-                            <button onClick={() => setShowNewPass(v => !v)} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                              {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="pt-2 flex gap-2">
-                          <button onClick={changeUserPassword} className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"><KeyRound className="w-4 h-4" />تغییر رمز</button>
-                          <button onClick={() => setUserModal(null)} className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition-colors">انصراف</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Deactivate / activate ── */}
-                  {userModal === 'delete' && (
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-5">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                          {selectedUser.is_active !== false ? <UserX className="w-5 h-5 text-red-500" /> : <UserCheck className="w-5 h-5 text-green-500" />}
-                          {selectedUser.is_active !== false ? 'غیرفعال کردن کاربر' : 'فعال کردن کاربر'}
-                        </h3>
-                        <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-                        {selectedUser.is_active !== false
-                          ? `آیا می‌خواهید دسترسی کاربر "${selectedUser.full_name || selectedUser.email}" را مسدود کنید؟ حساب کاربری حذف نمی‌شود.`
-                          : `آیا می‌خواهید دسترسی کاربر "${selectedUser.full_name || selectedUser.email}" را مجدداً فعال کنید؟`}
-                      </p>
-                      <div className="flex gap-2">
-                        <button onClick={deleteUser}
-                          className={`flex-1 py-2.5 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 ${selectedUser.is_active !== false ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}>
-                          {selectedUser.is_active !== false ? <><UserX className="w-4 h-4" />غیرفعال کن</> : <><UserCheck className="w-4 h-4" />فعال کن</>}
-                        </button>
-                        <button onClick={() => setUserModal(null)} className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition-colors">انصراف</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Access rights ── */}
-                  {userModal === 'access' && (
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-5">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-teal-500" />حقوق دسترسی</h3>
-                        <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
-                      </div>
-                      <div className="flex items-center gap-3 mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
-                        <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">{(selectedUser.full_name || selectedUser.email || '?')[0].toUpperCase()}</div>
-                        <div><p className="font-medium text-gray-800 dark:text-white">{selectedUser.full_name}</p><p className="text-xs text-gray-400">{selectedUser.email}</p></div>
-                        {selectedUser.is_admin && <span className="mr-auto text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-full">ادمین</span>}
-                      </div>
-                      <div className="space-y-2">
-                        {[['جلسات', 'meetings'], ['تقویم', 'calendar'], ['چت سازمانی', 'chat'], ['ویدیو کنفرانس', 'video_conference'], ['اقدامات', 'tasks'], ['یادداشت‌ها', 'notes'], ['مخاطبین', 'contacts'], ['گزارشات', 'reports'], ['پنل ادمین', 'admin']].map(([label, key]) => {
-                          const hasAccess = key === 'admin' ? !!selectedUser.is_admin : selectedUser.is_active !== false;
-                          return (
-                            <div key={key} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700">
-                              <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
-                              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${hasAccess ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
-                                {hasAccess ? 'دسترسی دارد' : 'ندارد'}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Activity ── */}
-                  {userModal === 'activity' && (
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-5">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><Activity className="w-5 h-5 text-purple-500" />فعالیت‌های کاربر</h3>
-                        <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
-                      </div>
-                      <p className="text-xs text-gray-400 mb-3">کاربر: <strong className="text-gray-700 dark:text-gray-200">{selectedUser.full_name || selectedUser.email}</strong></p>
-                      <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-                        {userActivity.length === 0 && <p className="text-center text-gray-400 py-8">فعالیتی ثبت نشده</p>}
-                        {userActivity.map(a => (
-                          <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-                            <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${a.severity === 'error' || a.severity === 'critical' ? 'bg-red-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{a.action}</span>
-                                <span className="text-xs text-gray-400 flex-shrink-0">{new Date(a.created_at).toLocaleString('fa-IR')}</span>
-                              </div>
-                              <div className="flex gap-3 mt-1">
-                                {a.module && <span className="text-xs text-gray-400">{a.module}</span>}
-                                {a.ip_address && <span className="text-xs text-gray-400 font-mono">{a.ip_address}</span>}
-                              </div>
-                              {a.details && <p className="text-xs text-gray-400 mt-1 truncate">{a.details}</p>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Login history ── */}
-                  {userModal === 'logins' && (
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-5">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><History className="w-5 h-5 text-gray-500" />تاریخچه ورودها</h3>
-                        <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
-                      </div>
-                      <p className="text-xs text-gray-400 mb-3">کاربر: <strong className="text-gray-700 dark:text-gray-200">{selectedUser.full_name || selectedUser.email}</strong></p>
-                      <LoginHistoryList userId={selectedUser.user_id} />
-                    </div>
-                  )}
-
-                  {/* ── Visited URLs ── */}
-                  {userModal === 'urls' && (
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-5">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><MapPin className="w-5 h-5 text-orange-500" />آدرس‌های مراجعه شده</h3>
-                        <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
-                      </div>
-                      <p className="text-xs text-gray-400 mb-3">کاربر: <strong className="text-gray-700 dark:text-gray-200">{selectedUser.full_name || selectedUser.email}</strong></p>
-                      <VisitedUrlsList userId={selectedUser.user_id} />
-                    </div>
-                  )}
-
-                </div>
-              </div>
-            )}
-
-            {/* ── Add User Modal ── */}
-            {userModal === 'add' && (
-              <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setUserModal(null)} dir="rtl">
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-5">
-                      <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><UserCog className="w-5 h-5 text-blue-500" />افزودن کاربر جدید</h3>
-                      <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><X className="w-4 h-4" /></button>
-                    </div>
-                    <div className="space-y-3">
-                      {[
-                        { label: 'نام و نام خانوادگی', key: 'full_name', type: 'text' },
-                        { label: 'ایمیل *', key: 'email', type: 'email' },
-                        { label: 'رمز عبور *', key: 'password', type: 'password' },
-                        { label: 'واحد سازمانی', key: 'department', type: 'text' },
-                        { label: 'سمت', key: 'position', type: 'text' },
-                      ].map(({ label, key, type }) => (
-                        <div key={key}>
-                          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{label}</label>
-                          <input type={type} value={(addForm as any)[key]} onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-gray-50 dark:bg-gray-700">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2"><Shield className="w-4 h-4 text-blue-500" />دسترسی ادمین</span>
-                        <button onClick={() => setAddForm(f => ({ ...f, is_admin: !f.is_admin }))}
-                          className={`w-10 h-5 rounded-full relative transition-colors ${addForm.is_admin ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${addForm.is_admin ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="pt-4 flex gap-2">
-                      <button onClick={addUser} className="flex-1 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"><Plus className="w-4 h-4" />ایجاد کاربر</button>
-                      <button onClick={() => setUserModal(null)} className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition-colors">انصراف</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          </div>
-        );
-      }
-
-      // ── Online users ─────────────────────────────────────────────────────
       case 'users_online':
         return (
           <div className="space-y-4">
@@ -1958,19 +354,13 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── User groups ───────────────────────────────────────────────────────
       case 'user_groups':
         return <UserGroupsPanel currentUserId={currentUserId} />;
-
-      // ── Group events ──────────────────────────────────────────────────────
       case 'group_events':
         return <GroupEventsPanel />;
-
-      // ── Org structure ─────────────────────────────────────────────────────
       case 'org_structure':
         return <OrgStructurePage />;
 
-      // ── Security ──────────────────────────────────────────────────────────
       case 'security':
         return (
           <div className="space-y-5">
@@ -1995,7 +385,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Server ────────────────────────────────────────────────────────────
       case 'server':
         return (
           <div className="space-y-5">
@@ -2005,23 +394,14 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Audit log ─────────────────────────────────────────────────────────
       case 'audit_log':
         return <AuditLogPage />;
-
-      // ── Notifications ─────────────────────────────────────────────────────
       case 'notifications':
         return <NotificationsConfigPanel />;
-
-      // ── SMS ───────────────────────────────────────────────────────────────
       case 'sms':
         return <SmsConfigPanel />;
-
-      // ── Social Notifications ───────────────────────────────────────────────
       case 'social_notifications':
         return <SocialNotificationsPanel />;
-
-      // ── Email ─────────────────────────────────────────────────────────────
       case 'email':
         return (
           <div className="space-y-5">
@@ -2030,12 +410,8 @@ export function PortalConfigPage({ currentUserId }: Props) {
             </SectionCard>
           </div>
         );
-
-      // ── Daily Report ──────────────────────────────────────────────────────
       case 'daily_report':
         return <DailyReportConfigPanel />;
-
-      // ── Video conference ──────────────────────────────────────────────────
       case 'video_conference':
         return (
           <div className="space-y-5">
@@ -2052,8 +428,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
             <IceTesterPanel configs={cfgs('video_conference')} />
           </div>
         );
-
-      // ── Calendar ──────────────────────────────────────────────────────────
       case 'calendar':
         return (
           <div className="space-y-5">
@@ -2065,30 +439,17 @@ export function PortalConfigPage({ currentUserId }: Props) {
             </SectionCard>
           </div>
         );
-
-      // ── Monitoring ────────────────────────────────────────────────────────
       case 'monitoring':
         return <SystemMonitoringPage />;
-
-      // ── Spark config ──────────────────────────────────────────────────────
       case 'spark_config':
         return <SparkConfigPanel />;
-
-      // ── Backup ────────────────────────────────────────────────────────────
       case 'backup':
-        return (
-          <div className="p-6">
-            <BackupPanel />
-          </div>
-        );
-
+        return (<div className="p-6"><BackupPanel /></div>);
       default:
         return <div className="text-gray-400 text-center py-20">بخش در حال توسعه است</div>;
-
     }
   };
 
-  // ── Breadcrumb ──────────────────────────────────────────────────────────────
   const breadcrumb = (() => {
     for (const group of NAV_ITEMS) {
       const sub = group.sub.find(s => s.key === activeSection);
@@ -2129,7 +490,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
 
   return (
     <div className="flex h-full overflow-hidden bg-gray-50 dark:bg-gray-900" dir="rtl">
-      {/* Mobile sidebar overlay */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-[200] lg:hidden" onClick={() => setMobileSidebarOpen(false)}>
           <div className="absolute inset-0 bg-black/50" />
@@ -2149,7 +509,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
         </div>
       )}
 
-      {/* Desktop Sidebar */}
       <div className="hidden lg:flex w-56 flex-shrink-0 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex-col overflow-y-auto">
         <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <h2 className="font-bold text-gray-800 dark:text-white flex items-center gap-2 text-sm">
@@ -2159,12 +518,9 @@ export function PortalConfigPage({ currentUserId }: Props) {
         <SidebarNav />
       </div>
 
-      {/* Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* Breadcrumb bar */}
         <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            {/* Mobile menu button */}
             <button onClick={() => setMobileSidebarOpen(true)}
               className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 flex-shrink-0">
               <Menu className="w-5 h-5" />
@@ -2183,92 +539,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">
           {renderContent()}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Login History sub-component ──────────────────────────────────────────────
-function LoginHistoryList({ userId }: { userId: string }) {
-  const [logs, setLogs] = useState<Array<{ id: string; created_at: string; ip_address: string | null; user_agent: string | null; action: string }>>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    supabase.from('audit_log').select('id,created_at,ip_address,user_agent,action').eq('user_id', userId)
-      .ilike('action', '%لاگین%').order('created_at', { ascending: false }).limit(50)
-      .then(({ data }) => { setLogs((data || []) as any); setLoading(false); });
-  }, [userId]);
-  if (loading) return <div className="text-center py-6 text-gray-400 text-sm">در حال بارگذاری...</div>;
-  if (logs.length === 0) return (
-    <div className="text-center py-8">
-      <LoginIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-      <p className="text-gray-400 text-sm">تاریخچه ورودی ثبت نشده</p>
-      <p className="text-gray-400 text-xs mt-1">ورودهای آینده کاربر اینجا نمایش داده خواهد شد</p>
-    </div>
-  );
-  return (
-    <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-      {logs.map((l, i) => (
-        <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-          <div className="w-7 h-7 rounded-lg bg-gray-200 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
-            <LoginIcon className="w-3.5 h-3.5 text-gray-500" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-gray-700 dark:text-gray-200">ورود #{i + 1}</span>
-              <span className="text-xs text-gray-400">{new Date(l.created_at).toLocaleString('fa-IR')}</span>
-            </div>
-            <div className="flex gap-3 mt-0.5">
-              {l.ip_address && <span className="text-xs text-gray-400 font-mono">{l.ip_address}</span>}
-              {l.user_agent && <span className="text-xs text-gray-400 truncate">{l.user_agent.split(' ').slice(0, 2).join(' ')}</span>}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Visited URLs sub-component ───────────────────────────────────────────────
-function VisitedUrlsList({ userId }: { userId: string }) {
-  const [logs, setLogs] = useState<Array<{ id: string; created_at: string; module: string | null; entity_name: string | null; action: string; ip_address: string | null }>>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    supabase.from('audit_log').select('id,created_at,module,entity_name,action,ip_address').eq('user_id', userId)
-      .not('module', 'is', null).order('created_at', { ascending: false }).limit(100)
-      .then(({ data }) => { setLogs((data || []) as any); setLoading(false); });
-  }, [userId]);
-
-  // Group by module
-  const moduleMap: Record<string, number> = {};
-  logs.forEach(l => { if (l.module) moduleMap[l.module] = (moduleMap[l.module] || 0) + 1; });
-
-  if (loading) return <div className="text-center py-6 text-gray-400 text-sm">در حال بارگذاری...</div>;
-  if (logs.length === 0) return (
-    <div className="text-center py-8">
-      <MapPin className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-      <p className="text-gray-400 text-sm">آدرسی ثبت نشده</p>
-    </div>
-  );
-  return (
-    <div className="space-y-3 max-h-[50vh] overflow-y-auto">
-      <div className="grid grid-cols-2 gap-2">
-        {Object.entries(moduleMap).map(([mod, count]) => (
-          <div key={mod} className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{mod}</span>
-            <span className="text-xs text-blue-500 font-bold mr-2">{count}</span>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-gray-400 text-center">آخرین ۱۰۰ رویداد</p>
-      <div className="space-y-1.5">
-        {logs.slice(0, 30).map(l => (
-          <div key={l.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-xs">
-            <MapPin className="w-3 h-3 text-orange-400 flex-shrink-0" />
-            <span className="text-gray-500 dark:text-gray-400 font-medium">{l.module}</span>
-            <span className="text-gray-400 truncate flex-1">{l.action}</span>
-            <span className="text-gray-300 dark:text-gray-600 flex-shrink-0">{new Date(l.created_at).toLocaleDateString('fa-IR')}</span>
-          </div>
-        ))}
       </div>
     </div>
   );
