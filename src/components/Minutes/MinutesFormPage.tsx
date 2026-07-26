@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl, setMeetingIdInUrl, clearMeetingIdFromUrl } from '../../lib/minutesNavigation';
 import { checkMinutesAccessForMeeting } from '../../lib/minutesMeetingAccess';
+import { gregorianToJalali } from '../../lib/sparkDateUtils';
 import { PageHeader, ConfidentialityBadge, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -545,7 +546,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         ...prev,
         meetingId: access.prefill!.meetingId,
         meetingTitle: access.prefill!.subject,
-        meetingDate: access.prefill!.requestDate || '',
+        meetingDate: access.prefill!.requestJalaaliDate || (access.prefill!.requestDate ? gregorianToJalali(access.prefill!.requestDate) : ''),
         startTime: access.prefill!.startTime || '',
         endTime: access.prefill!.endTime || '',
         location: access.prefill!.location || '',

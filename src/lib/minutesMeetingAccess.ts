@@ -11,6 +11,7 @@ export interface MeetingPrefillInfo {
   meetingId: string;
   subject: string;
   requestDate: string | null;
+  requestJalaaliDate: string | null;
   startTime: string | null;
   endTime: string | null;
   location: string | null;
@@ -158,7 +159,7 @@ export async function checkMinutesAccessForMeeting(
   if (access.allowed) {
     const { data: meetingRow, error: meetingErr } = await supabase
       .from('meetings')
-      .select('id, subject, request_date, start_time, end_time, location')
+      .select('id, subject, request_date, request_jalaali_date, start_time, end_time, location')
       .eq('id', meetingId)
       .maybeSingle();
     if (!meetingErr && meetingRow) {
@@ -166,6 +167,7 @@ export async function checkMinutesAccessForMeeting(
         meetingId: meetingRow.id,
         subject: meetingRow.subject ?? '',
         requestDate: meetingRow.request_date ?? null,
+        requestJalaaliDate: meetingRow.request_jalaali_date ?? null,
         startTime: meetingRow.start_time ?? null,
         endTime: meetingRow.end_time ?? null,
         location: meetingRow.location ?? null,
