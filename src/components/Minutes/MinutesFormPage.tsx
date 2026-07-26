@@ -1,12 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { UserSelector } from '../Tasks/UserSelector';
-import type { UserProfile } from '../Tasks/types';
 import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CircleAlert as AlertCircle, Upload, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl, setMeetingIdInUrl, clearMeetingIdFromUrl } from '../../lib/minutesNavigation';
-import { checkMinutesAccessForMeeting } from '../../lib/minutesMeetingAccess';
-import { gregorianToJalali } from '../../lib/sparkDateUtils';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
 import { PageHeader, ConfidentialityBadge, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -289,9 +285,7 @@ const RPC_ERROR_MESSAGES: Record<string, string> = {
   MEETING_NO_PERMISSION: 'شما اجازه ایجاد صورت‌جلسه برای این جلسه را ندارید.',
   MINUTES_ALREADY_EXISTS: 'برای این جلسه قبلاً صورت‌جلسه ثبت شده است.',
   SECRETARY_USER_NOT_FOUND: 'کاربر دبیر جلسه یافت نشد.',
-  SECRETARY_NOT_MEETING_PARTICIPANT: 'دبیر جلسه باید از شرکت‌کنندگان داخلی همین جلسه باشد.',
   CHAIR_USER_NOT_FOUND: 'کاربر رئیس جلسه یافت نشد.',
-  CHAIR_NOT_MEETING_PARTICIPANT: 'رئیس جلسه باید از شرکت‌کنندگان داخلی همین جلسه باشد.',
   ORG_UNIT_NOT_FOUND: 'واحد سازمانی یافت نشد.',
   PARTICIPANT_NAME_REQUIRED: 'نام شرکت‌کننده الزامی است.',
   PARTICIPANT_USER_NOT_FOUND: 'کاربر شرکت‌کننده یافت نشد.',
@@ -342,26 +336,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [editLoading, setEditLoading] = useState(mode === 'edit');
   const [editError, setEditError] = useState<string | null>(null);
   const [editNotFound, setEditNotFound] = useState(false);
-
-  // New-mode: track the minute id after draft creation so submit uses the real id
-  const [createdMinuteId, setCreatedMinuteId] = useState<string | null>(null);
-  // New-mode: guard against missing/invalid meetingId (point 2)
-  const [noMeetingError, setNoMeetingError] = useState<string | null>(null);
-
-  // Unmount cleanup: clear the temporary `meeting` param when leaving the new-mode
-  // page so it doesn't leak into the destination page or cause a stale prefill on
-  // refresh/back. Does NOT touch the `minute` param used by detail/edit pages.
-  useEffect(() => {
-    if (mode !== 'new') return;
-    return () => {
-      // Only clear `meeting`; preserve `minute`/`mpage` for the destination page.
-      const url = new URL(window.location.href);
-      if (url.searchParams.has('meeting')) {
-        url.searchParams.delete('meeting');
-        window.history.replaceState({}, '', url.toString());
-      }
-    };
-  }, [mode]);
 
   const title = mode === 'new' ? 'ایجاد صورت‌جلسه' : 'ویرایش صورت‌جلسه';
 
@@ -513,52 +487,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       }
     })();
   }, []);
-
-  // ── New-mode: prefill from source meeting (entry via ?meeting=<id>) ────────
-  // Validation is server-side: can_create_minutes_for_meeting RPC + RLS-protected
-  // meetings query. We do NOT rely on the client-side meetings list, which may be
-  // incomplete due to pagination/filtering.
-  useEffect(() => {
-    if (mode !== 'new') return;
-    const sourceMeetingId = getMeetingIdFromUrl();
-    if (!sourceMeetingId) {
-      setNoMeetingError('برای ثبت صورت‌جلسه باید از صفحه جزئیات جلسه وارد شوید.');
-      return;
-    }
-    if (info.meetingId) return; // already prefilled
-    let cancelled = false;
-    (async () => {
-      const access = await checkMinutesAccessForMeeting(supabase, sourceMeetingId);
-      if (cancelled) return;
-      if (access.errorCode === 'MEETING_NO_PERMISSION' || access.errorCode === 'CHECK_FAILED') {
-        setNoMeetingError('جلسه موردنظر یافت نشد یا شما به آن دسترسی ندارید.');
-        return;
-      }
-      if (access.errorCode === 'MINUTES_ALREADY_EXISTS' && access.existingMinuteId) {
-        toast('برای این جلسه قبلاً صورتجلسه ثبت شده است. به جزئیات آن منتقل می‌شوید.', { icon: 'ℹ️' });
-        setMinuteIdInUrl(access.existingMinuteId);
-        clearMeetingIdFromUrl();
-        setMinutesPageInUrl('minutes-detail');
-        onNavigate('minutes-detail');
-        return;
-      }
-      if (!access.allowed || !access.prefill) {
-        setNoMeetingError('جلسه موردنظر یافت نشد یا شما به آن دسترسی ندارید.');
-        return;
-      }
-      setInfo(prev => ({
-        ...prev,
-        meetingId: access.prefill!.meetingId,
-        meetingTitle: access.prefill!.subject,
-        meetingDate: access.prefill!.requestJalaaliDate || (access.prefill!.requestDate ? gregorianToJalali(access.prefill!.requestDate) : ''),
-        startTime: access.prefill!.startTime || '',
-        endTime: access.prefill!.endTime || '',
-        location: access.prefill!.location || '',
-      }));
-      fetchAgendaItems(access.prefill.meetingId);
-    })();
-    return () => { cancelled = true; };
-  }, [mode, info.meetingId, fetchAgendaItems]);
 
   // ── Fetch all profiles ────────────────────────────────────────────────
   useEffect(() => {
@@ -793,7 +721,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', newId);
           toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
           setMinuteIdInUrl(newId);
-          clearMeetingIdFromUrl();
           setMinutesPageInUrl('minutes-detail');
           onNavigate('minutes-detail');
           return;
@@ -834,7 +761,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, data.updated_at);
           toast.success('پیش‌نویس صورت‌جلسه با موفقیت به‌روزرسانی شد.');
           setMinuteIdInUrl(data.minute_id);
-          clearMeetingIdFromUrl();
           setMinutesPageInUrl('minutes-detail');
           onNavigate('minutes-detail');
           return;
@@ -874,64 +800,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     }
     setSubmitting(true);
     try {
-      // In new mode, ensure a draft exists before submitting. If we already created one
-      // (createdMinuteId), reuse it; otherwise create it now and capture the real minute id.
-      let submitMinuteId: string | null = mode === 'edit' ? editMinuteId : createdMinuteId;
-      let submitUpdatedAt: string | null = editUpdatedAt;
-      if (mode === 'new' && !submitMinuteId) {
-        const payload = buildDraftPayload();
-        const createPayload = { meeting_id: info.meetingId, ...payload };
-        const { data: createData, error: createErr } = await supabase.rpc('create_minutes_draft', {
-          p_payload: createPayload,
-        });
-        if (createErr) {
-          toast.error('ذخیره پیش‌نویس ناموفق بود. لطفاً دوباره تلاش کنید.');
-          return;
-        }
-        if (createData && createData.success === false) {
-          const code: string = createData.code || createData.error_code || 'INTERNAL_ERROR';
-          if (code === 'MINUTES_ALREADY_EXISTS') {
-            // Race condition: another request created the minutes between our precheck
-            // and this draft creation. Navigate to the existing minute instead of
-            // showing a raw error.
-            const { data: existing } = await supabase
-              .from('minutes')
-              .select('id')
-              .eq('meeting_id', info.meetingId)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            if (existing?.id) {
-              toast('برای این جلسه قبلاً صورتجلسه ثبت شده است. به جزئیات آن منتقل می‌شوید.', { icon: 'ℹ️' });
-              setMinuteIdInUrl(existing.id);
-              clearMeetingIdFromUrl();
-              setMinutesPageInUrl('minutes-detail');
-              onNavigate('minutes-detail');
-              return;
-            }
-          }
-          const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس ناموفق بود.';
-          toast.error(msg);
-          return;
-        }
-        if (createData && createData.success === true && createData.minute_id) {
-          submitMinuteId = createData.minute_id;
-          submitUpdatedAt = createData.updated_at || null;
-          setCreatedMinuteId(submitMinuteId);
-          setEditUpdatedAt(submitUpdatedAt);
-          if (isDev) console.log('[MinutesSubmit] Created draft on submit, minute_id:', submitMinuteId);
-        } else {
-          toast.error('پاسخ نامعتبر از سرور دریافت شد.');
-          return;
-        }
-      }
-      if (!submitMinuteId) {
-        toast.error('شناسه صورت‌جلسه مشخص نیست. ابتدا پیش‌نویس را ذخیره کنید.');
-        return;
-      }
       const { data, error: rpcError } = await supabase.rpc('submit_minutes_for_approval', {
-        p_minute_id: submitMinuteId,
-        p_expected_updated_at: submitUpdatedAt,
+        p_minute_id: mode === 'edit' ? (editMinuteId || info.meetingId) : info.meetingId,
+        p_expected_updated_at: editUpdatedAt,
         p_approval_mode: info.approvalMode,
       });
       if (rpcError) {
@@ -956,7 +827,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       if (data && data.success === true) {
         toast.success('صورت‌جلسه برای تأیید ارسال شد.');
         if (data.minute_id) setMinuteIdInUrl(data.minute_id);
-        clearMeetingIdFromUrl();
         setMinutesPageInUrl('minutes-detail');
         onNavigate('minutes-detail');
         return;
@@ -1006,24 +876,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     );
   }
 
-  if (mode === 'new' && noMeetingError) {
-    return (
-      <div dir="rtl" className="space-y-5">
-        <PageHeader title={title} />
-        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 text-sm text-amber-700 dark:text-amber-400 space-y-3">
-          <p>{noMeetingError}</p>
-          <button
-            type="button"
-            onClick={() => { clearMeetingIdFromUrl(); onNavigate('calendar'); }}
-            className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition-colors"
-          >
-            بازگشت به تقویم
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const isNonEditable = mode === 'edit' && info.status !== 'draft' && info.status !== 'changes_requested';
 
   return (
@@ -1032,7 +884,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         title={title}
         actions={
           <button
-            onClick={() => { clearMeetingIdFromUrl(); onNavigate('minutes'); }}
+            onClick={() => onNavigate('minutes')}
             className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm transition-colors"
           >
             <X className="w-4 h-4" />
@@ -1102,9 +954,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnitsError={orgUnitsError}
                 onMeetingSelect={handleMeetingSelect}
                 agendaLoading={agendaLoading}
-                mode={mode}
-                internalParticipants={internalParticipants}
-                readOnly={isNonEditable}
               />
             )}
             {activeSection === 1 && (
@@ -1166,7 +1015,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 {savingDraft ? 'در حال ذخیره...' : 'ذخیره پیش‌نویس'}
               </button>
               <button
-                onClick={() => { clearMeetingIdFromUrl(); onNavigate('minutes-detail'); }}
+                onClick={() => onNavigate('minutes-detail')}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 <Eye className="w-4 h-4" />
@@ -1219,9 +1068,6 @@ interface SectionInfoProps {
   orgUnitsError: string | null;
   onMeetingSelect: (meetingId: string) => void;
   agendaLoading: boolean;
-  mode: 'new' | 'edit';
-  internalParticipants: DraftInternalParticipant[];
-  readOnly: boolean;
 }
 
 function SectionInfo({
@@ -1230,52 +1076,27 @@ function SectionInfo({
   profiles, profilesLoading, profilesError,
   orgUnits, orgUnitsLoading, orgUnitsError,
   onMeetingSelect, agendaLoading,
-  mode, internalParticipants, readOnly,
 }: SectionInfoProps) {
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
 
   const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
 
-  // Single shared list of internal-participant users for both secretary and chair selectors.
-  // Only participants with a real user id are eligible; duplicates are de-duplicated by user_id.
-  const eligibleUsers = useMemo<UserProfile[]>(() => {
-    const seen = new Set<string>();
-    const result: UserProfile[] = [];
-    for (const p of internalParticipants) {
-      const id = p.userId.trim();
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      const profile = profiles.find(x => x.user_id === id);
-      const unit = orgUnits.find(u => u.id === (profile?.primary_unit_id || p.orgUnitId || ''));
-      result.push({
-        user_id: id,
-        full_name: profile?.full_name || p.nameSnapshot || null,
-        email: profile?.email || null,
-        avatar_url: null,
-        position: profile?.position || p.positionSnapshot || null,
-        unit_name: unit?.name || p.orgUnitNameSnapshot || null,
-      });
-    }
-    return result;
-  }, [internalParticipants, profiles, orgUnits]);
-
-  const noEligibleUsers = eligibleUsers.length === 0;
-  const selectorsDisabled = readOnly || noEligibleUsers;
-
-  const handleSecretaryChange = (userId: string, displayName: string) => {
+  const handleSecretaryChange = (userId: string) => {
+    const p = profiles.find(x => x.user_id === userId);
     setInfo(prev => ({
       ...prev,
       secretaryUserId: userId,
-      secretaryNameSnapshot: displayName,
+      secretaryNameSnapshot: p ? profileLabel(p) : '',
     }));
   };
 
-  const handleChairChange = (userId: string, displayName: string) => {
+  const handleChairChange = (userId: string) => {
+    const p = profiles.find(x => x.user_id === userId);
     setInfo(prev => ({
       ...prev,
       chairUserId: userId,
-      chairNameSnapshot: displayName,
+      chairNameSnapshot: p ? profileLabel(p) : '',
     }));
   };
 
@@ -1301,8 +1122,7 @@ function SectionInfo({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Meeting selector — hidden in new mode (meeting is prefilled from URL) */}
-        {mode === 'edit' && (
+        {/* Meeting selector */}
         <div className="sm:col-span-2">
           <label htmlFor="meeting-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             انتخاب جلسه <span className="text-red-500">*</span>
@@ -1335,7 +1155,6 @@ function SectionInfo({
             </p>
           )}
         </div>
-        )}
 
         <div className="sm:col-span-2">
           <label htmlFor="meeting-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1455,16 +1274,26 @@ function SectionInfo({
           <label htmlFor="secretary" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             دبیر جلسه <span className="text-red-500">*</span>
           </label>
-          {noEligibleUsers ? (
-            <EmptyState message="شرکت‌کننده داخلی برای انتخاب وجود ندارد." />
+          {profilesLoading ? (
+            <LoadingSelect label="در حال بارگذاری کاربران..." />
+          ) : profilesError ? (
+            <ErrorState message={profilesError} />
+          ) : profiles.length === 0 ? (
+            <EmptyState message="هیچ کاربری یافت نشد." />
           ) : (
-            <UserSelector
-              users={eligibleUsers}
+            <select
+              id="secretary"
               value={info.secretaryUserId}
-              onChange={handleSecretaryChange}
-              placeholder="انتخاب دبیر جلسه"
-              disabled={selectorsDisabled}
-            />
+              onChange={e => handleSecretaryChange(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">انتخاب کنید</option>
+              {profiles.map(p => (
+                <option key={p.user_id} value={p.user_id}>
+                  {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
+                </option>
+              ))}
+            </select>
           )}
         </div>
 
@@ -1473,16 +1302,26 @@ function SectionInfo({
           <label htmlFor="chair" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             رئیس جلسه <span className="text-red-500">*</span>
           </label>
-          {noEligibleUsers ? (
-            <EmptyState message="شرکت‌کننده داخلی برای انتخاب وجود ندارد." />
+          {profilesLoading ? (
+            <LoadingSelect label="در حال بارگذاری کاربران..." />
+          ) : profilesError ? (
+            <ErrorState message={profilesError} />
+          ) : profiles.length === 0 ? (
+            <EmptyState message="هیچ کاربری یافت نشد." />
           ) : (
-            <UserSelector
-              users={eligibleUsers}
+            <select
+              id="chair"
               value={info.chairUserId}
-              onChange={handleChairChange}
-              placeholder="انتخاب رئیس جلسه"
-              disabled={selectorsDisabled}
-            />
+              onChange={e => handleChairChange(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">انتخاب کنید</option>
+              {profiles.map(p => (
+                <option key={p.user_id} value={p.user_id}>
+                  {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
+                </option>
+              ))}
+            </select>
           )}
         </div>
 
