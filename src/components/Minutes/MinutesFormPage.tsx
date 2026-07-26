@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { UserSelector } from '../Tasks/UserSelector';
+import type { UserProfile } from '../Tasks/types';
 import { ChevronRight, ChevronLeft, Plus, Trash2, GripVertical, Users, FileText, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CircleAlert as AlertCircle, Upload, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
@@ -1099,6 +1101,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 onMeetingSelect={handleMeetingSelect}
                 agendaLoading={agendaLoading}
                 mode={mode}
+                internalParticipants={internalParticipants}
+                readOnly={isNonEditable}
               />
             )}
             {activeSection === 1 && (
@@ -1214,6 +1218,8 @@ interface SectionInfoProps {
   onMeetingSelect: (meetingId: string) => void;
   agendaLoading: boolean;
   mode: 'new' | 'edit';
+  internalParticipants: DraftInternalParticipant[];
+  readOnly: boolean;
 }
 
 function SectionInfo({
@@ -1222,28 +1228,52 @@ function SectionInfo({
   profiles, profilesLoading, profilesError,
   orgUnits, orgUnitsLoading, orgUnitsError,
   onMeetingSelect, agendaLoading,
-  mode,
+  mode, internalParticipants, readOnly,
 }: SectionInfoProps) {
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
 
   const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
 
-  const handleSecretaryChange = (userId: string) => {
-    const p = profiles.find(x => x.user_id === userId);
+  // Single shared list of internal-participant users for both secretary and chair selectors.
+  // Only participants with a real user id are eligible; duplicates are de-duplicated by user_id.
+  const eligibleUsers = useMemo<UserProfile[]>(() => {
+    const seen = new Set<string>();
+    const result: UserProfile[] = [];
+    for (const p of internalParticipants) {
+      const id = p.userId.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const profile = profiles.find(x => x.user_id === id);
+      const unit = orgUnits.find(u => u.id === (profile?.primary_unit_id || p.orgUnitId || ''));
+      result.push({
+        user_id: id,
+        full_name: profile?.full_name || p.nameSnapshot || null,
+        email: profile?.email || null,
+        avatar_url: null,
+        position: profile?.position || p.positionSnapshot || null,
+        unit_name: unit?.name || p.orgUnitNameSnapshot || null,
+      });
+    }
+    return result;
+  }, [internalParticipants, profiles, orgUnits]);
+
+  const noEligibleUsers = eligibleUsers.length === 0;
+  const selectorsDisabled = readOnly || noEligibleUsers;
+
+  const handleSecretaryChange = (userId: string, displayName: string) => {
     setInfo(prev => ({
       ...prev,
       secretaryUserId: userId,
-      secretaryNameSnapshot: p ? profileLabel(p) : '',
+      secretaryNameSnapshot: displayName,
     }));
   };
 
-  const handleChairChange = (userId: string) => {
-    const p = profiles.find(x => x.user_id === userId);
+  const handleChairChange = (userId: string, displayName: string) => {
     setInfo(prev => ({
       ...prev,
       chairUserId: userId,
-      chairNameSnapshot: p ? profileLabel(p) : '',
+      chairNameSnapshot: displayName,
     }));
   };
 
@@ -1423,26 +1453,16 @@ function SectionInfo({
           <label htmlFor="secretary" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             دبیر جلسه <span className="text-red-500">*</span>
           </label>
-          {profilesLoading ? (
-            <LoadingSelect label="در حال بارگذاری کاربران..." />
-          ) : profilesError ? (
-            <ErrorState message={profilesError} />
-          ) : profiles.length === 0 ? (
-            <EmptyState message="هیچ کاربری یافت نشد." />
+          {noEligibleUsers ? (
+            <EmptyState message="شرکت‌کننده داخلی برای انتخاب وجود ندارد." />
           ) : (
-            <select
-              id="secretary"
+            <UserSelector
+              users={eligibleUsers}
               value={info.secretaryUserId}
-              onChange={e => handleSecretaryChange(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">انتخاب کنید</option>
-              {profiles.map(p => (
-                <option key={p.user_id} value={p.user_id}>
-                  {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={handleSecretaryChange}
+              placeholder="انتخاب دبیر جلسه"
+              disabled={selectorsDisabled}
+            />
           )}
         </div>
 
@@ -1451,26 +1471,16 @@ function SectionInfo({
           <label htmlFor="chair" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             رئیس جلسه <span className="text-red-500">*</span>
           </label>
-          {profilesLoading ? (
-            <LoadingSelect label="در حال بارگذاری کاربران..." />
-          ) : profilesError ? (
-            <ErrorState message={profilesError} />
-          ) : profiles.length === 0 ? (
-            <EmptyState message="هیچ کاربری یافت نشد." />
+          {noEligibleUsers ? (
+            <EmptyState message="شرکت‌کننده داخلی برای انتخاب وجود ندارد." />
           ) : (
-            <select
-              id="chair"
+            <UserSelector
+              users={eligibleUsers}
               value={info.chairUserId}
-              onChange={e => handleChairChange(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">انتخاب کنید</option>
-              {profiles.map(p => (
-                <option key={p.user_id} value={p.user_id}>
-                  {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={handleChairChange}
+              placeholder="انتخاب رئیس جلسه"
+              disabled={selectorsDisabled}
+            />
           )}
         </div>
 

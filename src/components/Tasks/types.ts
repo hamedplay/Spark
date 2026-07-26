@@ -5,6 +5,8 @@ export interface UserProfile {
   full_name: string | null;
   email: string | null;
   avatar_url?: string | null;
+  position?: string | null;
+  unit_name?: string | null;
 }
 
 export interface TasksPageProps {

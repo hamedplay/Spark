@@ -3,12 +3,13 @@ import { ChevronDown, Building2 } from 'lucide-react';
 import { type UserProfile } from './types';
 import { type OrgUserProfile } from '../../lib/useOrgUsers';
 
-function UserSelector({ users, groups, value, onChange, placeholder }: {
+function UserSelector({ users, groups, value, onChange, placeholder, disabled }: {
   users: UserProfile[];
   groups?: { label: string; users: OrgUserProfile[] }[];
   value: string;
   onChange: (userId: string, displayName: string) => void;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -25,16 +26,24 @@ function UserSelector({ users, groups, value, onChange, placeholder }: {
     : users;
 
   const selected = allUsers.find(u => u.user_id === value);
-  const isSearching = search.trim().length > 0;
+  const trimmed = search.trim();
+  const isSearching = trimmed.length > 0;
+  const query = trimmed.toLowerCase();
 
   const filteredFlat = allUsers.filter(u =>
-    (u.full_name || u.email || '').toLowerCase().includes(search.toLowerCase())
+    (u.full_name || u.email || '').toLowerCase().includes(query)
   );
+
+  const subtitle = (u: UserProfile | OrgUserProfile): string => {
+    const pos = (u as OrgUserProfile).position_title || (u as UserProfile).position || '';
+    const unit = (u as OrgUserProfile).unit_name || (u as UserProfile).unit_name || '';
+    return [pos, unit].filter(Boolean).join(' • ');
+  };
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm">
+      <button type="button" disabled={disabled} onClick={() => { if (disabled) return; setOpen(v => !v); }}
+        className="w-full flex items-center justify-between p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed">
         <span className={selected ? '' : 'text-gray-400'}>
           {selected ? (selected.full_name || selected.email) : (placeholder || 'انتخاب کاربر')}
         </span>
@@ -59,7 +68,7 @@ function UserSelector({ users, groups, value, onChange, placeholder }: {
                     </div>
                     <div className="text-right">
                       <p className="text-gray-800 dark:text-gray-100 font-medium">{u.full_name || '—'}</p>
-                      <p className="text-gray-400 text-xs">{u.email}</p>
+                      <p className="text-gray-400 text-xs">{subtitle(u) || u.email}</p>
                     </div>
                   </button>
                 ))
@@ -81,7 +90,7 @@ function UserSelector({ users, groups, value, onChange, placeholder }: {
                         </div>
                         <div className="text-right min-w-0">
                           <p className="text-gray-800 dark:text-gray-100 font-medium truncate">{u.full_name || '—'}</p>
-                          <p className="text-gray-400 text-xs truncate">{u.position_title || u.email}</p>
+                          <p className="text-gray-400 text-xs truncate">{subtitle(u) || u.email}</p>
                         </div>
                       </button>
                     ))}
