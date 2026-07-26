@@ -2885,6 +2885,7 @@ export type Database = {
           duration_minutes: number | null;
           sort_order: number;
           created_at: string;
+          description: string | null;
         };
         Insert: {
           id?: string;
@@ -2894,6 +2895,7 @@ export type Database = {
           duration_minutes?: number | null;
           sort_order?: number;
           created_at?: string;
+          description?: string | null;
         };
         Update: {
           id?: string;
@@ -2903,6 +2905,7 @@ export type Database = {
           duration_minutes?: number | null;
           sort_order?: number;
           created_at?: string;
+          description?: string | null;
         };
         Relationships: [];
       };

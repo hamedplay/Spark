@@ -158,7 +158,7 @@ export async function loadMinutesPrefill(
       .eq('meeting_id', meetingId),
     supabase
       .from('meeting_agenda_items')
-      .select('id, title, presenter, duration_minutes, sort_order')
+      .select('id, title, presenter, duration_minutes, sort_order, description')
       .eq('meeting_id', meetingId)
       .order('sort_order', { ascending: true }),
   ]);
@@ -239,7 +239,7 @@ export async function loadMinutesPrefill(
         meetingAgendaItemId: item.id,
         order: idx + 1,
         title: item.title,
-        description: '',
+        description: ('description' in item ? String((item as Record<string, unknown>).description ?? '') : ''),
         presenter: item.presenter || '',
         allocatedTime: item.duration_minutes != null ? String(item.duration_minutes) : '',
         discussionResult: '',

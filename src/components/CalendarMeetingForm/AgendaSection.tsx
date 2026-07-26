@@ -8,8 +8,8 @@ export function AgendaSection(props: {
   setAgendaItems: React.Dispatch<React.SetStateAction<AgendaItem[]>>;
   showAgendaForm: boolean;
   setShowAgendaForm: (v: boolean) => void;
-  agendaForm: { title: string; presenter: string; duration_minutes: string };
-  setAgendaForm: React.Dispatch<React.SetStateAction<{ title: string; presenter: string; duration_minutes: string }>>;
+  agendaForm: { title: string; presenter: string; duration_minutes: string; description: string };
+  setAgendaForm: React.Dispatch<React.SetStateAction<{ title: string; presenter: string; duration_minutes: string; description: string }>>;
   editingAgendaIdx: number | null;
   setEditingAgendaIdx: (v: number | null) => void;
   participantDisplayItems: { id: string; name: string }[];
@@ -55,7 +55,7 @@ export function AgendaSection(props: {
                 </div>
               </div>
               <div className="flex gap-1 flex-shrink-0">
-                <button type="button" onClick={() => { setAgendaForm({ title: item.title, presenter: item.presenter || '', duration_minutes: item.duration_minutes ? String(item.duration_minutes) : '' }); setEditingAgendaIdx(idx); setShowAgendaForm(true); }}
+                <button type="button" onClick={() => { setAgendaForm({ title: item.title, presenter: item.presenter || '', duration_minutes: item.duration_minutes ? String(item.duration_minutes) : '', description: ('description' in item ? String((item as Record<string, unknown>).description ?? '') : '') }); setEditingAgendaIdx(idx); setShowAgendaForm(true); }}
                   className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
@@ -88,6 +88,12 @@ export function AgendaSection(props: {
                     className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-600 dark:text-white text-sm" />
                 </div>
               </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">شرح</label>
+                <textarea value={agendaForm.description} onChange={e => setAgendaForm(f => ({ ...f, description: e.target.value }))}
+                  rows={2} placeholder="شرح اختیاری دستور جلسه"
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-600 dark:text-white text-sm resize-none" />
+              </div>
               <div className="flex gap-2">
                 <button type="button"
                   onClick={() => {
@@ -99,20 +105,21 @@ export function AgendaSection(props: {
                       presenter: agendaForm.presenter || null,
                       duration_minutes: agendaForm.duration_minutes ? Number(agendaForm.duration_minutes) : null,
                       sort_order: editingAgendaIdx !== null ? editingAgendaIdx : agendaItems.length,
-                    };
+                      description: agendaForm.description.trim() || null,
+                    } as AgendaItem;
                     if (editingAgendaIdx !== null) {
                       setAgendaItems(prev => prev.map((it, i) => i === editingAgendaIdx ? newItem : it));
                     } else {
                       setAgendaItems(prev => [...prev, newItem]);
                     }
-                    setAgendaForm({ title: '', presenter: '', duration_minutes: '' });
+                    setAgendaForm({ title: '', presenter: '', duration_minutes: '', description: '' });
                     setEditingAgendaIdx(null);
                     setShowAgendaForm(false);
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors">
                   <Check className="w-3.5 h-3.5" />{editingAgendaIdx !== null ? 'ویرایش' : 'افزودن'}
                 </button>
-                <button type="button" onClick={() => { setShowAgendaForm(false); setAgendaForm({ title: '', presenter: '', duration_minutes: '' }); setEditingAgendaIdx(null); }}
+                <button type="button" onClick={() => { setShowAgendaForm(false); setAgendaForm({ title: '', presenter: '', duration_minutes: '', description: '' }); setEditingAgendaIdx(null); }}
                   className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">
                   انصراف
                 </button>
@@ -120,7 +127,7 @@ export function AgendaSection(props: {
             </div>
           ) : (
             <button type="button"
-              onClick={() => { setShowAgendaForm(true); setEditingAgendaIdx(null); setAgendaForm({ title: '', presenter: '', duration_minutes: '' }); }}
+              onClick={() => { setShowAgendaForm(true); setEditingAgendaIdx(null); setAgendaForm({ title: '', presenter: '', duration_minutes: '', description: '' }); }}
               className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors">
               <Plus className="w-4 h-4" />افزودن آیتم دستور جلسه
             </button>

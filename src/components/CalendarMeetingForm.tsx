@@ -278,7 +278,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [agendaEnabled, setAgendaEnabled] = useState(false);
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
   const [showAgendaForm, setShowAgendaForm] = useState(false);
-  const [agendaForm, setAgendaForm] = useState<{ title: string; presenter: string; duration_minutes: string }>({ title: '', presenter: '', duration_minutes: '' });
+  const [agendaForm, setAgendaForm] = useState<{ title: string; presenter: string; duration_minutes: string; description: string }>({ title: '', presenter: '', duration_minutes: '', description: '' });
   const [editingAgendaIdx, setEditingAgendaIdx] = useState<number | null>(null);
 
   // Org users for grouped pickers
@@ -752,6 +752,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
                 title: item.title,
                 presenter: item.presenter || null,
                 duration_minutes: item.duration_minutes || null,
+                description: ('description' in item ? String((item as Record<string, unknown>).description ?? '') : '') || null,
                 sort_order: idx,
               }))
             );
@@ -855,6 +856,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             title: item.title,
             presenter: item.presenter || null,
             duration_minutes: item.duration_minutes || null,
+            description: ('description' in item ? String((item as Record<string, unknown>).description ?? '') : '') || null,
             sort_order: idx,
           }))
         );

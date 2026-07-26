@@ -7,6 +7,7 @@ export type MeetingAgendaInput = Pick<
   | 'presenter'
   | 'duration_minutes'
   | 'sort_order'
+  | 'description'
 >;
 
 export async function fetchMeetingAgendaItems(
@@ -23,6 +24,7 @@ export async function fetchMeetingAgendaItems(
     presenter: it.presenter,
     duration_minutes: it.duration_minutes,
     sort_order: it.sort_order,
+    description: it.description,
   }));
 }
 
@@ -35,7 +37,10 @@ export async function insertMeetingAgendaItems(
     .from('meeting_agenda_items')
     .insert(
       items.map((item, index) => ({
-        ...item,
+        title: item.title,
+        presenter: item.presenter,
+        duration_minutes: item.duration_minutes,
+        description: item.description,
         meeting_id: meetingId,
         sort_order: index,
       }))

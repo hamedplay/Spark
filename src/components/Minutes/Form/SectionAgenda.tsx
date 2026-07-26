@@ -1,16 +1,21 @@
 import { Plus, Trash2, GripVertical } from 'lucide-react';
-import type { DraftAgendaItem } from './types';
+import type { DraftAgendaItem, DraftInternalParticipant, DraftExternalParticipant } from './types';
 import { defaultAgendaItem } from './defaults';
-import { InputField, TextareaField, SelectField, LoadingRow, EmptyState } from './fields';
-import { AGENDA_RESULT_OPTIONS } from './options';
+import { InputField, TextareaField, LoadingRow, EmptyState } from './fields';
+import { SearchableSelect, type SearchableOption } from './SearchableSelect';
 
 interface SectionAgendaProps {
   agendaItems: DraftAgendaItem[];
   setAgendaItems: React.Dispatch<React.SetStateAction<DraftAgendaItem[]>>;
   agendaLoading: boolean;
+  internalParticipants: DraftInternalParticipant[];
+  externalParticipants: DraftExternalParticipant[];
 }
 
-export function SectionAgenda({ agendaItems, setAgendaItems, agendaLoading }: SectionAgendaProps) {
+export function SectionAgenda({
+  agendaItems, setAgendaItems, agendaLoading,
+  internalParticipants, externalParticipants,
+}: SectionAgendaProps) {
   const add = () =>
     setAgendaItems(l => [...l, defaultAgendaItem(l.length + 1)]);
 
@@ -20,10 +25,28 @@ export function SectionAgenda({ agendaItems, setAgendaItems, agendaLoading }: Se
   const update = (id: string, field: keyof DraftAgendaItem, value: string) =>
     setAgendaItems(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
 
+  // Presenter options: internal participants (by name snapshot) + external participants
+  const presenterOptions: SearchableOption[] = [
+    ...internalParticipants
+      .filter(p => !!p.nameSnapshot)
+      .map(p => ({
+        value: p.nameSnapshot,
+        label: p.nameSnapshot,
+        sublabel: [p.positionSnapshot, p.orgUnitNameSnapshot].filter(Boolean).join(' — '),
+      })),
+    ...externalParticipants
+      .filter(p => !!p.fullName)
+      .map(p => ({
+        value: p.fullName,
+        label: p.fullName,
+        sublabel: [p.organization, p.position].filter(Boolean).join(' — '),
+      })),
+  ];
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">دستور جلسات و نتایج</h2>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">دستور جلسات</h2>
         <button onClick={add} disabled={agendaLoading} className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-40">
           <Plus className="w-4 h-4" /> افزودن دستور
         </button>
@@ -53,21 +76,19 @@ export function SectionAgenda({ agendaItems, setAgendaItems, agendaLoading }: Se
             </div>
             <TextareaField id={`ag-desc-${item.id}`} label="شرح" rows={2} value={item.description} onChange={v => update(item.id, 'description', v)} />
             <div className="space-y-3">
-              <InputField id={`ag-presenter-${item.id}`} label="ارائه‌دهنده" placeholder="" value={item.presenter} onChange={v => update(item.id, 'presenter', v)} />
+              <div>
+                <label htmlFor={`ag-presenter-${item.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">ارائه‌دهنده</label>
+                <SearchableSelect
+                  id={`ag-presenter-${item.id}`}
+                  value={item.presenter}
+                  options={presenterOptions}
+                  onChange={v => update(item.id, 'presenter', v)}
+                  placeholder="انتخاب ارائه‌دهنده"
+                  searchPlaceholder="جستجو بر اساس نام..."
+                  emptyText="موردی یافت نشد"
+                />
+              </div>
               <InputField id={`ag-time-${item.id}`} label="زمان اختصاص‌یافته (دقیقه)" placeholder="30" value={item.allocatedTime} onChange={v => update(item.id, 'allocatedTime', v)} />
-            </div>
-            <TextareaField id={`ag-result-${item.id}`} label="نتیجه بحث" rows={2} value={item.discussionResult} onChange={v => update(item.id, 'discussionResult', v)} />
-            <div className="space-y-3">
-              <SelectField id={`ag-type-${item.id}`} label="نوع نتیجه" options={AGENDA_RESULT_OPTIONS} value={item.resultType} onChange={v => update(item.id, 'resultType', v)} />
-              <InputField id={`ag-notes-${item.id}`} label="توضیحات تکمیلی" placeholder="" value={item.additionalNotes} onChange={v => update(item.id, 'additionalNotes', v)} />
-            </div>
-            <div className="sm:col-span-2 flex items-center gap-2 flex-wrap">
-              <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors">
-                <Plus className="w-3.5 h-3.5" /> افزودن نتیجه
-              </button>
-              <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 transition-colors">
-                <Plus className="w-3.5 h-3.5" /> افزودن مصوبه
-              </button>
             </div>
           </div>
         </div>

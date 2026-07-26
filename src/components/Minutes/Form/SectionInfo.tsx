@@ -1,8 +1,9 @@
 import { CircleAlert as AlertCircle, Loader as Loader2, Lock } from 'lucide-react';
 import { ConfidentialityBadge } from '../MinutesShared';
 import type { ConfidentialityLevel, ApprovalMode } from '../types';
-import type { DraftMeetingInfo, ProfileOption, OrgUnitOption } from './types';
+import type { DraftMeetingInfo, ProfileOption, OrgUnitOption, DraftInternalParticipant } from './types';
 import { LoadingSelect, ErrorState, EmptyState } from './fields';
+import { SearchableSelect } from './SearchableSelect';
 
 interface SectionInfoProps {
   info: DraftMeetingInfo;
@@ -17,6 +18,7 @@ interface SectionInfoProps {
   prefillError: string | null;
   isMeetingPrefilled: boolean;
   agendaLoading: boolean;
+  internalParticipants: DraftInternalParticipant[];
 }
 
 export function SectionInfo({
@@ -24,27 +26,42 @@ export function SectionInfo({
   profiles, profilesLoading, profilesError,
   orgUnits, orgUnitsLoading, orgUnitsError,
   prefillLoading, prefillError, isMeetingPrefilled, agendaLoading,
+  internalParticipants,
 }: SectionInfoProps) {
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
 
   const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
 
+  // Build secretary/chair options limited to internal participants of this meeting
+  const participantProfileOptions = internalParticipants
+    .filter(p => !!p.userId)
+    .map(p => {
+      const profile = profiles.find(x => x.user_id === p.userId);
+      const label = profile ? profileLabel(profile) : (p.nameSnapshot || p.userId);
+      const sublabelParts: string[] = [];
+      if (profile?.position) sublabelParts.push(profile.position);
+      if (p.orgUnitNameSnapshot) sublabelParts.push(p.orgUnitNameSnapshot);
+      return { value: p.userId, label, sublabel: sublabelParts.join(' — ') };
+    });
+
   const handleSecretaryChange = (userId: string) => {
     const p = profiles.find(x => x.user_id === userId);
+    const part = internalParticipants.find(x => x.userId === userId);
     setInfo(prev => ({
       ...prev,
       secretaryUserId: userId,
-      secretaryNameSnapshot: p ? profileLabel(p) : '',
+      secretaryNameSnapshot: p ? profileLabel(p) : (part?.nameSnapshot || ''),
     }));
   };
 
   const handleChairChange = (userId: string) => {
     const p = profiles.find(x => x.user_id === userId);
+    const part = internalParticipants.find(x => x.userId === userId);
     setInfo(prev => ({
       ...prev,
       chairUserId: userId,
-      chairNameSnapshot: p ? profileLabel(p) : '',
+      chairNameSnapshot: p ? profileLabel(p) : (part?.nameSnapshot || ''),
     }));
   };
 
@@ -206,7 +223,7 @@ export function SectionInfo({
           )}
         </div>
 
-        {/* Secretary selector */}
+        {/* Secretary selector — limited to internal participants */}
         <div>
           <label htmlFor="secretary" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             دبیر جلسه <span className="text-red-500">*</span>
@@ -215,26 +232,22 @@ export function SectionInfo({
             <LoadingSelect label="در حال بارگذاری کاربران..." />
           ) : profilesError ? (
             <ErrorState message={profilesError} />
-          ) : profiles.length === 0 ? (
-            <EmptyState message="هیچ کاربری یافت نشد." />
+          ) : participantProfileOptions.length === 0 ? (
+            <EmptyState message="ابتدا شرکت‌کنندگان داخلی را اضافه کنید." />
           ) : (
-            <select
+            <SearchableSelect
               id="secretary"
               value={info.secretaryUserId}
-              onChange={e => handleSecretaryChange(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">انتخاب کنید</option>
-              {profiles.map(p => (
-                <option key={p.user_id} value={p.user_id}>
-                  {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
-                </option>
-              ))}
-            </select>
+              options={participantProfileOptions}
+              onChange={handleSecretaryChange}
+              placeholder="انتخاب دبیر از شرکت‌کنندگان"
+              searchPlaceholder="جستجو بر اساس نام، سمت یا واحد..."
+              emptyText="شرکت‌کننده‌ای یافت نشد"
+            />
           )}
         </div>
 
-        {/* Chair selector */}
+        {/* Chair selector — limited to internal participants */}
         <div>
           <label htmlFor="chair" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             رئیس جلسه <span className="text-red-500">*</span>
@@ -243,22 +256,18 @@ export function SectionInfo({
             <LoadingSelect label="در حال بارگذاری کاربران..." />
           ) : profilesError ? (
             <ErrorState message={profilesError} />
-          ) : profiles.length === 0 ? (
-            <EmptyState message="هیچ کاربری یافت نشد." />
+          ) : participantProfileOptions.length === 0 ? (
+            <EmptyState message="ابتدا شرکت‌کنندگان داخلی را اضافه کنید." />
           ) : (
-            <select
+            <SearchableSelect
               id="chair"
               value={info.chairUserId}
-              onChange={e => handleChairChange(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">انتخاب کنید</option>
-              {profiles.map(p => (
-                <option key={p.user_id} value={p.user_id}>
-                  {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
-                </option>
-              ))}
-            </select>
+              options={participantProfileOptions}
+              onChange={handleChairChange}
+              placeholder="انتخاب رئیس از شرکت‌کنندگان"
+              searchPlaceholder="جستجو بر اساس نام، سمت یا واحد..."
+              emptyText="شرکت‌کننده‌ای یافت نشد"
+            />
           )}
         </div>
 

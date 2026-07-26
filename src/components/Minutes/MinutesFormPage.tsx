@@ -430,9 +430,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             a.allocatedTime && a.allocatedTime.trim()
               ? Number.parseInt(a.allocatedTime, 10)
               : null,
-          discussion_result: a.discussionResult || null,
-          result_type: a.resultType,
-          additional_notes: a.additionalNotes || null,
+          discussion_result: null,
+          result_type: null,
+          additional_notes: null,
         })),
 
       decisions: decisions.map((d) => ({
@@ -728,6 +728,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 prefillError={prefillError}
                 isMeetingPrefilled={mode === 'new' && !!info.meetingId}
                 agendaLoading={agendaLoading}
+                internalParticipants={internalParticipants}
               />
             )}
             {activeSection === 1 && (
@@ -746,7 +747,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               />
             )}
             {activeSection === 2 && (
-              <SectionAgenda agendaItems={agendaItems} setAgendaItems={setAgendaItems} agendaLoading={agendaLoading} />
+              <SectionAgenda agendaItems={agendaItems} setAgendaItems={setAgendaItems} agendaLoading={agendaLoading} internalParticipants={internalParticipants} externalParticipants={externalParticipants} />
             )}
             {activeSection === 3 && (
               <SectionDecisions
