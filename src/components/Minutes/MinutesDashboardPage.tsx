@@ -5,7 +5,11 @@ import {
   DecisionPriorityBadge, ProgressIndicator, EmptyState, TableSkeleton,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
-import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import toast from 'react-hot-toast';
+import {
+  setMinuteIdInUrl, setMinutesPageInUrl,
+  clearMinuteIdFromUrl, clearMeetingIdFromUrl, clearMinutesPageFromUrl,
+} from '../../lib/minutesNavigation';
 
 interface Props {
   onNavigate: (page: string) => void;
@@ -71,6 +75,14 @@ export function MinutesDashboardPage({ onNavigate }: Props) {
     onNavigate('minutes-detail');
   };
 
+  const goToCalendarForMinutes = () => {
+    clearMinuteIdFromUrl();
+    clearMeetingIdFromUrl();
+    clearMinutesPageFromUrl();
+    toast('برای ثبت صورت‌جلسه، ابتدا جلسه موردنظر را در تقویم باز کرده و گزینه «صورت‌جلسه» را انتخاب کنید.');
+    onNavigate('calendar');
+  };
+
   if (loading) return (
     <div dir="rtl" className="space-y-6">
       <PageHeader title="داشبورد صورت‌جلسات" description="خلاصه وضعیت صورت‌جلسات و مصوبات شما" />
@@ -95,11 +107,11 @@ export function MinutesDashboardPage({ onNavigate }: Props) {
         description="خلاصه وضعیت صورت‌جلسات و مصوبات شما"
         actions={
           <button
-            onClick={() => onNavigate('minutes-new')}
+            onClick={goToCalendarForMinutes}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
-            صورت‌جلسه جدید
+            انتخاب جلسه از تقویم
           </button>
         }
       />
