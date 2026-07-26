@@ -1,31 +1,29 @@
-import { CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
+import { CircleAlert as AlertCircle, Loader as Loader2, Lock } from 'lucide-react';
 import { ConfidentialityBadge } from '../MinutesShared';
 import type { ConfidentialityLevel, ApprovalMode } from '../types';
-import type { DraftMeetingInfo, MeetingOption, ProfileOption, OrgUnitOption } from './types';
+import type { DraftMeetingInfo, ProfileOption, OrgUnitOption } from './types';
 import { LoadingSelect, ErrorState, EmptyState } from './fields';
 
 interface SectionInfoProps {
   info: DraftMeetingInfo;
   setInfo: React.Dispatch<React.SetStateAction<DraftMeetingInfo>>;
-  meetings: MeetingOption[];
-  meetingsLoading: boolean;
-  meetingsError: string | null;
   profiles: ProfileOption[];
   profilesLoading: boolean;
   profilesError: string | null;
   orgUnits: OrgUnitOption[];
   orgUnitsLoading: boolean;
   orgUnitsError: string | null;
-  onMeetingSelect: (meetingId: string) => void;
+  prefillLoading: boolean;
+  prefillError: string | null;
+  isMeetingPrefilled: boolean;
   agendaLoading: boolean;
 }
 
 export function SectionInfo({
   info, setInfo,
-  meetings, meetingsLoading, meetingsError,
   profiles, profilesLoading, profilesError,
   orgUnits, orgUnitsLoading, orgUnitsError,
-  onMeetingSelect, agendaLoading,
+  prefillLoading, prefillError, isMeetingPrefilled, agendaLoading,
 }: SectionInfoProps) {
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
@@ -59,53 +57,37 @@ export function SectionInfo({
     }));
   };
 
+  // Prefilled meeting fields (title, date, times, location) are read-only in new mode
+  const readOnly = isMeetingPrefilled;
+  const readOnlyClass = 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700/50 dark:text-gray-300 cursor-not-allowed';
+
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
         اطلاعات جلسه
       </h2>
 
-      {/* Meeting selector hint */}
-      <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-sm text-blue-700 dark:text-blue-300">
-        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-        صورت‌جلسه فقط برای جلساتی قابل ایجاد است که در تقویم قرار دارند و وضعیت آن‌ها «برنامه‌ریزی‌شده» است.
-      </div>
+      {/* Prefill status hint */}
+      {prefillLoading && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-sm text-blue-700 dark:text-blue-300">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          در حال بارگذاری اطلاعات جلسه از تقویم...
+        </div>
+      )}
+      {prefillError && (
+        <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl text-sm text-red-700 dark:text-red-300">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          {prefillError}
+        </div>
+      )}
+      {readOnly && !prefillLoading && !prefillError && (
+        <div className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl text-sm text-emerald-700 dark:text-emerald-300">
+          <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          اطلاعات این جلسه از تقویم بارگذاری شده و فقط‌خواندنی است. موضوع، تاریخ، ساعت‌ها و محل برگزاری در صورت‌جلسه ذخیره می‌شوند.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Meeting selector */}
-        <div className="sm:col-span-2">
-          <label htmlFor="meeting-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            انتخاب جلسه <span className="text-red-500">*</span>
-          </label>
-          {meetingsLoading ? (
-            <LoadingSelect label="در حال بارگذاری جلسات..." />
-          ) : meetingsError ? (
-            <ErrorState message={meetingsError} />
-          ) : meetings.length === 0 ? (
-            <EmptyState message="هیچ جلسه برنامه‌ریزی‌شده‌ای با تقویم یافت نشد." />
-          ) : (
-            <select
-              id="meeting-select"
-              value={info.meetingId}
-              onChange={e => onMeetingSelect(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">انتخاب کنید...</option>
-              {meetings.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.subject}{m.request_date ? ` — ${m.request_date}` : ''}
-                </option>
-              ))}
-            </select>
-          )}
-          {agendaLoading && (
-            <p className="text-xs text-blue-500 mt-1 flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              در حال بارگذاری دستور جلسات...
-            </p>
-          )}
-        </div>
-
         <div className="sm:col-span-2">
           <label htmlFor="meeting-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             عنوان جلسه <span className="text-red-500">*</span>
@@ -114,8 +96,9 @@ export function SectionInfo({
             id="meeting-title"
             type="text"
             value={info.meetingTitle}
-            onChange={e => update('meetingTitle', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            onChange={readOnly ? undefined : e => update('meetingTitle', e.target.value)}
+            readOnly={readOnly}
+            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
             placeholder="عنوان جلسه را وارد کنید"
           />
         </div>
@@ -128,8 +111,9 @@ export function SectionInfo({
             id="meeting-date"
             type="text"
             value={info.meetingDate}
-            onChange={e => update('meetingDate', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            onChange={readOnly ? undefined : e => update('meetingDate', e.target.value)}
+            readOnly={readOnly}
+            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
             placeholder="۱۴۰۳/۰۵/۱۲"
           />
         </div>
@@ -161,8 +145,9 @@ export function SectionInfo({
             id="start-time"
             type="time"
             value={info.startTime}
-            onChange={e => update('startTime', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            onChange={readOnly ? undefined : e => update('startTime', e.target.value)}
+            readOnly={readOnly}
+            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
           />
         </div>
 
@@ -174,8 +159,9 @@ export function SectionInfo({
             id="end-time"
             type="time"
             value={info.endTime}
-            onChange={e => update('endTime', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            onChange={readOnly ? undefined : e => update('endTime', e.target.value)}
+            readOnly={readOnly}
+            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
           />
         </div>
 
@@ -187,8 +173,9 @@ export function SectionInfo({
             id="location"
             type="text"
             value={info.location}
-            onChange={e => update('location', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+            onChange={readOnly ? undefined : e => update('location', e.target.value)}
+            readOnly={readOnly}
+            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
             placeholder="اتاق جلسات / آنلاین"
           />
         </div>
@@ -341,6 +328,12 @@ export function SectionInfo({
           </div>
         </div>
       </div>
+      {agendaLoading && (
+        <p className="text-xs text-blue-500 mt-1 flex items-center gap-1">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          در حال بارگذاری دستور جلسات...
+        </p>
+      )}
     </div>
   );
 }

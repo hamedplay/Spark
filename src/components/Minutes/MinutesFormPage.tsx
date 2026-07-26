@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CalendarDays } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl } from '../../lib/minutesNavigation';
+import { loadMinutesPrefill } from '../../lib/minutesPrefill';
 import { PageHeader, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -10,7 +11,7 @@ import type {
   MinutesStatus, ApprovalMode,
 } from './types';
 import type {
-  MeetingOption, ProfileOption, OrgUnitOption, AgendaItemOption,
+  ProfileOption, OrgUnitOption,
   DraftMeetingInfo, DraftInternalParticipant, DraftExternalParticipant,
   DraftAgendaItem, DraftDecision, DraftApprover, DraftFinalization,
   MinutesDraftPayload,
@@ -99,17 +100,18 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [finalization, setFinalization] = useState<DraftFinalization>(defaultFinalization);
 
   // Fetched reference data
-  const [meetings, setMeetings] = useState<MeetingOption[]>([]);
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnitOption[]>([]);
-  const [meetingsLoading, setMeetingsLoading] = useState(true);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [orgUnitsLoading, setOrgUnitsLoading] = useState(true);
-  const [meetingsError, setMeetingsError] = useState<string | null>(null);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [orgUnitsError, setOrgUnitsError] = useState<string | null>(null);
   const [agendaLoading, setAgendaLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+
+  // New-mode prefill state — runs once, never overwrites user edits
+  const [prefillLoading, setPrefillLoading] = useState(mode === 'new');
+  const [prefillError, setPrefillError] = useState<string | null>(null);
 
   // Edit-mode state
   const [editMinuteId, setEditMinuteId] = useState<string | null>(null);
@@ -238,35 +240,62 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         setEditLoading(false);
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, minuteId]);
 
-  // ── Fetch allowed meetings (scheduled + has calendar_id) ──────────────
+  // ── New mode: centralized prefill from meeting (runs once) ──────────
+  // Reads meetingId only from the `meeting` URL param. Access is checked via
+  // can_create_minutes_for_meeting RPC inside loadMinutesPrefill. Never
+  // overwrites user edits — runs exactly once on mount.
   useEffect(() => {
+    if (mode !== 'new') return;
+    const meetingId = getMeetingIdFromUrl();
+    if (!meetingId) {
+      setPrefillLoading(false);
+      return;
+    }
+    let cancelled = false;
     (async () => {
-      setMeetingsLoading(true);
-      setMeetingsError(null);
+      setPrefillLoading(true);
+      setPrefillError(null);
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          setMeetingsError('کاربر احراز هویت نشده است.');
-          setMeetingsLoading(false);
+        const result = await loadMinutesPrefill(supabase, meetingId);
+        if (cancelled) return;
+        if (!result.allowed || !result.data) {
+          setPrefillError('دسترسی به این جلسه برای ثبت صورت‌جلسه وجود ندارد.');
+          setPrefillLoading(false);
           return;
         }
-        const { data, error } = await supabase
-          .from('meetings')
-          .select('id, subject, request_date, start_time, end_time, location, status_type, user_id, meeting_manager, participant_user_ids, calendar_id')
-          .eq('status_type', 'scheduled')
-          .not('calendar_id', 'is', null)
-          .order('request_date', { ascending: false });
-        if (error) throw error;
-        setMeetings((data || []) as unknown as MeetingOption[]);
+        const { info: prefillInfo, internalParticipants, externalParticipants, agendaItems, profiles: loadedProfiles, orgUnits: loadedOrgUnits } = result.data;
+        setInfo(prev => ({ ...prev, ...prefillInfo }));
+        setInternalParticipants(internalParticipants);
+        setExternalParticipants(externalParticipants);
+        setAgendaItems(agendaItems);
+        setAgendaLoading(false);
+        // Merge meeting-loaded profiles/orgUnits into the reference lists so
+        // secretary/chair selectors include meeting participants even if the
+        // global profile list hasn't loaded yet.
+        if (loadedProfiles.length > 0) {
+          setProfiles(prev => {
+            const byId = new Map(prev.map(p => [p.user_id, p]));
+            for (const p of loadedProfiles) if (!byId.has(p.user_id)) byId.set(p.user_id, p);
+            return Array.from(byId.values());
+          });
+        }
+        if (loadedOrgUnits.length > 0) {
+          setOrgUnits(prev => {
+            const byId = new Map(prev.map(u => [u.id, u]));
+            for (const u of loadedOrgUnits) if (!byId.has(u.id)) byId.set(u.id, u);
+            return Array.from(byId.values());
+          });
+        }
       } catch (err) {
-        setMeetingsError(err instanceof Error ? err.message : 'خطا در بارگذاری جلسات');
+        if (!cancelled) setPrefillError(err instanceof Error ? err.message : 'خطا در بارگذاری اطلاعات جلسه');
       } finally {
-        setMeetingsLoading(false);
+        if (!cancelled) setPrefillLoading(false);
       }
     })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Fetch all profiles ────────────────────────────────────────────────
@@ -309,59 +338,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       }
     })();
   }, []);
-
-  // ── Prefill agenda items when meeting is selected ─────────────────────
-  const fetchAgendaItems = useCallback(async (meetingId: string) => {
-    setAgendaLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('meeting_agenda_items')
-        .select('id, title, presenter, duration_minutes, sort_order')
-        .eq('meeting_id', meetingId)
-        .order('sort_order', { ascending: true });
-      if (error) throw error;
-      const items = (data || []) as unknown as AgendaItemOption[];
-      if (items.length > 0) {
-        setAgendaItems(items.map((item, idx) => ({
-          id: uid(),
-          meetingAgendaItemId: item.id,
-          order: idx + 1,
-          title: item.title,
-          description: '',
-          presenter: item.presenter || '',
-          allocatedTime: item.duration_minutes != null ? String(item.duration_minutes) : '',
-          discussionResult: '',
-          resultType: 'discussion',
-          additionalNotes: '',
-        })));
-      } else {
-        setAgendaItems([defaultAgendaItem(1)]);
-      }
-    } catch (err) {
-      toast.error('خطا در بارگذاری دستور جلسات: ' + (err instanceof Error ? err.message : 'نامشخص'));
-      setAgendaItems([defaultAgendaItem(1)]);
-    } finally {
-      setAgendaLoading(false);
-    }
-  }, []);
-
-  const handleMeetingSelect = useCallback((meetingId: string) => {
-    const meeting = meetings.find(m => m.id === meetingId);
-    if (!meeting) {
-      setInfo(prev => ({ ...prev, meetingId: '', meetingTitle: '', meetingDate: '', startTime: '', endTime: '', location: '' }));
-      return;
-    }
-    setInfo(prev => ({
-      ...prev,
-      meetingId: meeting.id,
-      meetingTitle: meeting.subject,
-      meetingDate: meeting.request_date || '',
-      startTime: meeting.start_time || '',
-      endTime: meeting.end_time || '',
-      location: meeting.location || '',
-    }));
-    fetchAgendaItems(meeting.id);
-  }, [meetings, fetchAgendaItems]);
 
   const payload: MinutesDraftPayload = useMemo(
     () => ({
@@ -742,16 +718,15 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               <SectionInfo
                 info={info}
                 setInfo={setInfo}
-                meetings={meetings}
-                meetingsLoading={meetingsLoading}
-                meetingsError={meetingsError}
                 profiles={profiles}
                 profilesLoading={profilesLoading}
                 profilesError={profilesError}
                 orgUnits={orgUnits}
                 orgUnitsLoading={orgUnitsLoading}
                 orgUnitsError={orgUnitsError}
-                onMeetingSelect={handleMeetingSelect}
+                prefillLoading={prefillLoading}
+                prefillError={prefillError}
+                isMeetingPrefilled={mode === 'new' && !!info.meetingId}
                 agendaLoading={agendaLoading}
               />
             )}
@@ -767,6 +742,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnits={orgUnits}
                 orgUnitsLoading={orgUnitsLoading}
                 orgUnitsError={orgUnitsError}
+                invitationStatusReadOnly={mode === 'new'}
               />
             )}
             {activeSection === 2 && (

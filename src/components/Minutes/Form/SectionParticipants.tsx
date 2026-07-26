@@ -15,6 +15,7 @@ interface SectionParticipantsProps {
   orgUnits: OrgUnitOption[];
   orgUnitsLoading: boolean;
   orgUnitsError: string | null;
+  invitationStatusReadOnly?: boolean;
 }
 
 export function SectionParticipants({
@@ -28,6 +29,7 @@ export function SectionParticipants({
   orgUnits,
   orgUnitsLoading,
   orgUnitsError,
+  invitationStatusReadOnly = false,
 }: SectionParticipantsProps) {
   const addInternal = () =>
     setInternalParticipants(l => [...l, defaultInternalParticipant()]);
@@ -136,7 +138,7 @@ export function SectionParticipants({
                   ))}
                 </select>
               </div>
-              <SelectField id={`int-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateInternal(row.id, 'invitationStatus', v)} />
+              <SelectField id={`int-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateInternal(row.id, 'invitationStatus', v)} disabled={invitationStatusReadOnly} />
               <SelectField id={`int-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateInternal(row.id, 'attendanceStatus', v)} />
               <div className="flex items-end">
                 <button

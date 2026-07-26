@@ -97,9 +97,10 @@ export interface SelectFieldProps {
   options: { value: string; label: string }[];
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }
 
-export function SelectField({ id, label, options, value, onChange }: SelectFieldProps) {
+export function SelectField({ id, label, options, value, onChange, disabled = false }: SelectFieldProps) {
   return (
     <div>
       <label htmlFor={id} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{label}</label>
@@ -107,7 +108,8 @@ export function SelectField({ id, label, options, value, onChange }: SelectField
         id={id}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
+        disabled={disabled}
+        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
