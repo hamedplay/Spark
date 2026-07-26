@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
 import type { ContactEmail, AgendaItem } from '../types';
 import { useOrgUsers, FALLBACK_NAME, LOADING_NAME } from '../lib/useOrgUsers';
+import { isPlaceholderName } from './CalendarMeetingForm/displayName';
 import type { CalendarEntry, CalendarMeetingFormProps, CommitSnapshot, ExternalSmsResult } from './CalendarMeetingForm/types';
 import { sendSmsToExternals, showSmsSummary } from './CalendarMeetingForm/smsHelpers';
 import { MultiSelectField } from './CalendarMeetingForm/MultiSelectField';
@@ -21,6 +22,8 @@ import { RepeatSection } from './CalendarMeetingForm/RepeatSection';
 import { AgendaSection } from './CalendarMeetingForm/AgendaSection';
 import { EditDecisionModal } from './CalendarMeetingForm/EditDecisionModal';
 import { MeetingCoreFields, MeetingManagerField, ReminderField, OnlineMeetingToggle, SmsAndSaveToggle, MeetingFormFooter } from './CalendarMeetingForm/MeetingCoreFields';
+import { FormHeader } from './CalendarMeetingForm/FormHeader';
+import { generateRoomCode } from './CalendarMeetingForm/roomCode';
 
 export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendars = [] }: CalendarMeetingFormProps) {
   const [loading, setLoading] = useState(false);
@@ -118,16 +121,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   // Display names are derived at render time from the org directory (usersById),
   // never stored as fallback strings in state. State holds only IDs (+ a vestigial
   // name used solely as a secondary fallback for users absent from the directory).
-  const isPlaceholderName = (name: string): boolean => {
-    const trimmed = name.trim();
-    if (!trimmed) return true;
-    if (trimmed === 'همکار گرامی' || trimmed === FALLBACK_NAME || trimmed === LOADING_NAME) return true;
-    // UUID or email are not valid display names
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) return true;
-    if (/^\S+@\S+\.\S+$/.test(trimmed)) return true;
-    return false;
-  };
-
+  // isPlaceholderName moved to ./CalendarMeetingForm/displayName.ts
   const resolveDisplayName = (uid: string, storedName?: string): string => {
     if (orgUsersLoading) return LOADING_NAME;
     const user = usersById[uid];
@@ -945,11 +939,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     }
   };
 
-  const generateRoomCode = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const seg = () => Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-    return `${seg()}-${seg()}-${seg()}`;
-  };
+  // generateRoomCode moved to ./CalendarMeetingForm/roomCode.ts
 
   const createConferenceRoom = async (meetingSubject: string): Promise<{ id: string; code: string } | null> => {
     if (!userId) return null;
@@ -1099,12 +1089,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 bg-teal-600">
-        <h2 className="text-base font-bold text-white">تنظیم جلسه در تقویم</h2>
-        <button type="button" onClick={onCancel} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30">
-          <X className="w-5 h-5 text-white" />
-        </button>
-      </div>
+      <FormHeader onCancel={onCancel} />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
         {/* Calendar selector */}

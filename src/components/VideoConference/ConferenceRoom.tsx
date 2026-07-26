@@ -32,9 +32,10 @@ import { ParticipantsPanel } from './Room/ParticipantsPanel';
 import { SidePanelHeader } from './Room/SidePanelHeader';
 import { SidePanelContainer } from './Room/SidePanelContainer';
 import { RoomOverlays } from './Room/RoomOverlays';
+import { RoomBackground } from './Room/RoomBackground';
 import { ROLE_PERMISSIONS, ROLE_LABELS, ROLE_COLORS, type RoleType, type Permission } from './Room/roleConstants';
 import { mediaReducer, type MediaState } from './Room/mediaReducer';
-import { MAX_PARTICIPANTS, calculateBitrate, setPreferredCodecs, EMOJIS } from './Room/webrtcHelpers';
+import { MAX_PARTICIPANTS, calculateBitrate, setPreferredCodecs, EMOJIS, fmt, qualityColor } from './Room/webrtcHelpers';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -470,10 +471,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fmt = (s: number) => {
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-    return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-  };
 
   // ── WebRTC helpers ─────────────────────────────────────────────────────────
   const sendSignal = useCallback((toPeerId: string | null, type: string, data: object) => {
@@ -1288,7 +1285,6 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     ...Array.from(peers.values()).map(p => ({ peerId: p.peerId, userId: p.userId, displayName: p.displayName, stream: p.stream, isMuted: p.isMuted, isVideoOff: p.isVideoOff, isHandRaised: p.isHandRaised, isLocal: false, isHost: hostId === p.userId, networkQuality: p.networkQuality, avatarUrl: peerAvatarUrls[p.userId], pingMs: peerLatencies[p.peerId] })),
   ];
 
-  const qualityColor = { excellent:'text-green-400', good:'text-teal-400', fair:'text-amber-400', poor:'text-red-400' };
 
   // Sorted hand raise queue (earliest first)
   const sortedQueue = [...handRaiseQueue].sort((a, b) => a.time - b.time);
@@ -1296,22 +1292,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className={`flex flex-col bg-gray-950 text-white select-none relative ${isFullscreen ? 'fixed inset-0 z-[9999]' : 'h-full'}`} dir="rtl">
-      <style>{`
-        @keyframes float-up{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-120px) scale(1.5)}}
-        @keyframes tile-reaction{0%{opacity:0;transform:scale(0.5)}15%{opacity:1;transform:scale(1.2)}30%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(0.8)}}
-        .conf-panel-mobile{transition:transform 0.3s cubic-bezier(.4,0,.2,1)}
-      `}</style>
-      {/* Background image — pointer-events-none so it never interferes with video tiles or controls */}
-      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
-        <img
-          src="/pexels-photo-4226140.jpg"
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="w-full h-full object-cover opacity-[0.07] blur-sm"
-        />
-        <div className="absolute inset-0 bg-gray-950/80" />
-      </div>
+      <RoomBackground />
       {/* All content is above z-0 */}
       <div className="relative z-10 flex flex-col h-full">
 
