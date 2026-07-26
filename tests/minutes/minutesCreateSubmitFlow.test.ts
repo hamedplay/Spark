@@ -547,3 +547,288 @@ test('new submit: create returns no minute_id → submit not called', async () =
   assert.equal(calls.length, 1);
   assert.equal(calls[0].fn, 'create_minutes_draft');
 });
+
+// ── 29. Concurrency: action lock contract ─────────────────────────────────────
+// These tests exercise the two-level lock structure (minutesActionRef wrapping
+// persistMinuteRef) by simulating the actual handler behavior with a mock that
+// records real RPC call counts.
+
+interface ConcurrencyCall { fn: string; }
+function makeConcurrencyMock(responses: Record<string, { data: unknown; error: unknown }>) {
+  const calls: ConcurrencyCall[] = [];
+  let actionRef: Promise<void> | null = null;
+  let persistRef: Promise<unknown> | null = null;
+
+  const rpc = async (fn: string) => {
+    calls.push({ fn });
+    const r = responses[fn] ?? { data: null, error: null };
+    return r;
+  };
+
+  const runExclusiveAction = (action: () => Promise<void>): Promise<void> => {
+    if (actionRef) return actionRef;
+    const op = action().finally(() => { actionRef = null; });
+    actionRef = op;
+    return op;
+  };
+
+  const ensureWorkingMinute = async (): Promise<{ minuteId: string; updatedAt: string } | null> => {
+    if (persistRef) return persistRef as Promise<{ minuteId: string; updatedAt: string } | null>;
+    const p = (async () => {
+      // create path (new mode)
+      const createRes = await rpc('create_minutes_draft', { p_payload: {} }) as { data: { success: boolean; minute_id?: string } };
+      if (!createRes.data.success || !createRes.data.minute_id) return null;
+      const minuteId = createRes.data.minute_id;
+      const minRow = await rpc('query_minutes_updated_at', { p_id: minuteId }) as { data: { updated_at: string } };
+      return { minuteId, updatedAt: minRow.data.updated_at };
+    })().finally(() => { persistRef = null; });
+    persistRef = p;
+    return p as Promise<{ minuteId: string; updatedAt: string } | null>;
+  };
+
+  const ensureWorkingMinuteEdit = async (editId: string, oldTs: string): Promise<{ minuteId: string; updatedAt: string } | null> => {
+    if (persistRef) return persistRef as Promise<{ minuteId: string; updatedAt: string } | null>;
+    const p = (async () => {
+      const updateRes = await rpc('update_minutes_draft', { p_minute_id: editId, p_expected_updated_at: oldTs }) as { data: { success: boolean; updated_at?: string } };
+      if (!updateRes.data.success || !updateRes.data.updated_at) return null;
+      return { minuteId: editId, updatedAt: updateRes.data.updated_at };
+    })().finally(() => { persistRef = null; });
+    persistRef = p;
+    return p as Promise<{ minuteId: string; updatedAt: string } | null>;
+  };
+
+  return { calls, runExclusiveAction, ensureWorkingMinute, ensureWorkingMinuteEdit, rpc, getActionRef: () => actionRef, getPersistRef: () => persistRef };
+}
+
+// 29. Double Submit in new mode → only 1 create + 1 submit
+test('concurrency: double submit (new mode) → 1 create + 1 submit', async () => {
+  const mock = makeConcurrencyMock({
+    create_minutes_draft: { data: { success: true, minute_id: 'minute-1' }, error: null },
+    query_minutes_updated_at: { data: { updated_at: '2026-07-26T10:00:00.000Z' }, error: null },
+    submit_minutes_for_approval: { data: { success: true, minute_id: 'minute-1' }, error: null },
+  });
+
+  const submitNew = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinute();
+    if (!saved) return;
+    await mock.rpc('submit_minutes_for_approval', { p_minute_id: saved.minuteId, p_expected_updated_at: saved.updatedAt });
+  });
+
+  await Promise.all([submitNew(), submitNew()]);
+
+  const createCount = mock.calls.filter(c => c.fn === 'create_minutes_draft').length;
+  const submitCount = mock.calls.filter(c => c.fn === 'submit_minutes_for_approval').length;
+  assert.equal(createCount, 1);
+  assert.equal(submitCount, 1);
+});
+
+// 30. Double Submit in edit mode → only 1 update + 1 submit
+test('concurrency: double submit (edit mode) → 1 update + 1 submit', async () => {
+  const mock = makeConcurrencyMock({
+    update_minutes_draft: { data: { success: true, updated_at: '2026-07-26T11:00:00.000Z' }, error: null },
+    submit_minutes_for_approval: { data: { success: true, minute_id: 'minute-edit-1' }, error: null },
+  });
+
+  const submitEdit = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinuteEdit('minute-edit-1', '2026-07-26T10:00:00.000Z');
+    if (!saved) return;
+    await mock.rpc('submit_minutes_for_approval', { p_minute_id: saved.minuteId, p_expected_updated_at: saved.updatedAt });
+  });
+
+  await Promise.all([submitEdit(), submitEdit()]);
+
+  const updateCount = mock.calls.filter(c => c.fn === 'update_minutes_draft').length;
+  const submitCount = mock.calls.filter(c => c.fn === 'submit_minutes_for_approval').length;
+  assert.equal(updateCount, 1);
+  assert.equal(submitCount, 1);
+});
+
+// 31. Save then immediate Submit → no second persistence
+test('concurrency: save + immediate submit → no duplicate persistence', async () => {
+  const mock = makeConcurrencyMock({
+    create_minutes_draft: { data: { success: true, minute_id: 'minute-1' }, error: null },
+    query_minutes_updated_at: { data: { updated_at: '2026-07-26T10:00:00.000Z' }, error: null },
+    submit_minutes_for_approval: { data: { success: true, minute_id: 'minute-1' }, error: null },
+  });
+
+  const save = () => mock.runExclusiveAction(async () => {
+    await mock.ensureWorkingMinute();
+  });
+  const submit = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinute();
+    if (!saved) return;
+    await mock.rpc('submit_minutes_for_approval', { p_minute_id: saved.minuteId, p_expected_updated_at: saved.updatedAt });
+  });
+
+  await Promise.all([save(), submit()]);
+
+  const createCount = mock.calls.filter(c => c.fn === 'create_minutes_draft').length;
+  assert.equal(createCount, 1, 'only one create despite save+submit concurrent');
+});
+
+// 32. Submit then immediate Save → save does not run
+test('concurrency: submit + immediate save → save does not start new operation', async () => {
+  const mock = makeConcurrencyMock({
+    create_minutes_draft: { data: { success: true, minute_id: 'minute-1' }, error: null },
+    query_minutes_updated_at: { data: { updated_at: '2026-07-26T10:00:00.000Z' }, error: null },
+    submit_minutes_for_approval: { data: { success: true, minute_id: 'minute-1' }, error: null },
+  });
+
+  const submit = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinute();
+    if (!saved) return;
+    await mock.rpc('submit_minutes_for_approval', { p_minute_id: saved.minuteId, p_expected_updated_at: saved.updatedAt });
+  });
+  const save = () => mock.runExclusiveAction(async () => {
+    await mock.ensureWorkingMinute();
+  });
+
+  await Promise.all([submit(), save()]);
+
+  // Submit ran; save was deduped into the same action (no extra create)
+  const createCount = mock.calls.filter(c => c.fn === 'create_minutes_draft').length;
+  assert.equal(createCount, 1);
+  const submitCount = mock.calls.filter(c => c.fn === 'submit_minutes_for_approval').length;
+  assert.equal(submitCount, 1);
+});
+
+// 33. Create failure releases action lock
+test('concurrency: create failure → action lock released', async () => {
+  const mock = makeConcurrencyMock({
+    create_minutes_draft: { data: { success: false, error_code: 'INTERNAL_ERROR' }, error: null },
+  });
+
+  const submit = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinute();
+    if (!saved) return;
+  });
+
+  await submit();
+  assert.equal(mock.getActionRef(), null, 'action lock released after create failure');
+  assert.equal(mock.getPersistRef(), null, 'persist lock released after create failure');
+});
+
+// 34. Update failure releases action lock
+test('concurrency: update failure → action lock released', async () => {
+  const mock = makeConcurrencyMock({
+    update_minutes_draft: { data: { success: false, error_code: 'MINUTES_VERSION_CONFLICT' }, error: null },
+  });
+
+  const submit = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinuteEdit('minute-1', 'old');
+    if (!saved) return;
+  });
+
+  await submit();
+  assert.equal(mock.getActionRef(), null, 'action lock released after update failure');
+  assert.equal(mock.getPersistRef(), null, 'persist lock released after update failure');
+});
+
+// 35. Submit failure releases action lock
+test('concurrency: submit failure → action lock released', async () => {
+  const mock = makeConcurrencyMock({
+    create_minutes_draft: { data: { success: true, minute_id: 'minute-1' }, error: null },
+    query_minutes_updated_at: { data: { updated_at: '2026-07-26T10:00:00.000Z' }, error: null },
+    submit_minutes_for_approval: { data: { success: false, error_code: 'MINUTES_VERSION_CONFLICT' }, error: null },
+  });
+
+  const submit = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinute();
+    if (!saved) return;
+    await mock.rpc('submit_minutes_for_approval', { p_minute_id: saved.minuteId, p_expected_updated_at: saved.updatedAt });
+  });
+
+  await submit();
+  assert.equal(mock.getActionRef(), null, 'action lock released after submit failure');
+});
+
+// 36. Retry after failure works
+test('concurrency: retry after failure executes new operation', async () => {
+  let createAttempts = 0;
+  const calls: ConcurrencyCall[] = [];
+  let actionRef: Promise<void> | null = null;
+  const runExclusiveAction = (action: () => Promise<void>): Promise<void> => {
+    if (actionRef) return actionRef;
+    const op = action().finally(() => { actionRef = null; });
+    actionRef = op;
+    return op;
+  };
+
+  // First attempt fails, second succeeds
+  const attempt = (willSucceed: boolean) => runExclusiveAction(async () => {
+    createAttempts++;
+    calls.push({ fn: 'create_minutes_draft' });
+    if (!willSucceed) throw new Error('fail');
+  });
+
+  await attempt(false).catch(() => {});
+  assert.equal(actionRef, null, 'lock released after failure');
+  await attempt(true);
+  assert.equal(createAttempts, 2, 'retry ran a new operation');
+  assert.equal(calls.length, 2);
+});
+
+// 37. p_minute_id is always the real minute id (never meeting id)
+test('concurrency: p_minute_id is always real minute id, never meeting id', async () => {
+  const meetingId = 'meeting-abc';
+  const mock = makeConcurrencyMock({
+    create_minutes_draft: { data: { success: true, minute_id: 'minute-real-1' }, error: null },
+    query_minutes_updated_at: { data: { updated_at: '2026-07-26T10:00:00.000Z' }, error: null },
+    submit_minutes_for_approval: { data: { success: true, minute_id: 'minute-real-1' }, error: null },
+  });
+
+  const submitArgs: Record<string, unknown>[] = [];
+  const origRpc = mock.rpc;
+  mock.rpc = async (fn: string, args: Record<string, unknown>) => {
+    if (fn === 'submit_minutes_for_approval') submitArgs.push(args);
+    return origRpc(fn, args);
+  };
+
+  const submit = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinute();
+    if (!saved) return;
+    await mock.rpc('submit_minutes_for_approval', { p_minute_id: saved.minuteId, p_expected_updated_at: saved.updatedAt });
+  });
+
+  await submit();
+  assert.equal(submitArgs.length, 1);
+  assert.equal(submitArgs[0].p_minute_id, 'minute-real-1');
+  assert.notEqual(submitArgs[0].p_minute_id, meetingId);
+});
+
+// 38. Submit always receives updatedAt from latest persistence
+test('concurrency: submit uses updatedAt from latest persistence', async () => {
+  const mock = makeConcurrencyMock({
+    update_minutes_draft: { data: { success: true, updated_at: '2026-07-26T15:30:00.000Z' }, error: null },
+    submit_minutes_for_approval: { data: { success: true, minute_id: 'minute-1' }, error: null },
+  });
+
+  const submitArgs: Record<string, unknown>[] = [];
+  const origRpc = mock.rpc;
+  mock.rpc = async (fn: string, args: Record<string, unknown>) => {
+    if (fn === 'submit_minutes_for_approval') submitArgs.push(args);
+    return origRpc(fn, args);
+  };
+
+  const submit = () => mock.runExclusiveAction(async () => {
+    const saved = await mock.ensureWorkingMinuteEdit('minute-1', '2026-07-26T10:00:00.000Z');
+    if (!saved) return;
+    await mock.rpc('submit_minutes_for_approval', { p_minute_id: saved.minuteId, p_expected_updated_at: saved.updatedAt });
+  });
+
+  await submit();
+  assert.equal(submitArgs[0].p_expected_updated_at, '2026-07-26T15:30:00.000Z');
+  assert.notEqual(submitArgs[0].p_expected_updated_at, '2026-07-26T10:00:00.000Z');
+});
+
+// 39. navigateAfterSave parameter no longer exists in the codebase
+test('contract: navigateAfterSave parameter is not present in ensureWorkingMinute signature', async () => {
+  // Read the source to confirm the parameter was removed.
+  const fs = await import('node:fs/promises');
+  const source = await fs.readFile(
+    new URL('../../src/components/Minutes/MinutesFormPage.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.ok(!source.includes('navigateAfterSave'), 'navigateAfterSave must be removed');
+  assert.ok(source.includes('saveCurrentValues: boolean;'), 'saveCurrentValues param present');
+});

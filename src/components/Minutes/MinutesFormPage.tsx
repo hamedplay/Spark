@@ -509,17 +509,35 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     updatedAt: string;
   }
 
-  // A single shared operation lock covers create + update + submit so that
-  // double-click, save+submit, or submit+submit cannot race. We do NOT rely
-  // solely on React state (whose updates are async) for this guard.
-  const inflightOpRef = useRef<Promise<WorkingMinuteResult | null> | null>(null);
+  // Persistence lock: dedupes concurrent create/update calls only.
+  // Does NOT cover submit or navigation — those are gated by the action lock.
+  const persistMinuteRef = useRef<Promise<WorkingMinuteResult | null> | null>(null);
+
+  // Action lock: covers the entire user operation (save OR submit), including
+  // persistence, submit RPC, and navigation. Prevents save+submit or
+  // submit+submit from running concurrently.
+  const minutesActionRef = useRef<Promise<void> | null>(null);
+
+  const runExclusiveMinutesAction = (
+    action: () => Promise<void>,
+  ): Promise<void> => {
+    if (minutesActionRef.current) {
+      return minutesActionRef.current;
+    }
+
+    const operation = action().finally(() => {
+      minutesActionRef.current = null;
+    });
+
+    minutesActionRef.current = operation;
+    return operation;
+  };
 
   const ensureWorkingMinute = async (options: {
     saveCurrentValues: boolean;
-    navigateAfterSave: boolean;
   }): Promise<WorkingMinuteResult | null> => {
-    // Reuse any in-flight operation to dedupe concurrent calls.
-    if (inflightOpRef.current) return inflightOpRef.current;
+    // Reuse any in-flight persistence to dedupe concurrent create/update calls.
+    if (persistMinuteRef.current) return persistMinuteRef.current;
 
     const sourceMeetingId = getMeetingIdFromUrl();
     const existingMinuteId = workingMinuteId ?? (mode === 'edit' ? editMinuteId : null);
@@ -607,11 +625,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           return null;
         } finally {
           setSavingDraft(false);
-          inflightOpRef.current = null;
+          persistMinuteRef.current = null;
         }
       })();
 
-      inflightOpRef.current = creation;
+      persistMinuteRef.current = creation;
       return creation;
     }
 
@@ -683,105 +701,105 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         return null;
       } finally {
         setSavingDraft(false);
-        inflightOpRef.current = null;
+        persistMinuteRef.current = null;
       }
     })();
 
-    inflightOpRef.current = update;
+    persistMinuteRef.current = update;
     return update;
   };
 
-  const handleSaveDraft = async () => {
-    if (savingDraft || submitting) return;
+  const handleSaveDraft = () =>
+    runExclusiveMinutesAction(async () => {
+      if (savingDraft || submitting) return;
 
-    const validationError = validate();
-    if (validationError) {
-      toast.error(validationError);
-      return;
-    }
+      const validationError = validate();
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
 
-    setSavingDraft(true);
-    try {
-      const saved = await ensureWorkingMinute({
-        saveCurrentValues: true,
-        navigateAfterSave: true,
-      });
-      if (!saved) return; // toast already shown
-      toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
-      setMinuteIdInUrl(saved.minuteId);
-      setMinutesPageInUrl('minutes-detail');
-      onNavigate('minutes-detail');
-    } catch (err) {
-      if (isDev) console.error('[SaveDraft] Exception:', err);
-      toast.error('خطای غیرمنتظره رخ داد. فرم حفظ شد؛ لطفاً دوباره تلاش کنید.');
-    } finally {
-      setSavingDraft(false);
-    }
-  };
+      setSavingDraft(true);
+      try {
+        const saved = await ensureWorkingMinute({
+          saveCurrentValues: true,
+        });
+        if (!saved) return; // toast already shown
+        toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
+        setMinuteIdInUrl(saved.minuteId);
+        setMinutesPageInUrl('minutes-detail');
+        onNavigate('minutes-detail');
+      } catch (err) {
+        if (isDev) console.error('[SaveDraft] Exception:', err);
+        toast.error('خطای غیرمنتظره رخ داد. فرم حفظ شد؛ لطفاً دوباره تلاش کنید.');
+      } finally {
+        setSavingDraft(false);
+      }
+    });
 
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmitForApproval = async () => {
-    if (submitting || savingDraft) return;
-    if (!info.approvalMode) {
-      toast.error('لطفاً مدل تأیید را انتخاب کنید.');
-      return;
-    }
-    if (info.approvalMode === 'system') {
-      const check = checkSystemApproverEligibility(info.approvalMode, internalParticipants);
-      if (!check.canSubmit) {
-        toast.error(check.errorMessage || 'در مدل سیستمی حداقل یک شرکت‌کننده داخلی با حساب کاربری لازم است.');
+  const handleSubmitForApproval = () =>
+    runExclusiveMinutesAction(async () => {
+      if (submitting || savingDraft) return;
+      if (!info.approvalMode) {
+        toast.error('لطفاً مدل تأیید را انتخاب کنید.');
         return;
       }
-    }
-    setSubmitting(true);
-    try {
-      // 1. Persist current form values and get a fresh minuteId + updatedAt.
-      const saved = await ensureWorkingMinute({
-        saveCurrentValues: true,
-        navigateAfterSave: false,
-      });
-      if (!saved) return; // create/update failed; toast already shown
+      if (info.approvalMode === 'system') {
+        const check = checkSystemApproverEligibility(info.approvalMode, internalParticipants);
+        if (!check.canSubmit) {
+          toast.error(check.errorMessage || 'در مدل سیستمی حداقل یک شرکت‌کننده داخلی با حساب کاربری لازم است.');
+          return;
+        }
+      }
+      setSubmitting(true);
+      try {
+        // 1. Persist current form values and get a fresh minuteId + updatedAt.
+        const saved = await ensureWorkingMinute({
+          saveCurrentValues: true,
+        });
+        if (!saved) return; // create/update failed; toast already shown
 
-      // 2. Submit using the real minute id and the updatedAt just returned.
-      const { data, error: rpcError } = await supabase.rpc('submit_minutes_for_approval', {
-        p_minute_id: saved.minuteId,
-        p_expected_updated_at: saved.updatedAt,
-        p_approval_mode: info.approvalMode,
-      });
-      if (rpcError) {
-        toast.error('ارسال صورت‌جلسه برای تأیید ناموفق بود.');
-        return;
+        // 2. Submit using the real minute id and the updatedAt just returned.
+        const { data, error: rpcError } = await supabase.rpc('submit_minutes_for_approval', {
+          p_minute_id: saved.minuteId,
+          p_expected_updated_at: saved.updatedAt,
+          p_approval_mode: info.approvalMode,
+        });
+        if (rpcError) {
+          toast.error('ارسال صورت‌جلسه برای تأیید ناموفق بود.');
+          return;
+        }
+        if (data && data.success === false) {
+          const code: string = data.error_code || 'INTERNAL_ERROR';
+          const msgs: Record<string, string> = {
+            NOT_AUTHENTICATED: 'برای ارسال باید وارد شده باشید.',
+            MINUTE_NOT_FOUND: 'صورت‌جلسه یافت نشد.',
+            MINUTES_NO_PERMISSION: 'شما اجازه ارسال این صورت‌جلسه را ندارید.',
+            MINUTE_NOT_SUBMITTABLE: 'این صورت‌جلسه در وضعیت قابل ارسال نیست.',
+            MINUTES_VERSION_CONFLICT: 'این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.',
+            APPROVAL_MODE_IMMUTABLE: 'مدل تأیید پس از اولین ارسال قابل تغییر نیست.',
+            INVALID_APPROVAL_MODE: 'مدل تأیید نامعتبر است.',
+            NO_ELIGIBLE_APPROVERS: 'هیچ شرکت‌کننده واجد شرایطی برای تأیید سیستمی وجود ندارد.',
+          };
+          toast.error(msgs[code] || 'ارسال صورت‌جلسه برای تأیید ناموفق بود.');
+          return;
+        }
+        if (data && data.success === true) {
+          toast.success('صورت‌جلسه برای تأیید ارسال شد.');
+          if (data.minute_id) setMinuteIdInUrl(data.minute_id as string);
+          setMinutesPageInUrl('minutes-detail');
+          onNavigate('minutes-detail');
+          return;
+        }
+        toast.error('پاسخ نامعتبر از سرور دریافت شد.');
+      } catch {
+        toast.error('خطای غیرمنتظره رخ داد.');
+      } finally {
+        setSubmitting(false);
       }
-      if (data && data.success === false) {
-        const code: string = data.error_code || 'INTERNAL_ERROR';
-        const msgs: Record<string, string> = {
-          NOT_AUTHENTICATED: 'برای ارسال باید وارد شده باشید.',
-          MINUTE_NOT_FOUND: 'صورت‌جلسه یافت نشد.',
-          MINUTES_NO_PERMISSION: 'شما اجازه ارسال این صورت‌جلسه را ندارید.',
-          MINUTE_NOT_SUBMITTABLE: 'این صورت‌جلسه در وضعیت قابل ارسال نیست.',
-          MINUTES_VERSION_CONFLICT: 'این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.',
-          APPROVAL_MODE_IMMUTABLE: 'مدل تأیید پس از اولین ارسال قابل تغییر نیست.',
-          INVALID_APPROVAL_MODE: 'مدل تأیید نامعتبر است.',
-          NO_ELIGIBLE_APPROVERS: 'هیچ شرکت‌کننده واجد شرایطی برای تأیید سیستمی وجود ندارد.',
-        };
-        toast.error(msgs[code] || 'ارسال صورت‌جلسه برای تأیید ناموفق بود.');
-        return;
-      }
-      if (data && data.success === true) {
-        toast.success('صورت‌جلسه برای تأیید ارسال شد.');
-        if (data.minute_id) setMinuteIdInUrl(data.minute_id as string);
-        setMinutesPageInUrl('minutes-detail');
-        onNavigate('minutes-detail');
-        return;
-      }
-      toast.error('پاسخ نامعتبر از سرور دریافت شد.');
-    } catch {
-      toast.error('خطای غیرمنتظره رخ داد.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    });
 
   // New-mode guard: require a valid meeting param (entry from meeting detail)
   if (mode === 'new' && !getMeetingIdFromUrl()) {
