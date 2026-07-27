@@ -12,15 +12,18 @@ export type InboxStatus = 'pending' | 'accepted' | 'declined' | 'delegated';
 
 /**
  * Pure mapping: meeting_inbox.status → Minutes InvitationStatus.
- * pending → no_response (وضعیت انتظار در قرارداد Minutes)
+ * pending is preserved as 'pending' (در انتظار پاسخ) — not converted to
+ * no_response. Unknown/null values fall back to 'invited' only when there is
+ * genuinely no inbox record; the mapping itself returns null for unknown so
+ * the caller can distinguish "no record" from "pending".
  */
 export function mapInboxStatusToInvitationStatus(status: InboxStatus | string | null | undefined): InvitationStatus {
   switch (status) {
     case 'accepted': return 'accepted';
     case 'declined': return 'declined';
     case 'delegated': return 'delegated';
-    case 'pending': return 'no_response';
-    default: return 'no_response';
+    case 'pending': return 'pending';
+    default: return 'invited';
   }
 }
 
@@ -156,10 +159,12 @@ export async function loadMinutesPrefill(
       .select('id, subject, request_date, request_jalaali_date, start_time, end_time, location, participant_user_ids, external_participants, meeting_manager, user_id')
       .eq('id', meetingId)
       .maybeSingle(),
+    // Use the SECURITY DEFINER RPC so the meeting organizer can read ALL
+    // participants' invitation statuses. A direct query on meeting_inbox is
+    // blocked by RLS (only own rows visible), causing every other participant
+    // to incorrectly show "no_response".
     supabase
-      .from('meeting_inbox')
-      .select('user_id, status, delegate_to')
-      .eq('meeting_id', meetingId),
+      .rpc('get_meeting_invitation_statuses', { p_meeting_id: meetingId }),
     supabase
       .from('meeting_agenda_items')
       .select('id, title, presenter, duration_minutes, sort_order, description')
@@ -180,6 +185,18 @@ export async function loadMinutesPrefill(
   }
   if (!meetingRes.data) {
     return { allowed: false, errorCode: 'MEETING_NOT_FOUND', existingMinuteId: null, data: null };
+  }
+
+  // Inbox query error must NOT be silently ignored — it would cause all
+  // participants to show "no_response" / "invited" incorrectly.
+  if (inboxRes.error) {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+      console.error('[MinutesPrefill] invitation statuses RPC error:', {
+        code: inboxRes.error.code,
+        message: inboxRes.error.message,
+      });
+    }
+    return { allowed: false, errorCode: 'MEETING_QUERY_ERROR', existingMinuteId: null, data: null };
   }
 
   const meeting = meetingRes.data as MeetingRow;

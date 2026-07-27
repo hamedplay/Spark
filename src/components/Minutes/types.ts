@@ -25,6 +25,7 @@ export type InvitationStatus =
   | 'accepted'
   | 'declined'
   | 'no_response'
+  | 'pending'
   | 'delegated';
 
 export type AttendanceStatus =

@@ -24,14 +24,14 @@ test('mapInboxStatus: delegated → delegated', () => {
   assert.equal(mapInboxStatusToInvitationStatus('delegated'), 'delegated');
 });
 
-test('mapInboxStatus: pending → no_response (وضعیت انتظار قرارداد Minutes)', () => {
-  assert.equal(mapInboxStatusToInvitationStatus('pending'), 'no_response');
+test('mapInboxStatus: pending → pending (در انتظار پاسخ)', () => {
+  assert.equal(mapInboxStatusToInvitationStatus('pending'), 'pending');
 });
 
-test('mapInboxStatus: null/undefined/unknown → no_response', () => {
-  assert.equal(mapInboxStatusToInvitationStatus(null), 'no_response');
-  assert.equal(mapInboxStatusToInvitationStatus(undefined), 'no_response');
-  assert.equal(mapInboxStatusToInvitationStatus('something_else'), 'no_response');
+test('mapInboxStatus: null/undefined/unknown → invited (fallback for no record)', () => {
+  assert.equal(mapInboxStatusToInvitationStatus(null), 'invited');
+  assert.equal(mapInboxStatusToInvitationStatus(undefined), 'invited');
+  assert.equal(mapInboxStatusToInvitationStatus('something_else'), 'invited');
 });
 
 // ── dedupeInternalParticipants ──────────────────────────────────────────────

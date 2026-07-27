@@ -30,6 +30,7 @@ const INVITATION_LABELS: Record<InvitationStatus, string> = {
   accepted: 'دعوت را پذیرفته است',
   declined: 'دعوت را رد کرده است',
   no_response: 'بدون پاسخ',
+  pending: 'در انتظار پاسخ',
   delegated: 'جانشین معرفی کرده است',
 };
 
@@ -39,6 +40,7 @@ const INVITATION_BADGE_CLASSES: Record<InvitationStatus, string> = {
   delegated: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
   invited: 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300',
   no_response: 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300',
+  pending: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
 };
 
 function InvitationBadge({ status }: { status: InvitationStatus }) {

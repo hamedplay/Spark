@@ -229,6 +229,22 @@ export function resolveMeetingDateGregorian(
   }
   if (gregorianInput) {
     const raw = toEnglishDigits(gregorianInput).trim();
+    // ISO timestamp (e.g. 2026-07-27T20:30:00.000Z): extract the calendar date
+    // in Asia/Tehran so the meeting day is not shifted by UTC offset.
+    // Never use slice(0,10) on a UTC timestamp — near midnight it flips the day.
+    if (raw.includes('T') || raw.includes('Z') || raw.includes('+')) {
+      const d = new Date(raw);
+      if (!Number.isNaN(d.getTime())) {
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Tehran',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+        const seg = parts.formatToParts(d);
+        const get = (t: string): string => seg.find(p => p.type === t)?.value ?? '';
+        return `${get('year')}-${get('month')}-${get('day')}`;
+      }
+      return null;
+    }
     const m = GREGORIAN_DATE_RE.exec(raw);
     if (m) {
       const [_, y, mm, d] = m;

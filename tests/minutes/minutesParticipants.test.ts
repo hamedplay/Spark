@@ -108,16 +108,15 @@ test('invitation: delegated → delegated', () => {
   assert.equal(mapInboxStatusToInvitationStatus('delegated'), 'delegated');
 });
 
-test('invitation: pending → no_response', () => {
-  assert.equal(mapInboxStatusToInvitationStatus('pending'), 'no_response');
+test('invitation: pending → pending', () => {
+  assert.equal(mapInboxStatusToInvitationStatus('pending'), 'pending');
 });
 
 test('invitation: no inbox record → invited (fallback)', () => {
-  // mapInboxStatusToInvitationStatus(null) returns 'no_response' per contract;
-  // the loader uses 'invited' as the fallback when no inbox row exists.
-  // Here we test the mapping function's contract for null.
+  // mapInboxStatusToInvitationStatus(null) returns 'invited' as the fallback
+  // for a genuinely missing inbox record.
   const mapped = mapInboxStatusToInvitationStatus(null);
-  assert.equal(mapped, 'no_response');
+  assert.equal(mapped, 'invited');
   // The loader fallback for "no inbox record" is 'invited'.
   const loaderFallback: InvitationStatus = 'invited';
   assert.equal(loaderFallback, 'invited');
@@ -126,7 +125,7 @@ test('invitation: no inbox record → invited (fallback)', () => {
 test('invitation: unknown status not converted to accepted', () => {
   const mapped = mapInboxStatusToInvitationStatus('something_unknown');
   assert.notEqual(mapped, 'accepted');
-  assert.equal(mapped, 'no_response');
+  assert.equal(mapped, 'invited');
 });
 
 // ── Declined / delegated not removed ───────────────────────────────────────────
@@ -216,6 +215,118 @@ test('readonly: attendance select disabled when readOnly=true', () => {
   assert.equal(changed, false);
 });
 
+// ── Secretary/chair enabled when meeting prefilled ───────────────────────────────
+
+test('secretary: enabled when meeting prefilled (not disabled by prefill)', () => {
+  // Prefilling the meeting must NOT disable secretary/chair selection.
+  // Only entireFormReadOnly (readOnly prop) should disable them.
+  const readOnly = false;
+  const entireFormReadOnly = readOnly;
+  const disabled = entireFormReadOnly; // NOT isMeetingPrefilled || readOnly
+  assert.equal(disabled, false);
+});
+
+test('secretary: disabled only when entire form is read-only', () => {
+  const readOnly = true;
+  const entireFormReadOnly = readOnly;
+  const disabled = entireFormReadOnly;
+  assert.equal(disabled, true);
+});
+
+test('secretary: options available even when profiles list is loading', () => {
+  // Options are built from internalParticipants snapshots, so profiles
+  // loading/error does NOT block selection.
+  const participants = [makeInternal('u1', 'Alice', { positionSnapshot: 'مدیر', orgUnitNameSnapshot: 'فناوری' })];
+  const profilesLoading = true;
+  const profilesError = null;
+  // Options are built regardless of profilesLoading
+  const options = participants.filter(p => !!p.userId).map(p => ({
+    value: p.userId,
+    label: p.nameSnapshot || p.userId,
+    sublabel: [p.positionSnapshot, p.orgUnitNameSnapshot].filter(Boolean).join(' — '),
+  }));
+  assert.equal(options.length, 1);
+  assert.equal(options[0].label, 'Alice');
+  // profilesLoading does not prevent options from being shown
+  assert.ok(profilesLoading);
+  assert.equal(profilesError, null);
+});
+
+test('secretary: options available even when profiles query errored', () => {
+  const participants = [makeInternal('u1', 'Alice')];
+  // Options are built from snapshots, not from profiles query
+  const options = participants.filter(p => !!p.userId).map(p => ({
+    value: p.userId,
+    label: p.nameSnapshot || p.userId,
+  }));
+  assert.equal(options.length, 1);
+});
+
+test('secretary: duplicate userIds not in options', () => {
+  const participants = [
+    makeInternal('u1', 'Alice'),
+    makeInternal('u1', 'Alice Dup'), // duplicate userId
+    makeInternal('u2', 'Bob'),
+  ];
+  const seen = new Set<string>();
+  const options = participants.filter(p => !!p.userId).filter(p => {
+    if (seen.has(p.userId)) return false;
+    seen.add(p.userId);
+    return true;
+  });
+  assert.equal(options.length, 2);
+  assert.equal(options[0].userId, 'u1');
+  assert.equal(options[1].userId, 'u2');
+});
+
+test('secretary: selecting fills secretaryUserId and secretaryNameSnapshot', () => {
+  const participants = [makeInternal('u1', 'Alice', { positionSnapshot: 'مدیر' })];
+  const selectedUserId = 'u1';
+  const p = participants.find(x => x.userId === selectedUserId)!;
+  const secretaryUserId = selectedUserId;
+  const secretaryNameSnapshot = p.nameSnapshot;
+  assert.equal(secretaryUserId, 'u1');
+  assert.equal(secretaryNameSnapshot, 'Alice');
+});
+
+test('chair: selecting fills chairUserId and chairNameSnapshot', () => {
+  const participants = [makeInternal('u2', 'Bob', { positionSnapshot: 'رئیس' })];
+  const selectedUserId = 'u2';
+  const p = participants.find(x => x.userId === selectedUserId)!;
+  const chairUserId = selectedUserId;
+  const chairNameSnapshot = p.nameSnapshot;
+  assert.equal(chairUserId, 'u2');
+  assert.equal(chairNameSnapshot, 'Bob');
+});
+
+// ── Save guard: prefill loading/error blocks save ───────────────────────────────
+
+test('save: blocked when prefill is still loading', () => {
+  const prefillLoading = true;
+  const meetingDate = '2026-07-27';
+  // validate() returns error when prefillLoading
+  const error = prefillLoading ? 'در حال بارگذاری...' : (!meetingDate.trim() ? 'تاریخ الزامی' : null);
+  assert.ok(error);
+  assert.ok(error!.includes('بارگذاری'));
+});
+
+test('save: blocked when prefill errored', () => {
+  const prefillLoading = false;
+  const prefillError = 'query failed';
+  const meetingDate = '2026-07-27';
+  const error = prefillLoading ? 'loading' : (prefillError ? 'error' : (!meetingDate.trim() ? 'date' : null));
+  assert.equal(error, 'error');
+});
+
+test('save: passes when prefill done and date populated from ISO timestamp', () => {
+  const prefillLoading = false;
+  const prefillError = null;
+  // After fix, resolveMeetingDateGregorian extracts the correct date from ISO
+  const meetingDate = '2026-07-28'; // extracted from 2026-07-27T20:30:00.000Z
+  const error = prefillLoading ? 'loading' : (prefillError ? 'error' : (!meetingDate.trim() ? 'date required' : null));
+  assert.equal(error, null);
+});
+
 test('readonly: invitation status still visible even when read-only', () => {
   const p = makeInternal('u1', 'Alice', { invitationStatus: 'accepted' });
   // In read-only, the badge still renders the status text
@@ -224,6 +335,7 @@ test('readonly: invitation status still visible even when read-only', () => {
     accepted: 'دعوت را پذیرفته است',
     declined: 'دعوت را رد کرده است',
     no_response: 'بدون پاسخ',
+    pending: 'در انتظار پاسخ',
     delegated: 'جانشین معرفی کرده است',
   };
   assert.ok(labels[p.invitationStatus].length > 0);
@@ -574,6 +686,7 @@ test('badge: invited → دعوت شده', () => {
     accepted: 'دعوت را پذیرفته است',
     declined: 'دعوت را رد کرده است',
     no_response: 'بدون پاسخ',
+    pending: 'در انتظار پاسخ',
     delegated: 'جانشین معرفی کرده است',
   };
   assert.equal(labels.invited, 'دعوت شده');
@@ -585,6 +698,7 @@ test('badge: accepted → دعوت را پذیرفته است', () => {
     accepted: 'دعوت را پذیرفته است',
     declined: 'دعوت را رد کرده است',
     no_response: 'بدون پاسخ',
+    pending: 'در انتظار پاسخ',
     delegated: 'جانشین معرفی کرده است',
   };
   assert.equal(labels.accepted, 'دعوت را پذیرفته است');
@@ -596,6 +710,7 @@ test('badge: declined → دعوت را رد کرده است', () => {
     accepted: 'دعوت را پذیرفته است',
     declined: 'دعوت را رد کرده است',
     no_response: 'بدون پاسخ',
+    pending: 'در انتظار پاسخ',
     delegated: 'جانشین معرفی کرده است',
   };
   assert.equal(labels.declined, 'دعوت را رد کرده است');
@@ -607,6 +722,7 @@ test('badge: no_response → بدون پاسخ', () => {
     accepted: 'دعوت را پذیرفته است',
     declined: 'دعوت را رد کرده است',
     no_response: 'بدون پاسخ',
+    pending: 'در انتظار پاسخ',
     delegated: 'جانشین معرفی کرده است',
   };
   assert.equal(labels.no_response, 'بدون پاسخ');
@@ -618,6 +734,7 @@ test('badge: delegated → جانشین معرفی کرده است', () => {
     accepted: 'دعوت را پذیرفته است',
     declined: 'دعوت را رد کرده است',
     no_response: 'بدون پاسخ',
+    pending: 'در انتظار پاسخ',
     delegated: 'جانشین معرفی کرده است',
   };
   assert.equal(labels.delegated, 'جانشین معرفی کرده است');

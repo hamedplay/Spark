@@ -494,6 +494,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     }));
 
   const validate = (): string | null => {
+    if (prefillLoading) return 'در حال بارگذاری اطلاعات جلسه...';
+    if (prefillError) return 'بارگذاری اطلاعات جلسه ناموفق بود. دوباره تلاش کنید.';
     if (!info.meetingId) return 'انتخاب جلسه الزامی است';
     if (!info.meetingTitle.trim()) return 'عنوان جلسه الزامی است';
     if (!info.meetingDate.trim()) return 'تاریخ جلسه الزامی است';

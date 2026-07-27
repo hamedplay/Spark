@@ -217,3 +217,34 @@ test('resolveMeetingDateGregorian: both invalid → null', () => {
   assert.equal(resolveMeetingDateGregorian('bad', 'also-bad'), null);
   assert.equal(resolveMeetingDateGregorian(null, null), null);
 });
+
+// ── ISO timestamp handling ─────────────────────────────────────────────────────
+
+test('resolveMeetingDateGregorian: ISO timestamp extracts Tehran calendar date', () => {
+  // 2026-07-27T20:30:00.000Z is 2026-07-28 01:00 in Tehran (UTC+3:30, no DST).
+  // The meeting day in Tehran is the 28th, not the 27th.
+  assert.equal(resolveMeetingDateGregorian(null, '2026-07-27T20:30:00.000Z'), '2026-07-28');
+});
+
+test('resolveMeetingDateGregorian: ISO timestamp near midnight UTC stays same day in Tehran', () => {
+  // 2026-07-26T10:00:00Z is 13:30 in Tehran — same calendar day (26th).
+  assert.equal(resolveMeetingDateGregorian(null, '2026-07-26T10:00:00Z'), '2026-07-26');
+});
+
+test('resolveMeetingDateGregorian: ISO timestamp with timezone offset', () => {
+  // 2026-07-27T23:00:00+00:00 is 2026-07-28 02:30 in Tehran.
+  assert.equal(resolveMeetingDateGregorian(null, '2026-07-27T23:00:00+00:00'), '2026-07-28');
+});
+
+test('resolveMeetingDateGregorian: plain YYYY-MM-DD still works', () => {
+  assert.equal(resolveMeetingDateGregorian(null, '2026-07-26'), '2026-07-26');
+});
+
+test('resolveMeetingDateGregorian: Jalali priority over ISO timestamp', () => {
+  assert.equal(resolveMeetingDateGregorian('1405/05/04', '2026-07-27T20:30:00.000Z'), '2026-07-26');
+});
+
+test('resolveMeetingDateGregorian: invalid ISO → null (not today)', () => {
+  assert.equal(resolveMeetingDateGregorian(null, 'not-a-timestamp'), null);
+  assert.equal(resolveMeetingDateGregorian(null, '2026-13-40T99:99:99Z'), null);
+});

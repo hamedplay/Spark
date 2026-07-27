@@ -24,15 +24,21 @@ interface SectionInfoProps {
   readOnly?: boolean;
 }
 
+// profilesLoading and profilesError are no longer used by the secretary/chair
+// selectors (options are built from internalParticipants snapshots), but are
+// kept in the props interface for callers that still pass them.
+void 0;
+
 export function SectionInfo({
   info, setInfo,
-  profiles, profilesLoading, profilesError,
+  profiles, _profilesLoading, _profilesError,
   orgUnits, orgUnitsLoading, orgUnitsError,
   prefillLoading, prefillError, isMeetingPrefilled, agendaLoading,
   onRetryPrefill,
   internalParticipants,
   readOnly = false,
 }: SectionInfoProps) {
+  void _profilesLoading; void _profilesError;
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
 
@@ -97,9 +103,12 @@ export function SectionInfo({
     }));
   };
 
-  // Prefilled meeting fields (title, date, times, location) are read-only in new mode
-  const prefilledReadOnly = isMeetingPrefilled;
-  const isReadOnly = prefilledReadOnly || readOnly;
+  // Prefilled meeting-derived fields (title, date, times, location) are
+  // read-only when the meeting is prefilled OR the entire form is read-only.
+  const meetingDerivedFieldsReadOnly = isMeetingPrefilled || readOnly;
+  // The entire form (including secretary/chair) is read-only only when readOnly.
+  // Prefilling the meeting must NOT disable secretary/chair selection.
+  const entireFormReadOnly = readOnly;
   const readOnlyClass = 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700/50 dark:text-gray-300 cursor-not-allowed';
 
   // Meeting date is stored as a Gregorian `YYYY-MM-DD` snapshot; display Jalali.
@@ -138,7 +147,7 @@ export function SectionInfo({
           </div>
         </div>
       )}
-      {isReadOnly && !prefillLoading && !prefillError && (
+      {meetingDerivedFieldsReadOnly && !prefillLoading && !prefillError && (
         <div className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl text-sm text-emerald-700 dark:text-emerald-300">
           <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
           اطلاعات این جلسه از تقویم بارگذاری شده و فقط‌خواندنی است. موضوع، تاریخ، ساعت‌ها و محل برگزاری در صورت‌جلسه ذخیره می‌شوند.
@@ -166,9 +175,9 @@ export function SectionInfo({
               id="meeting-title"
               type="text"
               value={info.meetingTitle}
-              onChange={isReadOnly ? undefined : e => update('meetingTitle', e.target.value)}
-              readOnly={isReadOnly}
-              className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+              onChange={meetingDerivedFieldsReadOnly ? undefined : e => update('meetingTitle', e.target.value)}
+              readOnly={meetingDerivedFieldsReadOnly}
+              className={meetingDerivedFieldsReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
               placeholder="عنوان جلسه را وارد کنید"
             />
           </div>
@@ -183,9 +192,9 @@ export function SectionInfo({
               id="meeting-date"
               type="text"
               value={toPersianDigits(meetingDateDisplay)}
-              onChange={isReadOnly ? undefined : e => update('meetingDate', e.target.value)}
-              readOnly={isReadOnly}
-              className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+              onChange={meetingDerivedFieldsReadOnly ? undefined : e => update('meetingDate', e.target.value)}
+              readOnly={meetingDerivedFieldsReadOnly}
+              className={meetingDerivedFieldsReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
               placeholder="۱۴۰۳/۰۵/۱۲"
             />
           </div>
@@ -199,9 +208,9 @@ export function SectionInfo({
               id="meeting-date"
               type="text"
               value={toPersianDigits(meetingDateDisplay)}
-              onChange={isReadOnly ? undefined : e => update('meetingDate', e.target.value)}
-              readOnly={isReadOnly}
-              className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+              onChange={meetingDerivedFieldsReadOnly ? undefined : e => update('meetingDate', e.target.value)}
+              readOnly={meetingDerivedFieldsReadOnly}
+              className={meetingDerivedFieldsReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
               placeholder="۱۴۰۳/۰۵/۱۲"
             />
           </div>
@@ -234,9 +243,9 @@ export function SectionInfo({
             id="start-time"
             type="time"
             value={startTimeDisplay}
-            onChange={isReadOnly ? undefined : e => update('startTime', e.target.value)}
-            readOnly={isReadOnly}
-            className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+            onChange={meetingDerivedFieldsReadOnly ? undefined : e => update('startTime', e.target.value)}
+            readOnly={meetingDerivedFieldsReadOnly}
+            className={meetingDerivedFieldsReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
           />
         </div>
 
@@ -248,9 +257,9 @@ export function SectionInfo({
             id="end-time"
             type="time"
             value={endTimeDisplay}
-            onChange={isReadOnly ? undefined : e => update('endTime', e.target.value)}
-            readOnly={isReadOnly}
-            className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+            onChange={meetingDerivedFieldsReadOnly ? undefined : e => update('endTime', e.target.value)}
+            readOnly={meetingDerivedFieldsReadOnly}
+            className={meetingDerivedFieldsReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
           />
         </div>
 
@@ -262,9 +271,9 @@ export function SectionInfo({
             id="location"
             type="text"
             value={info.location}
-            onChange={isReadOnly ? undefined : e => update('location', e.target.value)}
-            readOnly={isReadOnly}
-            className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+            onChange={meetingDerivedFieldsReadOnly ? undefined : e => update('location', e.target.value)}
+            readOnly={meetingDerivedFieldsReadOnly}
+            className={meetingDerivedFieldsReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
             placeholder="اتاق جلسات / آنلاین"
           />
         </div>
@@ -300,11 +309,10 @@ export function SectionInfo({
           <label htmlFor="secretary" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             دبیر جلسه <span className="text-red-500">*</span>
           </label>
-          {profilesLoading ? (
-            <LoadingSelect label="در حال بارگذاری کاربران..." />
-          ) : profilesError ? (
-            <ErrorState message={profilesError} />
-          ) : secretaryOptions.length === 0 ? (
+          {/* Secretary selector — limited to internal participants.
+              Options are built from internalParticipants snapshots, so
+              profiles loading/error does NOT block selection. */}
+          {secretaryOptions.length === 0 ? (
             <EmptyState message="ابتدا شرکت‌کنندگان داخلی را اضافه کنید." />
           ) : (
             <SearchableSelect
@@ -315,7 +323,7 @@ export function SectionInfo({
               placeholder="انتخاب دبیر از شرکت‌کنندگان"
               searchPlaceholder="جستجو بر اساس نام، سمت یا واحد..."
               emptyText="شرکت‌کننده‌ای یافت نشد"
-              disabled={isReadOnly}
+              disabled={entireFormReadOnly}
             />
           )}
         </div>
@@ -325,11 +333,10 @@ export function SectionInfo({
           <label htmlFor="chair" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             رئیس جلسه <span className="text-red-500">*</span>
           </label>
-          {profilesLoading ? (
-            <LoadingSelect label="در حال بارگذاری کاربران..." />
-          ) : profilesError ? (
-            <ErrorState message={profilesError} />
-          ) : chairOptions.length === 0 ? (
+          {/* Chair selector — limited to internal participants.
+              Options are built from internalParticipants snapshots, so
+              profiles loading/error does NOT block selection. */}
+          {chairOptions.length === 0 ? (
             <EmptyState message="ابتدا شرکت‌کنندگان داخلی را اضافه کنید." />
           ) : (
             <SearchableSelect
@@ -340,7 +347,7 @@ export function SectionInfo({
               placeholder="انتخاب رئیس از شرکت‌کنندگان"
               searchPlaceholder="جستجو بر اساس نام، سمت یا واحد..."
               emptyText="شرکت‌کننده‌ای یافت نشد"
-              disabled={isReadOnly}
+              disabled={entireFormReadOnly}
             />
           )}
         </div>

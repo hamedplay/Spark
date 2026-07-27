@@ -2,6 +2,7 @@ export const INVITATION_OPTIONS = [
   { value: 'invited',   label: 'دعوت‌شده' },
   { value: 'accepted',  label: 'پذیرفته' },
   { value: 'declined',  label: 'ردشده' },
+  { value: 'pending',  label: 'در انتظار پاسخ' },
   { value: 'no_response', label: 'بدون پاسخ' },
   { value: 'delegated', label: 'تفویض‌شده' },
 ];
