@@ -63,6 +63,7 @@ export interface DraftMeetingInfo {
 
 export interface DraftInternalParticipant {
   id: string;
+  participantId: string | null;
   userId: string;
   nameSnapshot: string;
   positionSnapshot: string;
@@ -71,17 +72,22 @@ export interface DraftInternalParticipant {
   invitationStatus: InvitationStatus;
   attendanceStatus: AttendanceStatus | null;
   delegate: string;
+  delegateUserId: string | null;
+  delegateName: string;
   notes: string;
 }
 
 export interface DraftExternalParticipant {
   id: string;
+  participantId: string | null;
   fullName: string;
   organization: string;
   position: string;
   mobile: string;
   email: string;
+  invitationStatus: InvitationStatus;
   attendanceStatus: AttendanceStatus | null;
+  notes: string;
 }
 
 export interface DraftAgendaItem {

@@ -173,8 +173,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         });
 
         const [ipRes, epRes, agRes, decRes] = await Promise.all([
-          supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
-          supabase.from('minutes_external_participants').select('id, full_name, organization, position, mobile, email, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
+          supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, notes, delegate_user_id, delegate_name').eq('minute_id', targetId).order('created_at', { ascending: true }),
+          supabase.from('minutes_external_participants').select('id, full_name, organization, position, mobile, email, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
           supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
         ]);
@@ -182,6 +182,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           const rows = ipRes.data as unknown as Record<string, unknown>[];
           setInternalParticipants(rows.length > 0 ? rows.map(r => ({
             id: uid(),
+            participantId: (r.id as string) || null,
             userId: (r.user_id as string) || '',
             nameSnapshot: (r.name_snapshot as string) || '',
             positionSnapshot: (r.position_snapshot as string) || '',
@@ -190,6 +191,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             invitationStatus: (r.invitation_status as InvitationStatus) || 'invited',
             attendanceStatus: (r.attendance_status as AttendanceStatus | null) ?? null,
             delegate: '',
+            delegateUserId: (r.delegate_user_id as string | null) ?? null,
+            delegateName: (r.delegate_name as string) || '',
             notes: (r.notes as string) || '',
           })) : [defaultInternalParticipant()]);
         }
@@ -197,12 +200,15 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           const rows = epRes.data as unknown as Record<string, unknown>[];
           setExternalParticipants(rows.length > 0 ? rows.map(r => ({
             id: uid(),
+            participantId: (r.id as string) || null,
             fullName: (r.full_name as string) || '',
             organization: (r.organization as string) || '',
             position: (r.position as string) || '',
             mobile: (r.mobile as string) || '',
             email: (r.email as string) || '',
+            invitationStatus: (r.invitation_status as InvitationStatus) || 'invited',
             attendanceStatus: (r.attendance_status as AttendanceStatus | null) ?? null,
+            notes: (r.notes as string) || '',
           })) : [defaultExternalParticipant()]);
         }
         if (agRes.data) {
@@ -415,6 +421,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         invitation_status: p.invitationStatus,
         attendance_status: p.attendanceStatus || null,
         notes: p.notes || null,
+        delegate_user_id: p.delegateUserId || null,
+        delegate_name: p.delegateName || null,
       })),
 
     external_participants: externalParticipants
@@ -425,8 +433,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         position: p.position || null,
         mobile: p.mobile || null,
         email: p.email || null,
+        invitation_status: p.invitationStatus,
         attendance_status: p.attendanceStatus || null,
-        notes: null,
+        notes: p.notes || null,
       })),
 
     agenda_results: agendaItems
@@ -935,6 +944,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 isMeetingPrefilled={mode === 'new' && !!info.meetingId}
                 agendaLoading={agendaLoading}
                 internalParticipants={internalParticipants}
+                readOnly={isNonEditable}
               />
             )}
             {activeSection === 1 && (
@@ -950,6 +960,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnitsLoading={orgUnitsLoading}
                 orgUnitsError={orgUnitsError}
                 invitationStatusReadOnly={mode === 'new'}
+                readOnly={isNonEditable}
               />
             )}
             {activeSection === 2 && (

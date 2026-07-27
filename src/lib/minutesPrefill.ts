@@ -52,12 +52,15 @@ export function mapExternalParticipantName(name: string | null | undefined): Dra
   if (!trimmed) return null;
   return {
     id: uid(),
+    participantId: null,
     fullName: trimmed,
     organization: '',
     position: '',
     mobile: '',
     email: '',
+    invitationStatus: 'invited',
     attendanceStatus: null,
+    notes: '',
   };
 }
 
@@ -93,6 +96,7 @@ interface MeetingRow {
 interface InboxRow {
   user_id: string;
   status: string;
+  delegate_to: string | null;
 }
 
 export interface MinutesPrefillData {
@@ -154,7 +158,7 @@ export async function loadMinutesPrefill(
       .maybeSingle(),
     supabase
       .from('meeting_inbox')
-      .select('user_id, status')
+      .select('user_id, status, delegate_to')
       .eq('meeting_id', meetingId),
     supabase
       .from('meeting_agenda_items')
@@ -197,6 +201,21 @@ export async function loadMinutesPrefill(
     }
   }
 
+  // Collect delegate user ids from inbox rows so we can resolve their names.
+  const delegateUserIds = Array.from(new Set(
+    inboxRows.map(r => r.delegate_to).filter((id): id is string => !!id)
+  ));
+  let delegateProfiles: ProfileOption[] = [];
+  if (delegateUserIds.length > 0) {
+    const { data: dpRows, error: dpErr } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, email, position, primary_unit_id')
+      .in('user_id', delegateUserIds);
+    if (!dpErr && dpRows) {
+      delegateProfiles = dpRows as ProfileOption[];
+    }
+  }
+
   // Fetch org units for participants' primary_unit_id
   const unitIds = Array.from(new Set(
     profiles.map(p => p.primary_unit_id).filter((id): id is string => !!id)
@@ -213,29 +232,42 @@ export async function loadMinutesPrefill(
   }
 
   // Build inbox status map
-  const inboxMap = new Map<string, InboxStatus>();
+  const inboxMap = new Map<string, InboxRow>();
   for (const row of inboxRows) {
-    inboxMap.set(row.user_id, row.status as InboxStatus);
+    inboxMap.set(row.user_id, row);
   }
 
   // Build internal participants from participant_user_ids + meeting_inbox
   const profileMap = new Map(profiles.map(p => [p.user_id, p]));
   const orgUnitMap = new Map(orgUnits.map(u => [u.id, u]));
+  const delegateProfileMap = new Map(delegateProfiles.map(p => [p.user_id, p]));
 
   const internalParticipants: DraftInternalParticipant[] = participantUserIds.map((userId) => {
     const profile = profileMap.get(userId);
     const unit = profile?.primary_unit_id ? orgUnitMap.get(profile.primary_unit_id) : undefined;
     const inboxStatus = inboxMap.get(userId);
+    // Fallback for missing profile: keep userId, use a safe placeholder name,
+    // and log in development so unresolved users are visible.
+    const fallbackName = 'همکار گرامی';
+    if (!profile && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+      console.warn('[MinutesPrefill] profile not found for userId:', userId);
+    }
+    const delegateTo = inboxStatus?.delegate_to ?? null;
+    const delegateProfile = delegateTo ? delegateProfileMap.get(delegateTo) : undefined;
+    const delegateName = delegateProfile ? (delegateProfile.full_name || delegateProfile.email || '') : '';
     return {
       id: uid(),
+      participantId: null,
       userId,
-      nameSnapshot: profile ? (profile.full_name || profile.email || '') : '',
+      nameSnapshot: profile ? (profile.full_name || profile.email || fallbackName) : fallbackName,
       positionSnapshot: profile?.position || '',
       orgUnitId: profile?.primary_unit_id || '',
       orgUnitNameSnapshot: unit?.name || '',
-      invitationStatus: mapInboxStatusToInvitationStatus(inboxStatus),
+      invitationStatus: mapInboxStatusToInvitationStatus(inboxStatus?.status),
       attendanceStatus: null,
       delegate: '',
+      delegateUserId: delegateTo,
+      delegateName,
       notes: '',
     };
   });

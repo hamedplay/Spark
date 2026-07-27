@@ -21,6 +21,7 @@ interface SectionInfoProps {
   onRetryPrefill?: () => void;
   agendaLoading: boolean;
   internalParticipants: DraftInternalParticipant[];
+  readOnly?: boolean;
 }
 
 export function SectionInfo({
@@ -30,6 +31,7 @@ export function SectionInfo({
   prefillLoading, prefillError, isMeetingPrefilled, agendaLoading,
   onRetryPrefill,
   internalParticipants,
+  readOnly = false,
 }: SectionInfoProps) {
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
@@ -47,6 +49,24 @@ export function SectionInfo({
       if (p.orgUnitNameSnapshot) sublabelParts.push(p.orgUnitNameSnapshot);
       return { value: p.userId, label, sublabel: sublabelParts.join(' — ') };
     });
+
+  // Legacy option: if the saved secretary/chair is no longer in the participant
+  // list (e.g. removed from the meeting), keep the value visible as a labelled
+  // legacy option rather than silently clearing it. Edit-mode load must not wipe
+  // the stored snapshot.
+  const buildLegacyOption = (userId: string, nameSnapshot: string) =>
+    userId && !participantProfileOptions.some(o => o.value === userId)
+      ? [{ value: userId, label: nameSnapshot || userId, sublabel: 'دبیر ثبت‌شده قبلی' }]
+      : [];
+
+  const secretaryOptions = [
+    ...participantProfileOptions,
+    ...buildLegacyOption(info.secretaryUserId, info.secretaryNameSnapshot),
+  ];
+  const chairOptions = [
+    ...participantProfileOptions,
+    ...buildLegacyOption(info.chairUserId, info.chairNameSnapshot),
+  ];
 
   const handleSecretaryChange = (userId: string) => {
     const p = profiles.find(x => x.user_id === userId);
@@ -78,7 +98,8 @@ export function SectionInfo({
   };
 
   // Prefilled meeting fields (title, date, times, location) are read-only in new mode
-  const readOnly = isMeetingPrefilled;
+  const prefilledReadOnly = isMeetingPrefilled;
+  const isReadOnly = prefilledReadOnly || readOnly;
   const readOnlyClass = 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700/50 dark:text-gray-300 cursor-not-allowed';
 
   // Meeting date is stored as a Gregorian `YYYY-MM-DD` snapshot; display Jalali.
@@ -117,7 +138,7 @@ export function SectionInfo({
           </div>
         </div>
       )}
-      {readOnly && !prefillLoading && !prefillError && (
+      {isReadOnly && !prefillLoading && !prefillError && (
         <div className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl text-sm text-emerald-700 dark:text-emerald-300">
           <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
           اطلاعات این جلسه از تقویم بارگذاری شده و فقط‌خواندنی است. موضوع، تاریخ، ساعت‌ها و محل برگزاری در صورت‌جلسه ذخیره می‌شوند.
@@ -125,35 +146,66 @@ export function SectionInfo({
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="sm:col-span-2">
-          <label htmlFor="meeting-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            عنوان جلسه <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="meeting-title"
-            type="text"
-            value={info.meetingTitle}
-            onChange={readOnly ? undefined : e => update('meetingTitle', e.target.value)}
-            readOnly={readOnly}
-            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
-            placeholder="عنوان جلسه را وارد کنید"
-          />
-        </div>
+        {/* Meeting base — read-only display instead of a selector when prefilled */}
+        {isMeetingPrefilled && info.meetingTitle ? (
+          <div className="sm:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              جلسه مبنا
+            </label>
+            <div className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700/50 dark:text-gray-300">
+              {info.meetingTitle}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">جلسه مبنا قابل تغییر نیست.</p>
+          </div>
+        ) : (
+          <div className="sm:col-span-2">
+            <label htmlFor="meeting-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              عنوان جلسه <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="meeting-title"
+              type="text"
+              value={info.meetingTitle}
+              onChange={isReadOnly ? undefined : e => update('meetingTitle', e.target.value)}
+              readOnly={isReadOnly}
+              className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+              placeholder="عنوان جلسه را وارد کنید"
+            />
+          </div>
+        )}
 
-        <div>
-          <label htmlFor="meeting-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            تاریخ جلسه <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="meeting-date"
-            type="text"
-            value={toPersianDigits(meetingDateDisplay)}
-            onChange={readOnly ? undefined : e => update('meetingDate', e.target.value)}
-            readOnly={readOnly}
-            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
-            placeholder="۱۴۰۳/۰۵/۱۲"
-          />
-        </div>
+        {isMeetingPrefilled && (
+          <div>
+            <label htmlFor="meeting-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              تاریخ جلسه <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="meeting-date"
+              type="text"
+              value={toPersianDigits(meetingDateDisplay)}
+              onChange={isReadOnly ? undefined : e => update('meetingDate', e.target.value)}
+              readOnly={isReadOnly}
+              className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+              placeholder="۱۴۰۳/۰۵/۱۲"
+            />
+          </div>
+        )}
+        {!isMeetingPrefilled && (
+          <div>
+            <label htmlFor="meeting-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              تاریخ جلسه <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="meeting-date"
+              type="text"
+              value={toPersianDigits(meetingDateDisplay)}
+              onChange={isReadOnly ? undefined : e => update('meetingDate', e.target.value)}
+              readOnly={isReadOnly}
+              className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+              placeholder="۱۴۰۳/۰۵/۱۲"
+            />
+          </div>
+        )}
 
         <div>
           <label htmlFor="meeting-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -182,9 +234,9 @@ export function SectionInfo({
             id="start-time"
             type="time"
             value={startTimeDisplay}
-            onChange={readOnly ? undefined : e => update('startTime', e.target.value)}
-            readOnly={readOnly}
-            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+            onChange={isReadOnly ? undefined : e => update('startTime', e.target.value)}
+            readOnly={isReadOnly}
+            className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
           />
         </div>
 
@@ -196,9 +248,9 @@ export function SectionInfo({
             id="end-time"
             type="time"
             value={endTimeDisplay}
-            onChange={readOnly ? undefined : e => update('endTime', e.target.value)}
-            readOnly={readOnly}
-            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+            onChange={isReadOnly ? undefined : e => update('endTime', e.target.value)}
+            readOnly={isReadOnly}
+            className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
           />
         </div>
 
@@ -210,9 +262,9 @@ export function SectionInfo({
             id="location"
             type="text"
             value={info.location}
-            onChange={readOnly ? undefined : e => update('location', e.target.value)}
-            readOnly={readOnly}
-            className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
+            onChange={isReadOnly ? undefined : e => update('location', e.target.value)}
+            readOnly={isReadOnly}
+            className={isReadOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
             placeholder="اتاق جلسات / آنلاین"
           />
         </div>
@@ -252,17 +304,18 @@ export function SectionInfo({
             <LoadingSelect label="در حال بارگذاری کاربران..." />
           ) : profilesError ? (
             <ErrorState message={profilesError} />
-          ) : participantProfileOptions.length === 0 ? (
+          ) : secretaryOptions.length === 0 ? (
             <EmptyState message="ابتدا شرکت‌کنندگان داخلی را اضافه کنید." />
           ) : (
             <SearchableSelect
               id="secretary"
               value={info.secretaryUserId}
-              options={participantProfileOptions}
+              options={secretaryOptions}
               onChange={handleSecretaryChange}
               placeholder="انتخاب دبیر از شرکت‌کنندگان"
               searchPlaceholder="جستجو بر اساس نام، سمت یا واحد..."
               emptyText="شرکت‌کننده‌ای یافت نشد"
+              disabled={isReadOnly}
             />
           )}
         </div>
@@ -276,17 +329,18 @@ export function SectionInfo({
             <LoadingSelect label="در حال بارگذاری کاربران..." />
           ) : profilesError ? (
             <ErrorState message={profilesError} />
-          ) : participantProfileOptions.length === 0 ? (
+          ) : chairOptions.length === 0 ? (
             <EmptyState message="ابتدا شرکت‌کنندگان داخلی را اضافه کنید." />
           ) : (
             <SearchableSelect
               id="chair"
               value={info.chairUserId}
-              options={participantProfileOptions}
+              options={chairOptions}
               onChange={handleChairChange}
               placeholder="انتخاب رئیس از شرکت‌کنندگان"
               searchPlaceholder="جستجو بر اساس نام، سمت یا واحد..."
               emptyText="شرکت‌کننده‌ای یافت نشد"
+              disabled={isReadOnly}
             />
           )}
         </div>

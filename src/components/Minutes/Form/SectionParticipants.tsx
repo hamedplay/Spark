@@ -1,5 +1,11 @@
 import { Plus, Trash2 } from 'lucide-react';
-import type { DraftInternalParticipant, DraftExternalParticipant, ProfileOption, OrgUnitOption } from './types';
+import type {
+  DraftInternalParticipant,
+  DraftExternalParticipant,
+  ProfileOption,
+  OrgUnitOption,
+  InvitationStatus,
+} from './types';
 import { defaultInternalParticipant, defaultExternalParticipant } from './defaults';
 import { InputField, SelectField, ErrorState, LoadingRow, EmptyState } from './fields';
 import { INVITATION_OPTIONS, ATTENDANCE_OPTIONS_WITH_NULL } from './options';
@@ -16,6 +22,31 @@ interface SectionParticipantsProps {
   orgUnitsLoading: boolean;
   orgUnitsError: string | null;
   invitationStatusReadOnly?: boolean;
+  readOnly?: boolean;
+}
+
+const INVITATION_LABELS: Record<InvitationStatus, string> = {
+  invited: 'دعوت شده',
+  accepted: 'دعوت را پذیرفته است',
+  declined: 'دعوت را رد کرده است',
+  no_response: 'بدون پاسخ',
+  delegated: 'جانشین معرفی کرده است',
+};
+
+const INVITATION_BADGE_CLASSES: Record<InvitationStatus, string> = {
+  accepted: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  declined: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  delegated: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+  invited: 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300',
+  no_response: 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300',
+};
+
+function InvitationBadge({ status }: { status: InvitationStatus }) {
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${INVITATION_BADGE_CLASSES[status]}`}>
+      {INVITATION_LABELS[status]}
+    </span>
+  );
 }
 
 export function SectionParticipants({
@@ -30,6 +61,7 @@ export function SectionParticipants({
   orgUnitsLoading,
   orgUnitsError,
   invitationStatusReadOnly = false,
+  readOnly = false,
 }: SectionParticipantsProps) {
   const addInternal = () =>
     setInternalParticipants(l => [...l, defaultInternalParticipant()]);
@@ -86,69 +118,96 @@ export function SectionParticipants({
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">شرکت‌کنندگان داخلی</h3>
-          <button
-            onClick={addInternal}
-            disabled={usersDisabled}
-            className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-40"
-          >
-            <Plus className="w-3.5 h-3.5" /> افزودن
-          </button>
+          {!readOnly && (
+            <button
+              onClick={addInternal}
+              disabled={usersDisabled}
+              className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-40"
+            >
+              <Plus className="w-3.5 h-3.5" /> افزودن
+            </button>
+          )}
         </div>
         {profilesError && <ErrorState message={profilesError} />}
         {!profilesError && profilesLoading ? (
           <LoadingRow label="در حال بارگذاری کاربران..." />
-        ) : !profilesError && profiles.length === 0 ? (
-          <EmptyState message="هیچ کاربری برای انتخاب وجود ندارد." />
+        ) : !profilesError && internalParticipants.length === 0 ? (
+          <EmptyState message="شرکت‌کننده داخلی برای این جلسه ثبت نشده است." />
         ) : (
         <div className="space-y-3">
           {internalParticipants.map(row => (
-            <div key={row.id} className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
-              {/* User selector */}
-              <div>
-                <label htmlFor={`int-user-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">کاربر</label>
-                <select
-                  id={`int-user-${row.id}`}
-                  value={row.userId}
-                  onChange={e => handleInternalUserChange(row.id, e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">انتخاب کنید</option>
-                  {profiles.map(p => (
-                    <option key={p.user_id} value={p.user_id}>
-                      {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
-                    </option>
-                  ))}
-                </select>
+            <div key={row.id} className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                {/* User selector */}
+                <div>
+                  <label htmlFor={`int-user-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">کاربر</label>
+                  <select
+                    id={`int-user-${row.id}`}
+                    value={row.userId}
+                    onChange={e => handleInternalUserChange(row.id, e.target.value)}
+                    disabled={readOnly}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <option value="">انتخاب کنید</option>
+                    {profiles.map(p => (
+                      <option key={p.user_id} value={p.user_id}>
+                        {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* Position snapshot */}
+                <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.positionSnapshot} onChange={v => updateInternal(row.id, 'positionSnapshot', v)} />
+                {/* Org unit selector */}
+                <div>
+                  <label htmlFor={`int-unit-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
+                  <select
+                    id={`int-unit-${row.id}`}
+                    value={row.orgUnitId}
+                    onChange={e => handleInternalOrgUnitChange(row.id, e.target.value)}
+                    disabled={orgUnitsDisabled || readOnly}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <option value="">انتخاب کنید</option>
+                    {orgUnits.map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* Invitation status — read-only badge or disabled select */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">وضعیت دعوت</label>
+                  {invitationStatusReadOnly ? (
+                    <div className="px-3 py-2">
+                      <InvitationBadge status={row.invitationStatus} />
+                    </div>
+                  ) : (
+                    <SelectField id={`int-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateInternal(row.id, 'invitationStatus', v)} disabled={readOnly} />
+                  )}
+                </div>
+                {/* Attendance status */}
+                <SelectField id={`int-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateInternal(row.id, 'attendanceStatus', v)} disabled={readOnly} />
+                {/* Remove */}
+                {!readOnly && (
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => removeInternal(row.id)}
+                      aria-label="حذف ردیف"
+                      className="p-2 rounded-xl text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
-              {/* Position snapshot (read-only display from profile, editable) */}
-              <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.positionSnapshot} onChange={v => updateInternal(row.id, 'positionSnapshot', v)} />
-              {/* Org unit selector */}
-              <div>
-                <label htmlFor={`int-unit-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
-                <select
-                  id={`int-unit-${row.id}`}
-                  value={row.orgUnitId}
-                  onChange={e => handleInternalOrgUnitChange(row.id, e.target.value)}
-                  disabled={orgUnitsDisabled}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-40"
-                >
-                  <option value="">انتخاب کنید</option>
-                  {orgUnits.map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-              <SelectField id={`int-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateInternal(row.id, 'invitationStatus', v)} disabled={invitationStatusReadOnly} />
-              <SelectField id={`int-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateInternal(row.id, 'attendanceStatus', v)} />
-              <div className="flex items-end">
-                <button
-                  onClick={() => removeInternal(row.id)}
-                  aria-label="حذف ردیف"
-                  className="p-2 rounded-xl text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              {/* Delegate display */}
+              {row.delegateName && (
+                <div className="text-xs text-orange-600 dark:text-orange-400 px-1">
+                  جانشین: {row.delegateName}
+                </div>
+              )}
+              {/* Notes */}
+              <InputField id={`int-notes-${row.id}`} label="یادداشت" placeholder="یادداشت اختیاری" value={row.notes} onChange={v => updateInternal(row.id, 'notes', v)} />
             </div>
           ))}
         </div>
@@ -158,34 +217,49 @@ export function SectionParticipants({
       {/* External participants */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">شرکت‌کنندگان خارجی</h3>
-          <button
-            onClick={addExternal}
-            className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline"
-          >
-            <Plus className="w-3.5 h-3.5" /> افزودن
-          </button>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">افراد خارج از سازمان</h3>
+          {!readOnly && (
+            <button
+              onClick={addExternal}
+              className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              <Plus className="w-3.5 h-3.5" /> افزودن
+            </button>
+          )}
         </div>
+        {externalParticipants.length === 0 ? (
+          <EmptyState message="فرد خارج از سازمان برای این جلسه ثبت نشده است." />
+        ) : (
         <div className="space-y-3">
           {externalParticipants.map(row => (
-            <div key={row.id} className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
-              <InputField id={`ext-name-${row.id}`} label="نام و نام خانوادگی" placeholder="" value={row.fullName} onChange={v => updateExternal(row.id, 'fullName', v)} />
-              <InputField id={`ext-org-${row.id}`} label="سازمان" placeholder="" value={row.organization} onChange={v => updateExternal(row.id, 'organization', v)} />
-              <InputField id={`ext-pos-${row.id}`} label="سمت" placeholder="" value={row.position} onChange={v => updateExternal(row.id, 'position', v)} />
-              <InputField id={`ext-mob-${row.id}`} label="موبایل" placeholder="" value={row.mobile} onChange={v => updateExternal(row.id, 'mobile', v)} />
-              <SelectField id={`ext-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateExternal(row.id, 'attendanceStatus', v)} />
-              <div className="flex items-end">
-                <button
-                  onClick={() => removeExternal(row.id)}
-                  aria-label="حذف ردیف"
-                  className="p-2 rounded-xl text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+            <div key={row.id} className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                <InputField id={`ext-name-${row.id}`} label="نام و نام خانوادگی" placeholder="" value={row.fullName} onChange={v => updateExternal(row.id, 'fullName', v)} />
+                <InputField id={`ext-org-${row.id}`} label="سازمان" placeholder="" value={row.organization} onChange={v => updateExternal(row.id, 'organization', v)} />
+                <InputField id={`ext-pos-${row.id}`} label="سمت" placeholder="" value={row.position} onChange={v => updateExternal(row.id, 'position', v)} />
+                <InputField id={`ext-mob-${row.id}`} label="موبایل" placeholder="" value={row.mobile} onChange={v => updateExternal(row.id, 'mobile', v)} />
+                <InputField id={`ext-email-${row.id}`} label="ایمیل" placeholder="" value={row.email} onChange={v => updateExternal(row.id, 'email', v)} />
+                <SelectField id={`ext-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateExternal(row.id, 'invitationStatus', v)} disabled={readOnly} />
+                <SelectField id={`ext-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateExternal(row.id, 'attendanceStatus', v)} disabled={readOnly} />
+                <div className="lg:col-span-5">
+                  <InputField id={`ext-notes-${row.id}`} label="یادداشت" placeholder="یادداشت اختیاری" value={row.notes} onChange={v => updateExternal(row.id, 'notes', v)} />
+                </div>
+                {!readOnly && (
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => removeExternal(row.id)}
+                      aria-label="حذف ردیف"
+                      className="p-2 rounded-xl text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

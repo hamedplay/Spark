@@ -29,6 +29,7 @@ export const defaultInfo: DraftMeetingInfo = {
 
 export const defaultInternalParticipant = (): DraftInternalParticipant => ({
   id: uid(),
+  participantId: null,
   userId: '',
   nameSnapshot: '',
   positionSnapshot: '',
@@ -37,17 +38,22 @@ export const defaultInternalParticipant = (): DraftInternalParticipant => ({
   invitationStatus: 'invited',
   attendanceStatus: null,
   delegate: '',
+  delegateUserId: null,
+  delegateName: '',
   notes: '',
 });
 
 export const defaultExternalParticipant = (): DraftExternalParticipant => ({
   id: uid(),
+  participantId: null,
   fullName: '',
   organization: '',
   position: '',
   mobile: '',
   email: '',
+  invitationStatus: 'invited',
   attendanceStatus: null,
+  notes: '',
 });
 
 export const defaultAgendaItem = (order: number): DraftAgendaItem => ({
