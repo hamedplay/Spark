@@ -58,8 +58,8 @@ export function SectionAgenda({
         <EmptyState message="هیچ دستور جلساتی یافت نشد." />
       ) : (
       agendaItems.map((item, idx) => (
-        <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
+        <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl">
+          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 rounded-t-2xl">
             <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">دستور {idx + 1}</span>
             {item.meetingAgendaItemId && (

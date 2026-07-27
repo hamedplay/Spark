@@ -163,7 +163,7 @@ export function JalaliDatePicker({
           <button
             type="button"
             onClick={handleClear}
-            className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-400"
+            className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-400 z-10"
             aria-label="پاک کردن تاریخ"
           >
             <X className="w-3.5 h-3.5" />
@@ -177,7 +177,7 @@ export function JalaliDatePicker({
       )}
 
       {open && !disabled && !readOnly && (
-        <div className="absolute z-50 top-full mt-1 right-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 p-3 w-72 shadow-xl" dir="rtl">
+        <div className="absolute z-50 top-full mt-1 right-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 p-3 w-72 max-w-[calc(100vw-2rem)] shadow-xl" dir="rtl">
           <div className="flex items-center justify-between mb-3">
             <button type="button" onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
               <ChevronRight className="w-4 h-4" />

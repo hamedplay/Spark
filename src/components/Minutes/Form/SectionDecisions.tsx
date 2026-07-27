@@ -208,8 +208,8 @@ function DecisionsForm({
       )}
 
       {decisions.map((item, idx) => (
-        <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
+        <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl">
+          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 rounded-t-2xl">
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">مصوبه {idx + 1}</span>
             {item.agendaResultId && (
               <span className="text-xs text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">از دستور جلسه</span>
@@ -221,7 +221,7 @@ function DecisionsForm({
               </button>
             )}
           </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-b-2xl">
             <div className="sm:col-span-2">
               <InputField id={`dec-title-${item.id}`} label="عنوان مصوبه" placeholder="عنوان مصوبه را وارد کنید" value={item.title} onChange={v => update(item.id, 'title', v)} />
             </div>

@@ -84,7 +84,7 @@ export function SearchableSelect({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg max-h-64 overflow-hidden flex flex-col">
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg max-h-64 overflow-hidden flex flex-col">
           <div className="p-2 border-b border-gray-100 dark:border-gray-700">
             <input
               type="text"
