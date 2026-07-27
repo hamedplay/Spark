@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, MoreVertical, FilePlus, ArrowRightFromLine } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Plus, Trash2, MoveVertical as MoreVertical, FilePlus, ArrowRightFromLine } from 'lucide-react';
 import type { DraftDecision, ProfileOption, OrgUnitOption, DraftAgendaItem } from './types';
 import { defaultDecision } from './defaults';
 import { InputField, TextareaField, SelectField } from './fields';
 import { PRIORITY_OPTIONS } from './options';
 import { SearchableSelect } from './SearchableSelect';
-import { JalaliDateField } from './JalaliDateField';
+import { JalaliDatePicker } from './JalaliDatePicker';
+import { isDueBeforeStart } from '../../../lib/minutesDate';
 
 interface SectionDecisionsProps {
   decisions: DraftDecision[];
@@ -111,6 +112,19 @@ function DecisionsForm({
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
   const [showAgendaPicker, setShowAgendaPicker] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Per-decision validation errors for the Jalali date fields.
+  const dateErrors = useMemo(() => {
+    const errs: Record<string, { start?: string; due?: string }> = {};
+    for (const d of decisions) {
+      const e: { start?: string; due?: string } = {};
+      if (d.startDate && d.dueDate && isDueBeforeStart(d.startDate, d.dueDate)) {
+        e.due = 'مهلت انجام نمی‌تواند قبل از تاریخ شروع باشد.';
+      }
+      if (Object.keys(e).length > 0) errs[d.id] = e;
+    }
+    return errs;
+  }, [decisions]);
 
   useEffect(() => {
     if (!openMenuFor) return;
@@ -250,20 +264,24 @@ function DecisionsForm({
             </div>
             <div>
               <label htmlFor={`dec-start-${item.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ شروع</label>
-              <JalaliDateField
+              <JalaliDatePicker
                 id={`dec-start-${item.id}`}
-                value={item.startDate}
-                onChange={v => update(item.id, 'startDate', v)}
+                value={item.startDate || null}
+                onChange={v => update(item.id, 'startDate', v ?? '')}
                 disabled={!!readOnly}
+                placeholder="انتخاب تاریخ شروع"
               />
             </div>
             <div>
               <label htmlFor={`dec-due-${item.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">مهلت انجام</label>
-              <JalaliDateField
+              <JalaliDatePicker
                 id={`dec-due-${item.id}`}
-                value={item.dueDate}
-                onChange={v => update(item.id, 'dueDate', v)}
+                value={item.dueDate || null}
+                onChange={v => update(item.id, 'dueDate', v ?? '')}
                 disabled={!!readOnly}
+                minDate={item.startDate || null}
+                placeholder="انتخاب مهلت انجام"
+                error={dateErrors[item.id]?.due}
               />
             </div>
             <SelectField id={`dec-priority-${item.id}`} label="اولویت" options={PRIORITY_OPTIONS} value={item.priority} onChange={v => update(item.id, 'priority', v)} />

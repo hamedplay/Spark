@@ -7,6 +7,7 @@ import { MinutesDocumentLayout } from '../MinutesDocumentLayout';
 import { buildDocumentDataFromDraft } from '../MinutesDocumentFromDraft';
 import type { MinutesDocumentData } from '../MinutesDocumentData';
 import { uploadMinuteAttachment, validateAttachment, type AttachmentRow } from '../../../lib/minutesAttachments';
+import { JalaliDatePicker } from './JalaliDatePicker';
 
 interface SectionFinalProps {
   finalization: DraftFinalization;
@@ -140,7 +141,15 @@ export function SectionFinal({
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <InputField id="sign-date" label="تاریخ امضا" placeholder="۱۴۰۳/۰۵/۱۸" value={finalization.signDate} onChange={v => update('signDate', v)} />
+        <div>
+          <label htmlFor="sign-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ امضا</label>
+          <JalaliDatePicker
+            id="sign-date"
+            value={finalization.signDate || null}
+            onChange={v => update('signDate', v ?? '')}
+            placeholder="انتخاب تاریخ امضا"
+          />
+        </div>
         <InputField id="version-number" label="شماره نسخه" placeholder="۱.۰" value={finalization.versionNumber} onChange={v => update('versionNumber', v)} />
         <div className="sm:col-span-2">
           <TextareaField id="version-notes" label="توضیحات نسخه" rows={2} value={finalization.versionNotes} onChange={v => update('versionNotes', v)} />

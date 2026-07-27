@@ -4,6 +4,7 @@ import type { ConfidentialityLevel, ApprovalMode } from '../types';
 import type { DraftMeetingInfo, ProfileOption, OrgUnitOption, DraftInternalParticipant } from './types';
 import { LoadingSelect, ErrorState, EmptyState } from './fields';
 import { SearchableSelect } from './SearchableSelect';
+import { gregorianToJalaliDate, normalizeClockTime, toPersianDigits } from '../../../lib/minutesDate';
 
 interface SectionInfoProps {
   info: DraftMeetingInfo;
@@ -80,6 +81,11 @@ export function SectionInfo({
   const readOnly = isMeetingPrefilled;
   const readOnlyClass = 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700/50 dark:text-gray-300 cursor-not-allowed';
 
+  // Meeting date is stored as a Gregorian `YYYY-MM-DD` snapshot; display Jalali.
+  const meetingDateDisplay = gregorianToJalaliDate(info.meetingDate) ?? info.meetingDate;
+  const startTimeDisplay = normalizeClockTime(info.startTime) ?? info.startTime;
+  const endTimeDisplay = normalizeClockTime(info.endTime) ?? info.endTime;
+
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
@@ -141,7 +147,7 @@ export function SectionInfo({
           <input
             id="meeting-date"
             type="text"
-            value={info.meetingDate}
+            value={toPersianDigits(meetingDateDisplay)}
             onChange={readOnly ? undefined : e => update('meetingDate', e.target.value)}
             readOnly={readOnly}
             className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
@@ -175,7 +181,7 @@ export function SectionInfo({
           <input
             id="start-time"
             type="time"
-            value={info.startTime}
+            value={startTimeDisplay}
             onChange={readOnly ? undefined : e => update('startTime', e.target.value)}
             readOnly={readOnly}
             className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}
@@ -189,7 +195,7 @@ export function SectionInfo({
           <input
             id="end-time"
             type="time"
-            value={info.endTime}
+            value={endTimeDisplay}
             onChange={readOnly ? undefined : e => update('endTime', e.target.value)}
             readOnly={readOnly}
             className={readOnly ? readOnlyClass : 'w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white'}

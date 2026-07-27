@@ -6,6 +6,7 @@ import type {
 } from '../components/Minutes/Form/types';
 import { uid, defaultInternalParticipant, defaultExternalParticipant, defaultAgendaItem } from '../components/Minutes/Form/defaults';
 import { checkMinutesAccessForMeeting } from './minutesMeetingAccess';
+import { normalizeClockTime, resolveMeetingDateGregorian } from './minutesDate';
 
 export type InboxStatus = 'pending' | 'accepted' | 'declined' | 'delegated';
 
@@ -79,6 +80,7 @@ interface MeetingRow {
   id: string;
   subject: string;
   request_date: string | null;
+  request_jalaali_date: string | null;
   start_time: string | null;
   end_time: string | null;
   location: string | null;
@@ -147,7 +149,7 @@ export async function loadMinutesPrefill(
   ] = await Promise.all([
     supabase
       .from('meetings')
-      .select('id, subject, request_date, start_time, end_time, location, participant_user_ids, external_participants, meeting_manager, user_id')
+      .select('id, subject, request_date, request_jalaali_date, start_time, end_time, location, participant_user_ids, external_participants, meeting_manager, user_id')
       .eq('id', meetingId)
       .maybeSingle(),
     supabase
@@ -261,12 +263,20 @@ export async function loadMinutesPrefill(
   // remain for the user to select.
   // meeting_type and org_unit_id do not exist on the meetings table.
   // These fields are left empty for the user to fill in; no fabricated values.
+  // Resolve the meeting date into a Gregorian `YYYY-MM-DD` snapshot value.
+  // Priority: request_jalaali_date (Jalali → Gregorian) → request_date.
+  // Invalid dates become null (never replaced with "today"). No timezone shift.
+  const resolvedDate = resolveMeetingDateGregorian(
+    meeting.request_jalaali_date,
+    meeting.request_date,
+  );
+
   const info: Partial<DraftMeetingInfo> = {
     meetingId: meeting.id,
     meetingTitle: meeting.subject || '',
-    meetingDate: meeting.request_date || '',
-    startTime: meeting.start_time || '',
-    endTime: meeting.end_time || '',
+    meetingDate: resolvedDate ?? '',
+    startTime: normalizeClockTime(meeting.start_time) ?? '',
+    endTime: normalizeClockTime(meeting.end_time) ?? '',
     location: meeting.location || '',
     meetingType: '',
     orgUnitId: '',

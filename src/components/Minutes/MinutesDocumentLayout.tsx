@@ -8,6 +8,7 @@ import {
   SYSTEM_TITLE, FALLBACK_LOGO, chunkArray,
 } from './MinutesDocumentData';
 import type { ConfidentialityLevel, MinutesStatus, ApprovalMode } from './types';
+import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
 
 interface MinutesDocumentLayoutProps {
   data: MinutesDocumentData;
@@ -66,7 +67,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           <h1>صورت‌جلسه</h1>
           <div className="mp-sub">{minute.meeting_title_snapshot}</div>
           <div className="mp-meta">
-            تاریخ جلسه: {minute.meeting_date_snapshot} — شماره نسخه: {minute.revision_number}
+            تاریخ جلسه: {toPersianDigits(gregorianToJalaliDate(minute.meeting_date_snapshot) ?? minute.meeting_date_snapshot)} — شماره نسخه: {minute.revision_number}
           </div>
         </div>
 
@@ -75,7 +76,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           <h2 className="mp-section-title">مشخصات جلسه</h2>
           <div className="mp-info-grid">
             <div className="mp-field"><span className="mp-label">عنوان جلسه:</span><span className="mp-value">{minute.meeting_title_snapshot}</span></div>
-            <div className="mp-field"><span className="mp-label">تاریخ جلسه:</span><span className="mp-value">{minute.meeting_date_snapshot}</span></div>
+            <div className="mp-field"><span className="mp-label">تاریخ جلسه:</span><span className="mp-value">{toPersianDigits(gregorianToJalaliDate(minute.meeting_date_snapshot) ?? minute.meeting_date_snapshot)}</span></div>
             <div className="mp-field"><span className="mp-label">ساعت شروع:</span><span className="mp-value">{orDash(minute.meeting_start_time_snapshot)}</span></div>
             <div className="mp-field"><span className="mp-label">ساعت پایان:</span><span className="mp-value">{orDash(minute.meeting_end_time_snapshot)}</span></div>
             <div className="mp-field"><span className="mp-label">محل جلسه:</span><span className="mp-value">{orDash(minute.meeting_location_snapshot)}</span></div>
@@ -131,7 +132,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
                 <div className="mp-item-row">
                   <span className="mp-item-label">اولویت: </span>{PRIORITY_LABELS[d.priority] || d.priority}
                   <span className="mp-item-sep"> — </span>
-                  <span className="mp-item-label">مهلت: </span>{orDash(d.dueDate)}
+                  <span className="mp-item-label">مهلت: </span>{orDash(d.dueDate ? toPersianDigits(gregorianToJalaliDate(d.dueDate) ?? d.dueDate) : '')}
                 </div>
                 <div className="mp-item-row">
                   <span className="mp-item-label">نتیجه بحث: </span>{orDash(d.discussionResult)}

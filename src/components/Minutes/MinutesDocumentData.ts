@@ -2,6 +2,7 @@ import type {
   MinutesStatus, ConfidentialityLevel, ApprovalMode, ApprovalStatus,
   DecisionPriority, DecisionStatus,
 } from '../types';
+import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
 
 export interface DocMinute {
   meeting_title_snapshot: string;
@@ -100,6 +101,10 @@ export function orDash(v: string | null | undefined): string {
 
 export function faDate(iso: string | null): string {
   if (!iso) return DASH;
+  // Date-only values: try Jalali conversion first (no timezone shift),
+  // then fall back to locale formatting for legacy timestamp inputs.
+  const jalali = gregorianToJalaliDate(iso);
+  if (jalali) return toPersianDigits(jalali);
   try { return new Date(iso).toLocaleDateString('fa-IR'); }
   catch { return iso; }
 }
