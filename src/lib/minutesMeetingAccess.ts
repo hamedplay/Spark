@@ -1,10 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+export type MinutesAccessErrorCode =
+  | 'MEETING_ID_REQUIRED'
+  | 'MEETING_NO_PERMISSION'
+  | 'MINUTES_ALREADY_EXISTS'
+  | 'MEETING_QUERY_ERROR'
+  | 'CHECK_FAILED'
+  | null;
+
 export interface MinutesAccessResult {
   allowed: boolean;
   existingMinuteId: string | null;
   existingMinuteStatus: string | null;
-  errorCode: string | null;
+  errorCode: MinutesAccessErrorCode;
 }
 
 export interface MeetingPrefillInfo {
@@ -38,16 +46,19 @@ export function resolveMinutesEntryAction(
   if (!meetingId) {
     return { kind: 'block', message: 'برای ثبت صورت‌جلسه باید از صفحه جزئیات جلسه وارد شوید.' };
   }
+  if (access.errorCode === 'CHECK_FAILED') {
+    return { kind: 'block', message: 'بررسی دسترسی به جلسه با خطا مواجه شد. دوباره تلاش کنید.' };
+  }
   if (access.errorCode === 'MINUTES_ALREADY_EXISTS' && access.existingMinuteId) {
     return { kind: 'navigate_to_existing_minute', minuteId: access.existingMinuteId };
   }
-  if (access.errorCode === 'MEETING_NO_PERMISSION' || access.errorCode === 'CHECK_FAILED') {
-    return { kind: 'block', message: 'جلسه موردنظر یافت نشد یا شما به آن دسترسی ندارید.' };
+  if (access.errorCode === 'MEETING_NO_PERMISSION') {
+    return { kind: 'block', message: 'شما اجازه ثبت صورت‌جلسه برای این جلسه را ندارید.' };
   }
   if (access.allowed) {
     return { kind: 'navigate_to_new_form', meetingId };
   }
-  return { kind: 'block', message: 'جلسه موردنظر یافت نشد یا شما به آن دسترسی ندارید.' };
+  return { kind: 'block', message: 'شما اجازه ثبت صورت‌جلسه برای این جلسه را ندارید.' };
 }
 
 /**
@@ -80,12 +91,10 @@ export function interpretMinutesAccess(
   canCreate: boolean | null,
   existingRows: Array<{ id: string; status: string }> | null,
 ): MinutesAccessResult {
-  if (canCreate === null) {
-    return { allowed: false, existingMinuteId: null, existingMinuteStatus: null, errorCode: 'CHECK_FAILED' };
-  }
-  if (!canCreate) {
-    return { allowed: false, existingMinuteId: null, existingMinuteStatus: null, errorCode: 'MEETING_NO_PERMISSION' };
-  }
+  // Priority: a visible existing minutes record wins over canCreate === false.
+  // RLS on the `minutes` table is the authority for visibility: if a row is
+  // returned, the user can see it and should navigate to it rather than being
+  // blocked or creating a duplicate.
   if (existingRows && existingRows.length > 0) {
     const first = existingRows[0];
     return {
@@ -94,6 +103,12 @@ export function interpretMinutesAccess(
       existingMinuteStatus: first.status,
       errorCode: 'MINUTES_ALREADY_EXISTS',
     };
+  }
+  if (canCreate === null) {
+    return { allowed: false, existingMinuteId: null, existingMinuteStatus: null, errorCode: 'CHECK_FAILED' };
+  }
+  if (!canCreate) {
+    return { allowed: false, existingMinuteId: null, existingMinuteStatus: null, errorCode: 'MEETING_NO_PERMISSION' };
   }
   return { allowed: true, existingMinuteId: null, existingMinuteStatus: null, errorCode: null };
 }
@@ -137,6 +152,8 @@ export async function checkMinutesAccessForMeeting(
     };
   }
 
+  // Query existing minutes BEFORE deciding permission: a visible existing
+  // minutes record (RLS-protected) takes priority over canCreate === false.
   const { data: existingRows, error: existErr } = await supabase
     .from('minutes')
     .select('id, status')
@@ -162,7 +179,18 @@ export async function checkMinutesAccessForMeeting(
       .select('id, subject, request_date, request_jalaali_date, start_time, end_time, location')
       .eq('id', meetingId)
       .maybeSingle();
-    if (!meetingErr && meetingRow) {
+    if (meetingErr) {
+      // Meeting query error must not be silently swallowed — surface it so the
+      // form can show a retry instead of a half-empty prefill.
+      return {
+        allowed: false,
+        existingMinuteId: null,
+        existingMinuteStatus: null,
+        errorCode: 'MEETING_QUERY_ERROR',
+        prefill: null,
+      };
+    }
+    if (meetingRow) {
       prefill = {
         meetingId: meetingRow.id,
         subject: meetingRow.subject ?? '',

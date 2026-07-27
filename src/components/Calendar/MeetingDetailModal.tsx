@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { isMeetingEligibleForMinutes } from '../../lib/isMeetingEligibleForMinutes';
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
-import moment from 'moment-jalaali';
+import { normalizeMeetingDate, normalizeClockTime } from '../../lib/minutesDate';
 
 interface AgendaItem {
   id: string;
@@ -43,6 +43,8 @@ export function MeetingDetailModal({
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareChoice, setShowShareChoice] = useState(false);
   const shareCardRef = useRef<HTMLDivElement>(null);
+  // Guard against double-click / double-navigation when confirming minutes creation.
+  const minutesNavigationRef = useRef(false);
 
   // Per-participant inbox status — only fetched for the meeting owner
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, 'pending' | 'accepted' | 'declined' | 'delegated'>>({});
@@ -92,11 +94,35 @@ export function MeetingDetailModal({
   const handleRegisterMinutes = () => {
     if (!onRegisterMinutes) return;
     if (minutesAccess.existingMinuteId) {
+      // Existing visible minutes: navigate directly, no confirmation dialog.
       onRegisterMinutes(m.id, minutesAccess.existingMinuteId);
       return;
     }
     setShowMinutesConfirm(true);
   };
+
+  const handleConfirmMinutes = () => {
+    if (!onRegisterMinutes) return;
+    if (minutesNavigationRef.current) return; // prevent double-click
+    minutesNavigationRef.current = true;
+    setShowMinutesConfirm(false);
+    onRegisterMinutes(m.id, null);
+  };
+
+  const handleCancelMinutes = () => {
+    setShowMinutesConfirm(false);
+    minutesNavigationRef.current = false;
+  };
+
+  // Escape closes the confirm dialog; click on backdrop closes it too.
+  useEffect(() => {
+    if (!showMinutesConfirm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleCancelMinutes();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showMinutesConfirm]);
 
   useEffect(() => {
     supabase
@@ -197,24 +223,18 @@ export function MeetingDetailModal({
   };
 
 const getJalaliDate = (): string => {
-  if (!m.request_date) return '';
-
-  try {
-    const d = moment.utc(m.request_date).utcOffset(210);
-
-    const jy = d.jYear();
-    const jm = d.jMonth() + 1;
-    const jd = d.jDate();
-
-    const monthNames = [
-      'فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور',
-      'مهر','آبان','آذر','دی','بهمن','اسفند'
-    ];
-
-    return `${jd} ${monthNames[jm - 1]} ${jy}`;
-  } catch {
-    return '';
-  }
+  // Priority: request_jalaali_date (already Jalali) → request_date (Gregorian).
+  // Uses the shared stage-1 utility — no local moment, no timezone shift.
+  const raw = (m as MeetingData & { request_jalaali_date?: string | null }).request_jalaali_date
+    ?? m.request_date;
+  const normalized = normalizeMeetingDate(raw);
+  if (!normalized) return '';
+  const [jy, jm, jd] = normalized.split('/').map(Number);
+  const monthNames = [
+    'فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور',
+    'مهر','آبان','آذر','دی','بهمن','اسفند'
+  ];
+  return `${jd} ${monthNames[jm - 1]} ${jy}`;
 };
 
   const buildShareText = (): string => {
@@ -226,7 +246,9 @@ const getJalaliDate = (): string => {
       .join('، ');
     const externalNames = (m.external_participants || []).join('، ');
     const creatorName = resolveName(m.user_id);
-    const timeStr = m.start_time && m.end_time ? `${m.start_time} - ${m.end_time}` : '';
+    const startNorm = normalizeClockTime(m.start_time) ?? m.start_time;
+    const endNorm = normalizeClockTime(m.end_time) ?? m.end_time;
+    const timeStr = startNorm && endNorm ? `${startNorm} - ${endNorm}` : '';
     const dateStr = getJalaliDate();
 
     const lines = [
@@ -339,7 +361,7 @@ const getJalaliDate = (): string => {
               <Clock className="w-5 h-5 text-gray-400 flex-shrink-0" />
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">زمان جلسه</p>
-                <p className="text-sm font-semibold dark:text-white">{m.start_time} — {m.end_time}</p>
+                <p className="text-sm font-semibold dark:text-white">{normalizeClockTime(m.start_time) ?? m.start_time} — {normalizeClockTime(m.end_time) ?? m.end_time}</p>
               </div>
             </div>
           )}
@@ -673,7 +695,7 @@ const getJalaliDate = (): string => {
               <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, margin: '4px 0 0' }}>{getJalaliDate()}</p>
             )}
             {(m.start_time || m.end_time) && (
-              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, margin: '4px 0 0' }}>{m.start_time} — {m.end_time}</p>
+              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, margin: '4px 0 0' }}>{normalizeClockTime(m.start_time) ?? m.start_time} — {normalizeClockTime(m.end_time) ?? m.end_time}</p>
             )}
           </div>
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -685,7 +707,7 @@ const getJalaliDate = (): string => {
               const rows = [
                 { label: 'ایجادکننده', value: creatorName },
                 { label: 'تاریخ', value: getJalaliDate() },
-                { label: 'زمان', value: m.start_time && m.end_time ? `${m.start_time} — ${m.end_time}` : '' },
+                { label: 'زمان', value: (normalizeClockTime(m.start_time) ?? m.start_time) && (normalizeClockTime(m.end_time) ?? m.end_time) ? `${normalizeClockTime(m.start_time) ?? m.start_time} — ${normalizeClockTime(m.end_time) ?? m.end_time}` : '' },
                 { label: 'محل برگزاری', value: m.location },
                 { label: 'نماینده', value: m.representative },
                 { label: 'تلفن تماس', value: m.phone },
@@ -718,13 +740,25 @@ const getJalaliDate = (): string => {
       </div>
 
       {showMinutesConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-sm w-full p-6" dir="rtl">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={handleCancelMinutes}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-sm w-full p-6"
+            dir="rtl"
+            onClick={e => e.stopPropagation()}
+          >
             <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">ثبت صورت‌جلسه</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">آیا مایل به ثبت صورتجلسه این جلسه هستید؟</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">آیا مایل به ثبت صورت‌جلسه این جلسه هستید؟</p>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowMinutesConfirm(false)} className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">خیر</button>
-              <button onClick={() => { setShowMinutesConfirm(false); onRegisterMinutes?.(m.id, null); }} className="px-4 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">بله</button>
+              <button onClick={handleCancelMinutes} className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">خیر</button>
+              <button
+                onClick={handleConfirmMinutes}
+                disabled={minutesNavigationRef.current}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >بله</button>
             </div>
           </div>
         </div>

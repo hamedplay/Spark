@@ -32,6 +32,14 @@ test('blocks creation when permission RPC returns false', () => {
   assert.equal(result.errorCode, 'MEETING_NO_PERMISSION');
 });
 
+test('existing minutes wins over canCreate=false (RLS visibility priority)', () => {
+  // A visible existing minutes record must take priority over canCreate === false.
+  const result = interpretMinutesAccess(false, [{ id: 'minute-1', status: 'draft' }]);
+  assert.equal(result.errorCode, 'MINUTES_ALREADY_EXISTS');
+  assert.equal(result.existingMinuteId, 'minute-1');
+  assert.equal(result.allowed, false);
+});
+
 test('returns existing minute id when minutes already exist', () => {
   const result = interpretMinutesAccess(true, [{ id: 'minute-1', status: 'draft' }]);
   assert.equal(result.allowed, false);
@@ -52,6 +60,26 @@ test('entry: allowed user → navigate to new form', () => {
   const action = resolveMinutesEntryAction(access({ allowed: true }), 'meeting-1');
   assert.equal(action.kind, 'navigate_to_new_form');
   assert.equal((action as { meetingId: string }).meetingId, 'meeting-1');
+});
+
+test('entry: CHECK_FAILED → block with technical retry message (not permission)', () => {
+  const action = resolveMinutesEntryAction(
+    access({ errorCode: 'CHECK_FAILED' }),
+    'meeting-1',
+  );
+  assert.equal(action.kind, 'block');
+  assert.match((action as { message: string }).message, /خطا.*تلاش/);
+  assert.doesNotMatch((action as { message: string }).message, /ندارید/);
+});
+
+test('entry: MEETING_NO_PERMISSION → block with permission message (not technical)', () => {
+  const action = resolveMinutesEntryAction(
+    access({ errorCode: 'MEETING_NO_PERMISSION' }),
+    'meeting-1',
+  );
+  assert.equal(action.kind, 'block');
+  assert.match((action as { message: string }).message, /ندارید/);
+  assert.doesNotMatch((action as { message: string }).message, /تلاش/);
 });
 
 test('entry: permission denied → block (button hidden for unauthorized user)', () => {
@@ -101,6 +129,16 @@ test('entry: valid meeting not in client list but RPC allows → navigate to new
   // (pagination/filter), but the server-side RPC grants access.
   const action = resolveMinutesEntryAction(access({ allowed: true }), 'meeting-not-in-list');
   assert.equal(action.kind, 'navigate_to_new_form');
+});
+
+test('entry: existing minutes with canCreate=false → navigate to existing (priority)', () => {
+  const action = resolveMinutesEntryAction(
+    access({ errorCode: 'MINUTES_ALREADY_EXISTS', existingMinuteId: 'minute-priority' }),
+    'meeting-1',
+  );
+  assert.equal(action.kind, 'navigate_to_existing_minute');
+  assert.equal((action as { minuteId: string }).minuteId, 'minute-priority');
+  assert.notEqual((action as { minuteId: string }).minuteId, 'meeting-1');
 });
 
 test('entry: existing minutes → navigate to existing minute detail', () => {
@@ -208,13 +246,21 @@ test('entry: unauthorized meeting → block with generic message', () => {
     'meeting-unauthorized',
   );
   assert.equal(action.kind, 'block');
-  assert.match((action as { message: string }).message, /دسترسی ندارید/);
+  assert.match((action as { message: string }).message, /ندارید/);
 });
 
 test('entry: missing meeting ID → block with guidance', () => {
   const action = resolveMinutesEntryAction(access({ allowed: true }), null);
   assert.equal(action.kind, 'block');
   assert.match((action as { message: string }).message, /جزئیات جلسه/);
+});
+
+test('entry: MEETING_QUERY_ERROR → block with technical message', () => {
+  const action = resolveMinutesEntryAction(
+    access({ errorCode: 'MEETING_QUERY_ERROR' }),
+    'meeting-1',
+  );
+  assert.equal(action.kind, 'block');
 });
 
 test('URL cleanup: new-form entry sets meeting, clears old minute, sets mpage', () => {

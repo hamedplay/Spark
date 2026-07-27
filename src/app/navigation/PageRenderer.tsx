@@ -81,10 +81,15 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
               setActivePage('minutes-detail');
             } else {
               url.searchParams.set('meeting', meetingId);
+              url.searchParams.delete('minute');
               window.history.replaceState({}, '', url.toString());
               setActivePage('minutes-new');
             }
-          } catch { /* noop */ }
+          } catch (err) {
+            if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+              console.error('[PageRenderer] onRegisterMinutes navigation failed:', err);
+            }
+          }
         }}
       />;
     case 'chat':

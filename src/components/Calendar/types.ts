@@ -4,6 +4,7 @@ export interface MeetingData {
   id: string;
   subject: string;
   request_date: string;
+  request_jalaali_date?: string | null;
   start_time: string | null;
   end_time: string | null;
   duration: string;
