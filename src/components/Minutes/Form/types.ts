@@ -107,6 +107,9 @@ export interface DraftDecision {
   id: string;
   decisionId: string | null;
   agendaResultId: string | null;
+  /** Stable link to the source agenda item (real meeting_agenda_item_id).
+   *  Used to resolve agenda_result_id server-side. Never the temp React id. */
+  meetingAgendaItemId: string | null;
   title: string;
   description: string;
   primaryOwnerUserId: string;

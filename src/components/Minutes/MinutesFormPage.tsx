@@ -228,10 +228,22 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         }
         if (decRes.data) {
           const rows = decRes.data as unknown as Record<string, unknown>[];
+          // Build agenda_result_id → meeting_agenda_item_id map from loaded
+          // agenda results so decisions can be linked by the stable
+          // meeting_agenda_item_id (never the temp React id).
+          const agendaResultMap = new Map<string, string>();
+          if (agRes.data) {
+            for (const ar of agRes.data as unknown as Record<string, unknown>[]) {
+              const arId = (ar.id as string) || '';
+              const mai = (ar.meeting_agenda_item_id as string) || '';
+              if (arId && mai) agendaResultMap.set(arId, mai);
+            }
+          }
           setDecisions(rows.length > 0 ? rows.map((r) => ({
             id: uid(),
             decisionId: (r.id as string) || null,
             agendaResultId: (r.agenda_result_id as string) || null,
+            meetingAgendaItemId: (r.agenda_result_id as string) ? (agendaResultMap.get(r.agenda_result_id as string) || '') : '',
             title: (r.title as string) || '',
             description: (r.description as string) || '',
             primaryOwnerUserId: (r.primary_owner_user_id as string) || '',
@@ -457,7 +469,10 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
 
     decisions: decisions.map((d) => ({
       id: d.decisionId || null,
-      agenda_result_id: d.agendaResultId || null,
+      // Send the stable meeting_agenda_item_id; the RPC resolves the real
+      // agenda_result_id. Never send the temp React id (d.agendaResultId).
+      meeting_agenda_item_id: d.meetingAgendaItemId || null,
+      agenda_result_id: null,
       title: d.title.trim(),
       description: d.description || null,
       primary_owner_user_id: d.primaryOwnerUserId,
@@ -477,7 +492,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const decisionsPayload = () =>
     decisions.map((d) => ({
       id: d.decisionId || null,
-      agenda_result_id: d.agendaResultId || null,
+      meeting_agenda_item_id: d.meetingAgendaItemId || null,
+      agenda_result_id: null,
       title: d.title.trim(),
       description: d.description || null,
       primary_owner_user_id: d.primaryOwnerUserId,

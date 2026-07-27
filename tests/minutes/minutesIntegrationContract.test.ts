@@ -145,8 +145,8 @@ test('invitation: delegated → delegated', () => {
   assert.equal(mapInboxStatusToInvitationStatus('delegated'), 'delegated');
 });
 
-test('invitation: pending → no_response', () => {
-  assert.equal(mapInboxStatusToInvitationStatus('pending'), 'no_response');
+test('invitation: pending → pending', () => {
+  assert.equal(mapInboxStatusToInvitationStatus('pending'), 'pending');
 });
 
 // 6. Attendance is editable (status field is mutable in draft)

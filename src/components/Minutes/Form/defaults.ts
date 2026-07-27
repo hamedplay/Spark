@@ -73,6 +73,7 @@ export const defaultDecision = (): DraftDecision => ({
   id: uid(),
   decisionId: null,
   agendaResultId: null,
+  meetingAgendaItemId: null,
   title: '',
   description: '',
   primaryOwnerUserId: '',

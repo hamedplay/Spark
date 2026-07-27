@@ -220,6 +220,7 @@ export interface DecisionUpdateRow {
 export interface DecisionDraftPayload {
   id?: string | null;
   agenda_result_id?: string | null;
+  meeting_agenda_item_id?: string | null;
   title: string;
   description?: string | null;
   primary_owner_user_id: string;

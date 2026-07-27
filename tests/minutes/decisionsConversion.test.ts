@@ -8,7 +8,8 @@ function agendaToDecision(agenda: DraftAgendaItem): DraftDecision {
   return {
     ...defaultDecision(),
     title: agenda.title,
-    agendaResultId: agenda.id,
+    meetingAgendaItemId: agenda.meetingAgendaItemId || null,
+    agendaResultId: null,
     discussionResult: agenda.discussionResult || '',
     resultType: agenda.resultType || 'discussion',
     additionalNotes: agenda.additionalNotes || '',
@@ -18,7 +19,8 @@ function agendaToDecision(agenda: DraftAgendaItem): DraftDecision {
 function serializeDecision(d: DraftDecision): DecisionDraftPayload {
   return {
     id: d.decisionId,
-    agenda_result_id: d.agendaResultId,
+    meeting_agenda_item_id: d.meetingAgendaItemId,
+    agenda_result_id: null,
     title: d.title,
     description: d.description || null,
     primary_owner_user_id: d.primaryOwnerUserId,
@@ -35,10 +37,10 @@ function serializeDecision(d: DraftDecision): DecisionDraftPayload {
   };
 }
 
-test('agendaToDecision: copies title and links agenda id', () => {
+test('agendaToDecision: copies title and links via meetingAgendaItemId', () => {
   const agenda: DraftAgendaItem = {
     id: 'agenda-1',
-    meetingAgendaItemId: 'db-1',
+    meetingAgendaItemId: 'db-agenda-1',
     order: 1,
     title: 'بودجه سال آینده',
     description: '',
@@ -50,16 +52,37 @@ test('agendaToDecision: copies title and links agenda id', () => {
   };
   const dec = agendaToDecision(agenda);
   assert.equal(dec.title, 'بودجه سال آینده');
-  assert.equal(dec.agendaResultId, 'agenda-1');
+  assert.equal(dec.meetingAgendaItemId, 'db-agenda-1');
+  assert.equal(dec.agendaResultId, null);
   assert.equal(dec.discussionResult, 'مورد توافق');
   assert.equal(dec.resultType, 'resolution');
   assert.equal(dec.additionalNotes, 'توجه به بخشنامه');
   assert.equal(dec.decisionId, null);
 });
 
+test('agendaToDecision: never stores temp React id as agendaResultId', () => {
+  const agenda: DraftAgendaItem = {
+    id: 'temp-react-id',
+    meetingAgendaItemId: 'real-db-id',
+    order: 1,
+    title: 'test',
+    description: '',
+    presenter: '',
+    allocatedTime: '',
+    discussionResult: '',
+    resultType: 'discussion',
+    additionalNotes: '',
+  };
+  const dec = agendaToDecision(agenda);
+  assert.equal(dec.agendaResultId, null);
+  assert.notEqual(dec.agendaResultId, 'temp-react-id');
+  assert.equal(dec.meetingAgendaItemId, 'real-db-id');
+});
+
 test('agendaToDecision: independent decision has no agenda link', () => {
   const dec = defaultDecision();
   assert.equal(dec.agendaResultId, null);
+  assert.equal(dec.meetingAgendaItemId, null);
   assert.equal(dec.title, '');
 });
 
@@ -67,7 +90,8 @@ test('serializeDecision: produces correct payload shape', () => {
   const dec: DraftDecision = {
     id: 'draft-1',
     decisionId: 'db-uuid',
-    agendaResultId: 'agenda-2',
+    agendaResultId: null,
+    meetingAgendaItemId: 'db-agenda-2',
     title: 'اقدام فوری',
     description: 'شرح مصوبه',
     primaryOwnerUserId: 'user-1',
@@ -84,7 +108,8 @@ test('serializeDecision: produces correct payload shape', () => {
   };
   const payload = serializeDecision(dec);
   assert.equal(payload.id, 'db-uuid');
-  assert.equal(payload.agenda_result_id, 'agenda-2');
+  assert.equal(payload.meeting_agenda_item_id, 'db-agenda-2');
+  assert.equal(payload.agenda_result_id, null);
   assert.equal(payload.title, 'اقدام فوری');
   assert.equal(payload.description, 'شرح مصوبه');
   assert.equal(payload.primary_owner_user_id, 'user-1');
@@ -109,6 +134,8 @@ test('serializeDecision: nulls empty optional fields', () => {
   assert.equal(payload.discussion_result, null);
   assert.equal(payload.result_type, 'discussion');
   assert.equal(payload.additional_notes, null);
+  assert.equal(payload.meeting_agenda_item_id, null);
+  assert.equal(payload.agenda_result_id, null);
 });
 
 test('serializeDecision: validation - title and owner required', () => {

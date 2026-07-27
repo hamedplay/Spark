@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Trash2, MoveVertical as MoreVertical, FilePlus, ArrowRightFromLine } from 'lucide-react';
+import { Plus, Trash2, Link2, Unlink } from 'lucide-react';
 import type { DraftDecision, ProfileOption, OrgUnitOption, DraftAgendaItem } from './types';
 import { defaultDecision } from './defaults';
-import { InputField, TextareaField, SelectField } from './fields';
+import { TextareaField, SelectField } from './fields';
 import { PRIORITY_OPTIONS } from './options';
 import { SearchableSelect } from './SearchableSelect';
 import { JalaliDatePicker } from './JalaliDatePicker';
@@ -32,7 +32,7 @@ export function SectionDecisions({
     setDecisions(l => [...l, {
       ...defaultDecision(),
       title: agenda.title,
-      agendaResultId: agenda.id,
+      meetingAgendaItemId: agenda.meetingAgendaItemId || null,
     }]);
 
   const remove = (id: string) =>
@@ -51,7 +51,22 @@ export function SectionDecisions({
     sublabel: p.position || undefined,
   }));
 
-  const agendaOptions = agendaItems.filter(a => a.title.trim());
+  const agendaOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return agendaItems
+      .filter(a => a.title.trim() && a.meetingAgendaItemId)
+      .filter(a => {
+        if (seen.has(a.meetingAgendaItemId)) return false;
+        seen.add(a.meetingAgendaItemId);
+        return true;
+      })
+      .map((a, idx) => ({
+        value: a.meetingAgendaItemId,
+        label: a.title,
+        sublabel: [a.presenter, a.description].filter(Boolean).join(' — ') || undefined,
+        order: idx + 1,
+      }));
+  }, [agendaItems]);
 
   return (
     <div className="space-y-5">
@@ -100,7 +115,7 @@ function DecisionsForm({
   decisions,
   readOnly,
   addIndependent,
-  addFromAgenda,
+  addFromAgenda: _addFromAgenda,
   remove,
   update,
   orgUnits,
@@ -109,9 +124,24 @@ function DecisionsForm({
   ownerOptions,
   agendaOptions,
 }: DecisionsFormProps) {
-  const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
-  const [showAgendaPicker, setShowAgendaPicker] = useState<string | null>(null);
+  void _addFromAgenda;
+  const [openAgendaPickerFor, setOpenAgendaPickerFor] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const linkToAgenda = (decisionId: string, meetingAgendaItemId: string) => {
+    const agenda = agendaItems.find(a => a.meetingAgendaItemId === meetingAgendaItemId);
+    if (!agenda) return;
+    setDecisions(l => l.map(d =>
+      d.id === decisionId
+        ? { ...d, meetingAgendaItemId, title: d.title.trim() ? d.title : agenda.title }
+        : d
+    ));
+  };
+
+  const clearAgendaLink = (decisionId: string) =>
+    setDecisions(l => l.map(d =>
+      d.id === decisionId ? { ...d, meetingAgendaItemId: null } : d
+    ));
 
   // Per-decision validation errors for the Jalali date fields.
   const dateErrors = useMemo(() => {
@@ -127,77 +157,28 @@ function DecisionsForm({
   }, [decisions]);
 
   useEffect(() => {
-    if (!openMenuFor) return;
+    if (!openAgendaPickerFor) return;
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpenMenuFor(null);
+        setOpenAgendaPickerFor(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [openMenuFor]);
+  }, [openAgendaPickerFor]);
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">مصوبات</h2>
         {!readOnly && (
-          <div className="relative" ref={menuRef}>
-            <button
-              type="button"
-              onClick={() => setOpenMenuFor(openMenuFor ? null : 'add')}
-              className="flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              <Plus className="w-4 h-4" /> افزودن مصوبه
-              <MoreVertical className="w-3.5 h-3.5" />
-            </button>
-            {openMenuFor === 'add' && (
-              <div className="absolute z-30 mt-1 left-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-56 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => { setOpenMenuFor(null); setShowAgendaPicker('add'); }}
-                  className="w-full text-right px-3 py-2.5 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 dark:text-white"
-                >
-                  <ArrowRightFromLine className="w-4 h-4 text-blue-500" />
-                  تبدیل دستور جلسه به مصوبه
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setOpenMenuFor(null); addIndependent(); }}
-                  className="w-full text-right px-3 py-2.5 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 dark:text-white border-t border-gray-100 dark:border-gray-700"
-                >
-                  <FilePlus className="w-4 h-4 text-green-500" />
-                  ثبت مصوبه مستقل
-                </button>
-              </div>
-            )}
-            {showAgendaPicker === 'add' && (
-              <div className="absolute z-30 mt-1 left-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-h-64 overflow-y-auto">
-                <div className="px-3 py-2 text-xs text-gray-400 border-b border-gray-100 dark:border-gray-700">انتخاب دستور جلسه</div>
-                {agendaOptions.length === 0 ? (
-                  <div className="px-3 py-3 text-sm text-gray-400 text-center">دستور جلسه‌ای موجود نیست</div>
-                ) : (
-                  agendaOptions.map((a, idx) => (
-                    <button
-                      type="button"
-                      key={a.id}
-                      onClick={() => { setShowAgendaPicker(null); addFromAgenda(a); }}
-                      className="w-full text-right px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white truncate"
-                    >
-                      {idx + 1}. {a.title}
-                    </button>
-                  ))
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowAgendaPicker(null)}
-                  className="w-full text-center px-3 py-2 text-xs text-gray-400 border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  بستن
-                </button>
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={addIndependent}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> افزودن مصوبه
+          </button>
         )}
       </div>
 
@@ -211,7 +192,7 @@ function DecisionsForm({
         <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl">
           <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 rounded-t-2xl">
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">مصوبه {idx + 1}</span>
-            {item.agendaResultId && (
+            {item.meetingAgendaItemId && (
               <span className="text-xs text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">از دستور جلسه</span>
             )}
             <div className="flex-1" />
@@ -223,7 +204,53 @@ function DecisionsForm({
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-b-2xl">
             <div className="sm:col-span-2">
-              <InputField id={`dec-title-${item.id}`} label="عنوان مصوبه" placeholder="عنوان مصوبه را وارد کنید" value={item.title} onChange={v => update(item.id, 'title', v)} />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">عنوان مصوبه</label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  id={`dec-title-${item.id}`}
+                  type="text"
+                  placeholder="عنوان مصوبه را وارد کنید"
+                  value={item.title}
+                  onChange={e => update(item.id, 'title', e.target.value)}
+                  className="flex-1 px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white min-w-0"
+                />
+                {!readOnly && agendaOptions.length > 0 && (
+                  <div className="relative shrink-0">
+                    {item.meetingAgendaItemId ? (
+                      <button
+                        type="button"
+                        onClick={() => clearAgendaLink(item.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-colors whitespace-nowrap"
+                      >
+                        <Unlink className="w-4 h-4" />
+                        <span className="hidden sm:inline">پاک‌کردن ارتباط</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setOpenAgendaPickerFor(openAgendaPickerFor === item.id ? null : item.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium text-blue-600 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-colors whitespace-nowrap"
+                      >
+                        <Link2 className="w-4 h-4" />
+                        <span className="hidden sm:inline">انتخاب از دستور جلسه</span>
+                      </button>
+                    )}
+                    {openAgendaPickerFor === item.id && (
+                      <div className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]">
+                        <SearchableSelect
+                          id={`dec-agenda-${item.id}`}
+                          value={item.meetingAgendaItemId || ''}
+                          options={agendaOptions}
+                          onChange={v => { linkToAgenda(item.id, v); setOpenAgendaPickerFor(null); }}
+                          placeholder="انتخاب دستور جلسه"
+                          searchPlaceholder="جستجوی دستور جلسه..."
+                          emptyText="دستور جلسه‌ای یافت نشد"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="sm:col-span-2">
               <TextareaField id={`dec-desc-${item.id}`} label="متن مصوبه" rows={3} value={item.description} onChange={v => update(item.id, 'description', v)} />
