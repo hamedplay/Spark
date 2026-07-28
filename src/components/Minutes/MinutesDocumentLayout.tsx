@@ -97,7 +97,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
             <ol className="mp-agenda-list">
               {agendaItems.map(item => (
                 <li key={item.id} className="mp-agenda-list-item">
-                  {toPersianDigits(item.order)}. {item.title}
+                  {toPersianDigits(String(item.order))}. {item.title}
                 </li>
               ))}
             </ol>
@@ -112,7 +112,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           ) : (
             decisions.map((d, i) => (
               <div key={d.id} className="mp-decision-item">
-                <div className="mp-item-title">مصوبه {toPersianDigits(i + 1)}</div>
+                <div className="mp-item-title">مصوبه {toPersianDigits(String(i + 1))}</div>
                 <div className="mp-item-row"><span className="mp-item-label">متن مصوبه: </span>{orDash(d.description)}</div>
                 <div className="mp-item-row"><span className="mp-item-label">واحد مسئول: </span>{orDash(d.responsibleUnitName)}</div>
                 <div className="mp-item-row"><span className="mp-item-label">مهلت انجام: </span>{orDash(d.dueDate ? toPersianDigits(gregorianToJalaliDate(d.dueDate) ?? d.dueDate) : '')}</div>
