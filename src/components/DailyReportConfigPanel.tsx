@@ -121,7 +121,7 @@ export function DailyReportConfigPanel() {
     try {
       const [cfgRes, profilesRes, groupsRes] = await Promise.all([
         supabase.from('daily_report_config').select('*').maybeSingle(),
-        supabase.from('profiles').select('user_id, full_name, email, avatar_url').order('full_name'),
+        supabase.from('profiles_public').select('user_id, full_name, username, avatar_url').order('full_name'),
         supabase.from('user_groups').select('id, name, display_name').order('name'),
       ]);
       if (cfgRes.data) {

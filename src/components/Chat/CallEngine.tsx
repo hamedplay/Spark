@@ -416,7 +416,7 @@ export function CallEngine({ currentUserId, otherUser, callType, mode, session, 
     return `${m}:${sec}`;
   };
 
-  const otherName = otherUser.full_name || otherUser.email || 'کاربر';
+  const otherName = otherUser.full_name || otherUser.username || otherUser.email || 'کاربر';
 
   // ── Minimized bubble ─────────────────────────────────────────────────────
   if (isMinimized) {
@@ -632,7 +632,7 @@ export function IncomingCallNotification({ session, callerProfile, onAccept, onD
     };
   }, []);
 
-  const name = callerProfile?.full_name || callerProfile?.email || 'کاربر';
+  const name = callerProfile?.full_name || callerProfile?.username || callerProfile?.email || 'کاربر';
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm" dir="rtl">

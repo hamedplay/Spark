@@ -96,8 +96,8 @@ function renderInline(
   if (!text) return null;
 
   const sortedUsers = allUsers
-    .filter(u => u.full_name || u.email)
-    .sort((a, b) => ((b.full_name || b.email || '').length) - ((a.full_name || a.email || '').length));
+    .filter(u => u.full_name || u.username || u.email)
+    .sort((a, b) => ((b.full_name || b.username || b.email || '').length) - ((a.full_name || a.username || a.email || '').length));
 
   const tokens: InlineToken[] = [];
   let remaining = text;
@@ -122,11 +122,11 @@ function renderInline(
     if (atIdx >= 0) {
       const afterAt = remaining.slice(atIdx + 1);
       const matched = sortedUsers.find(u => {
-        const name = u.full_name || u.email || '';
+        const name = u.full_name || u.username || u.email || '';
         return name && afterAt.startsWith(name);
       });
       if (matched && (earliest === null || atIdx < earliest.index)) {
-        const name = matched.full_name || matched.email || '';
+        const name = matched.full_name || matched.username || matched.email || '';
         earliest = { index: atIdx, length: 1 + name.length, token: { type: 'mention', user: matched } };
       }
     }
@@ -297,7 +297,7 @@ export function ChatMessage({
   const extractMentionIds = (text: string | null): string[] => {
     if (!text) return [];
     return allUsers
-      .filter(u => { const name = u.full_name || u.email; return name && text.includes(`@${name}`); })
+      .filter(u => { const name = u.full_name || u.username || u.email; return name && text.includes(`@${name}`); })
       .map(u => u.user_id);
   };
 

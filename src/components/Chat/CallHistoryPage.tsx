@@ -37,8 +37,8 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
 
     const otherIds = data.map(r => r.caller_id === currentUserId ? r.callee_id : r.caller_id);
     const { data: profiles } = await supabase
-      .from('profiles')
-      .select('user_id, full_name, email')
+      .from('profiles_public')
+      .select('user_id, full_name, username')
       .in('user_id', [...new Set(otherIds)]);
 
     const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
@@ -52,7 +52,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
   };
 
   const filtered = records.filter(r => {
-    const name = r.otherUser?.full_name || r.otherUser?.email || '';
+    const name = r.otherUser?.full_name || r.otherUser?.username || r.otherUser?.email || '';
     if (search && !name.toLowerCase().includes(search.toLowerCase())) return false;
     if (tab === 'missed') return r.status === 'missed' || (r.status === 'declined' && r.callee_id === currentUserId);
     return true;
@@ -81,7 +81,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
     return m > 0 ? `${m} دقیقه ${sec} ثانیه` : `${sec} ثانیه`;
   };
 
-  const otherName = (r: CallRecord) => r.otherUser?.full_name || r.otherUser?.email || 'کاربر';
+  const otherName = (r: CallRecord) => r.otherUser?.full_name || r.otherUser?.username || r.otherUser?.email || 'کاربر';
 
   return (
     <div className="flex flex-col h-full" dir="rtl">

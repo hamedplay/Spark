@@ -49,7 +49,7 @@ export function ChatSidebar({
     // self-chats are shown via the static Saved Messages button, not in the regular list
     c.otherUser.user_id !== currentUserId &&
     ((c.otherUser.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.otherUser.email || '').toLowerCase().includes(search.toLowerCase()))
+    (c.otherUser.username || c.otherUser.email || '').toLowerCase().includes(search.toLowerCase()))
   );
 
   const pinned = filtered.filter(c => c.isPinned);

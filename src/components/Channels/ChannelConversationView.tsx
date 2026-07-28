@@ -196,7 +196,7 @@ export function ChannelConversationView({ channel, currentUserId, allProfiles, o
 
     const userIds = memberRows.map((m: any) => m.user_id);
     const { data: profileRows } = userIds.length
-      ? await supabase.from('profiles').select('user_id, full_name, email, avatar_url').in('user_id', userIds)
+      ? await supabase.from('profiles_public').select('user_id, full_name, username, avatar_url').in('user_id', userIds)
       : { data: [] as any[] };
 
     const freshProfileMap = new Map((profileRows || []).map((p: any) => [p.user_id, p]));

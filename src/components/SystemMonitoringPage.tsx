@@ -20,7 +20,7 @@ export function SystemMonitoringPage() {
   const [profilesLoaded, setProfilesLoaded] = useState(false);
 
   useEffect(() => {
-    supabase.from('profiles').select('user_id, full_name, email').then(({ data }) => {
+    supabase.from('profiles_public').select('user_id, full_name, username').then(({ data }) => {
       setProfiles(data || []);
       setProfilesLoaded(true);
     });

@@ -197,7 +197,7 @@ export function ChatInputBar({
 
   const insertMention = (user: UserProfile) => {
     const lastAt = body.lastIndexOf('@');
-    const newVal = body.slice(0, lastAt) + `@${user.full_name || user.email} `;
+    const newVal = body.slice(0, lastAt) + `@${user.full_name || user.username || user.email} `;
     setBody(newVal);
     pushHistory(newVal);
     setShowMentionMenu(false);
@@ -207,7 +207,7 @@ export function ChatInputBar({
   const extractMentionedUserIds = (text: string): string[] => {
     const ids: string[] = [];
     for (const user of allUsers) {
-      const name = user.full_name || user.email;
+      const name = user.full_name || user.username || user.email;
       if (name && text.includes(`@${name}`)) {
         ids.push(user.user_id);
       }
@@ -618,7 +618,7 @@ export function ChatInputBar({
   const currentType = MESSAGE_TYPES.find(t => t.key === messageType)!;
   const mentionFiltered = allUsers.filter(u =>
     (u.full_name || '').toLowerCase().includes(mentionSearch.toLowerCase()) ||
-    (u.email || '').toLowerCase().includes(mentionSearch.toLowerCase())
+    (u.username || u.email || '').toLowerCase().includes(mentionSearch.toLowerCase())
   );
   const hasSpeechAPI = true; // always show button; iOS shows helpful fallback message
   const canSend = (body.trim().length > 0 || !!audioBlob) && !loading;
@@ -724,11 +724,11 @@ export function ChatInputBar({
                   <button key={u.user_id} onClick={() => insertMention(u)}
                     className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-right">
                     <span className="w-7 h-7 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                      {(u.full_name || u.email || 'U').charAt(0)}
+                      {(u.full_name || u.username || u.email || 'U').charAt(0)}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-gray-800 dark:text-white">{u.full_name || u.email}</p>
-                      {u.full_name && <p className="truncate text-[11px] text-gray-400 dark:text-gray-400">{u.email}</p>}
+                      <p className="truncate font-medium text-gray-800 dark:text-white">{u.full_name || u.username || u.email}</p>
+                      {u.full_name && <p className="truncate text-[11px] text-gray-400 dark:text-gray-400">{u.username || u.email}</p>}
                     </div>
                   </button>
                 ))}

@@ -49,7 +49,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
 
   useEffect(() => {
     supabase.from('chat_tags').select('*').eq('user_id', currentUserId).then(({ data }) => setUserTags(data || []));
-    supabase.from('profiles').select('user_id, full_name, email').not('is_hidden', 'eq', true).then(({ data }) => setAllUsers(data || []));
+    supabase.from('profiles_public').select('user_id, full_name, username').then(({ data }) => setAllUsers(data || []));
   }, [currentUserId]);
 
   useEffect(() => {
@@ -117,7 +117,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
       }
       if (typeFilters.has('mention')) {
         const myProfile = allUsers.find(u => u.user_id === currentUserId);
-        const myName = myProfile?.full_name || myProfile?.email;
+        const myName = myProfile?.full_name || myProfile?.username || myProfile?.email;
         if (myName) filtered = filtered.filter(m => m.body && m.body.includes(`@${myName}`));
       }
 
@@ -172,7 +172,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
         return {
           ...m,
           senderProfile: profileMap.get(m.sender_id) || null,
-          otherUserName: otherProfile?.full_name || otherProfile?.email || 'کاربر',
+          otherUserName: otherProfile?.full_name || otherProfile?.username || otherProfile?.email || 'کاربر',
           is_starred: starredIds.has(m.id),
           tags: tagsMap.get(m.id) || [],
         };
@@ -398,7 +398,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
                   <div className="flex items-center justify-between gap-2 mb-0.5">
                     <div className="flex items-center gap-1 text-xs min-w-0">
                       <span className="font-semibold text-gray-800 dark:text-white truncate">
-                        {r.senderProfile?.full_name || r.senderProfile?.email || 'کاربر'}
+                        {r.senderProfile?.full_name || r.senderProfile?.username || r.senderProfile?.email || 'کاربر'}
                       </span>
                       <span className="text-gray-400">›</span>
                       <span className="text-gray-500 truncate">{r.otherUserName}</span>

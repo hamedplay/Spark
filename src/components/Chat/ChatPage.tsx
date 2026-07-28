@@ -70,8 +70,8 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
     // Fetch profiles, presence, bulk unread counts, and mentions all in parallel
     const [profilesRes, presenceRes, unreadRes, mentionRes] = await Promise.all([
       supabase
-        .from('profiles')
-        .select('user_id, full_name, email, avatar_url')
+        .from('profiles_public')
+        .select('user_id, full_name, username, avatar_url')
         .in('user_id', otherIds),
       supabase
         .from('user_presence')
@@ -147,8 +147,8 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
       setCurrentUserId(user.id);
 
       const { data: profile } = await supabase
-        .from('profiles')
-        .select('user_id, full_name, email, avatar_url')
+        .from('profiles_public')
+        .select('user_id, full_name, username, avatar_url')
         .eq('user_id', user.id)
         .maybeSingle();
       if (cancelled) return;

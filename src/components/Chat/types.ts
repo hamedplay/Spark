@@ -66,6 +66,7 @@ export interface UserProfile {
   user_id: string;
   full_name: string | null;
   email: string | null;
+  username?: string | null;
   avatar_url?: string | null;
   status?: string | null;
   is_online?: boolean | null;

@@ -47,9 +47,9 @@ export function LogsTab() {
     const userIds = Array.from(new Set((data as any[]).map(r => r.user_id).filter(Boolean)));
     let profileMap: Record<string, { full_name: string; email: string }> = {};
     if (userIds.length > 0) {
-      const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email').in('user_id', userIds);
+      const { data: profiles } = await supabase.from('profiles_public').select('user_id, full_name, username').in('user_id', userIds);
       for (const p of (profiles || [])) {
-        profileMap[p.user_id] = { full_name: p.full_name || '', email: p.email || '' };
+        profileMap[p.user_id] = { full_name: p.full_name || '', email: p.username || '' };
       }
     }
 

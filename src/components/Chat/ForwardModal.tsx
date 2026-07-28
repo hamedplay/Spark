@@ -73,7 +73,7 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
         list.push({
           conversationId: c.id,
           isSelf: false,
-          name: profile?.full_name || profile?.email || 'کاربر',
+          name: profile?.full_name || profile?.username || profile?.email || 'کاربر',
           avatarUrl: profile?.avatar_url,
         });
       }
@@ -92,7 +92,7 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
       .map(u => ({
         type: 'user' as const,
         id: u.user_id,
-        name: u.full_name || u.email || 'کاربر',
+        name: u.full_name || u.username || u.email || 'کاربر',
         avatarUrl: u.avatar_url,
         subtitle: 'کاربر',
       }));

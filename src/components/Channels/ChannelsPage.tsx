@@ -34,7 +34,7 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
   const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
 
   const fetchProfiles = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('user_id, full_name, email, avatar_url');
+    const { data } = await supabase.from('profiles_public').select('user_id, full_name, username, avatar_url');
     if (data) setAllProfiles(data);
   }, []);
 

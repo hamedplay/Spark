@@ -76,7 +76,7 @@ function formatTime(iso: string | null) {
 
 export function ChatConversationItem({ conversation: c, isActive, currentUserId, lastSeen, onClick, onMentionClick, onTogglePin, onAction, onClearHistory }: Props) {
   const isSavedMessages = c.otherUser.user_id === currentUserId;
-  const name = isSavedMessages ? 'پیام‌های ذخیره‌شده' : (c.otherUser.full_name || c.otherUser.email || 'کاربر');
+  const name = isSavedMessages ? 'پیام‌های ذخیره‌شده' : (c.otherUser.full_name || c.otherUser.username || c.otherUser.email || 'کاربر');
   const isMine = c.last_message_sender_id === currentUserId;
   const preview = c.last_message_text
     ? (isMine ? `شما: ${c.last_message_text}` : c.last_message_text)

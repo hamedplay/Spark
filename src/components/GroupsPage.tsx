@@ -182,7 +182,7 @@ function MembersModal({ group, onClose }: { group: UserGroup; onClose: () => voi
   setLoading(true);
   const [memRes, profilesRes, orgRes] = await Promise.all([
     supabase.from('group_members').select('user_id').eq('group_id', group.id),
-    supabase.from('profiles').select('user_id, full_name, email, avatar_url, position').not('is_active', 'eq', false).order('full_name'),
+    supabase.from('profiles_public').select('user_id, full_name, username, avatar_url, position').order('full_name'),
     supabase.from('org_position_members').select(`user_id, org_positions ( title, level, unit_id, org_units ( id, name ) )`).eq('is_primary', true),
   ]);
 
@@ -331,7 +331,7 @@ function BroadcastTab({ currentUserId, isAdmin }: { currentUserId: string | null
     const [msgRes, groupsRes, profilesRes] = await Promise.all([
       supabase.from('broadcast_messages').select('*').order('sent_at', { ascending: false }).limit(50),
       supabase.from('user_groups').select('id, name, display_name').order('name'),
-      supabase.from('profiles').select('user_id, full_name').order('full_name'),
+      supabase.from('profiles_public').select('user_id, full_name').order('full_name'),
     ]);
     const msgs = (msgRes.data || []) as BroadcastMessage[];
     const profs = profilesRes.data || [];

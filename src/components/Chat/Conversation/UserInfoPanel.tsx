@@ -44,8 +44,8 @@ export function UserInfoPanel({ conversation, otherName, isSavedMessages, isUser
               {getLastSeenText(otherUserPresence?.last_seen)}
             </p>
           )}
-          {!isSavedMessages && conversation.otherUser.email && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{conversation.otherUser.email}</p>
+          {!isSavedMessages && (conversation.otherUser.username || conversation.otherUser.email) && (
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{conversation.otherUser.username || conversation.otherUser.email}</p>
           )}
         </div>
         <div className="px-5 py-4 space-y-1">
