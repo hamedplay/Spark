@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Building2, Send, X, Loader as Loader2, Search, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import toast from 'react-hot-toast';
 import { Meeting } from '../../../../types';
-import { useOrgUsers, OrgUnitGroup, OrgUserProfile, resolveUserDisplay, FALLBACK_NAME } from '../../../../lib/useOrgUsers';
+import { useOrgUsers, OrgUnitGroup, OrgUserProfile, FALLBACK_NAME } from '../../../../lib/useOrgUsers';
+import { filterMeetingRequestRecipients } from '../../utils/meetingRequestRecipientEligibility';
 
 interface UserSelectorModalProps {
   meetingId: string;
@@ -20,7 +21,18 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
   const [loading, setLoading] = useState(false);
   const [sendingToUserId, setSendingToUserId] = useState<string | null>(null);
 
-  const { groups, allUsers, loading: loadingUsers, usersById } = useOrgUsers(currentUserId);
+  const { groups: rawGroups, allUsers: rawAllUsers, loading: loadingUsers } = useOrgUsers(currentUserId);
+
+  const { groups, allUsers, usersById } = useMemo(() => {
+    const eligible = filterMeetingRequestRecipients(rawAllUsers);
+    const eligibleIds = new Set(eligible.map(u => u.user_id));
+    const eligibleGroups = rawGroups
+      .map(g => ({ ...g, users: g.users.filter(u => eligibleIds.has(u.user_id)) }))
+      .filter(g => g.users.length > 0);
+    const eligibleById: Record<string, OrgUserProfile> = {};
+    for (const u of eligible) eligibleById[u.user_id] = u;
+    return { groups: eligibleGroups, allUsers: eligible, usersById: eligibleById };
+  }, [rawGroups, rawAllUsers]);
 
   useEffect(() => {
     (async () => {
@@ -61,6 +73,14 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
 
       if (!meetingData) { toast.error('اطلاعات جلسه در دسترس نیست'); return; }
 
+      const { data: eligibleCheck, error: eligibleError } = await supabase
+        .rpc('is_meeting_request_recipient_eligible', { p_recipient_id: userId });
+      if (eligibleError) throw eligibleError;
+      if (!eligibleCheck) {
+        toast.error('این کاربر واجد شرایط دریافت درخواست جلسه نیست');
+        return;
+      }
+
       const { error } = await supabase.from('shared_meetings').insert([{
         meeting_id: meetingId,
         sender_id: user.id,
@@ -91,7 +111,7 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
   const toggleUnit = (key: string) => {
     setExpandedUnits(prev => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
@@ -175,8 +195,6 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
                   userId={u.user_id}
                   name={u.full_name || ''}
                   assignments={u.assignments}
-                  primaryPositionTitle={u.position_title}
-                  primaryUnitName={u.unit_name}
                   sending={sendingToUserId === u.user_id}
                   disabled={loading}
                   onSend={handleSendToUser}
@@ -217,8 +235,6 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
                             userId={u.user_id}
                             name={u.full_name || ''}
                             assignments={u.assignments}
-                            primaryPositionTitle={u.position_title}
-                            primaryUnitName={u.unit_name}
                             sending={sendingToUserId === u.user_id}
                             disabled={loading}
                             onSend={handleSendToUser}
@@ -238,13 +254,11 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
 }
 
 function UserRow({
-  userId, name, assignments, primaryPositionTitle, primaryUnitName, sending, disabled, onSend,
+  userId, name, assignments, sending, disabled, onSend,
 }: {
   userId: string;
   name: string;
   assignments: { positionId: string; positionTitle: string | null; unitName: string | null; isPrimary: boolean }[];
-  primaryPositionTitle: string | null;
-  primaryUnitName: string | null;
   sending: boolean;
   disabled: boolean;
   onSend: (userId: string, name: string) => void;
