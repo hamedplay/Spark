@@ -139,8 +139,13 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conference_polls', filter: `room_id=eq.${roomId}` },
         ({ new: row }) => {
           const poll: ConferencePoll = { ...row as ConferencePoll, options: row.options as string[], votes: {}, my_vote: null };
-          setPolls(prev => [poll, ...prev]);
-          pollIdsRef.current = [row.id, ...pollIdsRef.current];
+          setPolls(prev => {
+            if (prev.some(existing => existing.id === poll.id)) return prev;
+            return [poll, ...prev];
+          });
+          if (!pollIdsRef.current.includes(row.id)) {
+            pollIdsRef.current = [row.id, ...pollIdsRef.current];
+          }
         })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conference_polls', filter: `room_id=eq.${roomId}` },
         ({ new: row }) => setPolls(prev => prev.map(p => p.id === row.id ? { ...p, is_active: row.is_active, ended_at: row.ended_at } : p)))
@@ -184,13 +189,28 @@ export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
     if (err) { toast.error(err); return; }
     setCreating(true);
     try {
-      const { error } = await supabase.from('conference_polls').insert({
+      const { data: createdPoll, error } = await supabase.from('conference_polls').insert({
         room_id: roomId, created_by: userId,
         question: question.trim(),
         options: options.filter(o => o.trim()),
         is_active: true,
-      });
+      }).select('*').single();
       if (error) throw error;
+
+      const poll: ConferencePoll = {
+        ...createdPoll,
+        options: createdPoll.options as string[],
+        votes: {},
+        my_vote: null,
+      };
+      setPolls(prev => {
+        if (prev.some(existing => existing.id === poll.id)) return prev;
+        return [poll, ...prev];
+      });
+      if (!pollIdsRef.current.includes(poll.id)) {
+        pollIdsRef.current = [poll.id, ...pollIdsRef.current];
+      }
+
       setQuestion(''); setOptions(['', '']); setShowCreate(false);
       toast.success('نظرسنجی ایجاد شد');
     } catch (e: any) {
