@@ -1,4 +1,6 @@
+import { useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import type {
   DraftInternalParticipant,
   DraftExternalParticipant,
@@ -9,6 +11,14 @@ import type {
 import { defaultInternalParticipant, defaultExternalParticipant } from './defaults';
 import { InputField, SelectField, ErrorState, LoadingRow, EmptyState } from './fields';
 import { INVITATION_OPTIONS, ATTENDANCE_OPTIONS_WITH_NULL } from './options';
+import { ComboboxInput, type ComboboxOption } from './ComboboxInput';
+import { normalizeName } from './normalizeName';
+
+export interface ExternalParticipantSuggestion {
+  full_name: string;
+  organization: string | null;
+  position: string | null;
+}
 
 interface SectionParticipantsProps {
   internalParticipants: DraftInternalParticipant[];
@@ -23,6 +33,7 @@ interface SectionParticipantsProps {
   orgUnitsError: string | null;
   invitationStatusReadOnly?: boolean;
   readOnly?: boolean;
+  externalSuggestions?: ExternalParticipantSuggestion[];
 }
 
 const INVITATION_LABELS: Record<InvitationStatus, string> = {
@@ -64,6 +75,7 @@ export function SectionParticipants({
   orgUnitsError,
   invitationStatusReadOnly = false,
   readOnly = false,
+  externalSuggestions = [],
 }: SectionParticipantsProps) {
   const addInternal = () =>
     setInternalParticipants(l => [...l, defaultInternalParticipant()]);
@@ -104,6 +116,51 @@ export function SectionParticipants({
 
   const updateExternal = (id: string, field: keyof DraftExternalParticipant, value: string) =>
     setExternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+
+  // Deduplicate external participant suggestions by normalized full name.
+  const externalSuggestionOptions: ComboboxOption[] = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: ComboboxOption[] = [];
+    for (const s of externalSuggestions) {
+      const name = (s.full_name || '').trim();
+      if (!name) continue;
+      const key = normalizeName(name);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const sub = [s.organization, s.position].filter(Boolean).join(' — ') || undefined;
+      opts.push({ value: name, label: name, sublabel: sub });
+    }
+    return opts;
+  }, [externalSuggestions]);
+
+  const handleExternalNameSelect = (rowId: string, opt: ComboboxOption) => {
+    // Check for duplicate by normalized name — prevent adding the same person twice.
+    const key = normalizeName(opt.label);
+    const exists = externalParticipants.some(r => r.id !== rowId && normalizeName(r.fullName) === key);
+    if (exists) {
+      toast.error('این فرد قبلاً به لیست شرکت‌کنندگان خارجی اضافه شده است.');
+      return;
+    }
+    // Parse sublabel "organization — position" back into fields if present.
+    const subParts = opt.sublabel ? opt.sublabel.split(' — ') : [];
+    setExternalParticipants(l => l.map(r => r.id === rowId ? {
+      ...r,
+      fullName: opt.label,
+      organization: subParts[0] || r.organization,
+      position: subParts[1] || r.position,
+    } : r));
+  };
+
+  const handleExternalNameChange = (rowId: string, value: string) => {
+    // Check for duplicate when typing a name that matches an existing entry.
+    const key = normalizeName(value);
+    const exists = externalParticipants.some(r => r.id !== rowId && normalizeName(r.fullName) === key && value.trim().length > 0);
+    if (exists) {
+      toast.error('این فرد قبلاً به لیست شرکت‌کنندگان خارجی اضافه شده است.');
+      return;
+    }
+    updateExternal(rowId, 'fullName', value);
+  };
 
   const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
 
@@ -236,11 +293,23 @@ export function SectionParticipants({
           {externalParticipants.map(row => (
             <div key={row.id} className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl space-y-2">
               <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                <InputField id={`ext-name-${row.id}`} label="نام و نام خانوادگی" placeholder="" value={row.fullName} onChange={v => updateExternal(row.id, 'fullName', v)} />
+                <div>
+                  <label htmlFor={`ext-name-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">نام و نام خانوادگی</label>
+                  <ComboboxInput
+                    id={`ext-name-${row.id}`}
+                    value={row.fullName}
+                    options={externalSuggestionOptions}
+                    onChange={v => handleExternalNameChange(row.id, v)}
+                    onSelect={opt => handleExternalNameSelect(row.id, opt)}
+                    placeholder=""
+                    searchPlaceholder="جستجوی افراد خارج از سازمان..."
+                    emptyText="فردی یافت نشد"
+                    disabled={readOnly}
+                    useLabelAsValue
+                  />
+                </div>
                 <InputField id={`ext-org-${row.id}`} label="سازمان" placeholder="" value={row.organization} onChange={v => updateExternal(row.id, 'organization', v)} />
                 <InputField id={`ext-pos-${row.id}`} label="سمت" placeholder="" value={row.position} onChange={v => updateExternal(row.id, 'position', v)} />
-                <InputField id={`ext-mob-${row.id}`} label="موبایل" placeholder="" value={row.mobile} onChange={v => updateExternal(row.id, 'mobile', v)} />
-                <InputField id={`ext-email-${row.id}`} label="ایمیل" placeholder="" value={row.email} onChange={v => updateExternal(row.id, 'email', v)} />
                 <SelectField id={`ext-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateExternal(row.id, 'invitationStatus', v)} disabled={readOnly} />
                 <SelectField id={`ext-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateExternal(row.id, 'attendanceStatus', v)} disabled={readOnly} />
                 <div className="lg:col-span-5">

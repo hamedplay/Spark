@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl } from '../../lib/minutesNavigation';
 import { loadMinutesPrefill } from '../../lib/minutesPrefill';
 import { checkSystemApproverEligibility } from '../../lib/minutesApprovalEligibility';
+import { normalizeInvitationStatus } from '../../lib/minutesInvitationStatus';
 import { FALLBACK_LOGO } from './MinutesDocumentData';
 import { PageHeader, TableSkeleton } from './MinutesShared';
 import type {
@@ -23,7 +24,7 @@ import {
   defaultAgendaItem, defaultDecision, defaultFinalization,
 } from './Form/defaults';
 import { SectionInfo } from './Form/SectionInfo';
-import { SectionParticipants } from './Form/SectionParticipants';
+import { SectionParticipants, type ExternalParticipantSuggestion } from './Form/SectionParticipants';
 import { SectionAgenda } from './Form/SectionAgenda';
 import { SectionDecisions } from './Form/SectionDecisions';
 import { SectionAttachments } from './Form/SectionAttachments';
@@ -110,6 +111,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [orgUnitsError, setOrgUnitsError] = useState<string | null>(null);
   const [agendaLoading, setAgendaLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [externalSuggestions, setExternalSuggestions] = useState<ExternalParticipantSuggestion[]>([]);
 
   // New-mode prefill state — runs once, never overwrites user edits
   const [prefillLoading, setPrefillLoading] = useState(mode === 'new');
@@ -391,6 +393,22 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     })();
   }, []);
 
+  // ── Fetch external participant suggestions ───────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('minutes_external_participants')
+          .select('full_name, organization, position')
+          .order('full_name');
+        if (error) throw error;
+        setExternalSuggestions((data || []) as ExternalParticipantSuggestion[]);
+      } catch {
+        setExternalSuggestions([]);
+      }
+    })();
+  }, []);
+
   // ── Pure payload builder ────────────────────────────────────────────────
   // Translates form state into the create_minutes_draft / update_minutes_draft
   // RPC payload shape. No fabricated fields; empty optionals become null.
@@ -430,7 +448,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         position_snapshot: p.positionSnapshot || null,
         org_unit_id: p.orgUnitId || null,
         org_unit_name_snapshot: p.orgUnitNameSnapshot || null,
-        invitation_status: p.invitationStatus,
+        invitation_status: normalizeInvitationStatus(p.invitationStatus),
         attendance_status: p.attendanceStatus || null,
         notes: p.notes || null,
         delegate_user_id: p.delegateUserId || null,
@@ -445,7 +463,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         position: p.position || null,
         mobile: p.mobile || null,
         email: p.email || null,
-        invitation_status: p.invitationStatus,
+        invitation_status: normalizeInvitationStatus(p.invitationStatus),
         attendance_status: p.attendanceStatus || null,
         notes: p.notes || null,
       })),
@@ -979,6 +997,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnitsError={orgUnitsError}
                 invitationStatusReadOnly={mode === 'new'}
                 readOnly={isNonEditable}
+                externalSuggestions={externalSuggestions}
               />
             )}
             {activeSection === 2 && (

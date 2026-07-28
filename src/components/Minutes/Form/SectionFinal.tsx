@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Eye, EyeOff, Signature as FileSignature, CloudUpload as UploadCloud, Loader as Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Eye, EyeOff, Signature as FileSignature, CloudUpload as UploadCloud, Loader as Loader2, X, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { DraftFinalization, DraftMeetingInfo, DraftInternalParticipant, DraftExternalParticipant, DraftAgendaItem, DraftDecision, ProfileOption, OrgUnitOption } from './types';
 import { InputField, TextareaField } from './fields';
@@ -24,12 +24,18 @@ interface SectionFinalProps {
   canManage: boolean;
 }
 
+const MIN_ZOOM = 50;
+const MAX_ZOOM = 200;
+const ZOOM_STEP = 10;
+
 export function SectionFinal({
   finalization, setFinalization,
   info, internalParticipants, externalParticipants, agendaItems, decisions,
   profiles, orgUnits, logoUrl, minuteId, canManage,
 }: SectionFinalProps) {
-  const [showPreview, setShowPreview] = useState(false);
+  const [showInlinePreview, setShowInlinePreview] = useState(false);
+  const [showFullPreview, setShowFullPreview] = useState(false);
+  const [zoom, setZoom] = useState(100);
   const [uploadingSigned, setUploadingSigned] = useState(false);
   const [signedProgress, setSignedProgress] = useState(0);
   const [signedFiles, setSignedFiles] = useState<AttachmentRow[]>([]);
@@ -70,28 +76,119 @@ export function SectionFinal({
     profiles, orgUnits, logoUrl,
   );
 
+  // ── Full-screen preview modal ─────────────────────────────────────────────
+  const zoomIn = useCallback(() => setZoom(z => Math.min(MAX_ZOOM, z + ZOOM_STEP)), []);
+  const zoomOut = useCallback(() => setZoom(z => Math.max(MIN_ZOOM, z - ZOOM_STEP)), []);
+  const zoomReset = useCallback(() => setZoom(100), []);
+
+  useEffect(() => {
+    if (!showFullPreview) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowFullPreview(false);
+    };
+    document.addEventListener('keydown', handler);
+    // Lock body scroll while modal is open
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handler);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showFullPreview]);
+
+  const openFullPreview = () => {
+    setZoom(100);
+    setShowFullPreview(true);
+  };
+
   return (
     <div className="space-y-5" dir="rtl">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
         نهایی‌سازی و پیش‌نمایش
       </h2>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-gray-500 dark:text-gray-400">
           پیش‌نمایش صورت‌جلسه با اطلاعات فعلی فرم نمایش داده می‌شود.
         </p>
-        <button
-          onClick={() => setShowPreview(v => !v)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-        >
-          {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          {showPreview ? 'بستن پیش‌نمایش' : 'نمایش پیش‌نمایش'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowInlinePreview(v => !v)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+          >
+            {showInlinePreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {showInlinePreview ? 'بستن پیش‌نمایش' : 'پیش‌نمایش'}
+          </button>
+          <button
+            onClick={openFullPreview}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Maximize2 className="w-4 h-4" />
+            پیش‌نمایش تمام‌صفحه
+          </button>
+        </div>
       </div>
 
-      {showPreview && (
+      {showInlinePreview && (
         <div className="minutes-preview-container border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800">
           <MinutesDocumentLayout data={docData} variant="preview" />
+        </div>
+      )}
+
+      {/* Full-screen preview modal */}
+      {showFullPreview && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex flex-col"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowFullPreview(false); }}
+        >
+          {/* Toolbar */}
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={zoomOut}
+                disabled={zoom <= MIN_ZOOM}
+                className="p-2 rounded-lg hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="کوچک‌نمایی"
+              >
+                <ZoomOut className="w-5 h-5" />
+              </button>
+              <button
+                onClick={zoomReset}
+                className="px-3 py-1.5 text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors min-w-[70px] text-center"
+              >
+                {zoom}%
+              </button>
+              <button
+                onClick={zoomIn}
+                disabled={zoom >= MAX_ZOOM}
+                className="p-2 rounded-lg hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="بزرگ‌نمایی"
+              >
+                <ZoomIn className="w-5 h-5" />
+              </button>
+            </div>
+            <h3 className="text-sm font-medium hidden sm:block">پیش‌نمایش صورت‌جلسه</h3>
+            <button
+              onClick={() => setShowFullPreview(false)}
+              className="p-2 rounded-lg hover:bg-gray-700 transition-colors"
+              aria-label="بستن پیش‌نمایش"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Scrollable document area */}
+          <div
+            className="flex-1 overflow-auto flex justify-center p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="minutes-fullscreen-doc-wrapper"
+              style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
+            >
+              <MinutesDocumentLayout data={docData} variant="preview" />
+            </div>
+          </div>
         </div>
       )}
 

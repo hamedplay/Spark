@@ -326,6 +326,16 @@
   }
 }
 
+/* Full-screen preview modal — document wrapper */
+.minutes-fullscreen-doc-wrapper {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  min-width: 210mm;
+  max-width: 210mm;
+  padding: 0;
+}
+
 /* Preview mode also needs the layout classes (non-print) */
 .minutes-preview-root .mp-header {
   text-align: center;

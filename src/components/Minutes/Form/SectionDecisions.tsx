@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Link2, Unlink } from 'lucide-react';
+import { Plus, Trash2, Link2, Unlink, ListChecks } from 'lucide-react';
 import type { DraftDecision, ProfileOption, OrgUnitOption, DraftAgendaItem } from './types';
 import { defaultDecision } from './defaults';
 import { TextareaField, SelectField } from './fields';
-import { PRIORITY_OPTIONS } from './options';
+import { PRIORITY_OPTIONS, AGENDA_RESULT_OPTIONS } from './options';
 import { SearchableSelect } from './SearchableSelect';
+import { ComboboxInput } from './ComboboxInput';
 import { JalaliDatePicker } from './JalaliDatePicker';
 import { isDueBeforeStart } from '../../../lib/minutesDate';
 
@@ -25,15 +26,12 @@ export function SectionDecisions({
   orgUnits, orgUnitsLoading,
   agendaItems, readOnly,
 }: SectionDecisionsProps) {
+  const [openAgendaPickerFor, setOpenAgendaPickerFor] = useState<string | null>(null);
+  const [openTitlePickerFor, setOpenTitlePickerFor] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   const addIndependent = () =>
     setDecisions(l => [...l, defaultDecision()]);
-
-  const addFromAgenda = (agenda: DraftAgendaItem) =>
-    setDecisions(l => [...l, {
-      ...defaultDecision(),
-      title: agenda.title,
-      meetingAgendaItemId: agenda.meetingAgendaItemId || null,
-    }]);
 
   const remove = (id: string) =>
     setDecisions(l => l.filter(r => r.id !== id));
@@ -42,7 +40,7 @@ export function SectionDecisions({
     setDecisions(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
 
   const usersDisabled = profilesLoading || profiles.length === 0 || !!readOnly;
-  const orgUnitsDisabled = orgUnitsLoading || orgUnits.length === 0 || !!readOnly;
+  const orgUnitsDisabled = orgUnitsLoading || !!readOnly;
 
   const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
   const ownerOptions = profiles.map(p => ({
@@ -51,7 +49,8 @@ export function SectionDecisions({
     sublabel: p.position || undefined,
   }));
 
-  const agendaOptions = useMemo(() => {
+  // Agenda items that have a real meeting_agenda_item_id (for linking).
+  const agendaLinkOptions = useMemo(() => {
     const seen = new Set<string>();
     return agendaItems
       .filter(a => a.title.trim() && a.meetingAgendaItemId)
@@ -60,73 +59,23 @@ export function SectionDecisions({
         seen.add(a.meetingAgendaItemId);
         return true;
       })
-      .map((a, idx) => ({
+      .map(a => ({
         value: a.meetingAgendaItemId,
         label: a.title,
         sublabel: [a.presenter, a.description].filter(Boolean).join(' — ') || undefined,
-        order: idx + 1,
       }));
   }, [agendaItems]);
 
-  return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
-        مصوبات و اقدامات
-      </h2>
-      {readOnly && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-3 text-sm text-blue-700 dark:text-blue-400">
-          این صورت‌جلسه در وضعیت قابل ویرایش نیست؛ بخش مصوبات فقط خواندنی است.
-        </div>
-      )}
-      <DecisionsForm
-        decisions={decisions}
-        setDecisions={setDecisions}
-        profiles={profiles}
-        profilesLoading={profilesLoading}
-        orgUnits={orgUnits}
-        orgUnitsLoading={orgUnitsLoading}
-        agendaItems={agendaItems}
-        readOnly={readOnly}
-        addIndependent={addIndependent}
-        addFromAgenda={addFromAgenda}
-        remove={remove}
-        update={update}
-        usersDisabled={usersDisabled}
-        orgUnitsDisabled={orgUnitsDisabled}
-        ownerOptions={ownerOptions}
-        agendaOptions={agendaOptions}
-      />
-    </div>
-  );
-}
-
-interface DecisionsFormProps extends SectionDecisionsProps {
-  addIndependent: () => void;
-  addFromAgenda: (agenda: DraftAgendaItem) => void;
-  remove: (id: string) => void;
-  update: (id: string, field: keyof DraftDecision, value: string | number | boolean | null) => void;
-  usersDisabled: boolean;
-  orgUnitsDisabled: boolean;
-  ownerOptions: { value: string; label: string; sublabel?: string }[];
-  agendaOptions: DraftAgendaItem[];
-}
-
-function DecisionsForm({
-  decisions,
-  readOnly,
-  addIndependent,
-  addFromAgenda: _addFromAgenda,
-  remove,
-  update,
-  orgUnits,
-  orgUnitsDisabled,
-  usersDisabled,
-  ownerOptions,
-  agendaOptions,
-}: DecisionsFormProps) {
-  void _addFromAgenda;
-  const [openAgendaPickerFor, setOpenAgendaPickerFor] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  // All agenda items with a title (for title-only picker). Preserves original order.
+  const agendaTitleOptions = useMemo(() =>
+    agendaItems
+      .filter(a => a.title.trim())
+      .map(a => ({
+        value: a.id,
+        label: a.title,
+        sublabel: [a.presenter, a.description].filter(Boolean).join(' — ') || undefined,
+      })),
+  [agendaItems]);
 
   const linkToAgenda = (decisionId: string, meetingAgendaItemId: string) => {
     const agenda = agendaItems.find(a => a.meetingAgendaItemId === meetingAgendaItemId);
@@ -136,6 +85,7 @@ function DecisionsForm({
         ? { ...d, meetingAgendaItemId, title: d.title.trim() ? d.title : agenda.title }
         : d
     ));
+    setOpenAgendaPickerFor(null);
   };
 
   const clearAgendaLink = (decisionId: string) =>
@@ -143,29 +93,44 @@ function DecisionsForm({
       d.id === decisionId ? { ...d, meetingAgendaItemId: null } : d
     ));
 
+  // Title-only picker: copies just the agenda title into item.title.
+  // Does NOT set meetingAgendaItemId or agendaResultId.
+  const pickAgendaTitle = (decisionId: string, title: string) => {
+    update(decisionId, 'title', title);
+    setOpenTitlePickerFor(null);
+  };
+
   // Per-decision validation errors for the Jalali date fields.
   const dateErrors = useMemo(() => {
-    const errs: Record<string, { start?: string; due?: string }> = {};
+    const errs: Record<string, { due?: string }> = {};
     for (const d of decisions) {
-      const e: { start?: string; due?: string } = {};
       if (d.startDate && d.dueDate && isDueBeforeStart(d.startDate, d.dueDate)) {
-        e.due = 'مهلت انجام نمی‌تواند قبل از تاریخ شروع باشد.';
+        errs[d.id] = { due: 'مهلت انجام نمی‌تواند قبل از تاریخ شروع باشد.' };
       }
-      if (Object.keys(e).length > 0) errs[d.id] = e;
     }
     return errs;
   }, [decisions]);
 
   useEffect(() => {
-    if (!openAgendaPickerFor) return;
+    if (!openAgendaPickerFor && !openTitlePickerFor) return;
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpenAgendaPickerFor(null);
+        setOpenTitlePickerFor(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [openAgendaPickerFor]);
+  }, [openAgendaPickerFor, openTitlePickerFor]);
+
+  // Responsible unit options with legacy fallback for deleted units.
+  const buildResponsibleUnitOptions = (item: DraftDecision) => {
+    const opts = orgUnits.map(u => ({ value: u.id, label: u.name }));
+    if (item.responsibleUnitId && !orgUnits.some(u => u.id === item.responsibleUnitId)) {
+      opts.push({ value: item.responsibleUnitId, label: item.responsibleUnitNameSnapshot || 'واحد حذفشده' });
+    }
+    return opts;
+  };
 
   return (
     <div className="space-y-5">
@@ -181,6 +146,12 @@ function DecisionsForm({
           </button>
         )}
       </div>
+
+      {readOnly && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-3 text-sm text-blue-700 dark:text-blue-400">
+          این صورت‌جلسه در وضعیت قابل ویرایش نیست؛ بخش مصوبات فقط خواندنی است.
+        </div>
+      )}
 
       {decisions.length === 0 && (
         <div className="text-center py-8 text-sm text-gray-400 dark:text-gray-500">
@@ -203,6 +174,7 @@ function DecisionsForm({
             )}
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-b-2xl">
+            {/* 1. Title with agenda link + title-only picker */}
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">عنوان مصوبه</label>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -212,9 +184,10 @@ function DecisionsForm({
                   placeholder="عنوان مصوبه را وارد کنید"
                   value={item.title}
                   onChange={e => update(item.id, 'title', e.target.value)}
-                  className="flex-1 px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white min-w-0"
+                  disabled={!!readOnly}
+                  className="flex-1 px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white min-w-0 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
-                {!readOnly && agendaOptions.length > 0 && (
+                {!readOnly && agendaLinkOptions.length > 0 && (
                   <div className="relative shrink-0">
                     {item.meetingAgendaItemId ? (
                       <button
@@ -236,12 +209,12 @@ function DecisionsForm({
                       </button>
                     )}
                     {openAgendaPickerFor === item.id && (
-                      <div className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]">
+                      <div className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]" ref={menuRef}>
                         <SearchableSelect
                           id={`dec-agenda-${item.id}`}
                           value={item.meetingAgendaItemId || ''}
-                          options={agendaOptions}
-                          onChange={v => { linkToAgenda(item.id, v); setOpenAgendaPickerFor(null); }}
+                          options={agendaLinkOptions}
+                          onChange={v => linkToAgenda(item.id, v)}
                           placeholder="انتخاب دستور جلسه"
                           searchPlaceholder="جستجوی دستور جلسه..."
                           emptyText="دستور جلسه‌ای یافت نشد"
@@ -250,29 +223,70 @@ function DecisionsForm({
                     )}
                   </div>
                 )}
+                {/* Title-only picker icon — copies agenda title without linking */}
+                {!readOnly && (
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setOpenTitlePickerFor(openTitlePickerFor === item.id ? null : item.id)}
+                      aria-label="انتخاب عنوان از دستور جلسات"
+                      title="انتخاب عنوان از دستور جلسات"
+                      className="inline-flex items-center justify-center w-10 h-[42px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-colors"
+                    >
+                      <ListChecks className="w-4 h-4" />
+                    </button>
+                    {openTitlePickerFor === item.id && (
+                      <div className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]" ref={menuRef}>
+                        {agendaTitleOptions.length === 0 ? (
+                          <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                            دستور جلسه‌ای برای این جلسه ثبت نشده است.
+                          </div>
+                        ) : (
+                          <ComboboxInput
+                            id={`dec-title-picker-${item.id}`}
+                            value=""
+                            options={agendaTitleOptions}
+                            onChange={() => {}}
+                            onSelect={opt => pickAgendaTitle(item.id, opt.label)}
+                            searchPlaceholder="جستجوی دستور جلسه..."
+                            emptyText="دستور جلسه‌ای یافت نشد"
+                            useLabelAsValue
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
+            {/* 2. Description */}
             <div className="sm:col-span-2">
               <TextareaField id={`dec-desc-${item.id}`} label="متن مصوبه" rows={3} value={item.description} onChange={v => update(item.id, 'description', v)} />
             </div>
-            {/* Field order: responsible unit → primary owner → start date → due date */}
+            {/* 3. Responsible unit — searchable select */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">واحد مسئول</label>
-              <select
-                value={item.responsibleUnitId || ''}
-                onChange={e => {
-                  const unitId = e.target.value || null;
-                  const unit = orgUnits.find(u => u.id === unitId);
-                  update(item.id, 'responsibleUnitId', unitId);
-                  update(item.id, 'responsibleUnitNameSnapshot', unit?.name || '');
-                }}
-                disabled={orgUnitsDisabled}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60"
-              >
-                <option value="">— بدون واحد —</option>
-                {orgUnits.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              {orgUnitsDisabled && orgUnits.length === 0 ? (
+                <div className="px-3 py-2.5 text-sm text-gray-400 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700">در حال بارگذاری...</div>
+              ) : (
+                <SearchableSelect
+                  id={`dec-unit-${item.id}`}
+                  value={item.responsibleUnitId || ''}
+                  options={buildResponsibleUnitOptions(item)}
+                  onChange={v => {
+                    const unitId = v || null;
+                    const unit = orgUnits.find(u => u.id === unitId);
+                    update(item.id, 'responsibleUnitId', unitId);
+                    update(item.id, 'responsibleUnitNameSnapshot', unit?.name || '');
+                  }}
+                  placeholder="— بدون واحد —"
+                  searchPlaceholder="جستجوی واحد سازمانی..."
+                  emptyText="واحدی یافت نشد"
+                  disabled={!!readOnly}
+                />
+              )}
             </div>
+            {/* 4. Primary owner */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">مسئول اصلی <span className="text-red-500">*</span></label>
               {usersDisabled ? (
@@ -289,6 +303,7 @@ function DecisionsForm({
                 />
               )}
             </div>
+            {/* 5. Start date */}
             <div>
               <label htmlFor={`dec-start-${item.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ شروع</label>
               <JalaliDatePicker
@@ -299,6 +314,7 @@ function DecisionsForm({
                 placeholder="انتخاب تاریخ شروع"
               />
             </div>
+            {/* 6. Due date */}
             <div>
               <label htmlFor={`dec-due-${item.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">مهلت انجام</label>
               <JalaliDatePicker
@@ -311,7 +327,19 @@ function DecisionsForm({
                 error={dateErrors[item.id]?.due}
               />
             </div>
-            <SelectField id={`dec-priority-${item.id}`} label="اولویت" options={PRIORITY_OPTIONS} value={item.priority} onChange={v => update(item.id, 'priority', v)} />
+            {/* 7. Priority */}
+            <SelectField id={`dec-priority-${item.id}`} label="اولویت" options={PRIORITY_OPTIONS} value={item.priority} onChange={v => update(item.id, 'priority', v)} disabled={!!readOnly} />
+            {/* 8. Discussion result */}
+            <div className="sm:col-span-2">
+              <TextareaField id={`dec-discussion-${item.id}`} label="نتیجه بحث" rows={2} value={item.discussionResult} onChange={v => update(item.id, 'discussionResult', v)} />
+            </div>
+            {/* 9. Result type */}
+            <SelectField id={`dec-result-type-${item.id}`} label="نوع نتیجه" options={AGENDA_RESULT_OPTIONS} value={item.resultType} onChange={v => update(item.id, 'resultType', v)} disabled={!!readOnly} />
+            {/* 10. Additional notes */}
+            <div className="sm:col-span-2">
+              <TextareaField id={`dec-additional-${item.id}`} label="توضیحات تکمیلی" rows={2} value={item.additionalNotes} onChange={v => update(item.id, 'additionalNotes', v)} />
+            </div>
+            {/* 11. Requires followup */}
             <div className="sm:col-span-2 flex items-center gap-3">
               <label htmlFor={`dec-followup-${item.id}`} className="flex items-center gap-2 cursor-pointer select-none">
                 <input
