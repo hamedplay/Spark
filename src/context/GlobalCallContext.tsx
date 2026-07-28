@@ -340,7 +340,7 @@ export function GlobalCallProvider({
       if (!msgs?.length) return;
       const senderIds = [...new Set(msgs.map((m: any) => m.sender_id))];
       const { data: profiles } = await supabase
-        .from('profiles')
+        .from('profiles_public')
         .select('user_id, full_name')
         .in('user_id', senderIds);
       const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name]));
@@ -375,8 +375,8 @@ export function GlobalCallProvider({
           .maybeSingle();
         if (!session) return;
         const { data: callerProfile } = await supabase
-          .from('profiles')
-          .select('user_id, full_name, email, avatar_url')
+          .from('profiles_public')
+          .select('user_id, full_name, username, avatar_url')
           .eq('user_id', session.caller_id)
           .maybeSingle();
         setIncomingCall({ session: session as CallSession, callerProfile: callerProfile || null });
@@ -389,8 +389,8 @@ export function GlobalCallProvider({
           if (session.status !== 'ringing') return;
           setIncomingCall((prev) => (prev ? prev : { session, callerProfile: null }));
           const { data: callerProfile } = await supabase
-            .from('profiles')
-            .select('user_id, full_name, email, avatar_url')
+            .from('profiles_public')
+            .select('user_id, full_name, username, avatar_url')
             .eq('user_id', session.caller_id)
             .maybeSingle();
           setIncomingCall((prev) => {
@@ -421,7 +421,7 @@ export function GlobalCallProvider({
         if (!['urgent', 'important'].includes(msg.message_type)) return;
         if (msg.sender_id === currentUserId) return;
         const { data: sender } = await supabase
-          .from('profiles')
+          .from('profiles_public')
           .select('full_name')
           .eq('user_id', msg.sender_id)
           .maybeSingle();
@@ -448,7 +448,7 @@ export function GlobalCallProvider({
         if (!['urgent', 'important'].includes(msg.message_type)) return;
         if (msg.sender_id === currentUserId) return;
         const { data: sender } = await supabase
-          .from('profiles')
+          .from('profiles_public')
           .select('full_name')
           .eq('user_id', msg.sender_id)
           .maybeSingle();
@@ -514,6 +514,7 @@ export function GlobalCallProvider({
     const otherUser: UserProfile = callerProfile ?? {
       user_id: session.caller_id,
       full_name: null,
+      username: null,
       email: null,
     };
     supabase.from('call_sessions').update({ status: 'active' }).eq('id', session.id);

@@ -10,7 +10,7 @@ interface SectionApproversProps {
 }
 
 export function SectionApprovers({ approvalMode, internalParticipants, profiles, readOnly }: SectionApproversProps) {
-  const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
+  const profileLabel = (p: ProfileOption) => p.full_name || p.username || p.user_id;
 
   const eligibleApprovers = internalParticipants.filter(p => !!p.userId);
 

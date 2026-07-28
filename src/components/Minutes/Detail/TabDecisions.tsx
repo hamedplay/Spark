@@ -69,7 +69,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
       const names: Record<string, string> = {};
       if (ownerIds.length > 0) {
         const { data: profData } = await supabase
-          .from('profiles')
+          .from('profiles_public')
           .select('user_id, full_name')
           .in('user_id', ownerIds);
         for (const p of (profData || []) as unknown as { user_id: string; full_name: string }[]) {

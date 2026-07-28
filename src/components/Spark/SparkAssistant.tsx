@@ -434,7 +434,7 @@ async function execSendMessage(cmd: ParsedCommand, userId: string): Promise<stri
   const lbl = msgType === 'urgent' ? ' اورژانسی' : msgType === 'important' ? ' مهم' : '';
 
   // ── جستجو در پروفایل‌های کاربران ─────────────────────────────────────────────
-  const { data: profiles } = await supabase.from('profiles').select('user_id, full_name').ilike('full_name', `%${cmd.targetUser}%`).limit(5);
+  const { data: profiles } = await supabase.from('profiles_public').select('user_id, full_name').ilike('full_name', `%${cmd.targetUser}%`).limit(5);
   if (profiles?.length) {
     const recipient = profiles[0];
     const { data: convId, error: convErr } = await supabase.rpc('find_or_create_direct_conversation', { user_a: userId, user_b: recipient.user_id });
@@ -470,11 +470,11 @@ async function execSendMessage(cmd: ParsedCommand, userId: string): Promise<stri
 }
 
 async function execCreateTask(cmd: ParsedCommand, userId: string): Promise<string> {
-  const { data: myProfile } = await supabase.from('profiles').select('full_name').eq('user_id', userId).maybeSingle();
+  const { data: myProfile } = await supabase.from('profiles_public').select('full_name').eq('user_id', userId).maybeSingle();
   let assigneeId = userId;
   let assigneeName = myProfile?.full_name || 'من';
   if (cmd.taskAssigneeName) {
-    const { data: ap } = await supabase.from('profiles').select('user_id, full_name').ilike('full_name', `%${cmd.taskAssigneeName}%`).limit(1).maybeSingle();
+    const { data: ap } = await supabase.from('profiles_public').select('user_id, full_name').ilike('full_name', `%${cmd.taskAssigneeName}%`).limit(1).maybeSingle();
     if (ap) { assigneeId = ap.user_id; assigneeName = ap.full_name || cmd.taskAssigneeName; }
     else assigneeName = cmd.taskAssigneeName;
   }

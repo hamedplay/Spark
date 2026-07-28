@@ -92,7 +92,7 @@ export function SectionParticipants({
     setInternalParticipants(l => l.map(r => r.id === rowId ? {
       ...r,
       userId,
-      nameSnapshot: p ? (p.full_name || p.email || '') : '',
+      nameSnapshot: p ? (p.full_name || p.username || '') : '',
       positionSnapshot: p?.position || '',
       orgUnitId: p?.primary_unit_id || '',
       orgUnitNameSnapshot: unit?.name || '',
@@ -162,7 +162,7 @@ export function SectionParticipants({
     updateExternal(rowId, 'fullName', value);
   };
 
-  const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
+  const profileLabel = (p: ProfileOption) => p.full_name || p.username || p.user_id;
 
   const usersDisabled = profilesLoading || !!profilesError || profiles.length === 0;
   const orgUnitsDisabled = orgUnitsLoading || !!orgUnitsError || orgUnits.length === 0;

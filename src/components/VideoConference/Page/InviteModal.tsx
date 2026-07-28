@@ -23,14 +23,13 @@ export function InviteModal({ room, currentUserId, onClose }: {
     debounceRef.current = setTimeout(async () => {
       setLoadingUsers(true);
       try {
-        let query = supabase.from('profiles')
-          .select('user_id, full_name, email')
+        let query = supabase.from('profiles_public')
+          .select('user_id, full_name, username')
           .neq('user_id', currentUserId)
-          .not('is_hidden', 'eq', true)
           .limit(30);
         if (search.trim()) {
           const safe = search.replace(/[%_\\'"]/g, '');
-          query = query.or(`full_name.ilike.%${safe}%,email.ilike.%${safe}%`);
+          query = query.or(`full_name.ilike.%${safe}%,username.ilike.%${safe}%`);
         }
         const { data, error } = await query;
         if (error) throw error;
@@ -74,7 +73,7 @@ export function InviteModal({ room, currentUserId, onClose }: {
       });
       if (error) throw error;
       setSent(prev => new Set([...prev, u.user_id]));
-      toast.success(`دعوتنامه به ${u.full_name || u.email} ارسال شد`);
+      toast.success(`دعوتنامه به ${u.full_name || u.username} ارسال شد`);
     } catch (e: any) {
       toast.error('خطا در ارسال دعوتنامه: ' + (e.message || ''));
     } finally {
@@ -143,11 +142,11 @@ export function InviteModal({ room, currentUserId, onClose }: {
                 users.map(u => (
                   <div key={u.user_id} className="flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl">
                     <div className="w-9 h-9 rounded-full bg-teal-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                      {(u.full_name || u.email || '?')[0].toUpperCase()}
+                      {(u.full_name || u.username || '?')[0].toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.email}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{u.username}</p>
                     </div>
                     {sent.has(u.user_id) ? (
                       <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
@@ -157,7 +156,7 @@ export function InviteModal({ room, currentUserId, onClose }: {
                       <button
                         onClick={() => inviteUser(u)}
                         disabled={sending === u.user_id}
-                        aria-label={`دعوت ${u.full_name || u.email}`}
+                                        aria-label={`دعوت ${u.full_name || u.username}`}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-xs font-medium transition-colors disabled:opacity-50"
                       >
                         {sending === u.user_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} دعوت

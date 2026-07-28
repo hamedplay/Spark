@@ -40,7 +40,7 @@ export async function resendMeetingInvitations(
   if (notifyIds.length > 0) {
     const { data: notifyProfiles } =
       await supabase
-        .from('profiles')
+        .from('profiles_public')
         .select('user_id, full_name')
         .in('user_id', notifyIds);
 

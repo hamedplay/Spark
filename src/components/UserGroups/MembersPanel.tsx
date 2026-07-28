@@ -22,12 +22,12 @@ export function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () =
     if (error || !data) { setLoading(false); return; }
     if (data.length === 0) { setMembers([]); setLoading(false); return; }
     const userIds = data.map(m => m.user_id);
-    const { data: profiles } = await supabase.from('profiles').select('user_id, full_name, email, avatar_url').in('user_id', userIds);
+    const { data: profiles } = await supabase.from('profiles_public').select('user_id, full_name, username, avatar_url').in('user_id', userIds);
     const profileMap = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
     setMembers(data.map(m => ({
       id: m.id, user_id: m.user_id, group_id: m.group_id, joined_at: m.added_at,
       full_name: profileMap[m.user_id]?.full_name ?? null,
-      email: profileMap[m.user_id]?.email ?? null,
+      username: profileMap[m.user_id]?.username ?? null,
       avatar_url: profileMap[m.user_id]?.avatar_url ?? null,
     })));
     setLoading(false);
@@ -35,7 +35,7 @@ export function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () =
 
   useEffect(() => {
     loadMembers();
-    supabase.from('profiles').select('user_id, full_name, email, avatar_url').order('full_name').then(({ data }) => setAllProfiles((data || []) as AllProfile[]));
+    supabase.from('profiles_public').select('user_id, full_name, username, avatar_url').order('full_name').then(({ data }) => setAllProfiles((data || []) as AllProfile[]));
   }, [loadMembers]);
 
   const removeMember = async (memberId: string) => {
@@ -55,11 +55,11 @@ export function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () =
     loadMembers();
   };
 
-  const initials = (m: Member) => (m.full_name || m.email || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-  const filtered = members.filter(m => !search || (m.full_name || '').includes(search) || (m.email || '').includes(search));
+  const initials = (m: Member) => (m.full_name || m.username || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const filtered = members.filter(m => !search || (m.full_name || '').includes(search) || (m.username || '').includes(search));
   const addFiltered = allProfiles.filter(p =>
     !members.find(m => m.user_id === p.user_id) &&
-    (!addSearch || (p.full_name || '').includes(addSearch) || (p.email || '').includes(addSearch))
+    (!addSearch || (p.full_name || '').includes(addSearch) || (p.username || '').includes(addSearch))
   );
 
   return (
@@ -90,12 +90,12 @@ export function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () =
                     {p.avatar_url
                       ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
-                          {(p.full_name || p.email || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                          {(p.full_name || p.username || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
                         </div>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{p.full_name || '—'}</p>
-                    <p className="text-xs text-gray-400 truncate">{p.email}</p>
+                    <p className="text-xs text-gray-400 truncate">{p.username}</p>
                   </div>
                   <button onClick={() => addMember(p.user_id)}
                     className="flex items-center gap-1 px-2.5 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-medium hover:bg-blue-200 dark:hover:bg-blue-900/50 transition flex-shrink-0">
@@ -131,7 +131,7 @@ export function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () =
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{m.full_name || '—'}</p>
-                <p className="text-xs text-gray-400 truncate">{m.email}</p>
+                <p className="text-xs text-gray-400 truncate">{m.username}</p>
               </div>
               <span className="text-xs text-gray-400 flex-shrink-0">{new Date(m.joined_at).toLocaleDateString('fa-IR')}</span>
               <button onClick={() => removeMember(m.id)}

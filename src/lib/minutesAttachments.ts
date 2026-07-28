@@ -137,7 +137,7 @@ export async function listMinuteAttachments(minuteId: string): Promise<Attachmen
   const ids = Array.from(new Set(rows.map(r => r.uploaded_by_user_id).filter(Boolean)));
   if (ids.length) {
     const { data: prof } = await supabase
-      .from('profiles')
+      .from('profiles_public')
       .select('user_id,full_name')
       .in('user_id', ids);
     const map: Record<string, string> = {};

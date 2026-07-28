@@ -145,7 +145,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       if (approvalRows.length > 0) {
         const userIds = approvalRows.map(a => a.approver_user_id);
         const { data: profiles } = await supabase
-          .from('profiles')
+          .from('profiles_public')
           .select('user_id, full_name')
           .in('user_id', userIds);
         const nameMap = new Map((profiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
@@ -171,7 +171,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       if (commentsData && commentsData.length > 0) {
         const creatorIds = [...new Set(commentsData.map((c: { created_by_user_id: string }) => c.created_by_user_id))];
         const { data: creatorProfiles } = await supabase
-          .from('profiles')
+          .from('profiles_public')
           .select('user_id, full_name')
           .in('user_id', creatorIds);
         const creatorNameMap = new Map((creatorProfiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
@@ -322,7 +322,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       const ownerIds = Array.from(new Set(decRows.map(d => d.primary_owner_user_id).filter(Boolean))) as string[];
       let namesMap: Record<string, string> = {};
       if (ownerIds.length > 0) {
-        const { data: profData } = await supabase.from('profiles')
+        const { data: profData } = await supabase.from('profiles_public')
           .select('user_id, full_name')
           .in('user_id', ownerIds);
         namesMap = Object.fromEntries((profData || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name]));

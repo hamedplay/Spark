@@ -59,7 +59,7 @@ export async function listMinuteAudit(
   const ids = Array.from(new Set(trimmed.map(r => r.actor_user_id).filter(Boolean) as string[]));
   if (ids.length) {
     const { data: prof } = await supabase
-      .from('profiles')
+      .from('profiles_public')
       .select('user_id,full_name')
       .in('user_id', ids);
     const map: Record<string, string> = {};

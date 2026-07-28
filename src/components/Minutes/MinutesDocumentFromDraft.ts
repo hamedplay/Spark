@@ -17,7 +17,7 @@ export function buildDocumentDataFromDraft(
 ): MinutesDocumentData {
   const profileLabel = (uid: string): string => {
     const p = profiles.find(x => x.user_id === uid);
-    return p?.full_name || p?.email || uid;
+    return p?.full_name || p?.username || uid;
   };
   const unitLabel = (uid: string | null): string | null => {
     if (!uid) return null;

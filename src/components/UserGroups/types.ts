@@ -14,7 +14,7 @@ export interface Member {
   user_id: string;
   group_id: string;
   full_name: string | null;
-  email: string | null;
+  username: string | null;
   avatar_url: string | null;
   joined_at: string;
 }
@@ -34,7 +34,7 @@ export interface AuditRow {
 export interface AllProfile {
   user_id: string;
   full_name: string | null;
-  email: string | null;
+  username: string | null;
   avatar_url: string | null;
 }
 

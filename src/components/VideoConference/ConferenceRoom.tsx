@@ -383,7 +383,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
       .filter(uid => !fetchedAvatarUserIds.current.has(uid));
     if (!toFetch.length) return;
     toFetch.forEach(uid => fetchedAvatarUserIds.current.add(uid));
-    supabase.from('profiles').select('user_id, avatar_url').in('user_id', toFetch)
+    supabase.from('profiles_public').select('user_id, avatar_url').in('user_id', toFetch)
       .then(({ data }) => {
         if (!data?.length) return;
         const map: Record<string, string> = {};

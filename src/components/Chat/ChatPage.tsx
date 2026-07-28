@@ -88,6 +88,21 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
         .order('created_at', { ascending: false }),
     ]);
 
+    if (profilesRes.error) {
+      console.error('[ChatPage] profiles_public query failed', {
+        message: profilesRes.error.message,
+        code: profilesRes.error.code,
+        details: profilesRes.error.details,
+        requestedCount: otherIds.length,
+      });
+    }
+    if (presenceRes.error) {
+      console.error('[ChatPage] user_presence query failed', {
+        message: presenceRes.error.message,
+        code: presenceRes.error.code,
+      });
+    }
+
     const presenceMap = new Map<string, { is_online: boolean; status: string; last_seen: string }>(
       (presenceRes.data || []).map((p: any) => [p.user_id, {
         is_online: p.is_online && p.last_seen >= threshold,
@@ -108,6 +123,17 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
       })
     );
 
+    const unresolvedIds = otherIds.filter(id => !profileMap.has(id));
+    if (unresolvedIds.length > 0) {
+      console.warn('[ChatPage] unresolved profile IDs', {
+        unresolvedCount: unresolvedIds.length,
+        requestedCount: otherIds.length,
+        returnedCount: profileMap.size,
+        unresolvedIds,
+        hasQueryError: !!profilesRes.error,
+      });
+    }
+
     const countMap = new Map<string, number>(
       (unreadRes.data || []).map((r: any) => [r.conversation_id, Number(r.unread_count)])
     );
@@ -122,7 +148,16 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
       const otherId = c.participant_a === uid ? c.participant_b : c.participant_a;
       return {
         ...c,
-        otherUser: profileMap.get(otherId) ?? { user_id: otherId, full_name: null, email: null },
+        otherUser: profileMap.get(otherId) ?? {
+          user_id: otherId,
+          full_name: null,
+          username: null,
+          email: null,
+          avatar_url: null,
+          status: 'offline',
+          is_online: false,
+          last_seen: null,
+        },
         unreadCount: countMap.get(c.id) || 0,
         hasMention: mentionMap.has(c.id),
         mentionMessageId: mentionMap.get(c.id) || null,

@@ -42,7 +42,7 @@ export function SectionInfo({
   const update = (field: keyof DraftMeetingInfo, value: string) =>
     setInfo(prev => ({ ...prev, [field]: value }));
 
-  const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
+  const profileLabel = (p: ProfileOption) => p.full_name || p.username || p.user_id;
 
   // Build secretary/chair options limited to internal participants of this meeting
   const participantProfileOptions = internalParticipants

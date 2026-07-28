@@ -210,8 +210,8 @@ export async function loadMinutesPrefill(
   let profiles: ProfileOption[] = [];
   if (allUserIds.length > 0) {
     const { data: profileRows, error: profileErr } = await supabase
-      .from('profiles')
-      .select('user_id, full_name, email, position, primary_unit_id')
+      .from('profiles_public')
+      .select('user_id, full_name, username, position, primary_unit_id')
       .in('user_id', allUserIds);
     if (!profileErr && profileRows) {
       profiles = profileRows as ProfileOption[];
@@ -225,8 +225,8 @@ export async function loadMinutesPrefill(
   let delegateProfiles: ProfileOption[] = [];
   if (delegateUserIds.length > 0) {
     const { data: dpRows, error: dpErr } = await supabase
-      .from('profiles')
-      .select('user_id, full_name, email, position, primary_unit_id')
+      .from('profiles_public')
+      .select('user_id, full_name, username, position, primary_unit_id')
       .in('user_id', delegateUserIds);
     if (!dpErr && dpRows) {
       delegateProfiles = dpRows as ProfileOption[];
@@ -271,12 +271,12 @@ export async function loadMinutesPrefill(
     }
     const delegateTo = inboxStatus?.delegate_to ?? null;
     const delegateProfile = delegateTo ? delegateProfileMap.get(delegateTo) : undefined;
-    const delegateName = delegateProfile ? (delegateProfile.full_name || delegateProfile.email || '') : '';
+    const delegateName = delegateProfile ? (delegateProfile.full_name || delegateProfile.username || '') : '';
     return {
       id: uid(),
       participantId: null,
       userId,
-      nameSnapshot: profile ? (profile.full_name || profile.email || fallbackName) : fallbackName,
+      nameSnapshot: profile ? (profile.full_name || profile.username || fallbackName) : fallbackName,
       positionSnapshot: profile?.position || '',
       orgUnitId: profile?.primary_unit_id || '',
       orgUnitNameSnapshot: unit?.name || '',

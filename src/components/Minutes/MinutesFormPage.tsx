@@ -340,9 +340,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       setProfilesError(null);
       try {
         const { data, error } = await supabase
-          .from('profiles')
-          .select('user_id, full_name, email, position, primary_unit_id')
-          .neq('is_active', false)
+          .from('profiles_public')
+          .select('user_id, full_name, username, position, primary_unit_id')
           .order('full_name');
         if (error) throw error;
         setProfiles((data || []) as unknown as ProfileOption[]);

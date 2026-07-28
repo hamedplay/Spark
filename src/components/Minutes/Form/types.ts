@@ -21,7 +21,7 @@ export interface MeetingOption {
 export interface ProfileOption {
   user_id: string;
   full_name: string | null;
-  email: string | null;
+  username: string | null;
   position: string | null;
   primary_unit_id: string | null;
 }

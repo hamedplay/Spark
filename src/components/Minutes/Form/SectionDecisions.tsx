@@ -42,7 +42,7 @@ export function SectionDecisions({
   const usersDisabled = profilesLoading || profiles.length === 0 || !!readOnly;
   const orgUnitsDisabled = orgUnitsLoading || !!readOnly;
 
-  const profileLabel = (p: ProfileOption) => p.full_name || p.email || p.user_id;
+  const profileLabel = (p: ProfileOption) => p.full_name || p.username || p.user_id;
   const ownerOptions = profiles.map(p => ({
     value: p.user_id,
     label: profileLabel(p),

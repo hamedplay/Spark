@@ -64,10 +64,10 @@ export function useMeetingCardReadModel(meeting: Meeting): UseMeetingCardReadMod
         setParticipantStatuses(map);
 
         if (delegateIds.length > 0) {
-          supabase.from('profiles').select('user_id, full_name, email').in('user_id', delegateIds).then(({ data: profiles }) => {
+          supabase.from('profiles_public').select('user_id, full_name, username').in('user_id', delegateIds).then(({ data: profiles }) => {
             if (!profiles) return;
             const names: Record<string, string> = {};
-            for (const p of profiles) names[p.user_id] = p.full_name || p.email || p.user_id;
+            for (const p of profiles) names[p.user_id] = p.full_name || p.username || p.user_id;
             setDelegateNames(names);
           });
         }

@@ -49,7 +49,7 @@ export async function resendRejectedMeetingAfterEdit(
   if (participantIds.length > 0) {
     const { data: profiles } =
       await supabase
-        .from('profiles')
+        .from('profiles_public')
         .select('user_id, full_name')
         .in('user_id', participantIds);
 
