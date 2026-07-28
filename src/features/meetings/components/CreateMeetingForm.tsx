@@ -129,7 +129,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const [contacts, setContacts] = useState<ContactEmail[]>([]);
   const [selectedExternal, setSelectedExternal] = useState<string[]>([]);
   const [newExternalName, setNewExternalName] = useState('');
-  const [newExternalEmail, setNewExternalEmail] = useState('');
   const [newExternalPhone, setNewExternalPhone] = useState('');
   const [showAddExternal, setShowAddExternal] = useState(false);
 
@@ -473,9 +472,9 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const addQuickExternal = async () => {
     if (!newExternalName.trim() || !userId) return;
     try {
-      const data = await createExternalMeetingContact({ userId, name: newExternalName, email: newExternalEmail, phone: newExternalPhone });
+      const data = await createExternalMeetingContact({ userId, name: newExternalName.trim(), phone: newExternalPhone.trim() });
       setContacts(prev => [...prev, data]); setSelectedExternal(prev => [...prev, newExternalName]);
-      setNewExternalName(''); setNewExternalEmail(''); setNewExternalPhone(''); setShowAddExternal(false);
+      setNewExternalName(''); setNewExternalPhone(''); setShowAddExternal(false);
       toast.success('مخاطب اضافه شد');
     } catch { toast.error('خطا در افزودن مخاطب'); }
   };
@@ -585,7 +584,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         selectedNames={selectedExternal}
         draft={{
           name: newExternalName,
-          email: newExternalEmail,
           phone: newExternalPhone,
         }}
         isAddFormOpen={showAddExternal}
@@ -599,7 +597,6 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         }
         onDraftChange={(draft) => {
           setNewExternalName(draft.name);
-          setNewExternalEmail(draft.email);
           setNewExternalPhone(draft.phone);
         }}
         onAddFormOpenChange={setShowAddExternal}

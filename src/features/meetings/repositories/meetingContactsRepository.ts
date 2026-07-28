@@ -8,6 +8,12 @@ export interface MeetingContactInput {
   phone: string;
 }
 
+export interface ExternalContactCreateInput {
+  userId: string;
+  name: string;
+  phone: string;
+}
+
 export async function fetchMeetingContacts(
   userId: string
 ): Promise<ContactEmail[]> {
@@ -21,13 +27,12 @@ export async function fetchMeetingContacts(
 }
 
 export async function createExternalMeetingContact(
-  input: MeetingContactInput
+  input: ExternalContactCreateInput
 ): Promise<ContactEmail> {
   const { data, error } = await supabase
     .from('contacts_email')
     .insert([{
       name: input.name,
-      email: input.email,
       phone: input.phone,
       user_id: input.userId,
     }])

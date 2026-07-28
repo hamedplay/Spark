@@ -231,7 +231,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [selectedExternal, setSelectedExternal] = useState<string[]>([]);
   const [showExternalDropdown, setShowExternalDropdown] = useState(false);
   const [newExternalName, setNewExternalName] = useState('');
-  const [newExternalEmail, setNewExternalEmail] = useState('');
   const [newExternalPhone, setNewExternalPhone] = useState('');
   const [showAddExternal, setShowAddExternal] = useState(false);
   const externalSearchRef = useRef<HTMLDivElement>(null);
@@ -1270,10 +1269,10 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const addQuickExternal = async () => {
     if (!newExternalName.trim() || !userId) return;
     try {
-      const { data, error } = await supabase.from('contacts_email').insert([{ name: newExternalName, email: newExternalEmail, phone: newExternalPhone, user_id: userId }]).select().single();
+      const { data, error } = await supabase.from('contacts_email').insert([{ name: newExternalName.trim(), phone: newExternalPhone.trim(), user_id: userId }]).select().single();
       if (error) throw error;
       if (data) { setContacts(prev => [...prev, data]); setSelectedExternal(prev => [...prev, newExternalName]); }
-      setNewExternalName(''); setNewExternalEmail(''); setNewExternalPhone(''); setShowAddExternal(false);
+      setNewExternalName(''); setNewExternalPhone(''); setShowAddExternal(false);
       toast.success('مخاطب اضافه شد');
     } catch { toast.error('خطا در افزودن مخاطب'); }
   };
@@ -1370,8 +1369,6 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           setShowAddExternal={setShowAddExternal}
           newExternalName={newExternalName}
           setNewExternalName={setNewExternalName}
-          newExternalEmail={newExternalEmail}
-          setNewExternalEmail={setNewExternalEmail}
           newExternalPhone={newExternalPhone}
           setNewExternalPhone={setNewExternalPhone}
           addQuickExternal={addQuickExternal}

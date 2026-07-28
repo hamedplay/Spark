@@ -14,8 +14,6 @@ export function ExternalParticipantsSection(props: {
   setShowAddExternal: React.Dispatch<React.SetStateAction<boolean>>;
   newExternalName: string;
   setNewExternalName: React.Dispatch<React.SetStateAction<string>>;
-  newExternalEmail: string;
-  setNewExternalEmail: React.Dispatch<React.SetStateAction<string>>;
   newExternalPhone: string;
   setNewExternalPhone: React.Dispatch<React.SetStateAction<string>>;
   addQuickExternal: () => void;
@@ -28,7 +26,6 @@ export function ExternalParticipantsSection(props: {
     filteredExternal,
     showAddExternal, setShowAddExternal,
     newExternalName, setNewExternalName,
-    newExternalEmail, setNewExternalEmail,
     newExternalPhone, setNewExternalPhone,
     addQuickExternal,
   } = props;
@@ -98,16 +95,12 @@ export function ExternalParticipantsSection(props: {
           <div className="space-y-2 mb-2">
             <input type="text" value={newExternalName} onChange={e => setNewExternalName(e.target.value)}
               className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="نام مخاطب" />
-            <div className="flex gap-2">
-              <input type="tel" value={newExternalPhone} onChange={e => setNewExternalPhone(e.target.value)}
-                className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="شماره موبایل" />
-              <input type="email" value={newExternalEmail} onChange={e => setNewExternalEmail(e.target.value)}
-                className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="ایمیل (اختیاری)" />
-            </div>
+            <input type="tel" value={newExternalPhone} onChange={e => setNewExternalPhone(e.target.value)}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="شماره موبایل" />
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={addQuickExternal} className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600">ذخیره و افزودن</button>
-            <button type="button" onClick={() => { setShowAddExternal(false); setNewExternalName(''); setNewExternalEmail(''); setNewExternalPhone(''); }} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">انصراف</button>
+            <button type="button" onClick={() => { setShowAddExternal(false); setNewExternalName(''); setNewExternalPhone(''); }} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">انصراف</button>
           </div>
         </div>
       )}

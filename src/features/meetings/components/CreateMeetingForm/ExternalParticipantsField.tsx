@@ -4,7 +4,6 @@ import type { ContactEmail } from '../../../../types';
 
 export interface ExternalContactDraft {
   name: string;
-  email: string;
   phone: string;
 }
 
@@ -116,16 +115,12 @@ export function ExternalParticipantsField({
           <div className="space-y-2 mb-2">
             <input type="text" value={draft.name} onChange={(e) => onDraftChange({ ...draft, name: e.target.value })}
               className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="نام مخاطب" />
-            <div className="flex gap-2">
-              <input type="tel" value={draft.phone} onChange={(e) => onDraftChange({ ...draft, phone: e.target.value })}
-                className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="شماره موبایل" />
-              <input type="email" value={draft.email} onChange={(e) => onDraftChange({ ...draft, email: e.target.value })}
-                className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="ایمیل (اختیاری)" />
-            </div>
+            <input type="tel" value={draft.phone} onChange={(e) => onDraftChange({ ...draft, phone: e.target.value })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="شماره موبایل" />
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={onAddContact} className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600">ذخیره و افزودن</button>
-            <button type="button" onClick={() => { onAddFormOpenChange(false); onDraftChange({ name: '', email: '', phone: '' }); }} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-300">انصراف</button>
+            <button type="button" onClick={() => { onAddFormOpenChange(false); onDraftChange({ name: '', phone: '' }); }} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-300">انصراف</button>
           </div>
         </div>
       )}
