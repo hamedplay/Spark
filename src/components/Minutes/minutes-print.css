@@ -259,9 +259,17 @@
     color: #666;
   }
 
-  .mp-approvals-table th,
-  .mp-approvals-table td {
-    text-align: right;
+  /* Agenda title-only list */
+  .mp-agenda-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .mp-agenda-list-item {
+    font-size: 10.5pt;
+    margin-bottom: 1.5mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   /* Signature grid — dynamic columns, page-break safe */

@@ -177,16 +177,51 @@ export function SectionDecisions({
             {/* 1. Title with agenda link + title-only picker */}
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">عنوان مصوبه</label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  id={`dec-title-${item.id}`}
-                  type="text"
-                  placeholder="عنوان مصوبه را وارد کنید"
-                  value={item.title}
-                  onChange={e => update(item.id, 'title', e.target.value)}
-                  disabled={!!readOnly}
-                  className="flex-1 px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white min-w-0 disabled:opacity-60 disabled:cursor-not-allowed"
-                />
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                {/* Input + title-only picker icon as one unit */}
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    id={`dec-title-${item.id}`}
+                    type="text"
+                    placeholder="عنوان مصوبه را وارد کنید"
+                    value={item.title}
+                    onChange={e => update(item.id, 'title', e.target.value)}
+                    disabled={!!readOnly}
+                    className="w-full px-3 py-2.5 pe-11 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenTitlePickerFor(openTitlePickerFor === item.id ? null : item.id)}
+                      aria-label="انتخاب عنوان از دستور جلسات"
+                      title="انتخاب عنوان از دستور جلسات"
+                      className="absolute inset-y-0 end-0 w-10 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                    >
+                      <ListChecks className="w-4 h-4" />
+                    </button>
+                  )}
+                  {openTitlePickerFor === item.id && (
+                    <div className="absolute z-50 mt-1 end-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]" ref={menuRef}>
+                      {agendaTitleOptions.length === 0 ? (
+                        <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                          دستور جلسه‌ای برای این جلسه ثبت نشده است.
+                        </div>
+                      ) : (
+                        <ComboboxInput
+                          id={`dec-title-picker-${item.id}`}
+                          value=""
+                          options={agendaTitleOptions}
+                          onChange={() => {}}
+                          onSelect={opt => pickAgendaTitle(item.id, opt.label)}
+                          searchPlaceholder="جستجوی دستور جلسه..."
+                          emptyText="دستور جلسه‌ای یافت نشد"
+                          useLabelAsValue
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Real agenda link button — wraps to next row on narrow screens */}
                 {!readOnly && agendaLinkOptions.length > 0 && (
                   <div className="relative shrink-0">
                     {item.meetingAgendaItemId ? (
@@ -209,7 +244,7 @@ export function SectionDecisions({
                       </button>
                     )}
                     {openAgendaPickerFor === item.id && (
-                      <div className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]" ref={menuRef}>
+                      <div className="absolute z-50 mt-1 end-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]" ref={menuRef}>
                         <SearchableSelect
                           id={`dec-agenda-${item.id}`}
                           value={item.meetingAgendaItemId || ''}
@@ -219,40 +254,6 @@ export function SectionDecisions({
                           searchPlaceholder="جستجوی دستور جلسه..."
                           emptyText="دستور جلسه‌ای یافت نشد"
                         />
-                      </div>
-                    )}
-                  </div>
-                )}
-                {/* Title-only picker icon — copies agenda title without linking */}
-                {!readOnly && (
-                  <div className="relative shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setOpenTitlePickerFor(openTitlePickerFor === item.id ? null : item.id)}
-                      aria-label="انتخاب عنوان از دستور جلسات"
-                      title="انتخاب عنوان از دستور جلسات"
-                      className="inline-flex items-center justify-center w-10 h-[42px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-colors"
-                    >
-                      <ListChecks className="w-4 h-4" />
-                    </button>
-                    {openTitlePickerFor === item.id && (
-                      <div className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]" ref={menuRef}>
-                        {agendaTitleOptions.length === 0 ? (
-                          <div className="px-3 py-4 text-sm text-gray-400 text-center">
-                            دستور جلسه‌ای برای این جلسه ثبت نشده است.
-                          </div>
-                        ) : (
-                          <ComboboxInput
-                            id={`dec-title-picker-${item.id}`}
-                            value=""
-                            options={agendaTitleOptions}
-                            onChange={() => {}}
-                            onSelect={opt => pickAgendaTitle(item.id, opt.label)}
-                            searchPlaceholder="جستجوی دستور جلسه..."
-                            emptyText="دستور جلسه‌ای یافت نشد"
-                            useLabelAsValue
-                          />
-                        )}
                       </div>
                     )}
                   </div>
