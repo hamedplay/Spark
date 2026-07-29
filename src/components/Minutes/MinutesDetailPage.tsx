@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History } from 'lucide-react';
+import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History, Signature as FileSignature } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMinutesTabFromUrl, setMinutesTabInUrl, type MinutesDetailTab } from '../../lib/minutesNavigation';
@@ -15,16 +15,17 @@ import { TabAgenda } from './Detail/TabAgenda';
 import { TabDecisions } from './Detail/TabDecisions';
 import { TabAttachments } from './Detail/TabAttachments';
 import { TabApprovals } from './Detail/TabApprovals';
-import { TabHistory } from './Detail/TabHistory';
+import { TabFinalVersion } from './Detail/TabFinalVersion';
 
 const TABS = [
-  { id: 'summary',      label: 'خلاصه',              icon: FileText },
-  { id: 'participants', label: 'شرکت‌کنندگان',        icon: Users },
-  { id: 'agenda',       label: 'دستور جلسات',         icon: FileText },
-  { id: 'decisions',    label: 'مصوبات',              icon: CheckSquare },
-  { id: 'attachments',  label: 'پیوست‌ها',            icon: Paperclip },
-  { id: 'approvals',    label: 'تأییدها',             icon: Shield },
-  { id: 'history',      label: 'تاریخچه تغییرات',    icon: History },
+  { id: 'summary',       label: 'خلاصه',              icon: FileText },
+  { id: 'participants',  label: 'شرکت‌کنندگان',        icon: Users },
+  { id: 'agenda',        label: 'دستور جلسات',         icon: FileText },
+  { id: 'decisions',     label: 'مصوبات',              icon: CheckSquare },
+  { id: 'attachments',   label: 'پیوست‌ها',            icon: Paperclip },
+  { id: 'approvals',     label: 'تأییدها',             icon: Shield },
+  { id: 'history',       label: 'تاریخچه تغییرات',    icon: History },
+  { id: 'final_version', label: 'نسخه نهایی',          icon: FileSignature },
 ];
 
 interface Props {
@@ -426,6 +427,13 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
             />
           )}
           {activeTab === 'history' && <TabHistory minuteId={minute.id} />}
+          {activeTab === 'final_version' && (
+            <TabFinalVersion
+              minuteId={minute.id}
+              revisionNumber={minute.revision_number}
+              canManage={canManage}
+            />
+          )}
         </div>
       </div>
       <MinutesPrintView

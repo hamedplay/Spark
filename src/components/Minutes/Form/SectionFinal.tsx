@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Eye, EyeOff, Signature as FileSignature, CloudUpload as UploadCloud, Loader as Loader2, X, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Signature as FileSignature, CloudUpload as UploadCloud, Loader as Loader2, X, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { DraftFinalization, DraftMeetingInfo, DraftInternalParticipant, DraftExternalParticipant, DraftAgendaItem, DraftDecision, ProfileOption, OrgUnitOption } from './types';
 import { InputField, TextareaField } from './fields';
@@ -33,7 +33,6 @@ export function SectionFinal({
   info, internalParticipants, externalParticipants, agendaItems, decisions,
   profiles, orgUnits, logoUrl, minuteId, canManage,
 }: SectionFinalProps) {
-  const [showInlinePreview, setShowInlinePreview] = useState(false);
   const [showFullPreview, setShowFullPreview] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [uploadingSigned, setUploadingSigned] = useState(false);
@@ -107,33 +106,17 @@ export function SectionFinal({
         نهایی‌سازی و پیش‌نمایش
       </h2>
 
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          پیش‌نمایش صورت‌جلسه با اطلاعات فعلی فرم نمایش داده می‌شود.
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowInlinePreview(v => !v)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-          >
-            {showInlinePreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            {showInlinePreview ? 'بستن پیش‌نمایش' : 'پیش‌نمایش'}
-          </button>
-          <button
-            onClick={openFullPreview}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Maximize2 className="w-4 h-4" />
-            پیش‌نمایش تمام‌صفحه
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={openFullPreview}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          <Maximize2 className="w-4 h-4" />
+          پیش‌نمایش تمام‌صفحه
+        </button>
       </div>
 
-      {showInlinePreview && (
-        <div className="minutes-preview-container border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800">
-          <MinutesDocumentLayout data={docData} variant="preview" />
-        </div>
-      )}
+
 
       {/* Full-screen preview modal */}
       {showFullPreview && (

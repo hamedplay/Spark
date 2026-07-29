@@ -7,5 +7,12 @@ export interface TabAttachmentsProps {
 }
 
 export function TabAttachments({ minuteId, canManage, revisionNumber }: TabAttachmentsProps) {
-  return <AttachmentManager minuteId={minuteId} canManage={canManage} revisionNumber={revisionNumber} />;
+  return (
+    <AttachmentManager
+      minuteId={minuteId}
+      canManage={canManage}
+      revisionNumber={revisionNumber}
+      excludeKind="signed_final"
+    />
+  );
 }

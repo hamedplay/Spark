@@ -11,9 +11,10 @@ export interface AttachmentManagerProps {
   minuteId: string;
   canManage: boolean;
   revisionNumber?: number | null;
+  excludeKind?: AttachmentKind;
 }
 
-export function AttachmentManager({ minuteId, canManage, revisionNumber }: AttachmentManagerProps) {
+export function AttachmentManager({ minuteId, canManage, revisionNumber, excludeKind }: AttachmentManagerProps) {
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +113,10 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber }: Attac
     } finally { setConfirmDelete(null); }
   };
 
+  const visibleAttachments = excludeKind
+    ? attachments.filter(a => a.attachment_kind !== excludeKind)
+    : attachments;
+
   if (loading) return <TableSkeleton rows={3} />;
   if (error) return <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">{error}</div>;
 
@@ -181,7 +186,7 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber }: Attac
         </div>
       )}
 
-      {attachments.length === 0 ? (
+      {visibleAttachments.length === 0 ? (
         <EmptyState icon={<Paperclip className="w-8 h-8" />} title="هیچ پیوستی وجود ندارد" description={canManage ? 'برای افزودن فایل روی «افزودن فایل» بزنید.' : undefined} />
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -196,7 +201,7 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber }: Attac
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-              {attachments.map(a => (
+              {visibleAttachments.map(a => (
                 <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
                   <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={a.original_filename}>
                     <div className="flex items-center gap-2">

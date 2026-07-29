@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, X, Eye, CreditCard as Edit2, Send, Printer, Trash2, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
+import { Plus, Search, X, Eye, CreditCard as Edit2, Send, Printer, Trash2, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   PageHeader, MinutesStatusBadge, ConfidentialityBadge,
@@ -25,6 +25,42 @@ export function MinutesListPage({ onNavigate }: Props) {
   const [minutes, setMinutes] = useState<MinuteSummary[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [printingId, setPrintingId] = useState<string | null>(null);
+
+  const handleSendForApproval = async (id: string) => {
+    setSendingId(id);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('submit_minutes_for_approval', {
+        p_minute_id: id,
+        p_expected_updated_at: null,
+        p_approval_mode: null,
+      });
+      if (rpcError) { toast.error('ارسال صورت‌جلسه ناموفق بود: ' + rpcError.message); return; }
+      if (data && data.success === false) {
+        const code: string = data.error_code || 'INTERNAL_ERROR';
+        const msgs: Record<string, string> = {
+          MINUTE_NOT_SUBMITTABLE: 'این صورت‌جلسه باید ابتدا از صفحه ویرایش ارسال شود (تنظیم مدل تأیید لازم است).',
+          APPROVAL_MODE_IMMUTABLE: 'مدل تأیید تغییر نمی‌کند.',
+          MINUTES_VERSION_CONFLICT: 'این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. صفحه را دوباره بارگذاری کنید.',
+          NO_ELIGIBLE_APPROVERS: 'هیچ شرکت‌کننده واجد شرایطی برای تأیید سیستمی وجود ندارد.',
+        };
+        toast.error(msgs[code] || 'ارسال ناموفق بود. از صفحه ویرایش ارسال کنید.');
+        return;
+      }
+      if (data?.success === true) { toast.success('صورت‌جلسه برای تأیید ارسال شد.'); await fetchMinutes(); }
+    } catch { toast.error('خطای غیرمنتظره هنگام ارسال.'); } finally { setSendingId(null); }
+  };
+
+  const handlePrint = async (id: string) => {
+    setPrintingId(id);
+    setMinuteIdInUrl(id);
+    try {
+      setMinutesPageInUrl('minutes-detail');
+      onNavigate('minutes-detail');
+    } finally { setPrintingId(null); }
+  };
 
   const fetchMinutes = useCallback(async () => {
     setIsLoading(true);
@@ -262,10 +298,15 @@ export function MinutesListPage({ onNavigate }: Props) {
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">{m.lastModified}</td>
                       <td className="px-4 py-3">
                         <RowActions
+                          id={m.id}
                           status={m.status}
                           onView={() => goToDetail(m.id)}
                           onEdit={() => goToEdit(m.id)}
                           onDelete={() => setDeleteTarget(m.id)}
+                          onSendForApproval={() => handleSendForApproval(m.id)}
+                          onPrint={() => handlePrint(m.id)}
+                          sendingId={sendingId}
+                          printingId={printingId}
                         />
                       </td>
                     </tr>
@@ -296,10 +337,15 @@ export function MinutesListPage({ onNavigate }: Props) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <ConfidentialityBadge level={m.confidentiality} />
                     <RowActions
+                      id={m.id}
                       status={m.status}
                       onView={() => goToDetail(m.id)}
                       onEdit={() => goToEdit(m.id)}
                       onDelete={() => setDeleteTarget(m.id)}
+                      onSendForApproval={() => handleSendForApproval(m.id)}
+                      onPrint={() => handlePrint(m.id)}
+                      sendingId={sendingId}
+                      printingId={printingId}
                     />
                   </div>
                 </div>
@@ -342,45 +388,53 @@ export function MinutesListPage({ onNavigate }: Props) {
 // Send-approval, Publish, Print are disabled with a "به‌زودی" tooltip.
 
 interface RowActionsProps {
+  id: string;
   status: MinutesStatus;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onSendForApproval: () => void;
+  onPrint: () => void;
+  sendingId: string | null;
+  printingId: string | null;
 }
 
-function RowActions({ status, onView, onEdit, onDelete }: RowActionsProps) {
+function RowActions({ id, status, onView, onEdit, onDelete, onSendForApproval, onPrint, sendingId, printingId }: RowActionsProps) {
   const disabledCls = 'p-1.5 rounded-lg text-gray-300 dark:text-gray-600 cursor-not-allowed';
+  const canSend = status === 'draft' || status === 'changes_requested';
   return (
     <div className="flex items-center gap-1 flex-wrap">
       <button onClick={onView} aria-label="مشاهده" title="مشاهده"
         className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
         <Eye className="w-4 h-4" />
       </button>
-      {(status === 'draft' || status === 'rejected') && (
+      {(status === 'draft' || status === 'changes_requested') && (
         <button onClick={onEdit} aria-label="ویرایش" title="ویرایش"
           className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors">
           <Edit2 className="w-4 h-4" />
         </button>
       )}
-      <button
-        aria-label="ارسال برای تأیید (به‌زودی)" title="ارسال برای تأیید (به‌زودی)"
-        className={disabledCls}
-      >
-        <Send className="w-4 h-4" />
-      </button>
-      {status === 'approved' && (
+      {canSend ? (
         <button
-          aria-label="انتشار (به‌زودی)" title="انتشار (به‌زودی)"
-          className={disabledCls}
+          onClick={onSendForApproval}
+          disabled={sendingId === id}
+          aria-label="ارسال برای تأیید" title="ارسال برای تأیید"
+          className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <CheckCircle2 className="w-4 h-4" />
+          {sendingId === id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
+      ) : (
+        <span className={disabledCls} title="ارسال در وضعیت فعلی ممکن نیست">
+          <Send className="w-4 h-4" />
+        </span>
       )}
       <button
-        aria-label="چاپ (به‌زودی)" title="چاپ (به‌زودی)"
-        className={disabledCls}
+        onClick={onPrint}
+        disabled={printingId === id}
+        aria-label="چاپ" title="چاپ"
+        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <Printer className="w-4 h-4" />
+        {printingId === id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
       </button>
       {status === 'draft' && (
         <button onClick={onDelete} aria-label="حذف" title="حذف"

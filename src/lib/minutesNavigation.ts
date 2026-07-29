@@ -99,10 +99,11 @@ export type MinutesDetailTab =
   | 'decisions'
   | 'attachments'
   | 'approvals'
-  | 'history';
+  | 'history'
+  | 'final_version';
 
 const VALID_TABS: MinutesDetailTab[] = [
-  'summary', 'participants', 'agenda', 'decisions', 'attachments', 'approvals', 'history',
+  'summary', 'participants', 'agenda', 'decisions', 'attachments', 'approvals', 'history', 'final_version',
 ];
 
 export function isValidMinutesTab(tab: string | null): tab is MinutesDetailTab {

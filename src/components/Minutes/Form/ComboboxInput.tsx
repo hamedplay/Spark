@@ -5,6 +5,7 @@ export interface ComboboxOption {
   value: string;
   label: string;
   sublabel?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface ComboboxInputProps {

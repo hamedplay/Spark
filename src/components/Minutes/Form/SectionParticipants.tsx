@@ -118,6 +118,7 @@ export function SectionParticipants({
     setExternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
 
   // Deduplicate external participant suggestions by normalized full name.
+  // Store org/position in metadata so selection fills fields directly from DB record.
   const externalSuggestionOptions: ComboboxOption[] = useMemo(() => {
     const seen = new Set<string>();
     const opts: ComboboxOption[] = [];
@@ -128,7 +129,7 @@ export function SectionParticipants({
       if (seen.has(key)) continue;
       seen.add(key);
       const sub = [s.organization, s.position].filter(Boolean).join(' — ') || undefined;
-      opts.push({ value: name, label: name, sublabel: sub });
+      opts.push({ value: name, label: name, sublabel: sub, metadata: { organization: s.organization ?? '', position: s.position ?? '' } });
     }
     return opts;
   }, [externalSuggestions]);
@@ -141,13 +142,13 @@ export function SectionParticipants({
       toast.error('این فرد قبلاً به لیست شرکت‌کنندگان خارجی اضافه شده است.');
       return;
     }
-    // Parse sublabel "organization — position" back into fields if present.
-    const subParts = opt.sublabel ? opt.sublabel.split(' — ') : [];
+    // Use metadata directly — never parse from sublabel string.
+    const meta = opt.metadata as { organization?: string; position?: string } | undefined;
     setExternalParticipants(l => l.map(r => r.id === rowId ? {
       ...r,
       fullName: opt.label,
-      organization: subParts[0] || r.organization,
-      position: subParts[1] || r.position,
+      organization: meta?.organization ?? r.organization,
+      position: meta?.position ?? r.position,
     } : r));
   };
 
@@ -215,24 +216,42 @@ export function SectionParticipants({
                     ))}
                   </select>
                 </div>
-                {/* Position snapshot */}
-                <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.positionSnapshot} onChange={v => updateInternal(row.id, 'positionSnapshot', v)} />
-                {/* Org unit selector */}
-                <div>
-                  <label htmlFor={`int-unit-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
-                  <select
-                    id={`int-unit-${row.id}`}
-                    value={row.orgUnitId}
-                    onChange={e => handleInternalOrgUnitChange(row.id, e.target.value)}
-                    disabled={orgUnitsDisabled || readOnly}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <option value="">انتخاب کنید</option>
-                    {orgUnits.map(u => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* Position snapshot — read-only for auto-filled rows, editable for manually added */}
+                {row.participantId ? (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">سمت</label>
+                    <div className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-xl min-h-[38px] flex items-center">
+                      {row.positionSnapshot || '—'}
+                    </div>
+                  </div>
+                ) : (
+                  <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.positionSnapshot} onChange={v => updateInternal(row.id, 'positionSnapshot', v)} disabled={readOnly} />
+                )}
+                {/* Org unit — read-only for auto-filled rows, editable for manually added */}
+                {row.participantId ? (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
+                    <div className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-xl min-h-[38px] flex items-center">
+                      {row.orgUnitNameSnapshot || '—'}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label htmlFor={`int-unit-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
+                    <select
+                      id={`int-unit-${row.id}`}
+                      value={row.orgUnitId}
+                      onChange={e => handleInternalOrgUnitChange(row.id, e.target.value)}
+                      disabled={orgUnitsDisabled || readOnly}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <option value="">انتخاب کنید</option>
+                      {orgUnits.map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {/* Invitation status — read-only badge or disabled select */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">وضعیت دعوت</label>
@@ -308,8 +327,8 @@ export function SectionParticipants({
                     useLabelAsValue
                   />
                 </div>
-                <InputField id={`ext-org-${row.id}`} label="سازمان" placeholder="" value={row.organization} onChange={v => updateExternal(row.id, 'organization', v)} />
-                <InputField id={`ext-pos-${row.id}`} label="سمت" placeholder="" value={row.position} onChange={v => updateExternal(row.id, 'position', v)} />
+                <InputField id={`ext-org-${row.id}`} label="سازمان" placeholder="" value={row.organization} onChange={v => updateExternal(row.id, 'organization', v)} disabled={readOnly} />
+                <InputField id={`ext-pos-${row.id}`} label="سمت" placeholder="" value={row.position} onChange={v => updateExternal(row.id, 'position', v)} disabled={readOnly} />
                 <SelectField id={`ext-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateExternal(row.id, 'invitationStatus', v)} disabled={readOnly} />
                 <SelectField id={`ext-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateExternal(row.id, 'attendanceStatus', v)} disabled={readOnly} />
                 <div className="lg:col-span-5">

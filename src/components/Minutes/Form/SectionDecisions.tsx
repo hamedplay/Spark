@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Link2, Unlink, ListChecks } from 'lucide-react';
+import { Plus, Trash2, Link2, Unlink, ListChecks, ChevronLeft } from 'lucide-react';
 import type { DraftDecision, ProfileOption, OrgUnitOption, DraftAgendaItem } from './types';
 import { defaultDecision } from './defaults';
 import { TextareaField, SelectField } from './fields';
-import { PRIORITY_OPTIONS, AGENDA_RESULT_OPTIONS } from './options';
+import { PRIORITY_OPTIONS } from './options';
 import { SearchableSelect } from './SearchableSelect';
-import { ComboboxInput } from './ComboboxInput';
 import { JalaliDatePicker } from './JalaliDatePicker';
 import { isDueBeforeStart } from '../../../lib/minutesDate';
 
@@ -27,14 +26,19 @@ export function SectionDecisions({
   agendaItems, readOnly,
 }: SectionDecisionsProps) {
   const [openAgendaPickerFor, setOpenAgendaPickerFor] = useState<string | null>(null);
-  const [openTitlePickerFor, setOpenTitlePickerFor] = useState<string | null>(null);
+  const [openDecisionId, setOpenDecisionId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const addIndependent = () =>
-    setDecisions(l => [...l, defaultDecision()]);
+  const addIndependent = () => {
+    const newDecision = defaultDecision();
+    setDecisions(l => [...l, newDecision]);
+    setOpenDecisionId(newDecision.id);
+  };
 
-  const remove = (id: string) =>
+  const remove = (id: string) => {
     setDecisions(l => l.filter(r => r.id !== id));
+    if (openDecisionId === id) setOpenDecisionId(null);
+  };
 
   const update = (id: string, field: keyof DraftDecision, value: string | number | boolean | null) =>
     setDecisions(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
@@ -66,15 +70,11 @@ export function SectionDecisions({
       }));
   }, [agendaItems]);
 
-  // All agenda items with a title (for title-only picker). Preserves original order.
+  // All agenda titles for the simple dropdown picker (issue #3).
   const agendaTitleOptions = useMemo(() =>
     agendaItems
       .filter(a => a.title.trim())
-      .map(a => ({
-        value: a.id,
-        label: a.title,
-        sublabel: [a.presenter, a.description].filter(Boolean).join(' — ') || undefined,
-      })),
+      .map(a => a.title),
   [agendaItems]);
 
   const linkToAgenda = (decisionId: string, meetingAgendaItemId: string) => {
@@ -93,11 +93,9 @@ export function SectionDecisions({
       d.id === decisionId ? { ...d, meetingAgendaItemId: null } : d
     ));
 
-  // Title-only picker: copies just the agenda title into item.title.
-  // Does NOT set meetingAgendaItemId or agendaResultId.
+  // Title-only picker: copies just the agenda title into item.title via simple <select>.
   const pickAgendaTitle = (decisionId: string, title: string) => {
     update(decisionId, 'title', title);
-    setOpenTitlePickerFor(null);
   };
 
   // Per-decision validation errors for the Jalali date fields.
@@ -112,16 +110,15 @@ export function SectionDecisions({
   }, [decisions]);
 
   useEffect(() => {
-    if (!openAgendaPickerFor && !openTitlePickerFor) return;
+    if (!openAgendaPickerFor) return;
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpenAgendaPickerFor(null);
-        setOpenTitlePickerFor(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [openAgendaPickerFor, openTitlePickerFor]);
+  }, [openAgendaPickerFor]);
 
   // Responsible unit options with legacy fallback for deleted units.
   const buildResponsibleUnitOptions = (item: DraftDecision) => {
@@ -159,26 +156,46 @@ export function SectionDecisions({
         </div>
       )}
 
-      {decisions.map((item, idx) => (
-        <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl">
-          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 rounded-t-2xl">
+      {decisions.map((item, idx) => {
+        const isOpen = openDecisionId === item.id;
+        return (
+        <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl overflow-hidden">
+          {/* Accordion header — issue #6 */}
+          <button
+            type="button"
+            onClick={() => setOpenDecisionId(isOpen ? null : item.id)}
+            className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-right"
+          >
+            <ChevronLeft className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? '-rotate-90' : ''}`} />
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">مصوبه {idx + 1}</span>
+            {item.title && (
+              <span className="text-sm text-gray-500 dark:text-gray-400 truncate flex-1 text-right">— {item.title}</span>
+            )}
             {item.meetingAgendaItemId && (
-              <span className="text-xs text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">از دستور جلسه</span>
+              <span className="text-xs text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full whitespace-nowrap">از دستور جلسه</span>
             )}
             <div className="flex-1" />
             {!readOnly && (
-              <button onClick={() => remove(item.id)} aria-label="حذف مصوبه" className="p-1 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); remove(item.id); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); remove(item.id); } }}
+                className="p-1 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                aria-label="حذف مصوبه"
+              >
                 <Trash2 className="w-4 h-4" />
-              </button>
+              </span>
             )}
-          </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-b-2xl">
-            {/* 1. Title with agenda link + title-only picker */}
+          </button>
+
+          {/* Accordion body — only visible when open */}
+          {isOpen && (
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* 1. Title with simple dropdown picker (issue #3) + agenda link */}
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">عنوان مصوبه</label>
               <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-                {/* Input + title-only picker icon as one unit */}
                 <div className="relative flex-1 min-w-0">
                   <input
                     id={`dec-title-${item.id}`}
@@ -189,39 +206,27 @@ export function SectionDecisions({
                     disabled={!!readOnly}
                     className="w-full px-3 py-2.5 pe-11 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
                   />
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={() => setOpenTitlePickerFor(openTitlePickerFor === item.id ? null : item.id)}
+                  {!readOnly && agendaTitleOptions.length > 0 && (
+                    <select
                       aria-label="انتخاب عنوان از دستور جلسات"
                       title="انتخاب عنوان از دستور جلسات"
-                      className="absolute inset-y-0 end-0 w-10 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                      value=""
+                      onChange={e => { if (e.target.value) pickAgendaTitle(item.id, e.target.value); }}
+                      className="absolute inset-y-0 end-0 w-10 text-center text-transparent bg-transparent border-0 cursor-pointer opacity-0"
                     >
-                      <ListChecks className="w-4 h-4" />
-                    </button>
+                      <option value="">—</option>
+                      {agendaTitleOptions.map((title, i) => (
+                        <option key={i} value={title}>{title}</option>
+                      ))}
+                    </select>
                   )}
-                  {openTitlePickerFor === item.id && (
-                    <div className="absolute z-50 mt-1 end-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg w-72 max-w-[calc(100vw-2rem)]" ref={menuRef}>
-                      {agendaTitleOptions.length === 0 ? (
-                        <div className="px-3 py-4 text-sm text-gray-400 text-center">
-                          دستور جلسه‌ای برای این جلسه ثبت نشده است.
-                        </div>
-                      ) : (
-                        <ComboboxInput
-                          id={`dec-title-picker-${item.id}`}
-                          value=""
-                          options={agendaTitleOptions}
-                          onChange={() => {}}
-                          onSelect={opt => pickAgendaTitle(item.id, opt.label)}
-                          searchPlaceholder="جستجوی دستور جلسه..."
-                          emptyText="دستور جلسه‌ای یافت نشد"
-                          useLabelAsValue
-                        />
-                      )}
+                  {!readOnly && (
+                    <div className="absolute inset-y-0 end-0 w-10 flex items-center justify-center text-gray-500 dark:text-gray-400 pointer-events-none">
+                      <ListChecks className="w-4 h-4" />
                     </div>
                   )}
                 </div>
-                {/* Real agenda link button — wraps to next row on narrow screens */}
+                {/* Real agenda link button */}
                 {!readOnly && agendaLinkOptions.length > 0 && (
                   <div className="relative shrink-0">
                     {item.meetingAgendaItemId ? (
@@ -330,17 +335,7 @@ export function SectionDecisions({
             </div>
             {/* 7. Priority */}
             <SelectField id={`dec-priority-${item.id}`} label="اولویت" options={PRIORITY_OPTIONS} value={item.priority} onChange={v => update(item.id, 'priority', v)} disabled={!!readOnly} />
-            {/* 8. Discussion result */}
-            <div className="sm:col-span-2">
-              <TextareaField id={`dec-discussion-${item.id}`} label="نتیجه بحث" rows={2} value={item.discussionResult} onChange={v => update(item.id, 'discussionResult', v)} />
-            </div>
-            {/* 9. Result type */}
-            <SelectField id={`dec-result-type-${item.id}`} label="نوع نتیجه" options={AGENDA_RESULT_OPTIONS} value={item.resultType} onChange={v => update(item.id, 'resultType', v)} disabled={!!readOnly} />
-            {/* 10. Additional notes */}
-            <div className="sm:col-span-2">
-              <TextareaField id={`dec-additional-${item.id}`} label="توضیحات تکمیلی" rows={2} value={item.additionalNotes} onChange={v => update(item.id, 'additionalNotes', v)} />
-            </div>
-            {/* 11. Requires followup */}
+            {/* 8. Requires followup */}
             <div className="sm:col-span-2 flex items-center gap-3">
               <label htmlFor={`dec-followup-${item.id}`} className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -355,8 +350,10 @@ export function SectionDecisions({
               </label>
             </div>
           </div>
+          )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
