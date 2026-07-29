@@ -406,27 +406,30 @@ export type Database = {
         Row: {
           id: string;
           name: string;
-          email: string;
+          email: string | null;
           phone: string | null;
           company: string | null;
+          position: string | null;
           user_id: string;
           created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
-          email: string;
+          email?: string | null;
           phone?: string | null;
           company?: string | null;
+          position?: string | null;
           user_id: string;
           created_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
-          email?: string;
+          email?: string | null;
           phone?: string | null;
           company?: string | null;
+          position?: string | null;
           user_id?: string;
           created_at?: string;
         };

@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, CreditCard as Edit2, Save, X, Plus, Loader as Loader2, Search, Phone, Upload, Download, Trash2, Users, Building2, Share2, Check } from 'lucide-react';
+import { CreditCard as Edit2, Save, X, Plus, Loader as Loader2, Search, Phone, Upload, Download, Trash2, Users, Building2, Briefcase, Share2, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../context/PermissionsContext';
+import { ContactFormFields } from './Contacts/ContactFormFields';
 
 interface Contact {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   company: string | null;
+  position: string | null;
   user_id: string;
   created_at: string;
 }
@@ -143,7 +145,7 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [addMode, setAddMode] = useState<AddMode>('single');
-  const [newContact, setNewContact] = useState({ name: '', email: '', phone: '', company: '' });
+  const [newContact, setNewContact] = useState({ name: '', phone: '', company: '', position: '' });
   const [bulkText, setBulkText] = useState('');
   const [shareContact, setShareContact] = useState<Contact | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -173,10 +175,16 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
     e.preventDefault();
     if (!userId || !newContact.name.trim()) { toast.error('نام الزامی است'); return; }
     try {
-      const { error } = await supabase.from('contacts_email').insert([{ ...newContact, user_id: userId }]);
+      const { error } = await supabase.from('contacts_email').insert([{
+        name: newContact.name.trim(),
+        phone: newContact.phone.trim() || null,
+        company: newContact.company.trim() || null,
+        position: newContact.position.trim() || null,
+        user_id: userId,
+      }]);
       if (error) throw error;
       toast.success('مخاطب اضافه شد');
-      setNewContact({ name: '', email: '', phone: '', company: '' });
+      setNewContact({ name: '', phone: '', company: '', position: '' });
       setShowAddPanel(false);
       fetchContacts();
     } catch { toast.error('خطا در افزودن مخاطب'); }
@@ -185,10 +193,10 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
   const handleBulkAdd = async () => {
     if (!userId || !bulkText.trim()) return;
     const lines = bulkText.split('\n').filter(l => l.trim());
-    const items: { name: string; email: string; phone: string; user_id: string }[] = [];
+    const items: { name: string; phone: string | null; company: string | null; position: string | null; user_id: string }[] = [];
     for (const line of lines) {
       const parts = line.split(',').map(p => p.trim());
-      if (parts[0]) items.push({ name: parts[0], email: parts[1] || '', phone: parts[2] || '', user_id: userId });
+      if (parts[0]) items.push({ name: parts[0], phone: parts[1] || null, company: parts[2] || null, position: parts[3] || null, user_id: userId });
     }
     if (items.length === 0) { toast.error('فرمت نادرست'); return; }
     try {
@@ -206,9 +214,9 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
     try {
       const { error } = await supabase.from('contacts_email').update({
         name: editingContact.name,
-        email: editingContact.email,
         phone: editingContact.phone,
         company: editingContact.company,
+        position: editingContact.position,
       }).eq('id', editingContact.id);
       if (error) throw error;
       toast.success('ذخیره شد');
@@ -228,8 +236,8 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
   };
 
   const handleExport = () => {
-    const header = 'نام,ایمیل,موبایل,سازمان\n';
-    const rows = contacts.map(c => `${c.name},${c.email || ''},${c.phone || ''},${c.company || ''}`).join('\n');
+    const header = 'نام,موبایل,سازمان,سمت\n';
+    const rows = contacts.map(c => `${c.name},${c.phone || ''},${c.company || ''},${c.position || ''}`).join('\n');
     const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -244,10 +252,10 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
     reader.onload = async (ev) => {
       const text = ev.target?.result as string;
       const lines = text.split('\n').slice(1).filter(l => l.trim());
-      const items: { name: string; email: string; phone: string; user_id: string }[] = [];
+      const items: { name: string; phone: string | null; company: string | null; position: string | null; user_id: string }[] = [];
       for (const line of lines) {
         const parts = line.split(',').map(p => p.trim().replace(/^"|"$/g, ''));
-        if (parts[0]) items.push({ name: parts[0], email: parts[1] || '', phone: parts[2] || '', user_id: userId });
+        if (parts[0]) items.push({ name: parts[0], phone: parts[1] || null, company: parts[2] || null, position: parts[3] || null, user_id: userId });
       }
       if (items.length === 0) { toast.error('فایل خالی است'); return; }
       try {
@@ -263,9 +271,9 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
 
   const filtered = contacts.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.phone || '').includes(searchTerm) ||
-    (c.company || '').toLowerCase().includes(searchTerm.toLowerCase())
+    (c.company || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.position || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (!userId) {
@@ -313,16 +321,16 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
 
           {addMode === 'single' ? (
             <form onSubmit={handleAdd} className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input required value={newContact.name} onChange={e => setNewContact(p => ({ ...p, name: e.target.value }))} placeholder="نام و نام خانوادگی *"
-                  className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
-                <input type="tel" value={newContact.phone} onChange={e => setNewContact(p => ({ ...p, phone: e.target.value }))} placeholder="شماره موبایل"
-                  className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
-                <input type="email" value={newContact.email} onChange={e => setNewContact(p => ({ ...p, email: e.target.value }))} placeholder="ایمیل (اختیاری)"
-                  className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
-                <input value={newContact.company} onChange={e => setNewContact(p => ({ ...p, company: e.target.value }))} placeholder="سازمان / شرکت (اختیاری)"
-                  className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
-              </div>
+              <ContactFormFields
+                name={newContact.name}
+                phone={newContact.phone}
+                company={newContact.company}
+                position={newContact.position}
+                onNameChange={(value) => setNewContact(p => ({ ...p, name: value }))}
+                onPhoneChange={(value) => setNewContact(p => ({ ...p, phone: value }))}
+                onCompanyChange={(value) => setNewContact(p => ({ ...p, company: value }))}
+                onPositionChange={(value) => setNewContact(p => ({ ...p, position: value }))}
+              />
               <div className="flex gap-2">
                 <button type="submit" className="flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors">
                   <Plus className="w-4 h-4" /> افزودن
@@ -334,9 +342,9 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
             </form>
           ) : (
             <div className="space-y-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400">هر خط: نام، ایمیل، موبایل (جدا با کاما)</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">هر خط: نام، موبایل، سازمان، سمت (جدا با کاما)</p>
               <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={5}
-                placeholder={'علی رضایی, ali@example.com, 09121234567\nزهرا احمدی, zahra@example.com, 09130000000'}
+                placeholder={'علی رضایی, 09121234567, شرکت نمونه, مدیر\nزهرا احمدی, 09130000000, سازمان X, کارشناس'}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm resize-none font-mono" />
               <div className="flex gap-2">
                 <button onClick={handleBulkAdd} className="flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors">
@@ -354,7 +362,7 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
       {/* Search */}
       <div className="relative">
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="جستجو بر اساس نام، ایمیل یا موبایل..."
+        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="جستجو بر اساس نام، موبایل یا سازمان..."
           className="w-full pr-9 pl-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
 
@@ -380,9 +388,9 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
                   className="w-full px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
                 <input value={editingContact?.phone || ''} onChange={e => setEditingContact(p => p ? { ...p, phone: e.target.value } : null)} placeholder="موبایل"
                   className="w-full px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
-                <input type="email" value={editingContact?.email || ''} onChange={e => setEditingContact(p => p ? { ...p, email: e.target.value } : null)} placeholder="ایمیل"
-                  className="w-full px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
                 <input value={editingContact?.company || ''} onChange={e => setEditingContact(p => p ? { ...p, company: e.target.value } : null)} placeholder="سازمان / شرکت"
+                  className="w-full px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
+                <input value={editingContact?.position || ''} onChange={e => setEditingContact(p => p ? { ...p, position: e.target.value } : null)} placeholder="سمت سازمانی"
                   className="w-full px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
                 <div className="flex gap-2 pt-1">
                   <button onClick={handleUpdate} className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600">
@@ -398,6 +406,11 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold dark:text-white">{contact.name}</h3>
+                    {contact.position && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
+                        <Briefcase className="w-3 h-3" />{contact.position}
+                      </span>
+                    )}
                     {contact.company && (
                       <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1 mt-0.5">
                         <Building2 className="w-3 h-3" />{contact.company}
@@ -432,13 +445,7 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
                       <span>{contact.phone}</span>
                     </a>
                   )}
-                  {contact.email && (
-                    <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
-                      <Mail className="w-4 h-4 flex-shrink-0 text-gray-400" />
-                      <span className="truncate">{contact.email}</span>
-                    </a>
-                  )}
-                  {!contact.phone && !contact.email && (
+                  {!contact.phone && (
                     <p className="text-xs text-gray-400">اطلاعات تماس ثبت نشده</p>
                   )}
                 </div>

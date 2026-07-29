@@ -1,24 +1,23 @@
 import type { OrgUserProfile, OrgUserAssignment } from '../../../lib/useOrgUsers';
 
-const ALLOWED_PREFIXES = [
-  'رییس دایره',
-  'مدیر امور',
-  'متصدی اداری',
-];
-
 export function normalizePersianTitle(value: string): string {
   return value
     .replace(/ي/g, 'ی')
     .replace(/ك/g, 'ک')
     .replace(/\u200c/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .replace(/^رئیس/, 'رییس');
 }
 
 export function isAllowedMeetingRequestPosition(title: string | null): boolean {
   if (!title) return false;
   const normalized = normalizePersianTitle(title);
-  return ALLOWED_PREFIXES.some(prefix => normalized.startsWith(prefix));
+  return (
+    normalized.startsWith('رییس دایره') ||
+    normalized.startsWith('رییس دفتر') ||
+    normalized.startsWith('متصدی اداری')
+  );
 }
 
 export function isMeetingRequestRecipientEligible(profile: OrgUserProfile): boolean {

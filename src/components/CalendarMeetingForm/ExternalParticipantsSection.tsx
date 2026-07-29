@@ -1,5 +1,6 @@
 import { UserPlus, X, Plus } from 'lucide-react';
 import type { ContactEmail } from '../../types';
+import { ContactFormFields } from '../Contacts/ContactFormFields';
 
 export function ExternalParticipantsSection(props: {
   externalSearchRef: React.RefObject<HTMLDivElement | null>;
@@ -16,6 +17,10 @@ export function ExternalParticipantsSection(props: {
   setNewExternalName: React.Dispatch<React.SetStateAction<string>>;
   newExternalPhone: string;
   setNewExternalPhone: React.Dispatch<React.SetStateAction<string>>;
+  newExternalCompany: string;
+  setNewExternalCompany: React.Dispatch<React.SetStateAction<string>>;
+  newExternalPosition: string;
+  setNewExternalPosition: React.Dispatch<React.SetStateAction<string>>;
   addQuickExternal: () => void;
 }) {
   const {
@@ -27,8 +32,13 @@ export function ExternalParticipantsSection(props: {
     showAddExternal, setShowAddExternal,
     newExternalName, setNewExternalName,
     newExternalPhone, setNewExternalPhone,
+    newExternalCompany, setNewExternalCompany,
+    newExternalPosition, setNewExternalPosition,
     addQuickExternal,
   } = props;
+
+  // suppress unused import warning — ContactEmail is referenced via the filteredExternal type usage
+  void (null as unknown as ContactEmail);
 
   return (
     <div ref={externalSearchRef}>
@@ -92,15 +102,21 @@ export function ExternalParticipantsSection(props: {
       )}
       {showAddExternal && (
         <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
-          <div className="space-y-2 mb-2">
-            <input type="text" value={newExternalName} onChange={e => setNewExternalName(e.target.value)}
-              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="نام مخاطب" />
-            <input type="tel" value={newExternalPhone} onChange={e => setNewExternalPhone(e.target.value)}
-              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="شماره موبایل" />
+          <div className="mb-3">
+            <ContactFormFields
+              name={newExternalName}
+              phone={newExternalPhone}
+              company={newExternalCompany}
+              position={newExternalPosition}
+              onNameChange={setNewExternalName}
+              onPhoneChange={setNewExternalPhone}
+              onCompanyChange={setNewExternalCompany}
+              onPositionChange={setNewExternalPosition}
+            />
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={addQuickExternal} className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600">ذخیره و افزودن</button>
-            <button type="button" onClick={() => { setShowAddExternal(false); setNewExternalName(''); setNewExternalPhone(''); }} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">انصراف</button>
+            <button type="button" onClick={() => { setShowAddExternal(false); setNewExternalName(''); setNewExternalPhone(''); setNewExternalCompany(''); setNewExternalPosition(''); }} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">انصراف</button>
           </div>
         </div>
       )}

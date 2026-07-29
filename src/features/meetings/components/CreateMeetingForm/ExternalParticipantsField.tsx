@@ -1,22 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { UserPlus, X, Plus } from 'lucide-react';
 import type { ContactEmail } from '../../../../types';
+import { ContactFormFields } from '../../../../components/Contacts/ContactFormFields';
 
 export interface ExternalContactDraft {
   name: string;
   phone: string;
+  company: string;
+  position: string;
 }
 
 export interface ExternalParticipantsFieldProps {
   contacts: ContactEmail[];
   selectedNames: string[];
-
   draft: ExternalContactDraft;
   isAddFormOpen: boolean;
-
   onSelect: (name: string) => void;
   onRemove: (name: string) => void;
-
   onDraftChange: (draft: ExternalContactDraft) => void;
   onAddFormOpenChange: (open: boolean) => void;
   onAddContact: () => void | Promise<void>;
@@ -47,7 +47,8 @@ export function ExternalParticipantsField({
 
   const filteredContacts = contacts.filter(c =>
     c.name.toLowerCase().includes(externalSearch.toLowerCase()) ||
-    (c.email ?? '').toLowerCase().includes(externalSearch.toLowerCase())
+    (c.phone ?? '').includes(externalSearch) ||
+    (c.company ?? '').toLowerCase().includes(externalSearch.toLowerCase())
   ).filter(c => !selectedNames.includes(c.name));
 
   return (
@@ -91,13 +92,17 @@ export function ExternalParticipantsField({
       {showExternalDropdown && (
         <div className="relative z-20">
           <div className="absolute w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-44 overflow-y-auto">
-            {filteredContacts.slice(0, 8).map(c => (
-              <button key={c.id} type="button"
-                onClick={() => { onSelect(c.name); setExternalSearch(''); setShowExternalDropdown(false); }}
-                className="w-full text-right px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0">
-                <span>{c.name}</span><span className="text-xs text-gray-400">{c.email}</span>
-              </button>
-            ))}
+            {filteredContacts.slice(0, 8).map(c => {
+              const subParts = [c.position, c.company, c.phone].filter(Boolean);
+              return (
+                <button key={c.id} type="button"
+                  onClick={() => { onSelect(c.name); setExternalSearch(''); setShowExternalDropdown(false); }}
+                  className="w-full text-right px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm dark:text-white flex items-center justify-between border-b border-gray-50 dark:border-gray-600 last:border-0">
+                  <span>{c.name}</span>
+                  <span className="text-xs text-gray-400">{subParts.join(' · ')}</span>
+                </button>
+              );
+            })}
             {(externalSearch || filteredContacts.length === 0) && (
               <button type="button" onClick={() => { onAddFormOpenChange(true); setShowExternalDropdown(false); }}
                 className="w-full text-right px-3 py-2 hover:bg-green-50 dark:hover:bg-green-900/20 text-sm text-green-600 flex items-center gap-2 border-t border-gray-200 dark:border-gray-600">
@@ -112,15 +117,21 @@ export function ExternalParticipantsField({
       )}
       {isAddFormOpen && (
         <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
-          <div className="space-y-2 mb-2">
-            <input type="text" value={draft.name} onChange={(e) => onDraftChange({ ...draft, name: e.target.value })}
-              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="نام مخاطب" />
-            <input type="tel" value={draft.phone} onChange={(e) => onDraftChange({ ...draft, phone: e.target.value })}
-              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" placeholder="شماره موبایل" />
+          <div className="mb-3">
+            <ContactFormFields
+              name={draft.name}
+              phone={draft.phone}
+              company={draft.company}
+              position={draft.position}
+              onNameChange={(v) => onDraftChange({ ...draft, name: v })}
+              onPhoneChange={(v) => onDraftChange({ ...draft, phone: v })}
+              onCompanyChange={(v) => onDraftChange({ ...draft, company: v })}
+              onPositionChange={(v) => onDraftChange({ ...draft, position: v })}
+            />
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={onAddContact} className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600">ذخیره و افزودن</button>
-            <button type="button" onClick={() => { onAddFormOpenChange(false); onDraftChange({ name: '', phone: '' }); }} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-300">انصراف</button>
+            <button type="button" onClick={() => { onAddFormOpenChange(false); onDraftChange({ name: '', phone: '', company: '', position: '' }); }} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-300">انصراف</button>
           </div>
         </div>
       )}

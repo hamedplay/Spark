@@ -232,6 +232,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [showExternalDropdown, setShowExternalDropdown] = useState(false);
   const [newExternalName, setNewExternalName] = useState('');
   const [newExternalPhone, setNewExternalPhone] = useState('');
+  const [newExternalCompany, setNewExternalCompany] = useState('');
+  const [newExternalPosition, setNewExternalPosition] = useState('');
   const [showAddExternal, setShowAddExternal] = useState(false);
   const externalSearchRef = useRef<HTMLDivElement>(null);
 
@@ -1260,7 +1262,10 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     }
   };
 
-  const externalOptions = contacts.map(c => ({ id: c.name, name: c.name, sub: c.email }));
+  const externalOptions = contacts.map(c => {
+    const parts = [c.position, c.company, c.phone].filter(Boolean);
+    return { id: c.name, name: c.name, sub: parts.join(' · ') };
+  });
   const filteredExternal = externalOptions.filter(c =>
     !selectedExternal.includes(c.id) &&
     (c.name.toLowerCase().includes(externalSearch.toLowerCase()) || (c.sub ?? '').toLowerCase().includes(externalSearch.toLowerCase()))
@@ -1269,10 +1274,17 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const addQuickExternal = async () => {
     if (!newExternalName.trim() || !userId) return;
     try {
-      const { data, error } = await supabase.from('contacts_email').insert([{ name: newExternalName.trim(), phone: newExternalPhone.trim(), user_id: userId }]).select().single();
+      const { data, error } = await supabase.from('contacts_email').insert([{
+        name: newExternalName.trim(),
+        phone: newExternalPhone.trim() || null,
+        company: newExternalCompany.trim() || null,
+        position: newExternalPosition.trim() || null,
+        user_id: userId,
+      }]).select().single();
       if (error) throw error;
       if (data) { setContacts(prev => [...prev, data]); setSelectedExternal(prev => [...prev, newExternalName]); }
-      setNewExternalName(''); setNewExternalPhone(''); setShowAddExternal(false);
+      setNewExternalName(''); setNewExternalPhone(''); setNewExternalCompany(''); setNewExternalPosition('');
+      setShowAddExternal(false);
       toast.success('مخاطب اضافه شد');
     } catch { toast.error('خطا در افزودن مخاطب'); }
   };
@@ -1371,6 +1383,10 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           setNewExternalName={setNewExternalName}
           newExternalPhone={newExternalPhone}
           setNewExternalPhone={setNewExternalPhone}
+          newExternalCompany={newExternalCompany}
+          setNewExternalCompany={setNewExternalCompany}
+          newExternalPosition={newExternalPosition}
+          setNewExternalPosition={setNewExternalPosition}
           addQuickExternal={addQuickExternal}
         />
 

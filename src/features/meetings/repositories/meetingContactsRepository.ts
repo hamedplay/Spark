@@ -11,7 +11,9 @@ export interface MeetingContactInput {
 export interface ExternalContactCreateInput {
   userId: string;
   name: string;
-  phone: string;
+  phone: string | null;
+  company?: string | null;
+  position?: string | null;
 }
 
 export async function fetchMeetingContacts(
@@ -34,6 +36,8 @@ export async function createExternalMeetingContact(
     .insert([{
       name: input.name,
       phone: input.phone,
+      company: input.company ?? null,
+      position: input.position ?? null,
       user_id: input.userId,
     }])
     .select()

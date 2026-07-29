@@ -130,6 +130,8 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const [selectedExternal, setSelectedExternal] = useState<string[]>([]);
   const [newExternalName, setNewExternalName] = useState('');
   const [newExternalPhone, setNewExternalPhone] = useState('');
+  const [newExternalCompany, setNewExternalCompany] = useState('');
+  const [newExternalPosition, setNewExternalPosition] = useState('');
   const [showAddExternal, setShowAddExternal] = useState(false);
 
   // Repeat
@@ -189,6 +191,25 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
 
   useEffect(() => {
     allUsersRef.current = allUsers;
+
+    if (allUsers.length === 0) return;
+
+    const usersById = new Map(allUsers.map(u => [u.user_id, u]));
+    const resolveName = (id: string) => {
+      const user = usersById.get(id);
+      return user?.full_name?.trim() || user?.username?.trim() || 'کاربر نامشخص';
+    };
+
+    setSelectedParticipants(prev => {
+      const hasUnresolved = prev.some(p => p.name === 'در حال بارگذاری...' || p.name === 'کاربر نامشخص');
+      if (!hasUnresolved) return prev;
+      return prev.map(p => ({ ...p, name: resolveName(p.id) }));
+    });
+    setSelectedNotifyUsers(prev => {
+      const hasUnresolved = prev.some(p => p.name === 'در حال بارگذاری...' || p.name === 'کاربر نامشخص');
+      if (!hasUnresolved) return prev;
+      return prev.map(p => ({ ...p, name: resolveName(p.id) }));
+    });
   }, [allUsers]);
 
   const requestDateInitializedRef =
@@ -242,14 +263,17 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
       const resolvePrefillUsersByIds = (
         ids: string[]
       ): Array<{ id: string; name: string }> =>
-        ids.map((id) => ({
-          id,
-          name:
-            allUsersRef.current.find(
-              (user) => user.user_id === id
-            )?.full_name ||
-            'کاربر سیستم',
-        }));
+        ids.map((id) => {
+          const user = allUsersRef.current.find(
+            (u) => u.user_id === id);
+          return {
+            id,
+            name:
+              user?.full_name?.trim() ||
+              user?.username?.trim() ||
+              (allUsersRef.current.length === 0 ? 'در حال بارگذاری...' : 'کاربر نامشخص'),
+          };
+        });
 
       // Load participants from prefill IDs (name resolution via useOrgUsers data)
       if (prefillData.participantUserIds && prefillData.participantUserIds.length > 0) {
@@ -472,9 +496,9 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   const addQuickExternal = async () => {
     if (!newExternalName.trim() || !userId) return;
     try {
-      const data = await createExternalMeetingContact({ userId, name: newExternalName.trim(), phone: newExternalPhone.trim() });
+      const data = await createExternalMeetingContact({ userId, name: newExternalName.trim(), phone: newExternalPhone.trim() || null, company: newExternalCompany.trim() || null, position: newExternalPosition.trim() || null });
       setContacts(prev => [...prev, data]); setSelectedExternal(prev => [...prev, newExternalName]);
-      setNewExternalName(''); setNewExternalPhone(''); setShowAddExternal(false);
+      setNewExternalName(''); setNewExternalPhone(''); setNewExternalCompany(''); setNewExternalPosition(''); setShowAddExternal(false);
       toast.success('مخاطب اضافه شد');
     } catch { toast.error('خطا در افزودن مخاطب'); }
   };
@@ -585,6 +609,8 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         draft={{
           name: newExternalName,
           phone: newExternalPhone,
+          company: newExternalCompany,
+          position: newExternalPosition,
         }}
         isAddFormOpen={showAddExternal}
         onSelect={(name) =>
@@ -598,6 +624,8 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         onDraftChange={(draft) => {
           setNewExternalName(draft.name);
           setNewExternalPhone(draft.phone);
+          setNewExternalCompany(draft.company);
+          setNewExternalPosition(draft.position);
         }}
         onAddFormOpenChange={setShowAddExternal}
         onAddContact={addQuickExternal}
