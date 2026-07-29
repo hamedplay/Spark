@@ -2085,20 +2085,6 @@ export type Database = {
         };
         Relationships: [];
       };
-          expires_at?: string | null;
-          reason?: string | null;
-        };
-        Update: {
-          id?: string;
-          room_id?: string;
-          user_id?: string;
-          display_name?: string;
-          banned_at?: string;
-          expires_at?: string | null;
-          reason?: string | null;
-        };
-        Relationships: [];
-      };
       room_mod_actions: {
         Row: {
           id: string;
