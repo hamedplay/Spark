@@ -130,6 +130,7 @@ export interface MinuteSummary {
   orgUnit?: string;
   approvalMode?: ApprovalMode | null;
   revisionNumber?: number;
+  updatedAt?: string;
 }
 
 export interface MinuteApprovalRow {

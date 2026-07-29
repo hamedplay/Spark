@@ -61,6 +61,8 @@ export interface DraftMeetingInfo {
   submittedAt: string | null;
 }
 
+export type InternalParticipantSource = 'meeting' | 'saved' | 'manual';
+
 export interface DraftInternalParticipant {
   id: string;
   participantId: string | null;
@@ -75,7 +77,10 @@ export interface DraftInternalParticipant {
   delegateUserId: string | null;
   delegateName: string;
   notes: string;
+  source: InternalParticipantSource;
 }
+
+export type ExternalParticipantSource = 'saved' | 'manual';
 
 export interface DraftExternalParticipant {
   id: string;
@@ -88,6 +93,7 @@ export interface DraftExternalParticipant {
   invitationStatus: InvitationStatus;
   attendanceStatus: AttendanceStatus | null;
   notes: string;
+  source: ExternalParticipantSource;
 }
 
 export interface DraftAgendaItem {

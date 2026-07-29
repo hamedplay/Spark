@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase';
 import {
   setMinuteIdInUrl, setMinutesPageInUrl,
 } from '../../lib/minutesNavigation';
-import type { MinutesStatus, ConfidentialityLevel, MinuteSummary } from './types';
+import type { MinutesStatus, ConfidentialityLevel, MinuteSummary, ApprovalMode } from './types';
 
 interface Props {
   onNavigate: (page: string) => void;
@@ -30,23 +30,32 @@ export function MinutesListPage({ onNavigate }: Props) {
   const [printingId, setPrintingId] = useState<string | null>(null);
 
   const handleSendForApproval = async (id: string) => {
+    const target = minutes.find(m => m.id === id);
+    if (!target) return;
+    if (!target.approvalMode) {
+      toast('این صورت‌جلسه هنوز مدل تأیید ندارد. لطفاً از صفحه ویرایش، مدل تأیید را تنظیم و سپس ارسال کنید.', { icon: '⚠️' });
+      setMinuteIdInUrl(id);
+      setMinutesPageInUrl('minutes-edit');
+      onNavigate('minutes-edit');
+      return;
+    }
     setSendingId(id);
     try {
       const { data, error: rpcError } = await supabase.rpc('submit_minutes_for_approval', {
         p_minute_id: id,
-        p_expected_updated_at: null,
-        p_approval_mode: null,
+        p_expected_updated_at: target.updatedAt || null,
+        p_approval_mode: target.approvalMode,
       });
       if (rpcError) { toast.error('ارسال صورت‌جلسه ناموفق بود: ' + rpcError.message); return; }
       if (data && data.success === false) {
         const code: string = data.error_code || 'INTERNAL_ERROR';
         const msgs: Record<string, string> = {
-          MINUTE_NOT_SUBMITTABLE: 'این صورت‌جلسه باید ابتدا از صفحه ویرایش ارسال شود (تنظیم مدل تأیید لازم است).',
+          MINUTE_NOT_SUBMITTABLE: 'این صورت‌جلسه در وضعیت قابل ارسال نیست.',
           APPROVAL_MODE_IMMUTABLE: 'مدل تأیید تغییر نمی‌کند.',
           MINUTES_VERSION_CONFLICT: 'این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. صفحه را دوباره بارگذاری کنید.',
           NO_ELIGIBLE_APPROVERS: 'هیچ شرکت‌کننده واجد شرایطی برای تأیید سیستمی وجود ندارد.',
         };
-        toast.error(msgs[code] || 'ارسال ناموفق بود. از صفحه ویرایش ارسال کنید.');
+        toast.error(msgs[code] || 'ارسال ناموفق بود.');
         return;
       }
       if (data?.success === true) { toast.success('صورت‌جلسه برای تأیید ارسال شد.'); await fetchMinutes(); }
@@ -56,10 +65,12 @@ export function MinutesListPage({ onNavigate }: Props) {
   const handlePrint = async (id: string) => {
     setPrintingId(id);
     setMinuteIdInUrl(id);
-    try {
-      setMinutesPageInUrl('minutes-detail');
-      onNavigate('minutes-detail');
-    } finally { setPrintingId(null); }
+    const url = new URL(window.location.href);
+    url.searchParams.set('print', '1');
+    window.history.replaceState(null, '', url.toString());
+    setMinutesPageInUrl('minutes-detail');
+    onNavigate('minutes-detail');
+    setPrintingId(null);
   };
 
   const fetchMinutes = useCallback(async () => {
@@ -67,7 +78,7 @@ export function MinutesListPage({ onNavigate }: Props) {
     setError(null);
     const { data, error: fetchError } = await supabase
       .from('minutes')
-      .select('id, meeting_title_snapshot, meeting_date_snapshot, secretary_name_snapshot, chair_name_snapshot, status, confidentiality, org_unit_name_snapshot, updated_at')
+      .select('id, meeting_title_snapshot, meeting_date_snapshot, secretary_name_snapshot, chair_name_snapshot, status, confidentiality, org_unit_name_snapshot, updated_at, approval_mode, revision_number')
       .order('created_at', { ascending: false });
 
     if (fetchError) {
@@ -86,6 +97,9 @@ export function MinutesListPage({ onNavigate }: Props) {
         lastModified: row.updated_at ? new Date(row.updated_at as string).toLocaleDateString('fa-IR') : '',
         version: '',
         orgUnit: (row.org_unit_name_snapshot as string) || undefined,
+        approvalMode: (row.approval_mode as ApprovalMode) || null,
+        revisionNumber: (row.revision_number as number) || undefined,
+        updatedAt: (row.updated_at as string) || undefined,
       })));
     }
     setIsLoading(false);
@@ -300,6 +314,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                         <RowActions
                           id={m.id}
                           status={m.status}
+                          approvalMode={m.approvalMode}
                           onView={() => goToDetail(m.id)}
                           onEdit={() => goToEdit(m.id)}
                           onDelete={() => setDeleteTarget(m.id)}
@@ -339,6 +354,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                     <RowActions
                       id={m.id}
                       status={m.status}
+                      approvalMode={m.approvalMode}
                       onView={() => goToDetail(m.id)}
                       onEdit={() => goToEdit(m.id)}
                       onDelete={() => setDeleteTarget(m.id)}
@@ -390,6 +406,7 @@ export function MinutesListPage({ onNavigate }: Props) {
 interface RowActionsProps {
   id: string;
   status: MinutesStatus;
+  approvalMode?: ApprovalMode | null;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -399,9 +416,9 @@ interface RowActionsProps {
   printingId: string | null;
 }
 
-function RowActions({ id, status, onView, onEdit, onDelete, onSendForApproval, onPrint, sendingId, printingId }: RowActionsProps) {
+function RowActions({ id, status, approvalMode, onView, onEdit, onDelete, onSendForApproval, onPrint, sendingId, printingId }: RowActionsProps) {
   const disabledCls = 'p-1.5 rounded-lg text-gray-300 dark:text-gray-600 cursor-not-allowed';
-  const canSend = status === 'draft' || status === 'changes_requested';
+  const canSend = (status === 'draft' || status === 'changes_requested') && !!approvalMode;
   return (
     <div className="flex items-center gap-1 flex-wrap">
       <button onClick={onView} aria-label="مشاهده" title="مشاهده"

@@ -4,7 +4,8 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMinutesTabFromUrl, setMinutesTabInUrl, type MinutesDetailTab } from '../../lib/minutesNavigation';
 import type { DecisionRow } from './types';
-import { MinutesPrintView } from './MinutesPrintView';
+import { MinutesPrintView, toDocData } from './MinutesPrintView';
+import type { MinutesDocumentData } from './MinutesDocumentData';
 import { FALLBACK_LOGO } from './MinutesDocumentData';
 import './minutes-print.css';
 import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow, AgendaResultRow, ApprovalRow, ApprovalCommentRow } from './Detail/types';
@@ -15,6 +16,7 @@ import { TabAgenda } from './Detail/TabAgenda';
 import { TabDecisions } from './Detail/TabDecisions';
 import { TabAttachments } from './Detail/TabAttachments';
 import { TabApprovals } from './Detail/TabApprovals';
+import { TabHistory } from './Detail/TabHistory';
 import { TabFinalVersion } from './Detail/TabFinalVersion';
 
 const TABS = [
@@ -190,10 +192,30 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       }
 
       setIsLoading(false);
+
+      // Auto-print if print=1 in URL (triggered from list page)
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('print') === '1') {
+        url.searchParams.delete('print');
+        window.history.replaceState(null, '', url.toString());
+        // Defer to allow state to settle, then trigger print
+        setTimeout(() => {
+          const printEvent = new CustomEvent('minutes-auto-print');
+          window.dispatchEvent(printEvent);
+        }, 100);
+      }
     };
 
     fetchDetail();
   }, [minuteId]);
+
+  // Listen for auto-print event
+  useEffect(() => {
+    const handler = () => handlePrint();
+    window.addEventListener('minutes-auto-print', handler);
+    return () => window.removeEventListener('minutes-auto-print', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minute, printLoading, printReady]);
 
   const goEdit = () => {
     if (minute) {
@@ -354,6 +376,40 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     ? new Date(minute.updated_at).toLocaleDateString('fa-IR')
     : '';
 
+  const printViewProps = {
+    minute: {
+      id: minute.id,
+      meeting_title_snapshot: minute.meeting_title_snapshot,
+      meeting_date_snapshot: minute.meeting_date_snapshot,
+      meeting_start_time_snapshot: minute.meeting_start_time_snapshot,
+      meeting_end_time_snapshot: minute.meeting_end_time_snapshot,
+      meeting_location_snapshot: minute.meeting_location_snapshot,
+      meeting_type: minute.meeting_type,
+      org_unit_name_snapshot: minute.org_unit_name_snapshot,
+      secretary_name_snapshot: minute.secretary_name_snapshot,
+      chair_name_snapshot: minute.chair_name_snapshot,
+      notes: minute.notes,
+      confidentiality: minute.confidentiality,
+      status: minute.status,
+      approval_mode: minute.approval_mode,
+      revision_number: minute.revision_number,
+      secretary_confirmed_at: minute.secretary_confirmed_at,
+      chair_confirmed_at: minute.chair_confirmed_at,
+      published_at: minute.published_at,
+    },
+    internalParts,
+    externalParts,
+    agendaResults,
+    approvals,
+    approvalComments,
+    decisions: printDecisions,
+    ownerNames: printOwnerNames,
+    logoUrl,
+  };
+  const finalDocData: MinutesDocumentData | null = printDecisions.length > 0 || printLoading
+    ? toDocData(printViewProps)
+    : null;
+
   return (
     <div dir="rtl" className="space-y-4">
       <DetailHeader
@@ -432,6 +488,9 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               minuteId={minute.id}
               revisionNumber={minute.revision_number}
               canManage={canManage}
+              docData={finalDocData}
+              printLoading={printLoading}
+              onPrint={handlePrint}
             />
           )}
         </div>

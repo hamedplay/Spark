@@ -64,6 +64,7 @@ export function mapExternalParticipantName(name: string | null | undefined): Dra
     invitationStatus: 'invited',
     attendanceStatus: null,
     notes: '',
+    source: 'manual',
   };
 }
 
@@ -286,6 +287,7 @@ export async function loadMinutesPrefill(
       delegateUserId: delegateTo,
       delegateName,
       notes: '',
+      source: 'meeting',
     };
   });
 

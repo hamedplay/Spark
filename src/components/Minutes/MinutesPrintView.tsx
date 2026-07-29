@@ -85,7 +85,8 @@ export interface MinutesPrintViewProps {
   logoUrl?: string | null;
 }
 
-function toDocData(props: MinutesPrintViewProps): MinutesDocumentData {
+// eslint-disable-next-line react-refresh/only-export-components
+export function toDocData(props: MinutesPrintViewProps): MinutesDocumentData {
   const agendaItems: DocAgendaItem[] = props.agendaResults.map(a => ({
     id: a.id,
     order: a.sort_order_snapshot,

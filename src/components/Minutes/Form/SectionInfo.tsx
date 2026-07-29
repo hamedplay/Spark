@@ -22,6 +22,7 @@ interface SectionInfoProps {
   agendaLoading: boolean;
   internalParticipants: DraftInternalParticipant[];
   readOnly?: boolean;
+  hideLocation?: boolean;
 }
 
 // profilesLoading and profilesError are no longer used by the secretary/chair
@@ -37,6 +38,7 @@ export function SectionInfo({
   onRetryPrefill,
   internalParticipants,
   readOnly = false,
+  hideLocation = false,
 }: SectionInfoProps) {
   void _profilesLoading; void _profilesError;
   const update = (field: keyof DraftMeetingInfo, value: string) =>
@@ -263,6 +265,7 @@ export function SectionInfo({
           />
         </div>
 
+        {!hideLocation && (
         <div>
           <label htmlFor="location" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             محل برگزاری
@@ -277,6 +280,7 @@ export function SectionInfo({
             placeholder="اتاق جلسات / آنلاین"
           />
         </div>
+        )}
 
         {/* Org Unit selector */}
         <div>

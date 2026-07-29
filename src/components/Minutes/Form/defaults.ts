@@ -41,6 +41,7 @@ export const defaultInternalParticipant = (): DraftInternalParticipant => ({
   delegateUserId: null,
   delegateName: '',
   notes: '',
+  source: 'manual',
 });
 
 export const defaultExternalParticipant = (): DraftExternalParticipant => ({
@@ -54,6 +55,7 @@ export const defaultExternalParticipant = (): DraftExternalParticipant => ({
   invitationStatus: 'invited',
   attendanceStatus: null,
   notes: '',
+  source: 'manual',
 });
 
 export const defaultAgendaItem = (order: number): DraftAgendaItem => ({

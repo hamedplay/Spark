@@ -196,6 +196,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             delegateUserId: (r.delegate_user_id as string | null) ?? null,
             delegateName: (r.delegate_name as string) || '',
             notes: (r.notes as string) || '',
+            source: 'saved' as const,
           })) : [defaultInternalParticipant()]);
         }
         if (epRes.data) {
@@ -211,6 +212,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             invitationStatus: (r.invitation_status as InvitationStatus) || 'invited',
             attendanceStatus: (r.attendance_status as AttendanceStatus | null) ?? null,
             notes: (r.notes as string) || '',
+            source: 'saved' as const,
           })) : [defaultExternalParticipant()]);
         }
         if (agRes.data) {
@@ -901,6 +903,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   }
 
   const isNonEditable = mode === 'edit' && info.status !== 'draft' && info.status !== 'changes_requested';
+  const isChangesRequested = mode === 'edit' && info.status === 'changes_requested';
 
   return (
     <div dir="rtl" className="space-y-5">
@@ -980,9 +983,10 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 agendaLoading={agendaLoading}
                 internalParticipants={internalParticipants}
                 readOnly={isNonEditable}
+                hideLocation={isChangesRequested}
               />
             )}
-            {activeSection === 1 && (
+            {activeSection === 1 && !isChangesRequested && (
               <SectionParticipants
                 internalParticipants={internalParticipants}
                 setInternalParticipants={setInternalParticipants}
@@ -999,10 +1003,15 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 externalSuggestions={externalSuggestions}
               />
             )}
+            {activeSection === 1 && isChangesRequested && (
+              <div className="text-center py-8 text-sm text-gray-400 dark:text-gray-500">
+                در حالت «اصلاح و ویرایش»، شرکت‌کنندگان داخلی قابل تغییر نیستند.
+              </div>
+            )}
             {activeSection === 2 && (
               <SectionAgenda agendaItems={agendaItems} setAgendaItems={setAgendaItems} agendaLoading={agendaLoading} internalParticipants={internalParticipants} externalParticipants={externalParticipants} />
             )}
-            {activeSection === 3 && (
+            {activeSection === 3 && !isChangesRequested && (
               <SectionDecisions
                 decisions={decisions}
                 setDecisions={setDecisions}
@@ -1013,6 +1022,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 agendaItems={agendaItems}
                 readOnly={isNonEditable}
               />
+            )}
+            {activeSection === 3 && isChangesRequested && (
+              <div className="text-center py-8 text-sm text-gray-400 dark:text-gray-500">
+                در حالت «اصلاح و ویرایش»، مصوبات قابل تغییر نیستند.
+              </div>
             )}
             {activeSection === 4 && (
               <SectionAttachments

@@ -149,6 +149,7 @@ export function SectionParticipants({
       fullName: opt.label,
       organization: meta?.organization ?? r.organization,
       position: meta?.position ?? r.position,
+      source: 'saved',
     } : r));
   };
 
@@ -216,19 +217,19 @@ export function SectionParticipants({
                     ))}
                   </select>
                 </div>
-                {/* Position snapshot — read-only for auto-filled rows, editable for manually added */}
-                {row.participantId ? (
+                {/* Position snapshot — read-only for meeting/saved rows, editable for manual */}
+                {row.source === 'manual' ? (
+                  <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.positionSnapshot} onChange={v => updateInternal(row.id, 'positionSnapshot', v)} disabled={readOnly} />
+                ) : (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">سمت</label>
                     <div className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-xl min-h-[38px] flex items-center">
                       {row.positionSnapshot || '—'}
                     </div>
                   </div>
-                ) : (
-                  <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.positionSnapshot} onChange={v => updateInternal(row.id, 'positionSnapshot', v)} disabled={readOnly} />
                 )}
-                {/* Org unit — read-only for auto-filled rows, editable for manually added */}
-                {row.participantId ? (
+                {/* Org unit — read-only for meeting/saved rows, editable for manual */}
+                {row.source === 'manual' ? (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
                     <div className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-xl min-h-[38px] flex items-center">
@@ -327,8 +328,8 @@ export function SectionParticipants({
                     useLabelAsValue
                   />
                 </div>
-                <InputField id={`ext-org-${row.id}`} label="سازمان" placeholder="" value={row.organization} onChange={v => updateExternal(row.id, 'organization', v)} disabled={readOnly} />
-                <InputField id={`ext-pos-${row.id}`} label="سمت" placeholder="" value={row.position} onChange={v => updateExternal(row.id, 'position', v)} disabled={readOnly} />
+                <InputField id={`ext-org-${row.id}`} label="سازمان" placeholder="" value={row.organization} onChange={v => updateExternal(row.id, 'organization', v)} disabled={readOnly || row.source === 'saved'} />
+                <InputField id={`ext-pos-${row.id}`} label="سمت" placeholder="" value={row.position} onChange={v => updateExternal(row.id, 'position', v)} disabled={readOnly || row.source === 'saved'} />
                 <SelectField id={`ext-inv-${row.id}`} label="وضعیت دعوت" options={INVITATION_OPTIONS} value={row.invitationStatus} onChange={v => updateExternal(row.id, 'invitationStatus', v)} disabled={readOnly} />
                 <SelectField id={`ext-att-${row.id}`} label="وضعیت حضور" options={ATTENDANCE_OPTIONS_WITH_NULL} value={row.attendanceStatus ?? ''} onChange={v => updateExternal(row.id, 'attendanceStatus', v)} disabled={readOnly} />
                 <div className="lg:col-span-5">
