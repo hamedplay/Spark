@@ -180,7 +180,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
           supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
         ]);
-        if (ipRes.error) console.error('[Minutes edit] minutes_participants query error:', ipRes.error);
+        if (ipRes.error) {
+          console.error('[Minutes edit] minutes_participants query error:', ipRes.error);
+          setEditError('خطا در بارگذاری شرکت‌کنندگان داخلی');
+          setEditLoading(false);
+          return;
+        }
         if (ipRes.data) {
           const rows = ipRes.data as unknown as Record<string, unknown>[];
           setInternalParticipants(rows.length > 0 ? rows.map(r => ({
@@ -200,7 +205,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             source: 'saved' as const,
           })) : [defaultInternalParticipant()]);
         }
-        if (epRes.error) console.error('[Minutes edit] minutes_external_participants query error:', epRes.error);
+        if (epRes.error) {
+          console.error('[Minutes edit] minutes_external_participants query error:', epRes.error);
+          setEditError('خطا در بارگذاری شرکت‌کنندگان خارجی');
+          setEditLoading(false);
+          return;
+        }
         if (epRes.data) {
           const rows = epRes.data as unknown as Record<string, unknown>[];
           setExternalParticipants(rows.length > 0 ? rows.map(r => ({
@@ -217,7 +227,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             source: 'saved' as const,
           })) : [defaultExternalParticipant()]);
         }
-        if (agRes.error) console.error('[Minutes edit] minutes_agenda_results query error:', agRes.error);
+        if (agRes.error) {
+          console.error('[Minutes edit] minutes_agenda_results query error:', agRes.error);
+          setEditError('خطا در بارگذاری دستور جلسات');
+          setEditLoading(false);
+          return;
+        }
         if (agRes.data) {
           const rows = agRes.data as unknown as Record<string, unknown>[];
           setAgendaItems(rows.length > 0 ? rows.map((r, idx) => ({
@@ -233,7 +248,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             additionalNotes: (r.additional_notes as string) || '',
           })) : [defaultAgendaItem(1)]);
         }
-        if (decRes.error) console.error('[Minutes edit] minutes_decisions query error:', decRes.error);
+        if (decRes.error) {
+          console.error('[Minutes edit] minutes_decisions query error:', decRes.error);
+          setEditError('خطا در بارگذاری مصوبات');
+          setEditLoading(false);
+          return;
+        }
         if (decRes.data) {
           const rows = decRes.data as unknown as Record<string, unknown>[];
           // Build agenda_result_id → meeting_agenda_item_id map from loaded
@@ -444,12 +464,20 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     chair_name_snapshot: info.chairNameSnapshot,
     notes: info.notes || null,
     confidentiality: info.confidentiality,
+    approval_mode: info.approvalMode || null,
 
     internal_participants: internalParticipants
-      .filter((p) => p.nameSnapshot.trim())
-      .map((p) => ({
+      .filter((p) => p.nameSnapshot.trim() || p.userId)
+      .map((p) => {
+        // Resolve name from profiles if nameSnapshot is empty but userId exists
+        const resolvedName = p.nameSnapshot.trim() || (
+          p.userId
+            ? (profiles.find(pr => pr.user_id === p.userId)?.full_name || '')
+            : ''
+        );
+        return {
         user_id: p.userId || null,
-        name_snapshot: p.nameSnapshot,
+        name_snapshot: resolvedName || p.nameSnapshot,
         position_snapshot: p.positionSnapshot || null,
         org_unit_id: p.orgUnitId || null,
         org_unit_name_snapshot: p.orgUnitNameSnapshot || null,
@@ -458,7 +486,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         notes: p.notes || null,
         delegate_user_id: p.delegateUserId || null,
         delegate_name: p.delegateName || null,
-      })),
+      };
+      }),
 
     external_participants: externalParticipants
       .filter((p) => p.fullName.trim())
@@ -664,6 +693,44 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             setEditUpdatedAt(realUpdatedAt);
             setWorkingMinuteId(newId);
             setMinuteIdInUrl(newId);
+
+            // Dev verification: confirm participants were stored
+            if (isDev) {
+              const { count: pCount } = await supabase
+                .from('minutes_participants')
+                .select('*', { count: 'exact', head: true })
+                .eq('minute_id', newId);
+              const { count: epCount } = await supabase
+                .from('minutes_external_participants')
+                .select('*', { count: 'exact', head: true })
+                .eq('minute_id', newId);
+              const { count: agCount } = await supabase
+                .from('minutes_agenda_results')
+                .select('*', { count: 'exact', head: true })
+                .eq('minute_id', newId);
+              const { data: minCheck } = await supabase
+                .from('minutes')
+                .select('approval_mode, status')
+                .eq('id', newId)
+                .maybeSingle();
+              console.log('[MinutesDraftRPC] Verification:', {
+                minuteId: newId,
+                approvalMode: (minCheck as { approval_mode: string | null } | null)?.approval_mode,
+                status: (minCheck as { status: string } | null)?.status,
+                participantsStored: pCount,
+                externalStored: epCount,
+                agendaStored: agCount,
+                participantsInPayload: createPayload.internal_participants?.length ?? 0,
+                externalInPayload: createPayload.external_participants?.length ?? 0,
+                agendaInPayload: createPayload.agenda_results?.length ?? 0,
+              });
+              const expectedP = createPayload.internal_participants?.length ?? 0;
+              if (pCount !== expectedP) {
+                console.error('[MinutesDraftRPC] Participant count mismatch:', { stored: pCount, expected: expectedP });
+                toast.error('تعداد شرکت‌کنندگان ذخیره‌شده با payload همخوانی ندارد.');
+              }
+            }
+
             return { minuteId: newId, updatedAt: realUpdatedAt };
           }
           if (isDev) console.error('[MinutesDraftRPC] Unexpected response:', data);
@@ -740,6 +807,44 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           setEditUpdatedAt(returnedUpdatedAt);
           setWorkingMinuteId(existingMinuteId);
           setMinuteIdInUrl(existingMinuteId);
+
+          // Dev verification: confirm participants were stored
+          if (isDev) {
+            const { count: pCount } = await supabase
+              .from('minutes_participants')
+              .select('*', { count: 'exact', head: true })
+              .eq('minute_id', existingMinuteId);
+            const { count: epCount } = await supabase
+              .from('minutes_external_participants')
+              .select('*', { count: 'exact', head: true })
+              .eq('minute_id', existingMinuteId);
+            const { count: agCount } = await supabase
+              .from('minutes_agenda_results')
+              .select('*', { count: 'exact', head: true })
+              .eq('minute_id', existingMinuteId);
+            const { data: minCheck } = await supabase
+              .from('minutes')
+              .select('approval_mode, status')
+              .eq('id', existingMinuteId)
+              .maybeSingle();
+            console.log('[MinutesUpdateRPC] Verification:', {
+              minuteId: existingMinuteId,
+              approvalMode: (minCheck as { approval_mode: string | null } | null)?.approval_mode,
+              status: (minCheck as { status: string } | null)?.status,
+              participantsStored: pCount,
+              externalStored: epCount,
+              agendaStored: agCount,
+              participantsInPayload: updatePayload.internal_participants?.length ?? 0,
+              externalInPayload: updatePayload.external_participants?.length ?? 0,
+              agendaInPayload: updatePayload.agenda_results?.length ?? 0,
+            });
+            const expectedP = updatePayload.internal_participants?.length ?? 0;
+            if (pCount !== expectedP) {
+              console.error('[MinutesUpdateRPC] Participant count mismatch:', { stored: pCount, expected: expectedP });
+              toast.error('تعداد شرکت‌کنندگان ذخیره‌شده با payload همخوانی ندارد.');
+            }
+          }
+
           return { minuteId: existingMinuteId, updatedAt: returnedUpdatedAt };
         }
         if (isDev) console.error('[MinutesUpdateRPC] Unexpected response:', data);

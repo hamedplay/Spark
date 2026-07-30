@@ -54,6 +54,8 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [printOwnerNames, setPrintOwnerNames] = useState<Record<string, string>>({});
   const [printLoading, setPrintLoading] = useState(false);
   const [printReady, setPrintReady] = useState(false);
+  const [documentDataLoaded, setDocumentDataLoaded] = useState(false);
+  const [documentDataError, setDocumentDataError] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -260,6 +262,15 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     return () => window.removeEventListener('minutes-refresh', handler);
   }, [minuteId]);
 
+  // Auto-prepare document data when entering the final_version tab
+  useEffect(() => {
+    if (activeTab === 'final_version' && !documentDataLoaded && !documentDataError && minute) {
+      prepareDocumentData().catch(() => {
+        // Error already handled in prepareDocumentData
+      });
+    }
+  }, [activeTab, documentDataLoaded, documentDataError, minute]);
+
   const handleApprove = async () => {
     if (acting || !minute || !myApproval) return;
     setActing(true);
@@ -337,10 +348,25 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     if (printLoading || printReady || !minute) return;
     setPrintLoading(true);
     try {
+      await prepareDocumentData();
+      setPrintReady(true);
+    } catch {
+      toast.error('آماده‌سازی چاپ ناموفق بود.');
+    } finally {
+      setPrintLoading(false);
+    }
+  };
+
+  // Shared: load minutes_decisions + owner names, set state, return success/error.
+  // Does NOT call window.print().
+  const prepareDocumentData = async (): Promise<void> => {
+    if (!minute) return;
+    setDocumentDataError(null);
+    try {
       const decRes = await supabase.from('minutes_decisions')
           .select('id, minute_id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, status, progress_percent, start_date, due_date, completed_at, requires_followup, latest_update, created_by_user_id, created_at, updated_at')
           .eq('minute_id', minute.id);
-      if (decRes.error) { toast.error('بارگذاری مصوبات برای چاپ ناموفق بود.'); return; }
+      if (decRes.error) throw new Error(decRes.error.message);
       const decRows = (decRes.data || []) as DecisionRow[];
       const ownerIds = Array.from(new Set(decRows.map(d => d.primary_owner_user_id).filter(Boolean))) as string[];
       let namesMap: Record<string, string> = {};
@@ -352,11 +378,12 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       }
       setPrintDecisions(decRows);
       setPrintOwnerNames(namesMap);
-      setPrintReady(true);
-    } catch {
-      toast.error('آماده‌سازی چاپ ناموفق بود.');
-    } finally {
-      setPrintLoading(false);
+      setDocumentDataLoaded(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'خطا در آماده‌سازی داده سند';
+      setDocumentDataError(msg);
+      setDocumentDataLoaded(false);
+      throw e;
     }
   };
 
@@ -406,7 +433,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     ownerNames: printOwnerNames,
     logoUrl,
   };
-  const finalDocData: MinutesDocumentData | null = printDecisions.length > 0 || printLoading
+  const finalDocData: MinutesDocumentData | null = documentDataLoaded
     ? toDocData(printViewProps)
     : null;
 
@@ -489,6 +516,9 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               revisionNumber={minute.revision_number}
               canManage={canManage}
               docData={finalDocData}
+              docDataLoading={!documentDataLoaded && !documentDataError}
+              docDataError={documentDataError}
+              onPrepareDocumentData={prepareDocumentData}
               onPrint={handlePrint}
             />
           )}

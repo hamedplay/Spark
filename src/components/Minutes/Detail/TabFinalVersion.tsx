@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Upload, Download, Trash2, Signature as FileSignature, Loader as Loader2, Maximize2 } from 'lucide-react';
+import { Upload, Download, Trash2, Signature as FileSignature, Loader as Loader2, Maximize2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   listMinuteAttachments, uploadMinuteAttachment, deleteMinuteAttachment,
@@ -16,10 +16,13 @@ interface Props {
   revisionNumber: number;
   canManage: boolean;
   docData: MinutesDocumentData | null;
+  docDataLoading: boolean;
+  docDataError: string | null;
+  onPrepareDocumentData: () => Promise<void>;
   onPrint: () => void;
 }
 
-export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, onPrint }: Props) {
+export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, docDataLoading, docDataError, onPrepareDocumentData, onPrint }: Props) {
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +113,34 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
   return (
     <div className="space-y-5" dir="rtl">
       {/* Full document preview */}
-      {docData && (
+      {docDataError ? (
+        <div className="space-y-3">
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">
+            {docDataError}
+          </div>
+          <button
+            onClick={() => onPrepareDocumentData()}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            تلاش مجدد
+          </button>
+        </div>
+      ) : docDataLoading ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">پیش‌نمایش صورت‌جلسه</h3>
+            <button
+              disabled
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-400 cursor-not-allowed"
+            >
+              <Loader2 className="w-4 h-4 animate-spin" />
+              پیش‌نمایش تمام‌صفحه
+            </button>
+          </div>
+          <TableSkeleton rows={6} />
+        </div>
+      ) : docData ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">پیش‌نمایش صورت‌جلسه</h3>
@@ -126,7 +156,7 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
             <MinutesDocumentLayout data={docData} variant="preview" />
           </div>
         </div>
-      )}
+      ) : null}
 
       {docData && (
         <FullScreenPreview
