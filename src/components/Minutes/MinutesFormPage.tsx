@@ -175,7 +175,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         });
 
         const [ipRes, epRes, agRes, decRes] = await Promise.all([
-          supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, notes, delegate_user_id, delegate_name').eq('minute_id', targetId).order('created_at', { ascending: true }),
+          supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_external_participants').select('id, full_name, organization, position, mobile, email, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
           supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
@@ -199,8 +199,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             invitationStatus: (r.invitation_status as InvitationStatus) || 'invited',
             attendanceStatus: (r.attendance_status as AttendanceStatus | null) ?? null,
             delegate: '',
-            delegateUserId: (r.delegate_user_id as string | null) ?? null,
-            delegateName: (r.delegate_name as string) || '',
+            delegateUserId: null,
+            delegateName: '',
             notes: (r.notes as string) || '',
             source: 'saved' as const,
           })) : [defaultInternalParticipant()]);
