@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Eye, Send, X, CalendarDays } from 'lucide-react';
+import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Send, X, CalendarDays } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl } from '../../lib/minutesNavigation';
@@ -180,6 +180,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
           supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
         ]);
+        if (ipRes.error) console.error('[Minutes edit] minutes_participants query error:', ipRes.error);
         if (ipRes.data) {
           const rows = ipRes.data as unknown as Record<string, unknown>[];
           setInternalParticipants(rows.length > 0 ? rows.map(r => ({
@@ -199,6 +200,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             source: 'saved' as const,
           })) : [defaultInternalParticipant()]);
         }
+        if (epRes.error) console.error('[Minutes edit] minutes_external_participants query error:', epRes.error);
         if (epRes.data) {
           const rows = epRes.data as unknown as Record<string, unknown>[];
           setExternalParticipants(rows.length > 0 ? rows.map(r => ({
@@ -215,6 +217,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             source: 'saved' as const,
           })) : [defaultExternalParticipant()]);
         }
+        if (agRes.error) console.error('[Minutes edit] minutes_agenda_results query error:', agRes.error);
         if (agRes.data) {
           const rows = agRes.data as unknown as Record<string, unknown>[];
           setAgendaItems(rows.length > 0 ? rows.map((r, idx) => ({
@@ -230,6 +233,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             additionalNotes: (r.additional_notes as string) || '',
           })) : [defaultAgendaItem(1)]);
         }
+        if (decRes.error) console.error('[Minutes edit] minutes_decisions query error:', decRes.error);
         if (decRes.data) {
           const rows = decRes.data as unknown as Record<string, unknown>[];
           // Build agenda_result_id → meeting_agenda_item_id map from loaded
@@ -1079,13 +1083,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               >
                 <Save className="w-4 h-4" />
                 {savingDraft ? 'در حال ذخیره...' : 'ذخیره پیش‌نویس'}
-              </button>
-              <button
-                onClick={() => onNavigate('minutes-detail')}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              >
-                <Eye className="w-4 h-4" />
-                پیش‌نمایش
               </button>
               {activeSection === SECTIONS.length - 1 ? (
                 <button

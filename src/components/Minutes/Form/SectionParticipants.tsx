@@ -199,24 +199,33 @@ export function SectionParticipants({
           {internalParticipants.map(row => (
             <div key={row.id} className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl space-y-2">
               <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                {/* User selector */}
-                <div>
-                  <label htmlFor={`int-user-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">کاربر</label>
-                  <select
-                    id={`int-user-${row.id}`}
-                    value={row.userId}
-                    onChange={e => handleInternalUserChange(row.id, e.target.value)}
-                    disabled={readOnly}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    <option value="">انتخاب کنید</option>
-                    {profiles.map(p => (
-                      <option key={p.user_id} value={p.user_id}>
-                        {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* User — read-only for meeting/saved, select for manual */}
+                {row.source === 'manual' ? (
+                  <div>
+                    <label htmlFor={`int-user-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">کاربر</label>
+                    <select
+                      id={`int-user-${row.id}`}
+                      value={row.userId}
+                      onChange={e => handleInternalUserChange(row.id, e.target.value)}
+                      disabled={readOnly}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">انتخاب کنید</option>
+                      {profiles.map(p => (
+                        <option key={p.user_id} value={p.user_id}>
+                          {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">کاربر</label>
+                    <div className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-xl min-h-[38px] flex items-center">
+                      {row.nameSnapshot || '—'}
+                    </div>
+                  </div>
+                )}
                 {/* Position snapshot — read-only for meeting/saved rows, editable for manual */}
                 {row.source === 'manual' ? (
                   <InputField id={`int-pos-${row.id}`} label="سمت" placeholder="سمت" value={row.positionSnapshot} onChange={v => updateInternal(row.id, 'positionSnapshot', v)} disabled={readOnly} />
@@ -228,15 +237,8 @@ export function SectionParticipants({
                     </div>
                   </div>
                 )}
-                {/* Org unit — read-only for meeting/saved rows, editable for manual */}
+                {/* Org unit — read-only for meeting/saved rows, select for manual */}
                 {row.source === 'manual' ? (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
-                    <div className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-xl min-h-[38px] flex items-center">
-                      {row.orgUnitNameSnapshot || '—'}
-                    </div>
-                  </div>
-                ) : (
                   <div>
                     <label htmlFor={`int-unit-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
                     <select
@@ -251,6 +253,13 @@ export function SectionParticipants({
                         <option key={u.id} value={u.id}>{u.name}</option>
                       ))}
                     </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">واحد</label>
+                    <div className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-xl min-h-[38px] flex items-center">
+                      {row.orgUnitNameSnapshot || '—'}
+                    </div>
                   </div>
                 )}
                 {/* Invitation status — read-only badge or disabled select */}

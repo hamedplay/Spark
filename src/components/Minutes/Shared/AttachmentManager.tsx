@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Paperclip, Loader as Loader2, Trash2, Download, CloudUpload as UploadCloud, Signature as FileSignature, Award } from 'lucide-react';
+import { Paperclip, Loader as Loader2, Trash2, Download, CloudUpload as UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { EmptyState, TableSkeleton, ConfirmActionDialog } from '../MinutesShared';
 import {
   listMinuteAttachments, uploadMinuteAttachment, deleteMinuteAttachment, getAttachmentDownloadUrl,
-  validateAttachment, formatBytes, type AttachmentRow,
+  validateAttachment, formatBytes, type AttachmentRow, type AttachmentKind,
 } from '../../../lib/minutesAttachments';
 
 export interface AttachmentManagerProps {
@@ -23,9 +23,6 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber, exclude
   const [confirmDelete, setConfirmDelete] = useState<AttachmentRow | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [fileInput, setFileInput] = useState<HTMLInputElement | null>(null);
-  const [signedInput, setSignedInput] = useState<HTMLInputElement | null>(null);
-  const [uploadingSigned, setUploadingSigned] = useState(false);
-  const [signedProgress, setSignedProgress] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -60,33 +57,6 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber, exclude
     if (fileInput) fileInput.value = '';
   };
 
-  const handleSignedFile = async (files: FileList | File[]) => {
-    if (!canManage) return;
-    const arr = Array.from(files);
-    if (arr.length === 0) return;
-    const f = arr[0];
-    const v = validateAttachment(f);
-    if (!v.ok) { toast.error(`${f.name}: ${v.error}`); return; }
-    setUploadingSigned(true);
-    setSignedProgress(0);
-    try {
-      const { attachment } = await uploadMinuteAttachment(f, {
-        minuteId,
-        attachmentKind: 'signed_final',
-        revisionNumber: revisionNumber ?? null,
-        onProgress: setSignedProgress,
-      });
-      setAttachments(prev => [...prev, attachment]);
-      toast.success('نسخه امضاشده بارگذاری شد.');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'بارگذاری نسخه امضاشده ناموفق بود.');
-    } finally {
-      setUploadingSigned(false);
-      setSignedProgress(0);
-      if (signedInput) signedInput.value = '';
-    }
-  };
-
   const handleDownload = async (a: AttachmentRow) => {
     setDownloading(a.id);
     try {
@@ -113,9 +83,12 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber, exclude
     } finally { setConfirmDelete(null); }
   };
 
-  const visibleAttachments = excludeKind
-    ? attachments.filter(a => a.attachment_kind !== excludeKind)
-    : attachments;
+  // Exclude both signed_final (managed in TabFinalVersion) and any caller-specified kind
+  const visibleAttachments = attachments.filter(a => {
+    if (a.attachment_kind === 'signed_final') return false;
+    if (excludeKind && a.attachment_kind === excludeKind) return false;
+    return true;
+  });
 
   if (loading) return <TableSkeleton rows={3} />;
   if (error) return <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">{error}</div>;
@@ -135,41 +108,6 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber, exclude
           </button>
         )}
       </div>
-
-      {/* Signed final upload section */}
-      {canManage && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <FileSignature className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              <div>
-                <h3 className="text-sm font-bold text-amber-800 dark:text-amber-300">نسخه نهایی امضاشده</h3>
-                <p className="text-xs text-amber-600 dark:text-amber-400">فایل امضاشده این صورت‌جلسه را بارگذاری کنید. نسخه‌های قبلی حفظ می‌شوند.</p>
-              </div>
-            </div>
-            <button
-              onClick={() => signedInput?.click()}
-              disabled={uploadingSigned}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50"
-            >
-              <UploadCloud className="w-4 h-4" />
-              بارگذاری نسخه امضاشده
-            </button>
-          </div>
-          <input
-            ref={el => setSignedInput(el)}
-            type="file"
-            className="hidden"
-            accept=".pdf,.jpg,.jpeg,.png,.webp"
-            onChange={e => e.target.files && handleSignedFile(e.target.files)}
-          />
-          {uploadingSigned && signedProgress > 0 && (
-            <div className="mt-3 w-full bg-amber-200 dark:bg-amber-800 rounded-full h-2">
-              <div className="h-2 bg-amber-600 rounded-full transition-all" style={{ width: `${signedProgress}%` }} />
-            </div>
-          )}
-        </div>
-      )}
 
       <input
         ref={el => setFileInput(el)}
@@ -204,15 +142,7 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber, exclude
               {visibleAttachments.map(a => (
                 <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
                   <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={a.original_filename}>
-                    <div className="flex items-center gap-2">
-                      <span className="truncate">{a.original_filename}</span>
-                      {a.attachment_kind === 'signed_final' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium whitespace-nowrap">
-                          <Award className="w-3 h-3" />
-                          امضاشده{a.revision_number != null ? ` — نسخه ${a.revision_number}` : ''}
-                        </span>
-                      )}
-                    </div>
+                    {a.original_filename}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{formatBytes(a.size_bytes)}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{a.uploader_name || '—'}</td>

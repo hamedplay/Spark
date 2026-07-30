@@ -9,17 +9,17 @@ import {
 import { TableSkeleton, ConfirmActionDialog } from '../MinutesShared';
 import { MinutesDocumentLayout } from '../MinutesDocumentLayout';
 import type { MinutesDocumentData } from '../MinutesDocumentData';
+import { FullScreenPreview } from '../Shared/FullScreenPreview';
 
 interface Props {
   minuteId: string;
   revisionNumber: number;
   canManage: boolean;
   docData: MinutesDocumentData | null;
-  printLoading: boolean;
   onPrint: () => void;
 }
 
-export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, printLoading, onPrint }: Props) {
+export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, onPrint }: Props) {
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +27,7 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showFullPreview, setShowFullPreview] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -114,18 +115,26 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">پیش‌نمایش صورت‌جلسه</h3>
             <button
-              onClick={onPrint}
-              disabled={printLoading}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setShowFullPreview(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
             >
-              {printLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Maximize2 className="w-4 h-4" />}
-              پیش‌نمایش تمام‌صفحه و چاپ
+              <Maximize2 className="w-4 h-4" />
+              پیش‌نمایش تمام‌صفحه
             </button>
           </div>
           <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800">
             <MinutesDocumentLayout data={docData} variant="preview" />
           </div>
         </div>
+      )}
+
+      {docData && (
+        <FullScreenPreview
+          open={showFullPreview}
+          onClose={() => setShowFullPreview(false)}
+          docData={docData}
+          onPrint={onPrint}
+        />
       )}
 
       {/* Signed version uploads */}

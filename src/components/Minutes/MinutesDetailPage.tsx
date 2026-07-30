@@ -489,7 +489,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               revisionNumber={minute.revision_number}
               canManage={canManage}
               docData={finalDocData}
-              printLoading={printLoading}
               onPrint={handlePrint}
             />
           )}
