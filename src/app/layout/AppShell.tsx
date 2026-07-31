@@ -37,7 +37,10 @@ export function AppShell(props: AppShellProps) {
     isAdmin, currentUserId, userPermissions,
     activePage, setActivePage,
     showSplash, splashDone, onSplashDone,
-    sparkVisible, rendererProps, sparkProps,
+    sparkVisible,
+    minutesFollowupAllowed,
+    minutesFollowupAccessLoading,
+    rendererProps, sparkProps,
   } = props;
 
   const { theme } = useTheme();
