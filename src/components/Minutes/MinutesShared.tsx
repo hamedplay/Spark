@@ -20,13 +20,14 @@ export function DecisionProgressBar({ percent }: { percent: number }) {
 
 // ── DecisionProgressModal ───────────────────────────────────────────────────
 //
-// Shared modal for updating decision progress via update_decision_progress RPC.
-// Used by MinutesDetailPage, MyDecisionsPage, DecisionsFollowupPage.
+// Shared modal for updating decision progress.
+// Routes to update_my_minutes_decision (owner) or manage_minutes_decision (manager).
 
 interface DecisionProgressModalProps {
   decision: DecisionRow;
   history: DecisionUpdateRow[];
   canUpdate: boolean;
+  isManager?: boolean;
   onClose: () => void;
   onUpdated: (result: UpdateDecisionProgressResult) => void;
 }
@@ -43,51 +44,68 @@ const DECISION_STATUS_OPTIONS: { value: DecisionStatus; label: string }[] = [
 
 const RPC_ERROR_MESSAGES: Record<string, string> = {
   NOT_AUTHENTICATED: 'احراز هویت نشده‌اید. لطفاً دوباره وارد شوید.',
-  INVALID_DECISION_STATUS: 'وضعیت انتخاب‌شده نامعتبر است.',
-  INVALID_PROGRESS_PERCENT: 'درصد پیشرفت باید بین ۰ تا ۱۰۰ باشد.',
   DECISION_NOT_FOUND: 'مصوبه یافت نشد.',
+  NOT_DECISION_OWNER: 'شما مسئول این مصوبه نیستید.',
+  NOT_AUTHORIZED: 'شما اجازه به‌روزرسانی این مصوبه را ندارید.',
+  DECISION_VERSION_CONFLICT: 'این مصوبه توسط کاربر دیگری به‌روزرسانی شده است. لطفاً صفحه را بازآوری کنید.',
+  INVALID_PROGRESS: 'درصد پیشرفت باید بین ۰ تا ۱۰۰ باشد.',
+  INVALID_STATUS: 'وضعیت انتخاب‌شده نامعتبر است.',
+  COMPLETION_REQUIRES_100_PERCENT: 'تکمیل فقط با درصد پیشرفت ۱۰۰ ممکن است.',
+  COMPLETED_DECISION_IMMUTABLE: 'مصوبه تکمیل‌شده قابل ویرایش نیست.',
   MINUTE_NOT_PUBLISHED: 'صورت‌جلسه در وضعیت قابل به‌روزرسانی نیست.',
-  DECISION_NO_PERMISSION: 'شما اجازه به‌روزرسانی این مصوبه را ندارید.',
-  COMPLETION_REQUIRES_FULL_PROGRESS: 'تکمیل فقط با درصد پیشرفت ۱۰۰ ممکن است.',
-  PAYLOAD_INVALID: 'اطلاعات ارسالی نامعتبر است.',
+  USE_COMPLETION_OPERATION: 'برای تکمیل از عملیات تکمیل استفاده کنید.',
   INTERNAL_ERROR: 'خطای داخلی سرور رخ داد. لطفاً دوباره تلاش کنید.',
 };
 
-export function DecisionProgressModal({ decision, history, canUpdate, onClose, onUpdated }: DecisionProgressModalProps) {
+export function DecisionProgressModal({ decision, history, canUpdate, isManager = false, onClose, onUpdated }: DecisionProgressModalProps) {
   const [status, setStatus] = useState<DecisionStatus>(decision.status);
   const [progress, setProgress] = useState<number>(decision.progress_percent);
   const [updateText, setUpdateText] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleProgressChange = (v: number) => {
-    setProgress(v);
-    if (v === 100) setStatus('completed');
-  };
-
   const handleSubmit = async () => {
     if (submitting || !canUpdate) return;
     setError(null);
     setSubmitting(true);
     try {
-      const { data, error: rpcError } = await supabase.rpc('update_decision_progress', {
-        p_decision_id: decision.id,
-        p_status: status,
-        p_progress_percent: progress,
-        p_update_text: updateText || null,
-      });
+      const isCompletion = progress === 100 && status === 'completed' && decision.status !== 'completed';
+      let data: unknown;
+      let rpcError: unknown;
+
+      if (isManager) {
+        const res = await supabase.rpc('manage_minutes_decision', {
+          p_decision_id: decision.id,
+          p_expected_updated_at: decision.updated_at,
+          p_operation: isCompletion ? 'completion' : 'status_change',
+          p_new_status: isCompletion ? undefined : status,
+          p_report_text: updateText || null,
+        });
+        data = res.data; rpcError = res.error;
+      } else {
+        const res = await supabase.rpc('update_my_minutes_decision', {
+          p_decision_id: decision.id,
+          p_expected_updated_at: decision.updated_at,
+          p_progress_percent: progress,
+          p_status: status,
+          p_report_text: updateText || null,
+          p_event_type: isCompletion ? 'completion' : 'progress',
+        });
+        data = res.data; rpcError = res.error;
+      }
+
       if (rpcError) {
-        setError('به‌روزرسانی پیشرفت ناموفق بود. لطفاً دوباره تلاش کنید.');
+        setError('به‌روزرسانی ناموفق بود. لطفاً دوباره تلاش کنید.');
         return;
       }
-      const result = data as UpdateDecisionProgressResult;
+      const result = data as { success?: boolean; error_code?: string; updated_at?: string };
       if (result && result.success === false) {
         const code = result.error_code || 'INTERNAL_ERROR';
-        setError(RPC_ERROR_MESSAGES[code] || 'به‌روزرسانی پیشرفت ناموفق بود.');
+        setError(RPC_ERROR_MESSAGES[code] || 'به‌روزرسانی ناموفق بود.');
         return;
       }
       if (result && result.success === true) {
-        onUpdated(result);
+        onUpdated({ ...result, success: true } as UpdateDecisionProgressResult);
         return;
       }
       setError('پاسخ نامعتبر از سرور دریافت شد.');
@@ -134,7 +152,7 @@ export function DecisionProgressModal({ decision, history, canUpdate, onClose, o
                 max={100}
                 step={5}
                 value={progress}
-                onChange={e => handleProgressChange(Number(e.target.value))}
+                onChange={e => setProgress(Number(e.target.value))}
                 disabled={!canUpdate}
                 className="w-full accent-blue-600 disabled:opacity-60"
               />

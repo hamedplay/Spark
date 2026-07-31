@@ -13,10 +13,27 @@ export interface TabDecisionsProps {
   isAdmin?: boolean;
 }
 
+interface ViewDecisionRow {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: DecisionRow['priority'];
+  status: DecisionRow['status'];
+  progress_percent: number;
+  start_date: string | null;
+  due_date: string | null;
+  responsible_unit_name_snapshot: string | null;
+  primary_owner_user_id: string;
+  owner_name: string | null;
+  requires_followup: boolean;
+  latest_update: string | null;
+  agenda_result_id: string | null;
+  agenda_title: string | null;
+}
+
 export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, currentUserId, isAdmin }: TabDecisionsProps) {
-  const [decisions, setDecisions] = useState<DecisionRow[]>([]);
+  const [decisions, setDecisions] = useState<ViewDecisionRow[]>([]);
   const [historyMap, setHistoryMap] = useState<Record<string, DecisionUpdateRow[]>>({});
-  const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [progressDecision, setProgressDecision] = useState<DecisionRow | null>(null);
@@ -24,10 +41,18 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
 
   const canUpdateStatus = minuteStatus === 'approved' || minuteStatus === 'published';
 
-  const canUpdateDecision = (dec: DecisionRow) => {
+  const canUpdateDecision = (dec: ViewDecisionRow | DecisionRow) => {
     if (!currentUserId) return false;
     if (isAdmin) return true;
     if (dec.primary_owner_user_id === currentUserId) return true;
+    if (secretaryId && secretaryId === currentUserId) return true;
+    if (chairId && chairId === currentUserId) return true;
+    return false;
+  };
+
+  const isManager = (dec: ViewDecisionRow | DecisionRow) => {
+    if (!currentUserId) return false;
+    if (isAdmin) return true;
     if (secretaryId && secretaryId === currentUserId) return true;
     if (chairId && chairId === currentUserId) return true;
     return false;
@@ -37,47 +62,28 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
     setLoading(true);
     setError(null);
     try {
-      const [decRes, histRes] = await Promise.all([
-        supabase
-          .from('minutes_decisions')
-          .select('id, minute_id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, status, progress_percent, start_date, due_date, completed_at, requires_followup, latest_update, created_by_user_id, created_at, updated_at')
-          .eq('minute_id', minuteId)
-          .order('created_at', { ascending: true }),
+      const [viewRes, histRes] = await Promise.all([
+        supabase.rpc('get_minutes_decisions_for_view', { p_minute_id: minuteId }),
         supabase
           .from('minutes_decision_updates')
-          .select('id, decision_id, minute_id, previous_status, new_status, previous_progress_percent, new_progress_percent, update_text, created_by_user_id, created_at')
+          .select('id, decision_id, minute_id, previous_status, new_status, previous_progress_percent, new_progress_percent, update_text, created_by_user_id, created_at, event_type, event_title, event_metadata, is_blocking, resolved_at, resolved_by_user_id')
           .eq('minute_id', minuteId)
           .order('created_at', { ascending: false }),
       ]);
 
-      if (decRes.error) throw new Error('decisions');
+      if (viewRes.error) throw new Error('decisions');
       if (histRes.error) throw new Error('history');
 
-      const decRows = (decRes.data || []) as unknown as DecisionRow[];
+      const viewRows = (viewRes.data || []) as unknown as ViewDecisionRow[];
       const histRows = (histRes.data || []) as unknown as DecisionUpdateRow[];
 
-      // Group history by decision_id
       const hMap: Record<string, DecisionUpdateRow[]> = {};
       for (const h of histRows) {
         if (!hMap[h.decision_id]) hMap[h.decision_id] = [];
         hMap[h.decision_id].push(h);
       }
       setHistoryMap(hMap);
-
-      // Fetch owner names from profiles
-      const ownerIds = Array.from(new Set(decRows.map(d => d.primary_owner_user_id).filter(Boolean)));
-      const names: Record<string, string> = {};
-      if (ownerIds.length > 0) {
-        const { data: profData } = await supabase
-          .from('profiles_public')
-          .select('user_id, full_name')
-          .in('user_id', ownerIds);
-        for (const p of (profData || []) as unknown as { user_id: string; full_name: string }[]) {
-          names[p.user_id] = p.full_name;
-        }
-      }
-      setOwnerNames(names);
-      setDecisions(decRows);
+      setDecisions(viewRows);
     } catch {
       setError('بارگذاری مصوبات ناموفق بود. لطفاً دوباره تلاش کنید.');
     } finally {
@@ -90,8 +96,32 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minuteId]);
 
-  const openProgressModal = (dec: DecisionRow) => {
-    setProgressDecision(dec);
+  const openProgressModal = (dec: ViewDecisionRow) => {
+    const fullDec: DecisionRow = {
+      id: dec.id,
+      minute_id: minuteId,
+      agenda_result_id: dec.agenda_result_id,
+      title: dec.title,
+      description: dec.description,
+      primary_owner_user_id: dec.primary_owner_user_id,
+      responsible_unit_id: null,
+      responsible_unit_name_snapshot: dec.responsible_unit_name_snapshot,
+      priority: dec.priority,
+      status: dec.status,
+      progress_percent: dec.progress_percent,
+      start_date: dec.start_date,
+      due_date: dec.due_date,
+      completed_at: null,
+      requires_followup: dec.requires_followup,
+      latest_update: dec.latest_update,
+      created_by_user_id: dec.primary_owner_user_id,
+      created_at: '',
+      updated_at: '',
+      discussion_result: null,
+      result_type: null,
+      additional_notes: null,
+    };
+    setProgressDecision(fullDec);
     setProgressHistory(historyMap[dec.id] || []);
   };
 
@@ -116,7 +146,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
       )}
       {decisions.map((dec, idx) => {
         const overdue = dec.due_date && dec.status !== 'completed' && dec.status !== 'stopped' && new Date(dec.due_date) < new Date();
-        const ownerName = ownerNames[dec.primary_owner_user_id] || '—';
+        const ownerName = dec.owner_name || '—';
         const hist = historyMap[dec.id] || [];
         return (
           <div key={dec.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
@@ -161,7 +191,6 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500 dark:text-gray-400">پیشرفت: {dec.progress_percent}٪</span>
-                {dec.completed_at && <span className="text-green-600 dark:text-green-400">تکمیل: {new Date(dec.completed_at).toLocaleDateString('fa-IR')}</span>}
               </div>
               <DecisionProgressBar percent={dec.progress_percent} />
             </div>
@@ -211,6 +240,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
           decision={progressDecision}
           history={progressHistory}
           canUpdate={canUpdateDecision(progressDecision)}
+          isManager={isManager(progressDecision)}
           onClose={() => setProgressDecision(null)}
           onUpdated={onProgressUpdated}
         />

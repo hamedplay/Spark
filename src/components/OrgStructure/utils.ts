@@ -78,6 +78,9 @@ export const ALL_PERMISSION_GROUPS = [
     { key: 'spark',             label: 'دستیار اسپارک' },
     { key: 'spark_meeting_req', label: 'درخواست جلسه از طریق اسپارک' },
   ]},
+  { group: 'صورت‌جلسات', color: '#0ea5e9', keys: [
+    { key: 'minutes_decisions.track', label: 'پیگیری مصوبات' },
+  ]},
   { group: 'مدیریت سازمانی', color: '#64748b', keys: [
     { key: 'admin_panel',           label: 'پنل مدیریت' },
     { key: 'org_manage_structure',  label: 'مدیریت ساختار سازمانی' },

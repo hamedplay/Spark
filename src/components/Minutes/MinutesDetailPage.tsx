@@ -357,24 +357,39 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     }
   };
 
-  // Shared: load minutes_decisions + owner names, set state, return success/error.
+  // Shared: load minutes_decisions via read-only RPC + owner names, set state, return success/error.
   // Does NOT call window.print().
   const prepareDocumentData = async (): Promise<void> => {
     if (!minute) return;
     setDocumentDataError(null);
     try {
-      const decRes = await supabase.from('minutes_decisions')
-          .select('id, minute_id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, status, progress_percent, start_date, due_date, completed_at, requires_followup, latest_update, created_by_user_id, created_at, updated_at')
-          .eq('minute_id', minute.id);
-      if (decRes.error) throw new Error(decRes.error.message);
-      const decRows = (decRes.data || []) as DecisionRow[];
-      const ownerIds = Array.from(new Set(decRows.map(d => d.primary_owner_user_id).filter(Boolean))) as string[];
-      let namesMap: Record<string, string> = {};
-      if (ownerIds.length > 0) {
-        const { data: profData } = await supabase.from('profiles_public')
-          .select('user_id, full_name')
-          .in('user_id', ownerIds);
-        namesMap = Object.fromEntries((profData || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name]));
+      const { data: viewData, error: viewErr } = await supabase.rpc('get_minutes_decisions_for_view', { p_minute_id: minute.id });
+      if (viewErr) throw new Error(viewErr.message);
+      const viewRows = (viewData || []) as Array<{
+        id: string; title: string; description: string | null;
+        priority: DecisionRow['priority']; status: DecisionRow['status'];
+        progress_percent: number; start_date: string | null; due_date: string | null;
+        responsible_unit_name_snapshot: string | null;
+        primary_owner_user_id: string; owner_name: string | null;
+        requires_followup: boolean; latest_update: string | null;
+        agenda_result_id: string | null; agenda_title: string | null;
+      }>;
+      // Map to DecisionRow for print view compatibility
+      const decRows: DecisionRow[] = viewRows.map(r => ({
+        id: r.id, minute_id: minute.id, agenda_result_id: r.agenda_result_id,
+        title: r.title, description: r.description,
+        primary_owner_user_id: r.primary_owner_user_id,
+        responsible_unit_id: null,
+        responsible_unit_name_snapshot: r.responsible_unit_name_snapshot,
+        priority: r.priority, status: r.status, progress_percent: r.progress_percent,
+        start_date: r.start_date, due_date: r.due_date, completed_at: null,
+        requires_followup: r.requires_followup, latest_update: r.latest_update,
+        created_by_user_id: r.primary_owner_user_id, created_at: '', updated_at: '',
+        discussion_result: null, result_type: null, additional_notes: null,
+      }));
+      const namesMap: Record<string, string> = {};
+      for (const r of viewRows) {
+        if (r.owner_name) namesMap[r.primary_owner_user_id] = r.owner_name;
       }
       setPrintDecisions(decRows);
       setPrintOwnerNames(namesMap);

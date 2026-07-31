@@ -91,7 +91,7 @@ export function MinutesMeetingReportPage({ onNavigate }: Props) {
           supabase.from('minutes_participants').select('id,user_id,name_snapshot,position_snapshot,org_unit_name_snapshot,attendance_status').eq('minute_id', id).order('created_at'),
           supabase.from('minutes_external_participants').select('id,full_name,organization,attendance_status').eq('minute_id', id).order('created_at'),
           supabase.from('minutes_agenda_results').select('id,sort_order,title,discussion_result,result_type').eq('minute_id', id).order('sort_order'),
-          supabase.from('minutes_decisions').select('id,title,status,priority,progress_percent,primary_owner_user_id,responsible_unit_name_snapshot').eq('minute_id', id).order('created_at'),
+          supabase.rpc('get_minutes_decisions_for_view', { p_minute_id: id }),
         ]);
         if (mRes.error) throw mRes.error;
         if (!mRes.data) { setError('صورت‌جلسه یافت نشد.'); setLoading(false); return; }
@@ -100,7 +100,22 @@ export function MinutesMeetingReportPage({ onNavigate }: Props) {
         setInternal((iRes.data || []) as InternalPartRow[]);
         setExternal((eRes.data || []) as ExternalPartRow[]);
         setAgenda((aRes.data || []) as AgendaRow[]);
-        setDecisions((dRes.data || []) as DecisionRow[]);
+        const viewRows = (dRes.data || []) as Array<{
+          id: string; title: string; priority: DecisionRow['priority']; status: DecisionRow['status'];
+          progress_percent: number; responsible_unit_name_snapshot: string | null;
+          primary_owner_user_id: string; owner_name: string | null;
+        }>;
+        setDecisions(viewRows.map(r => ({
+          id: r.id, minute_id: id, agenda_result_id: null,
+          title: r.title, description: null,
+          primary_owner_user_id: r.primary_owner_user_id,
+          responsible_unit_id: null, responsible_unit_name_snapshot: r.responsible_unit_name_snapshot,
+          priority: r.priority, status: r.status, progress_percent: r.progress_percent,
+          start_date: null, due_date: null, completed_at: null,
+          requires_followup: false, latest_update: null,
+          created_by_user_id: r.primary_owner_user_id, created_at: '', updated_at: '',
+          discussion_result: null, result_type: null, additional_notes: null,
+        })) as DecisionRow[]);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'بارگذاری گزارش ناموفق بود.');
       } finally {

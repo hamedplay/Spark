@@ -262,7 +262,7 @@ export interface DecisionDraftPayload {
   additional_notes?: string | null;
 }
 
-// Result of update_decision_progress RPC
+// Result of update_my_minutes_decision / manage_minutes_decision RPC
 export interface UpdateDecisionProgressResult {
   success: boolean;
   decision_id?: string;
