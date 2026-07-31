@@ -56,6 +56,8 @@ export interface LayoutSidebarProps {
   isAdmin: boolean;
   sparkVisible: boolean;
   userPermissions: LayoutUserPermissions;
+  minutesFollowupAllowed: boolean;
+  minutesFollowupAccessLoading: boolean;
   isCollapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   isMobileMenuOpen: boolean;
@@ -69,6 +71,8 @@ export function LayoutSidebar({
   isAdmin,
   sparkVisible,
   userPermissions,
+  minutesFollowupAllowed,
+  minutesFollowupAccessLoading,
   isCollapsed,
   onCollapsedChange,
   isMobileMenuOpen,
@@ -97,6 +101,8 @@ export function LayoutSidebar({
       isAdmin,
       sparkVisible: !!sparkVisible,
       userPermissions,
+      minutesFollowupAllowed,
+      minutesFollowupAccessLoading,
     }).map((item) => ({
       ...item,
       icon: ICON_MAP[item.id],

@@ -42,6 +42,8 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
     sparkCalendarMeetingPrefill, setSparkCalendarMeetingPrefill,
     chatInitUserId, setChatInitUserId,
     sparkVisible,
+    minutesFollowupAllowed,
+    minutesFollowupAccessLoading,
   } = props;
 
   // While permissions are still loading, show a spinner instead of "access denied"
@@ -52,6 +54,21 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
       </div>
     );
   }
+
+  if (activePage === 'minutes-followup') {
+    if (minutesFollowupAccessLoading) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" />
+          <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">در حال بررسی دسترسی...</span>
+        </div>
+      );
+    }
+    if (!minutesFollowupAllowed) {
+      return <AccessDenied onReturn={() => setActivePage('profile')} />;
+    }
+  }
+
   const permKey = PAGE_PERMISSION_KEY[activePage];
   if (permKey && !checkPermission(permKey, isAdmin, userPermissions)) {
     return <AccessDenied onReturn={() => setActivePage('profile')} />;

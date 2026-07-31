@@ -49,6 +49,8 @@ export interface NavigationVisibilityContext {
   isAdmin: boolean;
   sparkVisible: boolean;
   userPermissions: LayoutUserPermissions;
+  minutesFollowupAllowed: boolean;
+  minutesFollowupAccessLoading: boolean;
 }
 
 export function getVisiblePrimaryNavigationItems(
@@ -68,6 +70,10 @@ export function getVisibleMinutesNavigationItems(
   context: NavigationVisibilityContext
 ): LayoutNavigationItem[] {
   return MINUTES_NAVIGATION_ITEMS.filter(item => {
+    if (item.id === 'minutes-followup') {
+      if (context.minutesFollowupAccessLoading) return false;
+      return context.minutesFollowupAllowed;
+    }
     if (context.isAdmin) return true;
     if (!item.permissionKey) return true;
     if (context.userPermissions === null) return true;

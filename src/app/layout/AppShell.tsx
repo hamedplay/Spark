@@ -19,6 +19,8 @@ interface AppShellProps {
   splashDone: boolean;
   onSplashDone: () => void;
   sparkVisible: boolean;
+  minutesFollowupAllowed: boolean;
+  minutesFollowupAccessLoading: boolean;
   rendererProps: PageRendererProps;
   sparkProps: {
     sparkExternalCommand: string | null;
@@ -63,7 +65,7 @@ export function AppShell(props: AppShellProps) {
             },
           }}
         />
-        <Layout activePage={activePage} onPageChange={(p) => setActivePage(p as PageId)} isAdmin={isAdmin} userPermissions={userPermissions} sparkVisible={sparkVisible}
+        <Layout activePage={activePage} onPageChange={(p) => setActivePage(p as PageId)} isAdmin={isAdmin} userPermissions={userPermissions} sparkVisible={sparkVisible} minutesFollowupAllowed={minutesFollowupAllowed} minutesFollowupAccessLoading={minutesFollowupAccessLoading}
         >
           {renderContent(rendererProps)}
         </Layout>

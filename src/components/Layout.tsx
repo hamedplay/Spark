@@ -13,13 +13,15 @@ import { LayoutTopBar } from '../app/layout/components/LayoutTopBar';
 
 export type { PageId } from '../app/layout/types';
 
-interface LayoutProps {
+export interface LayoutProps {
   children: React.ReactNode;
   activePage: PageId;
   onPageChange: (page: PageId) => void;
   isAdmin?: boolean;
   sparkVisible?: boolean;
   userPermissions?: LayoutUserPermissions;
+  minutesFollowupAllowed?: boolean;
+  minutesFollowupAccessLoading?: boolean;
 }
 
 export function Layout({
@@ -29,6 +31,8 @@ export function Layout({
   isAdmin = false,
   userPermissions,
   sparkVisible = false,
+  minutesFollowupAllowed = false,
+  minutesFollowupAccessLoading = false,
 }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
@@ -140,6 +144,8 @@ export function Layout({
         isAdmin={isAdmin}
         sparkVisible={!!sparkVisible}
         userPermissions={userPermissions ?? null}
+        minutesFollowupAllowed={minutesFollowupAllowed}
+        minutesFollowupAccessLoading={minutesFollowupAccessLoading}
         isCollapsed={isCollapsed}
         onCollapsedChange={setIsCollapsed}
         isMobileMenuOpen={isMobileMenuOpen}

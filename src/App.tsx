@@ -11,6 +11,7 @@ import { useMeetingsData } from './features/meetings';
 import { useMaintenanceMode } from './app/hooks/useMaintenanceMode';
 import { useSparkVisibility } from './app/hooks/useSparkVisibility';
 import { useNavigation, useAdminPathGuard } from './app/navigation/useNavigation';
+import { useMinutesFollowupAccess } from './app/hooks/useMinutesFollowupAccess';
 import { AppShell } from './app/layout/AppShell';
 import { SparkMeetingPrefill } from './components/Spark/SparkAssistant';
 import { Meeting } from './types';
@@ -107,6 +108,15 @@ function App() {
     );
   }
 
+  const hasGlobalMinutesTrackPermission =
+    userPermissions === null || !!userPermissions?.['minutes_decisions.track'];
+  const minutesFollowupAccess = useMinutesFollowupAccess({
+    isAuthenticated,
+    isAdmin,
+    userId: currentUserId,
+    hasGlobalPermission: hasGlobalMinutesTrackPermission,
+  });
+
   const rendererProps: PageRendererProps = {
     activePage, setActivePage, isAdmin, currentUserId, userPermissions,
     meetings, pendingMeetingsCount, fetchMeetings, fetchPendingMeetingsCount,
@@ -125,6 +135,8 @@ function App() {
     sparkCalendarMeetingPrefill, setSparkCalendarMeetingPrefill,
     chatInitUserId, setChatInitUserId,
     sparkVisible,
+    minutesFollowupAllowed: minutesFollowupAccess.allowed,
+    minutesFollowupAccessLoading: minutesFollowupAccess.loading,
   };
 
   return (
@@ -138,6 +150,8 @@ function App() {
       splashDone={splashDone}
       onSplashDone={() => { setShowSplash(false); setSplashDone(true); }}
       sparkVisible={sparkVisible}
+      minutesFollowupAllowed={minutesFollowupAccess.allowed}
+      minutesFollowupAccessLoading={minutesFollowupAccess.loading}
       rendererProps={rendererProps}
       sparkProps={{
         sparkExternalCommand,
