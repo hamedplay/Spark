@@ -13,6 +13,7 @@ export const ALL_PERMISSION_KEYS = [
   'spark', 'spark_meeting_req',
   'admin_panel', 'org_manage_structure', 'org_manage_permissions', 'user_management',
   'system_config', 'notification_config', 'sms_config', 'backup_access', 'audit_log',
+  'minutes_decisions.track',
 ] as const;
 
 export type PermissionKey = typeof ALL_PERMISSION_KEYS[number];

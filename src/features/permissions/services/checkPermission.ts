@@ -2,6 +2,7 @@
  * Maps page IDs to permission keys. Pages not listed are always accessible.
  */
 export const PAGE_PERMISSION_KEY: Record<string, string> = {
+  'minutes-followup': 'minutes_decisions.track',
   meetings: 'meetings',
   'create-meeting': 'meetings_create',
   calendar: 'calendar',

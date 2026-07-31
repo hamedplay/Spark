@@ -166,6 +166,24 @@ export interface HistoryEvent {
   notes?: string;
 }
 
+export type DecisionEventType =
+  | 'progress'
+  | 'status_change'
+  | 'report'
+  | 'obstacle'
+  | 'obstacle_resolved'
+  | 'followup'
+  | 'completion'
+  | 'reopened';
+
+export type DecisionDeadlineState =
+  | 'no_deadline'
+  | 'on_time'
+  | 'approaching'
+  | 'today'
+  | 'overdue'
+  | 'completed';
+
 // ── Decision DB row types (match public.minutes_decisions) ──────────────────
 
 export interface DecisionRow {
@@ -202,7 +220,7 @@ export interface MyDecisionRow extends DecisionRow {
   agenda_title: string | null;
 }
 
-// Row from minutes_decision_updates (history)
+// Row from minutes_decision_updates (history) — includes new event_type columns
 export interface DecisionUpdateRow {
   id: string;
   decision_id: string;
@@ -215,6 +233,13 @@ export interface DecisionUpdateRow {
   created_by_user_id: string;
   created_at: string;
   created_by_name?: string;
+  // Extended history columns
+  event_type: DecisionEventType;
+  event_title: string | null;
+  event_metadata: Record<string, unknown>;
+  is_blocking: boolean;
+  resolved_at: string | null;
+  resolved_by_user_id: string | null;
 }
 
 // Payload shape accepted by _sync_minutes_decisions RPC

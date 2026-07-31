@@ -166,7 +166,7 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
     case 'minutes-my-decisions':
       return <MyDecisionsPage onNavigate={(p) => setActivePage(p as PageId)} />;
     case 'minutes-followup':
-      return <DecisionsFollowupPage onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <DecisionsFollowupPage onNavigate={(p) => setActivePage(p as PageId)} isAdmin={isAdmin} currentUserId={currentUserId} />;
     case 'minutes-report':
       return <MinutesMeetingReportPage onNavigate={(p) => setActivePage(p as PageId)} />;
     case 'minutes-reports':

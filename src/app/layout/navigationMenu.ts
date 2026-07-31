@@ -28,7 +28,7 @@ export const MINUTES_NAVIGATION_ITEMS: LayoutNavigationItem[] = [
   { id: 'minutes',              title: 'صورت‌جلسات'     },
   { id: 'minutes-approvals',    title: 'کارتابل تأیید'  },
   { id: 'minutes-my-decisions', title: 'مصوبات من'      },
-  { id: 'minutes-followup',     title: 'پیگیری مصوبات'  },
+  { id: 'minutes-followup',     title: 'پیگیری مصوبات', permissionKey: 'minutes_decisions.track' },
   { id: 'minutes-reports',      title: 'گزارش‌ها'       },
 ];
 
