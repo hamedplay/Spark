@@ -160,8 +160,25 @@ export function DecisionActionModal({
         return;
       }
 
-      // ── Manager operations: manage_minutes_decision ────────────────────────
-      if (action === 'status') {
+      // ── Owner status change: update_my_minutes_decision ─────────────────
+      if (action === 'status' && !isManager) {
+        const { data, error: rpcErr } = await supabase.rpc('update_my_minutes_decision', {
+          p_decision_id: decision.id,
+          p_expected_updated_at: decision.updated_at,
+          p_progress_percent: decision.progress_percent,
+          p_status: newStatus,
+          p_report_text: reportText || null,
+          p_event_type: 'status_change',
+        });
+
+        const parsed = parseRpcResult(data, rpcErr);
+        if (!parsed.ok) { setError(parsed.error ?? 'خطا'); return; }
+        onSuccess(parsed.updatedAt);
+        return;
+      }
+
+      // ── Manager status change: manage_minutes_decision ───────────────────
+      if (action === 'status' && isManager) {
         const { data, error: rpcErr } = await supabase.rpc('manage_minutes_decision', {
           p_decision_id: decision.id,
           p_expected_updated_at: decision.updated_at,
@@ -227,18 +244,32 @@ export function DecisionActionModal({
       }
 
       if (action === 'obstacle_resolved') {
-        const { data, error: rpcErr } = await supabase.rpc('manage_minutes_decision', {
-          p_decision_id: decision.id,
-          p_expected_updated_at: decision.updated_at,
-          p_operation: 'obstacle_resolved',
-          p_report_text: resolveNotes || null,
-          p_obstacle_update_id: obstacleUpdateId ?? null,
-        });
+        if (isManager) {
+          const { data, error: rpcErr } = await supabase.rpc('manage_minutes_decision', {
+            p_decision_id: decision.id,
+            p_expected_updated_at: decision.updated_at,
+            p_operation: 'obstacle_resolved',
+            p_report_text: resolveNotes || null,
+            p_obstacle_update_id: obstacleUpdateId ?? null,
+          });
 
-        const parsed = parseRpcResult(data, rpcErr);
-        if (!parsed.ok) { setError(parsed.error ?? 'خطا'); return; }
-        onSuccess(parsed.updatedAt);
-        return;
+          const parsed = parseRpcResult(data, rpcErr);
+          if (!parsed.ok) { setError(parsed.error ?? 'خطا'); return; }
+          onSuccess(parsed.updatedAt);
+          return;
+        } else {
+          const { data, error: rpcErr } = await supabase.rpc('resolve_my_minutes_decision_obstacle', {
+            p_decision_id: decision.id,
+            p_expected_updated_at: decision.updated_at,
+            p_obstacle_update_id: obstacleUpdateId,
+            p_resolution_notes: resolveNotes || null,
+          });
+
+          const parsed = parseRpcResult(data, rpcErr);
+          if (!parsed.ok) { setError(parsed.error ?? 'خطا'); return; }
+          onSuccess(parsed.updatedAt);
+          return;
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطای ناشناخته');
@@ -263,6 +294,12 @@ export function DecisionActionModal({
             <DecisionStatusBadge status={decision.status} />
             <span className="text-xs text-gray-400">{toPersianDigits(String(decision.progress_percent))}٪</span>
           </div>
+
+          {action === 'complete' && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-3 text-sm text-blue-700 dark:text-blue-400">
+              با تکمیل مصوبه، درصد پیشرفت به ۱۰۰٪ تغییر خواهد کرد.
+            </div>
+          )}
 
           {(action === 'progress' || action === 'complete') && (
             <>

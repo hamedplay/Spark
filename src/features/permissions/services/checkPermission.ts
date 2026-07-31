@@ -23,14 +23,19 @@ export const PAGE_PERMISSION_KEY: Record<string, string> = {
  *   null (full access) → true
  *   undefined (loading) → false
  *   otherwise → check record
+ *
+ * For `minutes_decisions.track`, also allows access if the user has any
+ * trackable minutes decisions (secretary/chair of a published minute).
  */
 export function checkPermission(
   key: string,
   isAdmin: boolean,
   userPermissions: Record<string, boolean> | null | undefined,
+  hasAnyTrackableDecisions?: boolean,
 ): boolean {
   if (isAdmin) return true;
   if (userPermissions === null) return true;
   if (userPermissions === undefined) return false;
+  if (key === 'minutes_decisions.track' && hasAnyTrackableDecisions) return true;
   return !!userPermissions[key];
 }

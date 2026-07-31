@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, X, RefreshCw, Eye, TrendingUp, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Flag, ChevronRight, ChevronLeft, MessageSquare, SquareArrowUpRight, CircleStop as StopCircle, ListChecks, CirclePause as PauseCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -13,10 +13,10 @@ import {
 import {
   DECISION_STATUS_LABELS, DECISION_PRIORITY_LABELS,
   DEADLINE_STATE_LABELS, getDecisionDeadlineState, formatDecisionDaysLabel,
-  ACTIVE_STATUSES,
 } from './decisionHelpers';
 import { DecisionActionModal } from './DecisionActionModal';
 import { DecisionDetailsDrawer } from './DecisionDetailsDrawer';
+import { JalaliDatePicker } from './Form/JalaliDatePicker';
 import type { DecisionStatus, DecisionPriority, MyDecisionRow, DecisionDeadlineState } from './types';
 
 interface MyDecisionsPageProps {
@@ -55,12 +55,21 @@ const PRIORITY_OPTIONS: Array<{ value: DecisionPriority | 'all'; label: string }
 
 type ActionType = import('./DecisionActionModal').ActionType;
 
+interface MyDecisionsSummary {
+  total_count: number;
+  active_count: number;
+  completed_count: number;
+  stopped_count: number;
+  overdue_count: number;
+}
+
 export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
   const [data, setData]                         = useState<MyDecisionRow[]>([]);
   const [total, setTotal]                       = useState(0);
   const [loading, setLoading]                   = useState(true);
   const [error, setError]                       = useState<string | null>(null);
   const [offset, setOffset]                     = useState(0);
+  const [summary, setSummary]                   = useState<MyDecisionsSummary>({ total_count: 0, active_count: 0, completed_count: 0, stopped_count: 0, overdue_count: 0 });
 
   // Filters
   const [search, setSearch]                     = useState('');
@@ -68,11 +77,23 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
   const [priorityFilter, setPriorityFilter]     = useState<DecisionPriority | 'all'>('all');
   const [deadlineFilter, setDeadlineFilter]     = useState<DecisionDeadlineState | 'all'>('all');
   const [followupOnly, setFollowupOnly]         = useState(false);
+  const [dueFrom, setDueFrom]                   = useState<string | null>(null);
+  const [dueTo, setDueTo]                       = useState<string | null>(null);
 
   // Modals
   const [actionDecision, setActionDecision]     = useState<MyDecisionRow | null>(null);
   const [actionType, setActionType]             = useState<ActionType>('progress');
   const [detailDecision, setDetailDecision]     = useState<MyDecisionRow | null>(null);
+
+  const fetchSummary = useCallback(async () => {
+    try {
+      const { data: sumData, error: sumErr } = await supabase.rpc('get_my_minutes_decisions_summary');
+      if (sumErr) throw sumErr;
+      if (sumData) setSummary(sumData as MyDecisionsSummary);
+    } catch {
+      // silent — stats just stay stale
+    }
+  }, []);
 
   const fetchData = useCallback(async (currentOffset: number) => {
     setLoading(true);
@@ -84,6 +105,8 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
         p_search: search.trim() || null,
         p_requires_followup: followupOnly ? true : null,
         p_deadline_state: deadlineFilter === 'all' ? null : deadlineFilter,
+        p_due_from: dueFrom,
+        p_due_to: dueTo,
         p_limit:  PAGE_SIZE,
         p_offset: currentOffset,
       });
@@ -100,27 +123,21 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, search, followupOnly, deadlineFilter]);
+  }, [statusFilter, priorityFilter, search, followupOnly, deadlineFilter, dueFrom, dueTo]);
 
   useEffect(() => {
     setOffset(0);
-  }, [statusFilter, search, priorityFilter, deadlineFilter, followupOnly]);
+  }, [statusFilter, search, priorityFilter, deadlineFilter, followupOnly, dueFrom, dueTo]);
 
   useEffect(() => {
     fetchData(offset);
   }, [fetchData, offset]);
 
-  // All filtering is now server-side via RPC parameters
-  const filtered = data;
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
-  // Stats from full current page (pre-filter)
-  const stats = useMemo(() => ({
-    total:     total,
-    active:    data.filter(r => ACTIVE_STATUSES.has(r.status)).length,
-    completed: data.filter(r => r.status === 'completed').length,
-    stopped:   data.filter(r => r.status === 'stopped').length,
-    overdue:   data.filter(r => r.overdue).length,
-  }), [data, total]);
+  const filtered = data;
 
   const openAction = (dec: MyDecisionRow, type: ActionType) => {
     setActionDecision(dec);
@@ -130,6 +147,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
   const handleActionSuccess = (updatedAt?: string) => {
     setActionDecision(null);
     fetchData(offset);
+    fetchSummary();
     toast.success('عملیات با موفقیت ثبت شد.');
     void updatedAt;
   };
@@ -140,9 +158,11 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     setPriorityFilter('all');
     setDeadlineFilter('all');
     setFollowupOnly(false);
+    setDueFrom(null);
+    setDueTo(null);
   };
 
-  const hasFilters = search || statusFilter !== 'all' || priorityFilter !== 'all' || deadlineFilter !== 'all' || followupOnly;
+  const hasFilters = search || statusFilter !== 'all' || priorityFilter !== 'all' || deadlineFilter !== 'all' || followupOnly || dueFrom || dueTo;
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto" dir="rtl">
@@ -150,7 +170,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
         title="مصوبات من"
         description="فهرست مصوباتی که شما مسئول اصلی آن‌ها هستید"
         actions={
-          <button onClick={() => fetchData(offset)} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          <button onClick={() => { fetchData(offset); fetchSummary(); }} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             <RefreshCw className="w-4 h-4" /> بازآوری
           </button>
         }
@@ -158,11 +178,11 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-        <StatCard label="کل مصوبات" value={toPersianDigits(String(stats.total))} icon={<ListChecks className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => setStatusFilter('all')} />
-        <StatCard label="در حال انجام" value={toPersianDigits(String(stats.active))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => setStatusFilter('in_progress')} />
-        <StatCard label="تکمیل‌شده" value={toPersianDigits(String(stats.completed))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => setStatusFilter('completed')} />
-        <StatCard label="متوقف‌شده" value={toPersianDigits(String(stats.stopped))} icon={<PauseCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => setStatusFilter('stopped')} />
-        <StatCard label="دارای تأخیر" value={toPersianDigits(String(stats.overdue))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => setDeadlineFilter('overdue')} />
+        <StatCard label="کل مصوبات" value={toPersianDigits(String(summary.total_count))} icon={<ListChecks className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => setStatusFilter('all')} />
+        <StatCard label="در حال انجام" value={toPersianDigits(String(summary.active_count))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => setStatusFilter('in_progress')} />
+        <StatCard label="تکمیل‌شده" value={toPersianDigits(String(summary.completed_count))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => setStatusFilter('completed')} />
+        <StatCard label="متوقف‌شده" value={toPersianDigits(String(summary.stopped_count))} icon={<PauseCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => setStatusFilter('stopped')} />
+        <StatCard label="دارای تأخیر" value={toPersianDigits(String(summary.overdue_count))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => setDeadlineFilter('overdue')} />
       </div>
 
       {/* Filters */}
@@ -195,14 +215,22 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
               className="w-4 h-4 rounded accent-blue-600" />
             فقط نیازمند پیگیری
           </label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500 dark:text-gray-400">مهلت از:</span>
+            <div className="w-40"><JalaliDatePicker value={dueFrom} onChange={setDueFrom} placeholder="از تاریخ" /></div>
+            <span className="text-sm text-gray-500 dark:text-gray-400">تا:</span>
+            <div className="w-40"><JalaliDatePicker value={dueTo} onChange={setDueTo} placeholder="تا تاریخ" /></div>
+          </div>
           {hasFilters && (
-            <button onClick={resetFilters} className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 transition-colors">
+            <button onClick={resetFilters} className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 transition-colors mr-auto">
               <X className="w-3.5 h-3.5" /> پاک‌کردن فیلترها
             </button>
           )}
-          <span className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
-            {toPersianDigits(String(filtered.length))} نتیجه
-          </span>
+          {!hasFilters && (
+            <span className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
+              {toPersianDigits(String(filtered.length))} نتیجه
+            </span>
+          )}
         </div>
       </div>
 

@@ -30,6 +30,7 @@ import {
   isMinutesPage,
   resolveActiveMinutesPage,
 } from '../navigationMenu';
+import { supabase } from '../../../lib/supabase';
 
 const ICON_MAP: Record<PageId, typeof LayoutDashboard> = {
   'meetings': LayoutDashboard,
@@ -92,11 +93,35 @@ export function LayoutSidebar({
     icon: ICON_MAP[item.id],
   }));
 
+  const [hasAnyTrackable, setHasAnyTrackable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin && userPermissions !== null && userPermissions !== undefined) {
+      const hasTrackPerm = !!(userPermissions as Record<string, boolean>)['minutes_decisions.track'];
+      if (!hasTrackPerm) {
+        let cancelled = false;
+        (async () => {
+          try {
+            const { data } = await supabase.rpc('has_any_trackable_minutes_decision');
+            if (!cancelled && typeof data === 'boolean') setHasAnyTrackable(data);
+          } catch {
+            if (!cancelled) setHasAnyTrackable(false);
+          }
+        })();
+        return () => { cancelled = true; };
+      }
+      setHasAnyTrackable(false);
+    } else {
+      setHasAnyTrackable(null);
+    }
+  }, [isAdmin, userPermissions]);
+
   const visibleMinutesSubItems =
     getVisibleMinutesNavigationItems({
       isAdmin,
       sparkVisible: !!sparkVisible,
       userPermissions,
+      hasAnyTrackableDecisions: hasAnyTrackable ?? false,
     }).map((item) => ({
       ...item,
       icon: ICON_MAP[item.id],

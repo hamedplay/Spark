@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, ChevronDown, ChevronUp, Clock, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle2, RefreshCw, MessageSquare, Flag, User, Building2 } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Clock, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle2, RefreshCw, MessageSquare, Flag, User } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   DecisionStatusBadge, DecisionPriorityBadge, DecisionProgressBar,
 } from './MinutesShared';
 import type { DecisionRow, DecisionUpdateRow } from './types';
 import {
-  DECISION_STATUS_LABELS, DECISION_PRIORITY_LABELS, DECISION_EVENT_TYPE_LABELS,
+  DECISION_STATUS_LABELS, DECISION_EVENT_TYPE_LABELS,
 } from './decisionHelpers';
 import { formatJalaliDateForDisplay, formatJalaliTimestamp, toPersianDigits } from '../../lib/minutesDate';
 
@@ -15,7 +15,7 @@ interface DecisionDetailsDrawerProps {
   onClose: () => void;
 }
 
-type Tab = 'info' | 'history' | 'obstacles';
+type Tab = 'info' | 'history' | 'reports' | 'obstacles' | 'followups';
 
 const EVENT_ICON: Record<string, React.ReactNode> = {
   progress:          <RefreshCw className="w-3.5 h-3.5" />,
@@ -46,7 +46,6 @@ export function DecisionDetailsDrawer({ decision, onClose }: DecisionDetailsDraw
       const rows = (data || []) as DecisionUpdateRow[];
       setHistory(rows);
 
-      // Batch-fetch actor names
       const actorIds = [...new Set(rows.map(r => r.created_by_user_id).filter(Boolean))];
       if (actorIds.length > 0) {
         const { data: profiles } = await supabase
@@ -66,23 +65,26 @@ export function DecisionDetailsDrawer({ decision, onClose }: DecisionDetailsDraw
   }, [decision.id]);
 
   useEffect(() => {
-    if (tab === 'history' || tab === 'obstacles') fetchHistory();
+    if (tab !== 'info') fetchHistory();
   }, [tab, fetchHistory]);
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const obstacles = history.filter(h => h.is_blocking);
+  const obstacles = history.filter(h => h.event_type === 'obstacle');
   const openObstacles = obstacles.filter(h => !h.resolved_at);
+  const reports = history.filter(h => h.event_type === 'report' || (h.event_type === 'progress' && h.update_text));
+  const followups = history.filter(h => h.event_type === 'followup');
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'info',      label: 'مشخصات' },
     { id: 'history',   label: `تاریخچه (${toPersianDigits(String(history.length))})` },
+    { id: 'reports',   label: `گزارش‌ها (${toPersianDigits(String(reports.length))})` },
     { id: 'obstacles', label: `موانع${openObstacles.length > 0 ? ` (${toPersianDigits(String(openObstacles.length))})` : ''}` },
+    { id: 'followups', label: `پیگیری‌ها (${toPersianDigits(String(followups.length))})` },
   ];
 
   return (
@@ -103,12 +105,12 @@ export function DecisionDetailsDrawer({ decision, onClose }: DecisionDetailsDraw
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 dark:border-gray-700 px-5">
+        <div className="flex border-b border-gray-100 dark:border-gray-700 px-5 overflow-x-auto">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
                 tab === t.id
                   ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
                   : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
@@ -121,15 +123,11 @@ export function DecisionDetailsDrawer({ decision, onClose }: DecisionDetailsDraw
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {tab === 'info' && (
-            <InfoTab decision={decision} />
-          )}
-          {tab === 'history' && (
-            <HistoryTab history={history} loading={historyLoading} actorNames={actorNames} />
-          )}
-          {tab === 'obstacles' && (
-            <ObstaclesTab obstacles={obstacles} loading={historyLoading} actorNames={actorNames} />
-          )}
+          {tab === 'info' && <InfoTab decision={decision} />}
+          {tab === 'history' && <HistoryTab history={history} loading={historyLoading} actorNames={actorNames} />}
+          {tab === 'reports' && <ReportsTab reports={reports} loading={historyLoading} actorNames={actorNames} />}
+          {tab === 'obstacles' && <ObstaclesTab obstacles={obstacles} loading={historyLoading} actorNames={actorNames} />}
+          {tab === 'followups' && <FollowupsTab followups={followups} loading={historyLoading} actorNames={actorNames} />}
         </div>
       </div>
     </div>
@@ -240,6 +238,40 @@ function HistoryTab({ history, loading, actorNames }: {
   );
 }
 
+// ── ReportsTab ─────────────────────────────────────────────────────────────────
+function ReportsTab({ reports, loading, actorNames }: {
+  reports: DecisionUpdateRow[];
+  loading: boolean;
+  actorNames: Record<string, string>;
+}) {
+  if (loading) return <div className="text-sm text-gray-400 text-center py-8">در حال بارگذاری...</div>;
+  if (reports.length === 0) return <div className="text-sm text-gray-400 text-center py-8">هیچ گزارشی ثبت نشده است.</div>;
+
+  return (
+    <div className="space-y-3">
+      {reports.map(r => (
+        <div key={r.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <MessageSquare className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              {DECISION_EVENT_TYPE_LABELS[r.event_type] ?? r.event_type}
+            </span>
+            <span className="text-xs text-gray-400 dark:text-gray-500 mr-auto">{formatJalaliTimestamp(r.created_at)}</span>
+          </div>
+          <div className="flex items-center gap-1 mb-1.5">
+            <User className="w-3 h-3 text-gray-400" />
+            <span className="text-xs text-gray-500">{actorNames[r.created_by_user_id] ?? r.created_by_user_id.slice(0, 8)}</span>
+          </div>
+          {r.update_text && <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{r.update_text}</p>}
+          {(r.previous_progress_percent !== null && r.previous_progress_percent !== r.new_progress_percent) && (
+            <p className="text-xs text-gray-500 mt-1">پیشرفت: {toPersianDigits(String(r.previous_progress_percent ?? 0))}٪ → {toPersianDigits(String(r.new_progress_percent))}٪</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── ObstaclesTab ──────────────────────────────────────────────────────────────
 function ObstaclesTab({ obstacles, loading, actorNames }: {
   obstacles: DecisionUpdateRow[];
@@ -302,6 +334,50 @@ function ObstaclesTab({ obstacles, loading, actorNames }: {
   );
 }
 
-// ── Prevent lint warning on unused Building2 import ──────────────────────────
-const _unused = Building2;
-void _unused;
+// ── FollowupsTab ──────────────────────────────────────────────────────────────
+function FollowupsTab({ followups, loading, actorNames }: {
+  followups: DecisionUpdateRow[];
+  loading: boolean;
+  actorNames: Record<string, string>;
+}) {
+  if (loading) return <div className="text-sm text-gray-400 text-center py-8">در حال بارگذاری...</div>;
+  if (followups.length === 0) return <div className="text-sm text-gray-400 text-center py-8">هیچ پیگیری‌ای ثبت نشده است.</div>;
+
+  const meta = (m: unknown): Record<string, unknown> => {
+    if (m && typeof m === 'object') return m as Record<string, unknown>;
+    return {};
+  };
+
+  return (
+    <div className="space-y-3">
+      {followups.map(f => {
+        const m = meta(f.event_metadata);
+        return (
+          <div key={f.id} className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Clock className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">پیگیری</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500 mr-auto">{formatJalaliTimestamp(f.created_at)}</span>
+            </div>
+            <div className="flex items-center gap-1 mb-1.5">
+              <User className="w-3 h-3 text-gray-400" />
+              <span className="text-xs text-gray-500">{actorNames[f.created_by_user_id] ?? f.created_by_user_id.slice(0, 8)}</span>
+            </div>
+            {f.update_text && <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{f.update_text}</p>}
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-xs">
+              {m.method && (
+                <div><dt className="text-gray-400 inline">روش پیگیری: </dt><dd className="text-gray-600 dark:text-gray-400 inline">{String(m.method)}</dd></div>
+              )}
+              {m.result && (
+                <div><dt className="text-gray-400 inline">نتیجه: </dt><dd className="text-gray-600 dark:text-gray-400 inline">{String(m.result)}</dd></div>
+              )}
+              {m.next_followup_date && (
+                <div><dt className="text-gray-400 inline">تاریخ پیگیری بعدی: </dt><dd className="text-gray-600 dark:text-gray-400 inline">{formatJalaliDateForDisplay(String(m.next_followup_date))}</dd></div>
+              )}
+            </dl>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

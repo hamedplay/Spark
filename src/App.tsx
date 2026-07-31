@@ -26,6 +26,21 @@ function App() {
   const sparkVisible = useSparkVisibility();
   const { meetings, pendingMeetingsCount, fetchMeetings, fetchPendingMeetingsCount } = useMeetingsData(isAuthenticated);
 
+  const [hasAnyTrackableDecisions, setHasAnyTrackableDecisions] = useState(false);
+  useEffect(() => {
+    if (!isAuthenticated || isAdmin || !userPermissions) return;
+    const hasTrackPerm = !!(userPermissions as Record<string, boolean>)['minutes_decisions.track'];
+    if (hasTrackPerm) { setHasAnyTrackableDecisions(true); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.rpc('has_any_trackable_minutes_decision');
+        if (!cancelled && typeof data === 'boolean') setHasAnyTrackableDecisions(data);
+      } catch { if (!cancelled) setHasAnyTrackableDecisions(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, isAdmin, userPermissions]);
+
   useAdminPathGuard(isAuthenticated, isAdmin, setActivePage);
 
   const [showSplash, setShowSplash] = useState(false);
@@ -125,6 +140,7 @@ function App() {
     sparkCalendarMeetingPrefill, setSparkCalendarMeetingPrefill,
     chatInitUserId, setChatInitUserId,
     sparkVisible,
+    hasAnyTrackableDecisions,
   };
 
   return (
