@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import {
   setMinuteIdInUrl, setMinutesPageInUrl,
 } from '../../lib/minutesNavigation';
+import { formatJalaliDateForDisplay, formatJalaliTimestampDateOnly } from '../../lib/minutesDate';
 import type { MinutesStatus, ConfidentialityLevel, MinuteSummary, ApprovalMode } from './types';
 
 interface Props {
@@ -85,16 +86,39 @@ export function MinutesListPage({ onNavigate }: Props) {
       setError(fetchError.message);
       setMinutes([]);
     } else {
-      setMinutes((data || []).map((row: Record<string, unknown>) => ({
+      const rawRows = data || [];
+      const ids = rawRows.map((row: Record<string, unknown>) => row.id as string).filter(Boolean);
+
+      // Fetch decision counts in a single aggregation query to avoid N+1.
+      let countMap: Record<string, number> = {};
+      let countError = false;
+      if (ids.length > 0) {
+        try {
+          const { data: decData, error: decErr } = await supabase
+            .from('minutes_decisions')
+            .select('minute_id')
+            .in('minute_id', ids);
+          if (decErr) throw decErr;
+          for (const d of decData || []) {
+            const mid = (d as Record<string, unknown>).minute_id as string;
+            if (mid) countMap[mid] = (countMap[mid] || 0) + 1;
+          }
+        } catch (err) {
+          if (import.meta.env.DEV) console.error('MinutesListPage: failed to fetch decision counts', err);
+          countError = true;
+        }
+      }
+
+      setMinutes(rawRows.map((row: Record<string, unknown>) => ({
         id: row.id as string,
         meetingTitle: (row.meeting_title_snapshot as string) || '',
-        meetingDate: (row.meeting_date_snapshot as string) || '',
+        meetingDate: formatJalaliDateForDisplay(row.meeting_date_snapshot as string),
         secretary: (row.secretary_name_snapshot as string) || '',
         chair: (row.chair_name_snapshot as string) || '',
         status: row.status as MinutesStatus,
         confidentiality: row.confidentiality as ConfidentialityLevel,
-        decisionCount: 0,
-        lastModified: row.updated_at ? new Date(row.updated_at as string).toLocaleDateString('fa-IR') : '',
+        decisionCount: countError ? null : (countMap[row.id as string] ?? 0),
+        lastModified: formatJalaliTimestampDateOnly(row.updated_at as string),
         version: '',
         orgUnit: (row.org_unit_name_snapshot as string) || undefined,
         approvalMode: (row.approval_mode as ApprovalMode) || null,
@@ -306,7 +330,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                       <td className="px-4 py-3"><ConfidentialityBadge level={m.confidentiality} /></td>
                       <td className="px-4 py-3 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-semibold">
-                          {m.decisionCount}
+                          {m.decisionCount == null ? '—' : m.decisionCount}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">{m.lastModified}</td>
@@ -347,7 +371,7 @@ export function MinutesListPage({ onNavigate }: Props) {
                     <span>{m.meetingDate}</span>
                     <span>دبیر: {m.secretary}</span>
                     <span>رئیس: {m.chair}</span>
-                    <span>{m.decisionCount} مصوبه</span>
+                    <span>{m.decisionCount == null ? '—' : m.decisionCount} مصوبه</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <ConfidentialityBadge level={m.confidentiality} />

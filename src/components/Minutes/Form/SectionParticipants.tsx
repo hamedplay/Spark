@@ -15,9 +15,12 @@ import { ComboboxInput, type ComboboxOption } from './ComboboxInput';
 import { normalizeName } from './normalizeName';
 
 export interface ExternalParticipantSuggestion {
-  full_name: string;
-  organization: string | null;
+  id: string;
+  name: string;
+  company: string | null;
   position: string | null;
+  phone: string | null;
+  email: string | null;
 }
 
 interface SectionParticipantsProps {
@@ -117,38 +120,52 @@ export function SectionParticipants({
   const updateExternal = (id: string, field: keyof DraftExternalParticipant, value: string) =>
     setExternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
 
-  // Deduplicate external participant suggestions by normalized full name.
-  // Store org/position in metadata so selection fills fields directly from DB record.
+  // Build suggestions from contacts_email. Deduplicate by normalized name.
+  // metadata stores the full contact record so selection fills all fields at once.
   const externalSuggestionOptions: ComboboxOption[] = useMemo(() => {
     const seen = new Set<string>();
     const opts: ComboboxOption[] = [];
     for (const s of externalSuggestions) {
-      const name = (s.full_name || '').trim();
+      const name = (s.name || '').trim();
       if (!name) continue;
       const key = normalizeName(name);
       if (seen.has(key)) continue;
       seen.add(key);
-      const sub = [s.organization, s.position].filter(Boolean).join(' — ') || undefined;
-      opts.push({ value: name, label: name, sublabel: sub, metadata: { organization: s.organization ?? '', position: s.position ?? '' } });
+      const sub = [s.company, s.position].filter(Boolean).join(' — ') || undefined;
+      opts.push({
+        value: s.id,
+        label: name,
+        sublabel: sub,
+        metadata: {
+          contactId: s.id,
+          name,
+          organization: s.company ?? '',
+          position: s.position ?? '',
+          mobile: s.phone ?? '',
+          email: s.email ?? '',
+        },
+      });
     }
     return opts;
   }, [externalSuggestions]);
 
   const handleExternalNameSelect = (rowId: string, opt: ComboboxOption) => {
-    // Check for duplicate by normalized name — prevent adding the same person twice.
     const key = normalizeName(opt.label);
     const exists = externalParticipants.some(r => r.id !== rowId && normalizeName(r.fullName) === key);
     if (exists) {
       toast.error('این فرد قبلاً به لیست شرکت‌کنندگان خارجی اضافه شده است.');
       return;
     }
-    // Use metadata directly — never parse from sublabel string.
-    const meta = opt.metadata as { organization?: string; position?: string } | undefined;
     setExternalParticipants(l => l.map(r => r.id === rowId ? {
       ...r,
       fullName: opt.label,
       organization: meta?.organization ?? r.organization,
       position: meta?.position ?? r.position,
+      fullName: opt.label,
+      organization: (opt.metadata as Record<string, string> | undefined)?.organization ?? '',
+      position: (opt.metadata as Record<string, string> | undefined)?.position ?? '',
+      mobile: (opt.metadata as Record<string, string> | undefined)?.mobile ?? r.mobile,
+      email: (opt.metadata as Record<string, string> | undefined)?.email ?? r.email,
       source: 'saved',
     } : r));
   };

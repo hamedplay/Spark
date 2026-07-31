@@ -29,6 +29,8 @@ export interface DocInternalPart {
   name_snapshot: string;
   position_snapshot: string | null;
   org_unit_name_snapshot: string | null;
+  attendance_status: string | null;
+  delegate_name: string | null;
 }
 
 export interface DocExternalPart {
@@ -36,6 +38,7 @@ export interface DocExternalPart {
   full_name: string;
   organization: string | null;
   position: string | null;
+  attendance_status: string | null;
 }
 
 export interface DocAgendaItem {

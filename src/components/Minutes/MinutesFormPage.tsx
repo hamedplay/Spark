@@ -418,14 +418,14 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     })();
   }, []);
 
-  // ── Fetch external participant suggestions ───────────────────────────────
+  // ── Fetch external participant suggestions from contacts_email ──────────────
   useEffect(() => {
     (async () => {
       try {
         const { data, error } = await supabase
-          .from('minutes_external_participants')
-          .select('full_name, organization, position')
-          .order('full_name');
+          .from('contacts_email')
+          .select('id, name, company, position, phone, email')
+          .order('name');
         if (error) throw error;
         setExternalSuggestions((data || []) as ExternalParticipantSuggestion[]);
       } catch {

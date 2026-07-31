@@ -256,6 +256,40 @@ export function resolveMeetingDateGregorian(
   return null;
 }
 
+/**
+ * Format any date value (ISO Gregorian, Jalali ASCII/Persian) for display.
+ * - Gregorian YYYY-MM-DD → Jalali with Persian digits
+ * - Already-Jalali (year ≥ 1300) → normalize separators, apply Persian digits
+ * - Invalid / null → "—"
+ * Never re-interprets an already-Jalali string as Gregorian.
+ */
+export function formatJalaliDateForDisplay(value: string | null | undefined): string {
+  if (!value) return '—';
+  const normalized = normalizeMeetingDate(value);
+  if (!normalized) return '—';
+  return toPersianDigits(normalized);
+}
+
+/**
+ * Format a timestamp string for Jalali display (date only, no time).
+ * Uses Asia/Tehran timezone. Returns "—" on invalid input.
+ */
+export function formatJalaliTimestampDateOnly(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const seg = parts.formatToParts(d);
+  const get = (t: string): string => seg.find(p => p.type === t)?.value ?? '';
+  const yyyy = get('year'); const mm = get('month'); const dd = get('day');
+  const g = moment.utc(`${yyyy}-${mm}-${dd}`, 'YYYY-MM-DD', true);
+  if (!g.isValid()) return '—';
+  return toPersianDigits(g.format('jYYYY/jMM/jDD'));
+}
+
 /** Returns true when `due` is strictly before `start` (both `YYYY-MM-DD`). */
 export function isDueBeforeStart(start: string | null | undefined, due: string | null | undefined): boolean {
   if (!start || !due) return false;

@@ -294,17 +294,22 @@ export function SectionInfo({
           ) : orgUnits.length === 0 ? (
             <EmptyState message="هیچ واحد سازمانی یافت نشد." />
           ) : (
-            <select
+            <SearchableSelect
               id="org-unit"
               value={info.orgUnitId}
-              onChange={e => handleOrgUnitChange(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">انتخاب کنید</option>
-              {orgUnits.map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
+              options={[
+                ...orgUnits.map(u => ({ value: u.id, label: u.name })),
+                // Legacy option: saved unit that has since been removed
+                ...(info.orgUnitId && !orgUnits.some(u => u.id === info.orgUnitId)
+                  ? [{ value: info.orgUnitId, label: info.orgUnitNameSnapshot || info.orgUnitId, sublabel: 'واحد حذف‌شده' }]
+                  : []),
+              ]}
+              onChange={handleOrgUnitChange}
+              placeholder="انتخاب واحد برگزارکننده"
+              searchPlaceholder="جستجوی واحد سازمانی..."
+              emptyText="واحدی یافت نشد"
+              disabled={entireFormReadOnly}
+            />
           )}
         </div>
 

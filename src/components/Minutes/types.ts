@@ -124,7 +124,7 @@ export interface MinuteSummary {
   chair: string;
   status: MinutesStatus;
   confidentiality: ConfidentialityLevel;
-  decisionCount: number;
+  decisionCount: number | null;
   lastModified: string;
   version: string;
   orgUnit?: string;
