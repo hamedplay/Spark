@@ -49,7 +49,6 @@ export interface NavigationVisibilityContext {
   isAdmin: boolean;
   sparkVisible: boolean;
   userPermissions: LayoutUserPermissions;
-  hasAnyTrackableDecisions?: boolean;
 }
 
 export function getVisiblePrimaryNavigationItems(
@@ -73,9 +72,6 @@ export function getVisibleMinutesNavigationItems(
     if (!item.permissionKey) return true;
     if (context.userPermissions === null) return true;
     if (context.userPermissions === undefined) return false;
-    if (item.permissionKey === 'minutes_decisions.track') {
-      return !!context.userPermissions[item.permissionKey] || !!context.hasAnyTrackableDecisions;
-    }
     return !!context.userPermissions[item.permissionKey];
   });
 }

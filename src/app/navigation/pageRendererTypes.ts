@@ -42,5 +42,4 @@ export interface PageRendererProps {
   chatInitUserId: string | null;
   setChatInitUserId: (v: string | null) => void;
   sparkVisible: boolean;
-  hasAnyTrackableDecisions?: boolean;
 }
