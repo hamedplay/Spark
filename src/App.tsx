@@ -49,6 +49,15 @@ function App() {
   const [sparkCalendarMeetingPrefill, setSparkCalendarMeetingPrefill] = useState<unknown>(null);
   const [chatInitUserId, setChatInitUserId] = useState<string | null>(null);
 
+  const hasGlobalMinutesTrackPermission =
+    userPermissions === null || !!userPermissions?.['minutes_decisions.track'];
+  const minutesFollowupAccess = useMinutesFollowupAccess({
+    isAuthenticated,
+    isAdmin,
+    userId: currentUserId,
+    hasGlobalPermission: hasGlobalMinutesTrackPermission,
+  });
+
   if (conferenceCode) {
     return <GuestJoinPage code={conferenceCode} />;
   }
@@ -107,15 +116,6 @@ function App() {
       </>
     );
   }
-
-  const hasGlobalMinutesTrackPermission =
-    userPermissions === null || !!userPermissions?.['minutes_decisions.track'];
-  const minutesFollowupAccess = useMinutesFollowupAccess({
-    isAuthenticated,
-    isAdmin,
-    userId: currentUserId,
-    hasGlobalPermission: hasGlobalMinutesTrackPermission,
-  });
 
   const rendererProps: PageRendererProps = {
     activePage, setActivePage, isAdmin, currentUserId, userPermissions,
