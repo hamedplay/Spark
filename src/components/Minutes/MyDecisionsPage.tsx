@@ -80,6 +80,10 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     try {
       const { data: rows, error: rpcErr } = await supabase.rpc('get_my_minutes_decisions', {
         p_status: statusFilter === 'all' ? null : statusFilter,
+        p_priority: priorityFilter === 'all' ? null : priorityFilter,
+        p_search: search.trim() || null,
+        p_requires_followup: followupOnly ? true : null,
+        p_deadline_state: deadlineFilter === 'all' ? null : deadlineFilter,
         p_limit:  PAGE_SIZE,
         p_offset: currentOffset,
       });
@@ -88,7 +92,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
       setData(typedRows as MyDecisionRow[]);
       if (typedRows.length > 0 && typedRows[0].total_count !== undefined) {
         setTotal(Number(typedRows[0].total_count));
-      } else if (typedRows.length < PAGE_SIZE) {
+      } else {
         setTotal(currentOffset + typedRows.length);
       }
     } catch (err) {
@@ -96,7 +100,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, priorityFilter, search, followupOnly, deadlineFilter]);
 
   useEffect(() => {
     setOffset(0);
@@ -106,27 +110,8 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     fetchData(offset);
   }, [fetchData, offset]);
 
-  // Client-side filtering (on top of server-side status filter)
-  const filtered = useMemo(() => {
-    let rows = data;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(r =>
-        r.title?.toLowerCase().includes(q) ||
-        r.minute_title?.toLowerCase().includes(q)
-      );
-    }
-    if (priorityFilter !== 'all') {
-      rows = rows.filter(r => r.priority === priorityFilter);
-    }
-    if (deadlineFilter !== 'all') {
-      rows = rows.filter(r => getDecisionDeadlineState(r.due_date, r.status) === deadlineFilter);
-    }
-    if (followupOnly) {
-      rows = rows.filter(r => r.requires_followup);
-    }
-    return rows;
-  }, [data, search, priorityFilter, deadlineFilter, followupOnly]);
+  // All filtering is now server-side via RPC parameters
+  const filtered = data;
 
   // Stats from full current page (pre-filter)
   const stats = useMemo(() => ({
@@ -142,10 +127,11 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     setActionType(type);
   };
 
-  const handleActionSuccess = () => {
+  const handleActionSuccess = (updatedAt?: string) => {
     setActionDecision(null);
     fetchData(offset);
     toast.success('عملیات با موفقیت ثبت شد.');
+    void updatedAt;
   };
 
   const resetFilters = () => {

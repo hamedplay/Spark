@@ -85,93 +85,36 @@ export function DecisionsFollowupPage({ onNavigate, isAdmin = false }: Decisions
     setLoading(true);
     setError(null);
     try {
-      // Build query
-      let query = supabase
-        .from('minutes_decisions')
-        .select('*, minutes!inner(meeting_title_snapshot, status, meeting_date_snapshot)', { count: 'exact' })
-        .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-        .order('due_date', { ascending: true, nullsFirst: false });
-
-      if (statusFilter !== 'all') query = query.eq('status', statusFilter);
-      if (priorityFilter !== 'all') query = query.eq('priority', priorityFilter);
-      if (overdueOnly) {
-        const today = new Date().toISOString().slice(0, 10);
-        query = query.lt('due_date', today).not('status', 'in', '("completed","stopped")');
-      }
-      if (followupOnly) query = query.eq('requires_followup', true);
-
-      const { data: rows, error: qErr, count } = await query;
-      if (qErr) throw qErr;
-
-      // Fetch owner names in batch
-      const ownerIds = [...new Set((rows || []).map((r: Record<string, unknown>) => r.primary_owner_user_id as string).filter(Boolean))];
-      const ownerMap: Record<string, string> = {};
-      if (ownerIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles_public')
-          .select('user_id, full_name, username')
-          .in('user_id', ownerIds);
-        for (const p of profiles || []) {
-          const pr = p as { user_id: string; full_name: string | null; username: string | null };
-          ownerMap[pr.user_id] = pr.full_name || pr.username || pr.user_id.slice(0, 8);
-        }
-      }
-
-      // Fetch open obstacle counts
-      const decisionIds = (rows || []).map((r: Record<string, unknown>) => r.id as string);
-      const obstacleMap: Record<string, number> = {};
-      if (decisionIds.length > 0) {
-        const { data: obs } = await supabase
-          .from('minutes_decision_updates')
-          .select('decision_id')
-          .in('decision_id', decisionIds)
-          .eq('is_blocking', true)
-          .is('resolved_at', null);
-        for (const o of obs || []) {
-          const oo = o as { decision_id: string };
-          obstacleMap[oo.decision_id] = (obstacleMap[oo.decision_id] || 0) + 1;
-        }
-      }
-
-      const today = new Date().toISOString().slice(0, 10);
-      const enriched: FollowupRow[] = (rows || []).map((r: Record<string, unknown>) => {
-        const minuteRel = r.minutes as Record<string, unknown> | null;
-        return {
-          ...r,
-          minute_title: (minuteRel?.meeting_title_snapshot as string) || '',
-          minute_status: (minuteRel?.status as string) || '',
-          meeting_date_snapshot: (minuteRel?.meeting_date_snapshot as string) || '',
-          overdue: !!(r.due_date && (r.due_date as string) < today && !['completed','stopped'].includes(r.status as string)),
-          owner_name: ownerMap[r.primary_owner_user_id as string] || '',
-          open_obstacles: obstacleMap[r.id as string] || 0,
-        } as FollowupRow;
+      const { data: rows, error: rpcErr } = await supabase.rpc('get_trackable_minutes_decisions', {
+        p_search: search.trim() || null,
+        p_status: statusFilter === 'all' ? null : statusFilter,
+        p_priority: priorityFilter === 'all' ? null : priorityFilter,
+        p_requires_followup: followupOnly ? true : null,
+        p_has_open_obstacle: hasObstacle ? true : null,
+        p_deadline_state: deadlineFilter === 'all' ? null : deadlineFilter,
+        p_limit: PAGE_SIZE,
+        p_offset: currentOffset,
       });
-
-      setData(enriched);
-      setTotal(count ?? currentOffset + enriched.length);
+      if (rpcErr) throw rpcErr;
+      const typedRows = (rows || []) as (FollowupRow & { total_count?: number })[];
+      setData(typedRows as FollowupRow[]);
+      if (typedRows.length > 0 && typedRows[0].total_count !== undefined) {
+        setTotal(Number(typedRows[0].total_count));
+      } else {
+        setTotal(currentOffset + typedRows.length);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'خطا در بارگذاری مصوبات');
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, overdueOnly, followupOnly]);
+  }, [search, statusFilter, priorityFilter, followupOnly, hasObstacle, deadlineFilter]);
 
   useEffect(() => { setOffset(0); }, [statusFilter, priorityFilter, deadlineFilter, overdueOnly, followupOnly, hasObstacle, unitFilter, ownerFilter, search]);
   useEffect(() => { fetchData(offset); }, [fetchData, offset]);
 
-  // Client-side filtering
-  const filtered = useMemo(() => {
-    let rows = data;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(r => r.title?.toLowerCase().includes(q) || r.minute_title?.toLowerCase().includes(q));
-    }
-    if (deadlineFilter !== 'all') rows = rows.filter(r => getDecisionDeadlineState(r.due_date, r.status) === deadlineFilter);
-    if (hasObstacle) rows = rows.filter(r => r.open_obstacles > 0);
-    if (unitFilter.trim()) rows = rows.filter(r => r.responsible_unit_name_snapshot?.includes(unitFilter.trim()));
-    if (ownerFilter.trim()) rows = rows.filter(r => r.owner_name?.includes(ownerFilter.trim()));
-    return rows;
-  }, [data, search, deadlineFilter, hasObstacle, unitFilter, ownerFilter]);
+  // All filtering is now server-side via RPC parameters
+  const filtered = data;
 
   const stats = useMemo(() => ({
     total:      total,
@@ -188,10 +131,11 @@ export function DecisionsFollowupPage({ onNavigate, isAdmin = false }: Decisions
     setActionType(type);
   };
 
-  const handleActionSuccess = () => {
+  const handleActionSuccess = (updatedAt?: string) => {
     setActionDecision(null);
     fetchData(offset);
     toast.success('عملیات با موفقیت ثبت شد.');
+    void updatedAt;
   };
 
   const resetFilters = () => {
