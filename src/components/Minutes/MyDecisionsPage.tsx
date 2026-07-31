@@ -89,7 +89,18 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     try {
       const { data: sumData, error: sumErr } = await supabase.rpc('get_my_minutes_decisions_summary');
       if (sumErr) throw sumErr;
-      if (sumData) setSummary(sumData as MyDecisionsSummary);
+      const row = Array.isArray(sumData) ? sumData[0] : sumData;
+      if (row) {
+        setSummary({
+          total_count: Number(row.total_count ?? 0),
+          active_count: Number(row.active_count ?? 0),
+          completed_count: Number(row.completed_count ?? 0),
+          stopped_count: Number(row.stopped_count ?? 0),
+          overdue_count: Number(row.overdue_count ?? 0),
+        });
+      } else {
+        setSummary({ total_count: 0, active_count: 0, completed_count: 0, stopped_count: 0, overdue_count: 0 });
+      }
     } catch {
       // silent — stats just stay stale
     }
@@ -178,11 +189,11 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-        <StatCard label="کل مصوبات" value={toPersianDigits(String(summary.total_count))} icon={<ListChecks className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => setStatusFilter('all')} />
-        <StatCard label="در حال انجام" value={toPersianDigits(String(summary.active_count))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => setStatusFilter('in_progress')} />
-        <StatCard label="تکمیل‌شده" value={toPersianDigits(String(summary.completed_count))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => setStatusFilter('completed')} />
-        <StatCard label="متوقف‌شده" value={toPersianDigits(String(summary.stopped_count))} icon={<PauseCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => setStatusFilter('stopped')} />
-        <StatCard label="دارای تأخیر" value={toPersianDigits(String(summary.overdue_count))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => setDeadlineFilter('overdue')} />
+        <StatCard label="کل مصوبات" value={toPersianDigits(String(summary.total_count ?? 0))} icon={<ListChecks className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => setStatusFilter('all')} />
+        <StatCard label="در حال انجام" value={toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => setStatusFilter('in_progress')} />
+        <StatCard label="تکمیل‌شده" value={toPersianDigits(String(summary.completed_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => setStatusFilter('completed')} />
+        <StatCard label="متوقف‌شده" value={toPersianDigits(String(summary.stopped_count ?? 0))} icon={<PauseCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => setStatusFilter('stopped')} />
+        <StatCard label="دارای تأخیر" value={toPersianDigits(String(summary.overdue_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => setDeadlineFilter('overdue')} />
       </div>
 
       {/* Filters */}
