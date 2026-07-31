@@ -53,7 +53,7 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
     );
   }
   const permKey = PAGE_PERMISSION_KEY[activePage];
-  if (permKey && !checkPermission(permKey, isAdmin, userPermissions, hasAnyTrackableDecisions)) {
+  if (permKey && !checkPermission(permKey, isAdmin, userPermissions)) {
     return <AccessDenied onReturn={() => setActivePage('profile')} />;
   }
 
