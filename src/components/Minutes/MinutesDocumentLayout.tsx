@@ -6,6 +6,7 @@ import {
   DASH, orDash,
   chunkArray,
   APPROVAL_STATUS_LABELS, faDateTime,
+  formatConfidentiality,
 } from './MinutesDocumentData';
 import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
 
@@ -160,7 +161,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           {showConfidentiality && (
             <div className="mp-info-row-full">
               <span className="mp-label">سطح محرمانگی:</span>
-              <span className="mp-value">{orDash(minute.confidentiality)}</span>
+              <span className="mp-value">{formatConfidentiality(minute.confidentiality)}</span>
             </div>
           )}
         </div>

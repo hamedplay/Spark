@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -8,6 +9,7 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { PageHeader } from './MinutesShared';
+import { supabase } from '../../lib/supabase';
 import type { PageId } from '../../app/navigation/useNavigation';
 
 interface HubCard {
@@ -17,6 +19,20 @@ interface HubCard {
   icon: typeof LayoutDashboard;
   color: string;
   bgColor: string;
+  /** Which counter field maps to the primary badge. */
+  badgeKey?: BadgeKey;
+  /** Optional secondary badge field. */
+  secondaryBadgeKey?: BadgeKey;
+}
+
+type BadgeKey = 'minutes_unread' | 'approvals_pending' | 'my_decisions_unread' | 'my_decisions_active' | 'followup_actionable';
+
+interface HubCounts {
+  minutes_unread: number;
+  approvals_pending: number;
+  my_decisions_unread: number;
+  my_decisions_active: number;
+  followup_actionable: number;
 }
 
 const CARDS: HubCard[] = [
@@ -35,6 +51,7 @@ const CARDS: HubCard[] = [
     icon: FileText,
     color: 'text-indigo-600 dark:text-indigo-400',
     bgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
+    badgeKey: 'minutes_unread',
   },
   {
     id: 'minutes-approvals',
@@ -43,6 +60,7 @@ const CARDS: HubCard[] = [
     icon: ClipboardList,
     color: 'text-amber-600 dark:text-amber-400',
     bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    badgeKey: 'approvals_pending',
   },
   {
     id: 'minutes-my-decisions',
@@ -51,6 +69,8 @@ const CARDS: HubCard[] = [
     icon: DecisionIcon,
     color: 'text-teal-600 dark:text-teal-400',
     bgColor: 'bg-teal-50 dark:bg-teal-900/20',
+    badgeKey: 'my_decisions_unread',
+    secondaryBadgeKey: 'my_decisions_active',
   },
   {
     id: 'minutes-followup',
@@ -59,6 +79,7 @@ const CARDS: HubCard[] = [
     icon: TrendingUp,
     color: 'text-rose-600 dark:text-rose-400',
     bgColor: 'bg-rose-50 dark:bg-rose-900/20',
+    badgeKey: 'followup_actionable',
   },
   {
     id: 'minutes-reports',
@@ -70,12 +91,60 @@ const CARDS: HubCard[] = [
   },
 ];
 
+const EMPTY_COUNTS: HubCounts = {
+  minutes_unread: 0,
+  approvals_pending: 0,
+  my_decisions_unread: 0,
+  my_decisions_active: 0,
+  followup_actionable: 0,
+};
+
+function toPersianDigits(n: number): string {
+  return n.toLocaleString('fa-IR');
+}
+
+function formatBadge(n: number): string | null {
+  if (n <= 0) return null;
+  if (n > 99) return '۹۹+';
+  return toPersianDigits(n);
+}
+
 interface Props {
   onNavigate: (page: PageId) => void;
   visibleCards?: Set<PageId>;
 }
 
 export function MinutesHubPage({ onNavigate, visibleCards }: Props) {
+  const [counts, setCounts] = useState<HubCounts>(EMPTY_COUNTS);
+  const [loading, setLoading] = useState(true);
+
+  const fetchCounts = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_my_minutes_hub_counts');
+      if (error) {
+        console.error('[MinutesHub] count fetch failed', { code: error.code, message: error.message });
+        return;
+      }
+      if (data) {
+        setCounts({
+          minutes_unread: (data.minutes_unread as number) ?? 0,
+          approvals_pending: (data.approvals_pending as number) ?? 0,
+          my_decisions_unread: (data.my_decisions_unread as number) ?? 0,
+          my_decisions_active: (data.my_decisions_active as number) ?? 0,
+          followup_actionable: (data.followup_actionable as number) ?? 0,
+        });
+      }
+    } catch (err) {
+      console.error('[MinutesHub] count fetch exception', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCounts();
+  }, [fetchCounts]);
+
   const cards = visibleCards
     ? CARDS.filter(c => visibleCards.has(c.id))
     : CARDS;
@@ -90,13 +159,34 @@ export function MinutesHubPage({ onNavigate, visibleCards }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {cards.map(card => {
           const Icon = card.icon;
+          const primaryBadge = card.badgeKey ? formatBadge(counts[card.badgeKey]) : null;
+          const secondaryBadge = card.secondaryBadgeKey ? formatBadge(counts[card.secondaryBadgeKey]) : null;
           return (
             <button
               key={card.id}
               onClick={() => onNavigate(card.id)}
-              className="group bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 sm:p-6 text-right transition-all hover:shadow-lg hover:border-gray-200 dark:hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-300 dark:focus:border-blue-600"
+              className="group relative bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 sm:p-6 text-right transition-all hover:shadow-lg hover:border-gray-200 dark:hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-300 dark:focus:border-blue-600"
               aria-label={card.title}
             >
+              {/* Primary badge */}
+              {primaryBadge && (
+                <span
+                  className="absolute top-3 left-3 inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold text-white bg-red-500 shadow-sm"
+                  aria-label={`${card.title}: ${primaryBadge} مورد خوانده‌نشده`}
+                >
+                  {primaryBadge}
+                </span>
+              )}
+              {/* Secondary badge */}
+              {secondaryBadge && (
+                <span
+                  className="absolute top-3 left-3 inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold text-white bg-blue-500 shadow-sm"
+                  style={{ left: primaryBadge ? 'calc(1rem + 32px)' : '0.75rem' }}
+                  aria-label={`${card.title}: ${secondaryBadge} مورد فعال`}
+                >
+                  {secondaryBadge}
+                </span>
+              )}
               <div className={`w-12 h-12 rounded-xl ${card.bgColor} flex items-center justify-center mb-4 transition-transform group-hover:scale-105`}>
                 <Icon className={`w-6 h-6 ${card.color}`} />
               </div>

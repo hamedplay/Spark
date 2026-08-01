@@ -143,9 +143,14 @@ export const STATUS_LABELS: Record<MinutesStatus, string> = {
 export const CONF_LABELS: Record<ConfidentialityLevel, string> = {
   public: 'عمومی',
   organizational: 'سازمانی',
-  restricted: 'دسترسی محدود',
+  restricted: 'محدود',
   confidential: 'محرمانه',
 };
+
+export function formatConfidentiality(value: string | null | undefined): string {
+  if (!value) return DASH;
+  return CONF_LABELS[value as ConfidentialityLevel] || value;
+}
 
 export const APPROVAL_MODE_LABELS: Record<ApprovalMode, string> = {
   system: 'سیستمی',
