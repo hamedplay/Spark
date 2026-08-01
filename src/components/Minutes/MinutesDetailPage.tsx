@@ -16,6 +16,7 @@ import { TabAgenda } from './Detail/TabAgenda';
 import { TabDecisions } from './Detail/TabDecisions';
 import { TabAttachments } from './Detail/TabAttachments';
 import { TabApprovals } from './Detail/TabApprovals';
+import { RequestChangesModal } from './Detail/TabApprovals';
 import { TabHistory } from './Detail/TabHistory';
 import { TabFinalVersion } from './Detail/TabFinalVersion';
 
@@ -518,10 +519,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               comments={approvalComments}
               agendaItems={agendaResults}
               minute={minute}
-              currentUserId={currentUserId}
-              showRequestChanges={showRequestChanges}
-              setShowRequestChanges={setShowRequestChanges}
-              onAfterAction={refresh}
             />
           )}
           {activeTab === 'history' && <TabHistory minuteId={minute.id} />}
@@ -569,6 +566,15 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
         ownerNames={printOwnerNames}
         logoUrl={logoUrl}
       />
+      {showRequestChanges && (
+        <RequestChangesModal
+          minute={minute}
+          agendaItems={agendaResults}
+          onClose={() => setShowRequestChanges(false)}
+          onSubmitted={() => { setShowRequestChanges(false); refresh(); }}
+          currentUserId={currentUserId ?? undefined}
+        />
+      )}
     </div>
   );
 }

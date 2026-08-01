@@ -116,6 +116,27 @@ export function DecisionProgressModal({ decision, history, canUpdate, isManager 
     }
   };
 
+  const STATUS_LABELS: Record<string, string> = {
+    not_started: 'شروع‌نشده',
+    planned: 'برنامه‌ریزی‌شده',
+    in_progress: 'در حال انجام',
+    waiting_coordination: 'منتظر هماهنگی',
+    waiting_approval: 'منتظر تأیید',
+    completed: 'تکمیل‌شده',
+    stopped: 'متوقف‌شده',
+  };
+
+  const EVENT_LABELS: Record<string, string> = {
+    progress: 'به‌روزرسانی پیشرفت',
+    status_change: 'تغییر وضعیت',
+    report: 'گزارش',
+    obstacle: 'ثبت مانع',
+    obstacle_resolved: 'رفع مانع',
+    completion: 'تکمیل مصوبه',
+    followup: 'پیگیری',
+    reopened: 'بازگشایی',
+  };
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" dir="rtl">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
@@ -176,18 +197,34 @@ export function DecisionProgressModal({ decision, history, canUpdate, isManager 
             <div>
               <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">تاریخچه به‌روزرسانی‌ها</p>
               <div className="space-y-2 max-h-40 overflow-y-auto">
-                {history.map(h => (
-                  <div key={h.id} className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-2.5 text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-gray-700 dark:text-gray-300">{h.created_by_name || 'کاربر'}</span>
-                      <span className="text-gray-400">{new Date(h.created_at).toLocaleDateString('fa-IR')}</span>
+                {history.map(h => {
+                  const eventLabel = EVENT_LABELS[h.event_type] || h.event_type || 'به‌روزرسانی';
+                  const prevLabel = h.previous_status ? (STATUS_LABELS[h.previous_status] || h.previous_status) : null;
+                  const newLabel = h.new_status ? (STATUS_LABELS[h.new_status] || h.new_status) : null;
+                  return (
+                    <div key={h.id} className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-2.5 text-xs">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">{h.created_by_name || 'کاربر'}</span>
+                        <span className="text-gray-400">{new Date(h.created_at).toLocaleDateString('fa-IR')}</span>
+                      </div>
+                      <div className="text-gray-500 dark:text-gray-400">
+                        <span className="font-medium text-gray-600 dark:text-gray-300">{eventLabel}</span>
+                        {(prevLabel || newLabel) && (
+                          <span className="mr-1">
+                            {prevLabel && <span>{prevLabel}</span>}
+                            {prevLabel && newLabel && <span className="mx-1 text-gray-400">←</span>}
+                            {newLabel && <span>{newLabel}</span>}
+                          </span>
+                        )}
+                        {h.previous_progress_percent != null && h.new_progress_percent != null && h.previous_progress_percent !== h.new_progress_percent && (
+                          <span className="mr-1">| {h.previous_progress_percent}٪ ← {h.new_progress_percent}٪</span>
+                        )}
+                      </div>
+                      {h.update_text && <p className="text-gray-600 dark:text-gray-300 mt-1">{h.update_text}</p>}
+                      {h.is_blocking && <p className="text-orange-600 dark:text-orange-400 mt-1 font-medium">مانع ثبت شد</p>}
                     </div>
-                    <div className="text-gray-500 dark:text-gray-400">
-                      {h.previous_status ?? '—'} ← {h.new_status} | {h.previous_progress_percent ?? 0}٪ → {h.new_progress_percent}٪
-                    </div>
-                    {h.update_text && <p className="text-gray-600 dark:text-gray-300 mt-1">{h.update_text}</p>}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

@@ -10,13 +10,9 @@ export interface TabApprovalsProps {
   comments: ApprovalCommentRow[];
   agendaItems: AgendaResultRow[];
   minute: MinuteDetail;
-  currentUserId?: string;
-  showRequestChanges: boolean;
-  setShowRequestChanges: (v: boolean) => void;
-  onAfterAction: () => void;
 }
 
-export function TabApprovals({ approvals, comments, agendaItems, minute, currentUserId, showRequestChanges, setShowRequestChanges, onAfterAction }: TabApprovalsProps) {
+export function TabApprovals({ approvals, comments, agendaItems, minute }: TabApprovalsProps) {
   const approvedCount = approvals.filter(a => a.status === 'approved').length;
   const totalCount = approvals.length;
 
@@ -103,16 +99,6 @@ export function TabApprovals({ approvals, comments, agendaItems, minute, current
         </div>
       )}
 
-      {/* Request changes modal */}
-      {showRequestChanges && (
-        <RequestChangesModal
-          minute={minute}
-          agendaItems={agendaItems}
-          onClose={() => setShowRequestChanges(false)}
-          onSubmitted={() => { setShowRequestChanges(false); onAfterAction(); }}
-          currentUserId={currentUserId}
-        />
-      )}
     </div>
   );
 }
@@ -133,7 +119,7 @@ interface ChangeItem {
   suggested_correction: string;
 }
 
-function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted }: RequestChangesModalProps) {
+export function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted }: RequestChangesModalProps) {
   const [items, setItems] = useState<ChangeItem[]>([{ agenda_result_id: null, reason: '', suggested_correction: '' }]);
   const [submitting, setSubmitting] = useState(false);
 

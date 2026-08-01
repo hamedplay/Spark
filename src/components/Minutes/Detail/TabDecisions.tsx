@@ -50,7 +50,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
     return false;
   };
 
-  const isManager = (dec: ViewDecisionRow | DecisionRow) => {
+  const isManager = () => {
     if (!currentUserId) return false;
     if (isAdmin) return true;
     if (secretaryId && secretaryId === currentUserId) return true;
@@ -96,7 +96,18 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minuteId]);
 
-  const openProgressModal = (dec: ViewDecisionRow) => {
+  const openProgressModal = async (dec: ViewDecisionRow) => {
+    let updatedAt = '';
+    try {
+      const { data: row } = await supabase
+        .from('minutes_decisions')
+        .select('updated_at')
+        .eq('id', dec.id)
+        .maybeSingle();
+      if (row?.updated_at) updatedAt = row.updated_at;
+    } catch {
+      // fallback to empty string — RPC will surface version conflict if stale
+    }
     const fullDec: DecisionRow = {
       id: dec.id,
       minute_id: minuteId,
@@ -116,7 +127,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
       latest_update: dec.latest_update,
       created_by_user_id: dec.primary_owner_user_id,
       created_at: '',
-      updated_at: '',
+      updated_at: updatedAt,
       discussion_result: null,
       result_type: null,
       additional_notes: null,
@@ -240,7 +251,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
           decision={progressDecision}
           history={progressHistory}
           canUpdate={canUpdateDecision(progressDecision)}
-          isManager={isManager(progressDecision)}
+          isManager={isManager()}
           onClose={() => setProgressDecision(null)}
           onUpdated={onProgressUpdated}
         />
