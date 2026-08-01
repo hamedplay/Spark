@@ -22,8 +22,6 @@ import type { DecisionStatus, DecisionPriority, DecisionRow, DecisionDeadlineSta
 
 interface DecisionsFollowupPageProps {
   onNavigate: (page: string, params?: Record<string, unknown>) => void;
-  isAdmin?: boolean;
-  currentUserId?: string | null;
 }
 
 interface FollowupRow extends DecisionRow {
@@ -73,7 +71,7 @@ const DEADLINE_OPTIONS: Array<{ value: DecisionDeadlineState | 'all'; label: str
 
 type ActionType = import('./DecisionActionModal').ActionType;
 
-export function DecisionsFollowupPage({ onNavigate, isAdmin = false }: DecisionsFollowupPageProps) {
+export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps) {
   const [data, setData]               = useState<FollowupRow[]>([]);
   const [total, setTotal]             = useState(0);
   const [loading, setLoading]         = useState(true);
@@ -382,7 +380,7 @@ export function DecisionsFollowupPage({ onNavigate, isAdmin = false }: Decisions
                     <TrackingTableRow
                       key={dec.id}
                       dec={dec}
-                      isAdmin={isAdmin}
+                      isManager={true}
                       onViewDetail={() => setDetailDecision(dec)}
                       onAction={(type) => openAction(dec, type)}
                       onNavigate={onNavigate}
@@ -399,7 +397,7 @@ export function DecisionsFollowupPage({ onNavigate, isAdmin = false }: Decisions
               <TrackingMobileCard
                 key={dec.id}
                 dec={dec}
-                isAdmin={isAdmin}
+                isManager={true}
                 onViewDetail={() => setDetailDecision(dec)}
                 onAction={(type) => openAction(dec, type)}
                 onNavigate={onNavigate}
@@ -453,13 +451,13 @@ export function DecisionsFollowupPage({ onNavigate, isAdmin = false }: Decisions
 // ── TrackingTableRow ──────────────────────────────────────────────────────────
 interface TrackRowProps {
   dec: FollowupRow;
-  isAdmin: boolean;
+  isManager: boolean;
   onViewDetail: () => void;
   onAction: (t: ActionType) => void;
   onNavigate: (page: string, params?: Record<string, unknown>) => void;
 }
 
-function TrackingTableRow({ dec, isAdmin, onViewDetail, onAction, onNavigate }: TrackRowProps) {
+function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }: TrackRowProps) {
   const deadlineState = getDecisionDeadlineState(dec.due_date, dec.status);
   const daysLabel = formatDecisionDaysLabel(dec.due_date, dec.status);
   const isCompleted = dec.status === 'completed';
@@ -531,7 +529,7 @@ function TrackingTableRow({ dec, isAdmin, onViewDetail, onAction, onNavigate }: 
           <button title="تغییر وضعیت" onClick={() => onAction('status')} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors">
             <StopCircle className="w-4 h-4" />
           </button>
-          {isCompleted && isAdmin && (
+          {isCompleted && isManager && (
             <button title="بازگشایی" onClick={() => onAction('reopen')} className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-600 transition-colors">
               <RotateCcw className="w-4 h-4" />
             </button>
@@ -546,7 +544,7 @@ function TrackingTableRow({ dec, isAdmin, onViewDetail, onAction, onNavigate }: 
 }
 
 // ── TrackingMobileCard ────────────────────────────────────────────────────────
-function TrackingMobileCard({ dec, isAdmin, onViewDetail, onAction, onNavigate }: TrackRowProps) {
+function TrackingMobileCard({ dec, isManager, onViewDetail, onAction, onNavigate }: TrackRowProps) {
   const deadlineState = getDecisionDeadlineState(dec.due_date, dec.status);
   const daysLabel = formatDecisionDaysLabel(dec.due_date, dec.status);
   const isCompleted = dec.status === 'completed';
@@ -591,7 +589,7 @@ function TrackingMobileCard({ dec, isAdmin, onViewDetail, onAction, onNavigate }
         <button onClick={() => onAction('followup')} className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1">
           <Clock className="w-3.5 h-3.5" /> پیگیری
         </button>
-        {isCompleted && isAdmin && (
+        {isCompleted && isManager && (
           <button onClick={() => onAction('reopen')} className="px-3 py-1.5 text-xs rounded-xl border border-amber-300 dark:border-amber-700 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex items-center gap-1">
             <RotateCcw className="w-3.5 h-3.5" /> بازگشایی
           </button>

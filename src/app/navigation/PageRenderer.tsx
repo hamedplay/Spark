@@ -182,7 +182,7 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
       if (checkPermission('minutes_reports', isAdmin, userPermissions)) {
         hubCards.add('minutes-reports');
       }
-      if (checkPermission('minutes_decisions.track', isAdmin, userPermissions) && minutesFollowupAllowed) {
+      if (minutesFollowupAllowed) {
         hubCards.add('minutes-followup');
       }
       return <MinutesHubPage onNavigate={(p) => setActivePage(p as PageId)} visibleCards={hubCards} />;
@@ -202,7 +202,7 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
     case 'minutes-my-decisions':
       return <MyDecisionsPage onNavigate={(p) => setActivePage(p as PageId)} />;
     case 'minutes-followup':
-      return <DecisionsFollowupPage onNavigate={(p) => setActivePage(p as PageId)} isAdmin={isAdmin} currentUserId={currentUserId} />;
+      return <DecisionsFollowupPage onNavigate={(p) => setActivePage(p as PageId)} />;
     case 'minutes-report':
       return <MinutesMeetingReportPage onNavigate={(p) => setActivePage(p as PageId)} />;
     case 'minutes-reports':

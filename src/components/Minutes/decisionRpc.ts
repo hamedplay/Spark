@@ -31,6 +31,7 @@ export const DECISION_RPC_ERROR_MAP: Record<string, string> = {
   OBSTACLE_NOT_FOUND:            'مانع یافت نشد.',
   OBSTACLE_ALREADY_RESOLVED:      'این مانع قبلاً رفع شده است.',
   INTERNAL_ERROR:                'خطای داخلی سرور. لطفاً دوباره امتحان کنید.',
+  MINUTES_DECISION_TRACKING_NOT_ALLOWED: 'شما اجازه پیگیری مصوبات این صورت‌جلسه را ندارید.',
 };
 
 /** Returns true if the RPC call itself failed (network/transport error). */

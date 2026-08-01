@@ -44,18 +44,14 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
 
   const canUpdateDecision = (dec: ViewDecisionRow | DecisionRow) => {
     if (!currentUserId) return false;
-    if (isAdmin) return true;
     if (dec.primary_owner_user_id === currentUserId) return true;
     if (secretaryId && secretaryId === currentUserId) return true;
-    if (chairId && chairId === currentUserId) return true;
     return false;
   };
 
   const isManager = () => {
     if (!currentUserId) return false;
-    if (isAdmin) return true;
     if (secretaryId && secretaryId === currentUserId) return true;
-    if (chairId && chairId === currentUserId) return true;
     return false;
   };
 

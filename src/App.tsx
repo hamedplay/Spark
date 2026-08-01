@@ -49,13 +49,9 @@ function App() {
   const [sparkCalendarMeetingPrefill, setSparkCalendarMeetingPrefill] = useState<unknown>(null);
   const [chatInitUserId, setChatInitUserId] = useState<string | null>(null);
 
-  const hasGlobalMinutesTrackPermission =
-    userPermissions === null || !!userPermissions?.['minutes_decisions.track'];
   const minutesFollowupAccess = useMinutesFollowupAccess({
     isAuthenticated,
-    isAdmin,
     userId: currentUserId,
-    hasGlobalPermission: hasGlobalMinutesTrackPermission,
   });
 
   if (conferenceCode) {
