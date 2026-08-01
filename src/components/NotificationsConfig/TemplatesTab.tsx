@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Loader as Loader2, RefreshCw, Save, CreditCard as Edit2, Plus, Trash2, Eye, X, ChevronDown, Bell, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { invalidateTemplateCache } from '../../lib/notifications';
