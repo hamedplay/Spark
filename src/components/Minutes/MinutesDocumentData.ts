@@ -184,6 +184,16 @@ export const DECISION_STATUS_LABELS: Record<DecisionStatus, string> = {
   stopped: 'متوقف‌شده',
 };
 
+export const MEETING_TYPE_LABELS: Record<string, string> = {
+  board: 'هیئت مدیره',
+  management: 'مدیریتی',
+};
+
+export function formatMeetingType(value: string | null | undefined): string {
+  if (!value) return DASH;
+  return MEETING_TYPE_LABELS[value] || value;
+}
+
 export const SYSTEM_TITLE = 'سامانه مدیریت جلسات';
 
 export const FALLBACK_LOGO = '/logo_spark.png';

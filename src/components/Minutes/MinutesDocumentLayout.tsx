@@ -112,9 +112,15 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
               )}
             </div>
           )}
-          <h1>{headerTitle}</h1>
-          {orgName && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{orgName}</p>}
-          {subtitle && <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">{subtitle}</p>}
+          <div className="mp-header-center">
+            <h1>{headerTitle}</h1>
+            {orgName && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{orgName}</p>}
+            {subtitle && <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">{subtitle}</p>}
+          </div>
+          <div className="mp-header-date">
+            <span className="mp-label">تاریخ: </span>
+            <span className="mp-value">{minute.meeting_date_snapshot ? jalaliDateDisplay(minute.meeting_date_snapshot) : DASH}</span>
+          </div>
         </div>
 
         {/* ── Meeting details ────────────────────────────────────────────────── */}
@@ -189,9 +195,15 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
                   <div className="mp-item-title">
                     مصوبه {toPersianDigits(String(i + 1))} ـ {mainText}
                   </div>
-                  <div className="mp-item-row mp-item-row-inline">
-                    <span><span className="mp-item-label">واحد مسئول: </span>{orDash(d.responsibleUnitName)}</span>
-                    <span><span className="mp-item-label">مهلت انجام: </span>{d.dueDate ? jalaliDateDisplay(d.dueDate) : DASH}</span>
+                  <div className="mp-decision-meta">
+                    <div className="mp-decision-field">
+                      <span className="mp-item-label">واحد مسئول: </span>
+                      <span>{orDash(d.responsibleUnitName)}</span>
+                    </div>
+                    <div className="mp-decision-field">
+                      <span className="mp-item-label">مهلت انجام: </span>
+                      <span>{d.dueDate ? jalaliDateDisplay(d.dueDate) : DASH}</span>
+                    </div>
                   </div>
                 </div>
               );
@@ -221,12 +233,21 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
         {showApprovers && approvals.length > 0 && (
           <div className="mp-section mp-no-break">
             <h2 className="mp-section-title">تأییدکنندگان</h2>
-            <div className="mp-info-row-full">
+            <div className="mp-approvals-list">
               {approvals.map(a => (
-                <div key={a.id} className="mp-field" style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                  <span><span className="mp-label">نام: </span>{orDash(a.approver_name)}</span>
-                  <span><span className="mp-label">وضعیت: </span>{APPROVAL_STATUS_LABELS[a.status] || DASH}</span>
-                  <span><span className="mp-label">تاریخ: </span>{a.approved_at ? faDateTime(a.approved_at) : a.changes_requested_at ? faDateTime(a.changes_requested_at) : DASH}</span>
+                <div key={a.id} className="mp-approval-row">
+                  <div className="mp-approval-field">
+                    <span className="mp-label">نام: </span>
+                    <span className="mp-value">{orDash(a.approver_name)}</span>
+                  </div>
+                  <div className="mp-approval-field">
+                    <span className="mp-label">وضعیت: </span>
+                    <span className="mp-value">{APPROVAL_STATUS_LABELS[a.status] || DASH}</span>
+                  </div>
+                  <div className="mp-approval-field">
+                    <span className="mp-label">تاریخ: </span>
+                    <span className="mp-value">{a.approved_at ? faDateTime(a.approved_at) : a.changes_requested_at ? faDateTime(a.changes_requested_at) : DASH}</span>
+                  </div>
                 </div>
               ))}
             </div>

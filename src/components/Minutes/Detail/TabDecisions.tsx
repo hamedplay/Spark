@@ -72,8 +72,20 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
           .order('created_at', { ascending: false }),
       ]);
 
-      if (viewRes.error) throw new Error('decisions');
-      if (histRes.error) throw new Error('history');
+      if (viewRes.error) {
+        console.error('[minutes-decisions] view RPC failed', {
+          code: viewRes.error.code,
+          message: viewRes.error.message,
+        });
+        throw new Error('decisions');
+      }
+      if (histRes.error) {
+        console.error('[minutes-decisions] history query failed', {
+          code: histRes.error.code,
+          message: histRes.error.message,
+        });
+        throw new Error('history');
+      }
 
       const viewRows = (viewRes.data || []) as unknown as ViewDecisionRow[];
       const histRows = (histRes.data || []) as unknown as DecisionUpdateRow[];

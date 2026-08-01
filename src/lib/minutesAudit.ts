@@ -1,4 +1,33 @@
 import { supabase } from './supabase';
+import { toPersianDigits } from './minutesDate';
+
+const DECISION_STATUS_FA: Record<string, string> = {
+  not_started: 'شروع‌نشده',
+  planned: 'برنامه‌ریزی‌شده',
+  in_progress: 'در حال انجام',
+  waiting_coordination: 'در انتظار هماهنگی',
+  waiting_approval: 'در انتظار تأیید',
+  completed: 'تکمیل‌شده',
+  stopped: 'متوقف‌شده',
+};
+
+const PROGRESS_FIELDS = new Set([
+  'progress',
+  'progress_percent',
+  'previous_progress_percent',
+  'new_progress_percent',
+]);
+
+function formatDecisionStatus(value: unknown): string {
+  if (typeof value !== 'string') return String(value);
+  return DECISION_STATUS_FA[value] || value;
+}
+
+function formatProgress(value: unknown): string {
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  return `${toPersianDigits(String(n))}٪`;
+}
 
 export interface AuditLogRow {
   id: string;
@@ -81,7 +110,7 @@ export function summarizeChange(row: AuditLogRow): string {
     for (const k of keys) {
       const v = row.new_values[k];
       if (v == null || v === '') continue;
-      parts.push(`${label(k)}: ${formatVal(v)}`);
+      parts.push(`${label(k)}: ${formatVal(k, v)}`);
     }
   }
   return parts.join(' · ');
@@ -101,9 +130,11 @@ function label(k: string): string {
   return FIELD_LABELS[k] || k;
 }
 
-function formatVal(v: unknown): string {
+function formatVal(field: string, v: unknown): string {
+  if (field === 'status') return formatDecisionStatus(v);
+  if (PROGRESS_FIELDS.has(field)) return formatProgress(v);
   if (typeof v === 'string') return v.length > 40 ? v.slice(0, 40) + '…' : v;
-  if (typeof v === 'number') return String(v);
+  if (typeof v === 'number') return toPersianDigits(String(v));
   if (typeof v === 'boolean') return v ? 'بله' : 'خیر';
   return String(v);
 }

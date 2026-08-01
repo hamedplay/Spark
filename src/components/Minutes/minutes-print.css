@@ -158,6 +158,16 @@
     font-weight: 700;
     margin: 0 0 2mm 0;
   }
+  .mp-header .mp-header-center {
+    text-align: center;
+  }
+  .mp-header .mp-header-date {
+    position: absolute;
+    top: 0;
+    left: 0;
+    font-size: 10pt;
+    color: #333;
+  }
   .mp-header .mp-sub {
     font-size: 12pt;
     font-weight: 700;
@@ -257,6 +267,42 @@
     flex-wrap: wrap;
     justify-content: space-between;
     gap: 2mm 8mm;
+  }
+  .mp-decision-meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8mm;
+    row-gap: 1mm;
+    font-size: 10pt;
+    margin-bottom: 0.5mm;
+  }
+  .mp-decision-field {
+    display: flex;
+    gap: 1mm;
+    align-items: flex-start;
+  }
+  .mp-approvals-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2mm;
+  }
+  .mp-approval-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    column-gap: 6mm;
+    row-gap: 1mm;
+    align-items: center;
+    font-size: 10pt;
+    padding: 1.5mm 0;
+    border-bottom: 1px dashed #ccc;
+  }
+  .mp-approval-row:last-child {
+    border-bottom: none;
+  }
+  .mp-approval-field {
+    display: flex;
+    gap: 1mm;
+    align-items: flex-start;
   }
   .mp-item-label {
     font-weight: 700;
@@ -464,6 +510,16 @@
   margin: 0 0 2mm 0;
   color: #1a1a1a;
 }
+.minutes-preview-root .mp-header .mp-header-center {
+  text-align: center;
+}
+.minutes-preview-root .mp-header .mp-header-date {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 10pt;
+  color: #555;
+}
 .minutes-preview-root .mp-header .mp-sub {
   font-size: 12pt;
   font-weight: 700;
@@ -548,6 +604,42 @@
 .minutes-preview-root .mp-item-sep {
   color: #888;
 }
+.minutes-preview-root .mp-decision-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8mm;
+  row-gap: 1mm;
+  font-size: 10pt;
+  margin-bottom: 0.5mm;
+}
+.minutes-preview-root .mp-decision-field {
+  display: flex;
+  gap: 1mm;
+  align-items: flex-start;
+}
+.minutes-preview-root .mp-approvals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2mm;
+}
+.minutes-preview-root .mp-approval-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 6mm;
+  row-gap: 1mm;
+  align-items: center;
+  font-size: 10pt;
+  padding: 1.5mm 0;
+  border-bottom: 1px dashed #ccc;
+}
+.minutes-preview-root .mp-approval-row:last-child {
+  border-bottom: none;
+}
+.minutes-preview-root .mp-approval-field {
+  display: flex;
+  gap: 1mm;
+  align-items: flex-start;
+}
 .minutes-preview-root .mp-sign-grid {
   display: grid;
   gap: 6mm;
@@ -600,4 +692,19 @@
   font-size: 10pt;
   font-style: italic;
   text-align: center;
+}
+
+/* Narrow-screen fallback: stack grids into single column so text
+   doesn't collide on mobile preview. */
+@media (max-width: 480px) {
+  .minutes-preview-root .mp-decision-meta,
+  .minutes-preview-root .mp-approval-row {
+    grid-template-columns: 1fr;
+    row-gap: 1mm;
+  }
+  .mp-decision-meta,
+  .mp-approval-row {
+    grid-template-columns: 1fr;
+    row-gap: 1mm;
+  }
 }

@@ -2,6 +2,7 @@ import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow } fro
 import { EmptyState } from '../MinutesShared';
 import { InvitationBadge, AttendanceBadge } from './Badges';
 import { formatJalaliDateForDisplay } from '../../../lib/minutesDate';
+import { formatMeetingType } from '../MinutesDocumentData';
 
 export function TabSummary({ minute }: { minute: MinuteDetail }) {
   return (
@@ -13,7 +14,7 @@ export function TabSummary({ minute }: { minute: MinuteDetail }) {
         { label: 'رئیس جلسه', value: minute.chair_name_snapshot },
         { label: 'واحد سازمانی', value: minute.org_unit_name_snapshot || '—' },
         { label: 'موقعیت', value: minute.meeting_location_snapshot || '—' },
-        { label: 'نوع جلسه', value: minute.meeting_type || '—' },
+        { label: 'نوع جلسه', value: formatMeetingType(minute.meeting_type) },
         { label: 'ساعت شروع', value: minute.meeting_start_time_snapshot || '—' },
         { label: 'ساعت پایان', value: minute.meeting_end_time_snapshot || '—' },
       ].map(item => (
