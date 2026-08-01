@@ -5,6 +5,7 @@ import {
   PageHeader, MinutesStatusBadge, ConfidentialityBadge,
   EmptyState, TableSkeleton, ConfirmActionDialog,
 } from './MinutesShared';
+import { MinutesBackButton } from './MinutesBackButton';
 import { supabase } from '../../lib/supabase';
 import {
   setMinuteIdInUrl, setMinutesPageInUrl,
@@ -193,13 +194,19 @@ export function MinutesListPage({ onNavigate }: Props) {
         title="صورت‌جلسات"
         description="مدیریت و پیگیری صورت‌جلسات سازمانی"
         actions={
-          <button
-            onClick={() => onNavigate('calendar')}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            انتخاب جلسه از تقویم
-          </button>
+          <div className="flex items-center gap-2">
+            <MinutesBackButton
+              label="بازگشت به صورت‌جلسات و مصوبات"
+              onClick={() => { setMinutesPageInUrl('minutes-hub'); onNavigate('minutes-hub'); }}
+            />
+            <button
+              onClick={() => onNavigate('calendar')}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              انتخاب جلسه از تقویم
+            </button>
+          </div>
         }
       />
 

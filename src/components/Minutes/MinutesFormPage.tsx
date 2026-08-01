@@ -2,13 +2,14 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Send, X, CalendarDays } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl } from '../../lib/minutesNavigation';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl, setMeetingIdInUrl } from '../../lib/minutesNavigation';
 import { loadMinutesPrefill } from '../../lib/minutesPrefill';
 import { checkSystemApproverEligibility } from '../../lib/minutesApprovalEligibility';
 import { normalizeInvitationStatus } from '../../lib/minutesInvitationStatus';
 import { fetchMinutesConfig } from './fetchMinutesConfig';
 import type { MinutesLayoutConfig } from './MinutesDocumentData';
 import { PageHeader, TableSkeleton } from './MinutesShared';
+import { MinutesBackButton } from './MinutesBackButton';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
   AgendaResultType, DecisionPriority,
@@ -78,6 +79,7 @@ const RPC_ERROR_MESSAGES: Record<string, string> = {
   INVALID_INVITATION_STATUS: 'وضعیت دعوت نامعتبر است.',
   INVALID_ATTENDANCE_STATUS: 'وضعیت حضور نامعتبر است.',
   EXTERNAL_NAME_REQUIRED: 'نام شرکت‌کننده خارجی الزامی است.',
+  EXTERNAL_PARTICIPANT_NAME_REQUIRED: 'نام شرکت‌کننده خارجی الزامی است.',
   AGENDA_TITLE_REQUIRED: 'عنوان دستور جلسه الزامی است.',
   AGENDA_SORT_ORDER_INVALID: 'ترتیب دستور جلسه نامعتبر است.',
   AGENDA_ALLOCATED_TIME_INVALID: 'زمان اختصاص‌یافته دستور جلسه نامعتبر است.',
@@ -85,6 +87,18 @@ const RPC_ERROR_MESSAGES: Record<string, string> = {
   AGENDA_ITEM_MISMATCH: 'مغایرت در دستور جلسات.',
   DUPLICATE_INTERNAL_PARTICIPANT: 'شرکت‌کننده داخلی تکراری است.',
   DUPLICATE_AGENDA_ITEM: 'دستور جلسه تکراری است.',
+  INVALID_APPROVAL_MODE: 'مدل تأیید نامعتبر است.',
+  SECRETARY_NOT_MEETING_PARTICIPANT: 'دبیر جلسه باید از شرکت‌کنندگان جلسه باشد.',
+  CHAIR_NOT_MEETING_PARTICIPANT: 'رئیس جلسه باید از شرکت‌کنندگان جلسه باشد.',
+  DECISION_TITLE_REQUIRED: 'عنوان مصوبه الزامی است.',
+  DECISION_OWNER_REQUIRED: 'مسئول مصوبه الزامی است.',
+  DECISION_DUE_BEFORE_START: 'مهلت مصوبه نمی‌تواند قبل از تاریخ شروع باشد.',
+  MINUTES_NO_PERMISSION: 'شما اجازه انجام این عملیات را ندارید.',
+  MINUTES_VERSION_CONFLICT: 'این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.',
+  MINUTE_NOT_FOUND: 'صورت‌جلسه یافت نشد.',
+  NO_ELIGIBLE_APPROVERS: 'هیچ شرکت‌کننده واجد شرایطی برای تأیید سیستمی وجود ندارد.',
+  MINUTE_NOT_SUBMITTABLE: 'این صورت‌جلسه در وضعیت قابل ارسال نیست.',
+  APPROVAL_MODE_IMMUTABLE: 'مدل تأیید پس از اولین ارسال قابل تغییر نیست.',
   INTERNAL_ERROR: 'خطای داخلی سرور رخ داد. لطفاً دوباره تلاش کنید.',
 };
 
@@ -649,7 +663,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             p_decisions: decisionsPayload(),
           });
           if (rpcError) {
-            if (isDev) console.error('[MinutesDraftRPC] Supabase error:', rpcError);
+            console.error('[MinutesDraftRPC] create failed', {
+              code: rpcError?.code,
+              message: rpcError?.message,
+              details: rpcError?.details,
+            });
             toast.error('ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.');
             return null;
           }
@@ -673,20 +691,25 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               return null;
             }
             const msg = RPC_ERROR_MESSAGES[code] || 'ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.';
-            if (isDev) console.error('[MinutesDraftRPC] Business error:', code, data.message);
+            console.error('[MinutesDraftRPC] business failure', {
+              errorCode: data.error_code || code,
+              message: data.message,
+            });
             toast.error(msg);
             return null;
           }
           if (data && data.success === true && data.minute_id) {
             const newId = data.minute_id as string;
-            if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', newId);
-            // create_minutes_draft does NOT return updated_at; query it.
-            const { data: minRow } = await supabase
-              .from('minutes')
-              .select('updated_at')
-              .eq('id', newId)
-              .maybeSingle();
-            const realUpdatedAt = (minRow as { updated_at: string } | null)?.updated_at ?? null;
+            // Prefer updated_at from the RPC response; fall back to a SELECT for backward compat.
+            let realUpdatedAt = (data.updated_at as string | undefined) ?? null;
+            if (!realUpdatedAt) {
+              const { data: minRow } = await supabase
+                .from('minutes')
+                .select('updated_at')
+                .eq('id', newId)
+                .maybeSingle();
+              realUpdatedAt = (minRow as { updated_at: string } | null)?.updated_at ?? null;
+            }
             if (!realUpdatedAt) {
               toast.error('ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.');
               return null;
@@ -777,12 +800,20 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           p_decisions: decisionsPayload(),
         });
         if (rpcError) {
-          if (isDev) console.error('[MinutesUpdateRPC] Supabase error:', rpcError);
+          console.error('[MinutesUpdateRPC] update failed', {
+            code: rpcError?.code,
+            message: rpcError?.message,
+            details: rpcError?.details,
+          });
           toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
           return null;
         }
         if (data && data.success === false) {
           const code: string = data.code || data.error_code || 'INTERNAL_ERROR';
+          console.error('[MinutesUpdateRPC] business failure', {
+            errorCode: data.error_code || code,
+            message: data.message,
+          });
           if (code === 'MINUTES_VERSION_CONFLICT') {
             toast.error('این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.');
           } else if (code === 'MINUTES_NO_PERMISSION') {
@@ -790,7 +821,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           } else if (code === 'MINUTE_NOT_FOUND') {
             toast.error('صورت‌جلسه یافت نشد.');
           } else {
-            toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
+            toast.error(RPC_ERROR_MESSAGES[code] || 'ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
           }
           return null;
         }
@@ -920,6 +951,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           p_approval_mode: info.approvalMode,
         });
         if (rpcError) {
+          console.error('[MinutesSubmitRPC] submit failed', {
+            code: rpcError?.code,
+            message: rpcError?.message,
+            details: rpcError?.details,
+          });
           toast.error('ارسال صورت‌جلسه برای تأیید ناموفق بود.');
           return;
         }
@@ -1015,13 +1051,35 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       <PageHeader
         title={title}
         actions={
-          <button
-            onClick={() => onNavigate('minutes')}
-            className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm transition-colors"
-          >
-            <X className="w-4 h-4" />
-            انصراف
-          </button>
+          <div className="flex items-center gap-2">
+            <MinutesBackButton
+              label={mode === 'new' ? 'بازگشت به صورت‌جلسات' : 'بازگشت به جزئیات صورت‌جلسه'}
+              onClick={() => {
+                if (mode === 'new') {
+                  const meetingId = getMeetingIdFromUrl();
+                  if (meetingId) {
+                    setMeetingIdInUrl(meetingId);
+                    onNavigate('calendar');
+                  } else {
+                    setMinutesPageInUrl('minutes');
+                    onNavigate('minutes');
+                  }
+                } else {
+                  const mid = editMinuteId || workingMinuteId;
+                  if (mid) setMinuteIdInUrl(mid);
+                  setMinutesPageInUrl('minutes-detail');
+                  onNavigate('minutes-detail');
+                }
+              }}
+            />
+            <button
+              onClick={() => onNavigate('minutes')}
+              className="flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm transition-colors"
+            >
+              <X className="w-4 h-4" />
+              انصراف
+            </button>
+          </div>
         }
       />
 

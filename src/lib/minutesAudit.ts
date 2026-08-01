@@ -11,6 +11,16 @@ const DECISION_STATUS_FA: Record<string, string> = {
   stopped: 'متوقف‌شده',
 };
 
+const MINUTES_STATUS_FA: Record<string, string> = {
+  draft: 'پیش‌نویس',
+  pending_approval: 'در انتظار تأیید',
+  changes_requested: 'نیازمند اصلاح',
+  approved: 'تأییدشده',
+  published: 'منتشرشده',
+  rejected: 'ردشده',
+  invalidated: 'باطل‌شده',
+};
+
 const PROGRESS_FIELDS = new Set([
   'progress',
   'progress_percent',
@@ -18,9 +28,22 @@ const PROGRESS_FIELDS = new Set([
   'new_progress_percent',
 ]);
 
-function formatDecisionStatus(value: unknown): string {
+const REVISION_FIELDS = new Set([
+  'revision',
+  'revision_number',
+]);
+
+const STATUS_FIELDS = new Set([
+  'status',
+  'previous_status',
+  'new_status',
+]);
+
+function formatStatusByContext(entityType: string, value: unknown): string {
   if (typeof value !== 'string') return String(value);
-  return DECISION_STATUS_FA[value] || value;
+  if (entityType === 'decision') return DECISION_STATUS_FA[value] || value;
+  if (entityType === 'minute') return MINUTES_STATUS_FA[value] || value;
+  return MINUTES_STATUS_FA[value] || DECISION_STATUS_FA[value] || value;
 }
 
 function formatProgress(value: unknown): string {
@@ -104,13 +127,15 @@ export function summarizeChange(row: AuditLogRow): string {
   const action = AUDIT_ACTION_LABELS[row.action] || row.action;
   const entity = ENTITY_LABELS[row.entity_type] || row.entity_type;
   const parts: string[] = [action];
-  if (row.revision_number != null) parts.push(`نسخه ${row.revision_number}`);
+  const hasRevisionInRow = row.revision_number != null;
+  if (hasRevisionInRow) parts.push(`نسخه ${toPersianDigits(String(row.revision_number))}`);
   if (row.new_values) {
     const keys = Object.keys(row.new_values).slice(0, 3);
     for (const k of keys) {
+      if (hasRevisionInRow && REVISION_FIELDS.has(k)) continue;
       const v = row.new_values[k];
       if (v == null || v === '') continue;
-      parts.push(`${label(k)}: ${formatVal(k, v)}`);
+      parts.push(`${label(k)}: ${formatVal(k, v, row.entity_type)}`);
     }
   }
   return parts.join(' · ');
@@ -130,9 +155,10 @@ function label(k: string): string {
   return FIELD_LABELS[k] || k;
 }
 
-function formatVal(field: string, v: unknown): string {
-  if (field === 'status') return formatDecisionStatus(v);
+function formatVal(field: string, v: unknown, entityType?: string): string {
+  if (STATUS_FIELDS.has(field)) return formatStatusByContext(entityType || '', v);
   if (PROGRESS_FIELDS.has(field)) return formatProgress(v);
+  if (REVISION_FIELDS.has(field)) return toPersianDigits(String(v));
   if (typeof v === 'string') return v.length > 40 ? v.slice(0, 40) + '…' : v;
   if (typeof v === 'number') return toPersianDigits(String(v));
   if (typeof v === 'boolean') return v ? 'بله' : 'خیر';

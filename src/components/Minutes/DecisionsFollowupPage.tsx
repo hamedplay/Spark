@@ -5,6 +5,7 @@ import {
   PageHeader, StatCard, DecisionStatusBadge, DecisionPriorityBadge,
   DecisionProgressBar, TableSkeleton, EmptyState,
 } from './MinutesShared';
+import { MinutesBackButton } from './MinutesBackButton';
 import { supabase } from '../../lib/supabase';
 import { setMinuteIdInUrl } from '../../lib/minutesNavigation';
 import { formatJalaliDateForDisplay, formatJalaliTimestamp, toPersianDigits } from '../../lib/minutesDate';
@@ -234,6 +235,10 @@ export function DecisionsFollowupPage({ onNavigate, isAdmin = false }: Decisions
         description="مدیریت و پیگیری وضعیت مصوبات صورت‌جلسات"
         actions={
           <div className="flex items-center gap-2">
+            <MinutesBackButton
+              label="بازگشت به صورت‌جلسات و مصوبات"
+              onClick={() => onNavigate('minutes-hub')}
+            />
             <button onClick={() => setShowFilters(s => !s)}
               className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border transition-colors ${showFilters ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400'} hover:bg-gray-50 dark:hover:bg-gray-800`}>
               <Filter className="w-4 h-4" /> فیلترها

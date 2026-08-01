@@ -74,12 +74,14 @@ export function MinutesDashboardPage({ onNavigate }: Props) {
 
   if (loading) return (
     <div dir="rtl" className="space-y-6">
+      <MinutesBackButton onNavigate={onNavigate} target="minutes-hub" label="بازگشت به صورت‌جلسات و مصوبات" />
       <PageHeader title="داشبورد صورت‌جلسات" description="خلاصه وضعیت صورت‌جلسات و مصوبات شما" />
       <TableSkeleton rows={4} />
     </div>
   );
   if (error) return (
     <div dir="rtl" className="space-y-6">
+      <MinutesBackButton onNavigate={onNavigate} target="minutes-hub" label="بازگشت به صورت‌جلسات و مصوبات" />
       <PageHeader title="داشبورد صورت‌جلسات" />
       <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">{error}</div>
     </div>
@@ -91,6 +93,7 @@ export function MinutesDashboardPage({ onNavigate }: Props) {
 
   return (
     <div dir="rtl" className="space-y-6">
+      <MinutesBackButton onNavigate={onNavigate} target="minutes-hub" label="بازگشت به صورت‌جلسات و مصوبات" />
       <PageHeader
         title="داشبورد صورت‌جلسات"
         description="خلاصه وضعیت صورت‌جلسات و مصوبات شما"
