@@ -156,16 +156,14 @@ export function SectionParticipants({
       toast.error('این فرد قبلاً به لیست شرکت‌کنندگان خارجی اضافه شده است.');
       return;
     }
+    const meta = opt.metadata;
     setExternalParticipants(l => l.map(r => r.id === rowId ? {
       ...r,
       fullName: opt.label,
-      organization: meta?.organization ?? r.organization,
-      position: meta?.position ?? r.position,
-      fullName: opt.label,
-      organization: (opt.metadata as Record<string, string> | undefined)?.organization ?? '',
-      position: (opt.metadata as Record<string, string> | undefined)?.position ?? '',
-      mobile: (opt.metadata as Record<string, string> | undefined)?.mobile ?? r.mobile,
-      email: (opt.metadata as Record<string, string> | undefined)?.email ?? r.email,
+      organization: (meta?.organization as string) ?? '',
+      position: (meta?.position as string) ?? '',
+      mobile: (meta?.mobile as string) ?? r.mobile,
+      email: (meta?.email as string) ?? r.email,
       source: 'saved',
     } : r));
   };
