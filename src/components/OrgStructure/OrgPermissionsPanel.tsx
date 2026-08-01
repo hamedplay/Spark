@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { OrgPosition, LevelDef, LevelPermState } from './types';
 import { getLevelInfo, ALL_PERMISSION_GROUPS } from './utils';
+import { MINUTES_PERMISSION_KEYS, MINUTES_SUB_PERMISSIONS, MINUTES_SENSITIVE_PERMISSIONS } from '../../features/permissions/permissionRegistry';
+
+const MINUTES_GROUP_LABEL = 'صورت‌جلسات و مصوبات';
+
+type PositionOverrideState = Record<string, boolean>;
 
 function OrgPermissionsPanel({
   positions,
@@ -15,92 +20,268 @@ function OrgPermissionsPanel({
   const [selectedLevel, setSelectedLevel] = useState<number>(1);
   const [selectedPositionId, setSelectedPositionId] = useState<string>('');
   const [perms, setPerms] = useState<LevelPermState>({});
+  const [levelPerms, setLevelPerms] = useState<LevelPermState>({});
+  const [overrides, setOverrides] = useState<PositionOverrideState>({});
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showViewWarning, setShowViewWarning] = useState(false);
 
   const levels = [...levelDefs].sort((a, b) => a.level - b.level);
 
-  const loadLevelPerms = async (level: number) => {
+  const loadLevelPerms = useCallback(async (level: number) => {
     setLoading(true);
-    const { data } = await supabase.from('org_level_permissions').select('permission_key, granted').eq('level', level);
+    const { data, error } = await supabase
+      .from('org_level_permissions')
+      .select('permission_key, granted')
+      .eq('level', level);
+    if (error) {
+      toast.error('خطا در بارگذاری دسترسی‌های سطح');
+      setLoading(false);
+      return;
+    }
     const map: LevelPermState = {};
     for (const p of (data || [])) map[p.permission_key] = p.granted;
     setPerms(map);
     setLoading(false);
-  };
+  }, []);
 
-  const loadPositionPerms = async (positionId: string) => {
+  const loadPositionPerms = useCallback(async (positionId: string) => {
     if (!positionId) return;
     setLoading(true);
-    // ابتدا دسترسی‌های سطح پایه را بگیر
     const pos = positions.find(p => p.id === positionId);
     const levelMap: LevelPermState = {};
     if (pos) {
-      const { data: ld } = await supabase.from('org_level_permissions').select('permission_key, granted').eq('level', pos.level);
+      const { data: ld, error: ldErr } = await supabase
+        .from('org_level_permissions')
+        .select('permission_key, granted')
+        .eq('level', pos.level);
+      if (ldErr) {
+        toast.error('خطا در بارگذاری دسترسی‌های سطح پایه');
+        setLoading(false);
+        return;
+      }
       for (const p of (ld || [])) levelMap[p.permission_key] = p.granted;
     }
-    // سپس override های پست خاص
-    const { data: pd } = await supabase.from('org_position_permissions').select('permission_key, granted').eq('position_id', positionId);
-    const overrideMap: LevelPermState = {};
+    const { data: pd, error: pdErr } = await supabase
+      .from('org_position_permissions')
+      .select('permission_key, granted')
+      .eq('position_id', positionId);
+    if (pdErr) {
+      toast.error('خطا در بارگذاری overrideهای سمت');
+      setLoading(false);
+      return;
+    }
+    const overrideMap: PositionOverrideState = {};
     for (const p of (pd || [])) overrideMap[p.permission_key] = p.granted;
+    setLevelPerms(levelMap);
+    setOverrides(overrideMap);
     setPerms({ ...levelMap, ...overrideMap });
     setLoading(false);
-  };
+  }, [positions]);
 
   useEffect(() => {
     if (mode === 'level') loadLevelPerms(selectedLevel);
-  }, [mode, selectedLevel]);
+  }, [mode, selectedLevel, loadLevelPerms]);
 
   useEffect(() => {
     if (mode === 'position' && selectedPositionId) loadPositionPerms(selectedPositionId);
-  }, [mode, selectedPositionId]);
+  }, [mode, selectedPositionId, loadPositionPerms]);
 
   const togglePerm = (key: string) => {
-    setPerms(prev => ({ ...prev, [key]: !prev[key] }));
+    if (mode === 'position') {
+      const baseValue = levelPerms[key] ?? false;
+      const currentOverride = overrides[key];
+      const currentValue = currentOverride !== undefined ? currentOverride : baseValue;
+      const nextValue = !currentValue;
+      if (nextValue === baseValue) {
+        setOverrides(prev => {
+          const updated = { ...prev };
+          delete updated[key];
+          return updated;
+        });
+      } else {
+        setOverrides(prev => ({ ...prev, [key]: nextValue }));
+      }
+      setPerms(prev => ({ ...prev, [key]: nextValue }));
+    } else {
+      if (key === 'minutes_view' && perms[key]) {
+        setShowViewWarning(true);
+        return;
+      }
+      setPerms(prev => ({ ...prev, [key]: !prev[key] }));
+    }
+  };
+
+  const confirmDisableMinutesView = () => {
+    setShowViewWarning(false);
+    setPerms(prev => {
+      const updated = { ...prev, minutes_view: false };
+      for (const k of MINUTES_SUB_PERMISSIONS) updated[k] = false;
+      return updated;
+    });
+  };
+
+  const cancelDisableMinutesView = () => {
+    setShowViewWarning(false);
+  };
+
+  const handleToggleAllInGroup = (groupLabel: string, groupKeys: string[], enable: boolean) => {
+    if (groupLabel === MINUTES_GROUP_LABEL) {
+      setPerms(prev => {
+        const updated = { ...prev };
+        groupKeys.forEach(k => { updated[k] = enable; });
+        return updated;
+      });
+      if (mode === 'position') {
+        setOverrides(prev => {
+          const updated = { ...prev };
+          groupKeys.forEach(k => {
+            const baseValue = levelPerms[k] ?? false;
+            if (enable === baseValue) {
+              delete updated[k];
+            } else {
+              updated[k] = enable;
+            }
+          });
+          return updated;
+        });
+      }
+    } else {
+      setPerms(prev => {
+        const updated = { ...prev };
+        groupKeys.forEach(k => { updated[k] = enable; });
+        return updated;
+      });
+      if (mode === 'position') {
+        setOverrides(prev => {
+          const updated = { ...prev };
+          groupKeys.forEach(k => {
+            const baseValue = levelPerms[k] ?? false;
+            if (enable === baseValue) {
+              delete updated[k];
+            } else {
+              updated[k] = enable;
+            }
+          });
+          return updated;
+        });
+      }
+    }
+  };
+
+  const handleEnableAll = () => {
+    const allKeys = ALL_PERMISSION_GROUPS.flatMap(g => g.keys.map(k => k.key));
+    setPerms(Object.fromEntries(allKeys.map(k => [k, true])));
+    if (mode === 'position') {
+      setOverrides({});
+    }
+  };
+
+  const handleDisableAll = () => {
+    const allKeys = ALL_PERMISSION_GROUPS.flatMap(g => g.keys.map(k => k.key));
+    setPerms(Object.fromEntries(allKeys.map(k => [k, false])));
+    if (mode === 'position') {
+      const allOverrides: PositionOverrideState = {};
+      allKeys.forEach(k => {
+        const baseValue = levelPerms[k] ?? false;
+        if (baseValue) allOverrides[k] = false;
+      });
+      setOverrides(allOverrides);
+    }
   };
 
   const handleSave = async () => {
+    if (saving) return;
     setSaving(true);
     try {
       if (mode === 'level') {
         for (const [key, granted] of Object.entries(perms)) {
-          await supabase.from('org_level_permissions')
-            .upsert({ level: selectedLevel, permission_key: key, granted }, { onConflict: 'level,permission_key' });
-        }
-        // حذف کلیدهایی که کاملاً نیستند
-        const allKeys = ALL_PERMISSION_GROUPS.flatMap(g => g.keys.map(k => k.key));
-        for (const key of allKeys) {
-          if (!(key in perms)) {
-            await supabase.from('org_level_permissions')
-              .delete().eq('level', selectedLevel).eq('permission_key', key);
+          const { error } = await supabase
+            .from('org_level_permissions')
+            .upsert(
+              { level: selectedLevel, permission_key: key, granted },
+              { onConflict: 'level,permission_key' }
+            );
+          if (error) {
+            toast.error('خطا در ذخیره دسترسی‌های سطح');
+            setSaving(false);
+            return;
           }
         }
-        toast.success('دسترسی‌های سطح ذخیره شد');
+        await loadLevelPerms(selectedLevel);
       } else if (selectedPositionId) {
-        // فقط override ها را ذخیره کن (تفاوت با سطح پایه)
         const pos = positions.find(p => p.id === selectedPositionId);
-        const levelMap: LevelPermState = {};
-        if (pos) {
-          const { data: ld } = await supabase.from('org_level_permissions').select('permission_key, granted').eq('level', pos.level);
-          for (const p of (ld || [])) levelMap[p.permission_key] = p.granted;
+        if (!pos) {
+          toast.error('سمت انتخاب‌شده یافت نشد');
+          setSaving(false);
+          return;
         }
-        // ابتدا همه override های قبلی را پاک کن
-        await supabase.from('org_position_permissions').delete().eq('position_id', selectedPositionId);
-        // فقط تفاوت‌ها را بنویس
-        const overrides: { position_id: string; permission_key: string; granted: boolean }[] = [];
-        for (const [key, granted] of Object.entries(perms)) {
-          if (levelMap[key] !== granted) {
-            overrides.push({ position_id: selectedPositionId, permission_key: key, granted });
+        for (const [key, granted] of Object.entries(overrides)) {
+          const { error } = await supabase
+            .from('org_position_permissions')
+            .upsert(
+              { position_id: selectedPositionId, permission_key: key, granted },
+              { onConflict: 'position_id,permission_key' }
+            );
+          if (error) {
+            toast.error('خطا در ذخیره override سمت');
+            setSaving(false);
+            return;
           }
         }
-        if (overrides.length > 0) {
-          await supabase.from('org_position_permissions').insert(overrides);
+        const { data: existingOverrides } = await supabase
+          .from('org_position_permissions')
+          .select('permission_key')
+          .eq('position_id', selectedPositionId);
+        const existingKeys = new Set((existingOverrides || []).map(r => r.permission_key));
+        const keysToRemove = [...existingKeys].filter(k => !(k in overrides));
+        for (const key of keysToRemove) {
+          const { error } = await supabase
+            .from('org_position_permissions')
+            .delete()
+            .eq('position_id', selectedPositionId)
+            .eq('permission_key', key);
+          if (error) {
+            toast.error('خطا در حذف override');
+            setSaving(false);
+            return;
+          }
         }
-        toast.success('دسترسی‌های پست ذخیره شد');
+        await loadPositionPerms(selectedPositionId);
       }
     } catch {
-      toast.error('خطا در ذخیره');
-    } finally { setSaving(false); }
+      toast.error('خطای غیرمنتظر در ذخیره');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderPositionStatus = (key: string) => {
+    if (mode !== 'position' || !selectedPositionId) return null;
+    const baseValue = levelPerms[key] ?? false;
+    const hasOverride = key in overrides;
+    const overrideValue = hasOverride ? overrides[key] : undefined;
+    const effective = overrideValue !== undefined ? overrideValue : baseValue;
+    const pos = positions.find(p => p.id === selectedPositionId);
+    const levelLabel = pos ? `سطح ${pos.level}` : 'سطح پایه';
+    if (hasOverride) {
+      return (
+        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 leading-tight">
+          <span>ارث‌بری از {levelLabel}: {baseValue ? 'فعال' : 'غیرفعال'}</span>
+          <br />
+          <span>override: {overrideValue ? 'فعال' : 'غیرفعال'}</span>
+          <br />
+          <span className={effective ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400'}>
+            نتیجه: {effective ? 'فعال' : 'غیرفعال'}
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 leading-tight">
+        <span>ارث‌بری از {levelLabel}: {baseValue ? 'فعال' : 'غیرفعال'}</span>
+      </div>
+    );
   };
 
   return (
@@ -157,6 +338,11 @@ function OrgPermissionsPanel({
                 تغییرات این بخش فقط روی این پست اعمال می‌شود و سطح پایه را تغییر نمی‌دهد.
               </p>
             )}
+            {mode === 'position' && selectedPositionId && (
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                دسترسی گروه‌های کاربری ممکن است نتیجه نهایی کاربر را تغییر دهد.
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -173,6 +359,7 @@ function OrgPermissionsPanel({
                   const groupKeys = group.keys.map(k => k.key);
                   const allGranted = groupKeys.every(k => !!perms[k]);
                   const someGranted = groupKeys.some(k => !!perms[k]);
+                  const isMinutesGroup = group.group === MINUTES_GROUP_LABEL;
                   return (
                     <div key={group.group} className="rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
                       <div
@@ -181,14 +368,7 @@ function OrgPermissionsPanel({
                       >
                         <span className="text-xs font-bold" style={{ color: group.color }}>{group.group}</span>
                         <button
-                          onClick={() => {
-                            const next = !allGranted;
-                            setPerms(prev => {
-                              const updated = { ...prev };
-                              groupKeys.forEach(k => { updated[k] = next; });
-                              return updated;
-                            });
-                          }}
+                          onClick={() => handleToggleAllInGroup(group.group, groupKeys, !allGranted)}
                           className="text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors"
                           style={{
                             backgroundColor: allGranted ? group.color : someGranted ? group.color + '40' : '#e5e7eb',
@@ -199,38 +379,49 @@ function OrgPermissionsPanel({
                         </button>
                       </div>
                       <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                        {group.keys.map(item => (
-                          <label key={item.key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                            <span className="text-sm text-gray-700 dark:text-gray-300">{item.label}</span>
-                            <div
-                              onClick={() => togglePerm(item.key)}
-                              className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${!perms[item.key] ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                              style={perms[item.key] ? { backgroundColor: group.color } : {}}
+                        {group.keys.map(item => {
+                          const isSensitive = isMinutesGroup && MINUTES_SENSITIVE_PERMISSIONS.includes(item.key);
+                          return (
+                            <label
+                              key={item.key}
+                              className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
                             >
-                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${perms[item.key] ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                            </div>
-                          </label>
-                        ))}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm text-gray-700 dark:text-gray-300">{item.label}</span>
+                                  {isSensitive && (
+                                    <span
+                                      className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"
+                                      title="دسترسی حساس"
+                                    />
+                                  )}
+                                </div>
+                                {renderPositionStatus(item.key)}
+                              </div>
+                              <div
+                                onClick={() => togglePerm(item.key)}
+                                className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${!perms[item.key] ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                                style={perms[item.key] ? { backgroundColor: group.color } : {}}
+                              >
+                                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${perms[item.key] ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                              </div>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <div className="px-4 pb-4 flex gap-3 justify-end">
+              <div className="px-4 pb-4 flex gap-3 justify-end flex-wrap">
                 <button
-                  onClick={() => {
-                    const allKeys = ALL_PERMISSION_GROUPS.flatMap(g => g.keys.map(k => k.key));
-                    setPerms(Object.fromEntries(allKeys.map(k => [k, true])));
-                  }}
+                  onClick={handleEnableAll}
                   className="px-4 py-2 text-sm font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 rounded-xl transition-colors"
                 >
                   فعال‌سازی همه
                 </button>
                 <button
-                  onClick={() => {
-                    const allKeys = ALL_PERMISSION_GROUPS.flatMap(g => g.keys.map(k => k.key));
-                    setPerms(Object.fromEntries(allKeys.map(k => [k, false])));
-                  }}
+                  onClick={handleDisableAll}
                   className="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 rounded-xl transition-colors"
                 >
                   غیرفعال‌سازی همه
@@ -245,6 +436,34 @@ function OrgPermissionsPanel({
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* مودال تأیید خاموش‌کردن minutes_view */}
+      {showViewWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 max-w-sm w-full shadow-xl">
+            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">
+              غیرفعال‌سازی دسترسی پایه
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">
+              با خاموش‌کردن «مشاهده صورت‌جلسات و مصوبات»، دسترسی پایه این ماژول غیرفعال می‌شود و تمام دسترسی‌های فرعی این کارت نیز غیرفعال خواهند شد. آیا ادامه می‌دهید؟
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={cancelDisableMinutesView}
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-colors"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={confirmDisableMinutesView}
+                className="px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors"
+              >
+                بله، غیرفعال کن
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

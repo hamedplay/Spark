@@ -1,4 +1,8 @@
 import type { LevelDef } from './types';
+import { PERMISSION_REGISTRY, type PermissionItem } from '../../features/permissions/permissionRegistry';
+
+const MINUTES_REGISTRY_GROUP = PERMISSION_REGISTRY.find(g => g.moduleKey === 'minutes_view');
+const MINUTES_PERMISSION_ITEMS: PermissionItem[] = MINUTES_REGISTRY_GROUP?.items ?? [];
 
 export const DEFAULT_LEVELS: LevelDef[] = [
   { level: 1, label: 'مدیرعامل', color: '#ef4444', icon: '👑', sort_order: 1 },
@@ -78,9 +82,7 @@ export const ALL_PERMISSION_GROUPS = [
     { key: 'spark',             label: 'دستیار اسپارک' },
     { key: 'spark_meeting_req', label: 'درخواست جلسه از طریق اسپارک' },
   ]},
-  { group: 'صورت‌جلسات', color: '#0ea5e9', keys: [
-    { key: 'minutes_decisions.track', label: 'پیگیری مصوبات' },
-  ]},
+  { group: 'صورت‌جلسات و مصوبات', color: '#0d9488', keys: MINUTES_PERMISSION_ITEMS.map(item => ({ key: item.key, label: item.label })) },
   { group: 'مدیریت سازمانی', color: '#64748b', keys: [
     { key: 'admin_panel',           label: 'پنل مدیریت' },
     { key: 'org_manage_structure',  label: 'مدیریت ساختار سازمانی' },
