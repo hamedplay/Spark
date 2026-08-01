@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { TriangleAlert as AlertTriangle } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { EmptyState, TableSkeleton, DecisionStatusBadge, DecisionPriorityBadge, DecisionProgressBar, DecisionProgressModal } from '../MinutesShared';
+import { formatJalaliDateForDisplay } from '../../../lib/minutesDate';
 import type { MinutesStatus, DecisionRow, DecisionUpdateRow } from '../types';
 
 export interface TabDecisionsProps {
@@ -164,10 +165,9 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <p className="font-semibold text-gray-900 dark:text-white">
-                  <span className="text-gray-400 text-sm ml-1">{idx + 1}.</span>
-                  {dec.title}
+                  <span className="text-gray-400 text-sm ml-1">مصوبه {idx + 1} ـ</span>
+                  {dec.description || dec.title}
                 </p>
-                {dec.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{dec.description}</p>}
               </div>
               <div className="flex flex-wrap gap-2 justify-end">
                 <DecisionPriorityBadge priority={dec.priority} />
@@ -180,22 +180,14 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="flex flex-wrap justify-between gap-2 text-xs">
               <div>
-                <p className="text-gray-400 mb-0.5">مسئول اصلی</p>
-                <p className="text-gray-700 dark:text-gray-300">{ownerName}</p>
+                <span className="text-gray-400">واحد مسئول: </span>
+                <span className="text-gray-700 dark:text-gray-300">{dec.responsible_unit_name_snapshot || '—'}</span>
               </div>
               <div>
-                <p className="text-gray-400 mb-0.5">واحد مسئول</p>
-                <p className="text-gray-700 dark:text-gray-300">{dec.responsible_unit_name_snapshot || '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 mb-0.5">تاریخ شروع</p>
-                <p className="text-gray-700 dark:text-gray-300">{dec.start_date || '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 mb-0.5">مهلت</p>
-                <p className="text-gray-700 dark:text-gray-300">{dec.due_date || '—'}</p>
+                <span className="text-gray-400">مهلت انجام: </span>
+                <span className="text-gray-700 dark:text-gray-300">{dec.due_date ? formatJalaliDateForDisplay(dec.due_date) : '—'}</span>
               </div>
             </div>
 

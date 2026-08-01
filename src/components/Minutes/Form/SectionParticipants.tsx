@@ -89,6 +89,8 @@ export function SectionParticipants({
   const updateInternal = (id: string, field: keyof DraftInternalParticipant, value: string) =>
     setInternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
 
+  const profileLabel = (p: ProfileOption) => p.full_name || p.username || p.user_id;
+
   const profileOptions: ComboboxOption[] = useMemo(() => profiles.map(p => {
     const label = profileLabel(p);
     const unitName = orgUnits.find(u => u.id === p.primary_unit_id)?.name;
@@ -201,8 +203,6 @@ export function SectionParticipants({
     }
     updateExternal(rowId, 'fullName', value);
   };
-
-  const profileLabel = (p: ProfileOption) => p.full_name || p.username || p.user_id;
 
   const usersDisabled = profilesLoading || !!profilesError || profiles.length === 0;
   const orgUnitsDisabled = orgUnitsLoading || !!orgUnitsError || orgUnits.length === 0;

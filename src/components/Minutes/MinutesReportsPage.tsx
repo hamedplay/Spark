@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Search, FileDown, Play, X, Settings2, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
-import { PageHeader, TableSkeleton, EmptyState, MinutesStatusBadge, DecisionStatusBadge, DecisionPriorityBadge, ProgressIndicator } from './MinutesShared';
+import { useState, useCallback } from 'react';
+import { Search, FileDown, Play, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PageHeader, TableSkeleton, MinutesStatusBadge, DecisionStatusBadge, DecisionPriorityBadge, ProgressIndicator } from './MinutesShared';
+import { MinutesBackButton } from './MinutesBackButton';
 import { supabase } from '../../lib/supabase';
 import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
 import { formatJalaliDateForDisplay, formatJalaliTimestamp } from '../../lib/minutesDate';
+import { JalaliDatePicker } from './Form/JalaliDatePicker';
 
 type ReportType = 'minutes' | 'decisions';
 
@@ -133,6 +135,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
 
   return (
     <div dir="rtl" className="space-y-5">
+      <MinutesBackButton onNavigate={onNavigate} target="minutes-hub" label="بازگشت به هاب" />
       <PageHeader title="گزارش‌ها" description="ساخت گزارش از صورت‌جلسات و مصوبات" />
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 space-y-4">
@@ -146,13 +149,11 @@ export function MinutesReportsPage({ onNavigate }: Props) {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">از تاریخ</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white" />
+            <JalaliDatePicker value={dateFrom || null} onChange={v => setDateFrom(v || '')} placeholder="انتخاب تاریخ شروع" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">تا تاریخ</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white" />
+            <JalaliDatePicker value={dateTo || null} onChange={v => setDateTo(v || '')} placeholder="انتخاب تاریخ پایان" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">وضعیت</label>

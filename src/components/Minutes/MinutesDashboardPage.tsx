@@ -6,6 +6,7 @@ import {
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
 import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { MinutesBackButton } from './MinutesBackButton';
 
 interface Props {
   onNavigate: (page: string) => void;

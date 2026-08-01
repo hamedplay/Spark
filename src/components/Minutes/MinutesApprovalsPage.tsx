@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Eye, Check, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader, ApprovalStatusBadge, ApprovalModeBadge, EmptyState, TableSkeleton } from './MinutesShared';
+import { MinutesBackButton } from './MinutesBackButton';
 import { supabase } from '../../lib/supabase';
 import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
 import { formatJalaliDateForDisplay, formatJalaliTimestamp } from '../../lib/minutesDate';
@@ -119,6 +120,7 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
 
   return (
     <div dir="rtl" className="space-y-5">
+      <MinutesBackButton onNavigate={onNavigate} target="minutes-hub" label="بازگشت به هاب" />
       <PageHeader title="کارتابل تأیید" description="صورت‌جلساتی که در انتظار تأیید شما هستند" />
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">

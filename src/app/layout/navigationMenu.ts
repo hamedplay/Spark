@@ -13,6 +13,7 @@ export interface LayoutNavigationItem {
 export const PRIMARY_NAVIGATION_ITEMS: LayoutNavigationItem[] = [
   { id: 'meetings',         title: 'درخواست جلسه',   permissionKey: 'meetings' },
   { id: 'calendar',         title: 'تقویم',           permissionKey: 'calendar' },
+  { id: 'minutes-hub',      title: 'صورت‌جلسات و مصوبات', permissionKey: 'minutes_view' },
   { id: 'chat',             title: 'چت سازمانی',      permissionKey: 'chat' },
   { id: 'channels',         title: 'کانال‌ها',         permissionKey: 'channels' },
   { id: 'video-conference', title: 'ویدیو کنفرانس',   permissionKey: 'video_conference' },

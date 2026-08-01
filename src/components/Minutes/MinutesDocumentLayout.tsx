@@ -152,16 +152,15 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
             <p className="mp-item-row">{DASH}</p>
           ) : (
             decisions.map((d, i) => {
-              const fullText = [d.title, d.description].filter(Boolean).join(' — ') || DASH;
+              const mainText = d.description || d.title || DASH;
               return (
                 <div key={d.id} className="mp-decision-item">
                   <div className="mp-item-title">
-                    مصوبه {toPersianDigits(String(i + 1))} — {fullText}
+                    مصوبه {toPersianDigits(String(i + 1))} ـ {mainText}
                   </div>
-                  <div className="mp-item-row"><span className="mp-item-label">واحد مسئول: </span>{orDash(d.responsibleUnitName)}</div>
-                  <div className="mp-item-row">
-                    <span className="mp-item-label">مهلت انجام: </span>
-                    {d.dueDate ? jalaliDateDisplay(d.dueDate) : DASH}
+                  <div className="mp-item-row mp-item-row-inline">
+                    <span><span className="mp-item-label">واحد مسئول: </span>{orDash(d.responsibleUnitName)}</span>
+                    <span><span className="mp-item-label">مهلت انجام: </span>{d.dueDate ? jalaliDateDisplay(d.dueDate) : DASH}</span>
                   </div>
                 </div>
               );

@@ -48,6 +48,7 @@ const ICON_MAP: Record<PageId, typeof LayoutDashboard> = {
   'minutes-my-decisions': DecisionIcon,
   'minutes-followup': TrendingUp,
   'minutes-reports': BarChart2,
+  'minutes-hub': FileText,
 };
 
 export interface LayoutSidebarProps {
@@ -172,11 +173,15 @@ export function LayoutSidebar({
             const isActive =
               activePage === item.id ||
               (activePage === 'create-meeting' &&
-                item.id === 'meetings');
+                item.id === 'meetings') ||
+              (item.id === 'minutes-hub' && isMinutesPage(activePage));
             return (
               <button
                 key={item.id}
-                onClick={() => onNavigate(item.id)}
+                onClick={() => {
+                  onNavigate(item.id);
+                  if (isMobileMenuOpen) onMobileMenuOpenChange(false);
+                }}
                 className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${
                   isCollapsed ? 'justify-center px-2' : 'px-2.5'
                 } ${
@@ -202,113 +207,41 @@ export function LayoutSidebar({
             );
           })}
 
-          {/* ── صورت‌جلسات و مصوبات accordion ── */}
-          {visibleMinutesSubItems.length > 0 && (
-            <div>
-              {/* Divider */}
-              <div
-                className={`${isCollapsed ? 'hidden' : 'flex'} items-center gap-1.5 px-2 pt-3 pb-1`}
-              >
-                <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
-                <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                  صورت‌جلسات
-                </span>
-                <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
-              </div>
-              {isCollapsed && (
-                <div className="h-px bg-gray-100 dark:bg-gray-700 mx-2 my-2" />
-              )}
-
-              {/* Parent button */}
-              <button
-                onClick={() => {
-                  if (isCollapsed) {
-                    onNavigate('minutes-hub');
-                  } else {
-                    onNavigate('minutes-hub');
-                  }
-                }}
-                className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${
-                  isCollapsed ? 'justify-center px-2' : 'px-2.5'
-                } ${
-                  isMinutesPage(activePage)
-                    ? 'shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
-                }`}
-                style={
-                  isMinutesPage(activePage)
-                    ? {
-                        backgroundColor: accentColor + '18',
-                        color: accentColor,
-                      }
-                    : {}
-                }
-                title={
-                  isCollapsed
-                    ? 'صورت‌جلسات و مصوبات'
-                    : undefined
-                }
-                aria-current={isMinutesPage(activePage) ? 'page' : undefined}
-              >
-                <FileText className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && (
-                  <>
-                    <span className="truncate flex-1 text-right">
-                      صورت‌جلسات و مصوبات
-                    </span>
-                    <ChevronDown
-                      className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${
-                        isMinutesMenuOpen ? 'rotate-180' : ''
+          {/* ── صورت‌جلسات و مصوبات submenu (inline, after parent button) ── */}
+          {isMinutesPage(activePage) && !isCollapsed && visibleMinutesSubItems.length > 0 && (
+            <div
+              className="overflow-hidden transition-all duration-200"
+              style={{ maxHeight: isMinutesMenuOpen ? `${visibleMinutesSubItems.length * 44}px` : '0px' }}
+            >
+              <div className="pt-0.5 space-y-0.5">
+                {visibleMinutesSubItems.map((sub) => {
+                  const SubIcon = sub.icon;
+                  const mappedActive = resolveActiveMinutesPage(activePage);
+                  const isSubActive = mappedActive === sub.id;
+                  return (
+                    <button
+                      key={sub.id}
+                      onClick={() => {
+                        onNavigate(sub.id);
+                        if (isMobileMenuOpen) onMobileMenuOpenChange(false);
+                      }}
+                      className={`w-full flex items-center gap-2.5 py-2 pr-7 pl-2.5 rounded-xl transition-all text-sm font-medium ${
+                        isSubActive
+                          ? 'shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
                       }`}
-                    />
-                  </>
-                )}
-              </button>
-
-              {/* Submenu — animated expand/collapse */}
-              {!isCollapsed && (
-                <div
-                  className="overflow-hidden transition-all duration-200"
-                  style={{
-                    maxHeight: isMinutesMenuOpen
-                      ? `${visibleMinutesSubItems.length * 44}px`
-                      : '0px',
-                  }}
-                >
-                  <div className="pt-0.5 space-y-0.5">
-                    {visibleMinutesSubItems.map((sub) => {
-                      const SubIcon = sub.icon;
-                      const mappedActive =
-                        resolveActiveMinutesPage(activePage);
-                      const isSubActive = mappedActive === sub.id;
-                      return (
-                        <button
-                          key={sub.id}
-                          onClick={() => onNavigate(sub.id)}
-                          className={`w-full flex items-center gap-2.5 py-2 pr-7 pl-2.5 rounded-xl transition-all text-sm font-medium ${
-                            isSubActive
-                              ? 'shadow-sm'
-                              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
-                          }`}
-                          style={
-                            isSubActive
-                              ? {
-                                  backgroundColor: accentColor + '18',
-                                  color: accentColor,
-                                }
-                              : {}
-                          }
-                        >
-                          <SubIcon className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">
-                            {sub.title}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                      style={
+                        isSubActive
+                          ? { backgroundColor: accentColor + '18', color: accentColor }
+                          : {}
+                      }
+                    >
+                      <SubIcon className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate">{sub.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </nav>
