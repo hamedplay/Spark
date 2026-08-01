@@ -1,0 +1,8 @@
+# /etc/cron.d/notification-outbox
+# Cron entry for notification outbox worker — runs every 2 minutes.
+# Install: sudo cp deploy/notification-outbox.cron /etc/cron.d/notification-outbox
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/2 * * * * root /usr/local/bin/notification-outbox-trigger.sh

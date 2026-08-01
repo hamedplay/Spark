@@ -18,6 +18,28 @@ export const NOTIFICATION_TYPES = [
   { key: 'note_share',        label: 'اشتراک یادداشت',         category: 'یادداشت‌ها' },
   { key: 'report_ready',      label: 'گزارش آماده شد',         category: 'گزارشات' },
   { key: 'system_alert',      label: 'هشدار سیستم',            category: 'سیستم' },
+  // Minutes events (canonical minute_ prefix)
+  { key: 'minute_submitted',           label: 'ارسال صورت‌جلسه برای تأیید',  category: 'صورت‌جلسات' },
+  { key: 'minute_approval_requested',  label: 'درخواست تأیید',                category: 'صورت‌جلسات' },
+  { key: 'minute_approved_by_user',     label: 'تأیید توسط تأییدکننده',         category: 'صورت‌جلسات' },
+  { key: 'minute_changes_requested',   label: 'درخواست اصلاح',                category: 'صورت‌جلسات' },
+  { key: 'minute_resubmitted',          label: 'ارسال مجدد',                   category: 'صورت‌جلسات' },
+  { key: 'minute_secretary_confirmed',  label: 'تأیید دبیر',                   category: 'صورت‌جلسات' },
+  { key: 'minute_chair_confirmed',     label: 'تأیید رئیس جلسه',               category: 'صورت‌جلسات' },
+  { key: 'minute_published',           label: 'انتشار صورت‌جلسه',              category: 'صورت‌جلسات' },
+  { key: 'minute_revision_invalidated', label: 'باطل‌شدن نسخه',                category: 'صورت‌جلسات' },
+  // Decision events
+  { key: 'decision_assigned',           label: 'تخصیص مصوبه',           category: 'مصوبات' },
+  { key: 'decision_status_changed',     label: 'تغییر وضعیت',            category: 'مصوبات' },
+  { key: 'decision_progress_updated',   label: 'به‌روزرسانی پیشرفت',     category: 'مصوبات' },
+  { key: 'decision_followup',           label: 'ثبت پیگیری',             category: 'مصوبات' },
+  { key: 'decision_followup_due',       label: 'موعد پیگیری',             category: 'مصوبات' },
+  { key: 'decision_obstacle',           label: 'ثبت مانع',               category: 'مصوبات' },
+  { key: 'decision_obstacle_resolved',  label: 'رفع مانع',               category: 'مصوبات' },
+  { key: 'decision_completed',          label: 'تکمیل مصوبه',            category: 'مصوبات' },
+  { key: 'decision_reopened',           label: 'بازگشایی',               category: 'مصوبات' },
+  { key: 'decision_due_soon',           label: 'نزدیک‌شدن سررسید',       category: 'مصوبات' },
+  { key: 'decision_overdue',            label: 'عبور از مهلت',            category: 'مصوبات' },
 ];
 
 export const N_CATEGORIES = Array.from(new Set(NOTIFICATION_TYPES.map(n => n.category)));

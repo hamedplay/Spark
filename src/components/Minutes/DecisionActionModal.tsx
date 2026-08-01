@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Loader as Loader2 } from 'lucide-react';
+import moment from 'moment-jalaali';
 import { supabase } from '../../lib/supabase';
 import { DecisionStatusBadge, DecisionProgressBar } from './MinutesShared';
 import { JalaliDatePicker } from './Form/JalaliDatePicker';
@@ -7,6 +8,12 @@ import type { DecisionRow, DecisionStatus } from './types';
 import { DECISION_STATUS_LABELS } from './decisionHelpers';
 import { toPersianDigits } from '../../lib/minutesDate';
 import { parseRpcResult } from './decisionRpc';
+
+function jalaliToIsoUtc(jalaliDate: string, time: string): string {
+  const m = moment(`${jalaliDate} ${time}`, 'jYYYY/jMM/jDD HH:mm');
+  if (!m.isValid()) return '';
+  return m.toISOString();
+}
 
 export type ActionType =
   | 'progress'
@@ -218,13 +225,10 @@ export function DecisionActionModal({
       }
 
       if (action === 'followup') {
-        // Build p_remind_at from Jalali date + time, converted to ISO timestamptz
+        // Build p_remind_at from Jalali date + time, converted to ISO UTC
         let pRemindAt: string | undefined;
         if (followupDate) {
-          // followupDate is a Jalali date string (YYYY/MM/DD)
-          // The server converts it; we pass it as-is with time appended
-          // The RPC receives timestamptz and validates it's in the future
-          pRemindAt = `${followupDate}T${followupTime}:00`;
+          pRemindAt = jalaliToIsoUtc(followupDate, followupTime) || undefined;
         }
 
         const { data, error: rpcErr } = await supabase.rpc('manage_minutes_decision', {
