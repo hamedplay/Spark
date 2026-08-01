@@ -16,11 +16,14 @@ export const PAGE_PERMISSION_KEY: Record<string, string> = {
   'minutes-hub': 'minutes_view',
   'minutes-dashboard': 'minutes_view',
   minutes: 'minutes_view',
-  'minutes-approvals': 'minutes_view',
+  'minutes-detail': 'minutes_view',
+  'minutes-approvals': 'minutes_approve',
   'minutes-my-decisions': 'minutes_view',
-  'minutes-reports': 'minutes_view',
+  'minutes-reports': 'minutes_reports',
   'minutes-new': 'minutes_create',
   'minutes-edit': 'minutes_edit',
+  'minutes-config': 'minutes_config',
+  'minutes-followup': 'minutes_decisions.track',
 };
 
 /**

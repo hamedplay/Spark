@@ -27,10 +27,10 @@ export const PRIMARY_NAVIGATION_ITEMS: LayoutNavigationItem[] = [
 export const MINUTES_NAVIGATION_ITEMS: LayoutNavigationItem[] = [
   { id: 'minutes-dashboard',    title: 'داشبورد',       permissionKey: 'minutes_view' },
   { id: 'minutes',              title: 'صورت‌جلسات',     permissionKey: 'minutes_view' },
-  { id: 'minutes-approvals',    title: 'کارتابل تأیید',  permissionKey: 'minutes_view' },
+  { id: 'minutes-approvals',    title: 'کارتابل تأیید',  permissionKey: 'minutes_approve' },
   { id: 'minutes-my-decisions', title: 'مصوبات من',      permissionKey: 'minutes_view' },
   { id: 'minutes-followup',     title: 'پیگیری مصوبات', permissionKey: 'minutes_decisions.track' },
-  { id: 'minutes-reports',      title: 'گزارش‌ها',       permissionKey: 'minutes_view' },
+  { id: 'minutes-reports',      title: 'گزارش‌ها',       permissionKey: 'minutes_reports' },
 ];
 
 export const MINUTES_HUB_PAGE_ID: PageId = 'minutes-hub';

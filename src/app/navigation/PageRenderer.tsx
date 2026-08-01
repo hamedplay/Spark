@@ -170,10 +170,18 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
         setActivePage('chat');
       }} />;
     case 'minutes-hub': {
-      const hubCards = new Set<PageId>([
-        'minutes-dashboard', 'minutes', 'minutes-approvals',
-        'minutes-my-decisions', 'minutes-reports',
-      ]);
+      const hubCards = new Set<PageId>();
+      if (checkPermission('minutes_view', isAdmin, userPermissions)) {
+        hubCards.add('minutes-dashboard');
+        hubCards.add('minutes');
+        hubCards.add('minutes-my-decisions');
+      }
+      if (checkPermission('minutes_approve', isAdmin, userPermissions)) {
+        hubCards.add('minutes-approvals');
+      }
+      if (checkPermission('minutes_reports', isAdmin, userPermissions)) {
+        hubCards.add('minutes-reports');
+      }
       if (checkPermission('minutes_decisions.track', isAdmin, userPermissions) && minutesFollowupAllowed) {
         hubCards.add('minutes-followup');
       }

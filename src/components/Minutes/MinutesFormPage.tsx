@@ -646,6 +646,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           if (isDev) console.log('[MinutesDraftRPCPayload]', createPayload);
           const { data, error: rpcError } = await supabase.rpc('create_minutes_draft', {
             p_payload: createPayload,
+            p_decisions: decisionsPayload(),
           });
           if (rpcError) {
             if (isDev) console.error('[MinutesDraftRPC] Supabase error:', rpcError);
@@ -679,11 +680,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           if (data && data.success === true && data.minute_id) {
             const newId = data.minute_id as string;
             if (isDev) console.log('[MinutesDraftRPC] Created minute_id:', newId);
-            const { error: syncErr } = await supabase.rpc('_sync_minutes_decisions', {
-              p_minute_id: newId,
-              p_decisions: decisionsPayload(),
-            });
-            if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
             // create_minutes_draft does NOT return updated_at; query it.
             const { data: minRow } = await supabase
               .from('minutes')
@@ -778,6 +774,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           p_minute_id: existingMinuteId,
           p_expected_updated_at: editUpdatedAt,
           p_payload: buildMinutesDraftPayload(),
+          p_decisions: decisionsPayload(),
         });
         if (rpcError) {
           if (isDev) console.error('[MinutesUpdateRPC] Supabase error:', rpcError);
@@ -804,11 +801,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             return null;
           }
           if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, returnedUpdatedAt);
-          const { error: syncErr } = await supabase.rpc('_sync_minutes_decisions', {
-            p_minute_id: existingMinuteId,
-            p_decisions: decisionsPayload(),
-          });
-          if (syncErr && isDev) console.error('[DecisionsSync] error:', syncErr);
           setEditUpdatedAt(returnedUpdatedAt);
           setWorkingMinuteId(existingMinuteId);
           setMinuteIdInUrl(existingMinuteId);
