@@ -6,7 +6,6 @@ import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMinutesTa
 import type { DecisionRow } from './types';
 import { MinutesPrintView, toDocData } from './MinutesPrintView';
 import type { MinutesDocumentData } from './MinutesDocumentData';
-import { FALLBACK_LOGO } from './MinutesDocumentData';
 import { fetchMinutesConfig } from './fetchMinutesConfig';
 import type { MinutesLayoutConfig } from './MinutesDocumentData';
 import './minutes-print.css';

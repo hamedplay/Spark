@@ -1,11 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, RefreshCw, Upload, Trash2, Eye, FileText, Loader as Loader2 } from 'lucide-react';
+import { RefreshCw, Upload, Trash2, Eye, FileText, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
 import toast from 'react-hot-toast';
 import { MinutesDocumentLayout } from './MinutesDocumentLayout';
-import type { MinutesDocumentData } from './MinutesDocumentData';
+import type { MinutesDocumentData, MinutesLayoutConfig } from './MinutesDocumentData';
 import { FALLBACK_LOGO } from './MinutesDocumentData';
+import {
+  normalizeMinutesLayoutConfig,
+  resolveMinutesLogoUrl,
+  validateMinutesConfigValue,
+} from './fetchMinutesConfig';
 import type { ConfigEntry } from '../PortalConfig/types';
 
 const FONT_SIZE_MAP: Record<string, string> = {
@@ -33,7 +38,11 @@ const FONT_SIZE_OPTIONS = [
 ];
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
-const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml'];
+const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
+
+const LOGO_STORAGE_BUCKET = 'portal-assets';
+const LOGO_STORAGE_PREFIX = 'minutes/logo/';
 
 interface MinutesConfigPanelProps {
   currentUserId: string;
@@ -41,10 +50,11 @@ interface MinutesConfigPanelProps {
 
 export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
   const [configs, setConfigs] = useState<ConfigEntry[]>([]);
+  const [logoUrl, setLogoUrl] = useState<string>(FALLBACK_LOGO);
+  const [rawMap, setRawMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,8 +70,14 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
       if (error) throw error;
       const rows = (data || []) as ConfigEntry[];
       setConfigs(rows.filter(r => r.section === 'minutes'));
-      const logoEntry = rows.find(r => r.section === 'appearance' && r.key === 'logo_url');
-      setLogoUrl(logoEntry?.value || FALLBACK_LOGO);
+
+      const map = new Map<string, string>();
+      for (const r of rows) {
+        map.set(`${r.section}.${r.key}`, r.value ?? '');
+      }
+      setRawMap(map);
+      setLogoUrl(resolveMinutesLogoUrl(map));
+      setLogoError(false);
     } catch {
       toast.error('بارگذاری تنظیمات صورت‌جلسات ناموفق بود');
     } finally {
@@ -82,7 +98,13 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
     return e.value === 'true';
   };
 
+  const layoutConfig: MinutesLayoutConfig = normalizeMinutesLayoutConfig(rawMap);
+
   const saveConfig = async (key: string, value: string) => {
+    if (!validateMinutesConfigValue(key, value)) {
+      toast.error('مقدار واردشده معتبر نیست');
+      return;
+    }
     const entry = cfg(key);
     if (!entry) return;
     if (savingKey) return;
@@ -94,6 +116,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
         .eq('id', entry.id);
       if (error) throw error;
       setConfigs(prev => prev.map(c => c.id === entry.id ? { ...c, value } : c));
+      setRawMap(prev => { const m = new Map(prev); m.set(`minutes.${key}`, value); return m; });
       toast.success('ذخیره شد');
       logAudit({ module: 'system_config', action: 'config_updated', entity_name: `minutes.${key}`, details: `مقدار جدید: ${value}`, severity: 'info' });
     } catch {
@@ -103,30 +126,57 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
     }
   };
 
-  const handleLogoUpload = async (file: File) => {
-    if (uploading) return;
+  const validateFile = (file: File): string | null => {
     if (!ALLOWED_TYPES.includes(file.type)) {
-      toast.error('فرمت فایل مجاز نیست. فقط PNG، JPEG، GIF یا SVG');
-      return;
+      return 'فرمت فایل مجاز نیست. فقط PNG، JPEG یا WebP';
+    }
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      return 'پسوند فایل مجاز نیست. فقط PNG، JPG، JPEG یا WebP';
     }
     if (file.size > MAX_FILE_SIZE) {
-      toast.error('حجم فایل نباید بیش از ۲ مگابایت باشد');
+      return 'حجم فایل نباید بیش از ۲ مگابایت باشد';
+    }
+    return null;
+  };
+
+  const extractStoragePath = (url: string): string | null => {
+    try {
+      const u = new URL(url);
+      const prefix = `/object/public/${LOGO_STORAGE_BUCKET}/`;
+      const idx = u.pathname.indexOf(prefix);
+      if (idx === -1) return null;
+      const path = u.pathname.slice(idx + prefix.length);
+      if (!path.startsWith(LOGO_STORAGE_PREFIX)) return null;
+      return path;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleLogoUpload = async (file: File) => {
+    if (uploading) return;
+    const validationError = validateFile(file);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     setUploading(true);
     setLogoError(false);
     try {
-      const ext = file.name.split('.').pop() || 'png';
-      const path = `minutes_logo-${Date.now()}.${ext}`;
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const normalizedExt = ext === 'jpg' ? 'jpeg' : ext;
+      const path = `${LOGO_STORAGE_PREFIX}${Date.now()}.${normalizedExt}`;
       const { error: uploadError } = await supabase.storage
-        .from('portal-assets')
+        .from(LOGO_STORAGE_BUCKET)
         .upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage
-        .from('portal-assets')
+        .from(LOGO_STORAGE_BUCKET)
         .getPublicUrl(path);
       const publicUrl = urlData.publicUrl;
-      const logoEntry = configs.find(c => c.section === 'appearance' && c.key === 'logo_url');
+
+      const logoEntry = cfg('minutes_logo_url');
       if (logoEntry) {
         const { error: updateErr } = await supabase
           .from('system_config')
@@ -136,12 +186,32 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
       } else {
         const { error: insertErr } = await supabase
           .from('system_config')
-          .upsert({ section: 'appearance', key: 'logo_url', value: publicUrl, value_type: 'string', label: 'لوگو صورت‌جلسات' }, { onConflict: 'section,key' });
+          .upsert({
+            section: 'minutes',
+            key: 'minutes_logo_url',
+            value: publicUrl,
+            value_type: 'string',
+            label: 'لوگوی صورت‌جلسات',
+          }, { onConflict: 'section,key' });
         if (insertErr) throw insertErr;
       }
+
+      const oldUrl = rawMap.get('minutes.minutes_logo_url') || '';
+      const oldPath = extractStoragePath(oldUrl);
+      if (oldPath && oldPath !== path) {
+        const { error: delErr } = await supabase.storage
+          .from(LOGO_STORAGE_BUCKET)
+          .remove([oldPath]);
+        if (delErr) {
+          console.warn('Failed to cleanup old logo:', delErr.message);
+        }
+      }
+
       setLogoUrl(publicUrl);
+      setLogoError(false);
       toast.success('لوگو بارگذاری شد');
-      logAudit({ module: 'system_config', action: 'logo_uploaded', entity_name: 'minutes.logo_url', details: 'لوگو صورت‌جلسات بارگذاری شد', severity: 'info' });
+      logAudit({ module: 'system_config', action: 'minutes_logo_uploaded', entity_name: 'minutes.minutes_logo_url', details: 'لوگو صورت‌جلسات بارگذاری شد', severity: 'info' });
+      await loadConfigs();
     } catch {
       toast.error('خطا در آپلود لوگو');
     } finally {
@@ -153,16 +223,31 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
     if (uploading) return;
     setUploading(true);
     try {
-      const logoEntry = configs.find(c => c.section === 'appearance' && c.key === 'logo_url');
+      const logoEntry = cfg('minutes_logo_url');
       if (logoEntry) {
-        await supabase
+        const { error: updateErr } = await supabase
           .from('system_config')
           .update({ value: '', updated_by: currentUserId, updated_at: new Date().toISOString() })
           .eq('id', logoEntry.id);
+        if (updateErr) throw updateErr;
       }
-      setLogoUrl(null);
+
+      const oldUrl = rawMap.get('minutes.minutes_logo_url') || '';
+      const oldPath = extractStoragePath(oldUrl);
+      if (oldPath) {
+        const { error: delErr } = await supabase.storage
+          .from(LOGO_STORAGE_BUCKET)
+          .remove([oldPath]);
+        if (delErr) {
+          console.warn('Failed to delete logo file:', delErr.message);
+        }
+      }
+
+      setLogoUrl(resolveMinutesLogoUrl(new Map()));
       setLogoError(false);
       toast.success('لوگو حذف شد');
+      logAudit({ module: 'system_config', action: 'minutes_logo_deleted', entity_name: 'minutes.minutes_logo_url', details: 'لوگو صورت‌جلسات حذف شد', severity: 'info' });
+      await loadConfigs();
     } catch {
       toast.error('خطا در حذف لوگو');
     } finally {
@@ -170,7 +255,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
     }
   };
 
-  // ── Build preview data ──────────────────────────────────────────────────
   const previewData: MinutesDocumentData = {
     minute: {
       meeting_title_snapshot: 'جلسه بررسی گزارش فصلی',
@@ -204,23 +288,12 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
     decisions: [
       { id: 'd1', title: 'تصمیم نمونه', description: 'اقدام اجرایی مورد توافق', primaryOwnerName: 'کارشناس الف', responsibleUnitName: 'واحد برنامه‌ریزی', priority: 'normal', startDate: '2026-08-01', dueDate: '2026-09-01', status: 'in_progress', progressPercent: 30, latestUpdate: '', discussionResult: '', resultType: 'resolution', additionalNotes: '' },
     ],
-    approvals: [],
+    approvals: [
+      { id: 'ap1', approver_name: 'مدیر محترم', status: 'approved', approved_at: '2026-08-01T11:00:00Z', changes_requested_at: null },
+    ],
     approvalComments: [],
     logoUrl: cfgBool('minutes_show_logo', true) ? logoUrl : null,
-  };
-
-  // ── Config values for layout ─────────────────────────────────────────────
-  const layoutConfig = {
-    headerTitle: cfgVal('minutes_header_title', 'صورت‌جلسه'),
-    orgName: cfgVal('minutes_org_name', ''),
-    subtitle: cfgVal('minutes_subtitle', ''),
-    footerText: cfgVal('minutes_footer_text', 'پایان صورت‌جلسه'),
-    showLogo: cfgBool('minutes_show_logo', true),
-    showParticipants: cfgBool('minutes_show_participants', true),
-    showApprovers: cfgBool('minutes_show_approvers', true),
-    showConfidentiality: cfgBool('minutes_show_confidentiality', true),
-    showDecisions: cfgBool('minutes_show_decisions', true),
-    fontSize: cfgVal('minutes_font_size', 'medium'),
+    config: layoutConfig,
   };
 
   const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
@@ -236,7 +309,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
 
   return (
     <div className="space-y-5">
-      {/* ── Logo upload ─────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
         <h4 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
           <FileText className="w-4 h-4 text-blue-500" />
@@ -249,7 +321,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
                 src={logoUrl}
                 alt="لوگو صورت‌جلسات"
                 className="w-full h-full object-contain p-1"
-                onError={() => setLogoError(true)}
+                onError={() => { setLogoError(true); }}
               />
             ) : (
               <FileText className="w-8 h-8 text-gray-400" />
@@ -263,9 +335,9 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
                 className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
               >
                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {uploading ? 'در حال آپلود...' : logoUrl ? 'تغییر لوگو' : 'بارگذاری لوگو'}
+                {uploading ? 'در حال آپلود...' : logoUrl && logoUrl !== FALLBACK_LOGO ? 'تغییر لوگو' : 'بارگذاری لوگو'}
               </button>
-              {logoUrl && !uploading && (
+              {logoUrl && logoUrl !== FALLBACK_LOGO && !uploading && (
                 <button
                   onClick={handleLogoDelete}
                   className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium transition-colors"
@@ -276,7 +348,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
               )}
             </div>
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              فرمت‌های مجاز: PNG، JPEG، GIF، SVG — حداکثر ۲ مگابایت
+              فرمت‌های مجاز: PNG، JPEG، WebP — حداکثر ۲ مگابایت
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500">
               در صورت خرابی یا حذف، لوگوی پیش‌فرض سامانه نمایش داده می‌شود.
@@ -296,14 +368,12 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
         </div>
       </div>
 
-      {/* ── Document appearance settings ───────────────────────────────────── */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
         <h4 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
           <FileText className="w-4 h-4 text-teal-500" />
           تنظیمات ظاهری سند
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Header title */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">عنوان سربرگ</label>
             <input
@@ -318,7 +388,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
               className={inputCls}
             />
           </div>
-          {/* Org name */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">نام سازمان</label>
             <input
@@ -333,7 +402,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
               className={inputCls}
             />
           </div>
-          {/* Subtitle */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">زیرعنوان اختیاری</label>
             <input
@@ -348,7 +416,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
               className={inputCls}
             />
           </div>
-          {/* Footer text */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">متن پاورقی</label>
             <input
@@ -365,7 +432,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
           </div>
         </div>
 
-        {/* Visibility toggles */}
         <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
           <h5 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">نمایش بخش‌های سند</h5>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -393,7 +459,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
           </div>
         </div>
 
-        {/* Font size select */}
         <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
           <h5 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">اندازه فونت</h5>
           <div className="flex flex-wrap gap-2">
@@ -415,14 +480,12 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
         </div>
       </div>
 
-      {/* ── Default settings ────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
         <h4 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
           <FileText className="w-4 h-4 text-amber-500" />
           تنظیمات پیش‌فرض
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Default confidentiality */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">سطح محرمانگی پیش‌فرض</label>
             <div className="flex flex-wrap gap-2">
@@ -442,7 +505,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
               ))}
             </div>
           </div>
-          {/* Default approval mode */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">شیوه تأیید پیش‌فرض</label>
             <div className="flex flex-wrap gap-2">
@@ -465,7 +527,6 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
         </div>
       </div>
 
-      {/* ── Live preview ─────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-700">
           <h4 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -484,194 +545,12 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
             className="mx-auto bg-white border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm"
             style={{ maxWidth: '800px', fontSize: FONT_SIZE_MAP[cfgVal('minutes_font_size', 'medium')] || '14px' }}
           >
-            <MinutesDocumentLayoutWithConfig
+            <MinutesDocumentLayout
               data={previewData}
               variant="preview"
-              config={layoutConfig}
             />
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Extended layout with config support ─────────────────────────────────────
-interface MinutesLayoutConfig {
-  headerTitle: string;
-  orgName: string;
-  subtitle: string;
-  footerText: string;
-  showLogo: boolean;
-  showParticipants: boolean;
-  showApprovers: boolean;
-  showConfidentiality: boolean;
-  showDecisions: boolean;
-  fontSize: string;
-}
-
-function MinutesDocumentLayoutWithConfig({
-  data,
-  variant,
-  config,
-}: {
-  data: MinutesDocumentData;
-  variant: 'print' | 'preview';
-  config: MinutesLayoutConfig;
-}) {
-  const { minute, internalParts, externalParts, agendaItems, decisions, logoUrl } = data;
-  const [logoError, setLogoError] = useState(false);
-
-  const PRESENT_STATUSES = new Set(['present', 'online', 'late']);
-  const presentNames: string[] = [];
-  const absentNames: string[] = [];
-  for (const p of internalParts) {
-    if (p.attendance_status && PRESENT_STATUSES.has(p.attendance_status)) {
-      presentNames.push(p.delegate_name || p.name_snapshot);
-    } else if (p.attendance_status === 'absent') {
-      absentNames.push(p.name_snapshot);
-    }
-  }
-  for (const p of externalParts) {
-    if (p.attendance_status && PRESENT_STATUSES.has(p.attendance_status)) {
-      presentNames.push(p.full_name);
-    } else if (p.attendance_status === 'absent') {
-      absentNames.push(p.full_name);
-    }
-  }
-
-  const allSigners = [
-    ...internalParts.map(p => ({ id: p.id, name: p.name_snapshot, sub: p.org_unit_name_snapshot || '—' })),
-    ...externalParts.map(p => ({ id: p.id, name: p.full_name, sub: p.organization || '—' })),
-  ];
-  const signCols = allSigners.length <= 1 ? 1 : Math.min(allSigners.length, 6);
-  const signRows: typeof allSigners[][] = [];
-  for (let i = 0; i < allSigners.length; i += signCols) {
-    signRows.push(allSigners.slice(i, i + signCols));
-  }
-
-  const rootClass = variant === 'print' ? 'minutes-print-root' : 'minutes-preview-root';
-
-  return (
-    <div className={rootClass} dir="rtl">
-      <div className="mp-doc">
-        {/* Header */}
-        <div className="mp-header">
-          {config.showLogo && (
-            <div className="mp-header-logo">
-              {logoUrl && !logoError ? (
-                <img
-                  src={logoUrl}
-                  alt="لوگو سازمان"
-                  className="mp-logo"
-                  onError={() => setLogoError(true)}
-                />
-              ) : (
-                <div className="mp-logo-placeholder">محل لوگو</div>
-              )}
-            </div>
-          )}
-          <h1>{config.headerTitle || 'صورت‌جلسه'}</h1>
-          {config.orgName && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{config.orgName}</p>}
-          {config.subtitle && <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">{config.subtitle}</p>}
-        </div>
-
-        {/* Meeting details */}
-        <div className="mp-section mp-no-break">
-          <h2 className="mp-section-title">مشخصات جلسه</h2>
-          <div className="mp-info-row-full">
-            <span className="mp-label">عنوان جلسه:</span>
-            <span className="mp-value">{minute.meeting_title_snapshot || '—'}</span>
-          </div>
-          <div className="mp-info-row-two">
-            <div className="mp-field">
-              <span className="mp-label">حاضرین جلسه:</span>
-              <span className="mp-value">{presentNames.length > 0 ? presentNames.join('، ') : '—'}</span>
-            </div>
-            <div className="mp-field">
-              <span className="mp-label">غایبین جلسه:</span>
-              <span className="mp-value">{absentNames.length > 0 ? absentNames.join('، ') : '—'}</span>
-            </div>
-          </div>
-          <div className="mp-info-row-three">
-            <div className="mp-field">
-              <span className="mp-label">محل جلسه:</span>
-              <span className="mp-value">{minute.meeting_location_snapshot || '—'}</span>
-            </div>
-            <div className="mp-field">
-              <span className="mp-label">دبیر جلسه:</span>
-              <span className="mp-value">{minute.secretary_name_snapshot || '—'}</span>
-            </div>
-            <div className="mp-field">
-              <span className="mp-label">رئیس جلسه:</span>
-              <span className="mp-value">{minute.chair_name_snapshot || '—'}</span>
-            </div>
-          </div>
-          {config.showConfidentiality && (
-            <div className="mp-info-row-full">
-              <span className="mp-label">سطح محرمانگی:</span>
-              <span className="mp-value">{minute.confidentiality || 'سازمانی'}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Agenda */}
-        <div className="mp-section">
-          <h2 className="mp-section-title">دستور جلسات</h2>
-          {agendaItems.length === 0 ? (
-            <p className="mp-item-row">—</p>
-          ) : (
-            <ol className="mp-agenda-list">
-              {agendaItems.map(item => (
-                <li key={item.id} className="mp-agenda-list-item">
-                  {item.order}. {item.title}
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        {/* Decisions */}
-        {config.showDecisions && (
-          <div className="mp-section">
-            <h2 className="mp-section-title">مصوبات</h2>
-            {decisions.length === 0 ? (
-              <p className="mp-item-row">—</p>
-            ) : (
-              decisions.map((d, i) => (
-                <div key={d.id} className="mp-decision-item">
-                  <div className="mp-item-title">
-                    مصوبه {i + 1} ـ {d.description || d.title || '—'}
-                  </div>
-                  <div className="mp-item-row mp-item-row-inline">
-                    <span><span className="mp-item-label">واحد مسئول: </span>{d.responsibleUnitName || '—'}</span>
-                    <span><span className="mp-item-label">مهلت انجام: </span>{d.dueDate || '—'}</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Signatures */}
-        {config.showParticipants && allSigners.length > 0 && (
-          <div className="mp-section">
-            <h2 className="mp-section-title">شرکت‌کنندگان و امضاها</h2>
-            {signRows.map((row, rowIdx) => (
-              <div key={rowIdx} className="mp-sign-grid" style={{ gridTemplateColumns: `repeat(${signCols}, 1fr)` }}>
-                {row.map(s => (
-                  <div key={s.id} className="mp-sign-box">
-                    <div className="mp-sign-name">{s.name}</div>
-                    <div className="mp-sign-sub">{s.sub}</div>
-                    <div className="mp-sign-space" />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mp-end-note">{config.footerText || 'پایان صورت‌جلسه'}</div>
       </div>
     </div>
   );

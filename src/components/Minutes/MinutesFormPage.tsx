@@ -6,7 +6,6 @@ import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingId
 import { loadMinutesPrefill } from '../../lib/minutesPrefill';
 import { checkSystemApproverEligibility } from '../../lib/minutesApprovalEligibility';
 import { normalizeInvitationStatus } from '../../lib/minutesInvitationStatus';
-import { FALLBACK_LOGO } from './MinutesDocumentData';
 import { fetchMinutesConfig } from './fetchMinutesConfig';
 import type { MinutesLayoutConfig } from './MinutesDocumentData';
 import { PageHeader, TableSkeleton } from './MinutesShared';
@@ -403,13 +402,26 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   }, []);
 
   // ── Fetch portal logo and minutes config from system_config ────────────
+  // In new mode, also applies default confidentiality/approval_mode once,
+  // but only if the user hasn't already changed those fields.
+  const defaultsAppliedRef = useRef(false);
   useEffect(() => {
     (async () => {
-      const { logoUrl: logo, config } = await fetchMinutesConfig();
+      const { logoUrl: logo, config, rawMap } = await fetchMinutesConfig();
       setLogoUrl(logo);
       setDocConfig(config);
+      if (mode === 'new' && !defaultsAppliedRef.current) {
+        defaultsAppliedRef.current = true;
+        const defaultConf = rawMap.get('minutes.minutes_default_confidentiality') || 'organizational';
+        const defaultMode = rawMap.get('minutes.minutes_default_approval_mode') || 'system';
+        setInfo(prev => ({
+          ...prev,
+          confidentiality: (['public','organizational','restricted','confidential'].includes(defaultConf) ? defaultConf : 'organizational') as ConfidentialityLevel,
+          approvalMode: (['system','in_person'].includes(defaultMode) ? defaultMode : 'system') as ApprovalMode,
+        }));
+      }
     })();
-  }, []);
+  }, [mode]);
 
   // ── Fetch external participant suggestions from contacts_email ──────────────
   useEffect(() => {

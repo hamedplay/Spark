@@ -1,4 +1,4 @@
-import type { MinutesDocumentData, DocDecision } from './MinutesDocumentData';
+import type { MinutesDocumentData, DocDecision, MinutesLayoutConfig } from './MinutesDocumentData';
 import type {
   DraftMeetingInfo, DraftInternalParticipant, DraftExternalParticipant,
   DraftAgendaItem, DraftDecision, ProfileOption, OrgUnitOption,
@@ -14,6 +14,7 @@ export function buildDocumentDataFromDraft(
   profiles: ProfileOption[],
   orgUnits: OrgUnitOption[],
   logoUrl: string | null,
+  config?: MinutesLayoutConfig | null,
 ): MinutesDocumentData {
   const profileLabel = (uid: string): string => {
     const p = profiles.find(x => x.user_id === uid);
@@ -92,5 +93,6 @@ export function buildDocumentDataFromDraft(
     approvals: [],
     approvalComments: [],
     logoUrl,
+    config: config || undefined,
   };
 }

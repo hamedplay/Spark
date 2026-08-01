@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import type { DraftFinalization, DraftMeetingInfo, DraftInternalParticipant, DraftExternalParticipant, DraftAgendaItem, DraftDecision, ProfileOption, OrgUnitOption } from './types';
 import { InputField, TextareaField } from './fields';
 import { buildDocumentDataFromDraft } from '../MinutesDocumentFromDraft';
-import type { MinutesDocumentData } from '../MinutesDocumentData';
+import type { MinutesDocumentData, MinutesLayoutConfig } from '../MinutesDocumentData';
 import { uploadMinuteAttachment, validateAttachment, type AttachmentRow } from '../../../lib/minutesAttachments';
 import { JalaliDatePicker } from './JalaliDatePicker';
 import { FullScreenPreview } from '../Shared/FullScreenPreview';
@@ -20,6 +20,7 @@ interface SectionFinalProps {
   profiles: ProfileOption[];
   orgUnits: OrgUnitOption[];
   logoUrl: string | null;
+  config?: MinutesLayoutConfig | null;
   minuteId: string | null;
   canManage: boolean;
 }
@@ -28,7 +29,7 @@ interface SectionFinalProps {
 export function SectionFinal({
   finalization, setFinalization,
   info, internalParticipants, externalParticipants, agendaItems, decisions,
-  profiles, orgUnits, logoUrl, minuteId, canManage,
+  profiles, orgUnits, logoUrl, config, minuteId, canManage,
 }: SectionFinalProps) {
   const [showFullPreview, setShowFullPreview] = useState(false);
   const [uploadingSigned, setUploadingSigned] = useState(false);
@@ -68,7 +69,7 @@ export function SectionFinal({
 
   const docData: MinutesDocumentData = buildDocumentDataFromDraft(
     info, internalParticipants, externalParticipants, agendaItems, decisions,
-    profiles, orgUnits, logoUrl,
+    profiles, orgUnits, logoUrl, config,
   );
 
   return (

@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import type {
-  MinutesDocumentData,
+  MinutesDocumentData, DocApproval,
 } from './MinutesDocumentData';
 import {
   DASH, orDash,
   chunkArray,
+  APPROVAL_STATUS_LABELS, faDateTime,
 } from './MinutesDocumentData';
 import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
+
+const FONT_SIZE_PX: Record<string, string> = {
+  small: '12px',
+  medium: '14px',
+  large: '16px',
+};
 
 interface MinutesDocumentLayoutProps {
   data: MinutesDocumentData;
@@ -34,6 +41,9 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
   const showParticipants = cfg?.showParticipants ?? true;
   const showConfidentiality = cfg?.showConfidentiality ?? true;
   const showDecisions = cfg?.showDecisions ?? true;
+  const showApprovers = cfg?.showApprovers ?? true;
+  const fontSize = cfg?.fontSize ?? 'medium';
+  const approvals: DocApproval[] = data.approvals || [];
 
   // ── Attendance lists ───────────────────────────────────────────────────────
   const presentNames: string[] = [];
@@ -78,7 +88,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
   const rootClass = variant === 'print' ? 'minutes-print-root' : 'minutes-preview-root';
 
   return (
-    <div className={rootClass} dir="rtl">
+    <div className={rootClass} dir="rtl" style={{ fontSize: FONT_SIZE_PX[fontSize] || '14px' }}>
       {variant === 'preview' && (
         <div className="mp-print-hint">
           برای خروجی بدون آدرس صفحه، گزینه Headers and footers مرورگر را غیرفعال کنید.
@@ -205,6 +215,21 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
                 ))}
               </div>
             ))}
+          </div>
+        )}
+
+        {showApprovers && approvals.length > 0 && (
+          <div className="mp-section mp-no-break">
+            <h2 className="mp-section-title">تأییدکنندگان</h2>
+            <div className="mp-info-row-full">
+              {approvals.map(a => (
+                <div key={a.id} className="mp-field" style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                  <span><span className="mp-label">نام: </span>{orDash(a.approver_name)}</span>
+                  <span><span className="mp-label">وضعیت: </span>{APPROVAL_STATUS_LABELS[a.status] || DASH}</span>
+                  <span><span className="mp-label">تاریخ: </span>{a.approved_at ? faDateTime(a.approved_at) : a.changes_requested_at ? faDateTime(a.changes_requested_at) : DASH}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
