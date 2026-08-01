@@ -223,9 +223,9 @@ export function LayoutSidebar({
               <button
                 onClick={() => {
                   if (isCollapsed) {
-                    onNavigate('minutes-dashboard');
+                    onNavigate('minutes-hub');
                   } else {
-                    setIsMinutesMenuOpen((v) => !v);
+                    onNavigate('minutes-hub');
                   }
                 }}
                 className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${
@@ -248,6 +248,7 @@ export function LayoutSidebar({
                     ? 'صورت‌جلسات و مصوبات'
                     : undefined
                 }
+                aria-current={isMinutesPage(activePage) ? 'page' : undefined}
               >
                 <FileText className="w-5 h-5 flex-shrink-0" />
                 {!isCollapsed && (

@@ -129,51 +129,90 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
         ) : rows.length === 0 ? (
           <EmptyState title="موردی برای تأیید وجود ندارد" description="صورت‌جلساتی که برای تأیید به شما ارسال شوند در اینجا نمایش داده می‌شوند." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
-                  {['عنوان جلسه','تاریخ','دبیر','مدل تأیید','نسخه','تاریخ ارسال','عملیات'].map(h => (
-                    <th key={h} className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                {rows.map(row => (
-                  <tr key={row.approval_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
-                    <td className="px-4 py-3">
-                      <button onClick={() => goToDetail(row.minute_id)} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline text-right">
-                        {row.meeting_title}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatJalaliDateForDisplay(row.meeting_date)}</td>
-                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{row.secretary_name}</td>
-                    <td className="px-4 py-3"><ApprovalModeBadge mode={row.approval_mode} /></td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{row.revision_number}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                      {row.submitted_at ? formatJalaliTimestamp(row.submitted_at) : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => goToDetail(row.minute_id)} title="مشاهده و اقدام"
-                          className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleApprove(row.minute_id, row.revision_number, row.approval_id)}
-                          disabled={actingId === row.approval_id}
-                          title="تأیید سریع"
-                          className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 text-green-500 transition-colors disabled:opacity-50"
-                        >
-                          {actingId === row.approval_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+                    {['عنوان جلسه','تاریخ','دبیر','مدل تأیید','نسخه','تاریخ ارسال','عملیات'].map(h => (
+                      <th key={h} className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                  {rows.map(row => (
+                    <tr key={row.approval_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                      <td className="px-4 py-3">
+                        <button onClick={() => goToDetail(row.minute_id)} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline text-right">
+                          {row.meeting_title}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatJalaliDateForDisplay(row.meeting_date)}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{row.secretary_name}</td>
+                      <td className="px-4 py-3"><ApprovalModeBadge mode={row.approval_mode} /></td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">{row.revision_number}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                        {row.submitted_at ? formatJalaliTimestamp(row.submitted_at) : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => goToDetail(row.minute_id)} title="مشاهده و اقدام"
+                            className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleApprove(row.minute_id, row.revision_number, row.approval_id)}
+                            disabled={actingId === row.approval_id}
+                            title="تأیید سریع"
+                            className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 text-green-500 transition-colors disabled:opacity-50"
+                          >
+                            {actingId === row.approval_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-700">
+              {rows.map(row => (
+                <div key={row.approval_id} className="p-4 space-y-2">
+                  <button onClick={() => goToDetail(row.minute_id)} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline text-right block">
+                    {row.meeting_title}
+                  </button>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                    <span>{formatJalaliDateForDisplay(row.meeting_date)}</span>
+                    <span>·</span>
+                    <span>{row.secretary_name}</span>
+                    <span>·</span>
+                    <ApprovalModeBadge mode={row.approval_mode} />
+                    <span>·</span>
+                    <span>نسخه {row.revision_number}</span>
+                  </div>
+                  {row.submitted_at && (
+                    <div className="text-xs text-gray-400">{formatJalaliTimestamp(row.submitted_at)}</div>
+                  )}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button onClick={() => goToDetail(row.minute_id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium transition-colors">
+                      <Eye className="w-4 h-4" /> مشاهده و اقدام
+                    </button>
+                    <button
+                      onClick={() => handleApprove(row.minute_id, row.revision_number, row.approval_id)}
+                      disabled={actingId === row.approval_id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      {actingId === row.approval_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} تأیید سریع
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

@@ -13,6 +13,7 @@ import { SparkPage } from '../../components/Spark/SparkPage';
 import { GroupsPage } from '../../components/GroupsPage';
 import { ChannelsPage } from '../../components/Channels/ChannelsPage';
 import { MinutesDashboardPage } from '../../components/Minutes/MinutesDashboardPage';
+import { MinutesHubPage } from '../../components/Minutes/MinutesHubPage';
 import { MinutesListPage } from '../../components/Minutes/MinutesListPage';
 import { MinutesFormPage } from '../../components/Minutes/MinutesFormPage';
 import { MinutesDetailPage } from '../../components/Minutes/MinutesDetailPage';
@@ -168,6 +169,16 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
         setChatInitUserId(userId);
         setActivePage('chat');
       }} />;
+    case 'minutes-hub': {
+      const hubCards = new Set<PageId>([
+        'minutes-dashboard', 'minutes', 'minutes-approvals',
+        'minutes-my-decisions', 'minutes-reports',
+      ]);
+      if (checkPermission('minutes_decisions.track', isAdmin, userPermissions) && minutesFollowupAllowed) {
+        hubCards.add('minutes-followup');
+      }
+      return <MinutesHubPage onNavigate={(p) => setActivePage(p as PageId)} visibleCards={hubCards} />;
+    }
     case 'minutes-dashboard':
       return <MinutesDashboardPage onNavigate={(p) => setActivePage(p as PageId)} />;
     case 'minutes':

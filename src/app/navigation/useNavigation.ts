@@ -9,12 +9,13 @@ export type PageId =
   | 'groups' | 'channels'
   | 'minutes' | 'minutes-new' | 'minutes-edit' | 'minutes-detail'
   | 'minutes-approvals' | 'minutes-my-decisions' | 'minutes-followup'
-  | 'minutes-report' | 'minutes-reports' | 'minutes-dashboard';
+  | 'minutes-report' | 'minutes-reports' | 'minutes-dashboard' | 'minutes-hub';
 
 const MINUTES_PAGES: PageId[] = [
   'minutes', 'minutes-new', 'minutes-edit', 'minutes-detail',
   'minutes-approvals', 'minutes-my-decisions', 'minutes-followup',
   'minutes-report', 'minutes-reports', 'minutes-dashboard',
+  'minutes-hub',
 ];
 
 function isValidMinutesPage(page: string): page is PageId {

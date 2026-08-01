@@ -25,7 +25,8 @@ export type PageId =
   | 'minutes-followup'
   | 'minutes-report'
   | 'minutes-reports'
-  | 'minutes-dashboard';
+  | 'minutes-dashboard'
+  | 'minutes-hub';
 
 export type LayoutUserPermissions =
   | Record<string, boolean>

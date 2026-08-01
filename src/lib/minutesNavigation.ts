@@ -16,12 +16,14 @@ export type MinutesPage =
   | 'minutes-followup'
   | 'minutes-report'
   | 'minutes-reports'
-  | 'minutes-dashboard';
+  | 'minutes-dashboard'
+  | 'minutes-hub';
 
 const VALID_MINUTES_PAGES: MinutesPage[] = [
   'minutes', 'minutes-new', 'minutes-edit', 'minutes-detail',
   'minutes-approvals', 'minutes-my-decisions', 'minutes-followup',
   'minutes-report', 'minutes-reports', 'minutes-dashboard',
+  'minutes-hub',
 ];
 
 export function isValidMinutesPage(page: string | null): page is MinutesPage {

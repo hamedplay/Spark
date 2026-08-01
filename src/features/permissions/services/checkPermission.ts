@@ -13,6 +13,14 @@ export const PAGE_PERMISSION_KEY: Record<string, string> = {
   contacts: 'contacts',
   contacts_email: 'contacts',
   reports: 'reports',
+  'minutes-hub': 'minutes_view',
+  'minutes-dashboard': 'minutes_view',
+  minutes: 'minutes_view',
+  'minutes-approvals': 'minutes_view',
+  'minutes-my-decisions': 'minutes_view',
+  'minutes-reports': 'minutes_view',
+  'minutes-new': 'minutes_create',
+  'minutes-edit': 'minutes_edit',
 };
 
 /**

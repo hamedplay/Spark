@@ -24,18 +24,21 @@ export const PRIMARY_NAVIGATION_ITEMS: LayoutNavigationItem[] = [
 ];
 
 export const MINUTES_NAVIGATION_ITEMS: LayoutNavigationItem[] = [
-  { id: 'minutes-dashboard',    title: 'داشبورد'       },
-  { id: 'minutes',              title: 'صورت‌جلسات'     },
-  { id: 'minutes-approvals',    title: 'کارتابل تأیید'  },
-  { id: 'minutes-my-decisions', title: 'مصوبات من'      },
+  { id: 'minutes-dashboard',    title: 'داشبورد',       permissionKey: 'minutes_view' },
+  { id: 'minutes',              title: 'صورت‌جلسات',     permissionKey: 'minutes_view' },
+  { id: 'minutes-approvals',    title: 'کارتابل تأیید',  permissionKey: 'minutes_view' },
+  { id: 'minutes-my-decisions', title: 'مصوبات من',      permissionKey: 'minutes_view' },
   { id: 'minutes-followup',     title: 'پیگیری مصوبات', permissionKey: 'minutes_decisions.track' },
-  { id: 'minutes-reports',      title: 'گزارش‌ها'       },
+  { id: 'minutes-reports',      title: 'گزارش‌ها',       permissionKey: 'minutes_view' },
 ];
+
+export const MINUTES_HUB_PAGE_ID: PageId = 'minutes-hub';
 
 export const MINUTES_PAGES: Set<PageId> = new Set([
   'minutes', 'minutes-new', 'minutes-edit', 'minutes-detail',
   'minutes-approvals', 'minutes-my-decisions', 'minutes-followup',
   'minutes-report', 'minutes-reports', 'minutes-dashboard',
+  'minutes-hub',
 ]);
 
 export const MINUTES_INTERNAL_PAGE_MAP: Record<string, PageId> = {
@@ -43,6 +46,12 @@ export const MINUTES_INTERNAL_PAGE_MAP: Record<string, PageId> = {
   'minutes-edit':   'minutes',
   'minutes-detail': 'minutes',
   'minutes-report': 'minutes-reports',
+  'minutes-dashboard': 'minutes-hub',
+  'minutes': 'minutes-hub',
+  'minutes-approvals': 'minutes-hub',
+  'minutes-my-decisions': 'minutes-hub',
+  'minutes-followup': 'minutes-hub',
+  'minutes-reports': 'minutes-hub',
 };
 
 export interface NavigationVisibilityContext {
