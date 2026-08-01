@@ -112,9 +112,18 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     created_at: c.created_at,
   }));
 
-  const config: MinutesLayoutConfig | undefined = props.config
-    ? { ...props.config, showApprovers: false }
-    : undefined;
+  const config: MinutesLayoutConfig = {
+    headerTitle: props.config?.headerTitle ?? 'صورت‌جلسه',
+    orgName: props.config?.orgName ?? '',
+    subtitle: props.config?.subtitle ?? '',
+    footerText: props.config?.footerText ?? 'پایان صورت‌جلسه',
+    showLogo: props.config?.showLogo ?? true,
+    showParticipants: props.config?.showParticipants ?? true,
+    showApprovers: false,
+    showConfidentiality: props.config?.showConfidentiality ?? true,
+    showDecisions: props.config?.showDecisions ?? true,
+    fontSize: props.config?.fontSize ?? 'medium',
+  };
 
   return {
     minute,

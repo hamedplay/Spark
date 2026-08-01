@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History, Signature as FileSignature } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
@@ -11,6 +11,7 @@ import type { MinutesDocumentData } from './MinutesDocumentData';
 import { fetchMinutesConfig } from './fetchMinutesConfig';
 import type { MinutesLayoutConfig } from './MinutesDocumentData';
 import './minutes-print.css';
+import type { ApprovalStatus } from './types';
 import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow, AgendaResultRow, ApprovalRow, ApprovalCommentRow } from './Detail/types';
 import { DetailLoadingView, DetailErrorView, DetailNotFoundView } from './Detail/DetailViews';
 import { DetailHeader } from './Detail/DetailHeader';
@@ -41,6 +42,29 @@ interface Props {
   isAdmin?: boolean;
 }
 
+async function waitForPrintAssets(root: HTMLElement, timeoutMs = 3000): Promise<void> {
+  const images = Array.from(root.querySelectorAll('img'));
+  const pending = images.filter(img => !img.complete);
+  if (pending.length === 0) {
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+    return;
+  }
+
+  const fontPromise = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+
+  const imagePromises = pending.map(img => new Promise<void>((resolve) => {
+    const settle = () => resolve();
+    img.addEventListener('load', settle, { once: true });
+    img.addEventListener('error', settle, { once: true });
+  }));
+
+  const timeoutPromise = new Promise<void>(resolve => setTimeout(resolve, timeoutMs));
+  await Promise.race([Promise.all(imagePromises), timeoutPromise]);
+  await fontPromise;
+}
+
 export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin }: Props) {
   const [activeTab, setActiveTab] = useState<MinutesDetailTab>(() => getMinutesTabFromUrl() || 'summary');
   const [minute, setMinute] = useState<MinuteDetail | null>(null);
@@ -54,23 +78,30 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [notFound, setNotFound] = useState(false);
   const [showRequestChanges, setShowRequestChanges] = useState(false);
   const [acting, setActing] = useState(false);
-  const [printDecisions, setPrintDecisions] = useState<DecisionRow[]>([]);
-  const [printOwnerNames, setPrintOwnerNames] = useState<Record<string, string>>({});
   const [printLoading, setPrintLoading] = useState(false);
   const [printReady, setPrintReady] = useState(false);
   const [wordLoading, setWordLoading] = useState(false);
-  const [documentDataLoaded, setDocumentDataLoaded] = useState(false);
-  const [documentDataError, setDocumentDataError] = useState<string | null>(null);
+  const [docDataLoading, setDocDataLoading] = useState(false);
+  const [docDataError, setDocDataError] = useState<string | null>(null);
+  const [finalDocData, setFinalDocData] = useState<MinutesDocumentData | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [docConfig, setDocConfig] = useState<MinutesLayoutConfig | null>(null);
 
+  const autoPrintTriggered = useRef(false);
+
+  // afterprint cleanup
   useEffect(() => {
     if (!printReady) return;
-    const id = requestAnimationFrame(() => {
-      window.print();
+    const cleanup = () => {
       setPrintReady(false);
-    });
-    return () => cancelAnimationFrame(id);
+      setPrintLoading(false);
+    };
+    window.addEventListener('afterprint', cleanup, { once: true });
+    const fallback = setTimeout(cleanup, 10000);
+    return () => {
+      window.removeEventListener('afterprint', cleanup);
+      clearTimeout(fallback);
+    };
   }, [printReady]);
 
   useEffect(() => {
@@ -85,6 +116,8 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     setIsLoading(true);
     setError(null);
     setNotFound(false);
+    setFinalDocData(null);
+    setDocDataError(null);
 
     const targetId = minuteId || getMinuteIdFromUrl();
 
@@ -196,10 +229,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     if (url.searchParams.get('print') === '1') {
       url.searchParams.delete('print');
       window.history.replaceState(null, '', url.toString());
-      setTimeout(() => {
-        const printEvent = new CustomEvent('minutes-auto-print');
-        window.dispatchEvent(printEvent);
-      }, 100);
+      autoPrintTriggered.current = true;
     }
   }, [minuteId]);
 
@@ -207,13 +237,12 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     fetchDetail();
   }, [fetchDetail]);
 
-  // Listen for auto-print event
+  // Auto-print: wait for finalDocData then print
   useEffect(() => {
-    const handler = () => handlePrint();
-    window.addEventListener('minutes-auto-print', handler);
-    return () => window.removeEventListener('minutes-auto-print', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minute, printLoading, printReady]);
+    if (!autoPrintTriggered.current || !finalDocData || printLoading) return;
+    autoPrintTriggered.current = false;
+    handlePrint();
+  }, [finalDocData, printLoading]);
 
   const goEdit = () => {
     if (minute) {
@@ -237,13 +266,13 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
 
   // Auto-prepare document data when entering the final_version tab
   useEffect(() => {
-    if (activeTab === 'final_version' && !documentDataLoaded && !documentDataError && minute) {
+    if (activeTab === 'final_version' && !finalDocData && !docDataError && !docDataLoading && minute) {
       prepareDocumentData().catch(() => {
         // Error already handled in prepareDocumentData
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, documentDataLoaded, documentDataError, minute]);
+  }, [activeTab, finalDocData, docDataError, docDataLoading, minute]);
 
   const handleApprove = async () => {
     if (acting || !minute || !myApproval) return;
@@ -322,11 +351,20 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     if (printLoading || printReady || !minute) return;
     setPrintLoading(true);
     try {
-      await prepareDocumentData();
+      const data = finalDocData ?? await prepareDocumentData();
+      setFinalDocData(data);
       setPrintReady(true);
+      // Wait for DOM render, fonts, and images before printing
+      requestAnimationFrame(async () => {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const root = document.body.querySelector('.minutes-print-root') as HTMLElement | null;
+        if (root) {
+          await waitForPrintAssets(root);
+        }
+        window.print();
+      });
     } catch {
       toast.error('آماده‌سازی چاپ ناموفق بود.');
-    } finally {
       setPrintLoading(false);
     }
   };
@@ -335,10 +373,8 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     if (wordLoading || !minute) return;
     setWordLoading(true);
     try {
-      if (!documentDataLoaded) {
-        await prepareDocumentData();
-      }
-      const data = toDocData(printViewProps);
+      const data = finalDocData ?? await prepareDocumentData();
+      setFinalDocData(data);
       await exportMinutesToWord(data);
       toast.success('فایل Word با موفقیت ساخته شد.');
     } catch (e) {
@@ -349,11 +385,11 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     }
   };
 
-  // Shared: load minutes_decisions via read-only RPC + owner names, set state, return success/error.
-  // Does NOT call window.print().
-  const prepareDocumentData = async (): Promise<void> => {
-    if (!minute) return;
-    setDocumentDataError(null);
+  // Shared: load minutes_decisions via read-only RPC + owner names, build finalDocData, return it.
+  const prepareDocumentData = async (): Promise<MinutesDocumentData> => {
+    if (!minute) throw new Error('No minute loaded');
+    setDocDataError(null);
+    setDocDataLoading(true);
     try {
       const { data: viewData, error: viewErr } = await supabase.rpc('get_minutes_decisions_for_view', { p_minute_id: minute.id });
       if (viewErr) throw new Error(viewErr.message);
@@ -366,7 +402,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
         requires_followup: boolean; latest_update: string | null;
         agenda_result_id: string | null; agenda_title: string | null;
       }>;
-      // Map to DecisionRow for print view compatibility
       const decRows: DecisionRow[] = viewRows.map(r => ({
         id: r.id, minute_id: minute.id, agenda_result_id: r.agenda_result_id,
         title: r.title, description: r.description,
@@ -383,13 +418,46 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       for (const r of viewRows) {
         if (r.owner_name) namesMap[r.primary_owner_user_id] = r.owner_name;
       }
-      setPrintDecisions(decRows);
-      setPrintOwnerNames(namesMap);
-      setDocumentDataLoaded(true);
+
+      const data = toDocData({
+        minute: {
+          id: minute.id,
+          meeting_title_snapshot: minute.meeting_title_snapshot,
+          meeting_date_snapshot: minute.meeting_date_snapshot,
+          meeting_start_time_snapshot: minute.meeting_start_time_snapshot,
+          meeting_end_time_snapshot: minute.meeting_end_time_snapshot,
+          meeting_location_snapshot: minute.meeting_location_snapshot,
+          meeting_type: minute.meeting_type,
+          org_unit_name_snapshot: minute.org_unit_name_snapshot,
+          secretary_name_snapshot: minute.secretary_name_snapshot,
+          chair_name_snapshot: minute.chair_name_snapshot,
+          notes: minute.notes,
+          confidentiality: minute.confidentiality,
+          status: minute.status,
+          approval_mode: minute.approval_mode,
+          revision_number: minute.revision_number,
+          secretary_confirmed_at: minute.secretary_confirmed_at,
+          chair_confirmed_at: minute.chair_confirmed_at,
+          published_at: minute.published_at,
+        },
+        internalParts,
+        externalParts,
+        agendaResults,
+        approvals,
+        approvalComments,
+        decisions: decRows,
+        ownerNames: namesMap,
+        logoUrl,
+        config: docConfig,
+      });
+
+      setFinalDocData(data);
+      setDocDataLoading(false);
+      return data;
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'خطا در آماده‌سازی داده سند';
-      setDocumentDataError(msg);
-      setDocumentDataLoaded(false);
+      setDocDataError(msg);
+      setDocDataLoading(false);
       throw e;
     }
   };
@@ -409,41 +477,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const lastModified = minute.updated_at
     ? new Date(minute.updated_at).toLocaleDateString('fa-IR')
     : '';
-
-  const printViewProps = {
-    minute: {
-      id: minute.id,
-      meeting_title_snapshot: minute.meeting_title_snapshot,
-      meeting_date_snapshot: minute.meeting_date_snapshot,
-      meeting_start_time_snapshot: minute.meeting_start_time_snapshot,
-      meeting_end_time_snapshot: minute.meeting_end_time_snapshot,
-      meeting_location_snapshot: minute.meeting_location_snapshot,
-      meeting_type: minute.meeting_type,
-      org_unit_name_snapshot: minute.org_unit_name_snapshot,
-      secretary_name_snapshot: minute.secretary_name_snapshot,
-      chair_name_snapshot: minute.chair_name_snapshot,
-      notes: minute.notes,
-      confidentiality: minute.confidentiality,
-      status: minute.status,
-      approval_mode: minute.approval_mode,
-      revision_number: minute.revision_number,
-      secretary_confirmed_at: minute.secretary_confirmed_at,
-      chair_confirmed_at: minute.chair_confirmed_at,
-      published_at: minute.published_at,
-    },
-    internalParts,
-    externalParts,
-    agendaResults,
-    approvals,
-    approvalComments,
-    decisions: printDecisions,
-    ownerNames: printOwnerNames,
-    logoUrl,
-    config: docConfig,
-  };
-  const finalDocData: MinutesDocumentData | null = documentDataLoaded
-    ? toDocData(printViewProps)
-    : null;
 
   return (
     <div dir="rtl" className="space-y-4">
@@ -522,8 +555,8 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               revisionNumber={minute.revision_number}
               canManage={canManage}
               docData={finalDocData}
-              docDataLoading={!documentDataLoaded && !documentDataError}
-              docDataError={documentDataError}
+              docDataLoading={docDataLoading}
+              docDataError={docDataError}
               onPrepareDocumentData={prepareDocumentData}
               onPrint={handlePrint}
               onWordExport={handleWordExport}
@@ -533,7 +566,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
           )}
         </div>
       </div>
-      {finalDocData && (
+      {finalDocData && printReady && (
         <MinutesPrintView data={finalDocData} />
       )}
       {showRequestChanges && (

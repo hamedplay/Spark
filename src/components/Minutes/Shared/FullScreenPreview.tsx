@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ZoomIn, ZoomOut, X, Printer } from 'lucide-react';
+import { ZoomIn, ZoomOut, X, Printer, FileDown } from 'lucide-react';
 import { MinutesDocumentLayout } from '../MinutesDocumentLayout';
 import type { MinutesDocumentData } from '../MinutesDocumentData';
 
@@ -12,9 +12,11 @@ interface FullScreenPreviewProps {
   onClose: () => void;
   docData: MinutesDocumentData;
   onPrint?: () => void;
+  onWordExport?: () => void;
+  wordLoading?: boolean;
 }
 
-export function FullScreenPreview({ open, onClose, docData, onPrint }: FullScreenPreviewProps) {
+export function FullScreenPreview({ open, onClose, docData, onPrint, onWordExport, wordLoading }: FullScreenPreviewProps) {
   const [zoom, setZoom] = useState(100);
 
   const zoomIn = useCallback(() => setZoom(z => Math.min(MAX_ZOOM, z + ZOOM_STEP)), []);
@@ -77,6 +79,15 @@ export function FullScreenPreview({ open, onClose, docData, onPrint }: FullScree
             >
               <Printer className="w-4 h-4" />
               چاپ
+            </button>
+          )}
+          {onWordExport && (
+            <button
+              onClick={onWordExport}
+              disabled={wordLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors mr-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {wordLoading ? 'در حال ساخت...' : 'خروجی Word'}
             </button>
           )}
         </div>

@@ -1,7 +1,7 @@
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   AlignmentType, WidthType, HeightRule, ImageRun, PageOrientation,
-  convertMillimetersToTwip, ShadingType, VerticalAlign, BorderStyle,
+  convertMillimetersToTwip, VerticalAlign, BorderStyle,
 } from 'docx';
 import type { MinutesDocumentData, DocInternalPart, DocExternalPart } from '../components/Minutes/MinutesDocumentData';
 import {
@@ -10,6 +10,12 @@ import {
 import { gregorianToJalaliDate, toPersianDigits } from './minutesDate';
 
 const PRESENT_STATUSES = new Set(['present', 'online', 'late']);
+
+const WINDOWS_RESERVED = new Set([
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+]);
 
 function jalaliDisplay(value: string | null | undefined): string {
   if (!value) return DASH;
@@ -22,15 +28,29 @@ function sanitizeFilename(name: string): string {
     .replace(/[/\\:*?"<>|]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
+    .replace(/^[.\s-]+|[.\s-]+$/g, '')
     .slice(0, 120);
 }
 
 function buildFilename(title: string | null | undefined, dateIso: string | null | undefined): string {
-  const datePart = dateIso ? jalaliDisplay(dateIso).replace(/\//g, '-') : toPersianDigits(new Date().toLocaleDateString('fa-IR')).replace(/\//g, '-');
+  const datePart = dateIso
+    ? jalaliDisplay(dateIso).replace(/\//g, '-')
+    : toPersianDigits(new Date().toLocaleDateString('fa-IR')).replace(/\//g, '-');
   const safeTitle = title ? sanitizeFilename(title) : '';
-  const base = safeTitle || 'صورتجلسه';
-  return `${base}-${datePart}.docx`;
+
+  let stem: string;
+  if (safeTitle) {
+    stem = `صورتجلسه-${safeTitle}-${datePart}`;
+  } else {
+    stem = `صورتجلسه-${datePart}`;
+  }
+  stem = sanitizeFilename(stem);
+
+  const base = stem || 'صورتجلسه';
+  if (WINDOWS_RESERVED.has(base.toUpperCase())) {
+    return `صورتجلسه-${datePart}.docx`;
+  }
+  return `${base}.docx`;
 }
 
 function rtlParagraph(children: Parameters<typeof Paragraph>[0]['children'], opts?: { alignment?: typeof AlignmentType.RIGHT | typeof AlignmentType.CENTER, spacingAfter?: number, bold?: boolean, fontSize?: number }): Paragraph {
@@ -52,15 +72,49 @@ function textRun(text: string, opts?: { bold?: boolean, size?: number, font?: st
   });
 }
 
-async function fetchLogoBuffer(logoUrl: string | null | undefined): Promise<{ buffer: ArrayBuffer; type: string } | null> {
+async function convertImageToPng(input: ArrayBuffer): Promise<ArrayBuffer | null> {
+  try {
+    const blob = new Blob([input]);
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(bitmap, 0, 0);
+    const pngBlob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/png');
+    });
+    if (!pngBlob) return null;
+    return await pngBlob.arrayBuffer();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchLogoBuffer(logoUrl: string | null | undefined): Promise<{ buffer: ArrayBuffer; type: 'png' | 'jpg' } | null> {
   if (!logoUrl) return null;
   try {
     const res = await fetch(logoUrl);
     if (!res.ok) return null;
-    const ct = res.headers.get('content-type') || 'image/png';
+    const ct = res.headers.get('content-type') || '';
     const buf = await res.arrayBuffer();
-    const ext = ct.includes('jpeg') || ct.includes('jpg') ? 'jpg' : 'png';
-    return { buffer: buf, type: ext };
+
+    if (ct.includes('png')) {
+      return { buffer: buf, type: 'png' };
+    }
+    if (ct.includes('jpeg') || ct.includes('jpg')) {
+      return { buffer: buf, type: 'jpg' };
+    }
+
+    // SVG, WebP, GIF, or unknown — try converting to PNG
+    const pngBuf = await convertImageToPng(buf);
+    if (pngBuf) {
+      return { buffer: pngBuf, type: 'png' };
+    }
+
+    console.warn('MinutesWordExport: unsupported logo type:', ct, '— skipping logo');
+    return null;
   } catch {
     console.warn('MinutesWordExport: logo fetch failed, continuing without logo');
     return null;
@@ -83,7 +137,7 @@ function infoCell(label: string, value: string, widthPct: number): TableCell {
   });
 }
 
-function meetingInfoTable(data: MinutesDocumentData): Table {
+function meetingInfoTable(data: MinutesDocumentData, showConfidentiality: boolean): Table {
   const { minute, internalParts, externalParts } = data;
 
   const presentNames: string[] = [];
@@ -125,12 +179,15 @@ function meetingInfoTable(data: MinutesDocumentData): Table {
         infoCell('رئیس جلسه', orDash(minute.chair_name_snapshot), 33),
       ],
     }),
-    new TableRow({
+  ];
+
+  if (showConfidentiality) {
+    rows.push(new TableRow({
       children: [
         infoCell('سطح محرمانگی', formatConfidentiality(minute.confidentiality), 100),
       ],
-    }),
-  ];
+    }));
+  }
 
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -267,6 +324,9 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
   const subtitle = cfg?.subtitle ?? '';
   const footerText = cfg?.footerText ?? 'پایان صورت‌جلسه';
   const showLogo = cfg?.showLogo ?? true;
+  const showParticipants = cfg?.showParticipants ?? true;
+  const showConfidentiality = cfg?.showConfidentiality ?? true;
+  const showDecisions = cfg?.showDecisions ?? true;
 
   const logo = showLogo ? await fetchLogoBuffer(logoUrl) : null;
 
@@ -275,7 +335,7 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
     headerChildren.push(new ImageRun({
       data: logo.buffer,
       transformation: { width: 100, height: 66 },
-      type: logo.type as 'png' | 'jpg',
+      type: logo.type,
     }));
   }
   headerChildren.push(textRun(headerTitle, { bold: true, size: 36 }));
@@ -318,7 +378,7 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
 
   // Meeting info
   bodyChildren.push(rtlParagraph(textRun('مشخصات جلسه', { bold: true, size: 26 }), { spacingAfter: 200 }));
-  bodyChildren.push(meetingInfoTable(data));
+  bodyChildren.push(meetingInfoTable(data, showConfidentiality));
   bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
 
   // Agenda
@@ -326,11 +386,13 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
   bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
 
   // Decisions
-  bodyChildren.push(...decisionsSection(data));
-  bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+  if (showDecisions) {
+    bodyChildren.push(...decisionsSection(data));
+    bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+  }
 
   // Signatures
-  if (cfg?.showParticipants ?? true) {
+  if (showParticipants) {
     bodyChildren.push(rtlParagraph(textRun('شرکت‌کنندگان و امضاها', { bold: true, size: 26 }), { spacingAfter: 200 }));
     const sigTable = signaturesSection(data);
     if (sigTable) bodyChildren.push(sigTable);
@@ -385,6 +447,10 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
   });
 
   const blob = await Packer.toBlob(doc);
+  if (!blob || blob.size === 0) {
+    throw new Error('WORD_EMPTY_OUTPUT');
+  }
+
   const filename = buildFilename(minute.meeting_title_snapshot, minute.meeting_date_snapshot);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -393,3 +459,6 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
+
+// Exported for testing
+export { sanitizeFilename, buildFilename };

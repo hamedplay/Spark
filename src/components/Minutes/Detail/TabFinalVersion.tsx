@@ -18,7 +18,7 @@ interface Props {
   docData: MinutesDocumentData | null;
   docDataLoading: boolean;
   docDataError: string | null;
-  onPrepareDocumentData: () => Promise<void>;
+  onPrepareDocumentData: () => Promise<MinutesDocumentData>;
   onPrint: () => void;
   onWordExport: () => void;
   wordLoading: boolean;
@@ -185,6 +185,8 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
           onClose={() => setShowFullPreview(false)}
           docData={docData}
           onPrint={onPrint}
+          onWordExport={onWordExport}
+          wordLoading={wordLoading}
         />
       )}
 
