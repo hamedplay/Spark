@@ -109,6 +109,14 @@ function formatBadge(n: number): string | null {
   return toPersianDigits(n);
 }
 
+const ARIA_LABELS: Record<BadgeKey, string> = {
+  minutes_unread: 'اعلان جدید',
+  approvals_pending: 'مورد نیازمند تأیید',
+  my_decisions_unread: 'اعلان جدید',
+  my_decisions_active: 'مصوبه فعال',
+  followup_actionable: 'مصوبه نیازمند پیگیری',
+};
+
 interface Props {
   onNavigate: (page: PageId) => void;
   visibleCards?: Set<PageId>;
@@ -143,6 +151,19 @@ export function MinutesHubPage({ onNavigate, visibleCards }: Props) {
 
   useEffect(() => {
     fetchCounts();
+
+    const handleFocus = () => fetchCounts();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchCounts();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [fetchCounts]);
 
   const cards = visibleCards
@@ -172,7 +193,7 @@ export function MinutesHubPage({ onNavigate, visibleCards }: Props) {
               {primaryBadge && (
                 <span
                   className="absolute top-3 left-3 inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold text-white bg-red-500 shadow-sm"
-                  aria-label={`${card.title}: ${primaryBadge} مورد خوانده‌نشده`}
+                  aria-label={`${card.title}: ${primaryBadge} ${ARIA_LABELS[card.badgeKey!]}`}
                 >
                   {primaryBadge}
                 </span>
@@ -182,7 +203,7 @@ export function MinutesHubPage({ onNavigate, visibleCards }: Props) {
                 <span
                   className="absolute top-3 left-3 inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold text-white bg-blue-500 shadow-sm"
                   style={{ left: primaryBadge ? 'calc(1rem + 32px)' : '0.75rem' }}
-                  aria-label={`${card.title}: ${secondaryBadge} مورد فعال`}
+                  aria-label={`${card.title}: ${secondaryBadge} ${ARIA_LABELS[card.secondaryBadgeKey!]}`}
                 >
                   {secondaryBadge}
                 </span>

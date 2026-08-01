@@ -1,0 +1,9 @@
+# /etc/cron.d/minutes-reminder
+# Cron entry for minutes decision reminder scheduler — runs every 5 minutes.
+# Install: sudo cp deploy/minutes-reminder.cron /etc/cron.d/minutes-reminder
+# The script reads /etc/myapp/minutes-reminder.env for secrets.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/5 * * * * root /usr/local/bin/minutes-reminder-trigger.sh

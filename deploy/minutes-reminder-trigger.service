@@ -1,0 +1,7 @@
+[Unit]
+Description=Minutes Decision Reminder Scheduler (every 5 minutes)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/minutes-reminder-trigger.sh
+EnvironmentFile=/etc/myapp/minutes-reminder.env

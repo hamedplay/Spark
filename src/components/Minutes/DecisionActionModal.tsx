@@ -86,6 +86,7 @@ export function DecisionActionModal({
   const [followupMethod, setFollupMethod] = useState('phone');
   const [followupResult, setFollupResult] = useState('');
   const [followupDate, setFollupDate]  = useState<string | null>(null);
+  const [followupTime, setFollupTime]  = useState<string>('09:00');
   const [reopenStatus, setReopenStatus] = useState<DecisionStatus>('in_progress');
   const [reopenReason, setReopenReason] = useState('');
   const [resolveNotes, setResolveNotes] = useState('');
@@ -116,6 +117,13 @@ export function DecisionActionModal({
     if (action === 'followup' && followupResult.trim().length < 2) {
       setError('نتیجه پیگیری اجباری است.');
       return;
+    }
+    if (action === 'followup' && followupDate) {
+      const [h, m] = followupTime.split(':').map(Number);
+      if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+        setError('ساعت یادآور معتبر نیست.');
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -210,6 +218,15 @@ export function DecisionActionModal({
       }
 
       if (action === 'followup') {
+        // Build p_remind_at from Jalali date + time, converted to ISO timestamptz
+        let pRemindAt: string | undefined;
+        if (followupDate) {
+          // followupDate is a Jalali date string (YYYY/MM/DD)
+          // The server converts it; we pass it as-is with time appended
+          // The RPC receives timestamptz and validates it's in the future
+          pRemindAt = `${followupDate}T${followupTime}:00`;
+        }
+
         const { data, error: rpcErr } = await supabase.rpc('manage_minutes_decision', {
           p_decision_id: decision.id,
           p_expected_updated_at: decision.updated_at,
@@ -219,7 +236,9 @@ export function DecisionActionModal({
             method: followupMethod,
             result: followupResult,
             next_followup_date: followupDate ?? undefined,
+            next_followup_time: followupTime,
           },
+          p_remind_at: pRemindAt ?? null,
         });
 
         const parsed = parseRpcResult(data, rpcErr);
@@ -399,6 +418,14 @@ export function DecisionActionModal({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ پیگیری بعدی (اختیاری)</label>
                 <JalaliDatePicker value={followupDate} onChange={setFollupDate} placeholder="انتخاب تاریخ" />
               </div>
+              {followupDate && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ساعت یادآور</label>
+                  <input type="time" value={followupTime} onChange={e => setFollupTime(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+                  <p className="text-xs text-gray-400 mt-1">یادآور در این ساعت به مسئول مصوبه ارسال خواهد شد.</p>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نتیجه پیگیری <span className="text-red-500">*</span></label>
                 <textarea value={followupResult} onChange={e => setFollupResult(e.target.value)} rows={3}

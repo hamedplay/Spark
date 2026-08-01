@@ -2,8 +2,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.110.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Cron-Secret",
 };
 
 Deno.serve(async (req: Request) => {
@@ -11,22 +11,60 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "method_not_allowed" }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  // ── Authentication: require X-Cron-Secret ──────────────────────────────
+  const cronSecret = Deno.env.get("MINUTES_REMINDER_CRON_SECRET");
+  if (!cronSecret) {
+    console.error("[process-reminders] MINUTES_REMINDER_CRON_SECRET not configured");
+    return new Response(
+      JSON.stringify({ error: "server_misconfigured" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const providedSecret = req.headers.get("X-Cron-Secret");
+  if (!providedSecret) {
+    return new Response(
+      JSON.stringify({ error: "unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  // Constant-time comparison
+  const enc = new TextEncoder();
+  const a = enc.encode(providedSecret);
+  const b = enc.encode(cronSecret);
+  if (a.length !== b.length) {
+    return new Response(
+      JSON.stringify({ error: "unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  if (diff !== 0) {
+    return new Response(
+      JSON.stringify({ error: "unauthorized" }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    // 1. Atomically claim pending reminders that are due.
-    //    We use a single UPDATE ... RETURNING to lock rows.
-    const { data: dueReminders, error: claimError } = await supabase
-      .from("minutes_decision_reminders")
-      .update({ status: "processing", updated_at: new Date().toISOString() })
-      .eq("status", "pending")
-      .lte("remind_at", new Date().toISOString())
-      .order("remind_at", { ascending: true })
-      .limit(50)
-      .select("id, decision_id, minute_id, recipient_user_id");
+    // 1. Atomically claim due reminders using RPC with FOR UPDATE SKIP LOCKED
+    const { data: claimedReminders, error: claimError } = await supabase
+      .rpc("claim_due_minutes_decision_reminders", { p_limit: 50 });
 
     if (claimError) {
       console.error("[process-reminders] claim failed", claimError);
@@ -36,27 +74,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!dueReminders || dueReminders.length === 0) {
+    if (!claimedReminders || claimedReminders.length === 0) {
       return new Response(
         JSON.stringify({ processed: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    let sentCount = 0;
+    let notificationCount = 0;
+    let smsQueuedCount = 0;
     let failedCount = 0;
 
-    for (const reminder of dueReminders) {
+    for (const reminder of claimedReminders) {
       try {
-        // 2. Fetch decision details for notification content
-        const { data: decision } = await supabase
-          .from("minutes_decisions")
-          .select("id, title, minute_id")
-          .eq("id", reminder.decision_id)
-          .maybeSingle();
-
-        if (!decision) {
-          // Decision was deleted; cancel the reminder
+        if (!reminder.decision_title) {
           await supabase
             .from("minutes_decision_reminders")
             .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -64,27 +95,33 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // 3. Create in-app notification
+        // 2. Create in-app notification using direct insert (service role bypasses auth.uid() check)
         const eventKey = `decision:${reminder.decision_id}:${reminder.id}:decision_followup_due:${reminder.recipient_user_id}`;
         const { error: notifError } = await supabase
           .from("notifications")
           .insert({
             user_id: reminder.recipient_user_id,
+            title: "موعد پیگیری مصوبه",
+            message: `موعد پیگیری مصوبه «${reminder.decision_title}» فرا رسیده است.`,
+            type: "meeting",
+            read: false,
             entity_type: "decision",
             entity_id: reminder.decision_id,
             minute_id: reminder.minute_id,
-            template_category: "decision",
             template_event_type: "decision_followup_due",
-            event_key: eventKey,
-            title: "موعد پیگیری مصوبه",
-            body: `موعد پیگیری مصوبه «${decision.title}» فرا رسیده است.`,
+            template_category: "decision",
+            template_audience: "decision_owner",
             action_url: `#minutes-my-decisions?decision=${reminder.decision_id}`,
-            read: false,
+            event_key: eventKey,
+            metadata: { reminder_id: reminder.id, decision_id: reminder.decision_id },
           });
 
         const notificationOk = !notifError;
 
-        // 4. Check if SMS template is active for this event
+        // 3. Check if SMS template is active, then dispatch via send-sms edge function
+        let smsDispatched = false;
+        let smsQueued = false;
+
         const { data: smsTemplate } = await supabase
           .from("sms_templates")
           .select("id, body, is_active")
@@ -93,50 +130,54 @@ Deno.serve(async (req: Request) => {
           .eq("is_active", true)
           .maybeSingle();
 
-        let smsOk = false;
         if (smsTemplate) {
-          // Fetch recipient phone
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("phone")
-            .eq("id", reminder.recipient_user_id)
-            .maybeSingle();
-
-          if (profile?.phone) {
-            // Use the existing SMS dispatch infrastructure
-            const { error: smsLogError } = await supabase
-              .from("sms_dispatch_logs")
-              .insert({
-                target_phone: profile.phone,
-                target_user_id: reminder.recipient_user_id,
-                message: smsTemplate.body,
+          // Dispatch via the existing send-sms edge function (mode: "dispatch")
+          // This handles phone lookup, provider resolution, and logging internally.
+          const { data: smsResult, error: smsError } = await supabase.functions.invoke(
+            "send-sms",
+            {
+              body: {
+                mode: "dispatch",
+                targetUserId: reminder.recipient_user_id,
                 category: "decision",
-                event_type: "decision_followup_due",
-                status: "queued",
-              });
-            smsOk = !smsLogError;
+                eventType: "decision_followup_due",
+                audience: "decision_owner",
+                message: smsTemplate.body,
+                triggeredByUserId: null,
+              },
+            },
+          );
+
+          if (!smsError && smsResult?.ok) {
+            if (smsResult.status === "sent") {
+              smsDispatched = true;
+            } else if (smsResult.status === "skipped") {
+              // Template active but user has no phone or no SMS rule — not a failure
+              smsQueued = false;
+            }
           }
+          // If smsError or result not ok, smsDispatched stays false
         }
 
-        // 5. Update reminder status
-        const newStatus = notificationOk && (!smsTemplate || smsOk)
-          ? "sent"
-          : notificationOk
-            ? "partial"
-            : "failed";
+        // 4. Update reminder status
+        // sms_sent_at only set when actually sent by provider (not just queued)
+        const newStatus = notificationOk
+          ? (smsDispatched ? "sent" : "partial")
+          : "failed";
 
         await supabase
           .from("minutes_decision_reminders")
           .update({
             status: newStatus,
             notification_sent_at: notificationOk ? new Date().toISOString() : null,
-            sms_sent_at: smsOk ? new Date().toISOString() : null,
+            sms_sent_at: smsDispatched ? new Date().toISOString() : null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", reminder.id);
 
-        if (newStatus === "sent") sentCount++;
-        else failedCount++;
+        if (notificationOk) notificationCount++;
+        if (smsDispatched) smsQueuedCount++;
+        if (newStatus === "failed") failedCount++;
       } catch (err) {
         console.error("[process-reminders] reminder failed", reminder.id, err);
         await supabase
@@ -148,13 +189,18 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ processed: dueReminders.length, sent: sentCount, failed: failedCount }),
+      JSON.stringify({
+        processed: claimedReminders.length,
+        notifications: notificationCount,
+        sms_sent: smsQueuedCount,
+        failed: failedCount,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error("[process-reminders] fatal", err);
     return new Response(
-      JSON.stringify({ error: "internal", details: err.message }),
+      JSON.stringify({ error: "internal" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
