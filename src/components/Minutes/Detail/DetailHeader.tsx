@@ -2,6 +2,7 @@ import { ArrowRight, CreditCard as Edit2, Send, Printer, FileDown, Globe, Clock,
 import { MinutesStatusBadge, ConfidentialityBadge, ApprovalModeBadge } from '../MinutesShared';
 import type { MinutesStatus, ConfidentialityLevel, ApprovalMode } from '../types';
 import type { MinuteDetail, ApprovalRow } from './types';
+import { formatJalaliDateForDisplay } from '../../../lib/minutesDate';
 
 export interface DetailHeaderProps {
   minute: MinuteDetail;
@@ -44,7 +45,7 @@ export function DetailHeader({
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              {minute.meeting_date_snapshot}
+              {formatJalaliDateForDisplay(minute.meeting_date_snapshot)}
             </span>
             <span className="flex items-center gap-1.5">
               <User className="w-3.5 h-3.5" />

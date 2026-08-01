@@ -1,13 +1,14 @@
 import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow } from './types';
 import { EmptyState } from '../MinutesShared';
 import { InvitationBadge, AttendanceBadge } from './Badges';
+import { formatJalaliDateForDisplay } from '../../../lib/minutesDate';
 
 export function TabSummary({ minute }: { minute: MinuteDetail }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {[
         { label: 'عنوان جلسه', value: minute.meeting_title_snapshot },
-        { label: 'تاریخ جلسه', value: minute.meeting_date_snapshot },
+        { label: 'تاریخ جلسه', value: formatJalaliDateForDisplay(minute.meeting_date_snapshot) },
         { label: 'دبیر جلسه', value: minute.secretary_name_snapshot },
         { label: 'رئیس جلسه', value: minute.chair_name_snapshot },
         { label: 'واحد سازمانی', value: minute.org_unit_name_snapshot || '—' },

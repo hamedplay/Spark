@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { PageHeader, ApprovalStatusBadge, ApprovalModeBadge, EmptyState, TableSkeleton } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
 import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { formatJalaliDateForDisplay, formatJalaliTimestamp } from '../../lib/minutesDate';
 import type { ApprovalStatus, ApprovalMode } from './types';
 
 interface ApprovalInboxRow {
@@ -145,12 +146,12 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
                         {row.meeting_title}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{row.meeting_date}</td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatJalaliDateForDisplay(row.meeting_date)}</td>
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{row.secretary_name}</td>
                     <td className="px-4 py-3"><ApprovalModeBadge mode={row.approval_mode} /></td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{row.revision_number}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                      {row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('fa-IR') : '—'}
+                      {row.submitted_at ? formatJalaliTimestamp(row.submitted_at) : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">

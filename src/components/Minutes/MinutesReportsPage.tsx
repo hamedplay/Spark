@@ -3,6 +3,7 @@ import { Search, FileDown, Play, X, Settings2, ChevronLeft, ChevronRight, Printe
 import { PageHeader, TableSkeleton, EmptyState, MinutesStatusBadge, DecisionStatusBadge, DecisionPriorityBadge, ProgressIndicator } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
 import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { formatJalaliDateForDisplay, formatJalaliTimestamp } from '../../lib/minutesDate';
 
 type ReportType = 'minutes' | 'decisions';
 
@@ -287,7 +288,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
                           <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer"
                             onClick={() => { setMinuteIdInUrl(r.id); setMinutesPageInUrl('minutes-detail'); onNavigate('minutes-detail'); }}>
                             <Td><span className="font-medium text-gray-800 dark:text-gray-200">{r.meeting_title}</span></Td>
-                            <Td>{r.meeting_date || '—'}</Td>
+                            <Td>{formatJalaliDateForDisplay(r.meeting_date)}</Td>
                             <Td>{r.org_unit || '—'}</Td>
                             <Td>{r.secretary}</Td>
                             <Td>{r.chair}</Td>
@@ -295,7 +296,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
                             <Td>{r.approval_mode === 'system' ? 'سیستمی' : r.approval_mode === 'in_person' ? 'حضوری' : '—'}</Td>
                             <Td>{r.revision_number}</Td>
                             <Td>{r.decision_count}</Td>
-                            <Td>{r.published_at ? new Date(r.published_at).toLocaleDateString('fa-IR') : '—'}</Td>
+                            <Td>{r.published_at ? formatJalaliTimestamp(r.published_at) : '—'}</Td>
                           </tr>
                         ))
                       : (rows as DecisionReportRow[]).map(r => (
@@ -306,7 +307,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
                             <Td><DecisionPriorityBadge priority={r.priority as any} /></Td>
                             <Td><DecisionStatusBadge status={r.status as any} /></Td>
                             <Td><ProgressIndicator percent={r.progress} /></Td>
-                            <Td>{r.due_date || '—'}</Td>
+                            <Td>{formatJalaliDateForDisplay(r.due_date)}</Td>
                             <Td>{r.overdue ? <span className="text-red-600 text-xs font-medium">عقب‌افتاده</span> : '—'}</Td>
                           </tr>
                         ))

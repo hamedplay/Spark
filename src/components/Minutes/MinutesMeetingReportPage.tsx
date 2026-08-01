@@ -6,6 +6,7 @@ import {
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { formatJalaliDateForDisplay } from '../../lib/minutesDate';
 import type { MinutesStatus, ConfidentialityLevel, DecisionStatus, DecisionPriority } from './types';
 
 interface Props {
@@ -176,7 +177,7 @@ export function MinutesMeetingReportPage({ onNavigate }: Props) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {[
             { label: 'عنوان', value: minute.meeting_title_snapshot },
-            { label: 'تاریخ', value: minute.meeting_date_snapshot },
+            { label: 'تاریخ', value: formatJalaliDateForDisplay(minute.meeting_date_snapshot) },
             { label: 'دبیر', value: minute.secretary_name_snapshot },
             { label: 'رئیس جلسه', value: minute.chair_name_snapshot },
             { label: 'واحد', value: minute.org_unit_name_snapshot || '—' },
