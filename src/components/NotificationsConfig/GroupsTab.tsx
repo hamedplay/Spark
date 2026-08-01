@@ -8,12 +8,23 @@ import { Toggle } from './Toggle';
 import type { UserGroup } from './types';
 import { NOTIFICATION_TYPES, N_CATEGORIES } from './constants';
 
+interface RegistryEvent {
+  event_key: string;
+  category: string;
+  label_fa: string;
+  is_active: boolean;
+  group_rule_supported: boolean;
+}
+
+const REGISTRY_CATEGORIES = ['minutes', 'decision'];
+
 export function GroupsTab() {
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [rules, setRules] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [registryEvents, setRegistryEvents] = useState<RegistryEvent[]>([]);
 
   useEffect(() => {
     supabase.from('user_groups').select('id, name, display_name').order('name').then(({ data }) => {
@@ -21,6 +32,25 @@ export function GroupsTab() {
       setGroups(g);
       if (g.length > 0) setSelectedGroup(g[0].id);
     });
+
+    // Load minutes/decision events from registry
+    supabase
+      .from('notification_event_registry')
+      .select('event_key, category, label_fa, is_active, group_rule_supported')
+      .in('category', REGISTRY_CATEGORIES)
+      .eq('is_active', true)
+      .eq('group_rule_supported', true)
+      .order('category')
+      .order('event_key')
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('[GroupsTab] registry query failed, falling back to constants', error);
+          return;
+        }
+        if (data && data.length > 0) {
+          setRegistryEvents(data as RegistryEvent[]);
+        }
+      });
   }, []);
 
   const loadRules = useCallback(async (groupId: string) => {
@@ -39,8 +69,23 @@ export function GroupsTab() {
 
   useEffect(() => { if (selectedGroup) loadRules(selectedGroup); }, [selectedGroup, loadRules]);
 
+  // Build the display list: registry events for minutes/decision, constants for everything else
+  const allTypes = (() => {
+    const staticTypes = NOTIFICATION_TYPES.filter(n => !REGISTRY_CATEGORIES.includes(n.category));
+    const registryTypes = registryEvents.length > 0
+      ? registryEvents.map(e => ({ key: e.event_key, label: e.label_fa, category: e.category === 'minutes' ? 'صورت‌جلسات' : 'مصوبات' }))
+      : NOTIFICATION_TYPES.filter(n => n.category === 'صورت‌جلسات' || n.category === 'مصوبات');
+    return [...staticTypes, ...registryTypes];
+  })();
+
+  const allCategories = (() => {
+    const cats = new Set<string>();
+    allTypes.forEach(t => cats.add(t.category));
+    return Array.from(cats);
+  })();
+
   const toggleAll = (cat: string, value: boolean) => {
-    const keys = NOTIFICATION_TYPES.filter(n => n.category === cat).map(n => n.key);
+    const keys = allTypes.filter(n => n.category === cat).map(n => n.key);
     setRules(r => { const next = { ...r }; keys.forEach(k => { next[k] = value; }); return next; });
   };
 
@@ -56,7 +101,7 @@ export function GroupsTab() {
   };
 
   const allEnabledForCat = (cat: string) =>
-    NOTIFICATION_TYPES.filter(n => n.category === cat).every(n => rules[n.key] !== false);
+    allTypes.filter(n => n.category === cat).every(n => rules[n.key] !== false);
 
   return (
     <div className="space-y-4">
@@ -80,8 +125,8 @@ export function GroupsTab() {
       {selectedGroup && !loading && (
         <>
           <div className="space-y-3">
-            {N_CATEGORIES.map(cat => {
-              const items = NOTIFICATION_TYPES.filter(n => n.category === cat);
+            {allCategories.map(cat => {
+              const items = allTypes.filter(n => n.category === cat);
               const allOn = allEnabledForCat(cat);
               return (
                 <div key={cat} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">

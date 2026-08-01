@@ -7,6 +7,8 @@ import {
   Video,
   Users,
   Star,
+  Gavel,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -73,6 +75,20 @@ export function NotificationTypeIcon({
       <Star
         size={s}
         className={`${cls} text-yellow-500`}
+      />
+    );
+  if (type === 'minutes')
+    return (
+      <ClipboardCheck
+        size={s}
+        className={`${cls} text-indigo-500`}
+      />
+    );
+  if (type === 'decision')
+    return (
+      <Gavel
+        size={s}
+        className={`${cls} text-violet-500`}
       />
     );
 

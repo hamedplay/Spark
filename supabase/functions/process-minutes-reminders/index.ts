@@ -113,6 +113,7 @@ Deno.serve(async (req: Request) => {
               fallback_title: "موعد پیگیری مصوبه",
               fallback_message: `موعد پیگیری مصوبه «${reminder.decision_title}» فرا رسیده است.`,
               audience: "decision_owner",
+              reminder_id: reminder.id,
             },
             p_idempotency_key: idempotencyKey,
             p_revision_number: null,
@@ -128,15 +129,15 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // 3. Update reminder status based on queue result
-        const newStatus = queueResult?.ok ? "sent" : "failed";
+        // 3. Update reminder status to 'queued' — outbox worker will update to sent/partial/failed
+        const newStatus = queueResult?.ok ? "queued" : "failed";
 
         await supabase
           .from("minutes_decision_reminders")
           .update({
             status: newStatus,
-            notification_sent_at: queueResult?.ok ? new Date().toISOString() : null,
-            sms_sent_at: null, // SMS sent_at is set by outbox worker after provider confirms
+            notification_sent_at: null, // Set by outbox worker after notification created
+            sms_sent_at: null, // Set by outbox worker after SMS provider confirms
             updated_at: new Date().toISOString(),
           })
           .eq("id", reminder.id);

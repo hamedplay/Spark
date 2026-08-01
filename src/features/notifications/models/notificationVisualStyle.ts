@@ -17,5 +17,9 @@ export function getNotificationTypeBackground(
     type === 'video_conference'
   )
     return 'bg-rose-100 dark:bg-rose-900/40';
+  if (type === 'minutes')
+    return 'bg-indigo-100 dark:bg-indigo-900/40';
+  if (type === 'decision')
+    return 'bg-violet-100 dark:bg-violet-900/40';
   return 'bg-gray-100 dark:bg-gray-700';
 }

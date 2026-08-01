@@ -1,0 +1,10 @@
+# /etc/cron.d/decision-due-overdue
+# Cron entry for decision due/overdue processor — runs daily after midnight Tehran time.
+# Install: sudo cp deploy/decision-due-overdue.cron /etc/cron.d/decision-due-overdue
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Run at 00:30 Tehran time (approx 21:00 UTC previous day, but cron uses server TZ)
+# Adjust based on server timezone. For UTC server: 20 20 * * *
+20 20 * * * root /usr/local/bin/decision-due-overdue-trigger.sh
