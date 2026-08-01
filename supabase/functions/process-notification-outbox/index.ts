@@ -12,6 +12,26 @@ const MAX_NOTIFICATION_ATTEMPTS = 5;
 const SMS_BACKOFF_MS = [2 * 60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000, 60 * 60 * 1000];
 const NOTIF_BACKOFF_MS = [1 * 60 * 1000, 2 * 60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000];
 
+interface ClaimedRow {
+  id: string;
+  event_key: string;
+  category: string;
+  entity_type: string;
+  entity_id: string;
+  minute_id: string;
+  actor_user_id: string;
+  recipient_id: string;
+  audience: string;
+  payload: Record<string, unknown>;
+  attempt_count: number;
+  notification_attempt_count: number;
+  sms_attempt_count: number;
+  idempotency_key: string;
+  notification_status: string;
+  sms_status: string;
+  sms_sent_at: string | null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -88,19 +108,23 @@ Deno.serve(async (req: Request) => {
     let smsSentCount = 0;
     let failedCount = 0;
 
-    for (const row of claimedRows) {
+    for (const row of claimedRows as ClaimedRow[]) {
       try {
         const payload = row.payload || {};
-        const context = payload.context || {};
-        const smsSupported = payload.sms_supported || false;
-        const templateId = payload.template_id || null;
-        const revisionNumber = payload.revision_number || null;
-        const reminderId = context.reminder_id || null;
-        const actionUrl = payload.action_url || context.action_url || context.minute_link || context.decision_link || null;
+        const context = (payload.context || {}) as Record<string, unknown>;
+        const smsSupported = (payload.sms_supported as boolean) || false;
+        const templateId = (payload.template_id as string) || null;
+        const revisionNumber = (payload.revision_number as number) || null;
+        const reminderId = (context.reminder_id as string) || null;
+        const actionUrl = (payload.action_url as string) || (context.action_url as string) || (context.minute_link as string) || (context.decision_link as string) || null;
 
-        // ── Notification: only insert if not already sent ─────────────────
-        let notificationSent = (row as Record<string, unknown>).notification_status === 'sent';
+        let notificationSent = row.notification_status === "sent";
+        let notifAttemptCount = row.notification_attempt_count || 0;
+        let smsAttemptCount = row.sms_attempt_count || 0;
+        let smsStatus = row.sms_status || "not_requested";
+        let smsSentAt = row.sms_sent_at || null;
 
+        // ── Notification channel (independent retry) ──────────────────────
         if (!notificationSent) {
           const { error: notifError } = await supabase
             .from("notifications")
@@ -108,7 +132,7 @@ Deno.serve(async (req: Request) => {
               user_id: row.recipient_id,
               title: payload.title || row.event_type,
               message: payload.message || row.event_type,
-              type: row.category === 'decision' ? 'decision' : 'minutes',
+              type: row.category === "decision" ? "decision" : "minutes",
               read: false,
               entity_type: row.entity_type,
               entity_id: row.entity_id,
@@ -130,39 +154,49 @@ Deno.serve(async (req: Request) => {
 
           if (notifError) {
             if (notifError.code === "23505") {
-              // Duplicate notification — treat as sent
               notificationSent = true;
             } else {
-              // Notification failed — retry with backoff
-              const notifAttempt = (row.attempt_count || 0) + 1;
-              if (notifAttempt >= MAX_NOTIFICATION_ATTEMPTS) {
+              notifAttemptCount += 1;
+              if (notifAttemptCount >= MAX_NOTIFICATION_ATTEMPTS) {
                 await supabase
                   .from("notification_outbox")
                   .update({
                     status: "failed",
                     notification_status: "failed",
-                    attempt_count: notifAttempt,
+                    notification_attempt_count: notifAttemptCount,
+                    attempt_count: notifAttemptCount + smsAttemptCount,
                     last_error: notifError.message,
                     next_attempt_at: null,
                     processed_at: null,
                   })
                   .eq("id", row.id);
+
+                if (reminderId) {
+                  await updateReminderStatus(supabase, reminderId, "failed", null, null);
+                }
+                failedCount++;
+                continue;
               } else {
-                const backoffIdx = Math.min(notifAttempt - 1, NOTIF_BACKOFF_MS.length - 1);
+                const backoffIdx = Math.min(notifAttemptCount - 1, NOTIF_BACKOFF_MS.length - 1);
                 await supabase
                   .from("notification_outbox")
                   .update({
                     status: "partial",
                     notification_status: "failed",
-                    attempt_count: notifAttempt,
+                    notification_attempt_count: notifAttemptCount,
+                    attempt_count: notifAttemptCount + smsAttemptCount,
                     last_error: notifError.message,
                     next_attempt_at: new Date(Date.now() + NOTIF_BACKOFF_MS[backoffIdx]).toISOString(),
                     processed_at: null,
                   })
                   .eq("id", row.id);
+
+                if (reminderId) {
+                  await updateReminderStatus(supabase, reminderId, "partial", null, null);
+                }
+                failedCount++;
+                continue;
               }
-              failedCount++;
-              continue;
             }
           } else {
             notificationSent = true;
@@ -170,11 +204,7 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // ── SMS dispatch ──────────────────────────────────────────────────
-        let smsStatus = (row as Record<string, unknown>).sms_status || "not_requested";
-        let smsSentAt = (row as Record<string, unknown>).sms_sent_at || null;
-        let smsLastError: string | null = null;
-
+        // ── SMS channel (independent retry) ────────────────────────────────
         if (smsSupported && smsStatus !== "sent" && smsStatus !== "skipped_template_disabled" && smsStatus !== "skipped_no_phone" && smsStatus !== "skipped_no_provider_rule") {
           let smsTemplateBody: string | null = null;
           const { data: smsTemplate } = await supabase
@@ -187,7 +217,7 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
 
           if (smsTemplate) {
-            smsTemplateBody = smsTemplate.body;
+            smsTemplateBody = smsTemplate.body as string;
           } else {
             const { data: smsTemplateAll } = await supabase
               .from("sms_templates")
@@ -199,7 +229,7 @@ Deno.serve(async (req: Request) => {
               .maybeSingle();
 
             if (smsTemplateAll) {
-              smsTemplateBody = smsTemplateAll.body;
+              smsTemplateBody = smsTemplateAll.body as string;
             }
           }
 
@@ -210,7 +240,7 @@ Deno.serve(async (req: Request) => {
 
             if (renderedBody.unresolved.length > 0) {
               smsStatus = "failed";
-              smsLastError = `SMS_PLACEHOLDER_MISSING: ${renderedBody.unresolved.join(", ")}`;
+              smsAttemptCount += 1;
             } else {
               const smsResult = await dispatchSms(supabase, row, renderedBody.text);
 
@@ -220,7 +250,7 @@ Deno.serve(async (req: Request) => {
                 smsSentCount++;
               } else {
                 smsStatus = smsResult.status;
-                smsLastError = smsResult.error || "SMS_DISPATCH_FAILED";
+                smsAttemptCount += 1;
               }
             }
           }
@@ -229,24 +259,26 @@ Deno.serve(async (req: Request) => {
         // ── Determine final outbox status ───────────────────────────────────
         let finalStatus = "processed";
         let nextAttemptAt: string | null = null;
-        let attemptCount = row.attempt_count || 0;
         let lastError: string | null = null;
 
-        if (smsStatus === "failed") {
-          attemptCount += 1;
-
-          if (attemptCount >= MAX_SMS_ATTEMPTS) {
-            finalStatus = "failed";
-            nextAttemptAt = null;
-            lastError = smsLastError || "SMS_MAX_ATTEMPTS_REACHED";
-          } else {
-            finalStatus = "partial";
-            const backoffIdx = Math.min(attemptCount - 1, SMS_BACKOFF_MS.length - 1);
-            nextAttemptAt = new Date(Date.now() + SMS_BACKOFF_MS[backoffIdx]).toISOString();
-            lastError = smsLastError;
-          }
+        // Check notification failure
+        if (!notificationSent) {
+          // Should not reach here (handled above), but be safe
+          finalStatus = "failed";
+          lastError = "NOTIFICATION_NOT_SENT";
+        } else if (smsStatus === "failed" && smsAttemptCount < MAX_SMS_ATTEMPTS) {
+          // SMS retryable
+          finalStatus = "partial";
+          const backoffIdx = Math.min(smsAttemptCount - 1, SMS_BACKOFF_MS.length - 1);
+          nextAttemptAt = new Date(Date.now() + SMS_BACKOFF_MS[backoffIdx]).toISOString();
+          lastError = `SMS_FAILED (attempt ${smsAttemptCount})`;
+        } else if (smsStatus === "failed" && smsAttemptCount >= MAX_SMS_ATTEMPTS) {
+          // SMS final failure
+          finalStatus = "failed";
+          nextAttemptAt = null;
+          lastError = "SMS_MAX_ATTEMPTS_REACHED";
         } else if (smsStatus === "skipped_no_phone" || smsStatus === "skipped_no_provider_rule") {
-          // Terminal warning — outbox processing complete, but SMS was not sent
+          // Terminal warning — outbox processing complete
           finalStatus = "processed";
           lastError = `SMS_SKIPPED: ${smsStatus}`;
         }
@@ -260,7 +292,9 @@ Deno.serve(async (req: Request) => {
             sms_status: smsStatus,
             sms_sent_at: smsSentAt,
             processed_at: finalStatus === "processed" ? new Date().toISOString() : null,
-            attempt_count: attemptCount,
+            notification_attempt_count: notifAttemptCount,
+            sms_attempt_count: smsAttemptCount,
+            attempt_count: notifAttemptCount + smsAttemptCount,
             next_attempt_at: nextAttemptAt,
             last_error: lastError,
           })
@@ -268,21 +302,13 @@ Deno.serve(async (req: Request) => {
 
         // ── Update reminder lifecycle ─────────────────────────────────────
         if (reminderId) {
-          // Decision table per spec:
-          // not_requested → sent
-          // skipped_template_disabled → sent
-          // skipped_no_phone → partial
-          // skipped_no_provider_rule → partial
-          // failed (below cap) → partial
-          // failed (at cap) → failed
-          // sent → sent
           let reminderStatus = "sent";
           if (!notificationSent) {
             reminderStatus = "failed";
           } else if (smsStatus === "skipped_no_phone" || smsStatus === "skipped_no_provider_rule") {
             reminderStatus = "partial";
           } else if (smsStatus === "failed") {
-            if (attemptCount >= MAX_SMS_ATTEMPTS) {
+            if (smsAttemptCount >= MAX_SMS_ATTEMPTS) {
               reminderStatus = "failed";
             } else {
               reminderStatus = "partial";
@@ -356,7 +382,7 @@ function renderPlaceholders(template: string, context: Record<string, unknown>):
 // ── SMS dispatch helper ─────────────────────────────────────────────────────
 async function dispatchSms(
   supabase: ReturnType<typeof createClient>,
-  row: { recipient_id: string; category: string; event_key: string; audience: string; payload: Record<string, unknown> },
+  row: ClaimedRow,
   renderedBody: string,
 ): Promise<{ status: string; sent: boolean; error?: string }> {
   try {
