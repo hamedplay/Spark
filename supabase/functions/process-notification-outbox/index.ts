@@ -7,8 +7,10 @@ const corsHeaders = {
 };
 
 const MAX_SMS_ATTEMPTS = 5;
+const MAX_NOTIFICATION_ATTEMPTS = 5;
 
-const BACKOFF_MS = [2 * 60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000, 60 * 60 * 1000];
+const SMS_BACKOFF_MS = [2 * 60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000, 60 * 60 * 1000];
+const NOTIF_BACKOFF_MS = [1 * 60 * 1000, 2 * 60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000];
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -84,7 +86,6 @@ Deno.serve(async (req: Request) => {
 
     let notificationCount = 0;
     let smsSentCount = 0;
-    let smsSkippedCount = 0;
     let failedCount = 0;
 
     for (const row of claimedRows) {
@@ -129,18 +130,37 @@ Deno.serve(async (req: Request) => {
 
           if (notifError) {
             if (notifError.code === "23505") {
+              // Duplicate notification — treat as sent
               notificationSent = true;
             } else {
-              await supabase
-                .from("notification_outbox")
-                .update({
-                  status: "failed",
-                  notification_status: "failed",
-                  attempt_count: (row.attempt_count || 0) + 1,
-                  last_error: notifError.message,
-                  next_attempt_at: new Date(Date.now() + 60000).toISOString(),
-                })
-                .eq("id", row.id);
+              // Notification failed — retry with backoff
+              const notifAttempt = (row.attempt_count || 0) + 1;
+              if (notifAttempt >= MAX_NOTIFICATION_ATTEMPTS) {
+                await supabase
+                  .from("notification_outbox")
+                  .update({
+                    status: "failed",
+                    notification_status: "failed",
+                    attempt_count: notifAttempt,
+                    last_error: notifError.message,
+                    next_attempt_at: null,
+                    processed_at: null,
+                  })
+                  .eq("id", row.id);
+              } else {
+                const backoffIdx = Math.min(notifAttempt - 1, NOTIF_BACKOFF_MS.length - 1);
+                await supabase
+                  .from("notification_outbox")
+                  .update({
+                    status: "partial",
+                    notification_status: "failed",
+                    attempt_count: notifAttempt,
+                    last_error: notifError.message,
+                    next_attempt_at: new Date(Date.now() + NOTIF_BACKOFF_MS[backoffIdx]).toISOString(),
+                    processed_at: null,
+                  })
+                  .eq("id", row.id);
+              }
               failedCount++;
               continue;
             }
@@ -206,29 +226,29 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // ── Determine final outbox status with retry cap ───────────────────
+        // ── Determine final outbox status ───────────────────────────────────
         let finalStatus = "processed";
         let nextAttemptAt: string | null = null;
         let attemptCount = row.attempt_count || 0;
+        let lastError: string | null = null;
 
-        if (!notificationSent) {
-          finalStatus = "failed";
-          failedCount++;
-        } else if (smsStatus === "failed") {
+        if (smsStatus === "failed") {
           attemptCount += 1;
 
           if (attemptCount >= MAX_SMS_ATTEMPTS) {
             finalStatus = "failed";
             nextAttemptAt = null;
-            if (!smsLastError) smsLastError = "SMS_MAX_ATTEMPTS_REACHED";
+            lastError = smsLastError || "SMS_MAX_ATTEMPTS_REACHED";
           } else {
             finalStatus = "partial";
-            const backoffIdx = Math.min(attemptCount - 1, BACKOFF_MS.length - 1);
-            nextAttemptAt = new Date(Date.now() + BACKOFF_MS[backoffIdx]).toISOString();
+            const backoffIdx = Math.min(attemptCount - 1, SMS_BACKOFF_MS.length - 1);
+            nextAttemptAt = new Date(Date.now() + SMS_BACKOFF_MS[backoffIdx]).toISOString();
+            lastError = smsLastError;
           }
         } else if (smsStatus === "skipped_no_phone" || smsStatus === "skipped_no_provider_rule") {
-          // SMS was needed but couldn't be sent — partial, not processed
-          finalStatus = "partial";
+          // Terminal warning — outbox processing complete, but SMS was not sent
+          finalStatus = "processed";
+          lastError = `SMS_SKIPPED: ${smsStatus}`;
         }
         // skipped_template_disabled, not_requested, sent → processed
 
@@ -242,7 +262,7 @@ Deno.serve(async (req: Request) => {
             processed_at: finalStatus === "processed" ? new Date().toISOString() : null,
             attempt_count: attemptCount,
             next_attempt_at: nextAttemptAt,
-            last_error: finalStatus !== "processed" ? smsLastError : null,
+            last_error: lastError,
           })
           .eq("id", row.id);
 
@@ -253,7 +273,8 @@ Deno.serve(async (req: Request) => {
           // skipped_template_disabled → sent
           // skipped_no_phone → partial
           // skipped_no_provider_rule → partial
-          // failed → partial (or failed if max attempts reached)
+          // failed (below cap) → partial
+          // failed (at cap) → failed
           // sent → sent
           let reminderStatus = "sent";
           if (!notificationSent) {
@@ -296,7 +317,6 @@ Deno.serve(async (req: Request) => {
         processed: claimedRows.length,
         notifications: notificationCount,
         sms_sent: smsSentCount,
-        sms_skipped: smsSkippedCount,
         failed: failedCount,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
