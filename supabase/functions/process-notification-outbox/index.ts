@@ -6,6 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Cron-Secret",
 };
 
+const MAX_SMS_ATTEMPTS = 5;
+
+const BACKOFF_MS = [2 * 60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000, 60 * 60 * 1000];
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -125,7 +129,6 @@ Deno.serve(async (req: Request) => {
 
           if (notifError) {
             if (notifError.code === "23505") {
-              // Duplicate — notification already exists, mark notification as sent
               notificationSent = true;
             } else {
               await supabase
@@ -150,9 +153,9 @@ Deno.serve(async (req: Request) => {
         // ── SMS dispatch ──────────────────────────────────────────────────
         let smsStatus = (row as Record<string, unknown>).sms_status || "not_requested";
         let smsSentAt = (row as Record<string, unknown>).sms_sent_at || null;
+        let smsLastError: string | null = null;
 
         if (smsSupported && smsStatus !== "sent" && smsStatus !== "skipped_template_disabled" && smsStatus !== "skipped_no_phone" && smsStatus !== "skipped_no_provider_rule") {
-          // Look up SMS template
           let smsTemplateBody: string | null = null;
           const { data: smsTemplate } = await supabase
             .from("sms_templates")
@@ -183,55 +186,51 @@ Deno.serve(async (req: Request) => {
           if (!smsTemplateBody) {
             smsStatus = "skipped_template_disabled";
           } else {
-            // ── Render SMS placeholders ───────────────────────────────────
             const renderedBody = renderPlaceholders(smsTemplateBody, context);
 
-            // Check for unresolved placeholders
             if (renderedBody.unresolved.length > 0) {
-              // Don't send raw SMS with placeholders
               smsStatus = "failed";
-              await supabase
-                .from("notification_outbox")
-                .update({
-                  status: "partial",
-                  notification_status: notificationSent ? "sent" : "failed",
-                  sms_status: "failed",
-                  attempt_count: (row.attempt_count || 0) + 1,
-                  last_error: `SMS_PLACEHOLDER_MISSING: ${renderedBody.unresolved.join(", ")}`,
-                  next_attempt_at: new Date(Date.now() + 120000).toISOString(),
-                })
-                .eq("id", row.id);
-
-              // Update reminder if applicable
-              if (reminderId) {
-                await updateReminderStatus(supabase, reminderId, "partial", notificationSent ? new Date().toISOString() : null, null);
-              }
-
-              smsSkippedCount++;
-              continue;
-            }
-
-            // Dispatch via send-sms edge function
-            const smsResult = await dispatchSms(supabase, row, renderedBody.text);
-
-            if (smsResult.sent) {
-              smsStatus = "sent";
-              smsSentAt = new Date().toISOString();
-              smsSentCount++;
+              smsLastError = `SMS_PLACEHOLDER_MISSING: ${renderedBody.unresolved.join(", ")}`;
             } else {
-              smsStatus = smsResult.status;
+              const smsResult = await dispatchSms(supabase, row, renderedBody.text);
+
+              if (smsResult.sent) {
+                smsStatus = "sent";
+                smsSentAt = new Date().toISOString();
+                smsSentCount++;
+              } else {
+                smsStatus = smsResult.status;
+                smsLastError = smsResult.error || "SMS_DISPATCH_FAILED";
+              }
             }
           }
         }
 
-        // ── Determine final outbox status ─────────────────────────────────
+        // ── Determine final outbox status with retry cap ───────────────────
         let finalStatus = "processed";
+        let nextAttemptAt: string | null = null;
+        let attemptCount = row.attempt_count || 0;
+
         if (!notificationSent) {
           finalStatus = "failed";
           failedCount++;
         } else if (smsStatus === "failed") {
+          attemptCount += 1;
+
+          if (attemptCount >= MAX_SMS_ATTEMPTS) {
+            finalStatus = "failed";
+            nextAttemptAt = null;
+            if (!smsLastError) smsLastError = "SMS_MAX_ATTEMPTS_REACHED";
+          } else {
+            finalStatus = "partial";
+            const backoffIdx = Math.min(attemptCount - 1, BACKOFF_MS.length - 1);
+            nextAttemptAt = new Date(Date.now() + BACKOFF_MS[backoffIdx]).toISOString();
+          }
+        } else if (smsStatus === "skipped_no_phone" || smsStatus === "skipped_no_provider_rule") {
+          // SMS was needed but couldn't be sent — partial, not processed
           finalStatus = "partial";
         }
+        // skipped_template_disabled, not_requested, sent → processed
 
         await supabase
           .from("notification_outbox")
@@ -241,21 +240,32 @@ Deno.serve(async (req: Request) => {
             sms_status: smsStatus,
             sms_sent_at: smsSentAt,
             processed_at: finalStatus === "processed" ? new Date().toISOString() : null,
-            attempt_count: finalStatus === "partial" ? (row.attempt_count || 0) + 1 : row.attempt_count,
-            next_attempt_at: finalStatus === "partial" ? new Date(Date.now() + 120000).toISOString() : null,
-            last_error: finalStatus === "partial" ? "SMS_DISPATCH_FAILED" : null,
+            attempt_count: attemptCount,
+            next_attempt_at: nextAttemptAt,
+            last_error: finalStatus !== "processed" ? smsLastError : null,
           })
           .eq("id", row.id);
 
         // ── Update reminder lifecycle ─────────────────────────────────────
         if (reminderId) {
+          // Decision table per spec:
+          // not_requested → sent
+          // skipped_template_disabled → sent
+          // skipped_no_phone → partial
+          // skipped_no_provider_rule → partial
+          // failed → partial (or failed if max attempts reached)
+          // sent → sent
           let reminderStatus = "sent";
           if (!notificationSent) {
             reminderStatus = "failed";
-          } else if (smsStatus === "failed") {
+          } else if (smsStatus === "skipped_no_phone" || smsStatus === "skipped_no_provider_rule") {
             reminderStatus = "partial";
-          } else if (smsStatus === "skipped_template_disabled" || smsStatus === "skipped_no_phone" || smsStatus === "skipped_no_provider_rule") {
-            reminderStatus = "sent"; // notification sent, SMS not required/available
+          } else if (smsStatus === "failed") {
+            if (attemptCount >= MAX_SMS_ATTEMPTS) {
+              reminderStatus = "failed";
+            } else {
+              reminderStatus = "partial";
+            }
           }
 
           await updateReminderStatus(
@@ -305,7 +315,6 @@ function renderPlaceholders(template: string, context: Record<string, unknown>):
   const unresolved: string[] = [];
   let result = template;
 
-  // Replace all {{key}} with context values
   if (context && typeof context === "object") {
     for (const [key, value] of Object.entries(context)) {
       const strVal = value === null || value === undefined ? "" : String(value);
@@ -313,13 +322,11 @@ function renderPlaceholders(template: string, context: Record<string, unknown>):
     }
   }
 
-  // Find remaining unresolved placeholders
   const matches = result.match(/\{\{[^}]+\}\}/g);
   if (matches) {
     for (const m of matches) {
       unresolved.push(m.replace(/\{\{|}}/g, ""));
     }
-    // Strip them — don't send raw placeholders
     result = result.replace(/\{\{[^}]+\}\}/g, "");
   }
 
@@ -331,7 +338,7 @@ async function dispatchSms(
   supabase: ReturnType<typeof createClient>,
   row: { recipient_id: string; category: string; event_key: string; audience: string; payload: Record<string, unknown> },
   renderedBody: string,
-): Promise<{ status: string; sent: boolean }> {
+): Promise<{ status: string; sent: boolean; error?: string }> {
   try {
     const { data: result, error } = await supabase.functions.invoke("send-sms", {
       body: {
@@ -345,7 +352,7 @@ async function dispatchSms(
       },
     });
 
-    if (error) return { status: "failed", sent: false };
+    if (error) return { status: "failed", sent: false, error: error.message };
 
     if (result?.ok && result?.status === "sent") return { status: "sent", sent: true };
     if (result?.status === "skipped") {
@@ -354,9 +361,9 @@ async function dispatchSms(
       if (reason.includes("RULE") || reason.includes("rule")) return { status: "skipped_no_provider_rule", sent: false };
       return { status: "skipped_template_disabled", sent: false };
     }
-    return { status: "failed", sent: false };
-  } catch {
-    return { status: "failed", sent: false };
+    return { status: "failed", sent: false, error: "UNKNOWN_SMS_RESULT" };
+  } catch (err) {
+    return { status: "failed", sent: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 

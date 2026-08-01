@@ -18,7 +18,6 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // ── Authentication: require X-Cron-Secret ──────────────────────────────
   const cronSecret = Deno.env.get("MINUTES_REMINDER_CRON_SECRET");
   if (!cronSecret) {
     console.error("[process-reminders] MINUTES_REMINDER_CRON_SECRET not configured");
@@ -61,7 +60,6 @@ Deno.serve(async (req: Request) => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    // 1. Atomically claim due reminders using RPC with FOR UPDATE SKIP LOCKED
     const { data: claimedReminders, error: claimError } = await supabase
       .rpc("claim_due_minutes_decision_reminders", { p_limit: 50 });
 
@@ -82,6 +80,7 @@ Deno.serve(async (req: Request) => {
 
     let queuedCount = 0;
     let failedCount = 0;
+    let duplicateCount = 0;
 
     for (const reminder of claimedReminders) {
       try {
@@ -93,9 +92,6 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // 2. Queue outbox event via resolve_and_queue_notification RPC
-        //    This replaces direct notification insert — the outbox worker handles
-        //    notification creation, template rendering, and SMS dispatch.
         const idempotencyKey = `reminder:${reminder.id}:decision_followup_due:${reminder.recipient_user_id}`;
 
         const { data: queueResult, error: queueError } = await supabase
@@ -129,21 +125,50 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // 3. Update reminder status to 'queued' — outbox worker will update to sent/partial/failed
-        const newStatus = queueResult?.ok ? "queued" : "failed";
+        // Duplicate is NOT a failure — outbox already exists
+        if (queueResult?.ok && queueResult?.queued === false && queueResult?.reason === "DUPLICATE") {
+          // Find existing outbox row with same idempotency key
+          const { data: existingOutbox } = await supabase
+            .from("notification_outbox")
+            .select("id")
+            .eq("idempotency_key", idempotencyKey)
+            .maybeSingle();
 
-        await supabase
-          .from("minutes_decision_reminders")
-          .update({
-            status: newStatus,
-            notification_sent_at: null, // Set by outbox worker after notification created
-            sms_sent_at: null, // Set by outbox worker after SMS provider confirms
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", reminder.id);
+          await supabase
+            .from("minutes_decision_reminders")
+            .update({
+              status: "queued",
+              notification_sent_at: null,
+              sms_sent_at: null,
+              outbox_id: existingOutbox?.id || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", reminder.id);
 
-        if (queueResult?.ok) queuedCount++;
-        else failedCount++;
+          duplicateCount++;
+          continue;
+        }
+
+        if (queueResult?.ok) {
+          await supabase
+            .from("minutes_decision_reminders")
+            .update({
+              status: "queued",
+              notification_sent_at: null,
+              sms_sent_at: null,
+              outbox_id: queueResult.outbox_id || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", reminder.id);
+          queuedCount++;
+        } else {
+          console.error("[process-reminders] queue rejected", reminder.id, queueResult);
+          await supabase
+            .from("minutes_decision_reminders")
+            .update({ status: "failed", updated_at: new Date().toISOString() })
+            .eq("id", reminder.id);
+          failedCount++;
+        }
       } catch (err) {
         console.error("[process-reminders] reminder failed", reminder.id, err);
         await supabase
@@ -158,6 +183,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         processed: claimedReminders.length,
         queued: queuedCount,
+        duplicates: duplicateCount,
         failed: failedCount,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
