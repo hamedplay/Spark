@@ -7,6 +7,8 @@ import type { DecisionRow } from './types';
 import { MinutesPrintView, toDocData } from './MinutesPrintView';
 import type { MinutesDocumentData } from './MinutesDocumentData';
 import { FALLBACK_LOGO } from './MinutesDocumentData';
+import { fetchMinutesConfig } from './fetchMinutesConfig';
+import type { MinutesLayoutConfig } from './MinutesDocumentData';
 import './minutes-print.css';
 import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow, AgendaResultRow, ApprovalRow, ApprovalCommentRow } from './Detail/types';
 import { DetailLoadingView, DetailErrorView, DetailNotFoundView } from './Detail/DetailViews';
@@ -58,6 +60,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [documentDataLoaded, setDocumentDataLoaded] = useState(false);
   const [documentDataError, setDocumentDataError] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [docConfig, setDocConfig] = useState<MinutesLayoutConfig | null>(null);
 
   useEffect(() => {
     if (!printReady) return;
@@ -70,18 +73,9 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
 
   useEffect(() => {
     (async () => {
-      try {
-        const { data, error } = await supabase
-          .from('system_config')
-          .select('value')
-          .eq('section', 'appearance')
-          .eq('key', 'logo_url')
-          .maybeSingle();
-        if (error) throw error;
-        setLogoUrl(data?.value || FALLBACK_LOGO);
-      } catch {
-        setLogoUrl(FALLBACK_LOGO);
-      }
+      const { logoUrl: logo, config } = await fetchMinutesConfig();
+      setLogoUrl(logo);
+      setDocConfig(config);
     })();
   }, []);
 
@@ -425,6 +419,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     decisions: printDecisions,
     ownerNames: printOwnerNames,
     logoUrl,
+    config: docConfig,
   };
   const finalDocData: MinutesDocumentData | null = documentDataLoaded
     ? toDocData(printViewProps)

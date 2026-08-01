@@ -7,6 +7,8 @@ import { loadMinutesPrefill } from '../../lib/minutesPrefill';
 import { checkSystemApproverEligibility } from '../../lib/minutesApprovalEligibility';
 import { normalizeInvitationStatus } from '../../lib/minutesInvitationStatus';
 import { FALLBACK_LOGO } from './MinutesDocumentData';
+import { fetchMinutesConfig } from './fetchMinutesConfig';
+import type { MinutesLayoutConfig } from './MinutesDocumentData';
 import { PageHeader, TableSkeleton } from './MinutesShared';
 import type {
   ConfidentialityLevel, InvitationStatus, AttendanceStatus,
@@ -101,6 +103,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [decisions, setDecisions] = useState<DraftDecision[]>([defaultDecision()]);
   const [finalization, setFinalization] = useState<DraftFinalization>(defaultFinalization);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [docConfig, setDocConfig] = useState<MinutesLayoutConfig | null>(null);
 
   // Fetched reference data
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
@@ -399,22 +402,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     })();
   }, []);
 
-  // ── Fetch portal logo from system_config ────────────────────────────────
+  // ── Fetch portal logo and minutes config from system_config ────────────
   useEffect(() => {
     (async () => {
-      try {
-        const { data, error } = await supabase
-          .from('system_config')
-          .select('value')
-          .eq('section', 'appearance')
-          .eq('key', 'logo_url')
-          .maybeSingle();
-        if (error) throw error;
-        if (data?.value) setLogoUrl(data.value);
-        else setLogoUrl(FALLBACK_LOGO);
-      } catch {
-        setLogoUrl(FALLBACK_LOGO);
-      }
+      const { logoUrl: logo, config } = await fetchMinutesConfig();
+      setLogoUrl(logo);
+      setDocConfig(config);
     })();
   }, []);
 
@@ -1152,6 +1145,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 profiles={profiles}
                 orgUnits={orgUnits}
                 logoUrl={logoUrl}
+                config={docConfig}
                 minuteId={mode === 'edit' ? editMinuteId : workingMinuteId}
                 canManage={true}
               />

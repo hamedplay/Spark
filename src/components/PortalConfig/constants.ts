@@ -1,4 +1,4 @@
-import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Lock, Mail, Palette, Monitor, Bot } from 'lucide-react';
+import { Settings, Users, Shield, Globe, Bell, Video, Calendar, Server, Activity, ChevronDown, ChevronLeft, Lock, Mail, Palette, Monitor, Bot, FileText } from 'lucide-react';
 
 export const NAV_ITEMS = [
   { key: 'platform', label: 'تنظیمات پلتفرم', icon: Settings, sub: [
@@ -32,6 +32,7 @@ export const NAV_ITEMS = [
   { key: 'modules', label: 'مدیریت موجودیت‌ها', icon: Monitor, sub: [
     { key: 'video_conference', label: 'ویدیو کنفرانس' },
     { key: 'calendar', label: 'تقویم و مناسبت‌ها' },
+    { key: 'minutes_config', label: 'صورت‌جلسات و مصوبات' },
     { key: 'monitoring', label: 'مانیتورینگ سیستم' },
   ]},
   { key: 'spark', label: 'دستیار اسپارک', icon: Bot, sub: [

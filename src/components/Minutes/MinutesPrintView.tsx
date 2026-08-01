@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import type {
-  MinutesDocumentData, DocAgendaItem, DocDecision,
+  MinutesDocumentData, MinutesLayoutConfig, DocAgendaItem, DocDecision,
 } from './MinutesDocumentData';
 import { MinutesDocumentLayout } from './MinutesDocumentLayout';
 import type {
@@ -83,6 +83,7 @@ export interface MinutesPrintViewProps {
   decisions: DecisionRow[];
   ownerNames: Record<string, string>;
   logoUrl?: string | null;
+  config?: MinutesLayoutConfig | null;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -169,6 +170,7 @@ export function toDocData(props: MinutesPrintViewProps): MinutesDocumentData {
       created_at: c.created_at,
     })),
     logoUrl: props.logoUrl || null,
+    config: props.config || undefined,
   };
 }
 

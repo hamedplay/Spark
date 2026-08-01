@@ -22,8 +22,18 @@ function jalaliDateDisplay(value: string | null | undefined): string {
 }
 
 export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutProps) {
-  const { minute, internalParts, externalParts, agendaItems, decisions, logoUrl } = data;
+  const { minute, internalParts, externalParts, agendaItems, decisions, logoUrl, config } = data;
   const [logoError, setLogoError] = useState(false);
+
+  const cfg = config;
+  const headerTitle = cfg?.headerTitle ?? 'صورت‌جلسه';
+  const orgName = cfg?.orgName ?? '';
+  const subtitle = cfg?.subtitle ?? '';
+  const footerText = cfg?.footerText ?? 'پایان صورت‌جلسه';
+  const showLogo = cfg?.showLogo ?? true;
+  const showParticipants = cfg?.showParticipants ?? true;
+  const showConfidentiality = cfg?.showConfidentiality ?? true;
+  const showDecisions = cfg?.showDecisions ?? true;
 
   // ── Attendance lists ───────────────────────────────────────────────────────
   const presentNames: string[] = [];
@@ -78,19 +88,23 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
       <div className="mp-doc">
         {/* ── Header ────────────────────────────────────────────────────────── */}
         <div className="mp-header">
-          <div className="mp-header-logo">
-            {logoUrl && !logoError ? (
-              <img
-                src={logoUrl}
-                alt="لوگو سازمان"
-                className="mp-logo"
-                onError={() => setLogoError(true)}
-              />
-            ) : (
-              <div className="mp-logo-placeholder">محل لوگو</div>
-            )}
-          </div>
-          <h1>صورت‌جلسه</h1>
+          {showLogo && (
+            <div className="mp-header-logo">
+              {logoUrl && !logoError ? (
+                <img
+                  src={logoUrl}
+                  alt="لوگو سازمان"
+                  className="mp-logo"
+                  onError={() => setLogoError(true)}
+                />
+              ) : (
+                <div className="mp-logo-placeholder">محل لوگو</div>
+              )}
+            </div>
+          )}
+          <h1>{headerTitle}</h1>
+          {orgName && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{orgName}</p>}
+          {subtitle && <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">{subtitle}</p>}
         </div>
 
         {/* ── Meeting details ────────────────────────────────────────────────── */}
@@ -127,6 +141,12 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
               <span className="mp-value">{orDash(minute.chair_name_snapshot)}</span>
             </div>
           </div>
+          {showConfidentiality && (
+            <div className="mp-info-row-full">
+              <span className="mp-label">سطح محرمانگی:</span>
+              <span className="mp-value">{orDash(minute.confidentiality)}</span>
+            </div>
+          )}
         </div>
 
         {/* ── Agenda items ───────────────────────────────────────────────────── */}
@@ -146,6 +166,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
         </div>
 
         {/* ── Decisions ─────────────────────────────────────────────────────── */}
+        {showDecisions && (
         <div className="mp-section">
           <h2 className="mp-section-title">مصوبات</h2>
           {decisions.length === 0 ? (
@@ -167,9 +188,10 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
             })
           )}
         </div>
+        )}
 
         {/* ── Signatures ────────────────────────────────────────────────────── */}
-        {allSigners.length > 0 && (
+        {showParticipants && allSigners.length > 0 && (
           <div className="mp-section">
             <h2 className="mp-section-title">شرکت‌کنندگان و امضاها</h2>
             {signRows.map((row, rowIdx) => (
@@ -193,7 +215,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           </div>
         )}
 
-        <div className="mp-end-note">پایان صورت‌جلسه</div>
+        <div className="mp-end-note">{footerText}</div>
       </div>
     </div>
   );

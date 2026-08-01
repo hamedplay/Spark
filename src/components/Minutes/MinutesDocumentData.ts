@@ -93,6 +93,20 @@ export interface MinutesDocumentData {
   approvals: DocApproval[];
   approvalComments: DocApprovalComment[];
   logoUrl: string | null;
+  config?: MinutesLayoutConfig;
+}
+
+export interface MinutesLayoutConfig {
+  headerTitle: string;
+  orgName: string;
+  subtitle: string;
+  footerText: string;
+  showLogo: boolean;
+  showParticipants: boolean;
+  showApprovers: boolean;
+  showConfidentiality: boolean;
+  showDecisions: boolean;
+  fontSize: string;
 }
 
 export const DASH = '—';

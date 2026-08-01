@@ -13,6 +13,7 @@ import { SparkConfigPanel } from './SparkConfigPanel';
 import { SocialNotificationsPanel } from './SocialNotificationsPanel';
 import { DailyReportConfigPanel } from './DailyReportConfigPanel';
 import { SystemMonitoringPage } from './SystemMonitoringPage';
+import { MinutesConfigPanel } from './Minutes/MinutesConfigPanel';
 
 import { AuditLogPage } from './AuditLogPage';
 import { BackupPanel } from './BackupPanel';
@@ -588,6 +589,10 @@ export function PortalConfigPage({ currentUserId }: Props) {
       // ── Monitoring ────────────────────────────────────────────────────────
       case 'monitoring':
         return <SystemMonitoringPage />;
+
+      // ── Minutes config ──────────────────────────────────────────────────────
+      case 'minutes_config':
+        return <MinutesConfigPanel currentUserId={currentUserId} />;
 
       // ── Spark config ──────────────────────────────────────────────────────
       case 'spark_config':
