@@ -159,29 +159,6 @@
   gap: 1mm;
   align-items: flex-start;
 }
-.mp-approvals-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2mm;
-}
-.mp-approval-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  column-gap: 6mm;
-  row-gap: 1mm;
-  align-items: center;
-  font-size: 10pt;
-  padding: 1.5mm 0;
-  border-bottom: 1px dashed #ccc;
-}
-.mp-approval-row:last-child {
-  border-bottom: none;
-}
-.mp-approval-field {
-  display: flex;
-  gap: 1mm;
-  align-items: flex-start;
-}
 .mp-item-label {
   font-weight: 700;
 }
@@ -384,9 +361,6 @@
 .minutes-preview-root .mp-item-sep {
   color: #888;
 }
-.minutes-preview-root .mp-approval-row {
-  border-bottom-color: #ccc;
-}
 
 /* Dark mode: preview container stays light so the document is readable */
 @media (prefers-color-scheme: dark) {
@@ -457,10 +431,6 @@
   .minutes-print-root .mp-item-sep {
     color: #666 !important;
   }
-  .minutes-print-root .mp-approval-row {
-    border-bottom-color: #ccc !important;
-  }
-
   /* Fixed positioning for print-only elements */
   .minutes-print-root .mp-conf-banner {
     position: fixed;
@@ -502,8 +472,7 @@
 
 /* ── Narrow-screen fallback: stack grids into single column ─────────────── */
 @media (max-width: 480px) {
-  .mp-decision-meta,
-  .mp-approval-row {
+  .mp-decision-meta {
     grid-template-columns: 1fr;
     row-gap: 1mm;
   }

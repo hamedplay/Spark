@@ -14,6 +14,7 @@ export interface DetailHeaderProps {
   isChair: boolean;
   acting: boolean;
   printLoading: boolean;
+  wordLoading: boolean;
   onNavigateBack: () => void;
   onEdit: () => void;
   onApprove: () => void;
@@ -21,11 +22,12 @@ export interface DetailHeaderProps {
   onSecretaryConfirm: () => void;
   onChairPublish: () => void;
   onPrint: () => void;
+  onWordExport: () => void;
 }
 
 export function DetailHeader({
-  minute, lastModified, canManage, myApproval, allApprovalsApproved, isSecretary, isChair, acting, printLoading,
-  onNavigateBack, onEdit, onApprove, onRequestChanges, onSecretaryConfirm, onChairPublish, onPrint,
+  minute, lastModified, canManage, myApproval, allApprovalsApproved, isSecretary, isChair, acting, printLoading, wordLoading,
+  onNavigateBack, onEdit, onApprove, onRequestChanges, onSecretaryConfirm, onChairPublish, onPrint, onWordExport,
 }: DetailHeaderProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
@@ -139,12 +141,14 @@ export function DetailHeader({
             {printLoading ? 'در حال آماده‌سازی...' : 'چاپ / ذخیره PDF'}
           </button>
           <button
-            disabled
-            title="خروجی Word (به‌زودی)"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+            onClick={onWordExport}
+            disabled={wordLoading || !minute}
+            aria-label="خروجی Word"
+            title="خروجی Word"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FileDown className="w-4 h-4" />
-            Word
+            {wordLoading ? 'در حال ساخت Word...' : 'خروجی Word'}
           </button>
         </div>
       </div>

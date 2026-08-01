@@ -1,13 +1,6 @@
 import { useState } from 'react';
-import type {
-  MinutesDocumentData, DocApproval,
-} from './MinutesDocumentData';
-import {
-  DASH, orDash,
-  chunkArray,
-  APPROVAL_STATUS_LABELS, faDateTime,
-  formatConfidentiality,
-} from './MinutesDocumentData';
+import type { MinutesDocumentData } from './MinutesDocumentData';
+import { DASH, orDash, chunkArray, formatConfidentiality } from './MinutesDocumentData';
 import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
 
 const FONT_SIZE_PX: Record<string, string> = {
@@ -42,9 +35,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
   const showParticipants = cfg?.showParticipants ?? true;
   const showConfidentiality = cfg?.showConfidentiality ?? true;
   const showDecisions = cfg?.showDecisions ?? true;
-  const showApprovers = cfg?.showApprovers ?? true;
   const fontSize = cfg?.fontSize ?? 'medium';
-  const approvals: DocApproval[] = data.approvals || [];
 
   // ── Attendance lists ───────────────────────────────────────────────────────
   const presentNames: string[] = [];
@@ -228,30 +219,6 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
                 ))}
               </div>
             ))}
-          </div>
-        )}
-
-        {showApprovers && approvals.length > 0 && (
-          <div className="mp-section mp-no-break">
-            <h2 className="mp-section-title">تأییدکنندگان</h2>
-            <div className="mp-approvals-list">
-              {approvals.map(a => (
-                <div key={a.id} className="mp-approval-row">
-                  <div className="mp-approval-field">
-                    <span className="mp-label">نام: </span>
-                    <span className="mp-value">{orDash(a.approver_name)}</span>
-                  </div>
-                  <div className="mp-approval-field">
-                    <span className="mp-label">وضعیت: </span>
-                    <span className="mp-value">{APPROVAL_STATUS_LABELS[a.status] || DASH}</span>
-                  </div>
-                  <div className="mp-approval-field">
-                    <span className="mp-label">تاریخ: </span>
-                    <span className="mp-value">{a.approved_at ? faDateTime(a.approved_at) : a.changes_requested_at ? faDateTime(a.changes_requested_at) : DASH}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Upload, Download, Trash2, Signature as FileSignature, Loader as Loader2, Maximize2, RefreshCw } from 'lucide-react';
+import { Upload, Download, Trash2, Signature as FileSignature, Loader as Loader2, Maximize2, RefreshCw, FileDown, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   listMinuteAttachments, uploadMinuteAttachment, deleteMinuteAttachment,
@@ -20,9 +20,12 @@ interface Props {
   docDataError: string | null;
   onPrepareDocumentData: () => Promise<void>;
   onPrint: () => void;
+  onWordExport: () => void;
+  wordLoading: boolean;
+  printLoading?: boolean;
 }
 
-export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, docDataLoading, docDataError, onPrepareDocumentData, onPrint }: Props) {
+export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, docDataLoading, docDataError, onPrepareDocumentData, onPrint, onWordExport, wordLoading, printLoading }: Props) {
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +153,24 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
             >
               <Maximize2 className="w-4 h-4" />
               پیش‌نمایش تمام‌صفحه
+            </button>
+            <button
+              onClick={onPrint}
+              disabled={printLoading}
+              aria-label="چاپ / ذخیره PDF"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-gray-600 hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Printer className="w-4 h-4" />
+              چاپ / ذخیره PDF
+            </button>
+            <button
+              onClick={onWordExport}
+              disabled={wordLoading || !docData}
+              aria-label="خروجی Word"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {wordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+              {wordLoading ? 'در حال ساخت Word...' : 'خروجی Word'}
             </button>
           </div>
           <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800">

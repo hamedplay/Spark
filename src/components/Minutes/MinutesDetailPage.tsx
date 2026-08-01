@@ -4,7 +4,9 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMinutesTabFromUrl, setMinutesTabInUrl, type MinutesDetailTab } from '../../lib/minutesNavigation';
 import type { DecisionRow } from './types';
-import { MinutesPrintView, toDocData } from './MinutesPrintView';
+import { MinutesPrintView } from './MinutesPrintView';
+import { toDocData } from './minutesToDocData';
+import { exportMinutesToWord } from '../../lib/minutesWordExport';
 import type { MinutesDocumentData } from './MinutesDocumentData';
 import { fetchMinutesConfig } from './fetchMinutesConfig';
 import type { MinutesLayoutConfig } from './MinutesDocumentData';
@@ -56,6 +58,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [printOwnerNames, setPrintOwnerNames] = useState<Record<string, string>>({});
   const [printLoading, setPrintLoading] = useState(false);
   const [printReady, setPrintReady] = useState(false);
+  const [wordLoading, setWordLoading] = useState(false);
   const [documentDataLoaded, setDocumentDataLoaded] = useState(false);
   const [documentDataError, setDocumentDataError] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -328,6 +331,24 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     }
   };
 
+  const handleWordExport = async () => {
+    if (wordLoading || !minute) return;
+    setWordLoading(true);
+    try {
+      if (!documentDataLoaded) {
+        await prepareDocumentData();
+      }
+      const data = toDocData(printViewProps);
+      await exportMinutesToWord(data);
+      toast.success('فایل Word با موفقیت ساخته شد.');
+    } catch (e) {
+      console.error('Word export failed:', e);
+      toast.error('ساخت فایل Word ناموفق بود.');
+    } finally {
+      setWordLoading(false);
+    }
+  };
+
   // Shared: load minutes_decisions via read-only RPC + owner names, set state, return success/error.
   // Does NOT call window.print().
   const prepareDocumentData = async (): Promise<void> => {
@@ -443,6 +464,8 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
         onSecretaryConfirm={handleSecretaryConfirm}
         onChairPublish={handleChairPublish}
         onPrint={handlePrint}
+        onWordExport={handleWordExport}
+        wordLoading={wordLoading}
       />
 
       {/* Tabs */}
@@ -503,40 +526,16 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               docDataError={documentDataError}
               onPrepareDocumentData={prepareDocumentData}
               onPrint={handlePrint}
+              onWordExport={handleWordExport}
+              wordLoading={wordLoading}
+              printLoading={printLoading}
             />
           )}
         </div>
       </div>
-      <MinutesPrintView
-        minute={{
-          id: minute.id,
-          meeting_title_snapshot: minute.meeting_title_snapshot,
-          meeting_date_snapshot: minute.meeting_date_snapshot,
-          meeting_start_time_snapshot: minute.meeting_start_time_snapshot,
-          meeting_end_time_snapshot: minute.meeting_end_time_snapshot,
-          meeting_location_snapshot: minute.meeting_location_snapshot,
-          meeting_type: minute.meeting_type,
-          org_unit_name_snapshot: minute.org_unit_name_snapshot,
-          secretary_name_snapshot: minute.secretary_name_snapshot,
-          chair_name_snapshot: minute.chair_name_snapshot,
-          notes: minute.notes,
-          confidentiality: minute.confidentiality,
-          status: minute.status,
-          approval_mode: minute.approval_mode,
-          revision_number: minute.revision_number,
-          secretary_confirmed_at: minute.secretary_confirmed_at,
-          chair_confirmed_at: minute.chair_confirmed_at,
-          published_at: minute.published_at,
-        }}
-        internalParts={internalParts}
-        externalParts={externalParts}
-        agendaResults={agendaResults}
-        approvals={approvals}
-        approvalComments={approvalComments}
-        decisions={printDecisions}
-        ownerNames={printOwnerNames}
-        logoUrl={logoUrl}
-      />
+      {finalDocData && (
+        <MinutesPrintView data={finalDocData} />
+      )}
       {showRequestChanges && (
         <RequestChangesModal
           minute={minute}
