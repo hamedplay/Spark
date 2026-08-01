@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import type {
   MinutesDocumentData,
 } from './MinutesDocumentData';
 import {
   DASH, orDash,
-  FALLBACK_LOGO, chunkArray,
+  chunkArray,
 } from './MinutesDocumentData';
 import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
 
@@ -22,6 +23,7 @@ function jalaliDateDisplay(value: string | null | undefined): string {
 
 export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutProps) {
   const { minute, internalParts, externalParts, agendaItems, decisions, logoUrl } = data;
+  const [logoError, setLogoError] = useState(false);
 
   // ── Attendance lists ───────────────────────────────────────────────────────
   const presentNames: string[] = [];
@@ -77,8 +79,13 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
         {/* ── Header ────────────────────────────────────────────────────────── */}
         <div className="mp-header">
           <div className="mp-header-logo">
-            {logoUrl ? (
-              <img src={logoUrl} alt="لوگو سازمان" className="mp-logo" />
+            {logoUrl && !logoError ? (
+              <img
+                src={logoUrl}
+                alt="لوگو سازمان"
+                className="mp-logo"
+                onError={() => setLogoError(true)}
+              />
             ) : (
               <div className="mp-logo-placeholder">محل لوگو</div>
             )}
@@ -144,20 +151,21 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           {decisions.length === 0 ? (
             <p className="mp-item-row">{DASH}</p>
           ) : (
-            decisions.map((d, i) => (
-              <div key={d.id} className="mp-decision-item">
-                <div className="mp-item-title">
-                  مصوبه {toPersianDigits(String(i + 1))}
-                  {d.title ? ` — ${d.title}` : ''}
+            decisions.map((d, i) => {
+              const fullText = [d.title, d.description].filter(Boolean).join(' — ') || DASH;
+              return (
+                <div key={d.id} className="mp-decision-item">
+                  <div className="mp-item-title">
+                    مصوبه {toPersianDigits(String(i + 1))} — {fullText}
+                  </div>
+                  <div className="mp-item-row"><span className="mp-item-label">واحد مسئول: </span>{orDash(d.responsibleUnitName)}</div>
+                  <div className="mp-item-row">
+                    <span className="mp-item-label">مهلت انجام: </span>
+                    {d.dueDate ? jalaliDateDisplay(d.dueDate) : DASH}
+                  </div>
                 </div>
-                <div className="mp-item-row"><span className="mp-item-label">متن مصوبه: </span>{orDash(d.description)}</div>
-                <div className="mp-item-row"><span className="mp-item-label">واحد مسئول: </span>{orDash(d.responsibleUnitName)}</div>
-                <div className="mp-item-row">
-                  <span className="mp-item-label">مهلت انجام: </span>
-                  {d.dueDate ? jalaliDateDisplay(d.dueDate) : DASH}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 

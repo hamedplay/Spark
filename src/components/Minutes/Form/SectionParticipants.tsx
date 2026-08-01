@@ -89,7 +89,15 @@ export function SectionParticipants({
   const updateInternal = (id: string, field: keyof DraftInternalParticipant, value: string) =>
     setInternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
 
-  const handleInternalUserChange = (rowId: string, userId: string) => {
+  const profileOptions: ComboboxOption[] = useMemo(() => profiles.map(p => {
+    const label = profileLabel(p);
+    const unitName = orgUnits.find(u => u.id === p.primary_unit_id)?.name;
+    const sub = [p.position, unitName].filter(Boolean).join(' — ') || undefined;
+    return { value: p.user_id, label, sublabel: sub };
+  }), [profiles, orgUnits]);
+
+  const handleInternalNameSelect = (rowId: string, opt: ComboboxOption) => {
+    const userId = opt.value;
     const p = profiles.find(x => x.user_id === userId);
     const unit = orgUnits.find(u => u.id === (p?.primary_unit_id || ''));
     setInternalParticipants(l => l.map(r => r.id === rowId ? {
@@ -100,6 +108,21 @@ export function SectionParticipants({
       orgUnitId: p?.primary_unit_id || '',
       orgUnitNameSnapshot: unit?.name || '',
     } : r));
+  };
+
+  const handleInternalNameChange = (rowId: string, value: string) => {
+    if (!value.trim()) {
+      setInternalParticipants(l => l.map(r => r.id === rowId ? {
+        ...r,
+        userId: '',
+        nameSnapshot: '',
+        positionSnapshot: '',
+        orgUnitId: '',
+        orgUnitNameSnapshot: '',
+      } : r));
+    } else {
+      updateInternal(rowId, 'nameSnapshot', value);
+    }
   };
 
   const handleInternalOrgUnitChange = (rowId: string, unitId: string) => {
@@ -217,21 +240,18 @@ export function SectionParticipants({
                 {/* User — read-only for meeting/saved, select for manual */}
                 {row.source === 'manual' ? (
                   <div>
-                    <label htmlFor={`int-user-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">کاربر</label>
-                    <select
+                    <label htmlFor={`int-user-${row.id}`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">نام و نام خانوادگی</label>
+                    <ComboboxInput
                       id={`int-user-${row.id}`}
-                      value={row.userId}
-                      onChange={e => handleInternalUserChange(row.id, e.target.value)}
-                      disabled={readOnly}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      <option value="">انتخاب کنید</option>
-                      {profiles.map(p => (
-                        <option key={p.user_id} value={p.user_id}>
-                          {profileLabel(p)}{p.position ? ` — ${p.position}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      value={row.nameSnapshot}
+                      options={profileOptions}
+                      onChange={v => handleInternalNameChange(row.id, v)}
+                      onSelect={opt => handleInternalNameSelect(row.id, opt)}
+                      placeholder=""
+                      searchPlaceholder="جستجوی کاربران داخلی..."
+                      emptyText="کاربری یافت نشد"
+                      disabled={readOnly || usersDisabled}
+                    />
                   </div>
                 ) : (
                   <div>

@@ -118,9 +118,16 @@ function translateRpcError(msg?: string): string {
   if (msg.includes('NOT_AUTHORIZED')) return 'شما اجازه بارگذاری پیوست در این صورت‌جلسه را ندارید.';
   if (msg.includes('PUBLISHED_LOCKED')) return 'صورت‌جلسه منتشرشده است؛ بارگذاری فقط توسط دبیر/رئیس/مدیر ممکن است.';
   if (msg.includes('TARGET_MISMATCH')) return 'بند یا مصوبه انتخاب‌شده متعلق به این صورت‌جلسه نیست.';
-  if (msg.includes('INVALID_SIZE')) return 'حجم فایل نامعتبر است.';
+  if (msg.includes('INVALID_SIZE')) return 'حجم فایل نامعتبر است. حداکثر ۲۰ مگابایت.';
   if (msg.includes('INVALID_INPUT')) return 'نام فایل یا اطلاعات نامعتبر است.';
   if (msg.includes('INVALID_KIND')) return 'نوع پیوست نامعتبر است.';
+  if (msg.includes('INVALID_EXTENSION')) return 'پسوند فایل مجاز نیست. فایل باید یکی از انواع pdf, doc, docx, xls, xlsx, ppt, pptx, jpg, jpeg, png, webp, txt, zip باشد.';
+  if (msg.includes('INVALID_MIME')) return 'نوع فایل مجاز نیست.';
+  if (msg.includes('AUTH_REQUIRED')) return 'برای بارگذاری پیوست باید وارد شوید.';
+  if (msg.includes('begin_failed')) return 'شروع فرآیند بارگذاری ناموفق بود. لطفاً دوباره تلاش کنید.';
+  if (msg.includes('signed_url_failed')) return 'ساخت لینک بارگذاری ناموفق بود. لطفاً دوباره تلاش کنید.';
+  if (msg.includes('Unauthorized')) return 'برای بارگذاری پیوست باید وارد شوید.';
+  if (msg.includes('Missing required fields')) return 'اطلاعات فایل ناقص است.';
   return 'ساخت رکورد پیوست ناموفق بود.';
 }
 

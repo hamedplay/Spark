@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History, Signature as FileSignature } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
@@ -85,132 +85,131 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     })();
   }, []);
 
-  useEffect(() => {
-    const fetchDetail = async () => {
-      setIsLoading(true);
-      setError(null);
-      setNotFound(false);
+  const fetchDetail = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    setNotFound(false);
 
-      const targetId = minuteId || getMinuteIdFromUrl();
+    const targetId = minuteId || getMinuteIdFromUrl();
 
-      if (!targetId) {
-        setNotFound(true);
-        setIsLoading(false);
-        return;
-      }
+    if (!targetId) {
+      setNotFound(true);
+      setIsLoading(false);
+      return;
+    }
 
-      const { data: minData, error: minErr } = await supabase
-        .from('minutes')
-        .select('id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_name_snapshot, secretary_name_snapshot, chair_name_snapshot, secretary_user_id, chair_user_id, created_by_user_id, notes, confidentiality, status, approval_mode, revision_number, submitted_at, secretary_confirmed_at, chair_confirmed_at, published_at, created_at, updated_at')
-        .eq('id', targetId)
-        .maybeSingle();
+    const { data: minData, error: minErr } = await supabase
+      .from('minutes')
+      .select('id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_name_snapshot, secretary_name_snapshot, chair_name_snapshot, secretary_user_id, chair_user_id, created_by_user_id, notes, confidentiality, status, approval_mode, revision_number, submitted_at, secretary_confirmed_at, chair_confirmed_at, published_at, created_at, updated_at')
+      .eq('id', targetId)
+      .maybeSingle();
 
-      if (minErr) {
-        setError(minErr.message);
-        setIsLoading(false);
-        return;
-      }
-      if (!minData) {
-        setNotFound(true);
-        setIsLoading(false);
-        return;
-      }
+    if (minErr) {
+      setError(minErr.message);
+      setIsLoading(false);
+      return;
+    }
+    if (!minData) {
+      setNotFound(true);
+      setIsLoading(false);
+      return;
+    }
 
-      setMinute(minData as MinuteDetail);
+    setMinute(minData as MinuteDetail);
 
-      const [partsRes, extRes, agendaRes, approvalsRes] = await Promise.all([
-        supabase
-          .from('minutes_participants')
-          .select('id, name_snapshot, position_snapshot, org_unit_name_snapshot, invitation_status, attendance_status')
-          .eq('minute_id', targetId)
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('minutes_external_participants')
-          .select('id, full_name, organization, position, mobile, email, attendance_status')
-          .eq('minute_id', targetId)
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('minutes_agenda_results')
-          .select('id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes')
-          .eq('minute_id', targetId)
-          .order('sort_order_snapshot', { ascending: true }),
-        supabase
-          .from('minutes_approvals')
-          .select('id, approver_user_id, status, approved_at, changes_requested_at')
-          .eq('minute_id', targetId)
-          .eq('revision_number', (minData as MinuteDetail).revision_number)
-          .order('created_at', { ascending: true }),
-      ]);
-
-      setInternalParts((partsRes.data || []) as InternalParticipantRow[]);
-      setExternalParts((extRes.data || []) as ExternalParticipantRow[]);
-      setAgendaResults((agendaRes.data || []) as AgendaResultRow[]);
-
-      // Fetch approver names from profiles
-      const approvalRows = (approvalsRes.data || []) as Array<{ id: string; approver_user_id: string; status: ApprovalStatus; approved_at: string | null; changes_requested_at: string | null }>;
-      if (approvalRows.length > 0) {
-        const userIds = approvalRows.map(a => a.approver_user_id);
-        const { data: profiles } = await supabase
-          .from('profiles_public')
-          .select('user_id, full_name')
-          .in('user_id', userIds);
-        const nameMap = new Map((profiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
-        setApprovals(approvalRows.map(a => ({
-          id: a.id,
-          approver_user_id: a.approver_user_id,
-          status: a.status,
-          approved_at: a.approved_at,
-          changes_requested_at: a.changes_requested_at,
-          approver_name: nameMap.get(a.approver_user_id) || 'کاربر',
-        })));
-      } else {
-        setApprovals([]);
-      }
-
-      // Fetch approval comments
-      const { data: commentsData } = await supabase
-        .from('minutes_approval_comments')
-        .select('id, agenda_result_id, reason, suggested_correction, created_by_user_id, created_at')
+    const [partsRes, extRes, agendaRes, approvalsRes] = await Promise.all([
+      supabase
+        .from('minutes_participants')
+        .select('id, name_snapshot, position_snapshot, org_unit_name_snapshot, invitation_status, attendance_status')
+        .eq('minute_id', targetId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('minutes_external_participants')
+        .select('id, full_name, organization, position, mobile, email, attendance_status')
+        .eq('minute_id', targetId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('minutes_agenda_results')
+        .select('id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes')
+        .eq('minute_id', targetId)
+        .order('sort_order_snapshot', { ascending: true }),
+      supabase
+        .from('minutes_approvals')
+        .select('id, approver_user_id, status, approved_at, changes_requested_at')
         .eq('minute_id', targetId)
         .eq('revision_number', (minData as MinuteDetail).revision_number)
-        .order('created_at', { ascending: true });
-      if (commentsData && commentsData.length > 0) {
-        const creatorIds = [...new Set(commentsData.map((c: { created_by_user_id: string }) => c.created_by_user_id))];
-        const { data: creatorProfiles } = await supabase
-          .from('profiles_public')
-          .select('user_id, full_name')
-          .in('user_id', creatorIds);
-        const creatorNameMap = new Map((creatorProfiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
-        setApprovalComments(commentsData.map((c: { id: string; agenda_result_id: string | null; reason: string; suggested_correction: string | null; created_by_user_id: string; created_at: string }) => ({
-          id: c.id,
-          agenda_result_id: c.agenda_result_id,
-          reason: c.reason,
-          suggested_correction: c.suggested_correction,
-          created_by_user_id: c.created_by_user_id,
-          created_by_name: creatorNameMap.get(c.created_by_user_id) || 'کاربر',
-          created_at: c.created_at,
-        })));
-      } else {
-        setApprovalComments([]);
-      }
+        .order('created_at', { ascending: true }),
+    ]);
 
-      setIsLoading(false);
+    setInternalParts((partsRes.data || []) as InternalParticipantRow[]);
+    setExternalParts((extRes.data || []) as ExternalParticipantRow[]);
+    setAgendaResults((agendaRes.data || []) as AgendaResultRow[]);
 
-      // Auto-print if print=1 in URL (triggered from list page)
-      const url = new URL(window.location.href);
-      if (url.searchParams.get('print') === '1') {
-        url.searchParams.delete('print');
-        window.history.replaceState(null, '', url.toString());
-        // Defer to allow state to settle, then trigger print
-        setTimeout(() => {
-          const printEvent = new CustomEvent('minutes-auto-print');
-          window.dispatchEvent(printEvent);
-        }, 100);
-      }
-    };
+    // Fetch approver names from profiles
+    const approvalRows = (approvalsRes.data || []) as Array<{ id: string; approver_user_id: string; status: ApprovalStatus; approved_at: string | null; changes_requested_at: string | null }>;
+    if (approvalRows.length > 0) {
+      const userIds = approvalRows.map(a => a.approver_user_id);
+      const { data: profiles } = await supabase
+        .from('profiles_public')
+        .select('user_id, full_name')
+        .in('user_id', userIds);
+      const nameMap = new Map((profiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
+      setApprovals(approvalRows.map(a => ({
+        id: a.id,
+        approver_user_id: a.approver_user_id,
+        status: a.status,
+        approved_at: a.approved_at,
+        changes_requested_at: a.changes_requested_at,
+        approver_name: nameMap.get(a.approver_user_id) || 'کاربر',
+      })));
+    } else {
+      setApprovals([]);
+    }
 
-    fetchDetail();
+    // Fetch approval comments
+    const { data: commentsData } = await supabase
+      .from('minutes_approval_comments')
+      .select('id, agenda_result_id, reason, suggested_correction, created_by_user_id, created_at')
+      .eq('minute_id', targetId)
+      .eq('revision_number', (minData as MinuteDetail).revision_number)
+      .order('created_at', { ascending: true });
+    if (commentsData && commentsData.length > 0) {
+      const creatorIds = [...new Set(commentsData.map((c: { created_by_user_id: string }) => c.created_by_user_id))];
+      const { data: creatorProfiles } = await supabase
+        .from('profiles_public')
+        .select('user_id, full_name')
+        .in('user_id', creatorIds);
+      const creatorNameMap = new Map((creatorProfiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
+      setApprovalComments(commentsData.map((c: { id: string; agenda_result_id: string | null; reason: string; suggested_correction: string | null; created_by_user_id: string; created_at: string }) => ({
+        id: c.id,
+        agenda_result_id: c.agenda_result_id,
+        reason: c.reason,
+        suggested_correction: c.suggested_correction,
+        created_by_user_id: c.created_by_user_id,
+        created_by_name: creatorNameMap.get(c.created_by_user_id) || 'کاربر',
+        created_at: c.created_at,
+      })));
+    } else {
+      setApprovalComments([]);
+    }
+
+    setIsLoading(false);
+
+    // Auto-print if print=1 in URL (triggered from list page)
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('print') === '1') {
+      url.searchParams.delete('print');
+      window.history.replaceState(null, '', url.toString());
+      setTimeout(() => {
+        const printEvent = new CustomEvent('minutes-auto-print');
+        window.dispatchEvent(printEvent);
+      }, 100);
+    }
   }, [minuteId]);
+
+  useEffect(() => {
+    fetchDetail();
+  }, [fetchDetail]);
 
   // Listen for auto-print event
   useEffect(() => {
@@ -236,32 +235,9 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const myApproval = approvals.find(a => a.approver_user_id === currentUserId && a.status === 'pending');
   const allApprovalsApproved = approvals.length > 0 && approvals.every(a => a.status === 'approved');
 
-  const refresh = () => {
-    // Re-fetch by reloading via state reset
-    setIsLoading(true);
-    setMinute(null);
-    setTimeout(() => {
-      const targetId = minuteId || getMinuteIdFromUrl();
-      if (targetId) {
-        // trigger effect by toggling loading — simplest: navigate to same page
-        window.dispatchEvent(new CustomEvent('minutes-refresh'));
-      }
-    }, 0);
-  };
-
-  useEffect(() => {
-    const handler = () => {
-      const targetId = minuteId || getMinuteIdFromUrl();
-      if (targetId) {
-        // Re-run the fetch effect by toggling a state
-        setNotFound(false);
-        setError(null);
-        setIsLoading(true);
-      }
-    };
-    window.addEventListener('minutes-refresh', handler);
-    return () => window.removeEventListener('minutes-refresh', handler);
-  }, [minuteId]);
+  const refresh = useCallback(() => {
+    fetchDetail();
+  }, [fetchDetail]);
 
   // Auto-prepare document data when entering the final_version tab
   useEffect(() => {
@@ -270,6 +246,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
         // Error already handled in prepareDocumentData
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, documentDataLoaded, documentDataError, minute]);
 
   const handleApprove = async () => {

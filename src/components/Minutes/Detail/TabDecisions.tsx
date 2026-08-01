@@ -219,15 +219,26 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, chairId, cur
                   تاریخچه به‌روزرسانی‌ها ({hist.length})
                 </summary>
                 <div className="mt-2 space-y-1.5">
-                  {hist.map(h => (
-                    <div key={h.id} className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-2">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-gray-500">{h.previous_status ?? '—'} ← {h.new_status} | {h.previous_progress_percent ?? 0}٪ → {h.new_progress_percent}٪</span>
-                        <span className="text-gray-400">{new Date(h.created_at).toLocaleDateString('fa-IR')}</span>
+                  {hist.map(h => {
+                    const STATUS_LABELS: Record<string, string> = {
+                      not_started: 'شروع‌نشده', planned: 'برنامه‌ریزی‌شده', in_progress: 'در حال انجام',
+                      waiting_coordination: 'منتظر هماهنگی', waiting_approval: 'منتظر تأیید',
+                      completed: 'تکمیل‌شده', stopped: 'متوقف‌شده',
+                    };
+                    const prevLabel = h.previous_status ? (STATUS_LABELS[h.previous_status] || h.previous_status) : null;
+                    const newLabel = h.new_status ? (STATUS_LABELS[h.new_status] || h.new_status) : null;
+                    return (
+                      <div key={h.id} className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-2">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-gray-500">
+                            {prevLabel ?? '—'} ← {newLabel} | {h.previous_progress_percent ?? 0}٪ → {h.new_progress_percent}٪
+                          </span>
+                          <span className="text-gray-400">{new Date(h.created_at).toLocaleDateString('fa-IR')}</span>
+                        </div>
+                        {h.update_text && <p className="text-gray-600 dark:text-gray-300">{h.update_text}</p>}
                       </div>
-                      {h.update_text && <p className="text-gray-600 dark:text-gray-300">{h.update_text}</p>}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </details>
             )}
