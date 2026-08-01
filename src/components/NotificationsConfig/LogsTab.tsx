@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import moment from 'moment-jalaali';
-import { Bell, Users, Check, X, Loader as Loader2, RefreshCw, CircleCheck as CheckCircle, Clock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Bell, Users, Check, Loader as Loader2, RefreshCw, CircleCheck as CheckCircle, Clock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -8,6 +8,8 @@ import {
   TEMPLATE_CATEGORIES as NOTIF_CATEGORIES,
   TEMPLATE_EVENT_TYPES as EVENT_TYPES,
 } from '../../config/templateCatalog';
+import { JalaliDateFilter } from './JalaliDateFilter';
+import { jalaliToUtcRange } from './jalaliDateFilter';
 import type { NotifLog } from './types';
 
 export function LogsTab() {
@@ -36,9 +38,10 @@ export function LogsTab() {
     if (filterRead === 'unread') q = q.eq('read', false);
     if (filterEventType !== 'all') q = q.eq('template_event_type', filterEventType);
     if (filterDate) {
-      const start = new Date(filterDate); start.setHours(0, 0, 0, 0);
-      const end = new Date(filterDate); end.setHours(23, 59, 59, 999);
-      q = q.gte('created_at', start.toISOString()).lte('created_at', end.toISOString());
+      const range = jalaliToUtcRange(filterDate);
+      if (range) {
+        q = q.gte('created_at', range.start).lte('created_at', range.end);
+      }
     }
 
     const { data, count } = await q;
@@ -149,16 +152,9 @@ export function LogsTab() {
         </div>
         <div className="flex-1 min-w-36">
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">تاریخ</label>
-          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
-            className="w-full text-sm px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <JalaliDateFilter value={filterDate} onChange={setFilterDate} />
         </div>
         <div className="flex gap-2">
-          {filterDate && (
-            <button onClick={() => setFilterDate('')}
-              className="px-3 py-2 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 hover:text-red-500 rounded-xl transition-colors">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
           <button onClick={() => load()} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>

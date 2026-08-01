@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 import {
   TEMPLATE_CATEGORIES as SMS_CATEGORIES,
 } from '../../config/templateCatalog';
+import { JalaliDateFilter } from '../NotificationsConfig/JalaliDateFilter';
+import { jalaliToUtcRange } from '../NotificationsConfig/jalaliDateFilter';
 import type { DispatchLog } from './types';
 import { CATEGORY_COLORS, STATUS_CONFIG, DELIVERY_STATUS_UI, CATEGORY_LABEL, EVENT_LABEL } from './types';
 
@@ -13,8 +15,10 @@ export function ReportsTab() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterDate, setFilterDate] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const PAGE_SIZE = 25;
 
   const [stats, setStats] = useState({ sent: 0, failed: 0, skipped: 0, total: 0 });
@@ -70,17 +74,38 @@ export function ReportsTab() {
 
     if (filterStatus !== 'all') q = q.eq('status', filterStatus);
     if (filterCategory !== 'all') q = q.eq('category', filterCategory);
+    if (filterDate) {
+      const range = jalaliToUtcRange(filterDate);
+      if (range) {
+        q = q.gte('created_at', range.start).lte('created_at', range.end);
+      }
+    }
 
-    const { data } = await q;
-    setLogs((data || []) as DispatchLog[]);
+    const { data, count, error } = await q;
+    if (error) {
+      toast.error('خطا در بارگذاری گزارش‌ها');
+      setLogs([]);
+      setTotalCount(0);
+    } else {
+      setLogs((data || []) as DispatchLog[]);
+      setTotalCount(count ?? 0);
+    }
     setLoading(false);
-  }, [filterStatus, filterCategory, page]);
+  }, [filterStatus, filterCategory, filterDate, page]);
 
   const loadStats = useCallback(async () => {
-    const { data } = await supabase
+    let q = supabase
       .from('sms_dispatch_logs')
       .select('status');
-    if (!data) return;
+    if (filterCategory !== 'all') q = q.eq('category', filterCategory);
+    if (filterDate) {
+      const range = jalaliToUtcRange(filterDate);
+      if (range) {
+        q = q.gte('created_at', range.start).lte('created_at', range.end);
+      }
+    }
+    const { data, error } = await q;
+    if (error || !data) return;
     const s = { sent: 0, failed: 0, skipped: 0, total: data.length };
     for (const r of data) {
       if (r.status === 'sent') s.sent++;
@@ -88,7 +113,7 @@ export function ReportsTab() {
       else if (r.status === 'skipped') s.skipped++;
     }
     setStats(s);
-  }, []);
+  }, [filterCategory, filterDate]);
 
   useEffect(() => { load(); loadStats(); }, [load, loadStats]);
 
@@ -137,6 +162,9 @@ export function ReportsTab() {
               {SMS_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
             <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          </div>
+          <div className="min-w-36">
+            <JalaliDateFilter value={filterDate} onChange={(v) => { setFilterDate(v); setPage(0); }} />
           </div>
         </div>
         <button onClick={() => { load(); loadStats(); }}
@@ -272,7 +300,7 @@ export function ReportsTab() {
         </div>
       )}
 
-      {!loading && (logs.length === PAGE_SIZE || page > 0) && (
+      {!loading && (totalCount > 0 || page > 0) && (
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => setPage(p => Math.max(0, p - 1))}
@@ -281,7 +309,7 @@ export function ReportsTab() {
           >
             قبلی
           </button>
-          <span className="text-sm text-gray-500 dark:text-gray-400">صفحه {page + 1}</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">صفحه {page + 1} از {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}</span>
           <button
             onClick={() => setPage(p => p + 1)}
             disabled={logs.length < PAGE_SIZE}
