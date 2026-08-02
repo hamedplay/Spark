@@ -5,7 +5,7 @@ import type {
   MinutesLayoutConfig,
 } from './MinutesDocumentData';
 import type {
-  MinuteDetail, InternalParticipantRow, ExternalParticipantRow,
+  InternalParticipantRow, ExternalParticipantRow,
   AgendaResultRow, ApprovalRow, ApprovalCommentRow,
 } from './Detail/types';
 import type { DecisionRow } from './types';
@@ -58,7 +58,7 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     position_snapshot: p.position_snapshot,
     org_unit_name_snapshot: p.org_unit_name_snapshot,
     attendance_status: p.attendance_status,
-    delegate_name: null,
+    delegate_name: p.delegate_name ?? null,
   }));
 
   const externalParts: DocExternalPart[] = props.externalParts.map(p => ({
@@ -119,7 +119,7 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     footerText: props.config?.footerText ?? 'پایان صورت‌جلسه',
     showLogo: props.config?.showLogo ?? true,
     showParticipants: props.config?.showParticipants ?? true,
-    showApprovers: false,
+    showApprovers: props.config?.showApprovers ?? true,
     showConfidentiality: props.config?.showConfidentiality ?? true,
     showDecisions: props.config?.showDecisions ?? true,
     fontSize: props.config?.fontSize ?? 'medium',
@@ -138,6 +138,4 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
   };
 }
 
-// Re-export for backward compatibility with existing import sites.
 export type { MinutesDocumentData, MinutesLayoutConfig };
-export type { MinuteDetail } from './Detail/types';

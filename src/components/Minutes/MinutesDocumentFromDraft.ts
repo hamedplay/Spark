@@ -70,6 +70,8 @@ export function buildDocumentDataFromDraft(
         name_snapshot: p.nameSnapshot || profileLabel(p.userId),
         position_snapshot: p.positionSnapshot || null,
         org_unit_name_snapshot: p.orgUnitNameSnapshot || null,
+        attendance_status: p.attendanceStatus ?? null,
+        delegate_name: p.delegateName || null,
       })),
     externalParts: externalParticipants
       .filter(p => p.fullName)
@@ -78,6 +80,7 @@ export function buildDocumentDataFromDraft(
         full_name: p.fullName,
         organization: p.organization || null,
         position: p.position || null,
+        attendance_status: p.attendanceStatus ?? null,
       })),
     agendaItems: agendaItems
       .filter(a => a.title)

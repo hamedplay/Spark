@@ -209,6 +209,47 @@
   min-height: 12mm;
 }
 
+/* Approver table */
+.mp-approver-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+  margin-top: 2mm;
+}
+.mp-approver-table th,
+.mp-approver-table td {
+  border: 1px solid #999;
+  padding: 2mm 3mm;
+  text-align: right;
+}
+.mp-approver-table th {
+  background: #f0f0f0;
+  font-weight: 700;
+}
+.mp-sign-cell {
+  min-height: 10mm;
+  width: 40mm;
+}
+.minutes-preview-root .mp-approver-table th {
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+.minutes-preview-root .mp-approver-table th,
+.minutes-preview-root .mp-approver-table td {
+  border-color: #ccc;
+  color: #1a1a1a;
+}
+.minutes-print-root .mp-approver-table,
+.minutes-print-root .mp-approver-table th,
+.minutes-print-root .mp-approver-table td {
+  background: #fff !important;
+  color: #000 !important;
+  border-color: #333 !important;
+}
+.minutes-print-root .mp-approver-table th {
+  background: #eee !important;
+}
+
 .mp-end-note {
   margin-top: 6mm;
   font-size: 10pt;

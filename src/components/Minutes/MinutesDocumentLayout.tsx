@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { MinutesDocumentData } from './MinutesDocumentData';
-import { DASH, orDash, chunkArray, formatConfidentiality } from './MinutesDocumentData';
+import { DASH, orDash, chunkArray, formatConfidentiality, APPROVAL_STATUS_LABELS, faDateTime } from './MinutesDocumentData';
 import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
 
 const FONT_SIZE_PX: Record<string, string> = {
@@ -35,6 +35,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
   const showParticipants = cfg?.showParticipants ?? true;
   const showConfidentiality = cfg?.showConfidentiality ?? true;
   const showDecisions = cfg?.showDecisions ?? true;
+  const showApprovers = cfg?.showApprovers ?? true;
   const fontSize = cfg?.fontSize ?? 'medium';
 
   // ── Attendance lists ───────────────────────────────────────────────────────
@@ -207,7 +208,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
         {/* ── Signatures ────────────────────────────────────────────────────── */}
         {showParticipants && allSigners.length > 0 && (
           <div className="mp-section">
-            <h2 className="mp-section-title">شرکت‌کنندگان و امضاها</h2>
+            <h2 className="mp-section-title">شرکت‌کنندگان و محل امضا</h2>
             {signRows.map((row, rowIdx) => (
               <div key={rowIdx} className="mp-sign-grid" style={{ gridTemplateColumns: `repeat(${signCols}, 1fr)` }}>
                 {row.map(s => (
@@ -219,6 +220,33 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
                 ))}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ── System approvers ────────────────────────────────────────────────── */}
+        {showApprovers && data.approvals.length > 0 && (
+          <div className="mp-section mp-no-break">
+            <h2 className="mp-section-title">تأییدکنندگان سیستمی</h2>
+            <table className="mp-approver-table">
+              <thead>
+                <tr>
+                  <th>نام تأییدکننده</th>
+                  <th>وضعیت تأیید</th>
+                  <th>تاریخ تأیید</th>
+                  <th>محل امضا</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.approvals.map(a => (
+                  <tr key={a.id}>
+                    <td>{orDash(a.approver_name)}</td>
+                    <td>{APPROVAL_STATUS_LABELS[a.status] || a.status}</td>
+                    <td>{faDateTime(a.approved_at)}</td>
+                    <td className="mp-sign-cell" />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 

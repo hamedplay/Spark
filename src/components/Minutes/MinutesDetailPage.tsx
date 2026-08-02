@@ -149,7 +149,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     const [partsRes, extRes, agendaRes, approvalsRes] = await Promise.all([
       supabase
         .from('minutes_participants')
-        .select('id, name_snapshot, position_snapshot, org_unit_name_snapshot, invitation_status, attendance_status')
+        .select('id, name_snapshot, position_snapshot, org_unit_name_snapshot, invitation_status, attendance_status, delegate_name')
         .eq('minute_id', targetId)
         .order('created_at', { ascending: true }),
       supabase

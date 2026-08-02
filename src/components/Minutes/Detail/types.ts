@@ -34,6 +34,7 @@ export interface InternalParticipantRow {
   org_unit_name_snapshot: string | null;
   invitation_status: string;
   attendance_status: string | null;
+  delegate_name: string | null;
 }
 
 export interface ExternalParticipantRow {

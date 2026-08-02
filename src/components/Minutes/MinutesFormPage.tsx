@@ -100,6 +100,7 @@ const RPC_ERROR_MESSAGES: Record<string, string> = {
   MINUTE_NOT_SUBMITTABLE: 'این صورت‌جلسه در وضعیت قابل ارسال نیست.',
   APPROVAL_MODE_IMMUTABLE: 'مدل تأیید پس از اولین ارسال قابل تغییر نیست.',
   INTERNAL_ERROR: 'خطای داخلی سرور رخ داد. لطفاً دوباره تلاش کنید.',
+  MINUTES_NOT_PUBLISHED: 'این مصوبه تا زمان انتشار صورت‌جلسه قابل مشاهده یا پیگیری نیست.',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -191,7 +192,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         });
 
         const [ipRes, epRes, agRes, decRes] = await Promise.all([
-          supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
+          supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, delegate_name, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_external_participants').select('id, full_name, organization, position, mobile, email, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
           supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
@@ -214,9 +215,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             orgUnitNameSnapshot: (r.org_unit_name_snapshot as string) || '',
             invitationStatus: (r.invitation_status as InvitationStatus) || 'invited',
             attendanceStatus: (r.attendance_status as AttendanceStatus | null) ?? null,
-            delegate: '',
+            delegate: (r.delegate_name as string) || '',
             delegateUserId: null,
-            delegateName: '',
+            delegateName: (r.delegate_name as string) || '',
             notes: (r.notes as string) || '',
             source: 'saved' as const,
           })) : [defaultInternalParticipant()]);
@@ -951,10 +952,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           p_approval_mode: info.approvalMode,
         });
         if (rpcError) {
-          console.error('[MinutesSubmitRPC] submit failed', {
+          console.error('[submit_minutes_for_approval]', {
             code: rpcError?.code,
             message: rpcError?.message,
             details: rpcError?.details,
+            hint: rpcError?.hint,
           });
           toast.error('ارسال صورت‌جلسه برای تأیید ناموفق بود.');
           return;
@@ -970,6 +972,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             APPROVAL_MODE_IMMUTABLE: 'مدل تأیید پس از اولین ارسال قابل تغییر نیست.',
             INVALID_APPROVAL_MODE: 'مدل تأیید نامعتبر است.',
             NO_ELIGIBLE_APPROVERS: 'هیچ شرکت‌کننده واجد شرایطی برای تأیید سیستمی وجود ندارد.',
+            MINUTES_NOT_PUBLISHED: 'این مصوبه تا زمان انتشار صورت‌جلسه قابل مشاهده یا پیگیری نیست.',
           };
           toast.error(msgs[code] || 'ارسال صورت‌جلسه برای تأیید ناموفق بود.');
           return;
