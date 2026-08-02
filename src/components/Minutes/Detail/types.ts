@@ -29,6 +29,7 @@ export interface MinuteDetail {
 
 export interface InternalParticipantRow {
   id: string;
+  user_id: string | null;
   name_snapshot: string;
   position_snapshot: string | null;
   org_unit_name_snapshot: string | null;

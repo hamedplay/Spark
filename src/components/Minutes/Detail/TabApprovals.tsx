@@ -3,16 +3,17 @@ import { X, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../lib/supabase';
 import { EmptyState, ApprovalStatusBadge } from '../MinutesShared';
-import type { MinuteDetail, AgendaResultRow, ApprovalRow, ApprovalCommentRow } from './types';
+import type { MinuteDetail, AgendaResultRow, ApprovalRow, ApprovalCommentRow, InternalParticipantRow } from './types';
 
 export interface TabApprovalsProps {
   approvals: ApprovalRow[];
   comments: ApprovalCommentRow[];
   agendaItems: AgendaResultRow[];
   minute: MinuteDetail;
+  internalParticipants: InternalParticipantRow[];
 }
 
-export function TabApprovals({ approvals, comments, agendaItems, minute }: TabApprovalsProps) {
+export function TabApprovals({ approvals, comments, agendaItems, minute, internalParticipants }: TabApprovalsProps) {
   const approvedCount = approvals.filter(a => a.status === 'approved').length;
   const totalCount = approvals.length;
 
@@ -45,7 +46,41 @@ export function TabApprovals({ approvals, comments, agendaItems, minute }: TabAp
       </div>
 
       {/* Approvals list */}
-      {approvals.length === 0 ? (
+      {approvals.length === 0 && minute.approval_mode === 'system' ? (
+        (() => {
+          const eligibleApprovers = internalParticipants.filter(p => !!p.user_id);
+          if (eligibleApprovers.length === 0) {
+            return <EmptyState title="بدون تأییدکننده" description="هیچ شرکت‌کننده داخلی با حساب کاربری وجود ندارد." />;
+          }
+          return (
+            <div className="space-y-3">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-3 text-xs text-blue-700 dark:text-blue-400">
+                صورت‌جلسه هنوز ارسال نشده است. پس از ارسال، تأییدکنندگان زیر به‌صورت خودکار ساخته می‌شوند.
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <ul className="divide-y divide-gray-50 dark:divide-gray-700">
+                  {eligibleApprovers.map((p, idx) => (
+                    <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+                      <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-semibold flex items-center justify-center flex-shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{p.name_snapshot}</p>
+                        {(p.position_snapshot || p.org_unit_name_snapshot) && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {[p.position_snapshot, p.org_unit_name_snapshot].filter(Boolean).join(' — ')}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-400">تأیید سیستمی</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          );
+        })()
+      ) : approvals.length === 0 ? (
         <EmptyState title="بدون تأییدکننده" description={minute.approval_mode === 'in_person' ? 'در مدل حضوری تأیید سیستمی شرکت‌کنندگان وجود ندارد.' : 'هنوز تأییدکننده‌ای ثبت نشده است.'} />
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
