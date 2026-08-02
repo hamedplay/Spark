@@ -129,3 +129,16 @@ export function clearMinutesTabFromUrl(): void {
   url.searchParams.delete(TAB_PARAM);
   window.history.replaceState({}, '', url.toString());
 }
+
+// ── Atomic context cleanup ───────────────────────────────────────────────────
+// Removes ALL minutes-related URL params (mpage, minute, mtab, meeting) and the
+// sessionStorage selectedMinuteId in a single replaceState call.
+export function clearMinutesContextFromUrl(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(PAGE_PARAM);
+  url.searchParams.delete(MINUTE_PARAM);
+  url.searchParams.delete(TAB_PARAM);
+  url.searchParams.delete(MEETING_PARAM);
+  window.history.replaceState({}, '', url.toString());
+  sessionStorage.removeItem(STORAGE_KEY);
+}

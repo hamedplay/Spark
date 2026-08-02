@@ -29,7 +29,7 @@ import { PageRendererProps } from './pageRendererTypes';
 
 export function renderContent(props: PageRendererProps): React.ReactNode {
   const {
-    activePage, setActivePage, isAdmin, currentUserId, userPermissions,
+    activePage, setActivePage, navigate, isAdmin, currentUserId, userPermissions,
     fetchMeetings,
     pendingSchedule, setPendingSchedule,
     chatMentionParticipants, setChatMentionParticipants,
@@ -66,13 +66,13 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
       );
     }
     if (!minutesFollowupAllowed) {
-      return <AccessDenied onReturn={() => setActivePage('profile')} />;
+      return <AccessDenied onReturn={() => navigate('profile')} />;
     }
   }
 
   const permKey = PAGE_PERMISSION_KEY[activePage];
   if (permKey && !checkPermission(permKey, isAdmin, userPermissions)) {
-    return <AccessDenied onReturn={() => setActivePage('profile')} />;
+    return <AccessDenied onReturn={() => navigate('profile')} />;
   }
 
   switch (activePage) {
@@ -96,12 +96,12 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
               url.searchParams.set('minute', existingMinuteId);
               url.searchParams.delete('meeting');
               window.history.replaceState({}, '', url.toString());
-              setActivePage('minutes-detail');
+              navigate('minutes-detail');
             } else {
               url.searchParams.set('meeting', meetingId);
               url.searchParams.delete('minute');
               window.history.replaceState({}, '', url.toString());
-              setActivePage('minutes-new');
+              navigate('minutes-new');
             }
           } catch (err) {
             if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
@@ -115,12 +115,12 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
         onNavigateToCalendar={(ids, bodyText) => {
           if (ids && ids.length > 0) setChatMentionParticipants(ids);
           if (bodyText) setChatMeetingNotes(bodyText);
-          setActivePage('calendar');
+          navigate('calendar');
         }}
         onNavigateToTasks={(messageBody, messageId) => {
           setTaskPrefillDescription(messageBody);
           setTaskPrefillMessageId(messageId);
-          setActivePage('tasks');
+          navigate('tasks');
         }}
         initialOpenUserId={chatInitUserId}
         onInitialOpenUserConsumed={() => setChatInitUserId(null)}
@@ -128,7 +128,7 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
     case 'create-meeting':
       return <CreateMeetingPage
         prefillData={sparkMeetingPrefill}
-        setActivePage={setActivePage}
+        setActivePage={navigate}
         setSparkMeetingPrefill={setSparkMeetingPrefill}
         fetchMeetings={fetchMeetings}
       />;
@@ -156,18 +156,18 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
     case 'tutorial':
       return <TutorialPage onAskSpark={(cmd) => { setSparkExternalCommand(cmd); }} />;
     case 'spark':
-      if (!sparkVisible) { setActivePage('calendar'); return null; }
-      return <SparkPage onSendToAssistant={(cmd) => { setSparkExternalCommand(cmd); setActivePage('spark'); }} />;
+      if (!sparkVisible) { navigate('calendar'); return null; }
+      return <SparkPage onSendToAssistant={(cmd) => { setSparkExternalCommand(cmd); navigate('spark'); }} />;
     case 'groups':
       return <GroupsPage currentUserId={currentUserId} isAdmin={isAdmin} />;
     case 'channels':
       return <ChannelsPage currentUserId={currentUserId} isAdmin={isAdmin} onNavigateToTasks={(body, id) => {
         setTaskPrefillDescription(body);
         setTaskPrefillMessageId(id);
-        setActivePage('tasks');
+        navigate('tasks');
       }} onOpenDirectChat={(userId) => {
         setChatInitUserId(userId);
-        setActivePage('chat');
+        navigate('chat');
       }} />;
     case 'minutes-hub': {
       const hubCards = new Set<PageId>();
@@ -185,28 +185,28 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
       if (minutesFollowupAllowed) {
         hubCards.add('minutes-followup');
       }
-      return <MinutesHubPage onNavigate={(p) => setActivePage(p as PageId)} visibleCards={hubCards} />;
+      return <MinutesHubPage onNavigate={(p) => navigate(p as PageId)} visibleCards={hubCards} />;
     }
     case 'minutes-dashboard':
-      return <MinutesDashboardPage onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <MinutesDashboardPage onNavigate={(p) => navigate(p as PageId)} />;
     case 'minutes':
-      return <MinutesListPage onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <MinutesListPage onNavigate={(p) => navigate(p as PageId)} />;
     case 'minutes-new':
-      return <MinutesFormPage mode="new" onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <MinutesFormPage mode="new" onNavigate={(p) => navigate(p as PageId)} />;
     case 'minutes-edit':
-      return <MinutesFormPage mode="edit" onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <MinutesFormPage mode="edit" onNavigate={(p) => navigate(p as PageId)} />;
     case 'minutes-detail':
-      return <MinutesDetailPage onNavigate={(p) => setActivePage(p as PageId)} currentUserId={currentUserId || undefined} isAdmin={isAdmin} />;
+      return <MinutesDetailPage onNavigate={(p) => navigate(p as PageId)} currentUserId={currentUserId || undefined} isAdmin={isAdmin} />;
     case 'minutes-approvals':
-      return <MinutesApprovalsPage onNavigate={(p) => setActivePage(p as PageId)} currentUserId={currentUserId || undefined} />;
+      return <MinutesApprovalsPage onNavigate={(p) => navigate(p as PageId)} currentUserId={currentUserId || undefined} />;
     case 'minutes-my-decisions':
-      return <MyDecisionsPage onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <MyDecisionsPage onNavigate={(p) => navigate(p as PageId)} />;
     case 'minutes-followup':
-      return <DecisionsFollowupPage onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <DecisionsFollowupPage onNavigate={(p) => navigate(p as PageId)} />;
     case 'minutes-report':
-      return <MinutesMeetingReportPage onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <MinutesMeetingReportPage onNavigate={(p) => navigate(p as PageId)} />;
     case 'minutes-reports':
-      return <MinutesReportsPage onNavigate={(p) => setActivePage(p as PageId)} />;
+      return <MinutesReportsPage onNavigate={(p) => navigate(p as PageId)} />;
     default:
       return <MeetingsPage
         meetings={props.meetings}
@@ -221,7 +221,7 @@ export function renderContent(props: PageRendererProps): React.ReactNode {
         setPriorityFilter={props.setPriorityFilter}
         showPendingMeetingsModal={props.showPendingMeetingsModal}
         setShowPendingMeetingsModal={props.setShowPendingMeetingsModal}
-        setActivePage={props.setActivePage}
+        setActivePage={props.navigate}
         setPendingSchedule={props.setPendingSchedule}
         isAdmin={props.isAdmin}
         userPermissions={props.userPermissions}

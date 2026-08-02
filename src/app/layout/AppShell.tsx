@@ -15,6 +15,7 @@ interface AppShellProps {
   userPermissions: Record<string, boolean> | null | undefined;
   activePage: PageId;
   setActivePage: (page: PageId) => void;
+  navigate: (page: PageId) => void;
   showSplash: boolean;
   splashDone: boolean;
   onSplashDone: () => void;
@@ -35,7 +36,7 @@ interface AppShellProps {
 export function AppShell(props: AppShellProps) {
   const {
     isAdmin, currentUserId, userPermissions,
-    activePage, setActivePage,
+    activePage, setActivePage, navigate,
     showSplash, splashDone, onSplashDone,
     sparkVisible,
     minutesFollowupAllowed,
@@ -49,9 +50,9 @@ export function AppShell(props: AppShellProps) {
     <PermissionsProvider isAdmin={isAdmin} userPermissions={userPermissions}>
       <GlobalCallProvider
         currentUserId={currentUserId}
-        onNavigateToChat={() => setActivePage('chat')}
-        onNavigateToChannels={() => setActivePage('channels')}
-        onNavigateToVideoConference={() => setActivePage('video-conference')}
+        onNavigateToChat={() => navigate('chat')}
+        onNavigateToChannels={() => navigate('channels')}
+        onNavigateToVideoConference={() => navigate('video-conference')}
       >
         {showSplash && !splashDone && (
           <SplashScreen onDone={onSplashDone} />
@@ -68,26 +69,26 @@ export function AppShell(props: AppShellProps) {
             },
           }}
         />
-        <Layout activePage={activePage} onPageChange={(p) => setActivePage(p as PageId)} isAdmin={isAdmin} userPermissions={userPermissions} sparkVisible={sparkVisible} minutesFollowupAllowed={minutesFollowupAllowed} minutesFollowupAccessLoading={minutesFollowupAccessLoading}
+        <Layout activePage={activePage} onPageChange={(p) => navigate(p as PageId)} isAdmin={isAdmin} userPermissions={userPermissions} sparkVisible={sparkVisible} minutesFollowupAllowed={minutesFollowupAllowed} minutesFollowupAccessLoading={minutesFollowupAccessLoading}
         >
           {renderContent(rendererProps)}
         </Layout>
         {currentUserId && sparkVisible && (
           <SparkAssistant
             currentUserId={currentUserId}
-            onNavigate={(page) => setActivePage(page as PageId)}
-            onSetCalendarView={(view) => { sparkProps.onSetCalendarView(view); setActivePage('calendar'); }}
+            onNavigate={(page) => navigate(page as PageId)}
+            onSetCalendarView={(view) => { sparkProps.onSetCalendarView(view); navigate('calendar'); }}
             onOpenMeetingForm={(prefill) => {
               sparkProps.onOpenMeetingForm(prefill);
-              setActivePage('create-meeting');
+              navigate('create-meeting');
             }}
             onOpenCalendarMeetingForm={(prefill) => {
               sparkProps.onOpenCalendarMeetingForm(prefill);
-              setActivePage('calendar');
+              navigate('calendar');
             }}
             onNavigateToDate={(jy, jm, jd, view) => {
               sparkProps.onNavigateToDate(jy, jm, jd, view);
-              setActivePage('calendar');
+              navigate('calendar');
             }}
             externalCommand={sparkProps.sparkExternalCommand}
             onExternalCommandConsumed={sparkProps.onExternalCommandConsumed}

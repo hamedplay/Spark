@@ -22,12 +22,12 @@ function App() {
 
   const { isAuthenticated, loading, isAdmin, currentUserId, userPermissions } = useAuthSession();
   const { prefs, loading: prefsLoading } = useUserPreferences();
-  const { activePage, setActivePage } = useNavigation(isAuthenticated, prefsLoading, prefs.default_landing_page);
+  const { activePage, navigate } = useNavigation(isAuthenticated, prefsLoading, prefs.default_landing_page);
   const maintenanceMode = useMaintenanceMode();
   const sparkVisible = useSparkVisibility();
   const { meetings, pendingMeetingsCount, fetchMeetings, fetchPendingMeetingsCount } = useMeetingsData(isAuthenticated);
 
-  useAdminPathGuard(isAuthenticated, isAdmin, setActivePage);
+  useAdminPathGuard(isAuthenticated, isAdmin, navigate);
 
   const [showSplash, setShowSplash] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
@@ -79,7 +79,7 @@ function App() {
               setSplashDone(false);
             }
           }).catch(() => {});
-          setActivePage('calendar');
+          navigate('calendar');
         }} />
       </>
     );
@@ -114,7 +114,7 @@ function App() {
   }
 
   const rendererProps: PageRendererProps = {
-    activePage, setActivePage, isAdmin, currentUserId, userPermissions,
+    activePage, navigate, isAdmin, currentUserId, userPermissions,
     meetings, pendingMeetingsCount, fetchMeetings, fetchPendingMeetingsCount,
     searchTerm, setSearchTerm, statusFilter, setStatusFilter,
     priorityFilter, setPriorityFilter,
@@ -141,7 +141,7 @@ function App() {
       currentUserId={currentUserId}
       userPermissions={userPermissions}
       activePage={activePage}
-      setActivePage={setActivePage}
+      setActivePage={navigate}
       showSplash={showSplash}
       splashDone={splashDone}
       onSplashDone={() => { setShowSplash(false); setSplashDone(true); }}
