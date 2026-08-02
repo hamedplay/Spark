@@ -122,6 +122,7 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     showApprovers: props.config?.showApprovers ?? true,
     showConfidentiality: props.config?.showConfidentiality ?? true,
     showDecisions: props.config?.showDecisions ?? true,
+    showNotes: props.config?.showNotes ?? true,
     fontSize: props.config?.fontSize ?? 'medium',
   };
 

@@ -8,6 +8,7 @@ import {
 } from '../../../lib/minutesAttachments';
 import { TableSkeleton, ConfirmActionDialog } from '../MinutesShared';
 import { MinutesDocumentLayout } from '../MinutesDocumentLayout';
+import { MinutesPreviewFrame } from '../Shared/MinutesPreviewFrame';
 import type { MinutesDocumentData } from '../MinutesDocumentData';
 import { FullScreenPreview } from '../Shared/FullScreenPreview';
 
@@ -18,14 +19,17 @@ interface Props {
   docData: MinutesDocumentData | null;
   docDataLoading: boolean;
   docDataError: string | null;
+  configLoading?: boolean;
+  configError?: string | null;
   onPrepareDocumentData: () => Promise<MinutesDocumentData>;
+  onRetryConfig?: () => void;
   onPrint: () => void;
   onWordExport: () => void;
   wordLoading: boolean;
   printLoading?: boolean;
 }
 
-export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, docDataLoading, docDataError, onPrepareDocumentData, onPrint, onWordExport, wordLoading, printLoading }: Props) {
+export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, docDataLoading, docDataError, configLoading, configError, onPrepareDocumentData, onRetryConfig, onPrint, onWordExport, wordLoading, printLoading }: Props) {
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +120,29 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
   return (
     <div className="space-y-5" dir="rtl">
       {/* Full document preview */}
-      {docDataError ? (
+      {configError ? (
+        <div className="space-y-3">
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">
+            خطا در بارگذاری تنظیمات قالب: {configError}
+          </div>
+          {onRetryConfig && (
+            <button
+              onClick={onRetryConfig}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              تلاش مجدد بارگذاری تنظیمات
+            </button>
+          )}
+        </div>
+      ) : configLoading ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">پیش‌نمایش صورت‌جلسه</h3>
+          </div>
+          <TableSkeleton rows={6} />
+        </div>
+      ) : docDataError ? (
         <div className="space-y-3">
           <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">
             {docDataError}
@@ -173,9 +199,9 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
               {wordLoading ? 'در حال ساخت Word...' : 'خروجی Word'}
             </button>
           </div>
-          <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800">
+          <MinutesPreviewFrame>
             <MinutesDocumentLayout data={docData} variant="preview" />
-          </div>
+          </MinutesPreviewFrame>
         </div>
       ) : null}
 

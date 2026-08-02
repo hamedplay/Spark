@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
 import toast from 'react-hot-toast';
 import { MinutesDocumentLayout } from './MinutesDocumentLayout';
+import { MinutesPreviewFrame } from './Shared/MinutesPreviewFrame';
 import type { MinutesDocumentData, MinutesLayoutConfig } from './MinutesDocumentData';
 import { FALLBACK_LOGO } from './MinutesDocumentData';
 import {
@@ -442,6 +443,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
               { key: 'minutes_show_approvers', label: 'نمایش سوابق تأیید سیستمی' },
               { key: 'minutes_show_confidentiality', label: 'نمایش سطح محرمانگی' },
               { key: 'minutes_show_decisions', label: 'نمایش اطلاعات مصوبات' },
+              { key: 'minutes_show_notes', label: 'نمایش یادداشت‌ها' },
             ] as const).map(({ key, label }) => {
               const val = cfgBool(key, true);
               return (
@@ -541,17 +543,12 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-5 overflow-x-auto">
-          <div
-            className="mx-auto bg-white border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm"
-            style={{ maxWidth: '800px', fontSize: FONT_SIZE_MAP[cfgVal('minutes_font_size', 'medium')] || '14px' }}
-          >
-            <MinutesDocumentLayout
-              data={previewData}
-              variant="preview"
-            />
-          </div>
-        </div>
+        <MinutesPreviewFrame fontSize={FONT_SIZE_MAP[cfgVal('minutes_font_size', 'medium')] || '14px'}>
+          <MinutesDocumentLayout
+            data={previewData}
+            variant="preview"
+          />
+        </MinutesPreviewFrame>
       </div>
     </div>
   );

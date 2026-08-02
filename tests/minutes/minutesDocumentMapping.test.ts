@@ -41,6 +41,7 @@ const config: MinutesLayoutConfig = {
   headerTitle: 'صورت‌جلسه', orgName: 'سازمان', subtitle: '',
   footerText: '', showLogo: true, showParticipants: true,
   showApprovers: true, showConfidentiality: true, showDecisions: true,
+  showNotes: true,
   fontSize: 'medium',
 };
 

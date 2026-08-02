@@ -371,6 +371,7 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
   const showLogo = cfg?.showLogo ?? true;
   const showParticipants = cfg?.showParticipants ?? true;
   const showApprovers = cfg?.showApprovers ?? true;
+  const showNotes = cfg?.showNotes ?? true;
   const showConfidentiality = cfg?.showConfidentiality ?? true;
   const showDecisions = cfg?.showDecisions ?? true;
 
@@ -456,7 +457,7 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
   }
 
   // Notes
-  if (minute.notes) {
+  if (showNotes && minute.notes) {
     bodyChildren.push(rtlParagraph(textRun('یادداشت', { bold: true, size: 26 }), { spacingAfter: 200 }));
     for (const line of minute.notes.split('\n')) {
       bodyChildren.push(new Paragraph({

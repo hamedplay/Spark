@@ -112,6 +112,7 @@ test('config visibility: showApprovers is true when config has showApprovers=tru
     showApprovers: true,
     showConfidentiality: true,
     showDecisions: true,
+    showNotes: true,
     fontSize: 'medium',
   };
   const data = toDocData({
@@ -159,6 +160,7 @@ test('config visibility: showDecisions and showConfidentiality respect config', 
     showApprovers: true,
     showConfidentiality: false,
     showDecisions: false,
+    showNotes: false,
     fontSize: 'medium',
   };
   const data = toDocData({
@@ -197,6 +199,7 @@ test('config visibility: showDecisions and showConfidentiality respect config', 
   assert.equal(data.config?.showParticipants, false);
   assert.equal(data.config?.showLogo, false);
   assert.equal(data.config?.showApprovers, true);
+  assert.equal(data.config?.showNotes, false);
 });
 
 // ── Config visibility: null config uses defaults ───────────────────────────────
@@ -238,6 +241,205 @@ test('config visibility: null config uses defaults', () => {
   assert.equal(data.config?.showParticipants, true);
   assert.equal(data.config?.showLogo, true);
   assert.equal(data.config?.showApprovers, true);
+  assert.equal(data.config?.showNotes, true);
   assert.equal(data.config?.headerTitle, 'صورت‌جلسه');
   assert.equal(data.config?.fontSize, 'medium');
+});
+
+// ── Config visibility: showNotes is independent of other flags ────────────────
+
+test('config visibility: showNotes defaults to true with null config', () => {
+  const data = toDocData({
+    minute: {
+      id: 'test-notes-1',
+      meeting_title_snapshot: 'تست',
+      meeting_date_snapshot: '2026-08-01',
+      meeting_start_time_snapshot: null,
+      meeting_end_time_snapshot: null,
+      meeting_location_snapshot: null,
+      meeting_type: null,
+      org_unit_name_snapshot: null,
+      secretary_name_snapshot: 'دبیر',
+      chair_name_snapshot: 'رئیس',
+      notes: 'یادداشت نمونه',
+      confidentiality: 'organizational',
+      status: 'published',
+      approval_mode: 'system',
+      revision_number: 1,
+      secretary_confirmed_at: null,
+      chair_confirmed_at: null,
+      published_at: null,
+    },
+    internalParts: [],
+    externalParts: [],
+    agendaResults: [],
+    approvals: [],
+    approvalComments: [],
+    decisions: [],
+    ownerNames: {},
+    logoUrl: null,
+    config: null,
+  });
+  assert.equal(data.config?.showNotes, true);
+});
+
+test('config visibility: showNotes=false is preserved and independent of showParticipants/showApprovers', () => {
+  const config: MinutesLayoutConfig = {
+    headerTitle: 'تست',
+    orgName: '',
+    subtitle: '',
+    footerText: '',
+    showLogo: true,
+    showParticipants: true,
+    showApprovers: true,
+    showConfidentiality: true,
+    showDecisions: true,
+    showNotes: false,
+    fontSize: 'medium',
+  };
+  const data = toDocData({
+    minute: {
+      id: 'test-notes-2',
+      meeting_title_snapshot: 'تست',
+      meeting_date_snapshot: '2026-08-01',
+      meeting_start_time_snapshot: null,
+      meeting_end_time_snapshot: null,
+      meeting_location_snapshot: null,
+      meeting_type: null,
+      org_unit_name_snapshot: null,
+      secretary_name_snapshot: 'دبیر',
+      chair_name_snapshot: 'رئیس',
+      notes: 'یادداشت نمونه',
+      confidentiality: 'organizational',
+      status: 'published',
+      approval_mode: 'system',
+      revision_number: 1,
+      secretary_confirmed_at: null,
+      chair_confirmed_at: null,
+      published_at: null,
+    },
+    internalParts: [],
+    externalParts: [],
+    agendaResults: [],
+    approvals: [],
+    approvalComments: [],
+    decisions: [],
+    ownerNames: {},
+    logoUrl: null,
+    config,
+  });
+  assert.equal(data.config?.showNotes, false);
+  assert.equal(data.config?.showParticipants, true);
+  assert.equal(data.config?.showApprovers, true);
+  assert.equal(data.config?.showDecisions, true);
+});
+
+test('config visibility: showNotes=true while showParticipants=false and showApprovers=false', () => {
+  const config: MinutesLayoutConfig = {
+    headerTitle: 'تست',
+    orgName: '',
+    subtitle: '',
+    footerText: '',
+    showLogo: false,
+    showParticipants: false,
+    showApprovers: false,
+    showConfidentiality: false,
+    showDecisions: false,
+    showNotes: true,
+    fontSize: 'medium',
+  };
+  const data = toDocData({
+    minute: {
+      id: 'test-notes-3',
+      meeting_title_snapshot: 'تست',
+      meeting_date_snapshot: '2026-08-01',
+      meeting_start_time_snapshot: null,
+      meeting_end_time_snapshot: null,
+      meeting_location_snapshot: null,
+      meeting_type: null,
+      org_unit_name_snapshot: null,
+      secretary_name_snapshot: 'دبیر',
+      chair_name_snapshot: 'رئیس',
+      notes: 'یادداشت نمونه',
+      confidentiality: 'organizational',
+      status: 'published',
+      approval_mode: 'system',
+      revision_number: 1,
+      secretary_confirmed_at: null,
+      chair_confirmed_at: null,
+      published_at: null,
+    },
+    internalParts: [],
+    externalParts: [],
+    agendaResults: [],
+    approvals: [],
+    approvalComments: [],
+    decisions: [],
+    ownerNames: {},
+    logoUrl: null,
+    config,
+  });
+  assert.equal(data.config?.showNotes, true);
+  assert.equal(data.config?.showParticipants, false);
+  assert.equal(data.config?.showApprovers, false);
+});
+
+// ── Config consistency: same config object used across preview, final, and Word ──
+
+test('config consistency: toDocData passes through all config flags identically', () => {
+  const config: MinutesLayoutConfig = {
+    headerTitle: 'عنوان تست',
+    orgName: 'سازمان تست',
+    subtitle: 'زیرعنوان',
+    footerText: 'پایان',
+    showLogo: false,
+    showParticipants: false,
+    showApprovers: false,
+    showConfidentiality: false,
+    showDecisions: false,
+    showNotes: false,
+    fontSize: 'large',
+  };
+  const data = toDocData({
+    minute: {
+      id: 'test-consistency',
+      meeting_title_snapshot: 'تست',
+      meeting_date_snapshot: '2026-08-01',
+      meeting_start_time_snapshot: null,
+      meeting_end_time_snapshot: null,
+      meeting_location_snapshot: null,
+      meeting_type: null,
+      org_unit_name_snapshot: null,
+      secretary_name_snapshot: 'دبیر',
+      chair_name_snapshot: 'رئیس',
+      notes: 'یادداشت',
+      confidentiality: 'organizational',
+      status: 'published',
+      approval_mode: 'system',
+      revision_number: 1,
+      secretary_confirmed_at: null,
+      chair_confirmed_at: null,
+      published_at: null,
+    },
+    internalParts: [],
+    externalParts: [],
+    agendaResults: [],
+    approvals: [],
+    approvalComments: [],
+    decisions: [],
+    ownerNames: {},
+    logoUrl: null,
+    config,
+  });
+  assert.equal(data.config?.headerTitle, config.headerTitle);
+  assert.equal(data.config?.orgName, config.orgName);
+  assert.equal(data.config?.subtitle, config.subtitle);
+  assert.equal(data.config?.footerText, config.footerText);
+  assert.equal(data.config?.showLogo, config.showLogo);
+  assert.equal(data.config?.showParticipants, config.showParticipants);
+  assert.equal(data.config?.showApprovers, config.showApprovers);
+  assert.equal(data.config?.showConfidentiality, config.showConfidentiality);
+  assert.equal(data.config?.showDecisions, config.showDecisions);
+  assert.equal(data.config?.showNotes, config.showNotes);
+  assert.equal(data.config?.fontSize, config.fontSize);
 });

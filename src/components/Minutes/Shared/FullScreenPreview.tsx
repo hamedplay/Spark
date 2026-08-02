@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ZoomIn, ZoomOut, X, Printer, FileDown } from 'lucide-react';
 import { MinutesDocumentLayout } from '../MinutesDocumentLayout';
+import { MinutesPreviewFrame } from './MinutesPreviewFrame';
 import type { MinutesDocumentData } from '../MinutesDocumentData';
 
 const MIN_ZOOM = 50;
@@ -109,7 +110,9 @@ export function FullScreenPreview({ open, onClose, docData, onPrint, onWordExpor
           className="minutes-fullscreen-doc-wrapper"
           style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
         >
-          <MinutesDocumentLayout data={docData} variant="preview" />
+          <MinutesPreviewFrame>
+            <MinutesDocumentLayout data={docData} variant="preview" />
+          </MinutesPreviewFrame>
         </div>
       </div>
     </div>

@@ -106,6 +106,7 @@ export interface MinutesLayoutConfig {
   showApprovers: boolean;
   showConfidentiality: boolean;
   showDecisions: boolean;
+  showNotes: boolean;
   fontSize: string;
 }
 

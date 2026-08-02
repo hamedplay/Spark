@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MinutesDocumentData } from './MinutesDocumentData';
 import { DASH, orDash, chunkArray, formatConfidentiality, APPROVAL_STATUS_LABELS, faDateTime } from './MinutesDocumentData';
 import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
+import './minutes-print.css';
 
 const FONT_SIZE_PX: Record<string, string> = {
   small: '12px',
@@ -36,6 +37,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
   const showConfidentiality = cfg?.showConfidentiality ?? true;
   const showDecisions = cfg?.showDecisions ?? true;
   const showApprovers = cfg?.showApprovers ?? true;
+  const showNotes = cfg?.showNotes ?? true;
   const fontSize = cfg?.fontSize ?? 'medium';
 
   // ── Attendance lists ───────────────────────────────────────────────────────
@@ -248,7 +250,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           </div>
         )}
 
-        {minute.notes && (
+        {showNotes && minute.notes && (
           <div className="mp-section mp-no-break">
             <h2 className="mp-section-title">یادداشت</h2>
             <p className="mp-item-row" style={{ whiteSpace: 'pre-wrap' }}>{minute.notes}</p>

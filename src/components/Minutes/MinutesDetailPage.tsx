@@ -10,7 +10,6 @@ import { exportMinutesToWord } from '../../lib/minutesWordExport';
 import type { MinutesDocumentData } from './MinutesDocumentData';
 import { fetchMinutesConfig } from './fetchMinutesConfig';
 import type { MinutesLayoutConfig } from './MinutesDocumentData';
-import './minutes-print.css';
 import type { ApprovalStatus } from './types';
 import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow, AgendaResultRow, ApprovalRow, ApprovalCommentRow } from './Detail/types';
 import { DetailLoadingView, DetailErrorView, DetailNotFoundView } from './Detail/DetailViews';
@@ -86,6 +85,9 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [finalDocData, setFinalDocData] = useState<MinutesDocumentData | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [docConfig, setDocConfig] = useState<MinutesLayoutConfig | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const configRevRef = useRef(0);
 
   const autoPrintTriggered = useRef(false);
 
@@ -105,11 +107,23 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   }, [printReady]);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const { logoUrl: logo, config } = await fetchMinutesConfig();
-      setLogoUrl(logo);
-      setDocConfig(config);
+      setConfigLoading(true);
+      setConfigError(null);
+      try {
+        const { logoUrl: logo, config } = await fetchMinutesConfig();
+        if (cancelled) return;
+        setLogoUrl(logo);
+        setDocConfig(config);
+        configRevRef.current += 1;
+      } catch (e) {
+        if (!cancelled) setConfigError(e instanceof Error ? e.message : 'خطا در بارگذاری تنظیمات قالب');
+      } finally {
+        if (!cancelled) setConfigLoading(false);
+      }
     })();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchDetail = useCallback(async () => {
@@ -118,6 +132,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     setNotFound(false);
     setFinalDocData(null);
     setDocDataError(null);
+    configRevRef.current += 1;
 
     const targetId = minuteId || getMinuteIdFromUrl();
 
@@ -266,13 +281,13 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
 
   // Auto-prepare document data when entering the final_version tab
   useEffect(() => {
-    if (activeTab === 'final_version' && !finalDocData && !docDataError && !docDataLoading && minute) {
+    if (activeTab === 'final_version' && !finalDocData && !docDataError && !docDataLoading && minute && docConfig) {
       prepareDocumentData().catch(() => {
         // Error already handled in prepareDocumentData
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, finalDocData, docDataError, docDataLoading, minute]);
+  }, [activeTab, finalDocData, docDataError, docDataLoading, minute, docConfig]);
 
   const handleApprove = async () => {
     if (acting || !minute || !myApproval) return;
@@ -388,6 +403,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   // Shared: load minutes_decisions via read-only RPC + owner names, build finalDocData, return it.
   const prepareDocumentData = async (): Promise<MinutesDocumentData> => {
     if (!minute) throw new Error('No minute loaded');
+    if (!docConfig) throw new Error('تنظیمات قالب هنوز بارگذاری نشده است');
     setDocDataError(null);
     setDocDataLoading(true);
     try {
@@ -558,7 +574,20 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               docData={finalDocData}
               docDataLoading={docDataLoading}
               docDataError={docDataError}
+              configLoading={configLoading}
+              configError={configError}
               onPrepareDocumentData={prepareDocumentData}
+              onRetryConfig={() => {
+                setFinalDocData(null);
+                setDocDataError(null);
+                fetchMinutesConfig().then(({ logoUrl: logo, config }) => {
+                  setLogoUrl(logo);
+                  setDocConfig(config);
+                  setConfigError(null);
+                }).catch((e) => {
+                  setConfigError(e instanceof Error ? e.message : 'خطا در بارگذاری تنظیمات قالب');
+                }).finally(() => setConfigLoading(false));
+              }}
               onPrint={handlePrint}
               onWordExport={handleWordExport}
               wordLoading={wordLoading}

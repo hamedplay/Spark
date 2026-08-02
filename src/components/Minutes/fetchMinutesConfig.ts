@@ -16,6 +16,7 @@ const DEFAULT_CONFIG: MinutesLayoutConfig = {
   showApprovers: true,
   showConfidentiality: true,
   showDecisions: true,
+  showNotes: true,
   fontSize: 'medium',
 };
 
@@ -41,6 +42,7 @@ export function normalizeMinutesLayoutConfig(map: Map<string, string>): MinutesL
     showApprovers: parseBool(map.get('minutes.minutes_show_approvers'), true),
     showConfidentiality: parseBool(map.get('minutes.minutes_show_confidentiality'), true),
     showDecisions: parseBool(map.get('minutes.minutes_show_decisions'), true),
+    showNotes: parseBool(map.get('minutes.minutes_show_notes'), true),
     fontSize: VALID_FONT_SIZES.has(fontSize) ? fontSize : 'medium',
   };
 }
