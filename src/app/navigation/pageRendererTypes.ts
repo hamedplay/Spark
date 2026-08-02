@@ -3,7 +3,6 @@ import { SparkMeetingPrefill } from '../../components/Spark/SparkAssistant';
 
 export interface PageRendererProps {
   activePage: import('../navigation/useNavigation').PageId;
-  setActivePage: (page: import('../navigation/useNavigation').PageId) => void;
   navigate: (page: import('../navigation/useNavigation').PageId) => void;
   isAdmin: boolean;
   currentUserId: string | null;

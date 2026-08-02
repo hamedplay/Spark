@@ -141,7 +141,7 @@ function App() {
       currentUserId={currentUserId}
       userPermissions={userPermissions}
       activePage={activePage}
-      setActivePage={navigate}
+      navigate={navigate}
       showSplash={showSplash}
       splashDone={splashDone}
       onSplashDone={() => { setShowSplash(false); setSplashDone(true); }}

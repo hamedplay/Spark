@@ -29,7 +29,7 @@ import { PageRendererProps } from './pageRendererTypes';
 
 export function renderContent(props: PageRendererProps): React.ReactNode {
   const {
-    activePage, setActivePage, navigate, isAdmin, currentUserId, userPermissions,
+    activePage, navigate, isAdmin, currentUserId, userPermissions,
     fetchMeetings,
     pendingSchedule, setPendingSchedule,
     chatMentionParticipants, setChatMentionParticipants,

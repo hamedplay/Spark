@@ -14,7 +14,6 @@ interface AppShellProps {
   currentUserId: string | null;
   userPermissions: Record<string, boolean> | null | undefined;
   activePage: PageId;
-  setActivePage: (page: PageId) => void;
   navigate: (page: PageId) => void;
   showSplash: boolean;
   splashDone: boolean;
@@ -36,7 +35,7 @@ interface AppShellProps {
 export function AppShell(props: AppShellProps) {
   const {
     isAdmin, currentUserId, userPermissions,
-    activePage, setActivePage, navigate,
+    activePage, navigate,
     showSplash, splashDone, onSplashDone,
     sparkVisible,
     minutesFollowupAllowed,
