@@ -64,9 +64,9 @@ test('buildFilename: strips invalid chars from title', () => {
   assert.ok(!name.includes(':'));
 });
 
-// ── Config visibility: showApprovers always false ─────────────────────────────
+// ── Config visibility: showApprovers respects config ─────────────────────────
 
-test('config visibility: showApprovers is always false even with null config', () => {
+test('config visibility: showApprovers defaults to true with null config', () => {
   const data = toDocData({
     minute: {
       id: 'test-1',
@@ -98,10 +98,10 @@ test('config visibility: showApprovers is always false even with null config', (
     logoUrl: null,
     config: null,
   });
-  assert.equal(data.config?.showApprovers, false);
+  assert.equal(data.config?.showApprovers, true);
 });
 
-test('config visibility: showApprovers is false even when config has showApprovers=true', () => {
+test('config visibility: showApprovers is true when config has showApprovers=true', () => {
   const maliciousConfig: MinutesLayoutConfig = {
     headerTitle: 'تست',
     orgName: '',
@@ -109,7 +109,7 @@ test('config visibility: showApprovers is false even when config has showApprove
     footerText: '',
     showLogo: true,
     showParticipants: true,
-    showApprovers: true, // should be overridden to false
+    showApprovers: true,
     showConfidentiality: true,
     showDecisions: true,
     fontSize: 'medium',
@@ -145,7 +145,7 @@ test('config visibility: showApprovers is false even when config has showApprove
     logoUrl: null,
     config: maliciousConfig,
   });
-  assert.equal(data.config?.showApprovers, false);
+  assert.equal(data.config?.showApprovers, true);
 });
 
 test('config visibility: showDecisions and showConfidentiality respect config', () => {
@@ -196,12 +196,12 @@ test('config visibility: showDecisions and showConfidentiality respect config', 
   assert.equal(data.config?.showConfidentiality, false);
   assert.equal(data.config?.showParticipants, false);
   assert.equal(data.config?.showLogo, false);
-  assert.equal(data.config?.showApprovers, false); // always overridden
+  assert.equal(data.config?.showApprovers, true);
 });
 
 // ── Config visibility: null config uses defaults ───────────────────────────────
 
-test('config visibility: null config uses defaults (except showApprovers)', () => {
+test('config visibility: null config uses defaults', () => {
   const data = toDocData({
     minute: {
       id: 'test-4',
@@ -237,7 +237,7 @@ test('config visibility: null config uses defaults (except showApprovers)', () =
   assert.equal(data.config?.showConfidentiality, true);
   assert.equal(data.config?.showParticipants, true);
   assert.equal(data.config?.showLogo, true);
-  assert.equal(data.config?.showApprovers, false);
+  assert.equal(data.config?.showApprovers, true);
   assert.equal(data.config?.headerTitle, 'صورت‌جلسه');
   assert.equal(data.config?.fontSize, 'medium');
 });

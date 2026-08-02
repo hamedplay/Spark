@@ -290,6 +290,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
     ],
     approvals: [
       { id: 'ap1', approver_name: 'مدیر محترم', status: 'approved', approved_at: '2026-08-01T11:00:00Z', changes_requested_at: null },
+      { id: 'ap2', approver_name: 'کارشناس ارشد', status: 'pending', approved_at: null, changes_requested_at: null },
     ],
     approvalComments: [],
     logoUrl: cfgBool('minutes_show_logo', true) ? logoUrl : null,
@@ -437,8 +438,8 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {([
               { key: 'minutes_show_logo', label: 'نمایش لوگو' },
-              { key: 'minutes_show_participants', label: 'نمایش شرکت‌کنندگان و امضاها' },
-              { key: 'minutes_show_approvers', label: 'نمایش تأییدکنندگان' },
+              { key: 'minutes_show_participants', label: 'نمایش محل امضای شرکت‌کنندگان' },
+              { key: 'minutes_show_approvers', label: 'نمایش سوابق تأیید سیستمی' },
               { key: 'minutes_show_confidentiality', label: 'نمایش سطح محرمانگی' },
               { key: 'minutes_show_decisions', label: 'نمایش اطلاعات مصوبات' },
             ] as const).map(({ key, label }) => {

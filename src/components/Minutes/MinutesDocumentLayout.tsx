@@ -233,7 +233,6 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
                   <th>نام تأییدکننده</th>
                   <th>وضعیت تأیید</th>
                   <th>تاریخ تأیید</th>
-                  <th>محل امضا</th>
                 </tr>
               </thead>
               <tbody>
@@ -242,7 +241,6 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
                     <td>{orDash(a.approver_name)}</td>
                     <td>{APPROVAL_STATUS_LABELS[a.status] || a.status}</td>
                     <td>{faDateTime(a.approved_at)}</td>
-                    <td className="mp-sign-cell" />
                   </tr>
                 ))}
               </tbody>

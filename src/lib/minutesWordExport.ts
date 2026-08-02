@@ -3,9 +3,9 @@ import {
   AlignmentType, WidthType, HeightRule, ImageRun, PageOrientation,
   convertMillimetersToTwip, VerticalAlign, BorderStyle,
 } from 'docx';
-import type { MinutesDocumentData, DocInternalPart, DocExternalPart } from '../components/Minutes/MinutesDocumentData';
+import type { MinutesDocumentData, DocInternalPart, DocExternalPart, DocApproval } from '../components/Minutes/MinutesDocumentData';
 import {
-  DASH, orDash, formatConfidentiality,
+  DASH, orDash, formatConfidentiality, APPROVAL_STATUS_LABELS,
 } from '../components/Minutes/MinutesDocumentData';
 import { gregorianToJalaliDate, toPersianDigits } from './minutesDate';
 
@@ -316,6 +316,51 @@ function signaturesSection(data: MinutesDocumentData): Table | null {
   });
 }
 
+function approversSection(data: MinutesDocumentData): Table | null {
+  const { approvals } = data;
+  if (approvals.length === 0) return null;
+
+  const headerRow = new TableRow({
+    tableHeader: true,
+    children: [
+      new TableCell({
+        width: { size: 40, type: WidthType.PERCENTAGE },
+        children: [rtlParagraph(textRun('نام تأییدکننده', { bold: true }), { spacingAfter: 40 })],
+      }),
+      new TableCell({
+        width: { size: 30, type: WidthType.PERCENTAGE },
+        children: [rtlParagraph(textRun('وضعیت تأیید', { bold: true }), { spacingAfter: 40 })],
+      }),
+      new TableCell({
+        width: { size: 30, type: WidthType.PERCENTAGE },
+        children: [rtlParagraph(textRun('تاریخ تأیید', { bold: true }), { spacingAfter: 40 })],
+      }),
+    ],
+  });
+
+  const bodyRows = approvals.map((a: DocApproval) => new TableRow({
+    children: [
+      new TableCell({
+        width: { size: 40, type: WidthType.PERCENTAGE },
+        children: [rtlParagraph(textRun(orDash(a.approver_name)), { spacingAfter: 40 })],
+      }),
+      new TableCell({
+        width: { size: 30, type: WidthType.PERCENTAGE },
+        children: [rtlParagraph(textRun(APPROVAL_STATUS_LABELS[a.status] || a.status), { spacingAfter: 40 })],
+      }),
+      new TableCell({
+        width: { size: 30, type: WidthType.PERCENTAGE },
+        children: [rtlParagraph(textRun(a.approved_at ? jalaliDisplay(a.approved_at) : DASH), { spacingAfter: 40 })],
+      }),
+    ],
+  }));
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [headerRow, ...bodyRows],
+  });
+}
+
 export async function exportMinutesToWord(data: MinutesDocumentData): Promise<void> {
   const { minute, logoUrl, config } = data;
   const cfg = config;
@@ -325,6 +370,7 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
   const footerText = cfg?.footerText ?? 'پایان صورت‌جلسه';
   const showLogo = cfg?.showLogo ?? true;
   const showParticipants = cfg?.showParticipants ?? true;
+  const showApprovers = cfg?.showApprovers ?? true;
   const showConfidentiality = cfg?.showConfidentiality ?? true;
   const showDecisions = cfg?.showDecisions ?? true;
 
@@ -393,10 +439,20 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
 
   // Signatures
   if (showParticipants) {
-    bodyChildren.push(rtlParagraph(textRun('شرکت‌کنندگان و امضاها', { bold: true, size: 26 }), { spacingAfter: 200 }));
+    bodyChildren.push(rtlParagraph(textRun('شرکت‌کنندگان و محل امضا', { bold: true, size: 26 }), { spacingAfter: 200 }));
     const sigTable = signaturesSection(data);
     if (sigTable) bodyChildren.push(sigTable);
     bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+  }
+
+  // System approvers
+  if (showApprovers) {
+    const approverTable = approversSection(data);
+    if (approverTable) {
+      bodyChildren.push(rtlParagraph(textRun('تأییدکنندگان سیستمی', { bold: true, size: 26 }), { spacingAfter: 200 }));
+      bodyChildren.push(approverTable);
+      bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+    }
   }
 
   // Notes
