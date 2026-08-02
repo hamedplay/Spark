@@ -3,13 +3,12 @@ import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMinutesTabFromUrl, setMinutesTabInUrl, type MinutesDetailTab } from '../../lib/minutesNavigation';
-import type { DecisionRow } from './types';
 import { MinutesPrintView } from './MinutesPrintView';
-import { toDocData } from './minutesToDocData';
 import { exportMinutesToWord } from '../../lib/minutesWordExport';
 import type { MinutesDocumentData } from './MinutesDocumentData';
-import { fetchMinutesConfig } from './fetchMinutesConfig';
 import type { MinutesLayoutConfig } from './MinutesDocumentData';
+import { fetchMinutesConfig } from './fetchMinutesConfig';
+import { loadDocumentSnapshot } from './minutesDocumentLoader';
 import type { ApprovalStatus } from './types';
 import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow, AgendaResultRow, ApprovalRow, ApprovalCommentRow } from './Detail/types';
 import { DetailLoadingView, DetailErrorView, DetailNotFoundView } from './Detail/DetailViews';
@@ -27,7 +26,7 @@ const TABS = [
   { id: 'summary',       label: 'خلاصه',              icon: FileText },
   { id: 'participants',  label: 'شرکت‌کنندگان',        icon: Users },
   { id: 'agenda',        label: 'دستور جلسات',         icon: FileText },
-  { id: 'decisions',     label: 'مصوبات',              icon: CheckSquare },
+  { id: 'decisions',     label: 'مصوبات',             icon: CheckSquare },
   { id: 'attachments',   label: 'پیوست‌ها',            icon: Paperclip },
   { id: 'approvals',     label: 'تأییدها',             icon: Shield },
   { id: 'history',       label: 'تاریخچه تغییرات',    icon: History },
@@ -87,7 +86,13 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const [docConfig, setDocConfig] = useState<MinutesLayoutConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
-  const configRevRef = useRef(0);
+
+  // Request token: incremented on every new load. Stale responses are rejected
+  // by comparing their token against the current value.
+  const loadTokenRef = useRef(0);
+
+  // Track the currently loaded minute identity for snapshot invalidation.
+  const loadedMinuteKeyRef = useRef<string>('');
 
   const autoPrintTriggered = useRef(false);
 
@@ -106,6 +111,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     };
   }, [printReady]);
 
+  // Load config once on mount
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -116,7 +122,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
         if (cancelled) return;
         setLogoUrl(logo);
         setDocConfig(config);
-        configRevRef.current += 1;
       } catch (e) {
         if (!cancelled) setConfigError(e instanceof Error ? e.message : 'خطا در بارگذاری تنظیمات قالب');
       } finally {
@@ -130,9 +135,10 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     setIsLoading(true);
     setError(null);
     setNotFound(false);
+
+    // Invalidate any previous snapshot
     setFinalDocData(null);
     setDocDataError(null);
-    configRevRef.current += 1;
 
     const targetId = minuteId || getMinuteIdFromUrl();
 
@@ -142,111 +148,52 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       return;
     }
 
-    const { data: minData, error: minErr } = await supabase
-      .from('minutes')
-      .select('id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_name_snapshot, secretary_name_snapshot, chair_name_snapshot, secretary_user_id, chair_user_id, created_by_user_id, notes, confidentiality, status, approval_mode, revision_number, submitted_at, secretary_confirmed_at, chair_confirmed_at, published_at, created_at, updated_at')
-      .eq('id', targetId)
-      .maybeSingle();
+    // Assign a new request token and record the minute identity key.
+    const myToken = ++loadTokenRef.current;
+    const minuteKey = `${targetId}`;
+    loadedMinuteKeyRef.current = minuteKey;
 
-    if (minErr) {
-      setError(minErr.message);
+    try {
+      const snapshot = await loadDocumentSnapshot({
+        minuteId: targetId,
+        cachedConfig: docConfig,
+        cachedLogoUrl: logoUrl,
+      });
+
+      // Reject stale response: a newer load has started.
+      if (myToken !== loadTokenRef.current) return;
+      // Reject if the minute identity has changed since this load started.
+      if (loadedMinuteKeyRef.current !== minuteKey) return;
+
+      setMinute(snapshot.minute);
+      setInternalParts(snapshot.internalParts);
+      setExternalParts(snapshot.externalParts);
+      setAgendaResults(snapshot.agendaResults);
+      setApprovals(snapshot.approvals);
+      setApprovalComments(snapshot.approvalComments);
+      setFinalDocData(snapshot.docData);
+      setLogoUrl(snapshot.logoUrl);
+      setDocConfig(snapshot.config);
       setIsLoading(false);
-      return;
-    }
-    if (!minData) {
-      setNotFound(true);
+
+      // Auto-print if print=1 in URL (triggered from list page)
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('print') === '1') {
+        url.searchParams.delete('print');
+        window.history.replaceState(null, '', url.toString());
+        autoPrintTriggered.current = true;
+      }
+    } catch (e) {
+      if (myToken !== loadTokenRef.current) return;
+      const msg = e instanceof Error ? e.message : 'خطا در بارگذاری';
+      if (msg === 'MINUTE_NOT_FOUND') {
+        setNotFound(true);
+      } else {
+        setError(msg);
+      }
       setIsLoading(false);
-      return;
     }
-
-    setMinute(minData as MinuteDetail);
-
-    const [partsRes, extRes, agendaRes, approvalsRes] = await Promise.all([
-      supabase
-        .from('minutes_participants')
-        .select('id, user_id, name_snapshot, position_snapshot, org_unit_name_snapshot, invitation_status, attendance_status, delegate_name')
-        .eq('minute_id', targetId)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('minutes_external_participants')
-        .select('id, full_name, organization, position, mobile, email, attendance_status')
-        .eq('minute_id', targetId)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('minutes_agenda_results')
-        .select('id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes')
-        .eq('minute_id', targetId)
-        .order('sort_order_snapshot', { ascending: true }),
-      supabase
-        .from('minutes_approvals')
-        .select('id, approver_user_id, status, approved_at, changes_requested_at')
-        .eq('minute_id', targetId)
-        .eq('revision_number', (minData as MinuteDetail).revision_number)
-        .order('created_at', { ascending: true }),
-    ]);
-
-    setInternalParts((partsRes.data || []) as InternalParticipantRow[]);
-    setExternalParts((extRes.data || []) as ExternalParticipantRow[]);
-    setAgendaResults((agendaRes.data || []) as AgendaResultRow[]);
-
-    // Fetch approver names from profiles
-    const approvalRows = (approvalsRes.data || []) as Array<{ id: string; approver_user_id: string; status: ApprovalStatus; approved_at: string | null; changes_requested_at: string | null }>;
-    if (approvalRows.length > 0) {
-      const userIds = approvalRows.map(a => a.approver_user_id);
-      const { data: profiles } = await supabase
-        .from('profiles_public')
-        .select('user_id, full_name')
-        .in('user_id', userIds);
-      const nameMap = new Map((profiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
-      setApprovals(approvalRows.map(a => ({
-        id: a.id,
-        approver_user_id: a.approver_user_id,
-        status: a.status,
-        approved_at: a.approved_at,
-        changes_requested_at: a.changes_requested_at,
-        approver_name: nameMap.get(a.approver_user_id) || 'کاربر',
-      })));
-    } else {
-      setApprovals([]);
-    }
-
-    // Fetch approval comments
-    const { data: commentsData } = await supabase
-      .from('minutes_approval_comments')
-      .select('id, agenda_result_id, reason, suggested_correction, created_by_user_id, created_at')
-      .eq('minute_id', targetId)
-      .eq('revision_number', (minData as MinuteDetail).revision_number)
-      .order('created_at', { ascending: true });
-    if (commentsData && commentsData.length > 0) {
-      const creatorIds = [...new Set(commentsData.map((c: { created_by_user_id: string }) => c.created_by_user_id))];
-      const { data: creatorProfiles } = await supabase
-        .from('profiles_public')
-        .select('user_id, full_name')
-        .in('user_id', creatorIds);
-      const creatorNameMap = new Map((creatorProfiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
-      setApprovalComments(commentsData.map((c: { id: string; agenda_result_id: string | null; reason: string; suggested_correction: string | null; created_by_user_id: string; created_at: string }) => ({
-        id: c.id,
-        agenda_result_id: c.agenda_result_id,
-        reason: c.reason,
-        suggested_correction: c.suggested_correction,
-        created_by_user_id: c.created_by_user_id,
-        created_by_name: creatorNameMap.get(c.created_by_user_id) || 'کاربر',
-        created_at: c.created_at,
-      })));
-    } else {
-      setApprovalComments([]);
-    }
-
-    setIsLoading(false);
-
-    // Auto-print if print=1 in URL (triggered from list page)
-    const url = new URL(window.location.href);
-    if (url.searchParams.get('print') === '1') {
-      url.searchParams.delete('print');
-      window.history.replaceState(null, '', url.toString());
-      autoPrintTriggered.current = true;
-    }
-  }, [minuteId]);
+  }, [minuteId, docConfig, logoUrl]);
 
   useEffect(() => {
     fetchDetail();
@@ -278,6 +225,14 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const refresh = useCallback(() => {
     fetchDetail();
   }, [fetchDetail]);
+
+  // Invalidate snapshot when config changes after initial load
+  useEffect(() => {
+    if (docConfig && minute) {
+      setFinalDocData(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docConfig]);
 
   // Auto-prepare document data when entering the final_version tab
   useEffect(() => {
@@ -369,7 +324,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       const data = finalDocData ?? await prepareDocumentData();
       setFinalDocData(data);
       setPrintReady(true);
-      // Wait for DOM render, fonts, and images before printing
       requestAnimationFrame(async () => {
         await new Promise(resolve => requestAnimationFrame(resolve));
         const root = document.body.querySelector('.minutes-print-root') as HTMLElement | null;
@@ -400,77 +354,42 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     }
   };
 
-  // Shared: load minutes_decisions via read-only RPC + owner names, build finalDocData, return it.
+  // Rebuild the document snapshot atomically. Uses the cached config if available,
+  // otherwise fetches fresh. All sub-queries must succeed before finalDocData is set.
   const prepareDocumentData = async (): Promise<MinutesDocumentData> => {
     if (!minute) throw new Error('No minute loaded');
-    if (!docConfig) throw new Error('تنظیمات قالب هنوز بارگذاری نشده است');
     setDocDataError(null);
     setDocDataLoading(true);
-    try {
-      const { data: viewData, error: viewErr } = await supabase.rpc('get_minutes_decisions_for_view', { p_minute_id: minute.id });
-      if (viewErr) throw new Error(viewErr.message);
-      const viewRows = (viewData || []) as Array<{
-        id: string; title: string; description: string | null;
-        priority: DecisionRow['priority']; status: DecisionRow['status'];
-        progress_percent: number; start_date: string | null; due_date: string | null;
-        responsible_unit_name_snapshot: string | null;
-        primary_owner_user_id: string; owner_name: string | null;
-        requires_followup: boolean; latest_update: string | null;
-        agenda_result_id: string | null; agenda_title: string | null;
-      }>;
-      const decRows: DecisionRow[] = viewRows.map(r => ({
-        id: r.id, minute_id: minute.id, agenda_result_id: r.agenda_result_id,
-        title: r.title, description: r.description,
-        primary_owner_user_id: r.primary_owner_user_id,
-        responsible_unit_id: null,
-        responsible_unit_name_snapshot: r.responsible_unit_name_snapshot,
-        priority: r.priority, status: r.status, progress_percent: r.progress_percent,
-        start_date: r.start_date, due_date: r.due_date, completed_at: null,
-        requires_followup: r.requires_followup, latest_update: r.latest_update,
-        created_by_user_id: r.primary_owner_user_id, created_at: '', updated_at: '',
-        discussion_result: null, result_type: null, additional_notes: null,
-      }));
-      const namesMap: Record<string, string> = {};
-      for (const r of viewRows) {
-        if (r.owner_name) namesMap[r.primary_owner_user_id] = r.owner_name;
-      }
 
-      const data = toDocData({
-        minute: {
-          id: minute.id,
-          meeting_title_snapshot: minute.meeting_title_snapshot,
-          meeting_date_snapshot: minute.meeting_date_snapshot,
-          meeting_start_time_snapshot: minute.meeting_start_time_snapshot,
-          meeting_end_time_snapshot: minute.meeting_end_time_snapshot,
-          meeting_location_snapshot: minute.meeting_location_snapshot,
-          meeting_type: minute.meeting_type,
-          org_unit_name_snapshot: minute.org_unit_name_snapshot,
-          secretary_name_snapshot: minute.secretary_name_snapshot,
-          chair_name_snapshot: minute.chair_name_snapshot,
-          notes: minute.notes,
-          confidentiality: minute.confidentiality,
-          status: minute.status,
-          approval_mode: minute.approval_mode,
-          revision_number: minute.revision_number,
-          secretary_confirmed_at: minute.secretary_confirmed_at,
-          chair_confirmed_at: minute.chair_confirmed_at,
-          published_at: minute.published_at,
-        },
-        internalParts,
-        externalParts,
-        agendaResults,
-        approvals,
-        approvalComments,
-        decisions: decRows,
-        ownerNames: namesMap,
-        logoUrl,
-        config: docConfig,
+    const myToken = ++loadTokenRef.current;
+    const minuteKey = `${minute.id}`;
+    loadedMinuteKeyRef.current = minuteKey;
+
+    try {
+      const snapshot = await loadDocumentSnapshot({
+        minuteId: minute.id,
+        cachedConfig: docConfig,
+        cachedLogoUrl: logoUrl,
       });
 
-      setFinalDocData(data);
+      // Reject stale response
+      if (myToken !== loadTokenRef.current) return snapshot.docData;
+      if (loadedMinuteKeyRef.current !== minuteKey) return snapshot.docData;
+
+      // Update all state atomically
+      setMinute(snapshot.minute);
+      setInternalParts(snapshot.internalParts);
+      setExternalParts(snapshot.externalParts);
+      setAgendaResults(snapshot.agendaResults);
+      setApprovals(snapshot.approvals);
+      setApprovalComments(snapshot.approvalComments);
+      setFinalDocData(snapshot.docData);
+      setLogoUrl(snapshot.logoUrl);
+      setDocConfig(snapshot.config);
       setDocDataLoading(false);
-      return data;
+      return snapshot.docData;
     } catch (e) {
+      if (myToken !== loadTokenRef.current) throw e;
       const msg = e instanceof Error ? e.message : 'خطا در آماده‌سازی داده سند';
       setDocDataError(msg);
       setDocDataLoading(false);
@@ -580,6 +499,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               onRetryConfig={() => {
                 setFinalDocData(null);
                 setDocDataError(null);
+                setConfigLoading(true);
                 fetchMinutesConfig().then(({ logoUrl: logo, config }) => {
                   setLogoUrl(logo);
                   setDocConfig(config);
