@@ -90,19 +90,18 @@ export function MinutesListPage({ onNavigate }: Props) {
       const rawRows = data || [];
       const ids = rawRows.map((row: Record<string, unknown>) => row.id as string).filter(Boolean);
 
-      // Fetch decision counts in a single aggregation query to avoid N+1.
+      // Fetch decision counts via SECURITY DEFINER RPC to get accurate counts
+      // regardless of RLS on minutes_decisions.
       let countMap: Record<string, number> = {};
       let countError = false;
       if (ids.length > 0) {
         try {
-          const { data: decData, error: decErr } = await supabase
-            .from('minutes_decisions')
-            .select('minute_id')
-            .in('minute_id', ids);
-          if (decErr) throw decErr;
-          for (const d of decData || []) {
-            const mid = (d as Record<string, unknown>).minute_id as string;
-            if (mid) countMap[mid] = (countMap[mid] || 0) + 1;
+          const { data: countData, error: countErr } = await supabase.rpc('get_minutes_decision_counts', {
+            p_minute_ids: ids,
+          });
+          if (countErr) throw countErr;
+          for (const row of (countData || []) as Array<{ minute_id: string; decision_count: number }>) {
+            countMap[row.minute_id] = Number(row.decision_count);
           }
         } catch (err) {
           if (import.meta.env.DEV) console.error('MinutesListPage: failed to fetch decision counts', err);

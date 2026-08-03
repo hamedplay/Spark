@@ -23,7 +23,8 @@ export type ActionType =
   | 'followup'
   | 'complete'
   | 'reopen'
-  | 'obstacle_resolved';
+  | 'obstacle_resolved'
+  | 'update';
 
 interface DecisionActionModalProps {
   decision: DecisionRow;
@@ -76,6 +77,7 @@ function getActionTitle(action: ActionType): string {
     case 'complete':          return 'تکمیل مصوبه';
     case 'reopen':            return 'بازگشایی مصوبه';
     case 'obstacle_resolved': return 'رفع مانع';
+    case 'update':            return 'به‌روزرسانی مصوبه';
   }
 }
 
@@ -136,12 +138,22 @@ export function DecisionActionModal({
     setSubmitting(true);
     try {
       // ── Owner operations: update_my_minutes_decision ──────────────────────
-      if (action === 'progress' || action === 'report' || action === 'complete') {
-        const eventType = action === 'complete' ? 'completion'
+      if (action === 'update' || action === 'progress' || action === 'report' || action === 'complete') {
+        // 'update' is the combined action: status + progress + report in one submit.
+        // The RPC's existing logic determines the real event type from the actual change.
+        const isCompletion = action === 'complete' || (action === 'update' && newStatus === 'completed');
+        const eventType = isCompletion ? 'completion'
                         : action === 'report' ? 'report'
                         : 'progress';
-        const pStatus = action === 'complete' ? 'completed' : decision.status;
-        const pProgress = action === 'complete' ? 100 : progress;
+        const pStatus = isCompletion ? 'completed' : (action === 'update' ? newStatus : decision.status);
+        const pProgress = isCompletion ? 100 : progress;
+
+        // Prevent reducing progress from 100% without reopening
+        if (action === 'update' && decision.status === 'completed' && pProgress < 100) {
+          setError('کاهش پیشرفت از ۱۰۰٪ بدون بازگشایی مجاز نیست.');
+          setSubmitting(false);
+          return;
+        }
 
         const { data, error: rpcErr } = await supabase.rpc('update_my_minutes_decision', {
           p_decision_id: decision.id,
@@ -322,6 +334,43 @@ export function DecisionActionModal({
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-3 text-sm text-blue-700 dark:text-blue-400">
               با تکمیل مصوبه، درصد پیشرفت به ۱۰۰٪ تغییر خواهد کرد.
             </div>
+          )}
+
+          {action === 'update' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">وضعیت جدید</label>
+                <select value={newStatus} onChange={e => setNewStatus(e.target.value as DecisionStatus)}
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40">
+                  {(isManager ? MANAGER_STATUSES : OWNER_STATUSES).map(s => (
+                    <option key={s} value={s}>{DECISION_STATUS_LABELS[s]}</option>
+                  ))}
+                </select>
+                {newStatus === 'completed' && (
+                  <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl p-3 text-sm text-blue-700 dark:text-blue-400">
+                    با انتخاب وضعیت «تکمیل‌شده»، درصد پیشرفت به ۱۰۰٪ تغییر خواهد کرد.
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  درصد پیشرفت: {toPersianDigits(String(newStatus === 'completed' ? 100 : progress))}٪
+                </label>
+                {newStatus !== 'completed' && (
+                  <input type="range" min={0} max={100} value={progress}
+                    onChange={e => setProgress(Number(e.target.value))}
+                    className="w-full accent-blue-600" />
+                )}
+                <DecisionProgressBar percent={newStatus === 'completed' ? 100 : progress} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  متن گزارش یا توضیح تغییر {progress !== decision.progress_percent || newStatus !== decision.status ? <span className="text-red-500">*</span> : '(اختیاری)'}
+                </label>
+                <textarea value={reportText} onChange={e => setReportText(e.target.value)} rows={3}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+              </div>
+            </>
           )}
 
           {(action === 'progress' || action === 'complete') && (

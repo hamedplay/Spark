@@ -129,6 +129,11 @@ export interface DraftDecision {
   discussionResult: string;
   resultType: AgendaResultType;
   additionalNotes: string;
+  responsiblePartyType: 'internal' | 'external';
+  externalResponsibleParticipantId: string | null;
+  externalResponsibleNameSnapshot: string;
+  externalResponsibleOrganizationSnapshot: string;
+  externalResponsiblePositionSnapshot: string;
 }
 
 export interface DraftFinalization {

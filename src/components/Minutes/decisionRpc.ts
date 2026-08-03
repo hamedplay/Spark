@@ -32,6 +32,15 @@ export const DECISION_RPC_ERROR_MAP: Record<string, string> = {
   OBSTACLE_ALREADY_RESOLVED:      'این مانع قبلاً رفع شده است.',
   INTERNAL_ERROR:                'خطای داخلی سرور. لطفاً دوباره امتحان کنید.',
   MINUTES_DECISION_TRACKING_NOT_ALLOWED: 'شما اجازه پیگیری مصوبات این صورت‌جلسه را ندارید.',
+  MINUTE_NOT_FOUND:              'صورت‌جلسه یافت نشد.',
+  MINUTE_NOT_EDITABLE:           'این صورت‌جلسه قابل ویرایش نیست.',
+  MINUTES_NO_PERMISSION:         'شما اجازه ویرایش این صورت‌جلسه را ندارید.',
+  DECISION_TITLE_REQUIRED:      'عنوان مصوبه الزامی است.',
+  DECISION_OWNER_REQUIRED:       'انتخاب مسئول مصوبه الزامی است.',
+  DECISION_DUE_BEFORE_START:     'مهلت مصوبه نمی‌تواند قبل از تاریخ شروع باشد.',
+  REMINDER_MUST_BE_FUTURE:       'یادآوری باید در آینده باشد.',
+  NO_REMINDER_RECIPIENT:         'گیرنده یادآوری مشخص نیست.',
+  PAYLOAD_INVALID:               'اطلاعات ارسالی نامعتبر است.',
 };
 
 /** Returns true if the RPC call itself failed (network/transport error). */

@@ -142,6 +142,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [editLoading, setEditLoading] = useState(mode === 'edit');
   const [editError, setEditError] = useState<string | null>(null);
   const [editNotFound, setEditNotFound] = useState(false);
+  const [decisionsLoadFailed, setDecisionsLoadFailed] = useState(false);
 
   const title = mode === 'new' ? 'ایجاد صورت‌جلسه' : 'ویرایش صورت‌جلسه';
 
@@ -191,12 +192,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           submittedAt: (m.submitted_at as string) || null,
         });
 
-        const [ipRes, epRes, agRes, decRes] = await Promise.all([
+        const [ipRes, epRes, agRes] = await Promise.all([
           supabase.from('minutes_participants').select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, delegate_name, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_external_participants').select('id, full_name, organization, position, mobile, email, invitation_status, attendance_status, notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
           supabase.from('minutes_agenda_results').select('id, meeting_agenda_item_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('sort_order_snapshot', { ascending: true }),
-          supabase.from('minutes_decisions').select('id, agenda_result_id, title, description, primary_owner_user_id, responsible_unit_id, responsible_unit_name_snapshot, priority, start_date, due_date, requires_followup, latest_update, discussion_result, result_type, additional_notes').eq('minute_id', targetId).order('created_at', { ascending: true }),
         ]);
+
         if (ipRes.error) {
           console.error('[Minutes edit] minutes_participants query error:', ipRes.error);
           setEditError('خطا در بارگذاری شرکت‌کنندگان داخلی');
@@ -265,14 +266,17 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             additionalNotes: (r.additional_notes as string) || '',
           })) : [defaultAgendaItem(1)]);
         }
-        if (decRes.error) {
-          console.error('[Minutes edit] minutes_decisions query error:', decRes.error);
+        // Load decisions via SECURITY DEFINER RPC to get ALL decisions regardless of RLS/owner
+        const { data: decData, error: decErr } = await supabase.rpc('get_minutes_decisions_for_edit', { p_minute_id: targetId });
+        if (decErr) {
+          console.error('[Minutes edit] get_minutes_decisions_for_edit RPC error:', decErr);
           setEditError('خطا در بارگذاری مصوبات');
+          setDecisionsLoadFailed(true);
           setEditLoading(false);
           return;
         }
-        if (decRes.data) {
-          const rows = decRes.data as unknown as Record<string, unknown>[];
+        if (decData) {
+          const rows = decData as unknown as Record<string, unknown>[];
           // Build agenda_result_id → meeting_agenda_item_id map from loaded
           // agenda results so decisions can be linked by the stable
           // meeting_agenda_item_id (never the temp React id).
@@ -302,6 +306,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             discussionResult: (r.discussion_result as string) || '',
             resultType: (r.result_type as AgendaResultType) || 'discussion',
             additionalNotes: (r.additional_notes as string) || '',
+            responsiblePartyType: ((r.responsible_party_type as string) || 'internal') as 'internal' | 'external',
+            externalResponsibleParticipantId: (r.external_responsible_participant_id as string) || null,
+            externalResponsibleNameSnapshot: (r.external_responsible_name_snapshot as string) || '',
+            externalResponsibleOrganizationSnapshot: (r.external_responsible_organization_snapshot as string) || '',
+            externalResponsiblePositionSnapshot: (r.external_responsible_position_snapshot as string) || '',
           })) : [defaultDecision()]);
         }
       } catch (err) {
@@ -547,7 +556,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       agenda_result_id: null,
       title: d.title.trim(),
       description: d.description || null,
-      primary_owner_user_id: d.primaryOwnerUserId,
+      primary_owner_user_id: d.responsiblePartyType === 'external' ? null : (d.primaryOwnerUserId || null),
       responsible_unit_id: d.responsibleUnitId || null,
       responsible_unit_name_snapshot: d.responsibleUnitNameSnapshot || null,
       priority: d.priority,
@@ -558,6 +567,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       discussion_result: d.discussionResult || null,
       result_type: d.resultType || null,
       additional_notes: d.additionalNotes || null,
+      responsible_party_type: d.responsiblePartyType,
+      external_responsible_participant_id: d.externalResponsibleParticipantId || null,
+      external_responsible_name_snapshot: d.externalResponsibleNameSnapshot || null,
+      external_responsible_organization_snapshot: d.externalResponsibleOrganizationSnapshot || null,
+      external_responsible_position_snapshot: d.externalResponsiblePositionSnapshot || null,
     })),
   });
 
@@ -568,7 +582,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       agenda_result_id: null,
       title: d.title.trim(),
       description: d.description || null,
-      primary_owner_user_id: d.primaryOwnerUserId,
+      primary_owner_user_id: d.responsiblePartyType === 'external' ? null : (d.primaryOwnerUserId || null),
       responsible_unit_id: d.responsibleUnitId || null,
       responsible_unit_name_snapshot: d.responsibleUnitNameSnapshot || null,
       priority: d.priority,
@@ -579,6 +593,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       discussion_result: d.discussionResult || null,
       result_type: d.resultType || null,
       additional_notes: d.additionalNotes || null,
+      responsible_party_type: d.responsiblePartyType,
+      external_responsible_participant_id: d.externalResponsibleParticipantId || null,
+      external_responsible_name_snapshot: d.externalResponsibleNameSnapshot || null,
+      external_responsible_organization_snapshot: d.externalResponsibleOrganizationSnapshot || null,
+      external_responsible_position_snapshot: d.externalResponsiblePositionSnapshot || null,
     }));
 
   const validate = (): string | null => {
@@ -591,7 +610,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     if (!info.chairUserId) return 'انتخاب رئیس جلسه الزامی است';
     for (const d of decisions) {
       if (!d.title.trim()) return 'عنوان هر مصوبه الزامی است';
-      if (!d.primaryOwnerUserId) return 'انتخاب مسئول اصلی برای هر مصوبه الزامی است';
+      if (d.responsiblePartyType === 'internal' && !d.primaryOwnerUserId) return 'انتخاب مسئول اصلی برای هر مصوبه الزامی است';
+      if (d.responsiblePartyType === 'external' && !d.externalResponsibleNameSnapshot.trim()) return 'انتخاب مسئول خارج سازمان برای هر مصوبه الزامی است';
       if (d.startDate && d.dueDate && d.dueDate < d.startDate) return 'مهلت مصوبه نمی‌تواند قبل از تاریخ شروع باشد';
     }
     return null;
@@ -1181,6 +1201,13 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnits={orgUnits}
                 orgUnitsLoading={orgUnitsLoading}
                 agendaItems={agendaItems}
+                externalParticipants={externalParticipants.map(ep => ({
+                  id: ep.id,
+                  fullName: ep.fullName,
+                  organization: ep.organization,
+                  position: ep.position,
+                  mobile: ep.mobile,
+                }))}
                 readOnly={isNonEditable}
               />
             )}
@@ -1231,12 +1258,15 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleSaveDraft}
-                disabled={savingDraft}
+                disabled={savingDraft || decisionsLoadFailed}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
                 {savingDraft ? 'در حال ذخیره...' : 'ذخیره پیش‌نویس'}
               </button>
+              {decisionsLoadFailed && (
+                <span className="text-xs text-red-500">ذخیره غیرفعال — بارگذاری مصوبات ناموفق بود</span>
+              )}
               {activeSection === SECTIONS.length - 1 ? (
                 <button
                   onClick={handleSubmitForApproval}

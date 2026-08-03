@@ -89,6 +89,11 @@ export const defaultDecision = (): DraftDecision => ({
   discussionResult: '',
   resultType: 'discussion',
   additionalNotes: '',
+  responsiblePartyType: 'internal',
+  externalResponsibleParticipantId: null,
+  externalResponsibleNameSnapshot: '',
+  externalResponsibleOrganizationSnapshot: '',
+  externalResponsiblePositionSnapshot: '',
 });
 
 export const defaultFinalization: DraftFinalization = {

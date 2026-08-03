@@ -16,6 +16,7 @@ interface SectionDecisionsProps {
   orgUnits: OrgUnitOption[];
   orgUnitsLoading: boolean;
   agendaItems: DraftAgendaItem[];
+  externalParticipants: Array<{ id: string; fullName: string; organization: string; position: string; mobile?: string }>;
   readOnly?: boolean;
 }
 
@@ -24,6 +25,7 @@ export function SectionDecisions({
   profiles, profilesLoading,
   orgUnits, orgUnitsLoading,
   agendaItems,
+  externalParticipants,
   readOnly,
 }: SectionDecisionsProps) {
   const [openDecisionId, setOpenDecisionId] = useState<string | null>(null);
@@ -190,7 +192,47 @@ export function SectionDecisions({
                 <div className="sm:col-span-2">
                   <TextareaField id={`dec-desc-${item.id}`} label="متن مصوبه" rows={3} value={item.description} onChange={v => update(item.id, 'description', v)} />
                 </div>
-                {/* 3. Responsible unit */}
+                {/* 4. Responsible party type */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نوع مسئول</label>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="radio"
+                        name={`dec-rpt-${item.id}`}
+                        value="internal"
+                        checked={item.responsiblePartyType === 'internal'}
+                        onChange={() => {
+                          update(item.id, 'responsiblePartyType', 'internal');
+                          update(item.id, 'externalResponsibleParticipantId', null);
+                          update(item.id, 'externalResponsibleNameSnapshot', '');
+                          update(item.id, 'externalResponsibleOrganizationSnapshot', '');
+                          update(item.id, 'externalResponsiblePositionSnapshot', '');
+                        }}
+                        disabled={!!readOnly}
+                        className="w-4 h-4 accent-blue-600 disabled:opacity-60"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">واحد/کاربر داخل سازمان</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="radio"
+                        name={`dec-rpt-${item.id}`}
+                        value="external"
+                        checked={item.responsiblePartyType === 'external'}
+                        onChange={() => {
+                          update(item.id, 'responsiblePartyType', 'external');
+                          update(item.id, 'primaryOwnerUserId', '');
+                        }}
+                        disabled={!!readOnly}
+                        className="w-4 h-4 accent-blue-600 disabled:opacity-60"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">فرد خارج سازمان</span>
+                    </label>
+                  </div>
+                </div>
+                {/* 4a. Internal: responsible unit */}
+                {item.responsiblePartyType === 'internal' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">واحد مسئول</label>
                   {orgUnitsDisabled && orgUnits.length === 0 ? (
@@ -213,7 +255,9 @@ export function SectionDecisions({
                     />
                   )}
                 </div>
-                {/* 4. Primary owner */}
+                )}
+                {/* 4b. Internal: primary owner */}
+                {item.responsiblePartyType === 'internal' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     مسئول اصلی <span className="text-red-500">*</span>
@@ -232,6 +276,51 @@ export function SectionDecisions({
                     />
                   )}
                 </div>
+                )}
+                {/* 4c. External: responsible participant selector */}
+                {item.responsiblePartyType === 'external' && (
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    مسئول خارج سازمان <span className="text-red-500">*</span>
+                  </label>
+                  {externalParticipants.length === 0 ? (
+                    <div className="px-3 py-2.5 text-sm text-gray-400 border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700">
+                      شرکت‌کننده خارج سازمانی برای این صورت‌جلسه ثبت نشده است.
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      id={`dec-ext-owner-${item.id}`}
+                      value={item.externalResponsibleParticipantId || ''}
+                      options={externalParticipants.map(ep => ({
+                        value: ep.id,
+                        label: ep.fullName,
+                        sublabel: [
+                          ep.organization || '',
+                          ep.position || '',
+                          ep.mobile || '',
+                        ].filter(Boolean).join(' — '),
+                      }))}
+                      onChange={v => {
+                        const ep = externalParticipants.find(p => p.id === v);
+                        update(item.id, 'externalResponsibleParticipantId', v || null);
+                        update(item.id, 'externalResponsibleNameSnapshot', ep?.fullName || '');
+                        update(item.id, 'externalResponsibleOrganizationSnapshot', ep?.organization || '');
+                        update(item.id, 'externalResponsiblePositionSnapshot', ep?.position || '');
+                      }}
+                      placeholder="انتخاب از شرکت‌کنندگان خارج سازمان"
+                      searchPlaceholder="جستجو بر اساس نام..."
+                      emptyText="شخصی یافت نشد"
+                      disabled={!!readOnly}
+                    />
+                  )}
+                  {item.externalResponsibleNameSnapshot && !externalParticipants.some(ep => ep.id === item.externalResponsibleParticipantId) && (
+                    <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                      فرد خارجی ثبت‌شده: {item.externalResponsibleNameSnapshot}
+                      {item.externalResponsibleOrganizationSnapshot ? ` — ${item.externalResponsibleOrganizationSnapshot}` : ''}
+                    </div>
+                  )}
+                </div>
+                )}
                 {/* 5. Start date */}
                 <div>
                   <label htmlFor={`dec-start-${item.id}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ شروع</label>

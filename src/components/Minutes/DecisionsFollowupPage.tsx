@@ -523,12 +523,6 @@ function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }
           <button title="ثبت پیگیری" onClick={() => onAction('followup')} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
             <Clock className="w-4 h-4" />
           </button>
-          <button title="ثبت مانع" onClick={() => onAction('obstacle')} className="p-1.5 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 text-orange-500 transition-colors">
-            <AlertTriangle className="w-4 h-4" />
-          </button>
-          <button title="تغییر وضعیت" onClick={() => onAction('status')} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors">
-            <StopCircle className="w-4 h-4" />
-          </button>
           {isCompleted && isManager && (
             <button title="بازگشایی" onClick={() => onAction('reopen')} className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-600 transition-colors">
               <RotateCcw className="w-4 h-4" />

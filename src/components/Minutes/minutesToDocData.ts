@@ -82,8 +82,12 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     id: d.id,
     title: d.title,
     description: d.description || '',
-    primaryOwnerName: props.ownerNames[d.primary_owner_user_id] || '',
-    responsibleUnitName: d.responsible_unit_name_snapshot,
+    primaryOwnerName: d.responsible_party_type === 'external'
+      ? (d.external_responsible_name_snapshot || 'خارج سازمان')
+      : (props.ownerNames[d.primary_owner_user_id] || ''),
+    responsibleUnitName: d.responsible_party_type === 'external'
+      ? (d.external_responsible_organization_snapshot || 'خارج سازمان')
+      : d.responsible_unit_name_snapshot,
     priority: d.priority,
     startDate: d.start_date || '',
     dueDate: d.due_date || '',

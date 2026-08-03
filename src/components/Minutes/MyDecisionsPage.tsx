@@ -417,7 +417,7 @@ function DecisionTableRow({ dec, onViewDetail, onAction, onNavigate }: RowProps)
           </button>
           {!isCompleted && (
             <>
-              <button title="ثبت پیشرفت" onClick={() => onAction('progress')} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
+              <button title="به‌روزرسانی مصوبه" onClick={() => onAction('update')} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors">
                 <TrendingUp className="w-4 h-4" />
               </button>
               <button title="ثبت گزارش" onClick={() => onAction('report')} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors">
@@ -432,11 +432,6 @@ function DecisionTableRow({ dec, onViewDetail, onAction, onNavigate }: RowProps)
                 </button>
               )}
             </>
-          )}
-          {!isCompleted && (
-            <button title="تغییر وضعیت" onClick={() => onAction('status')} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors">
-              <StopCircle className="w-4 h-4" />
-            </button>
           )}
         </div>
       </td>
@@ -488,8 +483,8 @@ function DecisionMobileCard({ dec, onViewDetail, onAction, onNavigate }: RowProp
           <Eye className="w-3.5 h-3.5" /> جزئیات
         </button>
         {!isCompleted && (
-          <button onClick={() => onAction('progress')} className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center justify-center gap-1">
-            <TrendingUp className="w-3.5 h-3.5" /> پیشرفت
+          <button onClick={() => onAction('update')} className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center justify-center gap-1">
+            <TrendingUp className="w-3.5 h-3.5" /> به‌روزرسانی
           </button>
         )}
         <button onClick={() => { setMinuteIdInUrl(dec.minute_id); onNavigate('minutes-detail'); }}

@@ -209,6 +209,11 @@ export interface DecisionRow {
   discussion_result: string | null;
   result_type: AgendaResultType | null;
   additional_notes: string | null;
+  responsible_party_type: 'internal' | 'external';
+  external_responsible_participant_id: string | null;
+  external_responsible_name_snapshot: string | null;
+  external_responsible_organization_snapshot: string | null;
+  external_responsible_position_snapshot: string | null;
 }
 
 // Row returned by get_my_minutes_decisions RPC (decision fields + minute metadata)

@@ -196,6 +196,11 @@ export async function loadDocumentSnapshot(
     requires_followup: r.requires_followup, latest_update: r.latest_update,
     created_by_user_id: r.primary_owner_user_id, created_at: '', updated_at: '',
     discussion_result: null, result_type: null, additional_notes: null,
+    responsible_party_type: 'internal',
+    external_responsible_participant_id: null,
+    external_responsible_name_snapshot: null,
+    external_responsible_organization_snapshot: null,
+    external_responsible_position_snapshot: null,
   }));
   const ownerNames: Record<string, string> = {};
   for (const r of viewRows) {
