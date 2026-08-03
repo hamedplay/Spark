@@ -119,12 +119,9 @@ export function PhoneLoginToggleCard() {
       setSavingTest(false);
       return;
     }
-    setTestMode(v);
-    const maskedPhone = row?.test_phone_masked || 'masked';
-    setTestPhoneMasked(v ? maskedPhone : '');
-    setTestPhoneInput('');
     setSavingTest(false);
     toast.success(v ? 'حالت تست فعال شد' : 'حالت تست غیرفعال شد');
+    await load();
     logAudit({ module: 'security', action: v ? 'test_mode_enabled' : 'test_mode_disabled', entity_name: v ? maskedPhone : 'disabled', severity: 'warning' });
   };
 
@@ -148,11 +145,9 @@ export function PhoneLoginToggleCard() {
       setSavingTtl(false);
       return;
     }
-    setAdminStatus(prev => prev ? { ...prev, otp_ttl_seconds: ttl, otp_ttl_operator_confirmed: true, lock_seconds: row.lock_seconds } : prev);
-    setOtpTtlInput('');
-    setEditTtl(false);
     setSavingTtl(false);
     toast.success('TTL ثبت و تأیید شد');
+    await load();
     logAudit({ module: 'security', action: 'otp_ttl_confirmed', entity_name: `${ttl}s`, severity: 'warning' });
   };
 

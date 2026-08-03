@@ -101,11 +101,10 @@ export function PasswordRecoveryCard() {
       setTestSaving(false);
       return;
     }
-    setTestMode(v);
-    setMaskedPhone(row?.masked_phone || '');
     setTestSaving(false);
     toast.success(v ? 'حالت تست فعال شد' : 'حالت تست غیرفعال شد');
     logAudit({ module: 'security', action: v ? 'recovery_test_mode_enabled' : 'recovery_test_mode_disabled', entity_name: v ? 'enabled' : 'disabled', severity: 'warning' });
+    await load();
   };
 
   const handleConfirmSecret = async () => {

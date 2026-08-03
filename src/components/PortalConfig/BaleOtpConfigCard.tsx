@@ -21,10 +21,12 @@ interface DispatchSummary {
     processing: number;
     total: number;
   };
+  last_dispatch_status: string | null;
+  last_dispatch_purpose: string | null;
+  last_dispatch_at: string | null;
   last_error_code: string | null;
-  last_status: string | null;
-  last_purpose: string | null;
-  last_at: string | null;
+  last_error_purpose: string | null;
+  last_error_at: string | null;
 }
 
 export function BaleOtpConfigCard() {
@@ -34,42 +36,59 @@ export function BaleOtpConfigCard() {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [dispatch, setDispatch] = useState<DispatchSummary | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [cfgRes, rtRes, dispRes] = await Promise.all([
-      supabase
-        .from('system_config')
-        .select('key, value')
-        .eq('section', 'security')
-        .in('key', ['phone_login_bale_otp_enabled', 'phone_password_recovery_bale_otp_enabled']),
-      supabase.rpc('get_auth_runtime_status'),
-      supabase.rpc('get_bale_auth_dispatch_summary'),
-    ]);
+    setLoadingStatus(true);
+    setRuntimeError(null);
+    try {
+      const [cfgRes, rtRes, dispRes] = await Promise.all([
+        supabase
+          .from('system_config')
+          .select('key, value')
+          .eq('section', 'security')
+          .in('key', ['phone_login_bale_otp_enabled', 'phone_password_recovery_bale_otp_enabled']),
+        supabase.rpc('get_auth_runtime_status'),
+        supabase.rpc('get_bale_auth_dispatch_summary'),
+      ]);
 
-    if (cfgRes.data) {
-      for (const row of cfgRes.data) {
-        if (row.key === 'phone_login_bale_otp_enabled') setLoginBaleEnabled(row.value === 'true');
-        if (row.key === 'phone_password_recovery_bale_otp_enabled') setRecoveryBaleEnabled(row.value === 'true');
+      if (cfgRes.data) {
+        for (const row of cfgRes.data) {
+          if (row.key === 'phone_login_bale_otp_enabled') setLoginBaleEnabled(row.value === 'true');
+          if (row.key === 'phone_password_recovery_bale_otp_enabled') setRecoveryBaleEnabled(row.value === 'true');
+        }
       }
-    }
 
-    if (rtRes.data && rtRes.data.ok) {
-      setRuntime({
-        bale_channel_active: rtRes.data.bale_channel_active,
-        bale_bot_token_set: rtRes.data.bale_bot_token_set,
-        bale_bot_username_set: rtRes.data.bale_bot_username_set,
-        bale_login_template_ready: rtRes.data.bale_login_template_ready,
-        bale_recovery_template_ready: rtRes.data.bale_recovery_template_ready,
-        bale_mapping_count: rtRes.data.bale_mapping_count,
-        bale_auth_codes_enabled_count: rtRes.data.bale_auth_codes_enabled_count,
-      });
-    }
+      if (rtRes.error) {
+        setRuntimeError('خطا در دریافت وضعیت Runtime');
+        setRuntime(null);
+      } else if (rtRes.data && rtRes.data.ok) {
+        setRuntime({
+          bale_channel_active: rtRes.data.bale_channel_active,
+          bale_bot_token_set: rtRes.data.bale_bot_token_set,
+          bale_bot_username_set: rtRes.data.bale_bot_username_set,
+          bale_login_template_ready: rtRes.data.bale_login_template_ready,
+          bale_recovery_template_ready: rtRes.data.bale_recovery_template_ready,
+          bale_mapping_count: rtRes.data.bale_mapping_count,
+          bale_auth_codes_enabled_count: rtRes.data.bale_auth_codes_enabled_count,
+        });
+      } else {
+        setRuntime(null);
+      }
 
-    if (dispRes.data && dispRes.data.ok) {
-      setDispatch(dispRes.data);
+      if (dispRes.error) {
+        setDispatch(null);
+      } else if (dispRes.data && dispRes.data.ok) {
+        setDispatch(dispRes.data);
+      } else {
+        setDispatch(null);
+      }
+    } catch {
+      setRuntimeError('خطا در ارتباط با سرور');
+      setRuntime(null);
+    } finally {
+      setLoadingStatus(false);
     }
-
-    setLoadingStatus(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -96,8 +115,6 @@ export function BaleOtpConfigCard() {
         toast.error(errMap[errMsg] || 'خطا در ذخیره تنظیمات');
         return;
       }
-      if (key === 'phone_login_bale_otp_enabled') setLoginBaleEnabled(!current);
-      if (key === 'phone_password_recovery_bale_otp_enabled') setRecoveryBaleEnabled(!current);
       toast.success('ذخیره شد');
       await load();
     } catch {
@@ -107,9 +124,18 @@ export function BaleOtpConfigCard() {
     }
   };
 
-  const prerequisiteOk = runtime?.bale_channel_active && runtime?.bale_bot_token_set && runtime?.bale_bot_username_set;
+  // Fail-Closed: switches disabled when loading, error, or unknown runtime
+  const runtimeKnown = !loadingStatus && runtime !== null && runtimeError === null;
+  const prerequisiteOk = runtimeKnown
+    && runtime!.bale_channel_active
+    && runtime!.bale_bot_token_set
+    && runtime!.bale_bot_username_set;
   const loginTemplateOk = runtime?.bale_login_template_ready ?? false;
   const recoveryTemplateOk = runtime?.bale_recovery_template_ready ?? false;
+
+  // Each switch checks its own template prerequisite
+  const loginCanEnable = prerequisiteOk && loginTemplateOk;
+  const recoveryCanEnable = prerequisiteOk && recoveryTemplateOk;
 
   const purposeLabel = (purpose: string | null): string => {
     if (purpose === 'phone_login') return 'ورود';
@@ -128,6 +154,14 @@ export function BaleOtpConfigCard() {
           <p className="text-xs text-gray-500 dark:text-gray-400">کانال تکمیلی — پیامک کانال اصلی و الزامی باقی می‌ماند</p>
         </div>
       </div>
+
+      {/* Runtime error */}
+      {runtimeError && (
+        <div className="flex items-center gap-2 text-xs text-red-600 dark:text-red-400 mb-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>{runtimeError}</span>
+        </div>
+      )}
 
       {/* Runtime status */}
       {loadingStatus ? (
@@ -184,31 +218,38 @@ export function BaleOtpConfigCard() {
             <span>رد شده: {dispatch.counts.skipped}</span>
             <span>در حال: {dispatch.counts.processing}</span>
           </div>
+          {dispatch.last_dispatch_status && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              آخرین ارسال: {dispatch.last_dispatch_status} ({purposeLabel(dispatch.last_dispatch_purpose)})
+            </p>
+          )}
           {dispatch.last_error_code && (
             <div className="flex items-center gap-1.5 text-xs mt-1">
               <AlertTriangle className="w-3 h-3 text-amber-500" />
               <span className="text-gray-500 dark:text-gray-400">
-                آخرین خطا: {dispatch.last_error_code} ({purposeLabel(dispatch.last_purpose)})
+                آخرین خطا: {dispatch.last_error_code} ({purposeLabel(dispatch.last_error_purpose)})
               </span>
             </div>
           )}
         </div>
       )}
 
-      {/* Toggles */}
+      {/* Toggles — Fail-Closed when loading/error/unknown */}
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
           <div>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">ارسال کد ورود در بله</p>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">کد یکبار مصرف ورود علاوه بر پیامک، در بله نیز ارسال شود</p>
-            {!prerequisiteOk && (
-              <p className="text-[10px] text-red-500 dark:text-red-400 mt-1">پیش‌نیازها کامل نیست — کانال، توکن یا نام کاربری بله تنظیم نشده</p>
+            {!loginCanEnable && (
+              <p className="text-[10px] text-red-500 dark:text-red-400 mt-1">
+                {!runtimeKnown ? 'وضعیت Runtime نامشخص — سوییچ غیرفعال' : 'پیش‌نیازها کامل نیست — کانال، توکن، نام کاربری یا قالب ورود بله تنظیم نشده'}
+              </p>
             )}
           </div>
           <button
             onClick={() => toggle('phone_login_bale_otp_enabled', loginBaleEnabled)}
-            disabled={saving}
-            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${loginBaleEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${saving ? 'opacity-50' : ''}`}
+            disabled={saving || !runtimeKnown}
+            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${loginBaleEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${(saving || !runtimeKnown) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${loginBaleEnabled ? 'left-7' : 'left-1'}`} />
           </button>
@@ -218,14 +259,16 @@ export function BaleOtpConfigCard() {
           <div>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">ارسال کد بازیابی رمز در بله</p>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">کد یکبار مصرف بازیابی رمز علاوه بر پیامک، در بله نیز ارسال شود</p>
-            {!prerequisiteOk && (
-              <p className="text-[10px] text-red-500 dark:text-red-400 mt-1">پیش‌نیازها کامل نیست — کانال، توکن یا نام کاربری بله تنظیم نشده</p>
+            {!recoveryCanEnable && (
+              <p className="text-[10px] text-red-500 dark:text-red-400 mt-1">
+                {!runtimeKnown ? 'وضعیت Runtime نامشخص — سوییچ غیرفعال' : 'پیش‌نیازها کامل نیست — کانال، توکن، نام کاربری یا قالب بازیابی بله تنظیم نشده'}
+              </p>
             )}
           </div>
           <button
             onClick={() => toggle('phone_password_recovery_bale_otp_enabled', recoveryBaleEnabled)}
-            disabled={saving}
-            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${recoveryBaleEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${saving ? 'opacity-50' : ''}`}
+            disabled={saving || !runtimeKnown}
+            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${recoveryBaleEnabled ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-600'} ${(saving || !runtimeKnown) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${recoveryBaleEnabled ? 'left-7' : 'left-1'}`} />
           </button>
