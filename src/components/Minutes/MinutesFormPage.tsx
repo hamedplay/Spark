@@ -101,6 +101,7 @@ const RPC_ERROR_MESSAGES: Record<string, string> = {
   APPROVAL_MODE_IMMUTABLE: 'مدل تأیید پس از اولین ارسال قابل تغییر نیست.',
   INTERNAL_ERROR: 'خطای داخلی سرور رخ داد. لطفاً دوباره تلاش کنید.',
   MINUTES_NOT_PUBLISHED: 'این مصوبه تا زمان انتشار صورت‌جلسه قابل مشاهده یا پیگیری نیست.',
+  INVALID_EXTERNAL_PARTICIPANT_ID: 'شناسه شرکت‌کننده خارج سازمان نامعتبر است. صفحه را تازه‌سازی و دوباره تلاش کنید.',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -523,7 +524,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     external_participants: externalParticipants
       .filter((p) => p.fullName.trim())
       .map((p) => ({
-        id: p.participantId ?? p.id,
+        id: p.participantId,
         full_name: p.fullName,
         organization: p.organization || null,
         position: p.position || null,
@@ -1216,7 +1217,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnitsLoading={orgUnitsLoading}
                 agendaItems={agendaItems}
                 externalParticipants={externalParticipants.map(ep => ({
-                  id: ep.participantId ?? ep.id,
+                  id: ep.id,
+                  participantId: ep.participantId,
                   fullName: ep.fullName,
                   organization: ep.organization,
                   position: ep.position,

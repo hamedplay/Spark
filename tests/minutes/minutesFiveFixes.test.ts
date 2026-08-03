@@ -207,8 +207,12 @@ test('frontend includes id in external participant payload', () => {
     'utf-8',
   );
   assert.ok(
-    source.includes('id: p.participantId ?? p.id'),
-    'should include stable id in external participant payload',
+    source.includes('id: p.participantId'),
+    'should include participantId as id in external participant payload',
+  );
+  assert.ok(
+    !source.includes('id: p.participantId ?? p.id'),
+    'should NOT fall back to temp React id for external participant payload',
   );
 });
 

@@ -55,7 +55,7 @@ export function mapExternalParticipantName(name: string | null | undefined): Dra
   if (!trimmed) return null;
   return {
     id: uid(),
-    participantId: null,
+    participantId: crypto.randomUUID(),
     fullName: trimmed,
     organization: '',
     position: '',

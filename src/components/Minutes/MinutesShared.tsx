@@ -55,6 +55,7 @@ const RPC_ERROR_MESSAGES: Record<string, string> = {
   MINUTE_NOT_PUBLISHED: 'صورت‌جلسه در وضعیت قابل به‌روزرسانی نیست.',
   USE_COMPLETION_OPERATION: 'برای تکمیل از عملیات تکمیل استفاده کنید.',
   INTERNAL_ERROR: 'خطای داخلی سرور رخ داد. لطفاً دوباره تلاش کنید.',
+  INVALID_EXTERNAL_PARTICIPANT_ID: 'شناسه شرکت‌کننده خارج سازمان نامعتبر است. صفحه را تازه‌سازی و دوباره تلاش کنید.',
 };
 
 export function DecisionProgressModal({ decision, history, canUpdate, isManager = false, onClose, onUpdated }: DecisionProgressModalProps) {

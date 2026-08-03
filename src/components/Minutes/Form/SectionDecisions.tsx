@@ -16,7 +16,7 @@ interface SectionDecisionsProps {
   orgUnits: OrgUnitOption[];
   orgUnitsLoading: boolean;
   agendaItems: DraftAgendaItem[];
-  externalParticipants: Array<{ id: string; fullName: string; organization: string; position: string; mobile?: string }>;
+  externalParticipants: Array<{ id: string; participantId: string | null; fullName: string; organization: string; position: string; mobile?: string }>;
   readOnly?: boolean;
   onRemoveDecision?: (decisionId: string | null) => void;
 }
@@ -283,7 +283,7 @@ export function SectionDecisions({
                       id={`dec-ext-owner-${item.id}`}
                       value={item.externalResponsibleParticipantId || ''}
                       options={externalParticipants.map(ep => ({
-                        value: ep.id,
+                        value: ep.participantId ?? '',
                         label: ep.fullName,
                         sublabel: [
                           ep.organization || '',
@@ -292,7 +292,7 @@ export function SectionDecisions({
                         ].filter(Boolean).join(' — '),
                       }))}
                       onChange={v => {
-                        const ep = externalParticipants.find(p => p.id === v);
+                        const ep = externalParticipants.find(p => p.participantId === v);
                         update(item.id, 'externalResponsibleParticipantId', v || null);
                         update(item.id, 'externalResponsibleNameSnapshot', ep?.fullName || '');
                         update(item.id, 'externalResponsibleOrganizationSnapshot', ep?.organization || '');
@@ -304,7 +304,7 @@ export function SectionDecisions({
                       disabled={!!readOnly}
                     />
                   )}
-                  {item.externalResponsibleNameSnapshot && !externalParticipants.some(ep => ep.id === item.externalResponsibleParticipantId) && (
+                  {item.externalResponsibleNameSnapshot && !externalParticipants.some(ep => ep.participantId === item.externalResponsibleParticipantId) && (
                     <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
                       فرد خارجی ثبت‌شده: {item.externalResponsibleNameSnapshot}
                       {item.externalResponsibleOrganizationSnapshot ? ` — ${item.externalResponsibleOrganizationSnapshot}` : ''}

@@ -46,7 +46,7 @@ export const defaultInternalParticipant = (): DraftInternalParticipant => ({
 
 export const defaultExternalParticipant = (): DraftExternalParticipant => ({
   id: uid(),
-  participantId: null,
+  participantId: crypto.randomUUID(),
   fullName: '',
   organization: '',
   position: '',
