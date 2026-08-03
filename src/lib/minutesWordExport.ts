@@ -137,7 +137,7 @@ function infoCell(label: string, value: string, widthPct: number): TableCell {
   });
 }
 
-function meetingInfoTable(data: MinutesDocumentData, showConfidentiality: boolean): Table {
+function meetingInfoTable(data: MinutesDocumentData, showConfidentiality: boolean, showAbsentees: boolean): Table {
   const { minute, internalParts, externalParts } = data;
 
   const presentNames: string[] = [];
@@ -166,20 +166,30 @@ function meetingInfoTable(data: MinutesDocumentData, showConfidentiality: boolea
         infoCell('عنوان جلسه', orDash(minute.meeting_title_snapshot), 100),
       ],
     }),
-    new TableRow({
+  ];
+
+  if (showAbsentees) {
+    rows.push(new TableRow({
       children: [
         infoCell('حاضرین جلسه', presentNames.length > 0 ? presentNames.join('، ') : DASH, 50),
         infoCell('غایبین جلسه', absentNames.length > 0 ? absentNames.join('، ') : DASH, 50),
       ],
-    }),
-    new TableRow({
+    }));
+  } else {
+    rows.push(new TableRow({
       children: [
-        infoCell('محل جلسه', orDash(minute.meeting_location_snapshot), 33),
-        infoCell('دبیر جلسه', orDash(minute.secretary_name_snapshot), 34),
-        infoCell('رئیس جلسه', orDash(minute.chair_name_snapshot), 33),
+        infoCell('حاضرین جلسه', presentNames.length > 0 ? presentNames.join('، ') : DASH, 100),
       ],
-    }),
-  ];
+    }));
+  }
+
+  rows.push(new TableRow({
+    children: [
+      infoCell('محل جلسه', orDash(minute.meeting_location_snapshot), 33),
+      infoCell('دبیر جلسه', orDash(minute.secretary_name_snapshot), 34),
+      infoCell('رئیس جلسه', orDash(minute.chair_name_snapshot), 33),
+    ],
+  }));
 
   if (showConfidentiality) {
     rows.push(new TableRow({
@@ -374,6 +384,8 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
   const showNotes = cfg?.showNotes ?? true;
   const showConfidentiality = cfg?.showConfidentiality ?? true;
   const showDecisions = cfg?.showDecisions ?? true;
+  const showAbsentees = cfg?.showAbsentees ?? true;
+  const showAgenda = cfg?.showAgenda ?? true;
 
   const logo = showLogo ? await fetchLogoBuffer(logoUrl) : null;
 
@@ -425,12 +437,14 @@ export async function exportMinutesToWord(data: MinutesDocumentData): Promise<vo
 
   // Meeting info
   bodyChildren.push(rtlParagraph(textRun('مشخصات جلسه', { bold: true, size: 26 }), { spacingAfter: 200 }));
-  bodyChildren.push(meetingInfoTable(data, showConfidentiality));
+  bodyChildren.push(meetingInfoTable(data, showConfidentiality, showAbsentees));
   bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
 
   // Agenda
-  bodyChildren.push(...agendaSection(data));
-  bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+  if (showAgenda) {
+    bodyChildren.push(...agendaSection(data));
+    bodyChildren.push(new Paragraph({ children: [], spacing: { after: 200 } }));
+  }
 
   // Decisions
   if (showDecisions) {

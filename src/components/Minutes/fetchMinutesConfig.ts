@@ -17,6 +17,8 @@ const DEFAULT_CONFIG: MinutesLayoutConfig = {
   showConfidentiality: true,
   showDecisions: true,
   showNotes: true,
+  showAbsentees: true,
+  showAgenda: true,
   fontSize: 'medium',
 };
 
@@ -43,6 +45,8 @@ export function normalizeMinutesLayoutConfig(map: Map<string, string>): MinutesL
     showConfidentiality: parseBool(map.get('minutes.minutes_show_confidentiality'), true),
     showDecisions: parseBool(map.get('minutes.minutes_show_decisions'), true),
     showNotes: parseBool(map.get('minutes.minutes_show_notes'), true),
+    showAbsentees: parseBool(map.get('minutes.minutes_show_absentees'), true),
+    showAgenda: parseBool(map.get('minutes.minutes_show_agenda'), true),
     fontSize: VALID_FONT_SIZES.has(fontSize) ? fontSize : 'medium',
   };
 }
@@ -68,6 +72,9 @@ export function validateMinutesConfigValue(key: string, value: string): boolean 
     case 'minutes_show_approvers':
     case 'minutes_show_confidentiality':
     case 'minutes_show_decisions':
+    case 'minutes_show_notes':
+    case 'minutes_show_absentees':
+    case 'minutes_show_agenda':
       return value === 'true' || value === 'false';
     default:
       return true;

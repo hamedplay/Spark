@@ -444,6 +444,8 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
               { key: 'minutes_show_confidentiality', label: 'نمایش سطح محرمانگی' },
               { key: 'minutes_show_decisions', label: 'نمایش اطلاعات مصوبات' },
               { key: 'minutes_show_notes', label: 'نمایش یادداشت‌ها' },
+              { key: 'minutes_show_absentees', label: 'نمایش غایبین' },
+              { key: 'minutes_show_agenda', label: 'نمایش دستور جلسات' },
             ] as const).map(({ key, label }) => {
               const val = cfgBool(key, true);
               return (

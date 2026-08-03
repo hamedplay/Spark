@@ -38,6 +38,8 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
   const showDecisions = cfg?.showDecisions ?? true;
   const showApprovers = cfg?.showApprovers ?? true;
   const showNotes = cfg?.showNotes ?? true;
+  const showAbsentees = cfg?.showAbsentees ?? true;
+  const showAgenda = cfg?.showAgenda ?? true;
   const fontSize = cfg?.fontSize ?? 'medium';
 
   // ── Attendance lists ───────────────────────────────────────────────────────
@@ -127,16 +129,23 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
             <span className="mp-value">{orDash(minute.meeting_title_snapshot)}</span>
           </div>
           {/* Row 2: Attendees / Absentees */}
-          <div className="mp-info-row-two">
-            <div className="mp-field">
+          {showAbsentees ? (
+            <div className="mp-info-row-two">
+              <div className="mp-field">
+                <span className="mp-label">حاضرین جلسه:</span>
+                <span className="mp-value">{presentNames.length > 0 ? presentNames.join('، ') : DASH}</span>
+              </div>
+              <div className="mp-field">
+                <span className="mp-label">غایبین جلسه:</span>
+                <span className="mp-value">{absentNames.length > 0 ? absentNames.join('، ') : DASH}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="mp-info-row-full">
               <span className="mp-label">حاضرین جلسه:</span>
               <span className="mp-value">{presentNames.length > 0 ? presentNames.join('، ') : DASH}</span>
             </div>
-            <div className="mp-field">
-              <span className="mp-label">غایبین جلسه:</span>
-              <span className="mp-value">{absentNames.length > 0 ? absentNames.join('، ') : DASH}</span>
-            </div>
-          </div>
+          )}
           {/* Row 3: Location / Secretary / Chair */}
           <div className="mp-info-row-three">
             <div className="mp-field">
@@ -161,6 +170,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
         </div>
 
         {/* ── Agenda items ───────────────────────────────────────────────────── */}
+        {showAgenda && (
         <div className="mp-section">
           <h2 className="mp-section-title">دستور جلسات</h2>
           {agendaItems.length === 0 ? (
@@ -175,6 +185,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
             </ol>
           )}
         </div>
+        )}
 
         {/* ── Decisions ─────────────────────────────────────────────────────── */}
         {showDecisions && (
