@@ -291,88 +291,52 @@ export function MeetingInboxButton() {
     if (!meeting || !currentUserId) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delegate-meeting`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`,
-          },
-          body: JSON.stringify({
-            meeting_id: meeting.id,
-            delegate_to_id: delegateToId,
-            inbox_entry_id: entry.id,
-          }),
-        }
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'delegation failed');
-      }
+      // Fetch the current updated_at for optimistic concurrency
+      const { data: inboxRow } = await supabase
+        .from('meeting_inbox')
+        .select('updated_at, created_at')
+        .eq('id', entry.id)
+        .maybeSingle();
 
-      const myName = getProfileName(currentUserId);
-      const delegateName = getProfileName(delegateToId);
+      const expectedUpdatedAt = inboxRow?.updated_at || inboxRow?.created_at || null;
 
-      await insertNotification({
-        userId: delegateToId,
-        category: 'meeting',
-        eventType: getMeetingTemplateKey('representative', 'invite'),
-        fallbackTitle: 'انتخاب به عنوان جانشین',
-        fallbackMessage: `شما به عنوان جانشین برای جلسه «${meeting.subject}» انتخاب شده‌اید`,
-        placeholders: {
-          meeting_subject: meeting.subject,
-          meeting_date: formatMeetingDate(meeting),
-          start_time: meeting.start_time?.slice(11, 16) || '',
-          end_time: meeting.end_time?.slice(11, 16) || '',
-          location: meeting.location || '',
-          location_part: meeting.location ? ` | ${meeting.location}` : '',
-          full_name: delegateName,
-          recipient_greeting: `${delegateName} گرامی`,
-          organizer_name: myName,
-          represented_person_name: myName,
-          join_link: meeting.join_link || '',
-        },
-        senderId: currentUserId,
-        actionUrl: 'calendar',
+      const { data, error: rpcError } = await supabase.rpc('assign_meeting_invitation_delegate', {
+        p_meeting_inbox_id: entry.id,
+        p_delegate_user_id: delegateToId,
+        p_expected_updated_at: expectedUpdatedAt,
       });
 
-      const allToNotify = [...new Set([
-        ...(meeting.notify_users || []),
-        ...(meeting.participant_user_ids || []),
-        meeting.user_id,
-      ])].filter(id => id !== currentUserId && id !== delegateToId);
+      if (rpcError) {
+        toast.error('خطا در ارتباط با سرور');
+        return;
+      }
+      if (data?.success === false) {
+        const msgs: Record<string, string> = {
+          NOT_AUTHENTICATED: 'احراز هویت نشده‌اید.',
+          INBOX_NOT_FOUND: 'دعوت یافت نشد.',
+          NOT_INBOX_OWNER: 'این دعوت متعلق به شما نیست.',
+          CANNOT_DELEGATE_TO_SELF: 'نمی‌توانید خودتان را به‌عنوان جانشین انتخاب کنید.',
+          INBOX_NOT_PENDING: 'این دعوت دیگر در وضعیت انتظار نیست.',
+          DELEGATE_ALREADY_ASSIGNED: 'برای این دعوت قبلاً جانشین انتخاب شده است.',
+          INBOX_VERSION_CONFLICT: 'اطلاعات تغییر کرده است. صفحه را تازه‌سازی کنید.',
+          MEETING_NOT_FOUND: 'جلسه یافت نشد.',
+          DELEGATE_IS_ORGANIZER: 'سازنده جلسه نمی‌تواند جانشین شود.',
+          DELEGATE_ALREADY_PARTICIPANT: 'این کاربر از قبل شرکت‌کننده این جلسه است.',
+          DELEGATE_ALREADY_INVITED: 'این کاربر از قبل برای این جلسه دعوت شده است.',
+          DELEGATE_PROFILE_INVALID: 'پروفایل جانشین معتبر نیست یا فعال نیست.',
+          DELEGATE_DIFFERENT_ORG: 'جانشین باید از همان سازمان باشد.',
+        };
+        toast.error(msgs[data.error_code] || data.message || 'خطا در ثبت جانشین');
+        return;
+      }
 
-      await Promise.all(allToNotify.map(uid =>
-        insertNotification({
-          userId: uid,
-          category: 'meeting',
-          eventType: 'change',
-          fallbackTitle: 'تغییر جانشین در جلسه',
-          fallbackMessage: `کاربر ${myName} برای جلسه «${meeting.subject}»، کاربر ${delegateName} را به عنوان جانشین انتخاب کرد`,
-          placeholders: {
-            meeting_subject: meeting.subject,
-            meeting_date: formatMeetingDate(meeting),
-            start_time: meeting.start_time?.slice(11, 16) || '',
-            end_time: meeting.end_time?.slice(11, 16) || '',
-            location: meeting.location || '',
-            location_part: meeting.location ? ` | ${meeting.location}` : '',
-            full_name: getProfileName(uid),
-            recipient_greeting: getProfileName(uid) ? `${getProfileName(uid)} گرامی` : 'همکار گرامی',
-            organizer_name: myName,
-            represented_person_name: myName,
-          },
-          senderId: currentUserId,
-          actionUrl: 'calendar',
-        })
-      ));
+      const delegateName = data?.delegate_name || getProfileName(delegateToId);
 
       setEntries(prev => prev.filter(e => e.id !== entry.id));
       setMeetings(prev => { const n = { ...prev }; delete n[entry.meeting_id]; return n; });
       setDelegateForEntry(null);
       setOpen(false);
-      toast.success(`جانشین به ${delegateName} تغییر یافت`);
+      toast.success(`جانشین «${delegateName}» با موفقیت ثبت شد`);
     } catch {
       toast.error('خطا در ثبت جانشین');
     } finally {

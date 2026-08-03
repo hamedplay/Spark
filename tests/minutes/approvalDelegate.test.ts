@@ -117,7 +117,7 @@ test('migration adds delegate columns without dropping existing data', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return; // migrations may be applied via MCP only
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -135,7 +135,7 @@ test('migration creates assign_minutes_approval_delegate as SECURITY DEFINER', (
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -151,7 +151,7 @@ test('migration does not fire meeting/change event for delegate operations', () 
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -168,7 +168,7 @@ test('migration approves allow both approver and delegate via OR condition', () 
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -182,7 +182,7 @@ test('migration sets acted_by_user_id on approve and request_changes', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -193,7 +193,7 @@ test('migration prevents delegation chain', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -204,7 +204,7 @@ test('migration prevents self-delegation', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -215,7 +215,7 @@ test('migration rejects delegate who is already an approver', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -226,7 +226,7 @@ test('migration validates delegate profile is active and non-hidden', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -239,7 +239,7 @@ test('migration validates same organization', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -250,7 +250,7 @@ test('migration uses optimistic concurrency on approval updated_at', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -262,7 +262,7 @@ test('migration RLS allows delegate to read their delegated approvals', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -276,7 +276,7 @@ test('migration event registry entries use minutes category and minute entity_ty
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -290,7 +290,7 @@ test('migration templates use ON CONFLICT DO NOTHING to avoid overwriting', () =
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -301,7 +301,7 @@ test('migration deduplication keys include approval_id, approver, delegate, and 
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
@@ -316,7 +316,7 @@ test('migration excludes original approver and delegate from stakeholder notific
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
-  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('delegate')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.includes('minutes_approval_delegate')).sort();
   if (files.length === 0) return;
 
   const migrationSource = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');

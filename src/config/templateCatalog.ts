@@ -68,6 +68,10 @@ export const TEMPLATE_EVENT_TYPES: TemplateEventType[] = [
   { key: 'minute_published',           label: 'انتشار صورت‌جلسه' },
   { key: 'minute_revision_invalidated', label: 'باطل‌شدن نسخه قبلی' },
   { key: 'minute_attachment_added',    label: 'افزودن پیوست صورت‌جلسه' },
+  // Meeting invitation delegation events
+  { key: 'meeting_invitation_delegate_assigned',   label: 'انتخاب به‌عنوان جانشین دعوت جلسه' },
+  { key: 'meeting_invitation_delegate_selected',  label: 'انتخاب جانشین دعوت جلسه' },
+  { key: 'meeting_invitation_delegation_confirmed', label: 'تأیید ثبت جانشین دعوت جلسه' },
   { key: 'minute_approval_delegate_assigned', label: 'انتخاب به‌عنوان جانشین تأییدکننده' },
   { key: 'minute_approver_delegate_selected',  label: 'انتخاب جانشین تأییدکننده' },
   // Decision lifecycle events
@@ -109,6 +113,10 @@ export const TEMPLATE_AUDIENCES: TemplateAudience[] = [
   // Decision audiences
   { key: 'decision_owner', label: 'مسئول مصوبه' },
   { key: 'managers',        label: 'مدیران' },
+  // Meeting delegation audiences
+  { key: 'representatives',  label: 'جانشین‌ها (دعوت جلسه)' },
+  { key: 'delegators',       label: 'واگذارکنندگان دعوت' },
+  { key: 'organizer',       label: 'سازنده جلسه' },
 ];
 
 export function audienceLabel(key: string): string {
@@ -163,6 +171,8 @@ export const TEMPLATE_PLACEHOLDERS: TemplatePlaceholder[] = [
   { key: 'approver_name',        label: 'نام تأییدکننده',           example: 'علی احمدی' },
   { key: 'original_approver_name', label: 'نام تأییدکننده اصلی',      example: 'علی احمدی' },
   { key: 'delegate_name',         label: 'نام جانشین',                example: 'سارا رضایی' },
+  { key: 'representative_name',   label: 'نام جانشین دعوت جلسه',      example: 'سارا رضایی' },
+  { key: 'meeting_link',          label: 'لینک جلسه',                 example: '#calendar?meeting=...' },
   { key: 'actor_name',           label: 'نام انجام‌دهنده عمل',       example: 'سارا رضایی' },
   { key: 'change_reason',        label: 'دلیل اصلاح',               example: 'نیاز به اصلاح بخش مصوبات' },
   { key: 'minute_link',          label: 'لینک صورت‌جلسه',           example: 'https://...' },
@@ -692,6 +702,34 @@ export const TEMPLATE_EVENTS: TemplateEventDefinition[] = [
     audiences: ['creator', 'secretary', 'all'],
     requiredPlaceholders: ['minute_title'],
     optionalPlaceholders: ['actor_name', 'minute_link', 'recipient_greeting', 'full_name'],
+  },
+  // Meeting invitation delegation events
+  {
+    key: 'meeting_invitation_delegate_assigned',
+    category: 'meeting',
+    label: 'انتخاب به‌عنوان جانشین دعوت جلسه',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['all', 'representatives'],
+    requiredPlaceholders: ['meeting_subject', 'meeting_date', 'start_time', 'end_time', 'represented_person_name'],
+    optionalPlaceholders: ['location', 'organizer_name', 'recipient_greeting', 'full_name', 'meeting_link', 'meeting_time'],
+  },
+  {
+    key: 'meeting_invitation_delegate_selected',
+    category: 'meeting',
+    label: 'انتخاب جانشین دعوت جلسه',
+    supportedChannels: ['notification'],
+    audiences: ['all', 'participants', 'observers', 'organizer'],
+    requiredPlaceholders: ['meeting_subject', 'represented_person_name', 'representative_name'],
+    optionalPlaceholders: ['meeting_date', 'start_time', 'end_time', 'location', 'organizer_name', 'recipient_greeting', 'full_name', 'meeting_link'],
+  },
+  {
+    key: 'meeting_invitation_delegation_confirmed',
+    category: 'meeting',
+    label: 'تأیید ثبت جانشین دعوت جلسه',
+    supportedChannels: ['notification'],
+    audiences: ['all', 'delegators'],
+    requiredPlaceholders: ['meeting_subject', 'representative_name'],
+    optionalPlaceholders: ['meeting_date', 'start_time', 'end_time', 'location', 'organizer_name', 'recipient_greeting', 'full_name', 'meeting_link'],
   },
   {
     key: 'minute_approval_delegate_assigned',
