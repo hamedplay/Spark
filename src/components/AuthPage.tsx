@@ -302,7 +302,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   };
 
   const handleVerifyOtp = async () => {
-    if (!otp.trim() || otp.length < 4) { toast.error('کد تأیید را وارد کنید'); return; }
+    if (!otp.trim() || otp.length !== 6 || !/^\d{6}$/.test(otp)) { toast.error('کد تأیید باید دقیقاً ۶ رقم باشد'); return; }
     const normalized = normalizeIranPhone(phone);
     if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
     const e164 = `+${normalized}`;

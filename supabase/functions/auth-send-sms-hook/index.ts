@@ -138,6 +138,43 @@ Deno.serve(async (req: Request) => {
       return errorResponse(403, "Phone login is disabled");
     }
 
+    // ── Test mode: only the configured test phone receives SMS ───────────────
+    // In test mode, non-test phones get the same success response but no SMS is sent.
+    const { data: testModeRow } = await supabase
+      .from("system_config").select("value")
+      .eq("section", "security").eq("key", "phone_login_test_mode")
+      .maybeSingle();
+    const isTestMode = testModeRow?.value === "true";
+
+    const normalizedHookPhone = normalizeIranPhone(phone);
+
+    if (isTestMode) {
+      const { data: publicReadyRow } = await supabase
+        .from("system_config").select("value")
+        .eq("section", "security").eq("key", "phone_login_ready")
+        .maybeSingle();
+      const isPublicReady = publicReadyRow?.value === "true";
+
+      if (!isPublicReady) {
+        const { data: testPhoneRow } = await supabase
+          .from("system_config").select("value")
+          .eq("section", "security").eq("key", "phone_login_test_phone")
+          .maybeSingle();
+        const normalizedTestPhone = normalizeIranPhone(testPhoneRow?.value || "");
+
+        if (!normalizedTestPhone || normalizedHookPhone !== normalizedTestPhone) {
+          console.log("[auth-send-sms-hook] test mode: non-test phone, skipping SMS", maskedPhone);
+          const { error: completeErr } = await supabase.rpc(
+            "complete_auth_hook_event", { p_webhook_id: webhookId },
+          );
+          if (completeErr) {
+            await supabase.rpc("mark_sent_unconfirmed_auth_hook_event", { p_webhook_id: webhookId });
+          }
+          return successResponse();
+        }
+      }
+    }
+
     const { data: providerRow, error: providerErr } = await supabase
       .from("system_config")
       .select("value")

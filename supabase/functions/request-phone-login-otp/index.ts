@@ -28,13 +28,11 @@ function getClientIP(req: Request): string {
   return "unknown";
 }
 
-function corsHeaders(allowedOrigin: string | null): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin || "null",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
 
 const TARGET_MIN_MS = 5200;
 const TARGET_MAX_MS = 5400;
@@ -42,7 +40,6 @@ const TARGET_MAX_MS = 5400;
 async function finishPublicResponse(
   startedAt: number,
   response: Response,
-  cors: Record<string, string>,
 ): Promise<Response> {
   const elapsed = Date.now() - startedAt;
   const jitter = Math.floor(Math.random() * (TARGET_MAX_MS - TARGET_MIN_MS + 1));
@@ -52,19 +49,27 @@ async function finishPublicResponse(
   }
   return new Response(response.body, {
     status: response.status,
-    headers: { ...response.headers, ...cors },
+    headers: { ...response.headers, ...corsHeaders },
   });
 }
 
-function publicResponse(cors: Record<string, string>): Response {
+function publicResponse(): Response {
   return new Response(
     JSON.stringify({ ok: true }),
-    { status: 200, headers: { "Content-Type": "application/json", ...cors } },
+    { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },
   );
 }
 
 Deno.serve(async (req: Request) => {
   const startedAt = Date.now();
+
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return await finishPublicResponse(startedAt, publicResponse());
+  }
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -72,42 +77,19 @@ Deno.serve(async (req: Request) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let allowedOrigin: string | null = null;
   try {
-    const allowedStr = Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") || "";
-    const allowed = allowedStr.split(",").map(s => s.trim()).filter(Boolean);
-    const origin = req.headers.get("Origin") || "";
-    if (origin && allowed.includes(origin)) allowedOrigin = origin;
-  } catch { /* fail-closed below */ }
-
-  const cors = corsHeaders(allowedOrigin);
-
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: cors });
-  }
-
-  if (req.method !== "POST") {
-    return await finishPublicResponse(startedAt, publicResponse(cors), cors);
-  }
-
-  try {
-    if (!allowedOrigin) {
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
-    }
-
     const body = await req.json();
     const rawPhone: string | undefined = body.phone;
-    const isAdminContext: boolean = body._admin_context === true;
 
     const normalized = normalizeIranPhone(rawPhone);
     if (!normalized) {
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     // ── Check auth config ──────────────────────────────────────────────────
     const { data: cfgRow, error: cfgErr } = await supabase.rpc("get_public_auth_config");
     if (cfgErr) {
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
     const cfg = Array.isArray(cfgRow) ? cfgRow[0] : cfgRow;
     const publicReady = cfg?.phone_login_ready === true;
@@ -139,7 +121,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!allowDispatch) {
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     // ── Resolve profile + auth user BEFORE sending OTP ──────────────────────
@@ -164,55 +146,25 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!resolvedProfile) {
-      if (isAdminContext) {
-        return new Response(JSON.stringify({ ok: false, error: "NO_PROFILE_FOR_PHONE" }),
-          { status: 404, headers: { "Content-Type": "application/json", ...cors } });
-      }
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     // 2. Find auth user with same UUID
     const { data: authUser, error: authErr } = await supabase.auth.admin.getUserById(resolvedProfile.user_id);
     if (authErr || !authUser?.user) {
-      if (isAdminContext) {
-        return new Response(JSON.stringify({ ok: false, error: "AUTH_USER_NOT_FOUND" }),
-          { status: 404, headers: { "Content-Type": "application/json", ...cors } });
-      }
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     // 3. Check auth.users.phone matches
     const authPhoneNorm = normalizeIranPhone(authUser.user.phone);
     if (authPhoneNorm !== normalized) {
-      if (isAdminContext) {
-        return new Response(JSON.stringify({
-          ok: false,
-          error: "AUTH_PHONE_MISMATCH",
-          detail: "Profile phone does not match auth.users.phone. Sync required.",
-        }),
-          { status: 409, headers: { "Content-Type": "application/json", ...cors } });
-      }
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
-    }
-
-    // 4. Check phone is not on another auth user
-    const { data: conflictCheck } = await supabase.auth.admin.listUsers();
-    const phoneOnOther = conflictCheck?.users?.some(
-      (u: { id: string; phone?: string }) =>
-        u.id !== resolvedProfile.user_id && normalizeIranPhone(u.phone) === normalized,
-    );
-    if (phoneOnOther) {
-      if (isAdminContext) {
-        return new Response(JSON.stringify({ ok: false, error: "PHONE_USED_BY_OTHER_AUTH_USER" }),
-          { status: 409, headers: { "Content-Type": "application/json", ...cors } });
-      }
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     // ── Rate limit ──────────────────────────────────────────────────────────
     const pepper = Deno.env.get("PHONE_RATE_LIMIT_PEPPER") || "";
     if (!pepper || pepper.length < 32) {
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     let phoneHash: string;
@@ -222,7 +174,7 @@ Deno.serve(async (req: Request) => {
       phoneHash = await hmacHash(normalized, pepper);
       ipHash = await hmacHash(clientIP, pepper);
     } catch {
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     let rateLimitResult: { allowed: boolean; retry_after_seconds: number };
@@ -232,15 +184,15 @@ Deno.serve(async (req: Request) => {
         { p_phone_hash: phoneHash, p_ip_hash: ipHash },
       );
       if (rlErr) {
-        return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+        return await finishPublicResponse(startedAt, publicResponse());
       }
       rateLimitResult = typeof rlRaw === "string" ? JSON.parse(rlRaw) : rlRaw;
     } catch {
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     if (!rateLimitResult.allowed) {
-      return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+      return await finishPublicResponse(startedAt, publicResponse());
     }
 
     // ── Call signInWithOtp with shouldCreateUser: false ─────────────────────
@@ -254,9 +206,9 @@ Deno.serve(async (req: Request) => {
       // Never reveal whether the phone exists
     }
 
-    return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+    return await finishPublicResponse(startedAt, publicResponse());
 
   } catch {
-    return await finishPublicResponse(startedAt, publicResponse(cors), cors);
+    return await finishPublicResponse(startedAt, publicResponse());
   }
 });
