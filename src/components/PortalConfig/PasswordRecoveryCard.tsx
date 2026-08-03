@@ -66,10 +66,10 @@ export function PasswordRecoveryCard() {
       setSaving(false);
       return;
     }
-    setEnabled(v);
     setSaving(false);
     toast.success(v ? 'بازیابی رمز با موبایل فعال شد' : 'بازیابی رمز با موبایل غیرفعال شد');
     logAudit({ module: 'security', action: v ? 'password_recovery_enabled' : 'password_recovery_disabled', entity_name: v ? 'enabled' : 'disabled', severity: 'warning' });
+    await load();
   };
 
   const handleTestModeToggle = async (v: boolean) => {

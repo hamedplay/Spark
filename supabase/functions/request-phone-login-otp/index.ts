@@ -110,6 +110,15 @@ Deno.serve(async (req: Request) => {
     return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
   }
 
+  // ── Fail-Closed Origin gate ──────────────────────────────────────────────
+  // Before ANY processing: phone parsing, rate limit, profile lookup, or
+  // signInWithOtp — the Origin header must match an allowed origin.
+  // Empty or disallowed origin = immediate generic response, no processing.
+  const requestOrigin = req.headers.get("Origin") || "";
+  if (!requestOrigin || !allowedOrigins.includes(requestOrigin)) {
+    return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
+  }
+
   try {
     const body = await req.json();
     const rawPhone: string | undefined = body.phone;

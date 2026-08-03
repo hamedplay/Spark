@@ -79,10 +79,9 @@ export function PhoneLoginToggleCard() {
       setSaving(false);
       return;
     }
-    setEnabled(v);
-    setReady(v && testReady && e2eVerified);
     setSaving(false);
     toast.success(v ? 'ورود با موبایل فعال شد' : 'ورود با موبایل غیرفعال شد');
+    await load();
   };
 
   const handleTestModeToggle = async (v: boolean) => {
@@ -158,8 +157,7 @@ export function PhoneLoginToggleCard() {
   };
 
   const readinessItems = [
-    { label: providerReady ? 'Provider آماده' : 'Provider آماده نیست', ok: providerReady },
-    { label: 'Edge Function Secrets نیازمند تأیید اپراتور', ok: false, neutral: true },
+    { label: providerReady ? 'ارائه‌دهنده پیامک احراز هویت موبایلی آماده' : 'ارائه‌دهنده پیامک احراز هویت موبایلی آماده نیست', ok: providerReady },
     { label: operatorConfirmed ? 'Auth Hook تأیید شده' : 'Auth Hook تأیید نشده', ok: operatorConfirmed },
     { label: otpTtlConfirmed ? 'TTL OTP تأیید شده' : 'TTL OTP تأیید نشده', ok: otpTtlConfirmed },
     { label: testMode ? 'حالت تست فعال' : 'حالت تست غیرفعال', ok: testMode, neutral: true },
@@ -179,6 +177,7 @@ export function PhoneLoginToggleCard() {
             <p className="text-xs text-gray-500 dark:text-gray-400">
               {ready ? 'فعال و آماده' : 'غیرفعال'}
             </p>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">ارائه‌دهنده پیامک احراز هویت موبایلی — برای ورود و بازیابی رمز استفاده می‌شود</p>
           </div>
         </div>
         <button
@@ -204,6 +203,7 @@ export function PhoneLoginToggleCard() {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">تأیید TTL واقعی OTP</p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">مقدار واقعی TTL در تنظیمات Supabase Auth (Dashboard) تعیین می‌شود. ثبت این مقدار در اسپارک فقط تأیید آن است و TTL واقعی را تغییر نمی‌دهد.</p>
               {otpTtlConfirmed ? (
                 <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full">تأیید شده</span>
               ) : (
