@@ -39,18 +39,47 @@ export const DECISION_RPC_ERROR_MAP: Record<string, string> = {
   DECISION_OWNER_REQUIRED:       'انتخاب مسئول مصوبه الزامی است.',
   DECISION_DUE_BEFORE_START:     'مهلت مصوبه نمی‌تواند قبل از تاریخ شروع باشد.',
   REMINDER_MUST_BE_FUTURE:       'یادآوری باید در آینده باشد.',
+  INVALID_REMINDER_DATE_TIME:    'تاریخ یا ساعت یادآوری نامعتبر است.',
   NO_REMINDER_RECIPIENT:         'گیرنده یادآوری مشخص نیست.',
   PAYLOAD_INVALID:               'اطلاعات ارسالی نامعتبر است.',
 };
 
-/** Returns true if the RPC call itself failed (network/transport error). */
+/** Returns true if the error is a network/transport error (not a server-side RPC exception). */
 export function isRpcTransportError(error: unknown): boolean {
-  return error !== null && error !== undefined;
+  if (error === null || error === undefined) return false;
+  if (typeof error === 'object' && 'message' in error) {
+    const msg = String((error as { message: unknown }).message ?? '');
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Extract a known RPC error code from a PostgREST/Supabase error object. */
+function extractErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const e = error as Record<string, unknown>;
+  if (typeof e.code === 'string') return e.code;
+  if (typeof e.message === 'string') {
+    for (const code of Object.keys(DECISION_RPC_ERROR_MAP)) {
+      if (e.message.includes(code)) return code;
+    }
+    if (e.message.includes('23505')) return '23505';
+  }
+  return null;
 }
 
 /** Parse an RPC result, returning a user-friendly error message or null on success. */
 export function parseRpcResult(data: unknown, transportError: unknown): { ok: boolean; error?: string; updatedAt?: string } {
   if (transportError) {
+    if (isRpcTransportError(transportError)) {
+      return { ok: false, error: 'خطا در ارتباط با سرور. لطفاً دوباره امتحان کنید.' };
+    }
+    const code = extractErrorCode(transportError);
+    if (code) {
+      return { ok: false, error: mapRpcErrorCode(code) ?? 'خطای ناشناخته' };
+    }
     return { ok: false, error: 'خطا در ارتباط با سرور. لطفاً دوباره امتحان کنید.' };
   }
   if (!data) {
@@ -62,4 +91,12 @@ export function parseRpcResult(data: unknown, transportError: unknown): { ok: bo
     return { ok: false, error: DECISION_RPC_ERROR_MAP[code] ?? result.message ?? code ?? 'خطای ناشناخته' };
   }
   return { ok: true, updatedAt: result.updated_at };
+}
+
+/** Map a Postgres/PostgREST error code to a user-friendly Persian message. */
+export function mapRpcErrorCode(code: string | undefined): string | null {
+  if (!code) return null;
+  if (DECISION_RPC_ERROR_MAP[code]) return DECISION_RPC_ERROR_MAP[code];
+  if (code === '23505') return 'این یادآوری قبلاً ثبت شده است.';
+  return null;
 }
