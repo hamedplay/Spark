@@ -1,16 +1,56 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  LayoutDashboard,
-  FileText,
-  ClipboardList,
-  SquareCheck as DecisionIcon,
-  TrendingUp,
-  ChartBar as BarChart2,
-  ChevronLeft,
-} from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, SquareCheck as DecisionIcon, TrendingUp, ChartBar as BarChart2, ChevronLeft, Loader as Loader2, CircleAlert as AlertCircle } from 'lucide-react';
 import { PageHeader } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
 import type { PageId } from '../../app/navigation/useNavigation';
+
+interface CardStats {
+  total: number;
+  open: number;
+  closed: number;
+}
+
+interface HubCounts {
+  // Unread/pending notification badges (preserved separately)
+  minutes_unread: number;
+  approvals_pending: number;
+  my_decisions_unread: number;
+  my_decisions_active: number;
+  followup_actionable: number;
+  // Per-card total/open/closed
+  minutes_total: number;
+  minutes_open: number;
+  minutes_closed: number;
+  approvals_total: number;
+  approvals_open: number;
+  approvals_closed: number;
+  my_decisions_total: number;
+  my_decisions_open: number;
+  my_decisions_closed: number;
+  followup_total: number;
+  followup_open: number;
+  followup_closed: number;
+  dashboard_minutes_total: number;
+  dashboard_minutes_open: number;
+  dashboard_minutes_closed: number;
+  dashboard_decisions_total: number;
+  dashboard_decisions_open: number;
+  dashboard_decisions_closed: number;
+  reports_total: number;
+  reports_open: number;
+  reports_closed: number;
+}
+
+type BadgeKey = 'minutes_unread' | 'approvals_pending' | 'my_decisions_unread' | 'my_decisions_active' | 'followup_actionable';
+
+type CardStatKey =
+  | 'minutes'
+  | 'approvals'
+  | 'my_decisions'
+  | 'followup'
+  | 'dashboard_minutes'
+  | 'dashboard_decisions'
+  | 'reports';
 
 interface HubCard {
   id: PageId;
@@ -19,20 +59,11 @@ interface HubCard {
   icon: typeof LayoutDashboard;
   color: string;
   bgColor: string;
-  /** Which counter field maps to the primary badge. */
   badgeKey?: BadgeKey;
-  /** Optional secondary badge field. */
   secondaryBadgeKey?: BadgeKey;
-}
-
-type BadgeKey = 'minutes_unread' | 'approvals_pending' | 'my_decisions_unread' | 'my_decisions_active' | 'followup_actionable';
-
-interface HubCounts {
-  minutes_unread: number;
-  approvals_pending: number;
-  my_decisions_unread: number;
-  my_decisions_active: number;
-  followup_actionable: number;
+  statKey?: CardStatKey;
+  /** When statKey covers two entities, show combined stats. */
+  statKeys?: CardStatKey[];
 }
 
 const CARDS: HubCard[] = [
@@ -43,6 +74,7 @@ const CARDS: HubCard[] = [
     icon: LayoutDashboard,
     color: 'text-blue-600 dark:text-blue-400',
     bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    statKeys: ['dashboard_minutes', 'dashboard_decisions'],
   },
   {
     id: 'minutes',
@@ -52,6 +84,7 @@ const CARDS: HubCard[] = [
     color: 'text-indigo-600 dark:text-indigo-400',
     bgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
     badgeKey: 'minutes_unread',
+    statKey: 'minutes',
   },
   {
     id: 'minutes-approvals',
@@ -61,6 +94,7 @@ const CARDS: HubCard[] = [
     color: 'text-amber-600 dark:text-amber-400',
     bgColor: 'bg-amber-50 dark:bg-amber-900/20',
     badgeKey: 'approvals_pending',
+    statKey: 'approvals',
   },
   {
     id: 'minutes-my-decisions',
@@ -71,6 +105,7 @@ const CARDS: HubCard[] = [
     bgColor: 'bg-teal-50 dark:bg-teal-900/20',
     badgeKey: 'my_decisions_unread',
     secondaryBadgeKey: 'my_decisions_active',
+    statKey: 'my_decisions',
   },
   {
     id: 'minutes-followup',
@@ -80,6 +115,7 @@ const CARDS: HubCard[] = [
     color: 'text-rose-600 dark:text-rose-400',
     bgColor: 'bg-rose-50 dark:bg-rose-900/20',
     badgeKey: 'followup_actionable',
+    statKey: 'followup',
   },
   {
     id: 'minutes-reports',
@@ -88,6 +124,7 @@ const CARDS: HubCard[] = [
     icon: BarChart2,
     color: 'text-green-600 dark:text-green-400',
     bgColor: 'bg-green-50 dark:bg-green-900/20',
+    statKey: 'reports',
   },
 ];
 
@@ -97,6 +134,13 @@ const EMPTY_COUNTS: HubCounts = {
   my_decisions_unread: 0,
   my_decisions_active: 0,
   followup_actionable: 0,
+  minutes_total: 0, minutes_open: 0, minutes_closed: 0,
+  approvals_total: 0, approvals_open: 0, approvals_closed: 0,
+  my_decisions_total: 0, my_decisions_open: 0, my_decisions_closed: 0,
+  followup_total: 0, followup_open: 0, followup_closed: 0,
+  dashboard_minutes_total: 0, dashboard_minutes_open: 0, dashboard_minutes_closed: 0,
+  dashboard_decisions_total: 0, dashboard_decisions_open: 0, dashboard_decisions_closed: 0,
+  reports_total: 0, reports_open: 0, reports_closed: 0,
 };
 
 function toPersianDigits(n: number): string {
@@ -117,6 +161,40 @@ const ARIA_LABELS: Record<BadgeKey, string> = {
   followup_actionable: 'مصوبه نیازمند پیگیری',
 };
 
+function getCardStats(counts: HubCounts, card: HubCard): CardStats {
+  if (card.statKeys) {
+    let total = 0, open = 0, closed = 0;
+    for (const sk of card.statKeys) {
+      const s = getSingleStat(counts, sk);
+      total += s.total;
+      open += s.open;
+      closed += s.closed;
+    }
+    return { total, open, closed };
+  }
+  if (card.statKey) return getSingleStat(counts, card.statKey);
+  return { total: 0, open: 0, closed: 0 };
+}
+
+function getSingleStat(counts: HubCounts, key: CardStatKey): CardStats {
+  switch (key) {
+    case 'minutes':
+      return { total: counts.minutes_total, open: counts.minutes_open, closed: counts.minutes_closed };
+    case 'approvals':
+      return { total: counts.approvals_total, open: counts.approvals_open, closed: counts.approvals_closed };
+    case 'my_decisions':
+      return { total: counts.my_decisions_total, open: counts.my_decisions_open, closed: counts.my_decisions_closed };
+    case 'followup':
+      return { total: counts.followup_total, open: counts.followup_open, closed: counts.followup_closed };
+    case 'dashboard_minutes':
+      return { total: counts.dashboard_minutes_total, open: counts.dashboard_minutes_open, closed: counts.dashboard_minutes_closed };
+    case 'dashboard_decisions':
+      return { total: counts.dashboard_decisions_total, open: counts.dashboard_decisions_open, closed: counts.dashboard_decisions_closed };
+    case 'reports':
+      return { total: counts.reports_total, open: counts.reports_open, closed: counts.reports_closed };
+  }
+}
+
 interface Props {
   onNavigate: (page: PageId) => void;
   visibleCards?: Set<PageId>;
@@ -125,25 +203,37 @@ interface Props {
 export function MinutesHubPage({ onNavigate, visibleCards }: Props) {
   const [counts, setCounts] = useState<HubCounts>(EMPTY_COUNTS);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
   const fetchCounts = useCallback(async () => {
     try {
+      setFetchError(false);
       const { data, error } = await supabase.rpc('get_my_minutes_hub_counts');
       if (error) {
         console.error('[MinutesHub] count fetch failed', { code: error.code, message: error.message });
+        setFetchError(true);
         return;
       }
       if (data) {
+        const d = data as Record<string, number>;
         setCounts({
-          minutes_unread: (data.minutes_unread as number) ?? 0,
-          approvals_pending: (data.approvals_pending as number) ?? 0,
-          my_decisions_unread: (data.my_decisions_unread as number) ?? 0,
-          my_decisions_active: (data.my_decisions_active as number) ?? 0,
-          followup_actionable: (data.followup_actionable as number) ?? 0,
+          minutes_unread: d.minutes_unread ?? 0,
+          approvals_pending: d.approvals_pending ?? 0,
+          my_decisions_unread: d.my_decisions_unread ?? 0,
+          my_decisions_active: d.my_decisions_active ?? 0,
+          followup_actionable: d.followup_actionable ?? 0,
+          minutes_total: d.minutes_total ?? 0, minutes_open: d.minutes_open ?? 0, minutes_closed: d.minutes_closed ?? 0,
+          approvals_total: d.approvals_total ?? 0, approvals_open: d.approvals_open ?? 0, approvals_closed: d.approvals_closed ?? 0,
+          my_decisions_total: d.my_decisions_total ?? 0, my_decisions_open: d.my_decisions_open ?? 0, my_decisions_closed: d.my_decisions_closed ?? 0,
+          followup_total: d.followup_total ?? 0, followup_open: d.followup_open ?? 0, followup_closed: d.followup_closed ?? 0,
+          dashboard_minutes_total: d.dashboard_minutes_total ?? 0, dashboard_minutes_open: d.dashboard_minutes_open ?? 0, dashboard_minutes_closed: d.dashboard_minutes_closed ?? 0,
+          dashboard_decisions_total: d.dashboard_decisions_total ?? 0, dashboard_decisions_open: d.dashboard_decisions_open ?? 0, dashboard_decisions_closed: d.dashboard_decisions_closed ?? 0,
+          reports_total: d.reports_total ?? 0, reports_open: d.reports_open ?? 0, reports_closed: d.reports_closed ?? 0,
         });
       }
     } catch (err) {
       console.error('[MinutesHub] count fetch exception', err);
+      setFetchError(true);
     } finally {
       setLoading(false);
     }
@@ -182,6 +272,7 @@ export function MinutesHubPage({ onNavigate, visibleCards }: Props) {
           const Icon = card.icon;
           const primaryBadge = card.badgeKey ? formatBadge(counts[card.badgeKey]) : null;
           const secondaryBadge = card.secondaryBadgeKey ? formatBadge(counts[card.secondaryBadgeKey]) : null;
+          const stats = getCardStats(counts, card);
           return (
             <button
               key={card.id}
@@ -214,9 +305,37 @@ export function MinutesHubPage({ onNavigate, visibleCards }: Props) {
               <h3 className="text-base font-bold text-gray-900 dark:text-white mb-1">
                 {card.title}
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed mb-3">
                 {card.description}
               </p>
+
+              {/* Per-card counters: کل موارد / باز / بسته */}
+              <div className="flex items-center gap-3 mt-3">
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                ) : fetchError ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-red-500">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    خطا در دریافت آمار
+                  </span>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300">
+                      <span className="text-gray-400 dark:text-gray-500">کل موارد:</span>
+                      <span className="font-bold text-gray-800 dark:text-white">{toPersianDigits(stats.total)}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                      <span className="text-amber-400 dark:text-amber-500">باز:</span>
+                      <span className="font-bold">{toPersianDigits(stats.open)}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
+                      <span className="text-green-400 dark:text-green-500">بسته:</span>
+                      <span className="font-bold">{toPersianDigits(stats.closed)}</span>
+                    </span>
+                  </>
+                )}
+              </div>
+
               <div className={`mt-4 flex items-center gap-1 text-sm ${card.color} opacity-0 group-hover:opacity-100 transition-opacity`}>
                 <span>ورود</span>
                 <ChevronLeft className="w-4 h-4" />
