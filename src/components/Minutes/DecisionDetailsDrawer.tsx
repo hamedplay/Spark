@@ -17,6 +17,19 @@ interface DecisionDetailsDrawerProps {
 
 type Tab = 'info' | 'history' | 'reports' | 'obstacles' | 'followups';
 
+const FOLLOWUP_METHOD_LABELS: Record<string, string> = {
+  phone:  'تلفن',
+  letter: 'مکاتبه',
+  meeting:'جلسه',
+  message:'پیام',
+  other:  'سایر',
+};
+
+function followupMethodLabel(method: unknown): string {
+  if (typeof method !== 'string' || method === '') return '';
+  return FOLLOWUP_METHOD_LABELS[method] ?? method;
+}
+
 const EVENT_ICON: Record<string, React.ReactNode> = {
   progress:          <RefreshCw className="w-3.5 h-3.5" />,
   status_change:     <ChevronDown className="w-3.5 h-3.5" />,
@@ -366,7 +379,7 @@ function FollowupsTab({ followups, loading, actorNames }: {
             {f.update_text && <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{f.update_text}</p>}
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-xs">
               {m.method && (
-                <div><dt className="text-gray-400 inline">روش پیگیری: </dt><dd className="text-gray-600 dark:text-gray-400 inline">{String(m.method)}</dd></div>
+                <div><dt className="text-gray-400 inline">روش پیگیری: </dt><dd className="text-gray-600 dark:text-gray-400 inline">{followupMethodLabel(m.method)}</dd></div>
               )}
               {m.result && (
                 <div><dt className="text-gray-400 inline">نتیجه: </dt><dd className="text-gray-600 dark:text-gray-400 inline">{String(m.result)}</dd></div>

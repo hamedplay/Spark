@@ -151,7 +151,7 @@ export function DecisionActionModal({
                         : action === 'report' ? 'report'
                         : 'progress';
         const pStatus = isCompletion ? 'completed' : (action === 'update' ? newStatus : decision.status);
-        const pProgress = isCompletion ? 100 : progress;
+        const pProgress = isCompletion ? 100 : (pStatus === 'waiting_approval' ? 100 : progress);
 
         // Prevent reducing progress from 100% without reopening
         if (action === 'update' && decision.status === 'completed' && pProgress < 100) {
@@ -194,10 +194,11 @@ export function DecisionActionModal({
 
       // ── Owner status change: update_my_minutes_decision ─────────────────
       if (action === 'status' && !isManager) {
+        const statusProgress = newStatus === 'waiting_approval' ? 100 : decision.progress_percent;
         const { data, error: rpcErr } = await supabase.rpc('update_my_minutes_decision', {
           p_decision_id: decision.id,
           p_expected_updated_at: decision.updated_at,
-          p_progress_percent: decision.progress_percent,
+          p_progress_percent: statusProgress,
           p_status: newStatus,
           p_report_text: reportText || null,
           p_event_type: 'status_change',
@@ -356,17 +357,22 @@ export function DecisionActionModal({
                     با انتخاب وضعیت «تکمیل‌شده»، درصد پیشرفت به ۱۰۰٪ تغییر خواهد کرد.
                   </div>
                 )}
+                {newStatus === 'waiting_approval' && (
+                  <div className="mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3 text-sm text-amber-700 dark:text-amber-400">
+                    با انتخاب وضعیت «منتظر تأیید»، درصد پیشرفت به‌صورت خودکار روی ۱۰۰٪ قفل می‌شود.
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  درصد پیشرفت: {toPersianDigits(String(newStatus === 'completed' ? 100 : progress))}٪
+                  درصد پیشرفت: {toPersianDigits(String(newStatus === 'completed' || newStatus === 'waiting_approval' ? 100 : progress))}٪
                 </label>
-                {newStatus !== 'completed' && (
+                {newStatus !== 'completed' && newStatus !== 'waiting_approval' && (
                   <input type="range" min={0} max={100} value={progress}
                     onChange={e => setProgress(Number(e.target.value))}
                     className="w-full accent-blue-600" />
                 )}
-                <DecisionProgressBar percent={newStatus === 'completed' ? 100 : progress} />
+                <DecisionProgressBar percent={newStatus === 'completed' || newStatus === 'waiting_approval' ? 100 : progress} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

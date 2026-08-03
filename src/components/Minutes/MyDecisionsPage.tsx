@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, X, RefreshCw, Eye, TrendingUp, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Flag, ChevronRight, ChevronLeft, MessageSquare, SquareArrowUpRight, ListChecks, CirclePause as PauseCircle } from 'lucide-react';
+import { RefreshCw, Eye, TrendingUp, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Flag, ChevronRight, ChevronLeft, MessageSquare, SquareArrowUpRight, ListChecks, CirclePause as PauseCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   PageHeader, StatCard, DecisionStatusBadge, DecisionPriorityBadge,
@@ -12,12 +12,13 @@ import {
   formatJalaliDateForDisplay, toPersianDigits,
 } from '../../lib/minutesDate';
 import {
-  DECISION_STATUS_LABELS, DECISION_PRIORITY_LABELS,
-  DEADLINE_STATE_LABELS, getDecisionDeadlineState, formatDecisionDaysLabel,
+  DECISION_STATUS_LABELS, DEADLINE_STATE_LABELS,
+  getDecisionDeadlineState, formatDecisionDaysLabel,
 } from './decisionHelpers';
 import { DecisionActionModal } from './DecisionActionModal';
 import { DecisionDetailsDrawer } from './DecisionDetailsDrawer';
-import { JalaliDatePicker } from './Form/JalaliDatePicker';
+import { DecisionFilters, EMPTY_FILTERS } from './DecisionFilters';
+import type { DecisionFilterState } from './DecisionFilters';
 import type { DecisionStatus, DecisionPriority, MyDecisionRow, DecisionDeadlineState } from './types';
 
 interface MyDecisionsPageProps {
@@ -25,34 +26,6 @@ interface MyDecisionsPageProps {
 }
 
 const PAGE_SIZE = 20;
-
-const STATUS_OPTIONS: Array<{ value: DecisionStatus | 'all'; label: string }> = [
-  { value: 'all',               label: 'همه وضعیت‌ها' },
-  { value: 'not_started',       label: DECISION_STATUS_LABELS.not_started },
-  { value: 'planned',           label: DECISION_STATUS_LABELS.planned },
-  { value: 'in_progress',       label: DECISION_STATUS_LABELS.in_progress },
-  { value: 'waiting_coordination', label: DECISION_STATUS_LABELS.waiting_coordination },
-  { value: 'waiting_approval',  label: DECISION_STATUS_LABELS.waiting_approval },
-  { value: 'completed',         label: DECISION_STATUS_LABELS.completed },
-  { value: 'stopped',           label: DECISION_STATUS_LABELS.stopped },
-];
-
-const DEADLINE_OPTIONS: Array<{ value: DecisionDeadlineState | 'all'; label: string }> = [
-  { value: 'all',        label: 'همه' },
-  { value: 'overdue',    label: DEADLINE_STATE_LABELS.overdue },
-  { value: 'today',      label: DEADLINE_STATE_LABELS.today },
-  { value: 'approaching',label: DEADLINE_STATE_LABELS.approaching },
-  { value: 'on_time',    label: DEADLINE_STATE_LABELS.on_time },
-  { value: 'no_deadline',label: DEADLINE_STATE_LABELS.no_deadline },
-];
-
-const PRIORITY_OPTIONS: Array<{ value: DecisionPriority | 'all'; label: string }> = [
-  { value: 'all',       label: 'همه اولویت‌ها' },
-  { value: 'urgent',    label: DECISION_PRIORITY_LABELS.urgent },
-  { value: 'important', label: DECISION_PRIORITY_LABELS.important },
-  { value: 'normal',    label: DECISION_PRIORITY_LABELS.normal },
-  { value: 'low',       label: DECISION_PRIORITY_LABELS.low },
-];
 
 type ActionType = import('./DecisionActionModal').ActionType;
 
@@ -72,19 +45,14 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
   const [offset, setOffset]                     = useState(0);
   const [summary, setSummary]                   = useState<MyDecisionsSummary>({ total_count: 0, active_count: 0, completed_count: 0, stopped_count: 0, overdue_count: 0 });
 
-  // Filters
-  const [search, setSearch]                     = useState('');
-  const [statusFilter, setStatusFilter]         = useState<DecisionStatus | 'all'>('all');
-  const [priorityFilter, setPriorityFilter]     = useState<DecisionPriority | 'all'>('all');
-  const [deadlineFilter, setDeadlineFilter]     = useState<DecisionDeadlineState | 'all'>('all');
-  const [followupOnly, setFollowupOnly]         = useState(false);
-  const [dueFrom, setDueFrom]                   = useState<string | null>(null);
-  const [dueTo, setDueTo]                       = useState<string | null>(null);
+  const [filters, setFilters]                   = useState<DecisionFilterState>(EMPTY_FILTERS);
 
   // Modals
   const [actionDecision, setActionDecision]     = useState<MyDecisionRow | null>(null);
   const [actionType, setActionType]             = useState<ActionType>('progress');
   const [detailDecision, setDetailDecision]     = useState<MyDecisionRow | null>(null);
+
+  const updateFilters = (patch: Partial<DecisionFilterState>) => setFilters(f => ({ ...f, ...patch }));
 
   const fetchSummary = useCallback(async () => {
     try {
@@ -112,13 +80,13 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     setError(null);
     try {
       const { data: rows, error: rpcErr } = await supabase.rpc('get_my_minutes_decisions', {
-        p_status: statusFilter === 'all' ? null : statusFilter,
-        p_priority: priorityFilter === 'all' ? null : priorityFilter,
-        p_search: search.trim() || null,
-        p_requires_followup: followupOnly ? true : null,
-        p_deadline_state: deadlineFilter === 'all' ? null : deadlineFilter,
-        p_due_from: dueFrom,
-        p_due_to: dueTo,
+        p_status: filters.statusFilter === 'all' ? null : filters.statusFilter,
+        p_priority: filters.priorityFilter === 'all' ? null : filters.priorityFilter,
+        p_search: filters.search.trim() || null,
+        p_requires_followup: filters.followupOnly ? true : null,
+        p_deadline_state: filters.deadlineFilter === 'all' ? null : filters.deadlineFilter,
+        p_due_from: filters.dueFrom,
+        p_due_to: filters.dueTo,
         p_limit:  PAGE_SIZE,
         p_offset: currentOffset,
       });
@@ -135,11 +103,12 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, search, followupOnly, deadlineFilter, dueFrom, dueTo]);
+  }, [filters.statusFilter, filters.priorityFilter, filters.search, filters.followupOnly, filters.deadlineFilter, filters.dueFrom, filters.dueTo]);
 
+  // Reset pagination on any filter change
   useEffect(() => {
     setOffset(0);
-  }, [statusFilter, search, priorityFilter, deadlineFilter, followupOnly, dueFrom, dueTo]);
+  }, [filters.statusFilter, filters.search, filters.priorityFilter, filters.deadlineFilter, filters.followupOnly, filters.dueFrom, filters.dueTo]);
 
   useEffect(() => {
     fetchData(offset);
@@ -148,8 +117,6 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
-
-  const filtered = data;
 
   const openAction = (dec: MyDecisionRow, type: ActionType) => {
     setActionDecision(dec);
@@ -164,17 +131,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     void updatedAt;
   };
 
-  const resetFilters = () => {
-    setSearch('');
-    setStatusFilter('all');
-    setPriorityFilter('all');
-    setDeadlineFilter('all');
-    setFollowupOnly(false);
-    setDueFrom(null);
-    setDueTo(null);
-  };
-
-  const hasFilters = search || statusFilter !== 'all' || priorityFilter !== 'all' || deadlineFilter !== 'all' || followupOnly || dueFrom || dueTo;
+  const hasFilters = filters.search || filters.statusFilter !== 'all' || filters.priorityFilter !== 'all' || filters.deadlineFilter !== 'all' || filters.followupOnly || filters.dueFrom || filters.dueTo;
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto" dir="rtl">
@@ -196,61 +153,20 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-        <StatCard label="کل مصوبات" value={toPersianDigits(String(summary.total_count ?? 0))} icon={<ListChecks className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => setStatusFilter('all')} />
-        <StatCard label="در حال انجام" value={toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => setStatusFilter('in_progress')} />
-        <StatCard label="تکمیل‌شده" value={toPersianDigits(String(summary.completed_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => setStatusFilter('completed')} />
-        <StatCard label="متوقف‌شده" value={toPersianDigits(String(summary.stopped_count ?? 0))} icon={<PauseCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => setStatusFilter('stopped')} />
-        <StatCard label="دارای تأخیر" value={toPersianDigits(String(summary.overdue_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => setDeadlineFilter('overdue')} />
+        <StatCard label="کل مصوبات" value={toPersianDigits(String(summary.total_count ?? 0))} icon={<ListChecks className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => updateFilters({ statusFilter: 'all' })} />
+        <StatCard label="در حال انجام" value={toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => updateFilters({ statusFilter: 'in_progress' })} />
+        <StatCard label="تکمیل‌شده" value={toPersianDigits(String(summary.completed_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => updateFilters({ statusFilter: 'completed' })} />
+        <StatCard label="متوقف‌شده" value={toPersianDigits(String(summary.stopped_count ?? 0))} icon={<PauseCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => updateFilters({ statusFilter: 'stopped' })} />
+        <StatCard label="دارای تأخیر" value={toPersianDigits(String(summary.overdue_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => updateFilters({ deadlineFilter: 'overdue' })} />
       </div>
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 mb-4 space-y-3">
-        <div className="flex flex-wrap gap-3">
-          <div className="flex-1 min-w-48 relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text" placeholder="جست‌وجوی عنوان مصوبه یا جلسه..." value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pr-9 pl-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            />
-          </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as DecisionStatus | 'all')}
-            className="px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40">
-            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as DecisionPriority | 'all')}
-            className="px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40">
-            {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select value={deadlineFilter} onChange={e => setDeadlineFilter(e.target.value as DecisionDeadlineState | 'all')}
-            className="px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40">
-            {DEADLINE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-4 flex-wrap">
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-            <input type="checkbox" checked={followupOnly} onChange={e => setFollowupOnly(e.target.checked)}
-              className="w-4 h-4 rounded accent-blue-600" />
-            فقط نیازمند پیگیری
-          </label>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500 dark:text-gray-400">مهلت از:</span>
-            <div className="w-40"><JalaliDatePicker value={dueFrom} onChange={setDueFrom} placeholder="از تاریخ" /></div>
-            <span className="text-sm text-gray-500 dark:text-gray-400">تا:</span>
-            <div className="w-40"><JalaliDatePicker value={dueTo} onChange={setDueTo} placeholder="تا تاریخ" /></div>
-          </div>
-          {hasFilters && (
-            <button onClick={resetFilters} className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 transition-colors mr-auto">
-              <X className="w-3.5 h-3.5" /> پاک‌کردن فیلترها
-            </button>
-          )}
-          {!hasFilters && (
-            <span className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
-              {toPersianDigits(String(filtered.length))} نتیجه
-            </span>
-          )}
-        </div>
-      </div>
+      <DecisionFilters
+        filters={filters}
+        onChange={updateFilters}
+        onReset={() => setFilters(EMPTY_FILTERS)}
+        hasFilters={hasFilters}
+        totalResultCount={total}
+      />
 
       {/* Content */}
       {loading ? (
@@ -262,7 +178,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
             تلاش مجدد
           </button>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : data.length === 0 ? (
         <EmptyState title="مصوبه‌ای یافت نشد" description={hasFilters ? 'فیلترها را تغییر دهید.' : 'هیچ مصوبه‌ای به شما اختصاص داده نشده است.'} />
       ) : (
         <>
@@ -278,7 +194,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                  {filtered.map(dec => (
+                  {data.map(dec => (
                     <DecisionTableRow
                       key={dec.id}
                       dec={dec}
@@ -294,7 +210,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
 
           {/* Mobile cards */}
           <div className="lg:hidden space-y-3">
-            {filtered.map(dec => (
+            {data.map(dec => (
               <DecisionMobileCard
                 key={dec.id}
                 dec={dec}
