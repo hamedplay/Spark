@@ -29,6 +29,8 @@ export const DEADLINE_STATE_LABELS: Record<DecisionDeadlineState, string> = {
   on_time:     'در موعد',
   approaching: 'نزدیک سررسید',
   today:       'امروز',
+  this_week:   'این هفته',
+  next_7_days: '۷ روز آینده',
   overdue:     'عقب‌افتاده',
   completed:   'تکمیل‌شده',
 };

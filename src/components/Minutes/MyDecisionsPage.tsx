@@ -17,9 +17,11 @@ import {
 } from './decisionHelpers';
 import { DecisionActionModal } from './DecisionActionModal';
 import { DecisionDetailsDrawer } from './DecisionDetailsDrawer';
-import { DecisionFilters, EMPTY_FILTERS } from './DecisionFilters';
+import { DecisionFilters, EMPTY_FILTERS, hasDateRangeValidationError } from './DecisionFilters';
 import type { DecisionFilterState } from './DecisionFilters';
 import type { DecisionStatus, DecisionPriority, MyDecisionRow, DecisionDeadlineState } from './types';
+
+const ACTIVE_STATUSES: DecisionStatus[] = ['not_started','planned','in_progress','waiting_coordination','waiting_approval'];
 
 interface MyDecisionsPageProps {
   onNavigate: (page: string, params?: Record<string, unknown>) => void;
@@ -75,7 +77,15 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     }
   }, []);
 
+  const dateRangeError = hasDateRangeValidationError(filters);
+
   const fetchData = useCallback(async (currentOffset: number) => {
+    if (dateRangeError) {
+      setData([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -103,7 +113,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [filters.statusFilter, filters.priorityFilter, filters.search, filters.followupOnly, filters.deadlineFilter, filters.dueFrom, filters.dueTo]);
+  }, [filters.statusFilter, filters.priorityFilter, filters.search, filters.followupOnly, filters.deadlineFilter, filters.dueFrom, filters.dueTo, dateRangeError]);
 
   // Reset pagination on any filter change
   useEffect(() => {
@@ -154,7 +164,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <StatCard label="کل مصوبات" value={toPersianDigits(String(summary.total_count ?? 0))} icon={<ListChecks className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => updateFilters({ statusFilter: 'all' })} />
-        <StatCard label="در حال انجام" value={toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => updateFilters({ statusFilter: 'in_progress' })} />
+        <StatCard label="در جریان" value={toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => updateFilters({ statusFilter: 'active', deadlineFilter: 'all', followupOnly: false, dueFrom: null, dueTo: null, search: '', priorityFilter: 'all' })} />
         <StatCard label="تکمیل‌شده" value={toPersianDigits(String(summary.completed_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => updateFilters({ statusFilter: 'completed' })} />
         <StatCard label="متوقف‌شده" value={toPersianDigits(String(summary.stopped_count ?? 0))} icon={<PauseCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => updateFilters({ statusFilter: 'stopped' })} />
         <StatCard label="دارای تأخیر" value={toPersianDigits(String(summary.overdue_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => updateFilters({ deadlineFilter: 'overdue' })} />

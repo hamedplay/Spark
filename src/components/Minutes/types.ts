@@ -181,6 +181,8 @@ export type DecisionDeadlineState =
   | 'on_time'
   | 'approaching'
   | 'today'
+  | 'this_week'
+  | 'next_7_days'
   | 'overdue'
   | 'completed';
 

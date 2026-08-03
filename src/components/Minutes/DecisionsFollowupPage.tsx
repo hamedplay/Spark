@@ -15,7 +15,7 @@ import {
 } from './decisionHelpers';
 import { DecisionActionModal } from './DecisionActionModal';
 import { DecisionDetailsDrawer } from './DecisionDetailsDrawer';
-import { DecisionFilters, EMPTY_FILTERS } from './DecisionFilters';
+import { DecisionFilters, EMPTY_FILTERS, hasDateRangeValidationError } from './DecisionFilters';
 import type { DecisionFilterState } from './DecisionFilters';
 import type { SearchableOption } from './Form/SearchableSelect';
 import type { DecisionStatus, DecisionPriority, DecisionRow, DecisionDeadlineState } from './types';
@@ -71,27 +71,15 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
 
   const updateFilters = (patch: Partial<DecisionFilterState>) => setFilters(f => ({ ...f, ...patch }));
 
-  // Fetch filter options from full trackable scope (no artificial limit)
+  // Fetch filter options from lightweight distinct RPC
   const fetchFilterOptions = useCallback(async () => {
     try {
-      const { data: rows, error: rpcErr } = await supabase.rpc('get_trackable_minutes_decisions', {
-        p_limit: 100000,
-        p_offset: 0,
-      });
+      const { data: rows, error: rpcErr } = await supabase.rpc('get_minutes_decision_filter_options');
       if (rpcErr) throw rpcErr;
-      const typedRows = (rows || []) as FollowupRow[];
-
-      const meetingMap = new Map<string, string>();
-      const unitMap = new Map<string, string>();
-      const ownerMap = new Map<string, string>();
-      for (const r of typedRows) {
-        if (r.minute_id && r.minute_title) meetingMap.set(r.minute_id, r.minute_title);
-        if (r.responsible_unit_id && r.responsible_unit_name_snapshot) unitMap.set(r.responsible_unit_id, r.responsible_unit_name_snapshot);
-        if (r.primary_owner_user_id && r.owner_name) ownerMap.set(r.primary_owner_user_id, r.owner_name);
-      }
-      setMeetingOptions(Array.from(meetingMap.entries()).map(([value, label]) => ({ value, label })));
-      setUnitOptions(Array.from(unitMap.entries()).map(([value, label]) => ({ value, label })));
-      setOwnerOptions(Array.from(ownerMap.entries()).map(([value, label]) => ({ value, label })));
+      const typedRows = (rows || []) as Array<{ option_type: string; option_id: string; option_label: string }>;
+      setMeetingOptions(typedRows.filter(r => r.option_type === 'meeting').map(r => ({ value: r.option_id, label: r.option_label })));
+      setUnitOptions(typedRows.filter(r => r.option_type === 'unit').map(r => ({ value: r.option_id, label: r.option_label })));
+      setOwnerOptions(typedRows.filter(r => r.option_type === 'owner').map(r => ({ value: r.option_id, label: r.option_label })));
     } catch {
       // silent
     }
@@ -120,7 +108,15 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
     }
   }, []);
 
+  const dateRangeError = hasDateRangeValidationError(filters);
+
   const fetchData = useCallback(async (currentOffset: number) => {
+    if (dateRangeError) {
+      setData([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -154,7 +150,7 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
     } finally {
       setLoading(false);
     }
-  }, [filters.search, filters.statusFilter, filters.priorityFilter, filters.followupOnly, filters.hasObstacle, filters.deadlineFilter, filters.overdueOnly, filters.meetingFilter, filters.ownerFilter, filters.unitFilter, filters.startFrom, filters.startTo, filters.dueFrom, filters.dueTo]);
+  }, [filters.search, filters.statusFilter, filters.priorityFilter, filters.followupOnly, filters.hasObstacle, filters.deadlineFilter, filters.overdueOnly, filters.meetingFilter, filters.ownerFilter, filters.unitFilter, filters.startFrom, filters.startTo, filters.dueFrom, filters.dueTo, dateRangeError]);
 
   // Reset pagination on any filter change
   useEffect(() => {
@@ -205,7 +201,7 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
         <StatCard label="کل" value={toPersianDigits(String(summary.total_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => updateFilters({ statusFilter: 'all' })} />
-        <StatCard label="در جریان" value={toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => updateFilters({ statusFilter: 'in_progress' })} />
+        <StatCard label="در جریان" value={toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => updateFilters({ statusFilter: 'active', deadlineFilter: 'all', overdueOnly: false, followupOnly: false, hasObstacle: false, dueFrom: null, dueTo: null, search: '', priorityFilter: 'all', meetingFilter: '', unitFilter: '', ownerFilter: '', startFrom: null, startTo: null })} />
         <StatCard label="تکمیل" value={toPersianDigits(String(summary.completed_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => updateFilters({ statusFilter: 'completed' })} />
         <StatCard label="متوقف" value={toPersianDigits(String(summary.stopped_count ?? 0))} icon={<StopCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => updateFilters({ statusFilter: 'stopped' })} />
         <StatCard label="عقب‌افتاده" value={toPersianDigits(String(summary.overdue_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => { updateFilters({ overdueOnly: true, statusFilter: 'all' }); }} />

@@ -8,9 +8,11 @@ import { SearchableSelect } from './Form/SearchableSelect';
 import type { SearchableOption } from './Form/SearchableSelect';
 import type { DecisionStatus, DecisionPriority, DecisionDeadlineState } from './types';
 
+export type StatusFilterValue = DecisionStatus | 'all' | 'active';
+
 export interface DecisionFilterState {
   search: string;
-  statusFilter: DecisionStatus | 'all';
+  statusFilter: StatusFilterValue;
   priorityFilter: DecisionPriority | 'all';
   deadlineFilter: DecisionDeadlineState | 'all';
   followupOnly: boolean;
@@ -43,8 +45,9 @@ export const EMPTY_FILTERS: DecisionFilterState = {
   startTo: null,
 };
 
-const STATUS_OPTIONS: Array<{ value: DecisionStatus | 'all'; label: string }> = [
+const STATUS_OPTIONS: Array<{ value: StatusFilterValue; label: string }> = [
   { value: 'all', label: 'همه وضعیت‌ها' },
+  { value: 'active', label: 'در جریان (همه وضعیت‌های باز)' },
   ...(['not_started','planned','in_progress','waiting_coordination','waiting_approval','completed','stopped'] as DecisionStatus[])
     .map(s => ({ value: s, label: DECISION_STATUS_LABELS[s] })),
 ];
@@ -57,14 +60,23 @@ const PRIORITY_OPTIONS: Array<{ value: DecisionPriority | 'all'; label: string }
 
 const DEADLINE_OPTIONS: Array<{ value: DecisionDeadlineState | 'all'; label: string }> = [
   { value: 'all', label: 'همه' },
-  { value: 'overdue', label: DEADLINE_STATE_LABELS.overdue },
   { value: 'today', label: DEADLINE_STATE_LABELS.today },
+  { value: 'this_week', label: DEADLINE_STATE_LABELS.this_week },
+  { value: 'next_7_days', label: DEADLINE_STATE_LABELS.next_7_days },
   { value: 'approaching', label: DEADLINE_STATE_LABELS.approaching },
+  { value: 'overdue', label: DEADLINE_STATE_LABELS.overdue },
   { value: 'on_time', label: DEADLINE_STATE_LABELS.on_time },
   { value: 'no_deadline', label: DEADLINE_STATE_LABELS.no_deadline },
+  { value: 'completed', label: DEADLINE_STATE_LABELS.completed },
 ];
 
 const selectCls = 'px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40';
+
+export function hasDateRangeValidationError(filters: DecisionFilterState): boolean {
+  const dueError = filters.dueFrom && filters.dueTo && filters.dueFrom > filters.dueTo;
+  const startError = filters.startFrom && filters.startTo && filters.startFrom > filters.startTo;
+  return Boolean(dueError || startError);
+}
 
 interface DecisionFiltersProps {
   filters: DecisionFilterState;
@@ -93,6 +105,7 @@ export function DecisionFilters({
   const startDateRangeError = filters.startFrom && filters.startTo && filters.startFrom > filters.startTo
     ? 'تاریخ «از» نمی‌تواند بعد از «تا» باشد.'
     : null;
+  const hasDateRangeError = Boolean(dateRangeError || startDateRangeError);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 mb-4 space-y-3">
@@ -108,7 +121,7 @@ export function DecisionFilters({
             className="w-full pr-9 pl-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           />
         </div>
-        <select value={filters.statusFilter} onChange={e => onChange({ statusFilter: e.target.value as DecisionStatus | 'all' })} className={selectCls}>
+        <select value={filters.statusFilter} onChange={e => onChange({ statusFilter: e.target.value as StatusFilterValue })} className={selectCls}>
           {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <select value={filters.priorityFilter} onChange={e => onChange({ priorityFilter: e.target.value as DecisionPriority | 'all' })} className={selectCls}>
