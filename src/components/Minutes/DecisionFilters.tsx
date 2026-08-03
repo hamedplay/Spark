@@ -1,4 +1,4 @@
-import { Search, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import {
   DECISION_STATUS_LABELS, DECISION_PRIORITY_LABELS,
   DEADLINE_STATE_LABELS,
@@ -105,7 +105,7 @@ export function DecisionFilters({
   const startDateRangeError = filters.startFrom && filters.startTo && filters.startFrom > filters.startTo
     ? 'تاریخ «از» نمی‌تواند بعد از «تا» باشد.'
     : null;
-  const hasDateRangeError = Boolean(dateRangeError || startDateRangeError);
+
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 mb-4 space-y-3">

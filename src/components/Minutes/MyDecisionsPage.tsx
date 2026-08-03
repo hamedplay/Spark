@@ -19,9 +19,8 @@ import { DecisionActionModal } from './DecisionActionModal';
 import { DecisionDetailsDrawer } from './DecisionDetailsDrawer';
 import { DecisionFilters, EMPTY_FILTERS, hasDateRangeValidationError } from './DecisionFilters';
 import type { DecisionFilterState } from './DecisionFilters';
-import type { DecisionStatus, DecisionPriority, MyDecisionRow, DecisionDeadlineState } from './types';
+import type { MyDecisionRow } from './types';
 
-const ACTIVE_STATUSES: DecisionStatus[] = ['not_started','planned','in_progress','waiting_coordination','waiting_approval'];
 
 interface MyDecisionsPageProps {
   onNavigate: (page: string, params?: Record<string, unknown>) => void;

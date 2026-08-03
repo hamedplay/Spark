@@ -18,7 +18,7 @@ import { DecisionDetailsDrawer } from './DecisionDetailsDrawer';
 import { DecisionFilters, EMPTY_FILTERS, hasDateRangeValidationError } from './DecisionFilters';
 import type { DecisionFilterState } from './DecisionFilters';
 import type { SearchableOption } from './Form/SearchableSelect';
-import type { DecisionStatus, DecisionPriority, DecisionRow, DecisionDeadlineState } from './types';
+import type { DecisionRow } from './types';
 
 interface DecisionsFollowupPageProps {
   onNavigate: (page: string, params?: Record<string, unknown>) => void;
