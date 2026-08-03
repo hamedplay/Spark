@@ -139,10 +139,7 @@ Deno.serve(async (req: Request) => {
       return errorResponse(503, "Request already processing");
     }
 
-    // ── Read computed config from get_public_auth_config ─────────────────────
-    // This function computes phone_login_ready and phone_login_test_ready
-    // from multiple system_config rows. We must NOT read phone_login_ready
-    // directly from system_config — it is a computed value.
+    // ── Check canonical login readiness ─────────────────────────────────────
     const { data: cfgRow, error: cfgErr } = await supabase.rpc("get_public_auth_config");
     if (cfgErr) {
       console.log("[auth-send-sms-hook] config query error, fail-closed:", cfgErr.message);
@@ -150,34 +147,9 @@ Deno.serve(async (req: Request) => {
       return errorResponse(500, "Configuration check failed");
     }
     const cfg = Array.isArray(cfgRow) ? cfgRow[0] : cfgRow;
-    const publicReady = cfg?.phone_login_ready === true;
-    const testMode = cfg?.phone_login_test_mode === true;
-    const testReady = cfg?.phone_login_test_ready === true;
+    const canonicalReady = cfg?.phone_login_canonical_ready === true;
 
-    const normalizedHookPhone = normalizeIranPhone(phone);
-
-    // ── Allow logic ───────────────────────────────────────────────────────────
-    // Allow SMS dispatch if:
-    //   1. phone_login_ready=true (public mode), OR
-    //   2. phone_login_test_mode=true && phone_login_test_ready=true && phone===test_phone
-    // Otherwise: return success (so GoTrue does NOT retry) but do NOT send SMS.
-    let allowDispatch = false;
-
-    if (publicReady) {
-      allowDispatch = true;
-    } else if (testMode && testReady) {
-      const { data: testPhoneRow } = await supabase
-        .from("system_config").select("value")
-        .eq("section", "security").eq("key", "phone_login_test_phone")
-        .maybeSingle();
-      const normalizedTestPhone = normalizeIranPhone(testPhoneRow?.value || "");
-
-      if (normalizedTestPhone && normalizedHookPhone === normalizedTestPhone) {
-        allowDispatch = true;
-      }
-    }
-
-    if (!allowDispatch) {
+    if (!canonicalReady) {
       console.log("[auth-send-sms-hook] dispatch not allowed, skipping SMS", maskedPhone);
       return await completeWithoutSms(supabase, webhookId);
     }

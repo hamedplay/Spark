@@ -22,11 +22,7 @@ import { IceTesterPanel } from './VideoConference/IceTesterPanel';
 import { NAV_ITEMS, HIDDEN_SECURITY_CONFIG_KEYS } from './PortalConfig/constants';
 import { ConfigField } from './PortalConfig/ConfigField';
 import { SectionCard } from './PortalConfig/SectionCard';
-import { PhoneLoginToggleCard } from './PortalConfig/PhoneLoginToggleCard';
-import { PasswordRecoveryCard } from './PortalConfig/PasswordRecoveryCard';
-import { PhoneSyncCard } from './PortalConfig/PhoneSyncCard';
-import { BaleOtpConfigCard } from './PortalConfig/BaleOtpConfigCard';
-import { MfaPanel } from './PortalConfig/MfaPanel';
+import { PhoneAuthCard } from './PortalConfig/PhoneAuthCard';
 import { UsersListOld } from './PortalConfig/UsersListOld';
 import type { ConfigEntry, AuditEntry, Profile, Props } from './PortalConfig/types';
 
@@ -497,21 +493,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
             <SectionCard title="امنیت و دسترسی" icon={Shield} color="red">
               {cfgs('security').filter(c => !HIDDEN_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
-            <PhoneLoginToggleCard />
-            <PasswordRecoveryCard />
-            <PhoneSyncCard />
-            <BaleOtpConfigCard />
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-              <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-                  <KeyRound className="w-4 h-4" />
-                </div>
-                <h3 className="font-bold text-gray-800 dark:text-white">احراز هویت دو مرحله‌ای (MFA)</h3>
-              </div>
-              <div className="p-5">
-                <MfaPanel />
-              </div>
-            </div>
+            <PhoneAuthCard />
           </div>
         );
 

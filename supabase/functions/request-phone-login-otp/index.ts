@@ -128,34 +128,13 @@ Deno.serve(async (req: Request) => {
       return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
-    // ── Read computed config from get_public_auth_config ─────────────────────
+    // ── Check canonical login readiness ─────────────────────────────────────
     const { data: cfgRow, error: cfgErr } = await supabase.rpc("get_public_auth_config");
     if (cfgErr) {
       return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
     const cfg = Array.isArray(cfgRow) ? cfgRow[0] : cfgRow;
-    const publicReady = cfg?.phone_login_ready === true;
-    const testReady = cfg?.phone_login_test_ready === true;
-
-    let allowDispatch = false;
-
-    if (publicReady) {
-      allowDispatch = true;
-    } else if (testReady) {
-      // testReady already incorporates phone_login_test_mode=true
-      // Read the test phone to compare
-      const { data: testPhoneRow } = await supabase
-        .from("system_config").select("value")
-        .eq("section", "security").eq("key", "phone_login_test_phone")
-        .maybeSingle();
-      const normalizedTestPhone = normalizeIranPhone(testPhoneRow?.value || "");
-
-      if (normalizedTestPhone && normalized === normalizedTestPhone) {
-        allowDispatch = true;
-      }
-    }
-
-    if (!allowDispatch) {
+    if (!cfg?.phone_login_canonical_ready) {
       return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 

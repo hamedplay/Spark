@@ -14,18 +14,16 @@ interface AuthPageProps {
 }
 
 interface PublicAuthConfig {
-  phone_login_enabled: boolean;
   phone_login_ready: boolean;
-  phone_login_test_mode: boolean;
-  phone_login_test_ready: boolean;
   phone_password_recovery_ready: boolean;
-  phone_password_recovery_test_mode: boolean;
-  phone_password_recovery_test_ready: boolean;
   recovery_template_ready: boolean;
   recovery_secret_confirmed: boolean;
   recovery_ttl_valid: boolean;
   recovery_ttl_seconds: number;
-  phone_password_recovery_e2e_verified: boolean;
+  phone_login_canonical_enabled: boolean;
+  phone_login_canonical_ready: boolean;
+  phone_password_recovery_canonical_enabled: boolean;
+  phone_password_recovery_canonical_ready: boolean;
 }
 
 export function AuthPage({ onSuccess }: AuthPageProps) {
@@ -52,8 +50,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   useEffect(() => {
     supabase.rpc('get_public_auth_config').then(({ data }) => {
       const row = Array.isArray(data) ? data[0] : data;
-      setAuthConfig(row ?? { phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600, phone_password_recovery_e2e_verified: false });
-    }).catch(() => setAuthConfig({ phone_login_enabled: false, phone_login_ready: false, phone_login_test_mode: false, phone_login_test_ready: false, phone_password_recovery_ready: false, phone_password_recovery_test_mode: false, phone_password_recovery_test_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600, phone_password_recovery_e2e_verified: false }));
+      setAuthConfig(row ?? { phone_login_ready: false, phone_password_recovery_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600, phone_login_canonical_enabled: false, phone_login_canonical_ready: false, phone_password_recovery_canonical_enabled: false, phone_password_recovery_canonical_ready: false });
+    }).catch(() => setAuthConfig({ phone_login_ready: false, phone_password_recovery_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600, phone_login_canonical_enabled: false, phone_login_canonical_ready: false, phone_password_recovery_canonical_enabled: false, phone_password_recovery_canonical_ready: false }));
   }, []);
 
   // Email/password form
@@ -181,9 +179,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   };
 
   // ── Check if recovery form should be shown ──────────────────────────────────
-  const isRecoveryAvailable = authConfig?.phone_password_recovery_ready === true
-    || (authConfig?.phone_password_recovery_test_mode === true
-        && authConfig?.phone_password_recovery_test_ready === true);
+  const isRecoveryAvailable = authConfig?.phone_password_recovery_canonical_ready === true;
 
   // ── Password recovery: request OTP via edge function ───────────────────────
   const handleRequestPasswordResetOtp = async () => {
@@ -275,9 +271,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   // ── Phone OTP ─────────────────────────────────────────────────────────────────
   const handleSendOtp = async () => {
     if (!phone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
-    const isPublicReady = authConfig?.phone_login_ready === true;
-    const isTestModeActive = authConfig?.phone_login_test_mode === true && authConfig?.phone_login_test_ready === true;
-    if (!isPublicReady && !isTestModeActive) { toast.error('ورود با شماره موبایل در حال حاضر فعال نیست.'); return; }
+    if (authConfig?.phone_login_canonical_ready !== true) { toast.error('ورود با شماره موبایل در حال حاضر فعال نیست.'); return; }
     const normalized = normalizeIranPhone(phone);
     if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
     void normalized;
@@ -303,50 +297,25 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
   const handleVerifyOtp = async () => {
     if (!otp.trim() || otp.length !== 6 || !/^\d{6}$/.test(otp)) { toast.error('کد تأیید باید دقیقاً ۶ رقم باشد'); return; }
-    const normalized = normalizeIranPhone(phone);
-    if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
-    const e164 = `+${normalized}`;
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({ phone: e164, token: otp, type: 'sms' });
-      if (error) { toast.error('کد نادرست است یا منقضی شده'); return; }
-      if (data.user) {
-        const { data: profileData } = await supabase.from('profiles').select('user_id, phone, is_active').eq('user_id', data.user.id).maybeSingle();
-        // Profile must exist — do NOT create via ensureProfile for OTP users
-        if (!profileData) {
-          await supabase.auth.signOut();
-          toast.error('حساب کاربری یافت نشد. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
-          return;
-        }
-        if (profileData.is_active !== true) {
-          await supabase.auth.signOut();
-          toast.error('حساب کاربری شما غیرفعال شده است. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
-          return;
-        }
-        // Compare normalized phone numbers (auth vs profile vs OTP) — all three must match
-        const authPhone = normalizeIranPhone(data.user.phone);
-        const profilePhone = normalizeIranPhone(profileData.phone);
-        const otpPhone = normalizeIranPhone(phone);
-        if (!profilePhone || profilePhone !== otpPhone) {
-          await supabase.auth.signOut();
-          toast.error('شماره موبایل با حساب کاربری تطابق ندارد.', { duration: 6000 });
-          return;
-        }
-        if (!authPhone) {
-          await supabase.auth.signOut();
-          toast.error('شماره این حساب هنوز در Supabase Auth همگام نشده است.', { duration: 6000 });
-          return;
-        }
-        if (authPhone !== otpPhone) {
-          await supabase.auth.signOut();
-          toast.error('شماره موبایل با حساب کاربری تطابق ندارد.', { duration: 6000 });
-          return;
-        }
-        toast.success('با موفقیت وارد شدید');
-        logAudit({ module: 'auth', action: 'phone_otp_login', entity_name: 'user', entity_id: data.user.id, details: 'ورود با کد یک‌بارمصرف موبایلی', severity: 'info' });
-        onSuccess();
-      }
-    } catch (err: any) { toast.error('خطا در تأیید کد'); }
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-phone-login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+        body: JSON.stringify({ phone, otp }),
+      });
+      if (!res.ok) { toast.error('کد نادرست است یا منقضی شده'); return; }
+      const data = await res.json();
+      if (!data?.ok || !data?.access_token || !data?.refresh_token) { toast.error('کد نادرست است یا منقضی شده'); return; }
+      const { data: sessData, error: sessErr } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
+      if (sessErr || !sessData.user) { toast.error('کد نادرست است یا منقضی شده'); return; }
+      toast.success('با موفقیت وارد شدید');
+      logAudit({ module: 'auth', action: 'phone_otp_login', entity_name: 'user', entity_id: sessData.user.id, details: 'ورود با کد یک‌بارمصرف موبایلی', severity: 'info' });
+      onSuccess();
+    } catch { toast.error('خطا در تأیید کد'); }
     finally { setLoading(false); }
   };
 
@@ -407,10 +376,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
             {/* Login method tabs (only on login) */}
             {mode === 'login' && (() => {
-              const isPublicReady = authConfig?.phone_login_ready === true;
-              const isTestModeActive = authConfig?.phone_login_test_mode === true && authConfig?.phone_login_test_ready === true;
-              const phoneTabEnabled = isPublicReady || isTestModeActive;
-              const isTestBadge = !isPublicReady && isTestModeActive;
+              const phoneTabEnabled = authConfig?.phone_login_canonical_ready === true;
               return (
               <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 mb-6">
                 <button onClick={() => setLoginMethod('email')}
@@ -421,7 +387,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                   disabled={!phoneTabEnabled}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'} ${!phoneTabEnabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
                   <Smartphone className="w-4 h-4" /> موبایل
-                  {isTestBadge && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full">حالت تست</span>}
                 </button>
               </div>
               );
@@ -429,17 +394,9 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
             {/* ── Phone OTP login ────────────────────────────────────── */}
             {mode === 'login' && loginMethod === 'phone' && (() => {
-              const isPublicReady = authConfig?.phone_login_ready === true;
-              const isTestModeActive = authConfig?.phone_login_test_mode === true && authConfig?.phone_login_test_ready === true;
-              const showForm = isPublicReady || isTestModeActive;
+              const showForm = authConfig?.phone_login_canonical_ready === true;
               return (
               <div className="space-y-4">
-                {isTestModeActive && !isPublicReady && (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>حالت تست فعال است. فقط شماره تعیین‌شده می‌تواند کد دریافت کند.</span>
-                  </div>
-                )}
                 {!showForm && (
                   <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl p-3 flex gap-2 text-xs text-gray-500 dark:text-gray-400">
                     <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />

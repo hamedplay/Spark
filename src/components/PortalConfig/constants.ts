@@ -87,4 +87,9 @@ export const HIDDEN_SECURITY_CONFIG_KEYS = new Set([
   'phone_password_recovery_test_phone',
   'phone_password_recovery_secret_operator_confirmed',
   'phone_password_recovery_otp_ttl_seconds',
+  'phone_auth_pepper',
+  'phone_login_bale_otp_enabled',
+  'phone_password_recovery_bale_otp_enabled',
+  'phone_password_recovery_secret_configured',
+  'phone_rate_limit_pepper_configured',
 ]);

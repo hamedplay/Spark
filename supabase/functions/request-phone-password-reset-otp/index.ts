@@ -137,17 +137,15 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // Check recovery config readiness
+    // Check canonical recovery readiness
     const { data: cfgRow, error: cfgErr } = await supabase.rpc("get_public_auth_config");
     if (cfgErr) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
     const cfg = Array.isArray(cfgRow) ? cfgRow[0] : cfgRow;
-    const recoveryReady = cfg?.phone_password_recovery_ready === true;
-    const testModeActive = cfg?.phone_password_recovery_test_mode === true
-      && cfg?.phone_password_recovery_test_ready === true;
+    const recoveryReady = cfg?.phone_password_recovery_canonical_ready === true;
 
-    if (!recoveryReady && !testModeActive) {
+    if (!recoveryReady) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
@@ -161,21 +159,9 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // Fail-closed: secret must be confirmed
+    // Fail-closed: secret must be configured (proxy flag for env var)
     if (!cfg?.recovery_secret_confirmed) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
-    }
-
-    // Test mode: only accept the configured test phone
-    if (testModeActive && !recoveryReady) {
-      const { data: testPhoneRow } = await supabase
-        .from("system_config").select("value")
-        .eq("section", "security").eq("key", "phone_password_recovery_test_phone")
-        .maybeSingle();
-      const testPhone = testPhoneRow?.value || "";
-      if (normalizeIranPhone(testPhone) !== normalized) {
-        return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
-      }
     }
 
     // Resolve secret — only PHONE_PASSWORD_RESET_SECRET

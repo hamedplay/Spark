@@ -98,10 +98,33 @@ export function UserManagementPanel({ currentUserId }: Props) {
       await load();
       goBack();
     } else {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (updated.phone !== selectedUser.phone) {
+        if (!token) { toast.error('جلسه منقضی شده'); return; }
+        const phoneRes = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/change-user-phone`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            },
+            body: JSON.stringify({ user_id: updated.user_id, phone: updated.phone || '' }),
+          },
+        );
+        const phoneResult = await phoneRes.json();
+        if (!phoneRes.ok || phoneResult.error) {
+          toast.error(phoneResult.error || 'خطا در همگام‌سازی شماره موبایل');
+          return;
+        }
+      }
+
       const { error } = await supabase.from('profiles').update({
         full_name: updated.full_name,
         username: updated.username || null,
-        phone: updated.phone,
         organization: updated.organization,
         position: updated.position,
         department: updated.department,
