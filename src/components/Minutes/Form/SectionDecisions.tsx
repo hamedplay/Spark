@@ -18,6 +18,7 @@ interface SectionDecisionsProps {
   agendaItems: DraftAgendaItem[];
   externalParticipants: Array<{ id: string; fullName: string; organization: string; position: string; mobile?: string }>;
   readOnly?: boolean;
+  onRemoveDecision?: (decisionId: string | null) => void;
 }
 
 export function SectionDecisions({
@@ -27,6 +28,7 @@ export function SectionDecisions({
   agendaItems,
   externalParticipants,
   readOnly,
+  onRemoveDecision,
 }: SectionDecisionsProps) {
   const [openDecisionId, setOpenDecisionId] = useState<string | null>(null);
   const [agendaPickerOpenId, setAgendaPickerOpenId] = useState<string | null>(null);
@@ -38,6 +40,10 @@ export function SectionDecisions({
   };
 
   const remove = (id: string) => {
+    const removed = decisions.find(d => d.id === id);
+    if (removed?.decisionId && onRemoveDecision) {
+      onRemoveDecision(removed.decisionId);
+    }
     setDecisions(l => l.filter(r => r.id !== id));
     if (openDecisionId === id) setOpenDecisionId(null);
     if (agendaPickerOpenId === id) setAgendaPickerOpenId(null);
@@ -195,41 +201,26 @@ export function SectionDecisions({
                 {/* 4. Responsible party type */}
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نوع مسئول</label>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="radio"
-                        name={`dec-rpt-${item.id}`}
-                        value="internal"
-                        checked={item.responsiblePartyType === 'internal'}
-                        onChange={() => {
-                          update(item.id, 'responsiblePartyType', 'internal');
-                          update(item.id, 'externalResponsibleParticipantId', null);
-                          update(item.id, 'externalResponsibleNameSnapshot', '');
-                          update(item.id, 'externalResponsibleOrganizationSnapshot', '');
-                          update(item.id, 'externalResponsiblePositionSnapshot', '');
-                        }}
-                        disabled={!!readOnly}
-                        className="w-4 h-4 accent-blue-600 disabled:opacity-60"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">واحد/کاربر داخل سازمان</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="radio"
-                        name={`dec-rpt-${item.id}`}
-                        value="external"
-                        checked={item.responsiblePartyType === 'external'}
-                        onChange={() => {
-                          update(item.id, 'responsiblePartyType', 'external');
-                          update(item.id, 'primaryOwnerUserId', '');
-                        }}
-                        disabled={!!readOnly}
-                        className="w-4 h-4 accent-blue-600 disabled:opacity-60"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">فرد خارج سازمان</span>
-                    </label>
-                  </div>
+                  <select
+                    value={item.responsiblePartyType}
+                    onChange={e => {
+                      const newType = e.target.value as 'internal' | 'external';
+                      update(item.id, 'responsiblePartyType', newType);
+                      if (newType === 'internal') {
+                        update(item.id, 'externalResponsibleParticipantId', null);
+                        update(item.id, 'externalResponsibleNameSnapshot', '');
+                        update(item.id, 'externalResponsibleOrganizationSnapshot', '');
+                        update(item.id, 'externalResponsiblePositionSnapshot', '');
+                      } else {
+                        update(item.id, 'primaryOwnerUserId', '');
+                      }
+                    }}
+                    disabled={!!readOnly}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-60"
+                  >
+                    <option value="internal">داخل سازمان</option>
+                    <option value="external">خارج سازمان</option>
+                  </select>
                 </div>
                 {/* 4a. Internal: responsible unit */}
                 {item.responsiblePartyType === 'internal' && (

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Send, X, CalendarDays } from 'lucide-react';
+import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Send, X, CalendarDays, CircleAlert as AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl, setMeetingIdInUrl } from '../../lib/minutesNavigation';
@@ -115,6 +115,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [externalParticipants, setExternalParticipants] = useState<DraftExternalParticipant[]>([defaultExternalParticipant()]);
   const [agendaItems, setAgendaItems] = useState<DraftAgendaItem[]>([defaultAgendaItem(1)]);
   const [decisions, setDecisions] = useState<DraftDecision[]>([defaultDecision()]);
+  const [deletedDecisionIds, setDeletedDecisionIds] = useState<string[]>([]);
   const [finalization, setFinalization] = useState<DraftFinalization>(defaultFinalization);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [docConfig, setDocConfig] = useState<MinutesLayoutConfig | null>(null);
@@ -814,11 +815,13 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     const update = (async (): Promise<WorkingMinuteResult | null> => {
       setSavingDraft(true);
       try {
+        const updatePayload = buildMinutesDraftPayload();
         const { data, error: rpcError } = await supabase.rpc('update_minutes_draft', {
           p_minute_id: existingMinuteId,
           p_expected_updated_at: editUpdatedAt,
-          p_payload: buildMinutesDraftPayload(),
+          p_payload: updatePayload,
           p_decisions: decisionsPayload(),
+          p_deleted_decision_ids: deletedDecisionIds,
         });
         if (rpcError) {
           console.error('[MinutesUpdateRPC] update failed', {
@@ -883,11 +886,19 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               participantsStored: pCount,
               externalStored: epCount,
               agendaStored: agCount,
-              participantsInPayload: updatePayload.internal_participants?.length ?? 0,
-              externalInPayload: updatePayload.external_participants?.length ?? 0,
-              agendaInPayload: updatePayload.agenda_results?.length ?? 0,
+              participantsInPayload: (updatePayload as Record<string, unknown>).internal_participants != null
+                ? ((updatePayload as Record<string, unknown>).internal_participants as unknown[]).length
+                : 0,
+              externalInPayload: (updatePayload as Record<string, unknown>).external_participants != null
+                ? ((updatePayload as Record<string, unknown>).external_participants as unknown[]).length
+                : 0,
+              agendaInPayload: (updatePayload as Record<string, unknown>).agenda_results != null
+                ? ((updatePayload as Record<string, unknown>).agenda_results as unknown[]).length
+                : 0,
             });
-            const expectedP = updatePayload.internal_participants?.length ?? 0;
+            const expectedP = (updatePayload as Record<string, unknown>).internal_participants != null
+              ? ((updatePayload as Record<string, unknown>).internal_participants as unknown[]).length
+              : 0;
             if (pCount !== expectedP) {
               console.error('[MinutesUpdateRPC] Participant count mismatch:', { stored: pCount, expected: expectedP });
               toast.error('تعداد شرکت‌کنندگان ذخیره‌شده با payload همخوانی ندارد.');
@@ -1046,7 +1057,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       <div dir="rtl" className="space-y-5">
         <PageHeader title={title} />
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <CircleAlert as AlertCircle className="w-10 h-10 text-gray-400 mb-3" />
+          <AlertCircle className="w-10 h-10 text-gray-400 mb-3" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">صورت‌جلسه‌ای یافت نشد</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">این صورت‌جلسه وجود ندارد، حذف شده است، یا شما دسترسی ویرایش آن را ندارید.</p>
           <button onClick={() => onNavigate('minutes')} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
@@ -1202,13 +1213,18 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 orgUnitsLoading={orgUnitsLoading}
                 agendaItems={agendaItems}
                 externalParticipants={externalParticipants.map(ep => ({
-                  id: ep.id,
+                  id: ep.participantId ?? ep.id,
                   fullName: ep.fullName,
                   organization: ep.organization,
                   position: ep.position,
                   mobile: ep.mobile,
                 }))}
                 readOnly={isNonEditable}
+                onRemoveDecision={(decId) => {
+                  if (decId && !deletedDecisionIds.includes(decId)) {
+                    setDeletedDecisionIds(prev => [...prev, decId]);
+                  }
+                }}
               />
             )}
             {activeSection === 4 && (

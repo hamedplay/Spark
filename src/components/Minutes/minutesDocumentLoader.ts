@@ -184,6 +184,11 @@ export async function loadDocumentSnapshot(
     primary_owner_user_id: string; owner_name: string | null;
     requires_followup: boolean; latest_update: string | null;
     agenda_result_id: string | null; agenda_title: string | null;
+    responsible_party_type: string | null;
+    external_responsible_participant_id: string | null;
+    external_responsible_name_snapshot: string | null;
+    external_responsible_organization_snapshot: string | null;
+    external_responsible_position_snapshot: string | null;
   }>;
   const decRows: DecisionRow[] = viewRows.map(r => ({
     id: r.id, minute_id: minuteId, agenda_result_id: r.agenda_result_id,
@@ -196,11 +201,11 @@ export async function loadDocumentSnapshot(
     requires_followup: r.requires_followup, latest_update: r.latest_update,
     created_by_user_id: r.primary_owner_user_id, created_at: '', updated_at: '',
     discussion_result: null, result_type: null, additional_notes: null,
-    responsible_party_type: 'internal',
-    external_responsible_participant_id: null,
-    external_responsible_name_snapshot: null,
-    external_responsible_organization_snapshot: null,
-    external_responsible_position_snapshot: null,
+    responsible_party_type: (r.responsible_party_type || 'internal') as 'internal' | 'external',
+    external_responsible_participant_id: r.external_responsible_participant_id,
+    external_responsible_name_snapshot: r.external_responsible_name_snapshot,
+    external_responsible_organization_snapshot: r.external_responsible_organization_snapshot,
+    external_responsible_position_snapshot: r.external_responsible_position_snapshot,
   }));
   const ownerNames: Record<string, string> = {};
   for (const r of viewRows) {

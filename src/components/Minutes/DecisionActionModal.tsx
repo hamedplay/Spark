@@ -111,6 +111,11 @@ export function DecisionActionModal({
       setError('متن گزارش هنگام تغییر پیشرفت اجباری است (حداقل ۳ کاراکتر).');
       return;
     }
+    if (action === 'update' && reportText.trim().length < 3
+        && (progress !== decision.progress_percent || newStatus !== decision.status)) {
+      setError('متن گزارش هنگام تغییر وضعیت یا پیشرفت اجباری است (حداقل ۳ کاراکتر).');
+      return;
+    }
     if (action === 'report' && reportText.trim().length < 3) {
       setError('متن گزارش باید حداقل ۳ کاراکتر باشد.');
       return;
