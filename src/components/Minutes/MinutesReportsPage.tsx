@@ -3,7 +3,7 @@ import { Search, FileDown, Play, X, ChevronLeft, ChevronRight } from 'lucide-rea
 import { PageHeader, TableSkeleton, MinutesStatusBadge, DecisionStatusBadge, DecisionPriorityBadge, ProgressIndicator } from './MinutesShared';
 import { MinutesBackButton } from './MinutesBackButton';
 import { supabase } from '../../lib/supabase';
-import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { setMinuteIdInUrl } from '../../lib/minutesNavigation';
 import { formatJalaliDateForDisplay, formatJalaliTimestamp } from '../../lib/minutesDate';
 import { JalaliDatePicker } from './Form/JalaliDatePicker';
 
@@ -287,7 +287,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
                     {reportType === 'minutes'
                       ? (rows as MinuteReportRow[]).map(r => (
                           <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer"
-                            onClick={() => { setMinuteIdInUrl(r.id); setMinutesPageInUrl('minutes-detail'); onNavigate('minutes-detail'); }}>
+                            onClick={() => { setMinuteIdInUrl(r.id); onNavigate('minutes-detail'); }}>
                             <Td><span className="font-medium text-gray-800 dark:text-gray-200">{r.meeting_title}</span></Td>
                             <Td>{formatJalaliDateForDisplay(r.meeting_date)}</Td>
                             <Td>{r.org_unit || '—'}</Td>

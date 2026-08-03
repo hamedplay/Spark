@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { PageHeader, ApprovalStatusBadge, ApprovalModeBadge, EmptyState, TableSkeleton } from './MinutesShared';
 import { MinutesBackButton } from './MinutesBackButton';
 import { supabase } from '../../lib/supabase';
-import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { setMinuteIdInUrl } from '../../lib/minutesNavigation';
 import { formatJalaliDateForDisplay, formatJalaliTimestamp } from '../../lib/minutesDate';
 import type { ApprovalStatus, ApprovalMode } from './types';
 
@@ -127,7 +127,6 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
 
   const goToDetail = (minuteId: string) => {
     setMinuteIdInUrl(minuteId);
-    setMinutesPageInUrl('minutes-detail');
     onNavigate('minutes-detail');
   };
 

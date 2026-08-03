@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { UserPreferences } from '../../features/user-preferences';
 import {
-  setMinutesPageInUrl,
   setMinuteIdInUrl,
   setMinutesTabInUrl,
   getMinuteIdFromUrl,
@@ -10,8 +9,7 @@ import {
   getMeetingIdFromUrl,
   setMeetingIdInUrl,
   clearMinutesContextFromUrl,
-  type MinutesPage,
-  type MinutesDetailTab,
+  stripMpageFromUrl,
 } from '../../lib/minutesNavigation';
 
 export type PageId =
@@ -36,31 +34,14 @@ const MINUTES_GENERAL_PAGES: PageId[] = [
   'minutes-report', 'minutes-reports', 'minutes-dashboard', 'minutes-hub',
 ];
 
-function isValidMinutesPage(page: string): page is PageId {
-  return (MINUTES_PAGES as string[]).includes(page);
-}
-
-/**
- * Apply URL cleanup rules for a navigation to the given target page.
- * This runs BEFORE setActivePage is called, in a single replaceState.
- *
- * Rules:
- * - Exit to any non-minutes page: clear all minutes context (mpage, minute, mtab, meeting, selectedMinuteId).
- * - Enter minutes-detail: set mpage=minutes-detail, preserve minute and mtab if valid.
- * - Enter minutes-edit: preserve minute, clear mtab and meeting.
- * - Enter minutes-new: preserve meeting if present, clear minute, mtab, selectedMinuteId.
- * - Enter general minutes pages (list, dashboard, hub, approvals, reports, etc.):
- *   set mpage to target, clear minute, meeting, mtab, selectedMinuteId.
- */
 function applyNavigationUrlCleanup(target: PageId): void {
   const isMinutesPage = (MINUTES_PAGES as string[]).includes(target);
   const isGeneralMinutesPage = (MINUTES_GENERAL_PAGES as string[]).includes(target);
 
   if (target === 'minutes-detail') {
-    // Preserve minute and mtab, set mpage
+    // Preserve minute and mtab
     const minuteId = getMinuteIdFromUrl();
     const tab = getMinutesTabFromUrl();
-    setMinutesPageInUrl('minutes-detail');
     if (minuteId) setMinuteIdInUrl(minuteId);
     if (tab) setMinutesTabInUrl(tab);
     return;
@@ -69,7 +50,6 @@ function applyNavigationUrlCleanup(target: PageId): void {
   if (target === 'minutes-edit') {
     // Preserve minute, clear mtab and meeting
     const minuteId = getMinuteIdFromUrl();
-    setMinutesPageInUrl('minutes-edit');
     if (minuteId) setMinuteIdInUrl(minuteId);
     // Clear mtab and meeting
     const url = new URL(window.location.href);
@@ -82,7 +62,6 @@ function applyNavigationUrlCleanup(target: PageId): void {
   if (target === 'minutes-new') {
     // Preserve meeting if present, clear minute, mtab, selectedMinuteId
     const meetingId = getMeetingIdFromUrl();
-    setMinutesPageInUrl('minutes-new');
     if (meetingId) setMeetingIdInUrl(meetingId);
     // Clear minute, mtab, selectedMinuteId
     const url = new URL(window.location.href);
@@ -94,8 +73,7 @@ function applyNavigationUrlCleanup(target: PageId): void {
   }
 
   if (isGeneralMinutesPage) {
-    // Set mpage to target, clear minute, meeting, mtab, selectedMinuteId
-    setMinutesPageInUrl(target as MinutesPage);
+    // Clear minute, meeting, mtab, selectedMinuteId
     const url = new URL(window.location.href);
     url.searchParams.delete('minute');
     url.searchParams.delete('meeting');
@@ -112,7 +90,6 @@ function applyNavigationUrlCleanup(target: PageId): void {
   }
 
   // Fallback: any other minutes page not covered above — clear context
-  setMinutesPageInUrl(target as MinutesPage);
   const url = new URL(window.location.href);
   url.searchParams.delete('minute');
   url.searchParams.delete('meeting');
@@ -144,29 +121,22 @@ export function useNavigation(
   const [activePage, setActivePage] = useState<PageId>('calendar');
   const [landingApplied, setLandingApplied] = useState(false);
 
+  // Strip legacy `mpage` param from the URL once on mount, preserving
+  // pathname, hash, and all other query params.
+  useEffect(() => {
+    stripMpageFromUrl();
+  }, []);
+
   // Apply default landing page once both auth and prefs are resolved
   useEffect(() => {
     if (!isAuthenticated || prefsLoading || landingApplied) return;
     setLandingApplied(true);
-    const urlPage = new URLSearchParams(window.location.search).get('mpage');
-    if (urlPage && isValidMinutesPage(urlPage)) {
-      setActivePage(urlPage);
-      return;
-    }
     setActivePage(defaultLandingPage as PageId);
   }, [isAuthenticated, prefsLoading, landingApplied, defaultLandingPage]);
 
-  // Sync activePage with URL on back/forward navigation (popstate)
-  useEffect(() => {
-    const handler = () => {
-      const urlPage = new URLSearchParams(window.location.search).get('mpage');
-      if (urlPage && isValidMinutesPage(urlPage)) {
-        setActivePage(urlPage);
-      }
-    };
-    window.addEventListener('popstate', handler);
-    return () => window.removeEventListener('popstate', handler);
-  }, []);
+  // popstate handler removed: mpage is no longer in the URL, so there is
+  // nothing to restore on back/forward navigation. Sub-page state is kept
+  // in React state only, consistent with all other modules.
 
   // Stable navigate function: applies URL cleanup rules before setActivePage
   const navigate = useCallback((page: PageId) => {

@@ -8,7 +8,7 @@ import {
 import { MinutesBackButton } from './MinutesBackButton';
 import { supabase } from '../../lib/supabase';
 import {
-  setMinuteIdInUrl, setMinutesPageInUrl,
+  setMinuteIdInUrl,
 } from '../../lib/minutesNavigation';
 import { formatJalaliDateForDisplay, formatJalaliTimestampDateOnly } from '../../lib/minutesDate';
 import type { MinutesStatus, ConfidentialityLevel, MinuteSummary, ApprovalMode } from './types';
@@ -37,7 +37,6 @@ export function MinutesListPage({ onNavigate }: Props) {
     if (!target.approvalMode) {
       toast('این صورت‌جلسه هنوز مدل تأیید ندارد. لطفاً از صفحه ویرایش، مدل تأیید را تنظیم و سپس ارسال کنید.', { icon: '⚠️' });
       setMinuteIdInUrl(id);
-      setMinutesPageInUrl('minutes-edit');
       onNavigate('minutes-edit');
       return;
     }
@@ -70,7 +69,6 @@ export function MinutesListPage({ onNavigate }: Props) {
     const url = new URL(window.location.href);
     url.searchParams.set('print', '1');
     window.history.replaceState(null, '', url.toString());
-    setMinutesPageInUrl('minutes-detail');
     onNavigate('minutes-detail');
     setPrintingId(null);
   };
@@ -150,13 +148,11 @@ export function MinutesListPage({ onNavigate }: Props) {
 
   const goToDetail = (id: string) => {
     setMinuteIdInUrl(id);
-    setMinutesPageInUrl('minutes-detail');
     onNavigate('minutes-detail');
   };
 
   const goToEdit = (id: string) => {
     setMinuteIdInUrl(id);
-    setMinutesPageInUrl('minutes-edit');
     onNavigate('minutes-edit');
   };
 
@@ -196,7 +192,7 @@ export function MinutesListPage({ onNavigate }: Props) {
           <div className="flex items-center gap-2">
             <MinutesBackButton
               label="بازگشت به صورت‌جلسات و مصوبات"
-              onClick={() => { setMinutesPageInUrl('minutes-hub'); onNavigate('minutes-hub'); }}
+              onClick={() => { onNavigate('minutes-hub'); }}
             />
             <button
               onClick={() => onNavigate('calendar')}

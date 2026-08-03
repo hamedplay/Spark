@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History, Signature as FileSignature } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMinutesTabFromUrl, setMinutesTabInUrl, type MinutesDetailTab } from '../../lib/minutesNavigation';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, getMinutesTabFromUrl, setMinutesTabInUrl, type MinutesDetailTab } from '../../lib/minutesNavigation';
 import { MinutesPrintView } from './MinutesPrintView';
 import { exportMinutesToWord } from '../../lib/minutesWordExport';
 import type { MinutesDocumentData } from './MinutesDocumentData';
@@ -209,7 +209,6 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const goEdit = () => {
     if (minute) {
       setMinuteIdInUrl(minute.id);
-      setMinutesPageInUrl('minutes-edit');
     }
     onNavigate('minutes-edit');
   };

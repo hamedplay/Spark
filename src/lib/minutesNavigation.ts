@@ -1,6 +1,8 @@
-// Stable URL-based navigation for Minutes Detail/Edit pages.
-// Uses query params `mpage` and `minute` so direct refresh and
-// back/forward work without relying solely on sessionStorage.
+// URL-based navigation helpers for Minutes Detail/Edit pages.
+// `mpage` is intentionally NOT written to the URL anymore — all
+// sub-page navigation is handled via React state (setActivePage).
+// The `minute`, `mtab`, and `meeting` params are still used for
+// deep-linking detail/edit/new pages.
 
 const PAGE_PARAM = 'mpage';
 const MINUTE_PARAM = 'minute';
@@ -31,20 +33,28 @@ export function isValidMinutesPage(page: string | null): page is MinutesPage {
 }
 
 export function getMinutesPageFromUrl(): string | null {
-  const params = new URLSearchParams(window.location.search);
-  return params.get(PAGE_PARAM);
+  return null;
 }
 
-export function setMinutesPageInUrl(page: string): void {
-  const url = new URL(window.location.href);
-  url.searchParams.set(PAGE_PARAM, page);
-  window.history.replaceState({}, '', url.toString());
+export function setMinutesPageInUrl(_page: string): void {
+  // No-op: mpage is no longer persisted in the URL.
+  // Sub-page navigation is handled via React state (setActivePage).
 }
 
 export function clearMinutesPageFromUrl(): void {
   const url = new URL(window.location.href);
   url.searchParams.delete(PAGE_PARAM);
   window.history.replaceState({}, '', url.toString());
+}
+
+/** Strip only the `mpage` param from the URL if present, preserving
+ * pathname, hash, and all other query params. Called once on mount. */
+export function stripMpageFromUrl(): void {
+  const url = new URL(window.location.href);
+  if (url.searchParams.has(PAGE_PARAM)) {
+    url.searchParams.delete(PAGE_PARAM);
+    window.history.replaceState({}, '', url.toString());
+  }
 }
 
 export function getMinuteIdFromUrl(): string | null {

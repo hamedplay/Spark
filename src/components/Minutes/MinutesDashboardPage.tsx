@@ -5,7 +5,7 @@ import {
   DecisionPriorityBadge, ProgressIndicator, EmptyState, TableSkeleton,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
-import { setMinuteIdInUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { setMinuteIdInUrl } from '../../lib/minutesNavigation';
 import { MinutesBackButton } from './MinutesBackButton';
 
 interface Props {
@@ -68,7 +68,6 @@ export function MinutesDashboardPage({ onNavigate }: Props) {
 
   const goDetail = (id: string) => {
     setMinuteIdInUrl(id);
-    setMinutesPageInUrl('minutes-detail');
     onNavigate('minutes-detail');
   };
 

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronLeft, FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, Signature as FileSignature, Save, Send, X, CalendarDays, CircleAlert as AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import { getMinuteIdFromUrl, setMinuteIdInUrl, setMinutesPageInUrl, getMeetingIdFromUrl, setMeetingIdInUrl } from '../../lib/minutesNavigation';
+import { getMinuteIdFromUrl, setMinuteIdInUrl, getMeetingIdFromUrl, setMeetingIdInUrl } from '../../lib/minutesNavigation';
 import { loadMinutesPrefill } from '../../lib/minutesPrefill';
 import { checkSystemApproverEligibility } from '../../lib/minutesApprovalEligibility';
 import { normalizeInvitationStatus } from '../../lib/minutesInvitationStatus';
@@ -709,7 +709,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               toast.error('برای این جلسه قبلاً صورت‌جلسه ثبت شده است.');
               if (existingId) {
                 setMinuteIdInUrl(existingId);
-                setMinutesPageInUrl('minutes-detail');
                 onNavigate('minutes-detail');
               }
               return null;
@@ -945,7 +944,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         if (!saved) return; // toast already shown
         toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
         setMinuteIdInUrl(saved.minuteId);
-        setMinutesPageInUrl('minutes-detail');
         onNavigate('minutes-detail');
       } catch (err) {
         if (isDev) console.error('[SaveDraft] Exception:', err);
@@ -1014,7 +1012,6 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         if (data && data.success === true) {
           toast.success('صورت‌جلسه برای تأیید ارسال شد.');
           if (data.minute_id) setMinuteIdInUrl(data.minute_id as string);
-          setMinutesPageInUrl('minutes-detail');
           onNavigate('minutes-detail');
           return;
         }
@@ -1098,13 +1095,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                     setMeetingIdInUrl(meetingId);
                     onNavigate('calendar');
                   } else {
-                    setMinutesPageInUrl('minutes');
                     onNavigate('minutes');
                   }
                 } else {
                   const mid = editMinuteId || workingMinuteId;
                   if (mid) setMinuteIdInUrl(mid);
-                  setMinutesPageInUrl('minutes-detail');
                   onNavigate('minutes-detail');
                 }
               }}

@@ -5,7 +5,7 @@ import {
   EmptyState, TableSkeleton,
 } from './MinutesShared';
 import { supabase } from '../../lib/supabase';
-import { getMinuteIdFromUrl, setMinutesPageInUrl } from '../../lib/minutesNavigation';
+import { getMinuteIdFromUrl } from '../../lib/minutesNavigation';
 import { formatJalaliDateForDisplay } from '../../lib/minutesDate';
 import type { MinutesStatus, ConfidentialityLevel, DecisionStatus, DecisionPriority } from './types';
 
@@ -129,7 +129,6 @@ export function MinutesMeetingReportPage({ onNavigate }: Props) {
   const handlePrint = () => window.print();
 
   const goBack = () => {
-    setMinutesPageInUrl('minutes-detail');
     onNavigate('minutes-detail');
   };
 
