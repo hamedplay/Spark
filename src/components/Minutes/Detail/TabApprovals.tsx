@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, UserCheck, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../lib/supabase';
 import { EmptyState, ApprovalStatusBadge } from '../MinutesShared';
@@ -88,6 +88,8 @@ export function TabApprovals({ approvals, comments, agendaItems, minute, interna
             <thead>
               <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">تأییدکننده</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">جانشین</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">اقدام‌کننده</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">وضعیت</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">تاریخ</th>
               </tr>
@@ -96,6 +98,28 @@ export function TabApprovals({ approvals, comments, agendaItems, minute, interna
               {approvals.map(a => (
                 <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
                   <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{a.approver_name}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                    {a.delegate_user_id ? (
+                      <div className="flex items-center gap-1.5">
+                        <UserCheck className="w-3.5 h-3.5 text-blue-500" />
+                        <span>{a.delegate_name}</span>
+                        {a.delegated_at && (
+                          <span className="text-xs text-gray-400">{new Date(a.delegated_at).toLocaleDateString('fa-IR')}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                    {a.acted_by_user_id ? (
+                      <span className={a.acted_by_user_id === a.approver_user_id ? '' : 'text-blue-600 dark:text-blue-400'}>
+                        {a.acted_by_name}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3"><ApprovalStatusBadge status={a.status} /></td>
                   <td className="px-4 py-3 text-xs text-gray-500">
                     {a.approved_at ? new Date(a.approved_at).toLocaleDateString('fa-IR') :

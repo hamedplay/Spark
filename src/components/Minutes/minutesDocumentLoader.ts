@@ -88,7 +88,7 @@ export async function loadDocumentSnapshot(
       .order('sort_order_snapshot', { ascending: true }),
     supabase
       .from('minutes_approvals')
-      .select('id, approver_user_id, status, approved_at, changes_requested_at')
+      .select('id, approver_user_id, status, approved_at, changes_requested_at, delegate_user_id, delegated_by_user_id, delegated_at, acted_by_user_id')
       .eq('minute_id', minuteId)
       .eq('revision_number', minute.revision_number)
       .order('created_at', { ascending: true }),
@@ -117,14 +117,21 @@ export async function loadDocumentSnapshot(
   const approvalRows = (approvalsRes.data || []) as Array<{
     id: string; approver_user_id: string; status: ApprovalStatus;
     approved_at: string | null; changes_requested_at: string | null;
+    delegate_user_id: string | null; delegated_by_user_id: string | null;
+    delegated_at: string | null; acted_by_user_id: string | null;
   }>;
   let approvals: ApprovalRow[] = [];
   if (approvalRows.length > 0) {
-    const userIds = approvalRows.map(a => a.approver_user_id);
+    const userIds = new Set<string>();
+    for (const a of approvalRows) {
+      userIds.add(a.approver_user_id);
+      if (a.delegate_user_id) userIds.add(a.delegate_user_id);
+      if (a.acted_by_user_id) userIds.add(a.acted_by_user_id);
+    }
     const { data: profiles, error: profErr } = await supabase
       .from('profiles_public')
       .select('user_id, full_name')
-      .in('user_id', userIds);
+      .in('user_id', [...userIds]);
     if (profErr) throw new Error(profErr.message);
     const nameMap = new Map((profiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
     approvals = approvalRows.map(a => ({
@@ -134,6 +141,12 @@ export async function loadDocumentSnapshot(
       approved_at: a.approved_at,
       changes_requested_at: a.changes_requested_at,
       approver_name: nameMap.get(a.approver_user_id) || 'کاربر',
+      delegate_user_id: a.delegate_user_id,
+      delegate_name: a.delegate_user_id ? (nameMap.get(a.delegate_user_id) || 'کاربر') : null,
+      delegated_by_user_id: a.delegated_by_user_id,
+      delegated_at: a.delegated_at,
+      acted_by_user_id: a.acted_by_user_id,
+      acted_by_name: a.acted_by_user_id ? (nameMap.get(a.acted_by_user_id) || 'کاربر') : null,
     }));
   }
 

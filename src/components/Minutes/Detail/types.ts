@@ -67,6 +67,12 @@ export interface ApprovalRow {
   approved_at: string | null;
   changes_requested_at: string | null;
   approver_name: string;
+  delegate_user_id: string | null;
+  delegate_name: string | null;
+  delegated_by_user_id: string | null;
+  delegated_at: string | null;
+  acted_by_user_id: string | null;
+  acted_by_name: string | null;
 }
 
 export interface ApprovalCommentRow {

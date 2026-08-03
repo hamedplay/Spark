@@ -68,6 +68,8 @@ export const TEMPLATE_EVENT_TYPES: TemplateEventType[] = [
   { key: 'minute_published',           label: 'انتشار صورت‌جلسه' },
   { key: 'minute_revision_invalidated', label: 'باطل‌شدن نسخه قبلی' },
   { key: 'minute_attachment_added',    label: 'افزودن پیوست صورت‌جلسه' },
+  { key: 'minute_approval_delegate_assigned', label: 'انتخاب به‌عنوان جانشین تأییدکننده' },
+  { key: 'minute_approver_delegate_selected',  label: 'انتخاب جانشین تأییدکننده' },
   // Decision lifecycle events
   { key: 'decision_assigned',          label: 'تخصیص مصوبه به مسئول' },
   { key: 'decision_status_changed',    label: 'تغییر وضعیت مصوبه' },
@@ -159,6 +161,8 @@ export const TEMPLATE_PLACEHOLDERS: TemplatePlaceholder[] = [
   { key: 'minute_status',        label: 'وضعیت صورت‌جلسه',          example: 'در انتظار تأیید' },
   { key: 'approval_mode',        label: 'مدل تأیید',                example: 'تأیید سیستمی' },
   { key: 'approver_name',        label: 'نام تأییدکننده',           example: 'علی احمدی' },
+  { key: 'original_approver_name', label: 'نام تأییدکننده اصلی',      example: 'علی احمدی' },
+  { key: 'delegate_name',         label: 'نام جانشین',                example: 'سارا رضایی' },
   { key: 'actor_name',           label: 'نام انجام‌دهنده عمل',       example: 'سارا رضایی' },
   { key: 'change_reason',        label: 'دلیل اصلاح',               example: 'نیاز به اصلاح بخش مصوبات' },
   { key: 'minute_link',          label: 'لینک صورت‌جلسه',           example: 'https://...' },
@@ -688,6 +692,24 @@ export const TEMPLATE_EVENTS: TemplateEventDefinition[] = [
     audiences: ['creator', 'secretary', 'all'],
     requiredPlaceholders: ['minute_title'],
     optionalPlaceholders: ['actor_name', 'minute_link', 'recipient_greeting', 'full_name'],
+  },
+  {
+    key: 'minute_approval_delegate_assigned',
+    category: 'minutes',
+    label: 'انتخاب به‌عنوان جانشین تأییدکننده',
+    supportedChannels: ['notification', 'sms'],
+    audiences: ['approvers', 'all'],
+    requiredPlaceholders: ['minute_title', 'original_approver_name'],
+    optionalPlaceholders: ['minute_revision', 'delegate_name', 'minute_link', 'recipient_greeting', 'full_name'],
+  },
+  {
+    key: 'minute_approver_delegate_selected',
+    category: 'minutes',
+    label: 'انتخاب جانشین تأییدکننده',
+    supportedChannels: ['notification'],
+    audiences: ['creator', 'secretary', 'chair', 'approvers', 'all'],
+    requiredPlaceholders: ['minute_title', 'original_approver_name', 'delegate_name'],
+    optionalPlaceholders: ['minute_revision', 'actor_name', 'minute_link', 'recipient_greeting', 'full_name'],
   },
   // Decision lifecycle events
   {
