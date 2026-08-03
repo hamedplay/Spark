@@ -116,6 +116,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const [agendaItems, setAgendaItems] = useState<DraftAgendaItem[]>([defaultAgendaItem(1)]);
   const [decisions, setDecisions] = useState<DraftDecision[]>([defaultDecision()]);
   const [deletedDecisionIds, setDeletedDecisionIds] = useState<string[]>([]);
+  const [deletedExternalParticipantIds, setDeletedExternalParticipantIds] = useState<string[]>([]);
   const [finalization, setFinalization] = useState<DraftFinalization>(defaultFinalization);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [docConfig, setDocConfig] = useState<MinutesLayoutConfig | null>(null);
@@ -522,6 +523,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     external_participants: externalParticipants
       .filter((p) => p.fullName.trim())
       .map((p) => ({
+        id: p.participantId ?? p.id,
         full_name: p.fullName,
         organization: p.organization || null,
         position: p.position || null,
@@ -822,6 +824,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           p_payload: updatePayload,
           p_decisions: decisionsPayload(),
           p_deleted_decision_ids: deletedDecisionIds,
+          p_deleted_external_participant_ids: deletedExternalParticipantIds,
         });
         if (rpcError) {
           console.error('[MinutesUpdateRPC] update failed', {
@@ -1198,6 +1201,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
                 invitationStatusReadOnly={mode === 'new'}
                 readOnly={isNonEditable}
                 externalSuggestions={externalSuggestions}
+                onRemoveExternalParticipant={(partId) => {
+                  if (partId && !deletedExternalParticipantIds.includes(partId)) {
+                    setDeletedExternalParticipantIds(prev => [...prev, partId]);
+                  }
+                }}
               />
             )}
             {activeSection === 2 && (

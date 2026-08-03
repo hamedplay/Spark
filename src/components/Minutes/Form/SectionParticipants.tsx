@@ -37,6 +37,7 @@ interface SectionParticipantsProps {
   invitationStatusReadOnly?: boolean;
   readOnly?: boolean;
   externalSuggestions?: ExternalParticipantSuggestion[];
+  onRemoveExternalParticipant?: (participantId: string | null) => void;
 }
 
 const INVITATION_LABELS: Record<InvitationStatus, string> = {
@@ -79,6 +80,7 @@ export function SectionParticipants({
   invitationStatusReadOnly = false,
   readOnly = false,
   externalSuggestions = [],
+  onRemoveExternalParticipant,
 }: SectionParticipantsProps) {
   const addInternal = () =>
     setInternalParticipants(l => [...l, defaultInternalParticipant()]);
@@ -139,8 +141,13 @@ export function SectionParticipants({
   const addExternal = () =>
     setExternalParticipants(l => [...l, defaultExternalParticipant()]);
 
-  const removeExternal = (id: string) =>
+  const removeExternal = (id: string) => {
+    const removed = externalParticipants.find(r => r.id === id);
+    if (removed?.participantId && onRemoveExternalParticipant) {
+      onRemoveExternalParticipant(removed.participantId);
+    }
     setExternalParticipants(l => l.filter(r => r.id !== id));
+  };
 
   const updateExternal = (id: string, field: keyof DraftExternalParticipant, value: string) =>
     setExternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));

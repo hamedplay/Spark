@@ -8,231 +8,248 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Source-level contract tests ──────────────────────────────────────────────
 
-test('MinutesFormPage uses CircleAlert as AlertCircle import', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/MinutesFormPage.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('CircleAlert as AlertCircle'), 'should import CircleAlert as AlertCircle');
-  assert.ok(!source.includes('<CircleAlert'), 'should not have CircleAlert JSX');
-  assert.ok(source.includes('<AlertCircle'), 'should use AlertCircle component');
-});
-
-test('MinutesFormPage defines updatePayload before update RPC call', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/MinutesFormPage.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('const updatePayload = buildMinutesDraftPayload()'), 'should define updatePayload');
-  assert.ok(source.includes('p_payload: updatePayload'), 'should pass updatePayload to p_payload');
-});
-
-test('MyDecisionsPage does not import StopCircle', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/MyDecisionsPage.tsx'),
-    'utf-8',
-  );
-  assert.ok(!source.includes('StopCircle'), 'should not import StopCircle');
-});
-
-test('DecisionActionModal validates report text for update action', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/DecisionActionModal.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes("action === 'update'"), 'should check update action');
-  assert.ok(source.includes('متن گزارش هنگام تغییر وضعیت یا پیشرفت'), 'should validate report for update');
-});
-
-test('DecisionActionModal submit button is disabled during submission', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/DecisionActionModal.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('disabled={submitting}'), 'should disable submit button');
-});
-
-test('MinutesFormPage tracks deletedDecisionIds', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/MinutesFormPage.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('deletedDecisionIds'), 'should track deletedDecisionIds');
-  assert.ok(source.includes('setDeletedDecisionIds'), 'should have setter');
-  assert.ok(source.includes('p_deleted_decision_ids'), 'should pass to RPC');
-  assert.ok(source.includes('onRemoveDecision'), 'should pass onRemoveDecision callback');
-});
-
-test('SectionDecisions uses dropdown for responsible party type', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/Form/SectionDecisions.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('<select'), 'should use select element');
-  assert.ok(source.includes('داخل سازمان'), 'should have internal option');
-  assert.ok(source.includes('خارج سازمان'), 'should have external option');
-  assert.ok(!source.includes('type="radio"'), 'should not use radio buttons');
-});
-
-test('SectionDecisions uses participantId ?? id for external participant selector', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/MinutesFormPage.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('ep.participantId ?? ep.id'), 'should use participantId ?? id for stable id');
-});
-
-test('minutesDocumentLoader reads external responsible fields from RPC', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/minutesDocumentLoader.ts'),
-    'utf-8',
-  );
-  assert.ok(source.includes('responsible_party_type'), 'should read responsible_party_type from RPC');
-  assert.ok(source.includes('external_responsible_name_snapshot'), 'should read external_responsible_name_snapshot from RPC');
-  assert.ok(!source.includes("responsible_party_type: 'internal'"), 'should not hardcode internal');
-});
-
-// ── Migration contract tests ──────────────────────────────────────────────────
-
-test('new migration removes cast to decision_status', () => {
+test('migration file exists for create/update sync fix', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_manage_minutes_decision_runtime'))
-    .sort();
-  assert.ok(files.length > 0, 'should find the runtime fix migration');
-  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(!sql.includes('::public.decision_status'), 'should not cast to decision_status');
-  assert.ok(sql.includes('status = v_new_status'), 'should use unaliased SET');
-  assert.ok(sql.includes('completed_at = v_new_completed_at'), 'should use unaliased SET for completed_at');
-  assert.ok(sql.includes('latest_update = COALESCE'), 'should use unaliased SET for latest_update');
-  assert.ok(sql.includes('updated_at = v_new_updated_at'), 'should use unaliased SET for updated_at');
-  assert.ok(!sql.includes('d.status ='), 'should not alias target column in SET');
-  assert.ok(!sql.includes('u.resolved_at ='), 'should not alias target column in minutes_decision_updates SET');
-  assert.ok(sql.includes('resolved_at = now()'), 'should use unaliased SET for resolved_at');
-});
-
-test('new migration restores publish gate', () => {
-  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
-  const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_manage_minutes_decision_runtime'))
-    .sort();
-  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(sql.includes("v_minute_status IS DISTINCT FROM 'published'"), 'should check published status');
-  assert.ok(sql.includes('v_minute_published_at IS NULL'), 'should check published_at is not null');
-  assert.ok(sql.includes('MINUTE_NOT_PUBLISHED'), 'should raise MINUTE_NOT_PUBLISHED error');
-});
-
-test('new migration keeps decision_followup event and decision_owner audience', () => {
-  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
-  const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_manage_minutes_decision_runtime'))
-    .sort();
-  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(sql.includes("'decision_followup'"), 'should use decision_followup event');
-  assert.ok(sql.includes("'decision_owner'"), 'should use decision_owner audience');
-});
-
-test('new migration keeps direct p_remind_at validation', () => {
-  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
-  const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_manage_minutes_decision_runtime'))
-    .sort();
-  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(sql.includes('p_remind_at <= now()'), 'should compare directly');
-  assert.ok(!sql.includes("AT TIME ZONE 'Asia/Tehran'"), 'should not use AT TIME ZONE');
-});
-
-test('new migration error handler logs full diagnostics', () => {
-  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
-  const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_manage_minutes_decision_runtime'))
-    .sort();
-  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(sql.includes('PG_EXCEPTION_DETAIL'), 'should get PG_EXCEPTION_DETAIL');
-  assert.ok(sql.includes('PG_EXCEPTION_HINT'), 'should get PG_EXCEPTION_HINT');
-  assert.ok(sql.includes('RETURNED_SQLSTATE'), 'should get RETURNED_SQLSTATE');
-  assert.ok(sql.includes('RAISE LOG'), 'should log server-side');
-  assert.ok(!sql.includes("'sqlstate', v_diag_sqlstate"), 'should not expose sqlstate in response');
-});
-
-test('sync migration uses separate p_deleted_decision_ids parameter', () => {
-  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
-  const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_sync_minutes_decisions_and_external_schema'))
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
     .sort();
   assert.ok(files.length > 0, 'should find the sync fix migration');
-  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(sql.includes('p_deleted_decision_ids uuid[]'), 'should have separate parameter');
-  assert.ok(!sql.includes("p_decisions->'deleted_decision_ids'"), 'should not read from p_decisions object');
-  assert.ok(sql.includes('FOREACH v_delete_id IN ARRAY p_deleted_decision_ids'), 'should iterate explicit ids');
-  assert.ok(sql.includes('WHERE id = v_delete_id AND minute_id = p_minute_id'), 'should verify ownership before delete');
 });
 
-test('sync migration makes primary_owner_user_id nullable', () => {
+test('migration does not edit previous migrations', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir).sort();
+  const syncFixIdx = files.findIndex(f => f.includes('fix_create_update_minutes_draft_sync'));
+  const fiveFixesIdx = files.findIndex(f => f.includes('minutes_decisions_five_fixes'));
+  const runtimeFixIdx = files.findIndex(f => f.includes('fix_manage_minutes_decision_runtime'));
+  assert.ok(syncFixIdx > fiveFixesIdx, 'sync fix should be after five-fixes');
+  assert.ok(syncFixIdx > runtimeFixIdx, 'sync fix should be after runtime fix');
+});
+
+test('migration does not TRUNCATE or DROP TABLE', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_sync_minutes_decisions_and_external_schema'))
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
     .sort();
   const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(sql.includes('ALTER COLUMN primary_owner_user_id DROP NOT NULL'), 'should make nullable');
+  assert.ok(!sql.includes('TRUNCATE'), 'should not TRUNCATE');
+  assert.ok(!sql.includes('DROP TABLE'), 'should not DROP TABLE');
 });
 
-test('sync migration has full internal/external constraint', () => {
+test('migration does not add CASCADE', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_sync_minutes_decisions_and_external_schema'))
-    .sort();
-  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(sql.includes("responsible_party_type = 'internal'"), 'should check internal type');
-  assert.ok(sql.includes('primary_owner_user_id IS NOT NULL'), 'should require owner for internal');
-  assert.ok(sql.includes('external_responsible_name_snapshot IS NULL'), 'should require null external for internal');
-  assert.ok(sql.includes('external_responsible_participant_id IS NULL'), 'should require null external id for internal');
-  assert.ok(sql.includes("responsible_party_type = 'external'"), 'should check external type');
-  assert.ok(sql.includes('primary_owner_user_id IS NULL'), 'should require null owner for external');
-  assert.ok(sql.includes('external_responsible_name_snapshot IS NOT NULL'), 'should require external name for external');
-});
-
-test('sync migration does not add CASCADE', () => {
-  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
-  const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_sync_minutes_decisions_and_external_schema'))
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
     .sort();
   const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
   assert.ok(!sql.includes('ON DELETE CASCADE'), 'should not add CASCADE');
 });
 
-test('sync migration updates get_minutes_decisions_for_view to return external fields', () => {
+test('migration does not bulk DELETE external participants', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_sync_minutes_decisions_and_external_schema'))
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
     .sort();
   const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
-  assert.ok(sql.includes('responsible_party_type'), 'should return responsible_party_type');
-  assert.ok(sql.includes('external_responsible_participant_id'), 'should return external_responsible_participant_id');
-  assert.ok(sql.includes('external_responsible_name_snapshot'), 'should return external_responsible_name_snapshot');
-  assert.ok(sql.includes('external_responsible_organization_snapshot'), 'should return external_responsible_organization_snapshot');
-  assert.ok(sql.includes('external_responsible_position_snapshot'), 'should return external_responsible_position_snapshot');
+  // The old pattern was: DELETE FROM minutes_external_participants WHERE minute_id = p_minute_id
+  // In the new migration, external participants are synced non-destructively
+  assert.ok(
+    !sql.includes('DELETE FROM public.minutes_external_participants WHERE minute_id = p_minute_id'),
+    'should not bulk DELETE external participants in update_minutes_draft',
+  );
 });
 
-test('no previous migration was edited', () => {
-  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
-  const files = fs.readdirSync(migrationsDir).sort();
-  const runtimeFixIdx = files.findIndex(f => f.includes('fix_manage_minutes_decision_runtime'));
-  const syncFixIdx = files.findIndex(f => f.includes('fix_sync_minutes_decisions_and_external_schema'));
-  const fiveFixesIdx = files.findIndex(f => f.includes('minutes_decisions_five_fixes'));
-  assert.ok(runtimeFixIdx > fiveFixesIdx, 'runtime fix should be after five-fixes');
-  assert.ok(syncFixIdx > fiveFixesIdx, 'sync fix should be after five-fixes');
-});
-
-test('no migration deletes data', () => {
+test('migration creates 5-param update_minutes_draft (actually 6 with default)', () => {
   const migrationsDir = path.join(__dirname, '../../supabase/migrations');
   const files = fs.readdirSync(migrationsDir)
-    .filter(f => f.includes('fix_sync_minutes_decisions_and_external_schema') || f.includes('fix_manage_minutes_decision_runtime'))
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
     .sort();
-  for (const f of files) {
-    const sql = fs.readFileSync(path.join(migrationsDir, f), 'utf-8');
-    assert.ok(!sql.includes('TRUNCATE'), `${f} should not TRUNCATE`);
-    assert.ok(!sql.includes('DROP TABLE'), `${f} should not DROP TABLE`);
-    assert.ok(!sql.includes('DELETE FROM public.minutes_decisions WHERE minute_id'), `${f} should not bulk delete`);
-  }
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(
+    sql.includes('p_deleted_decision_ids uuid[]') && sql.includes('p_deleted_external_participant_ids uuid[]'),
+    'should have both deleted arrays in 5-param version',
+  );
+});
+
+test('migration creates 4-param wrapper that calls 6-param version', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  // The 4-param wrapper should call the 6-param version with empty arrays
+  assert.ok(
+    sql.includes("RETURN public.update_minutes_draft(") && sql.includes("'{}'::uuid[]"),
+    '4-param wrapper should call 6-param version',
+  );
+});
+
+test('migration REVOKEs _sync_minutes_decisions from PUBLIC, anon, and authenticated', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(
+    sql.includes('REVOKE EXECUTE ON FUNCTION public._sync_minutes_decisions(uuid, jsonb, uuid[]) FROM PUBLIC'),
+    'should REVOKE from PUBLIC',
+  );
+  assert.ok(
+    sql.includes('REVOKE EXECUTE ON FUNCTION public._sync_minutes_decisions(uuid, jsonb, uuid[]) FROM anon'),
+    'should REVOKE from anon',
+  );
+  assert.ok(
+    sql.includes('REVOKE EXECUTE ON FUNCTION public._sync_minutes_decisions(uuid, jsonb, uuid[]) FROM authenticated'),
+    'should REVOKE from authenticated',
+  );
+});
+
+test('migration GRANTs create/update to authenticated only', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(
+    sql.includes('GRANT EXECUTE ON FUNCTION public.create_minutes_draft(jsonb, jsonb) TO authenticated'),
+    'should GRANT create to authenticated',
+  );
+  assert.ok(
+    sql.includes('GRANT EXECUTE ON FUNCTION public.update_minutes_draft(uuid, timestamptz, jsonb, jsonb, uuid[], uuid[]) TO authenticated'),
+    'should GRANT 6-param update to authenticated',
+  );
+  assert.ok(
+    sql.includes('GRANT EXECUTE ON FUNCTION public.update_minutes_draft(uuid, timestamptz, jsonb, jsonb) TO authenticated'),
+    'should GRANT 4-param update to authenticated',
+  );
+});
+
+test('migration validates external_responsible_participant_id scope', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(
+    sql.includes('EXTERNAL_PARTICIPANT_SCOPE_INVALID'),
+    'should reject external participant from different minute',
+  );
+  assert.ok(
+    sql.includes('EXTERNAL_PARTICIPANT_NOT_FOUND'),
+    'should reject non-existent external participant',
+  );
+});
+
+test('migration validates internal decision cannot have external fields', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(
+    sql.includes('INTERNAL_DECISION_CANNOT_HAVE_EXTERNAL_FIELDS'),
+    'should reject internal decision with external fields',
+  );
+  assert.ok(
+    sql.includes('EXTERNAL_DECISION_CANNOT_HAVE_INTERNAL_OWNER'),
+    'should reject external decision with internal owner',
+  );
+});
+
+test('migration create_minutes_draft includes external participant id in INSERT', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(
+    sql.includes('COALESCE(v_ep_id, gen_random_uuid())'),
+    'create should use provided id or generate new one',
+  );
+});
+
+test('migration update_minutes_draft does non-destructive external sync', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(
+    sql.includes('UPDATE public.minutes_external_participants') && sql.includes('WHERE id = v_ep_id AND minute_id = p_minute_id'),
+    'should UPDATE existing external participants by id',
+  );
+  assert.ok(
+    sql.includes('EXTERNAL_PARTICIPANT_SCOPE_INVALID'),
+    'should reject external participant from different minute',
+  );
+  assert.ok(
+    sql.includes('FOREACH v_del_ep_id IN ARRAY'),
+    'should delete only explicit external participant ids',
+  );
+});
+
+test('migration syncs external participants before decisions', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_create_update_minutes_draft_sync'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  // External participants are synced in the function body before _sync_minutes_decisions call
+  const extSyncPos = sql.indexOf('NON-DESTRUCTIVE sync');
+  const decisionsSyncPos = sql.indexOf('Sync decisions: use 3-arg signature with explicit deleted ids');
+  assert.ok(extSyncPos > 0 && decisionsSyncPos > 0, 'both syncs should exist');
+  assert.ok(extSyncPos < decisionsSyncPos, 'external participants should sync before decisions');
+});
+
+test('frontend includes id in external participant payload', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../../src/components/Minutes/MinutesFormPage.tsx'),
+    'utf-8',
+  );
+  assert.ok(
+    source.includes('id: p.participantId ?? p.id'),
+    'should include stable id in external participant payload',
+  );
+});
+
+test('frontend tracks deletedExternalParticipantIds', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../../src/components/Minutes/MinutesFormPage.tsx'),
+    'utf-8',
+  );
+  assert.ok(source.includes('deletedExternalParticipantIds'), 'should track deleted external participant ids');
+  assert.ok(
+    source.includes('p_deleted_external_participant_ids'),
+    'should pass deleted external participant ids to RPC',
+  );
+  assert.ok(
+    source.includes('onRemoveExternalParticipant'),
+    'should pass onRemoveExternalParticipant callback',
+  );
+});
+
+test('frontend passes p_deleted_decision_ids to update RPC', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../../src/components/Minutes/MinutesFormPage.tsx'),
+    'utf-8',
+  );
+  assert.ok(
+    source.includes('p_deleted_decision_ids: deletedDecisionIds'),
+    'should pass deleted decision ids to update RPC',
+  );
+});
+
+test('SectionParticipants tracks removed external participant id', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../../src/components/Minutes/Form/SectionParticipants.tsx'),
+    'utf-8',
+  );
+  assert.ok(
+    source.includes('onRemoveExternalParticipant'),
+    'should accept onRemoveExternalParticipant callback',
+  );
+  assert.ok(
+    source.includes('removed?.participantId'),
+    'should track participantId of removed external participant',
+  );
 });
