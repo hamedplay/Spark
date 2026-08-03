@@ -7,7 +7,7 @@ async function hmacHash(value: string, secret: string): Promise<string> {
     { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join("");
 }
 
 function timingSafeCompare(a: string, b: string): boolean {
@@ -33,6 +33,7 @@ function corsHeaders(allowedOrigin: string | null): Record<string, string> {
     "Access-Control-Allow-Origin": allowedOrigin || "null",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
   };
 }
 
@@ -72,21 +73,33 @@ Deno.serve(async (req: Request) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let allowedOrigin: string | null = null;
+  // ── Load allowed origins from system_config ─────────────────────────────────
+  let allowedOrigins: string[] = [];
   try {
-    const allowedStr = Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") || "";
-    const allowed = allowedStr.split(",").map(s => s.trim()).filter(Boolean);
-    const origin = req.headers.get("Origin") || "";
-    if (origin && allowed.includes(origin)) allowedOrigin = origin;
+    const { data: originsRow } = await supabase
+      .from("system_config").select("value")
+      .eq("section", "security").eq("key", "phone_login_allowed_origins")
+      .maybeSingle();
+    if (originsRow?.value) {
+      allowedOrigins = originsRow.value
+        .split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+    }
   } catch { /* fail-closed */ }
 
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigin = allowedOrigins.includes(origin) ? origin : null;
   const cors = corsHeaders(allowedOrigin);
 
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: cors });
+    return new Response(null, { status: 200, headers: cors });
   }
 
   if (req.method !== "POST") {
+    return await finishResponse(startedAt, genericErrorResponse(cors), cors);
+  }
+
+  // Reject disallowed origin before processing body
+  if (!allowedOrigin) {
     return await finishResponse(startedAt, genericErrorResponse(cors), cors);
   }
 
@@ -106,10 +119,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    if (!allowedOrigin) {
-      return await finishResponse(startedAt, genericErrorResponse(cors), cors);
-    }
-
     let body: { challenge_id?: string; otp?: string };
     try {
       body = JSON.parse(bodyText);
@@ -120,10 +129,12 @@ Deno.serve(async (req: Request) => {
     const challengeId: string | undefined = body.challenge_id;
     const otp: string | undefined = body.otp;
 
-    if (!challengeId || !otp || otp.length < 4) {
+    // OTP must be exactly 6 digits
+    if (!challengeId || !otp || !/^\d{6}$/.test(otp)) {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
+    // Only PHONE_PASSWORD_RESET_SECRET — never read pepper from DB
     const secret = Deno.env.get("PHONE_PASSWORD_RESET_SECRET") || "";
     if (!secret || secret.length < 32) {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
@@ -149,7 +160,7 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Revalidate using RPC with challenge_id — no direct profile query
+    // Revalidate using RPC with challenge_id
     const { data: revData, error: revErr } = await supabase.rpc(
       "revalidate_phone_password_reset_target",
       { p_challenge_id: challengeId },
@@ -168,7 +179,7 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, genericErrorResponse(cors), cors);
     }
 
-    // Compute provided OTP hash
+    // Compute provided OTP hash — uses the SAME challenge_id that was used at request time
     const providedOtpHash = await hmacHash(
       `${challengeId}:${revRow.user_id}:${revRow.normalized_phone}:${otp}`,
       secret,
@@ -177,7 +188,7 @@ Deno.serve(async (req: Request) => {
     // Generate reset token (32 bytes)
     const resetTokenBytes = new Uint8Array(32);
     crypto.getRandomValues(resetTokenBytes);
-    const resetToken = Array.from(resetTokenBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+    const resetToken = Array.from(resetTokenBytes).map(b => b.toString(16).padStart(2, '0')).join("");
     const resetTokenHash = await hmacHash(resetToken, secret);
     const resetExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 

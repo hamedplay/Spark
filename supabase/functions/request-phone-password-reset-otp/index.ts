@@ -17,7 +17,7 @@ async function hmacHash(value: string, secret: string): Promise<string> {
     { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join("");
 }
 
 function getClientIP(req: Request): string {
@@ -34,6 +34,7 @@ function corsHeaders(allowedOrigin: string | null): Record<string, string> {
     "Access-Control-Allow-Origin": allowedOrigin || "null",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
   };
 }
 
@@ -77,21 +78,33 @@ Deno.serve(async (req: Request) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let allowedOrigin: string | null = null;
+  // ── Load allowed origins from system_config ─────────────────────────────────
+  let allowedOrigins: string[] = [];
   try {
-    const allowedStr = Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") || "";
-    const allowed = allowedStr.split(",").map(s => s.trim()).filter(Boolean);
-    const origin = req.headers.get("Origin") || "";
-    if (origin && allowed.includes(origin)) allowedOrigin = origin;
+    const { data: originsRow } = await supabase
+      .from("system_config").select("value")
+      .eq("section", "security").eq("key", "phone_login_allowed_origins")
+      .maybeSingle();
+    if (originsRow?.value) {
+      allowedOrigins = originsRow.value
+        .split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+    }
   } catch { /* fail-closed */ }
 
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigin = allowedOrigins.includes(origin) ? origin : null;
   const cors = corsHeaders(allowedOrigin);
 
+  // Reject disallowed origin before processing body
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: cors });
+    return new Response(null, { status: 200, headers: cors });
   }
 
   if (req.method !== "POST") {
+    return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+  }
+
+  if (!allowedOrigin) {
     return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
   }
 
@@ -100,7 +113,6 @@ Deno.serve(async (req: Request) => {
     return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
   }
 
-  // Read body as text, enforce real size limit
   let bodyText: string;
   try {
     bodyText = await req.text();
@@ -112,10 +124,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    if (!allowedOrigin) {
-      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
-    }
-
     let body: { phone?: string };
     try {
       body = JSON.parse(bodyText);
@@ -148,7 +156,7 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // Fail-closed: template must be active
+    // Fail-closed: template must be active AND contain {{otp}} placeholder
     if (!cfg?.recovery_template_ready) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
@@ -170,7 +178,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Resolve secret
+    // Resolve secret — only PHONE_PASSWORD_RESET_SECRET
     const secret = Deno.env.get("PHONE_PASSWORD_RESET_SECRET") || "";
     if (!secret || secret.length < 32) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
@@ -200,7 +208,6 @@ Deno.serve(async (req: Request) => {
       },
     );
     if (rlErr || !rlData) {
-      // Fail-closed on DB error
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
     const rlRow = Array.isArray(rlData) ? rlData[0] : rlData;
@@ -208,7 +215,7 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // Resolve target user via RPC (no listUsers, no profile iteration)
+    // Resolve target user via RPC
     const { data: targetData, error: targetErr } = await supabase.rpc(
       "resolve_phone_password_reset_target",
       { p_normalized_phone: normalized },
@@ -222,13 +229,12 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // Resolve TTL from config (already validated by RPC, but read for use)
+    // Resolve TTL from config
     const { data: ttlRow } = await supabase
       .from("system_config").select("value")
       .eq("section", "security").eq("key", "phone_password_recovery_otp_ttl_seconds")
       .maybeSingle();
     const ttlVal = parseInt(ttlRow?.value || "0", 10);
-    // Fail-closed: don't guess 600
     if (isNaN(ttlVal) || ttlVal < 60 || ttlVal > 86400) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
@@ -238,7 +244,7 @@ Deno.serve(async (req: Request) => {
     crypto.getRandomValues(otpBuf);
     const otp = String(otpBuf[0] % 1000000).padStart(6, "0");
 
-    // Pre-generate challenge_id for OTP hash binding
+    // Pre-generate challenge_id — OTP is hashed with THIS id
     const challengeId = crypto.randomUUID();
     const otpHash = await hmacHash(
       `${challengeId}:${targetUserId}:${normalized}:${otp}`,
@@ -247,10 +253,11 @@ Deno.serve(async (req: Request) => {
     const phoneHashChallenge = await hmacHash(normalized, secret);
     const expiresAt = new Date(Date.now() + ttlVal * 1000).toISOString();
 
-    // Atomic challenge creation (advisory-locked, expires old, inserts new)
+    // Atomic challenge creation using the NEW overload with p_challenge_id
     const { data: createData, error: createErr } = await supabase.rpc(
       "create_phone_password_reset_challenge",
       {
+        p_challenge_id: challengeId,
         p_user_id: targetUserId,
         p_phone_hash: phoneHashChallenge,
         p_otp_hash: otpHash,
@@ -264,7 +271,12 @@ Deno.serve(async (req: Request) => {
     if (!createRow?.success || !createRow?.challenge_id) {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
-    const realChallengeId = createRow.challenge_id;
+
+    // Fail-closed: if returned ID differs from what we sent, abort
+    const realChallengeId = createRow.challenge_id as string;
+    if (realChallengeId !== challengeId) {
+      return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
+    }
 
     // Fetch active template
     const { data: template } = await supabase
@@ -276,9 +288,7 @@ Deno.serve(async (req: Request) => {
       .eq("is_active", true)
       .maybeSingle();
 
-    // Fail-closed: no template = no SMS
-    if (!template?.body) {
-      // Mark challenge as delivery_failed
+    if (!template?.body || !template.body.includes("{{otp}}")) {
       await supabase
         .from("phone_password_reset_challenges")
         .update({ status: "delivery_failed", updated_at: new Date().toISOString() })
@@ -302,7 +312,7 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // Send SMS via send-sms edge function with auth_otp mode and providerId
+    // Send SMS via send-sms edge function
     const e164 = `+${normalized}`;
     let smsSuccess = false;
     try {
@@ -331,8 +341,20 @@ Deno.serve(async (req: Request) => {
       // SMS failure
     }
 
+    // ── Log SMS dispatch (success or failure) ────────────────────────────────
+    try {
+      await supabase.from("sms_dispatch_logs").insert({
+        target_phone: normalized,
+        category: "auth",
+        event_type: "password_reset_otp",
+        audience: "all",
+        message: "[AUTH_OTP_REDACTED]",
+        status: smsSuccess ? "sent" : "failed",
+        provider_id: providerId,
+      });
+    } catch { /* logging failure should not block */ }
+
     if (!smsSuccess) {
-      // Mark challenge as delivery_failed, return decoy
       await supabase
         .from("phone_password_reset_challenges")
         .update({ status: "delivery_failed", updated_at: new Date().toISOString() })
@@ -340,7 +362,7 @@ Deno.serve(async (req: Request) => {
       return await finishResponse(startedAt, okResponse(cors, randomUUID()), cors);
     }
 
-    // ── Best-effort Bale OTP delivery (non-blocking) ─────────────────────
+    // ── Best-effort Bale OTP delivery (non-blocking) ─────────────────────────
     EdgeRuntime.waitUntil(
       sendBaleAuthCode({
         supabase,
@@ -351,7 +373,7 @@ Deno.serve(async (req: Request) => {
       }),
     );
 
-    // Return success with real challenge_id
+    // Return success with real challenge_id (same as pre-generated one)
     return await finishResponse(startedAt, okResponse(cors, realChallengeId), cors);
 
   } catch {
