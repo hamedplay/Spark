@@ -28,11 +28,16 @@ function getClientIP(req: Request): string {
   return "unknown";
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+function buildCorsHeaders(req: Request, allowedOrigins: string[]): Record<string, string> {
+  const origin = req.headers.get("Origin") || "";
+  const allowed = allowedOrigins.includes(origin) ? origin : "";
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+    "Vary": "Origin",
+  };
+}
 
 const TARGET_MIN_MS = 5200;
 const TARGET_MAX_MS = 5400;
@@ -40,6 +45,7 @@ const TARGET_MAX_MS = 5400;
 async function finishPublicResponse(
   startedAt: number,
   response: Response,
+  corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const elapsed = Date.now() - startedAt;
   const jitter = Math.floor(Math.random() * (TARGET_MAX_MS - TARGET_MIN_MS + 1));
@@ -53,7 +59,7 @@ async function finishPublicResponse(
   });
 }
 
-function publicResponse(): Response {
+function publicResponse(corsHeaders: Record<string, string>): Response {
   return new Response(
     JSON.stringify({ ok: true }),
     { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },
@@ -63,19 +69,46 @@ function publicResponse(): Response {
 Deno.serve(async (req: Request) => {
   const startedAt = Date.now();
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-
-  if (req.method !== "POST") {
-    return await finishPublicResponse(startedAt, publicResponse());
-  }
-
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
+
+  // signInWithOtp must use the anon key so GoTrue creates a real OTP challenge
+  // and triggers the SMS hook. The service role key bypasses the OTP flow.
+  const anonSupabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  // ── Load allowed origins from system_config ───────────────────────────────
+  let allowedOrigins: string[] = [];
+  try {
+    const { data: originsRow } = await supabase
+      .from("system_config").select("value")
+      .eq("section", "security").eq("key", "phone_login_allowed_origins")
+      .maybeSingle();
+    if (originsRow?.value) {
+      allowedOrigins = originsRow.value
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.length > 0);
+    }
+  } catch {
+    // fail-closed: no origins loaded
+  }
+
+  const corsHeaders = buildCorsHeaders(req, allowedOrigins);
+
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
+  }
 
   try {
     const body = await req.json();
@@ -83,13 +116,13 @@ Deno.serve(async (req: Request) => {
 
     const normalized = normalizeIranPhone(rawPhone);
     if (!normalized) {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
-    // ── Check auth config ──────────────────────────────────────────────────
+    // ── Read computed config from get_public_auth_config ─────────────────────
     const { data: cfgRow, error: cfgErr } = await supabase.rpc("get_public_auth_config");
     if (cfgErr) {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
     const cfg = Array.isArray(cfgRow) ? cfgRow[0] : cfgRow;
     const publicReady = cfg?.phone_login_ready === true;
@@ -100,32 +133,24 @@ Deno.serve(async (req: Request) => {
     if (publicReady) {
       allowDispatch = true;
     } else if (testReady) {
-      const { data: testModeRow } = await supabase
+      // testReady already incorporates phone_login_test_mode=true
+      // Read the test phone to compare
+      const { data: testPhoneRow } = await supabase
         .from("system_config").select("value")
-        .eq("section", "security").eq("key", "phone_login_test_mode")
+        .eq("section", "security").eq("key", "phone_login_test_phone")
         .maybeSingle();
-      const testModeEnabled = testModeRow?.value === "true";
+      const normalizedTestPhone = normalizeIranPhone(testPhoneRow?.value || "");
 
-      if (testModeEnabled) {
-        const { data: testPhoneRow } = await supabase
-          .from("system_config").select("value")
-          .eq("section", "security").eq("key", "phone_login_test_phone")
-          .maybeSingle();
-        const testPhone = testPhoneRow?.value || "";
-        const normalizedTestPhone = normalizeIranPhone(testPhone);
-
-        if (normalizedTestPhone && normalized === normalizedTestPhone) {
-          allowDispatch = true;
-        }
+      if (normalizedTestPhone && normalized === normalizedTestPhone) {
+        allowDispatch = true;
       }
     }
 
     if (!allowDispatch) {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
     // ── Resolve profile + auth user BEFORE sending OTP ──────────────────────
-    // 1. Find active profile with this phone
     const { data: profile } = await supabase
       .from("profiles")
       .select("user_id, phone, is_active")
@@ -133,7 +158,6 @@ Deno.serve(async (req: Request) => {
       .filter("phone", "eq", normalized)
       .maybeSingle();
 
-    // Also try raw phone format in case profiles store un-normalized
     let resolvedProfile = profile;
     if (!resolvedProfile) {
       const { data: profileByRaw } = await supabase
@@ -146,25 +170,23 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!resolvedProfile) {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
-    // 2. Find auth user with same UUID
     const { data: authUser, error: authErr } = await supabase.auth.admin.getUserById(resolvedProfile.user_id);
     if (authErr || !authUser?.user) {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
-    // 3. Check auth.users.phone matches
     const authPhoneNorm = normalizeIranPhone(authUser.user.phone);
     if (authPhoneNorm !== normalized) {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
     // ── Rate limit ──────────────────────────────────────────────────────────
     const pepper = Deno.env.get("PHONE_RATE_LIMIT_PEPPER") || "";
     if (!pepper || pepper.length < 32) {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
     let phoneHash: string;
@@ -174,7 +196,7 @@ Deno.serve(async (req: Request) => {
       phoneHash = await hmacHash(normalized, pepper);
       ipHash = await hmacHash(clientIP, pepper);
     } catch {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
     let rateLimitResult: { allowed: boolean; retry_after_seconds: number };
@@ -184,21 +206,21 @@ Deno.serve(async (req: Request) => {
         { p_phone_hash: phoneHash, p_ip_hash: ipHash },
       );
       if (rlErr) {
-        return await finishPublicResponse(startedAt, publicResponse());
+        return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
       }
       rateLimitResult = typeof rlRaw === "string" ? JSON.parse(rlRaw) : rlRaw;
     } catch {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
     if (!rateLimitResult.allowed) {
-      return await finishPublicResponse(startedAt, publicResponse());
+      return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
     }
 
     // ── Call signInWithOtp with shouldCreateUser: false ─────────────────────
     const e164 = `+${normalized}`;
     try {
-      await supabase.auth.signInWithOtp({
+      await anonSupabase.auth.signInWithOtp({
         phone: e164,
         options: { shouldCreateUser: false, channel: "sms" },
       });
@@ -206,9 +228,9 @@ Deno.serve(async (req: Request) => {
       // Never reveal whether the phone exists
     }
 
-    return await finishPublicResponse(startedAt, publicResponse());
+    return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
 
   } catch {
-    return await finishPublicResponse(startedAt, publicResponse());
+    return await finishPublicResponse(startedAt, publicResponse(corsHeaders), corsHeaders);
   }
 });

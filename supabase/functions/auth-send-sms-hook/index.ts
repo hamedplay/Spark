@@ -37,8 +37,29 @@ function successResponse() {
   );
 }
 
+async function completeWithoutSms(supabase: ReturnType<typeof createClient>, webhookId: string): Promise<Response> {
+  const { error: completeErr } = await supabase.rpc(
+    "complete_auth_hook_event", { p_webhook_id: webhookId },
+  );
+  if (completeErr) {
+    await supabase.rpc("mark_sent_unconfirmed_auth_hook_event", { p_webhook_id: webhookId });
+  }
+  return successResponse();
+}
+
 Deno.serve(async (req: Request) => {
   const deadlineAt = Date.now() + HOOK_DEADLINE_MS;
+
+  // Only POST and OPTIONS are allowed; reject all other methods immediately
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200 });
+  }
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: { http_code: 405, message: "Method not allowed" } }), {
+      status: 405,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -118,61 +139,47 @@ Deno.serve(async (req: Request) => {
       return errorResponse(503, "Request already processing");
     }
 
-    const { data: enabledRow, error: enabledErr } = await supabase
-      .from("system_config")
-      .select("value")
-      .eq("section", "security")
-      .eq("key", "phone_login_enabled")
-      .maybeSingle();
-
-    if (enabledErr) {
-      console.log("[auth-send-sms-hook] config query error, fail-closed:", enabledErr.message);
+    // ── Read computed config from get_public_auth_config ─────────────────────
+    // This function computes phone_login_ready and phone_login_test_ready
+    // from multiple system_config rows. We must NOT read phone_login_ready
+    // directly from system_config — it is a computed value.
+    const { data: cfgRow, error: cfgErr } = await supabase.rpc("get_public_auth_config");
+    if (cfgErr) {
+      console.log("[auth-send-sms-hook] config query error, fail-closed:", cfgErr.message);
       await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "CONFIG_ERROR" });
       return errorResponse(500, "Configuration check failed");
     }
-
-    const phoneLoginEnabled = enabledRow?.value === "true";
-    if (!phoneLoginEnabled) {
-      console.log("[auth-send-sms-hook] phone_login disabled, rejecting", maskedPhone);
-      await supabase.rpc("fail_auth_hook_event", { p_webhook_id: webhookId, p_error_code: "LOGIN_DISABLED" });
-      return errorResponse(403, "Phone login is disabled");
-    }
-
-    // ── Test mode: only the configured test phone receives SMS ───────────────
-    // In test mode, non-test phones get the same success response but no SMS is sent.
-    const { data: testModeRow } = await supabase
-      .from("system_config").select("value")
-      .eq("section", "security").eq("key", "phone_login_test_mode")
-      .maybeSingle();
-    const isTestMode = testModeRow?.value === "true";
+    const cfg = Array.isArray(cfgRow) ? cfgRow[0] : cfgRow;
+    const publicReady = cfg?.phone_login_ready === true;
+    const testMode = cfg?.phone_login_test_mode === true;
+    const testReady = cfg?.phone_login_test_ready === true;
 
     const normalizedHookPhone = normalizeIranPhone(phone);
 
-    if (isTestMode) {
-      const { data: publicReadyRow } = await supabase
+    // ── Allow logic ───────────────────────────────────────────────────────────
+    // Allow SMS dispatch if:
+    //   1. phone_login_ready=true (public mode), OR
+    //   2. phone_login_test_mode=true && phone_login_test_ready=true && phone===test_phone
+    // Otherwise: return success (so GoTrue does NOT retry) but do NOT send SMS.
+    let allowDispatch = false;
+
+    if (publicReady) {
+      allowDispatch = true;
+    } else if (testMode && testReady) {
+      const { data: testPhoneRow } = await supabase
         .from("system_config").select("value")
-        .eq("section", "security").eq("key", "phone_login_ready")
+        .eq("section", "security").eq("key", "phone_login_test_phone")
         .maybeSingle();
-      const isPublicReady = publicReadyRow?.value === "true";
+      const normalizedTestPhone = normalizeIranPhone(testPhoneRow?.value || "");
 
-      if (!isPublicReady) {
-        const { data: testPhoneRow } = await supabase
-          .from("system_config").select("value")
-          .eq("section", "security").eq("key", "phone_login_test_phone")
-          .maybeSingle();
-        const normalizedTestPhone = normalizeIranPhone(testPhoneRow?.value || "");
-
-        if (!normalizedTestPhone || normalizedHookPhone !== normalizedTestPhone) {
-          console.log("[auth-send-sms-hook] test mode: non-test phone, skipping SMS", maskedPhone);
-          const { error: completeErr } = await supabase.rpc(
-            "complete_auth_hook_event", { p_webhook_id: webhookId },
-          );
-          if (completeErr) {
-            await supabase.rpc("mark_sent_unconfirmed_auth_hook_event", { p_webhook_id: webhookId });
-          }
-          return successResponse();
-        }
+      if (normalizedTestPhone && normalizedHookPhone === normalizedTestPhone) {
+        allowDispatch = true;
       }
+    }
+
+    if (!allowDispatch) {
+      console.log("[auth-send-sms-hook] dispatch not allowed, skipping SMS", maskedPhone);
+      return await completeWithoutSms(supabase, webhookId);
     }
 
     const { data: providerRow, error: providerErr } = await supabase
@@ -291,8 +298,6 @@ Deno.serve(async (req: Request) => {
           { p_webhook_id: webhookId },
         );
         if (markErr) {
-          // Both RPCs failed — event stays in 'processing' with its TTL-based lock.
-          // Return success so GoTrue does NOT retry (preventing duplicate SMS).
           console.log("[auth-send-sms-hook] both complete and mark RPCs failed; event remains processing with lock");
           finalDispatchStatus = 'sent_unconfirmed';
         } else {
