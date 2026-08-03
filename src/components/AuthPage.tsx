@@ -621,7 +621,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                   <input type="text" value={recoveryOtp} onChange={e => setRecoveryOtp(e.target.value.replace(/\D/g, '').slice(0,6))}
                     placeholder="کد ۶ رقمی" className={inp + ' text-center text-xl tracking-[0.5em] font-mono'} dir="ltr" maxLength={6} />
                 </div>
-                <button onClick={handleRecoveryVerifyOtp} disabled={recoveryLoading || recoveryOtp.length !== 6
+                <button onClick={handleRecoveryVerifyOtp} disabled={recoveryLoading || recoveryOtp.length !== 6}
                   className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
                   {recoveryLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowRight className="w-5 h-5" />تأیید کد</>}
                 </button>
