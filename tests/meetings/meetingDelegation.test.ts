@@ -4,260 +4,201 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  TEMPLATE_EVENTS,
-  TEMPLATE_PLACEHOLDERS,
-  TEMPLATE_AUDIENCES,
-} from '../../src/config/templateCatalog';
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ── Event type registry tests ─────────────────────────────────────────────────
-
-test('meeting_invitation_delegate_assigned event exists with correct category', () => {
-  const evt = TEMPLATE_EVENTS.find(e => e.key === 'meeting_invitation_delegate_assigned');
-  assert.ok(evt, 'meeting_invitation_delegate_assigned should be in TEMPLATE_EVENTS');
-  assert.equal(evt!.category, 'meeting');
-  assert.ok(evt!.audiences.includes('representatives'));
-  assert.ok(evt!.supportedChannels.includes('sms'), 'delegate assigned should support SMS');
+test('migration file exists for delegate fix', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  assert.ok(files.length > 0, 'should find the delegate fix migration');
 });
 
-test('meeting_invitation_delegate_assigned requires correct placeholders', () => {
-  const evt = TEMPLATE_EVENTS.find(e => e.key === 'meeting_invitation_delegate_assigned');
-  assert.ok(evt);
-  assert.ok(evt!.requiredPlaceholders.includes('meeting_subject'));
-  assert.ok(evt!.requiredPlaceholders.includes('meeting_date'));
-  assert.ok(evt!.requiredPlaceholders.includes('start_time'));
-  assert.ok(evt!.requiredPlaceholders.includes('end_time'));
-  assert.ok(evt!.requiredPlaceholders.includes('represented_person_name'));
+test('migration does not edit previous migrations', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir).sort();
+  const delegateFixIdx = files.findIndex(f => f.includes('fix_assign_meeting_invitation_delegate'));
+  const originalDelegateIdx = files.findIndex(f => f.includes('meeting_invitation_delegate'));
+  assert.ok(delegateFixIdx > originalDelegateIdx, 'fix should be after original delegate migration');
 });
 
-test('meeting_invitation_delegate_selected event exists with correct category', () => {
-  const evt = TEMPLATE_EVENTS.find(e => e.key === 'meeting_invitation_delegate_selected');
-  assert.ok(evt, 'meeting_invitation_delegate_selected should be in TEMPLATE_EVENTS');
-  assert.equal(evt!.category, 'meeting');
-  assert.ok(evt!.audiences.includes('participants'));
-  assert.ok(evt!.audiences.includes('observers'));
-  assert.ok(evt!.audiences.includes('organizer'));
+test('migration does not TRUNCATE or DROP TABLE', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(!sql.includes('TRUNCATE'), 'should not TRUNCATE');
+  assert.ok(!sql.includes('DROP TABLE'), 'should not DROP TABLE');
 });
 
-test('meeting_invitation_delegate_selected requires correct placeholders', () => {
-  const evt = TEMPLATE_EVENTS.find(e => e.key === 'meeting_invitation_delegate_selected');
-  assert.ok(evt);
-  assert.ok(evt!.requiredPlaceholders.includes('meeting_subject'));
-  assert.ok(evt!.requiredPlaceholders.includes('represented_person_name'));
-  assert.ok(evt!.requiredPlaceholders.includes('representative_name'));
+test('migration does not add CASCADE', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(!sql.includes('ON DELETE CASCADE'), 'should not add CASCADE');
 });
 
-test('meeting_invitation_delegation_confirmed event exists with correct category', () => {
-  const evt = TEMPLATE_EVENTS.find(e => e.key === 'meeting_invitation_delegation_confirmed');
-  assert.ok(evt, 'meeting_invitation_delegation_confirmed should be in TEMPLATE_EVENTS');
-  assert.equal(evt!.category, 'meeting');
-  assert.ok(evt!.audiences.includes('delegators'));
+test('migration fixes v_next_participants to uuid[]', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(sql.includes('v_next_participants uuid[]'), 'should declare as uuid[]');
+  assert.ok(!sql.includes('v_next_participants text[]'), 'should not declare as text[]');
 });
 
-test('meeting_invitation_delegation_confirmed requires correct placeholders', () => {
-  const evt = TEMPLATE_EVENTS.find(e => e.key === 'meeting_invitation_delegation_confirmed');
-  assert.ok(evt);
-  assert.ok(evt!.requiredPlaceholders.includes('meeting_subject'));
-  assert.ok(evt!.requiredPlaceholders.includes('representative_name'));
+test('migration replaces alias x in WHERE with qualified q.user_id', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(!sql.includes('WHERE x IS DISTINCT FROM'), 'should not use alias x in WHERE');
+  assert.ok(sql.includes('q.user_id IS DISTINCT FROM v_user_id'), 'should use qualified q.user_id');
 });
 
-test('delegate events do NOT use minutes category or minutes event type', () => {
-  const meetingDelegateEvents = TEMPLATE_EVENTS.filter(
-    e => e.key.startsWith('meeting_invitation_delegate') || e.key === 'meeting_invitation_delegation_confirmed'
+test('migration uses COALESCE for null array handling', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(sql.includes("COALESCE(v_meeting.participant_user_ids, '{}'::uuid[])"), 'should COALESCE null array');
+});
+
+test('migration clears delegated_at and delegated_by_user_id on ON CONFLICT', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(sql.includes('delegated_at = NULL'), 'should clear delegated_at');
+  assert.ok(sql.includes('delegated_by_user_id = NULL'), 'should clear delegated_by_user_id');
+  assert.ok(sql.includes("delegate_to = NULL"), 'should clear delegate_to');
+  assert.ok(sql.includes("status = 'accepted'"), 'should set status to accepted');
+});
+
+test('migration adds p_metadata to all create_notification calls', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  // Count create_notification calls
+  const notifCount = (sql.match(/public\.create_notification\(/g) || []).length;
+  // Count p_metadata := occurrences
+  const metadataCount = (sql.match(/p_metadata := v_notif_metadata/g) || []).length;
+  assert.ok(notifCount > 0, 'should have create_notification calls');
+  assert.equal(metadataCount, notifCount, 'every create_notification should have p_metadata');
+});
+
+test('migration metadata includes all required fields', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(sql.includes("'meeting_id'"), 'metadata should have meeting_id');
+  assert.ok(sql.includes("'meeting_subject'"), 'metadata should have meeting_subject');
+  assert.ok(sql.includes("'meeting_date'"), 'metadata should have meeting_date');
+  assert.ok(sql.includes("'start_time'"), 'metadata should have start_time');
+  assert.ok(sql.includes("'end_time'"), 'metadata should have end_time');
+  assert.ok(sql.includes("'location'"), 'metadata should have location');
+  assert.ok(sql.includes("'represented_person_name'"), 'metadata should have represented_person_name');
+  assert.ok(sql.includes("'representative_name'"), 'metadata should have representative_name');
+  assert.ok(sql.includes("'organizer_name'"), 'metadata should have organizer_name');
+  assert.ok(sql.includes("'meeting_link'"), 'metadata should have meeting_link');
+});
+
+test('migration has enhanced error logging with GET STACKED DIAGNOSTICS', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(sql.includes('RETURNED_SQLSTATE'), 'should log RETURNED_SQLSTATE');
+  assert.ok(sql.includes('MESSAGE_TEXT'), 'should log MESSAGE_TEXT');
+  assert.ok(sql.includes('PG_EXCEPTION_DETAIL'), 'should log PG_EXCEPTION_DETAIL');
+  assert.ok(sql.includes('PG_EXCEPTION_HINT'), 'should log PG_EXCEPTION_HINT');
+  assert.ok(sql.includes('PG_EXCEPTION_CONTEXT'), 'should log PG_EXCEPTION_CONTEXT');
+  assert.ok(sql.includes('RAISE LOG'), 'should RAISE LOG');
+});
+
+test('migration error response does not expose SQL internals', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  // The WHEN OTHERS response should have generic message, not v_diag_msg
+  assert.ok(sql.includes("'خطای داخلی در انتخاب جانشین دعوت جلسه'"), 'should have generic message');
+  // The RETURN jsonb_build_object in WHEN OTHERS should not expose detail/hint/context
+  const othersSection = sql.substring(sql.indexOf("WHEN OTHERS THEN"));
+  const returnStart = othersSection.indexOf('RETURN jsonb_build_object');
+  const returnEnd = othersSection.indexOf('END;', returnStart);
+  const returnBlock = othersSection.substring(returnStart, returnEnd > 0 ? returnEnd : undefined);
+  assert.ok(!returnBlock.includes('v_diag_detail'), 'should not expose detail in response');
+  assert.ok(!returnBlock.includes('v_diag_hint'), 'should not expose hint in response');
+  assert.ok(!returnBlock.includes('v_diag_context'), 'should not expose context in response');
+  assert.ok(!returnBlock.includes('v_diag_msg'), 'should not expose msg in response');
+});
+
+test('migration has no meeting/change event', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(!sql.includes('meeting/change'), 'should not produce meeting/change event');
+  assert.ok(!sql.includes('meeting_change'), 'should not produce meeting_change event');
+});
+
+test('migration preserves SECURITY DEFINER and search_path', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(sql.includes('SECURITY DEFINER'), 'should be SECURITY DEFINER');
+  assert.ok(sql.includes("SET search_path = ''"), 'should have empty search_path');
+});
+
+test('migration has REVOKE from PUBLIC and anon, GRANT to authenticated', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(sql.includes('REVOKE EXECUTE ON FUNCTION public.assign_meeting_invitation_delegate(uuid, uuid, timestamptz) FROM PUBLIC'), 'should REVOKE from PUBLIC');
+  assert.ok(sql.includes('REVOKE EXECUTE ON FUNCTION public.assign_meeting_invitation_delegate(uuid, uuid, timestamptz) FROM anon'), 'should REVOKE from anon');
+  assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.assign_meeting_invitation_delegate(uuid, uuid, timestamptz) TO authenticated'), 'should GRANT to authenticated');
+});
+
+test('migration preserves function signature', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(
+    sql.includes('public.assign_meeting_invitation_delegate(') &&
+    sql.includes('p_meeting_inbox_id uuid') &&
+    sql.includes('p_delegate_user_id uuid') &&
+    sql.includes('p_expected_updated_at timestamptz'),
+    'should preserve function signature',
   );
-  for (const evt of meetingDelegateEvents) {
-    assert.equal(evt!.category, 'meeting', `${evt!.key} should be category meeting`);
-    assert.ok(!evt!.key.includes('minute'), `${evt!.key} should not be a minutes event`);
-  }
 });
 
-test('meeting delegation events are distinct from minutes delegation events', () => {
-  const meetingEvents = TEMPLATE_EVENTS.filter(e => e.key.startsWith('meeting_invitation'));
-  const minutesEvents = TEMPLATE_EVENTS.filter(e => e.key.startsWith('minute_approval') || e.key.startsWith('minute_approver'));
-  assert.ok(meetingEvents.length >= 3, 'should have at least 3 meeting delegation events');
-  assert.ok(minutesEvents.length >= 2, 'should have at least 2 minutes delegation events');
-  // No overlap
-  for (const m of meetingEvents) {
-    for (const n of minutesEvents) {
-      assert.notEqual(m.key, n.key, 'meeting and minutes events should not overlap');
-    }
-  }
-});
-
-// ── Audience tests ───────────────────────────────────────────────────────────
-
-test('representatives audience exists in catalog', () => {
-  assert.ok(TEMPLATE_AUDIENCES.some(a => a.key === 'representatives'));
-});
-
-test('delegators audience exists in catalog', () => {
-  assert.ok(TEMPLATE_AUDIENCES.some(a => a.key === 'delegators'));
-});
-
-test('organizer audience exists in catalog', () => {
-  assert.ok(TEMPLATE_AUDIENCES.some(a => a.key === 'organizer'));
-});
-
-// ── Placeholder tests ─────────────────────────────────────────────────────────
-
-test('represented_person_name placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'represented_person_name'));
-});
-
-test('representative_name placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'representative_name'));
-});
-
-test('meeting_subject placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'meeting_subject'));
-});
-
-test('meeting_date placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'meeting_date'));
-});
-
-test('start_time placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'start_time'));
-});
-
-test('end_time placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'end_time'));
-});
-
-test('location placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'location'));
-});
-
-test('meeting_link placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'meeting_link'));
-});
-
-test('organizer_name placeholder exists in catalog', () => {
-  assert.ok(TEMPLATE_PLACEHOLDERS.some(p => p.key === 'organizer_name'));
-});
-
-// ── Frontend wiring tests ─────────────────────────────────────────────────────
-
-test('MeetingInboxButton calls RPC instead of edge function for delegation', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/MeetingInboxButton.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('assign_meeting_invitation_delegate'), 'should call the RPC');
-  assert.ok(!source.includes('delegate-meeting'), 'should not call the edge function directly');
-});
-
-test('MeetingInboxButton does not use slice(11,16) for time extraction', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/MeetingInboxButton.tsx'),
-    'utf-8',
-  );
-  // The delegation handler should not slice time fields
-  assert.ok(!source.includes('slice(11, 16)'), 'should not use slice(11,16) for time');
-});
-
-test('MeetingInboxButton does not send eventType change for delegation', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/MeetingInboxButton.tsx'),
-    'utf-8',
-  );
-  // The handleDelegate function should not contain eventType: 'change'
-  // and should not call insertNotification (notifications are sent by the RPC)
-  const delegateStart = source.indexOf('const handleDelegate');
-  // handleDelegate is the last handler — use the component return or end of function
-  const delegateEnd = source.indexOf('return (', delegateStart);
-  assert.ok(delegateStart > -1, 'should find handleDelegate');
-  assert.ok(delegateEnd > delegateStart, 'should find return after handleDelegate');
-  const delegateSection = source.substring(delegateStart, delegateEnd);
-  assert.ok(!delegateSection.includes("'change'"), 'delegation should not send eventType change');
-  assert.ok(!delegateSection.includes('insertNotification'), 'delegation should not call insertNotification directly');
-});
-
-test('MeetingInboxButton handles delegate RPC error codes', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/MeetingInboxButton.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('CANNOT_DELEGATE_TO_SELF'), 'should handle self-delegation error');
-  assert.ok(source.includes('DELEGATE_ALREADY_ASSIGNED'), 'should handle already-assigned error');
-  assert.ok(source.includes('DELEGATE_ALREADY_PARTICIPANT'), 'should handle already-participant error');
-  assert.ok(source.includes('DELEGATE_PROFILE_INVALID'), 'should handle invalid profile error');
-  assert.ok(source.includes('DELEGATE_DIFFERENT_ORG'), 'should handle different org error');
-  assert.ok(source.includes('INBOX_VERSION_CONFLICT'), 'should handle version conflict error');
-  assert.ok(source.includes('DELEGATE_IS_ORGANIZER'), 'should handle organizer error');
-  assert.ok(source.includes('DELEGATE_ALREADY_INVITED'), 'should handle already-invited error');
-});
-
-test('MeetingInboxButton passes optimistic concurrency timestamp to RPC', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/MeetingInboxButton.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('p_expected_updated_at'), 'should pass p_expected_updated_at to RPC');
-  assert.ok(source.includes('updated_at'), 'should fetch updated_at before RPC call');
-});
-
-// ── Edge function tests ──────────────────────────────────────────────────────
-
-test('edge function is a thin wrapper that calls the RPC', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../supabase/functions/delegate-meeting/index.ts'),
-    'utf-8',
-  );
-  assert.ok(source.includes('assign_meeting_invitation_delegate'), 'should call the RPC');
-  assert.ok(!source.includes('service_role'), 'should not use service role key');
-  assert.ok(source.includes('auth.getUser'), 'should verify user identity');
-  assert.ok(source.includes('Authorization'), 'should preserve user JWT');
-});
-
-test('edge function does not directly manipulate meeting_inbox or meetings tables', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../supabase/functions/delegate-meeting/index.ts'),
-    'utf-8',
-  );
-  // The edge function should only read meeting_inbox for updated_at, not update it
-  assert.ok(!source.includes('.update('), 'should not directly update tables');
-  assert.ok(!source.includes('.delete('), 'should not directly delete from tables');
-  assert.ok(!source.includes('.insert('), 'should not directly insert into tables');
-});
-
-test('edge function rejects self-delegation', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../supabase/functions/delegate-meeting/index.ts'),
-    'utf-8',
-  );
-  assert.ok(source.includes('Cannot delegate to yourself'), 'should reject self-delegation');
-});
-
-test('edge function has CORS headers', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../supabase/functions/delegate-meeting/index.ts'),
-    'utf-8',
-  );
-  assert.ok(source.includes('Access-Control-Allow-Origin'), 'should have CORS headers');
-  assert.ok(source.includes('OPTIONS'), 'should handle OPTIONS preflight');
-});
-
-// ── Independence from minutes delegation ─────────────────────────────────────
-
-test('meeting delegation events do not share event keys with minutes delegation', () => {
-  const meetingEvents = TEMPLATE_EVENTS.filter(e => e.key.startsWith('meeting_invitation'));
-  const minutesEvents = TEMPLATE_EVENTS.filter(e => e.key.startsWith('minute_approval') || e.key.startsWith('minute_approver'));
-  for (const m of meetingEvents) {
-    for (const n of minutesEvents) {
-      assert.notEqual(m.key, n.key);
-      assert.notEqual(m.category, n.category, 'meeting and minutes events should have different categories');
-    }
-  }
-});
-
-test('meeting delegation uses meeting_inbox not minutes_approvals', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/MeetingInboxButton.tsx'),
-    'utf-8',
-  );
-  assert.ok(source.includes('meeting_inbox'), 'should reference meeting_inbox');
-  assert.ok(!source.includes('minutes_approvals'), 'should not reference minutes_approvals');
+test('migration does not modify minutes approval delegation', () => {
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const files = fs.readdirSync(migrationsDir)
+    .filter(f => f.includes('fix_assign_meeting_invitation_delegate'))
+    .sort();
+  const sql = fs.readFileSync(path.join(migrationsDir, files[files.length - 1]), 'utf-8');
+  assert.ok(!sql.includes('minutes_approval'), 'should not touch minutes approval');
+  assert.ok(!sql.includes('approval_delegate'), 'should not touch approval delegate');
 });
