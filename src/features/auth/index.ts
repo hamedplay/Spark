@@ -1,5 +1,5 @@
 export { useAuthSession } from './hooks/useAuthSession';
-export type { AuthSessionState } from './types/authSession';
+export type { AuthSessionState, AuthAccessState, AccessLevel, ReasonCode, NextStep } from './types/authSession';
 
 export {
   getCurrentAuthUserId,

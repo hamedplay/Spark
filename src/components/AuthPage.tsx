@@ -125,14 +125,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         auditLabel = identifier;
       }
       if (userId) {
-        const { data: profileData } = await supabase.from('profiles').select('is_active').eq('user_id', userId).maybeSingle();
-        if (profileData && profileData.is_active === false) {
-          await supabase.auth.signOut();
-          toast.error('حساب کاربری شما غیرفعال شده است. لطفاً با مدیر خود در تماس باشید.', { duration: 6000 });
-          return;
-        }
         await ensureProfile(userId, '');
-        toast.success('با موفقیت وارد شدید');
+        toast.success('ورود با موفقیت انجام شد');
         logAudit({ module: 'auth', action: 'login', entity_name: 'user', entity_id: userId, details: `ورود: ${auditLabel}`, severity: 'info' });
         onSuccess();
       }

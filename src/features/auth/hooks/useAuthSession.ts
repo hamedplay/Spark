@@ -1,114 +1,135 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, handleSupabaseError } from '../../../lib/supabase';
 import { loadResolvedUserPermissions } from '../../permissions';
-import type { AuthSessionState } from '../types/authSession';
+import type { AuthSessionState, AuthAccessState, AccessLevel, ReasonCode, NextStep } from '../types/authSession';
 
 export function useAuthSession(): AuthSessionState {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  const [isFullyAuthorized, setIsFullyAuthorized] = useState(false);
+  const [accessLevel, setAccessLevel] = useState<AccessLevel | null>(null);
+  const [reasonCode, setReasonCode] = useState<ReasonCode | null>(null);
+  const [nextStep, setNextStep] = useState<NextStep>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [userPermissions, setUserPermissions] = useState<Record<string, boolean> | null | undefined>(undefined);
+
+  const generationRef = useRef(0);
 
   const loadUserPermissions = useCallback(async (userId: string) => {
     try {
       const result = await loadResolvedUserPermissions(userId);
       setUserPermissions(result);
-    } catch (err) {
-      console.error('loadUserPermissions error:', err);
+    } catch {
       setUserPermissions({});
     }
   }, []);
 
-  const checkAuth = useCallback(async () => {
+  const refreshAccessState = useCallback(async () => {
+    const gen = ++generationRef.current;
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error("Auth session error:", error);
-        localStorage.removeItem('meeting-manager-auth');
-        await supabase.auth.signOut();
-        setIsAuthenticated(false);
-        setLoading(false);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        if (gen === generationRef.current) {
+          setHasSession(false);
+          setIsFullyAuthorized(false);
+          setAccessLevel(null);
+          setReasonCode(null);
+          setNextStep('login');
+          setCurrentUserId(null);
+          setIsAdmin(false);
+          setUserPermissions(undefined);
+        }
         return;
       }
 
-      setIsAuthenticated(!!session);
+      const { data, error } = await supabase.rpc('get_my_auth_access_state');
+      if (gen !== generationRef.current) return;
 
-      if (session) {
-        try {
-          const { data: { user }, error: userError } = await supabase.auth.getUser();
-          if (userError || !user) {
-            console.error("Auth user error:", userError);
-            localStorage.removeItem('meeting-manager-auth');
-            await supabase.auth.signOut();
-            setIsAuthenticated(false);
-          } else {
-            setCurrentUserId(user.id);
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('is_admin')
-              .eq('user_id', user.id)
-              .maybeSingle();
-
-            if (!profileError && profile) {
-              const adminStatus = profile.is_admin === true;
-              setIsAdmin(adminStatus);
-              if (!adminStatus) {
-                await loadUserPermissions(user.id);
-              } else {
-                setUserPermissions(null);
-              }
-            } else {
-              await loadUserPermissions(user.id);
-            }
-          }
-        } catch (userCheckError) {
-          console.error("Error checking user:", userCheckError);
-          localStorage.removeItem('meeting-manager-auth');
-          await supabase.auth.signOut();
-          setIsAuthenticated(false);
-        }
+      if (error || !data) {
+        setHasSession(false);
+        setIsFullyAuthorized(false);
+        setAccessLevel('BLOCKED');
+        setReasonCode('SESSION_INVALID');
+        return;
       }
-    } catch (error) {
-      console.error("Auth check error:", error);
-      localStorage.removeItem('meeting-manager-auth');
-      handleSupabaseError(error);
-      setIsAuthenticated(false);
-      setUserPermissions({});
+
+      const state = data as AuthAccessState;
+      setHasSession(state.has_session);
+      setAccessLevel(state.access_level);
+      setReasonCode(state.reason_code);
+      setNextStep(state.next_step);
+      setCurrentUserId(state.user_id);
+      setIsFullyAuthorized(state.access_level === 'FULL');
+
+      if (state.access_level === 'FULL' && state.user_id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('user_id', state.user_id)
+          .maybeSingle();
+
+        if (gen !== generationRef.current) return;
+
+        const adminStatus = profile?.is_admin === true;
+        setIsAdmin(adminStatus);
+        if (!adminStatus) {
+          await loadUserPermissions(state.user_id);
+        } else {
+          setUserPermissions(null);
+        }
+      } else {
+        setIsAdmin(false);
+        setUserPermissions(undefined);
+      }
+    } catch {
+      if (gen === generationRef.current) {
+        setHasSession(false);
+        setIsFullyAuthorized(false);
+      }
     } finally {
-      setLoading(false);
+      if (gen === generationRef.current) {
+        setLoading(false);
+      }
     }
   }, [loadUserPermissions]);
 
   useEffect(() => {
-    checkAuth();
+    refreshAccessState();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
       if (!session) {
+        const gen = ++generationRef.current;
+        setHasSession(false);
+        setIsFullyAuthorized(false);
+        setAccessLevel(null);
+        setReasonCode(null);
+        setNextStep('login');
+        setCurrentUserId(null);
         setIsAdmin(false);
         setUserPermissions(undefined);
+        setLoading(false);
       } else {
-        (async () => {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('is_admin')
-            .eq('user_id', session.user.id)
-            .maybeSingle();
-          const adminStatus = profile?.is_admin === true;
-          setIsAdmin(adminStatus);
-          setCurrentUserId(session.user.id);
-          if (adminStatus) {
-            setUserPermissions(null);
-          } else {
-            await loadUserPermissions(session.user.id);
-          }
-        })();
+        refreshAccessState();
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [checkAuth, loadUserPermissions]);
+  }, [refreshAccessState]);
 
-  return { isAuthenticated, loading, isAdmin, currentUserId, userPermissions };
+  const isAuthenticated = hasSession && isFullyAuthorized;
+
+  return {
+    loading,
+    hasSession,
+    isFullyAuthorized,
+    isAuthenticated,
+    accessLevel,
+    reasonCode,
+    nextStep,
+    currentUserId,
+    isAdmin,
+    userPermissions,
+    refreshAccessState,
+  };
 }

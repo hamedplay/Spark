@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, Loader as Loader2, CircleAlert as AlertCircle, Shield, Lock, Users, ShieldOff, Clock } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase, guestSupabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
 import type { ConferenceRoom } from './types';
@@ -252,7 +252,7 @@ export function GuestJoinPage({ code }: Props) {
     const peerId = `${participantId}-${Date.now()}`;
     setMyPeerId(peerId);
 
-    const { error: upsertErr } = await supabase.from('conference_participants').upsert([{
+    const { error: upsertErr } = await guestSupabase.from('conference_participants').upsert([{
       room_id: room.id,
       user_id: participantId,
       display_name: participantName,
@@ -320,7 +320,7 @@ export function GuestJoinPage({ code }: Props) {
       supabase.removeChannel(ch);
       // Clean up the waiting room record
       if (waitingRequestId) {
-        await supabase.from('conference_waiting_room').delete().eq('id', waitingRequestId);
+        await guestSupabase.from('conference_waiting_room').delete().eq('id', waitingRequestId);
       }
       setWaitingRequestId(null);
       setStep('form');
@@ -433,7 +433,7 @@ export function GuestJoinPage({ code }: Props) {
 
   const handleLeave = async () => {
     if (room && myPeerId) {
-      await supabase.from('conference_participants')
+      await guestSupabase.from('conference_participants')
         .delete().eq('room_id', room.id).eq('peer_id', myPeerId);
     }
 

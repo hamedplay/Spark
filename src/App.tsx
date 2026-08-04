@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { AuthPage } from './components/AuthPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { GuestJoinPage } from './components/VideoConference/GuestJoinPage';
+import { RestrictedAccessPage } from './components/RestrictedAccessPage';
 import { supabase } from './lib/supabase';
 import { Toaster } from 'react-hot-toast';
 import { Wrench } from 'lucide-react';
-import { useUserPreferences } from './features/user-preferences';
+import { useUserPreferences, UserPreferencesProvider } from './features/user-preferences';
 import { useAuthSession } from './features/auth';
 import { useMeetingsData } from './features/meetings';
 import { useMaintenanceMode } from './app/hooks/useMaintenanceMode';
@@ -17,17 +18,15 @@ import { SparkMeetingPrefill } from './components/Spark/SparkAssistant';
 import { Meeting } from './types';
 import { PageRendererProps } from './app/navigation/pageRendererTypes';
 
-function App() {
-  const conferenceCode = new URLSearchParams(window.location.search).get('conference');
-
-  const { isAuthenticated, loading, isAdmin, currentUserId, userPermissions } = useAuthSession();
+function AuthorizedApp() {
   const { prefs, loading: prefsLoading } = useUserPreferences();
-  const { activePage, navigate } = useNavigation(isAuthenticated, prefsLoading, prefs.default_landing_page);
+  const { currentUserId, isAdmin, userPermissions } = useAuthSession();
+  const { activePage, navigate } = useNavigation(true, prefsLoading, prefs.default_landing_page);
   const maintenanceMode = useMaintenanceMode();
   const sparkVisible = useSparkVisibility();
-  const { meetings, pendingMeetingsCount, fetchMeetings, fetchPendingMeetingsCount } = useMeetingsData(isAuthenticated);
+  const { meetings, pendingMeetingsCount, fetchMeetings, fetchPendingMeetingsCount } = useMeetingsData(true);
 
-  useAdminPathGuard(isAuthenticated, isAdmin, navigate);
+  useAdminPathGuard(true, isAdmin, navigate);
 
   const [showSplash, setShowSplash] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
@@ -50,40 +49,9 @@ function App() {
   const [chatInitUserId, setChatInitUserId] = useState<string | null>(null);
 
   const minutesFollowupAccess = useMinutesFollowupAccess({
-    isAuthenticated,
+    isAuthenticated: true,
     userId: currentUserId,
   });
-
-  if (conferenceCode) {
-    return <GuestJoinPage code={conferenceCode} />;
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <>
-        <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
-        <AuthPage onSuccess={() => {
-          void supabase.from('system_config').select('value').eq('section', 'appearance').eq('key', 'splash_enabled').maybeSingle().then(({ data }) => {
-            const enabled = !data || data.value === 'true' || data.value === null;
-            if (enabled && !sessionStorage.getItem('spark_splash_shown')) {
-              sessionStorage.setItem('spark_splash_shown', '1');
-              setShowSplash(true);
-              setSplashDone(false);
-            }
-          }).catch(() => {});
-          navigate('calendar');
-        }} />
-      </>
-    );
-  }
 
   if (activePage === 'admin' && isAdmin) {
     return <AdminDashboard />;
@@ -158,6 +126,71 @@ function App() {
         onNavigateToDate: (jy, jm, jd, view) => { setSparkNavigateDate({ jy, jm, jd, view }); },
       }}
     />
+  );
+}
+
+function App() {
+  const conferenceCode = new URLSearchParams(window.location.search).get('conference');
+
+  const { loading, hasSession, isFullyAuthorized, reasonCode, nextStep, refreshAccessState } = useAuthSession();
+
+  const [showSplash, setShowSplash] = useState(false);
+  const [splashDone, setSplashDone] = useState(false);
+  useEffect(() => { setSplashDone(true); }, []);
+
+  if (conferenceCode) {
+    return <GuestJoinPage code={conferenceCode} />;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (!hasSession || !isFullyAuthorized) {
+    if (hasSession && !isFullyAuthorized) {
+      return (
+        <>
+          <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+          <RestrictedAccessPage
+            reasonCode={reasonCode}
+            nextStep={nextStep}
+            onRefresh={refreshAccessState}
+            onSignOut={async () => {
+              await supabase.auth.signOut();
+            }}
+          />
+        </>
+      );
+    }
+    return (
+      <>
+        <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+        <AuthPage onSuccess={() => {
+          void supabase.from('system_config').select('value').eq('section', 'appearance').eq('key', 'splash_enabled').maybeSingle().then(({ data }) => {
+            const enabled = !data || data.value === 'true' || data.value === null;
+            if (enabled && !sessionStorage.getItem('spark_splash_shown')) {
+              sessionStorage.setItem('spark_splash_shown', '1');
+              setShowSplash(true);
+              setSplashDone(false);
+            }
+          }).catch(() => {});
+          refreshAccessState();
+        }} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+      <UserPreferencesProvider>
+        <AuthorizedApp />
+      </UserPreferencesProvider>
+    </>
   );
 }
 
