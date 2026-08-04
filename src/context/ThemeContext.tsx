@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useUserPreferences } from '../features/user-preferences';
 
 type Theme = 'light' | 'dark';
 
@@ -43,8 +42,6 @@ function applyAccentToDom(accent: AccentKey) {
 }
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { prefs, loading: prefsLoading, updatePrefs } = useUserPreferences();
-
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('theme') as Theme;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -55,27 +52,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return (localStorage.getItem('accent_color') as AccentKey) || 'teal';
   });
 
-  // Apply initial values to DOM
-  useEffect(() => { applyThemeToDom(theme); }, []);
-  useEffect(() => { applyAccentToDom(accent); }, []);
-
-  // Sync from Supabase once prefs have loaded
-  useEffect(() => {
-    if (prefsLoading) return;
-    if (prefs.theme && prefs.theme !== theme) {
-      setTheme(prefs.theme);
-      localStorage.setItem('theme', prefs.theme);
-      applyThemeToDom(prefs.theme);
-    }
-    const validAccent = ACCENT_COLORS.some(c => c.key === prefs.accent_color);
-    if (prefs.accent_color && validAccent && prefs.accent_color !== accent) {
-      setAccentState(prefs.accent_color as AccentKey);
-      localStorage.setItem('accent_color', prefs.accent_color);
-      applyAccentToDom(prefs.accent_color as AccentKey);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefsLoading]);
-
   useEffect(() => { applyThemeToDom(theme); }, [theme]);
   useEffect(() => { applyAccentToDom(accent); }, [accent]);
 
@@ -83,13 +59,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const next = theme === 'light' ? 'dark' : 'light';
     setTheme(next);
     localStorage.setItem('theme', next);
-    updatePrefs({ theme: next });
   };
 
   const setAccent = (a: AccentKey) => {
     setAccentState(a);
     localStorage.setItem('accent_color', a);
-    updatePrefs({ accent_color: a });
   };
 
   return (
