@@ -1,16 +1,12 @@
 /*
-# Phase 3B — Security Console Read Model
+# Phase 3B Hardening — Security Console Read Model
 
-Creates public.get_auth_security_console_state() RPC that returns:
-- Current auth_security_settings (sanitized)
-- Impact counts (active users, verified TOTP users, security admins without TOTP)
-- Recent history (max 20 records)
-
-Security:
-- SECURITY DEFINER, search_path = ''
-- Only authenticated role may call
-- Requires is_current_security_admin() = true
-- Returns only counts, never user identities or factor IDs
+Replaces public.get_auth_security_console_state() with hardened version:
+- Independent session validation (auth.uid, session_id, auth.sessions, not_after)
+- Impact counts only for active profiles (is_active=true, account_status='ACTIVE')
+- users_with_verified_totp: active profiles with EXISTS verified TOTP
+- users_without_verified_totp: active profiles with NOT EXISTS verified TOTP
+- No subtraction of counts from different populations
 
 Safety:
 - No prior migration modified
@@ -28,6 +24,8 @@ SET search_path TO ''
 AS $function$
 DECLARE
   v_uid uuid := auth.uid();
+  v_jwt jsonb := auth.jwt();
+  v_session_id uuid;
   v_settings jsonb;
   v_active_users int;
   v_users_with_verified_totp int;
@@ -35,18 +33,44 @@ DECLARE
   v_security_admins int;
   v_security_admins_without_verified_totp int;
   v_recent_history jsonb;
+  v_session_exists boolean := false;
+  v_session_not_after timestamptz;
 BEGIN
   -- 1. Must be authenticated
   IF v_uid IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'UNAUTHORIZED');
   END IF;
 
-  -- 2. Must be an active security admin
+  -- 2. Extract session_id from JWT
+  v_session_id := NULLIF(v_jwt ->> 'session_id', '')::uuid;
+  IF v_session_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'SESSION_INVALID');
+  END IF;
+
+  -- 3. Verify session exists and belongs to user
+  SELECT EXISTS(
+    SELECT 1 FROM auth.sessions
+    WHERE id = v_session_id AND user_id = v_uid
+  ) INTO v_session_exists;
+
+  IF NOT v_session_exists THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'SESSION_INVALID');
+  END IF;
+
+  -- 4. Check not_after expiry
+  SELECT not_after INTO v_session_not_after
+  FROM auth.sessions WHERE id = v_session_id LIMIT 1;
+
+  IF v_session_not_after IS NOT NULL AND v_session_not_after <= now() THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'SESSION_INVALID');
+  END IF;
+
+  -- 5. Must be an active security admin
   IF NOT public.is_current_security_admin() THEN
     RETURN jsonb_build_object('ok', false, 'error', 'SECURITY_ADMIN_REQUIRED');
   END IF;
 
-  -- 3. Load current settings (single row, id=1)
+  -- 6. Load current settings (single row, id=1)
   SELECT to_jsonb(s) - 'updated_by' INTO v_settings
   FROM public.auth_security_settings s
   WHERE s.id = 1;
@@ -55,29 +79,44 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'SETTINGS_NOT_FOUND');
   END IF;
 
-  -- 4. Impact: active users (account_status = 'ACTIVE' AND is_active = true)
+  -- 7. Impact: active users
   SELECT count(DISTINCT p.user_id) INTO v_active_users
   FROM public.profiles p
   WHERE p.is_active IS TRUE
     AND p.account_status = 'ACTIVE';
 
-  -- 5. Impact: users with at least one verified TOTP factor
-  SELECT count(DISTINCT f.user_id) INTO v_users_with_verified_totp
-  FROM auth.mfa_factors f
-  WHERE f.factor_type = 'totp'
-    AND f.status = 'verified';
+  -- 8. Users with verified TOTP (active only, EXISTS)
+  SELECT count(DISTINCT p.user_id) INTO v_users_with_verified_totp
+  FROM public.profiles p
+  WHERE p.is_active IS TRUE
+    AND p.account_status = 'ACTIVE'
+    AND EXISTS (
+      SELECT 1 FROM auth.mfa_factors f
+      WHERE f.user_id = p.user_id
+        AND f.factor_type = 'totp'
+        AND f.status = 'verified'
+    );
 
-  -- 6. Users without verified TOTP = active - with_totp
-  v_users_without_verified_totp := GREATEST(v_active_users - v_users_with_verified_totp, 0);
+  -- 9. Users without verified TOTP (active only, NOT EXISTS — not subtraction)
+  SELECT count(DISTINCT p.user_id) INTO v_users_without_verified_totp
+  FROM public.profiles p
+  WHERE p.is_active IS TRUE
+    AND p.account_status = 'ACTIVE'
+    AND NOT EXISTS (
+      SELECT 1 FROM auth.mfa_factors f
+      WHERE f.user_id = p.user_id
+        AND f.factor_type = 'totp'
+        AND f.status = 'verified'
+    );
 
-  -- 7. Security admins count
+  -- 10. Security admins count
   SELECT count(DISTINCT p.user_id) INTO v_security_admins
   FROM public.profiles p
   WHERE p.is_security_admin IS TRUE
     AND p.is_active IS TRUE
     AND p.account_status = 'ACTIVE';
 
-  -- 8. Security admins without verified TOTP
+  -- 11. Security admins without verified TOTP
   SELECT count(DISTINCT p.user_id) INTO v_security_admins_without_verified_totp
   FROM public.profiles p
   WHERE p.is_security_admin IS TRUE
@@ -90,7 +129,7 @@ BEGIN
         AND f.status = 'verified'
     );
 
-  -- 9. Recent history (max 20)
+  -- 12. Recent history (max 20)
   SELECT jsonb_agg(jsonb_build_object(
     'version', h.version,
     'changed_at', h.changed_at,

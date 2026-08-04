@@ -64,6 +64,10 @@ export type SecurityErrorCode =
   | 'INVALID_TYPE'
   | 'OUT_OF_RANGE'
   | 'UNKNOWN_KEY'
+  | 'UNAUTHORIZED'
+  | 'SESSION_INVALID'
+  | 'SECURITY_ADMIN_REQUIRED'
+  | 'SETTINGS_NOT_FOUND'
   | 'UNKNOWN_SECURITY_ERROR';
 
 export interface SecuritySettingsPatch {
@@ -96,6 +100,10 @@ export const SECURITY_ERROR_MESSAGES: Record<string, string> = {
   INVALID_TYPE: 'نوع یکی از فیلدها نامعتبر است.',
   OUT_OF_RANGE: 'مقدار یکی از فیلدها خارج از محدوده مجاز است.',
   UNKNOWN_KEY: 'کلید ناشناخته در Patch.',
+  UNAUTHORIZED: 'احراز هویت نشده‌اید. لطفاً وارد شوید.',
+  SESSION_INVALID: 'نشست شما نامعتبر است. لطفاً دوباره وارد شوید.',
+  SECURITY_ADMIN_REQUIRED: 'دسترسی به تنظیمات امنیتی فقط برای مدیر امنیت فعال است.',
+  SETTINGS_NOT_FOUND: 'تنظیمات امنیتی یافت نشد.',
   UNKNOWN_SECURITY_ERROR: 'خطای ناشناخته رخ داد.',
 };
 
@@ -106,6 +114,7 @@ export function mapSecurityError(code: string | undefined | null): SecurityError
     'MFA_REQUIRED_WITHOUT_FACTOR', 'INVALID_SESSION_POLICY', 'PHONE_LOGIN_NOT_READY',
     'NO_EFFECTIVE_CHANGE', 'FORBIDDEN', 'SESSION_EXPIRED', 'INVALID_TYPE',
     'OUT_OF_RANGE', 'UNKNOWN_KEY',
+    'UNAUTHORIZED', 'SESSION_INVALID', 'SECURITY_ADMIN_REQUIRED', 'SETTINGS_NOT_FOUND',
   ];
   return (known as string[]).includes(code) ? (code as SecurityErrorCode) : 'UNKNOWN_SECURITY_ERROR';
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Shield, ShieldCheck, KeyRound, Plus, Trash2, X, Loader as Loader2, QrCode, Copy, Check, CircleAlert as AlertCircle, Smartphone } from 'lucide-react';
+import { Shield, ShieldCheck, Plus, Trash2, X, Loader as Loader2, QrCode, Copy, Check, CircleAlert as AlertCircle, Smartphone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../lib/supabase';
 import {
@@ -40,8 +40,8 @@ export function TotpFactorManager() {
       const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       setCurrentAal(aalData?.currentLevel ?? '');
 
-      const { data: accessState } = await supabase.rpc('get_my_auth_access_state');
-      setMfaRequired(accessState?.mfa_required ?? false);
+      const { data: accessState } = await supabase.rpc('get_my_auth_access_state' as never) as { data: unknown };
+      setMfaRequired((accessState as { mfa_required?: boolean })?.mfa_required ?? false);
     } catch {
       // best-effort
     } finally {
@@ -114,7 +114,6 @@ export function TotpFactorManager() {
     setEnrollment(null);
     setCode('');
     setFriendlyName('');
-    setError(null);
     setPhase('idle');
   }, []);
 
@@ -214,6 +213,7 @@ export function TotpFactorManager() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => handleRemoveInitiate(f)}
                 disabled={removing}
                 className="p-2 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -230,6 +230,7 @@ export function TotpFactorManager() {
       {phase === 'idle' && (
         <div className="space-y-3">
           <button
+            type="button"
             onClick={() => setPhase('enrolling')}
             disabled={busy}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
@@ -258,6 +259,7 @@ export function TotpFactorManager() {
           </div>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={handleStartEnrollment}
               disabled={busy || friendlyName.trim().length < 3}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
@@ -266,6 +268,7 @@ export function TotpFactorManager() {
               ایجاد کد QR
             </button>
             <button
+              type="button"
               onClick={handleCancel}
               disabled={busy}
               className="px-4 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition-colors"
@@ -287,7 +290,7 @@ export function TotpFactorManager() {
               <code className="flex-1 text-xs text-gray-600 dark:text-gray-300 break-all font-mono">
                 {enrollment.secret}
               </code>
-              <button onClick={handleCopySecret} className="flex-shrink-0 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="کپی کلید">
+              <button type="button" onClick={handleCopySecret} className="flex-shrink-0 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="کپی کلید">
                 {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-400" />}
               </button>
             </div>
@@ -315,6 +318,7 @@ export function TotpFactorManager() {
 
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={handleVerify}
               disabled={busy || code.length !== 6}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
@@ -323,6 +327,7 @@ export function TotpFactorManager() {
               تأیید و فعال‌سازی
             </button>
             <button
+              type="button"
               onClick={handleCancel}
               disabled={busy}
               className="px-4 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-300 rounded-xl text-sm transition-colors"
@@ -342,7 +347,7 @@ export function TotpFactorManager() {
                 <AlertCircle className="w-5 h-5 text-red-500" />
                 حذف برنامه احراز هویت
               </h3>
-              <button onClick={() => { setRemoveTarget(null); setRemoveCode(''); }} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+              <button type="button" onClick={() => { setRemoveTarget(null); setRemoveCode(''); }} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -376,6 +381,7 @@ export function TotpFactorManager() {
 
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={handleRemoveConfirm}
                 disabled={removing || removeCode.length !== 6 || (verifiedCount === 1 && mfaRequired)}
                 className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
@@ -384,6 +390,7 @@ export function TotpFactorManager() {
                 حذف
               </button>
               <button
+                type="button"
                 onClick={() => { setRemoveTarget(null); setRemoveCode(''); }}
                 disabled={removing}
                 className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"

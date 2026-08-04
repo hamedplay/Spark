@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { KeyRound, Loader as Loader2, Check, X } from 'lucide-react';
 import {
   listCurrentUserTotpFactors,
@@ -29,6 +29,8 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
       setFactors(verified);
       if (verified.length === 1) {
         setSelectedFactorId(verified[0].id);
+      } else {
+        setSelectedFactorId(null);
       }
     } catch {
       setError('برنامه احراز هویت پیدا نشد.');
@@ -37,18 +39,17 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
     }
   }, []);
 
-  const handleOpen = useCallback(() => {
-    if (open) {
-      setError(null);
+  useEffect(() => {
+    if (!open) {
       setCode('');
-      loadFactors();
+      setError(null);
+      setSelectedFactorId(null);
+      setFactors([]);
+      return;
     }
-  }, [open, loadFactors]);
 
-  // Call loadFactors when dialog opens
-  useState(() => {
-    if (open) loadFactors();
-  });
+    void loadFactors();
+  }, [open, loadFactors]);
 
   const handleVerify = useCallback(async () => {
     const validCode = validateTotpCode(code);
@@ -94,7 +95,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
             <KeyRound className="w-5 h-5 text-blue-500" />
             تأیید احراز هویت دومرحله‌ای
           </h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -123,6 +124,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
                   onChange={(e) => setSelectedFactorId(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
+                  <option value="">انتخاب کنید</option>
                   {factors.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.friendlyName ?? 'بدون نام'} — {new Date(f.createdAt).toLocaleDateString('fa-IR')}
@@ -149,6 +151,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
 
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={handleVerify}
                 disabled={busy || code.length !== 6 || !selectedFactorId}
                 className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
@@ -157,6 +160,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
                 تأیید و ذخیره
               </button>
               <button
+                type="button"
                 onClick={() => { setCode(''); setError(null); onClose(); }}
                 disabled={busy}
                 className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"

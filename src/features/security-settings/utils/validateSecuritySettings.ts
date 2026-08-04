@@ -10,19 +10,13 @@ export function validateSecuritySettings(
   draft: SecuritySettings,
   patch: SecuritySettingsPatch
 ): ValidationResult {
-  // Check at least one login method enabled
+  // Check at least one login method enabled — based on final draft state
   if (
-    patch.username_login === false &&
-    patch.email_login === false &&
-    patch.phone_login === false
+    !draft.username_login &&
+    !draft.email_login &&
+    !draft.phone_login
   ) {
-    // Also check the resulting state
-    const resultUsername = patch.username_login ?? draft.username_login;
-    const resultEmail = patch.email_login ?? draft.email_login;
-    const resultPhone = patch.phone_login ?? draft.phone_login;
-    if (!resultUsername && !resultEmail && !resultPhone) {
-      return { ok: false, error: 'NO_LOGIN_METHOD_ENABLED', message: 'حداقل یک روش ورود باید فعال باشد.' };
-    }
+    return { ok: false, error: 'NO_LOGIN_METHOD_ENABLED', message: 'حداقل یک روش ورود باید فعال باشد.' };
   }
 
   // mfa_policy = required only if allow_totp_mfa = true

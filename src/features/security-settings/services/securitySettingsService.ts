@@ -1,4 +1,4 @@
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 import type {
   SecurityConsoleState,
   SecuritySettingsPatch,
@@ -7,7 +7,7 @@ import type {
 import { mapSecurityError } from '../types/securitySettings';
 
 export async function loadSecurityConsoleState(): Promise<SecurityConsoleState> {
-  const { data, error } = await supabase.rpc('get_auth_security_console_state');
+  const { data, error } = await supabase.rpc('get_auth_security_console_state' as never) as unknown as { data: unknown; error: { message?: string } | null };
 
   if (error) {
     return {
@@ -19,17 +19,27 @@ export async function loadSecurityConsoleState(): Promise<SecurityConsoleState> 
     };
   }
 
-  if (!data || data.ok === false) {
+  if (!data || (data as { ok?: boolean }).ok === false) {
+    const errCode = (data as { error?: string })?.error;
+    if (errCode === 'UNAUTHORIZED' || errCode === 'SESSION_INVALID' || errCode === 'SECURITY_ADMIN_REQUIRED' || errCode === 'SETTINGS_NOT_FOUND') {
+      return {
+        ok: false,
+        settings: {} as never,
+        impact: {} as never,
+        recent_history: [],
+        error: errCode,
+      };
+    }
     return {
       ok: false,
       settings: {} as never,
       impact: {} as never,
       recent_history: [],
-      error: data?.error ?? 'UNKNOWN_SECURITY_ERROR',
+      error: 'UNKNOWN_SECURITY_ERROR',
     };
   }
 
-  return data as SecurityConsoleState;
+  return data as unknown as SecurityConsoleState;
 }
 
 export interface SaveSecuritySettingsParams {
@@ -47,25 +57,32 @@ export interface SaveResult {
 export async function saveSecuritySettingsPatch(
   params: SaveSecuritySettingsParams
 ): Promise<SaveResult> {
-  const { data, error } = await supabase.rpc('set_auth_security_settings_patch', {
+  const rpcResult = await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  }).rpc('set_auth_security_settings_patch', {
     p_expected_version: params.expectedVersion,
     p_patch: params.patch,
     p_change_reason: params.changeReason,
   });
+  const { data, error } = rpcResult;
 
   if (error) {
     return { ok: false, error: 'UNKNOWN_SECURITY_ERROR' };
   }
 
-  if (!data || data.ok === false) {
+  if (!data || (data as { ok?: boolean }).ok === false) {
+    const errCode = (data as { error?: string })?.error;
+    if (errCode === 'SESSION_INVALID') {
+      return { ok: false, error: 'SESSION_INVALID' };
+    }
     return {
       ok: false,
-      error: mapSecurityError(data?.error),
+      error: mapSecurityError(errCode),
     };
   }
 
   return {
     ok: true,
-    currentVersion: data.settings_version ?? undefined,
+    currentVersion: (data as { new_version?: number }).new_version ?? undefined,
   };
 }

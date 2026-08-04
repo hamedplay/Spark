@@ -451,16 +451,6 @@ export function ProfilePage() {
           )}
         </div>
 
-        {/* Security / TOTP */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <SectionHeader id="security" title="امنیت حساب" subtitle="مدیریت احراز هویت دومرحله‌ای (TOTP)" />
-          {openSection === 'security' && (
-            <div className="p-6">
-              <TotpFactorManager />
-            </div>
-          )}
-        </div>
-
         {/* Save */}
         <div className="flex justify-end pb-4">
           <button type="submit" disabled={saving}
@@ -472,6 +462,16 @@ export function ProfilePage() {
           </button>
         </div>
       </form>
+
+      {/* Security / TOTP — outside profile form to prevent submit on Enter */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mt-4">
+        <SectionHeader id="security" title="امنیت حساب" subtitle="مدیریت احراز هویت دومرحله‌ای (TOTP)" />
+        {openSection === 'security' && (
+          <div className="p-6">
+            <TotpFactorManager />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

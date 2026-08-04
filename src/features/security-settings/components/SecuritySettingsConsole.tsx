@@ -1,24 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Shield, Loader as Loader2, Save, Lock, LogIn, Settings as SettingsIcon, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, KeyRound } from 'lucide-react';
+import { Shield, Loader as Loader2, Save, Lock, LogIn, Settings as SettingsIcon, Clock, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
-import {
-  loadSecurityConsoleState,
-  saveSecuritySettingsPatch,
-  buildSecuritySettingsPatch,
-  isPatchEmpty,
-  validateSecuritySettings,
-  validateChangeReason,
-  SECURITY_ERROR_MESSAGES,
-  mapSecurityError,
-  type SecurityConsoleState,
-  type SecuritySettings,
-  type SecuritySettingsPatch,
-  type MfaPolicy,
-} from '../index';
+import { loadSecurityConsoleState, saveSecuritySettingsPatch } from '../services/securitySettingsService';
+import { buildSecuritySettingsPatch, isPatchEmpty } from '../utils/buildSecuritySettingsPatch';
+import { validateSecuritySettings, validateChangeReason } from '../utils/validateSecuritySettings';
+import { SECURITY_ERROR_MESSAGES, type SecurityConsoleState, type SecuritySettings, type SecuritySettingsPatch, type MfaPolicy } from '../types/securitySettings';
 import { MfaPolicyImpactCard } from './MfaPolicyImpactCard';
 import { SecuritySettingsHistory } from './SecuritySettingsHistory';
 import { SecurityStepUpDialog } from './SecurityStepUpDialog';
-import { listCurrentUserTotpFactors, type TotpFactor } from '../../auth/services/mfaOperations';
+import { listCurrentUserTotpFactors } from '../../auth/services/mfaOperations';
+
+interface ConflictSnapshot {
+  expectedVersion: number;
+  patch: SecuritySettingsPatch;
+  changeReason: string;
+  draft: SecuritySettings;
+}
 
 export function SecuritySettingsConsole() {
   const [state, setState] = useState<SecurityConsoleState | null>(null);
@@ -27,10 +24,9 @@ export function SecuritySettingsConsole() {
   const [saving, setSaving] = useState(false);
   const [changeReason, setChangeReason] = useState('');
   const [stepUpOpen, setStepUpOpen] = useState(false);
-  const [stepUpSuccess, setStepUpSuccess] = useState(false);
   const [confirmRequired, setConfirmRequired] = useState(false);
   const [hasVerifiedTotp, setHasVerifiedTotp] = useState(false);
-  const [totpFactors, setTotpFactors] = useState<TotpFactor[]>([]);
+  const [conflict, setConflict] = useState<ConflictSnapshot | null>(null);
   const patchRef = useRef<SecuritySettingsPatch | null>(null);
   const reasonRef = useRef<string>('');
 
@@ -42,11 +38,9 @@ export function SecuritySettingsConsole() {
       if (result.ok && result.settings) {
         setDraft({ ...result.settings });
       }
-      // Also check if current user has verified TOTP
       try {
         const factors = await listCurrentUserTotpFactors();
         const verified = factors.filter((f) => f.status === 'verified');
-        setTotpFactors(verified);
         setHasVerifiedTotp(verified.length > 0);
       } catch {
         setHasVerifiedTotp(false);
@@ -66,24 +60,20 @@ export function SecuritySettingsConsole() {
   const handleSave = useCallback(async () => {
     if (!draft || !state?.settings) return;
 
-    // 1. Build minimal patch
     const patch = buildSecuritySettingsPatch(state.settings, draft);
     patchRef.current = patch;
 
-    // 2. Check if patch is empty
     if (isPatchEmpty(patch)) {
       toast('تغییری برای ذخیره وجود ندارد.');
       return;
     }
 
-    // 3. Validate draft
     const validation = validateSecuritySettings(draft, patch);
     if (!validation.ok) {
       toast.error(validation.message ?? 'خطا در اعتبارسنجی.');
       return;
     }
 
-    // 4. Validate change reason
     const reasonValidation = validateChangeReason(changeReason);
     if (!reasonValidation.ok) {
       toast.error(reasonValidation.message ?? 'دلیل تغییر نامعتبر است.');
@@ -91,7 +81,6 @@ export function SecuritySettingsConsole() {
     }
     reasonRef.current = changeReason.trim();
 
-    // 5. Check impact for required transition
     if (isRequiredTransition()) {
       if (state.impact.security_admins_without_verified_totp > 0) {
         toast.error('فعال‌سازی سیاست «الزامی» مسدود است: برخی مدیران امنیت TOTP فعال ندارند.');
@@ -103,19 +92,16 @@ export function SecuritySettingsConsole() {
       }
     }
 
-    // 6. Check if user has verified TOTP factor
     if (!hasVerifiedTotp) {
       toast.error('برای تغییر تنظیمات امنیتی ابتدا TOTP را در پروفایل خود فعال کنید.');
       return;
     }
 
-    // 7. Open step-up dialog
     setStepUpOpen(true);
   }, [draft, state, changeReason, confirmRequired, hasVerifiedTotp, isRequiredTransition]);
 
   const handleStepUpSuccess = useCallback(async () => {
     setStepUpOpen(false);
-    setStepUpSuccess(true);
 
     if (!patchRef.current || !state?.settings) return;
 
@@ -132,10 +118,14 @@ export function SecuritySettingsConsole() {
         const message = SECURITY_ERROR_MESSAGES[errorCode] ?? SECURITY_ERROR_MESSAGES.UNKNOWN_SECURITY_ERROR;
 
         if (errorCode === 'VERSION_CONFLICT') {
+          setConflict({
+            expectedVersion: state.settings.settings_version,
+            patch: patchRef.current,
+            changeReason: reasonRef.current,
+            draft: { ...draft! },
+          });
           toast.error(message);
           await loadState();
-          setChangeReason('');
-          setConfirmRequired(false);
         } else {
           toast.error(message);
         }
@@ -145,14 +135,14 @@ export function SecuritySettingsConsole() {
       toast.success('تنظیمات امنیتی با موفقیت ذخیره شد.');
       setChangeReason('');
       setConfirmRequired(false);
+      setConflict(null);
       await loadState();
     } finally {
       setSaving(false);
-      setStepUpSuccess(false);
       patchRef.current = null;
       reasonRef.current = '';
     }
-  }, [state, loadState]);
+  }, [state, draft, loadState]);
 
   if (loading) {
     return (
@@ -163,11 +153,32 @@ export function SecuritySettingsConsole() {
   }
 
   if (!state || !state.ok) {
+    const errCode = state?.error;
+    if (errCode === 'SECURITY_ADMIN_REQUIRED') {
+      return (
+        <div className="p-6 text-center" dir="rtl">
+          <Lock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            دسترسی به تنظیمات امنیتی فقط برای مدیر امنیت فعال است.
+          </p>
+        </div>
+      );
+    }
+    if (errCode === 'UNAUTHORIZED' || errCode === 'SESSION_INVALID') {
+      return (
+        <div className="p-6 text-center" dir="rtl">
+          <Lock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            نشست شما نامعتبر است. لطفاً دوباره وارد شوید.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="p-6 text-center" dir="rtl">
         <Lock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          دسترسی به تنظیمات امنیتی فقط برای مدیر امنیت فعال است.
+          خطا در بارگذاری تنظیمات امنیتی.
         </p>
       </div>
     );
@@ -184,6 +195,21 @@ export function SecuritySettingsConsole() {
         onClose={() => setStepUpOpen(false)}
         onSuccess={handleStepUpSuccess}
       />
+
+      {conflict && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-2xl p-5 space-y-3">
+          <h4 className="text-sm font-bold text-amber-800 dark:text-amber-200">تعارض نسخه</h4>
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            نسخه قبلی: {conflict.expectedVersion} — نسخه جدید: {state.settings.settings_version}
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            فیلدهای مورد نظر برای تغییر: {Object.keys(conflict.patch).join('، ')}
+          </p>
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            تغییرات جدید روی State جدید بارگذاری شد. لطفاً تغییرات خود را بازبینی و دوباره اعمال کنید.
+          </p>
+        </div>
+      )}
 
       {/* Login Methods */}
       <SectionCard title="روش‌های ورود" icon={LogIn}>
@@ -355,11 +381,12 @@ export function SecuritySettingsConsole() {
       {/* Save Button */}
       <div className="flex justify-end">
         <button
+          type="button"
           onClick={handleSave}
-          disabled={saving || stepUpSuccess}
+          disabled={saving}
           className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-8 py-2.5 rounded-xl font-medium transition disabled:opacity-60 shadow-sm"
         >
-          {saving || stepUpSuccess ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
         </button>
       </div>
