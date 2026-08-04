@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, Loader as Loader2, CircleAlert as AlertCircle, Shield, Lock, Users, ShieldOff, Clock } from 'lucide-react';
-import { guestSupabase } from '../../lib/supabase';
+import { guestSupabase } from '../../lib/guestSupabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
 import { ConferenceClientContext } from './conferenceClient';

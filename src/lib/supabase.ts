@@ -34,22 +34,6 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// Anonymous client for Guest Conference: no session persistence, no token sharing
-export const guestSupabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'meeting-manager-guest'
-    }
-  },
-  db: {
-    schema: 'public'
-  }
-});
-
 // Test Supabase connectivity using the SDK (avoids CORS issues with raw fetch)
 export const testSupabaseConnection = async (): Promise<boolean> => {
   try {

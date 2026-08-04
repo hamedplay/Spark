@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, Plus, LogIn, Copy, Check, Loader as Loader2, Mic, MicOff, VideoOff, Users, Clock, Crown, Link2, UserPlus, Send, Search, X, ChevronRight, RefreshCw, Globe, Calendar, Lock, Clock as Unlock, Shield, ShieldOff, ShieldCheck } from 'lucide-react';
 import { E2EECallPage } from './E2EECallPage';
 import { supabase } from '../../lib/supabase';
+import { ConferenceClientContext } from './conferenceClient';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
 import { ApprovalWaitingGate } from './ApprovalGate';
@@ -418,6 +419,7 @@ export function VideoConferencePage() {
   if (activeRoom && localStream) {
     return (
       <>
+        <ConferenceClientContext.Provider value={supabase}>
         <ConferenceRoomView
           room={activeRoom}
           currentUserId={userId!}
@@ -427,6 +429,7 @@ export function VideoConferencePage() {
           onLeave={handleLeave}
           onInvite={() => setInviteRoom(activeRoom)}
         />
+        </ConferenceClientContext.Provider>
         {inviteRoom && userId && (
           <InviteModal room={inviteRoom} currentUserId={userId} onClose={() => setInviteRoom(null)} />
         )}

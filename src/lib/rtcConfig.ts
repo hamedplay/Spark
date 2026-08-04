@@ -1,4 +1,4 @@
-import { supabase, guestSupabase } from './supabase';
+import { supabase } from './supabase';
 
 /**
  * Builds an RTCConfiguration from a flat key→value map read from system_config
@@ -217,8 +217,8 @@ export function invalidateRTCConfigCache(): void {
 }
 
 // ── Guest RTC Config (anonymous-safe) ─────────────────────────────────────────
-// Uses guestSupabase (no auth token) and a SECURITY DEFINER RPC that returns
-// only the WebRTC runtime keys. Safe for the Guest Conference route.
+// Uses a dynamically imported guest client to avoid instantiating the main
+// supabase client when only the guest path is loaded.
 let _guestConfigPromise: Promise<RTCConfiguration> | null = null;
 
 export function getGuestRTCConfig(): Promise<RTCConfiguration> {
@@ -229,8 +229,10 @@ export function getGuestRTCConfig(): Promise<RTCConfiguration> {
       setTimeout(() => reject(new Error('RTC config fetch timeout')), 5000)
     );
 
-    const rpcFetch = guestSupabase
-      .rpc('get_public_conference_runtime_config')
+    const rpcFetch = import('./guestSupabase')
+      .then(({ guestSupabase }) =>
+        guestSupabase.rpc('get_public_conference_runtime_config')
+      )
       .then(({ data }) => {
         if (!data || data.length === 0) {
           log.warn('[RTCConfig] guest RPC returned no rows — using env fallback');

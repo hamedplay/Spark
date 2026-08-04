@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users, Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2, Crown, Pin, X, Copy, Check, Smile, ChartBar as BarChart2, PenTool, Volume2, VolumeX, Activity, UserPlus, ShieldAlert, UserX, Mic as Mic2, ChevronUp, ChevronDown, ArrowRightLeft, SlidersHorizontal, LayoutGrid, MonitorPlay, PanelRight, ShieldCheck, ShieldOff, Clock } from 'lucide-react';
 import { useConferenceClient } from './conferenceClient';
 import { getSharedRTCConfig, getGuestRTCConfig } from '../../lib/rtcConfig';
-import { guestSupabase } from '../../lib/supabase';
 import { startDiagnostics, stopDiagnostics, stopAllDiagnostics, attemptICERestart } from '../../lib/webrtcDiagnostics';
 import type { PeerDiagnostics } from '../../lib/webrtcDiagnostics';
 import toast from 'react-hot-toast';
@@ -66,7 +65,11 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
     iceServers: [], iceTransportPolicy: 'all',
     iceCandidatePoolSize: 10, bundlePolicy: 'max-bundle', rtcpMuxPolicy: 'require',
   });
-  const isGuestClient = supabase === guestSupabase;
+  const isGuestClient = (() => {
+    try {
+      return (supabase as unknown as { auth?: { config?: { persistSession?: boolean } } }).auth?.config?.persistSession === false;
+    } catch { return false; }
+  })();
   const rtcConfigReadyRef = useRef<Promise<void>>(
     (isGuestClient ? getGuestRTCConfig() : getSharedRTCConfig()).then(cfg => { rtcConfigRef.current = cfg; })
   );
