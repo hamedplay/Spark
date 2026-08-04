@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,19 +18,13 @@ function json(body: unknown, status = 200) {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
-  // ── Authentication ──────────────────────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ ok: false, error: "احراز هویت لازم است" }, 401);
+  // ── FULL auth access gate ─────────────────────────────────────────────────────
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
+  const user = { id: authResult.userId! };
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: { user }, error: authErr } = await userClient.auth.getUser();
-  if (authErr || !user) return json({ ok: false, error: "دسترسی غیرمجاز" }, 401);
 
   const admin = createClient(supabaseUrl, serviceKey);
 

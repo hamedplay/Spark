@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CircleCheck as CheckCircle, Clock, Circle as XCircle } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { useConferenceClient } from './conferenceClient';
 import type { PendingApproval } from './types';
 
 export type { PendingApproval };
@@ -16,6 +16,7 @@ interface WaitingProps {
 }
 
 export function ApprovalWaitingGate({ roomId, userId, displayName, onApproved, onRejected, onCancel }: WaitingProps) {
+  const supabase = useConferenceClient();
   const [status, setStatus] = useState<'pending' | 'approved' | 'rejected' | 'expired'>('pending');
   const [approvalId, setApprovalId] = useState<string | null>(null);
   // Seconds remaining until expiry (null = not yet known)
@@ -237,6 +238,7 @@ interface HostPanelProps {
 }
 
 export function PendingApprovalsList({ approvals, onApprove, onReject }: HostPanelProps) {
+  const supabase = useConferenceClient();
   if (!approvals.length) return null;
 
   const approveAll = () => approvals.forEach(a => onApprove(a.id));

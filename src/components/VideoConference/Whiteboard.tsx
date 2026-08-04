@@ -3,7 +3,7 @@ import {
   Trash2, Undo2, Redo2, Type, Minus, Square, Circle as CircleIcon,
   ArrowRight, Pen, Eraser,
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { useConferenceClient } from './conferenceClient';
 import toast from 'react-hot-toast';
 import type { WhiteboardStroke, Point } from './types';
 
@@ -142,6 +142,7 @@ interface WhiteboardProps {
 }
 
 export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) {
+  const supabase = useConferenceClient();
   const mainRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);

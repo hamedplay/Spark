@@ -47,10 +47,24 @@ export function useAuthSession(): AuthSessionState {
       if (gen !== generationRef.current) return;
 
       if (error || !data) {
-        setHasSession(false);
-        setIsFullyAuthorized(false);
-        setAccessLevel('BLOCKED');
-        setReasonCode('SESSION_INVALID');
+        const isNetworkError =
+          (error?.code && String(error.code).startsWith('PGRST')) ||
+          (error?.message && (/fetch/i.test(error.message) || /network/i.test(error.message)));
+        if (isNetworkError) {
+          // Network/server error — don't sign out, let the user retry
+          setHasSession(true);
+          setIsFullyAuthorized(false);
+          setAccessLevel('BLOCKED');
+          setReasonCode('ACCESS_CHECK_FAILED');
+        } else {
+          // Session error — auto sign out and clear storage
+          try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
+          await supabase.auth.signOut();
+          setHasSession(false);
+          setIsFullyAuthorized(false);
+          setAccessLevel('BLOCKED');
+          setReasonCode('SESSION_INVALID');
+        }
         return;
       }
 

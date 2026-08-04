@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,11 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  // ── FULL auth access gate ──────────────────────────────────────────────────────
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
+  const callerUserId = authResult.userId!;
+
   const json = (data: unknown, status = 200) =>
     new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -27,17 +33,9 @@ Deno.serve(async (req: Request) => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    // Verify JWT
-    const authHeader = req.headers.get("Authorization") || "";
-    const token = authHeader.replace("Bearer ", "");
-    if (!token) return json({ ok: false, error: "NO_TOKEN" }, 401);
-
-    const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
-    if (userErr || !user) return json({ ok: false, error: "INVALID_TOKEN" }, 401);
-
-    // Check admin
+    // Check admin (FULL access already verified by gate)
     const { data: callerProfile } = await supabase
-      .from("profiles").select("is_admin, is_active").eq("user_id", user.id).maybeSingle();
+      .from("profiles").select("is_admin, is_active").eq("user_id", callerUserId).maybeSingle();
     if (!callerProfile?.is_admin || !callerProfile?.is_active) {
       return json({ ok: false, error: "NOT_ADMIN" }, 403);
     }
@@ -147,9 +145,7 @@ Deno.serve(async (req: Request) => {
       // 8. Audit
       try {
         await supabase.from("audit_log").insert({
-          user_id: user.id,
-          module: "security",
-          action: "repair_phone_orphan",
+          user_id: callerUserId,
           entity_name: "user",
           entity_id: primaryProfile.user_id,
           details: `Deleted phone-only orphan ${orphanUserId}, synced phone ${maskPhone(normalizedOrphanPhone)} to primary. Sync status: ${syncStatus}`,

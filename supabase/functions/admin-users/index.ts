@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,9 +51,9 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const action = url.pathname.split("/").pop();
 
-    // ── Public signup (no auth required) ─────────────────────────────────────
+    // ── Public signup (no auth required) ────────────────────────────────────────
     if (req.method === "POST" && action === "register") {
-      const { email, password, full_name } = await req.json();
+      const { email, password, full_name, username } = await req.json();
       if (!email || !password) return json({ error: "ایمیل و رمز عبور الزامی است" }, 400);
       if (password.length < 6) return json({ error: "رمز عبور باید حداقل ۶ کاراکتر باشد" }, 400);
 
@@ -60,7 +61,7 @@ Deno.serve(async (req: Request) => {
         email: email.trim().toLowerCase(),
         password,
         email_confirm: true,
-        user_metadata: { full_name: full_name || "" },
+        user_metadata: { full_name: full_name || "", username: username || "" },
       });
       if (createErr) {
         if (createErr.message?.includes("already been registered") || createErr.message?.includes("already exists")) {
@@ -74,6 +75,7 @@ Deno.serve(async (req: Request) => {
         user_id: userId,
         email: email.trim().toLowerCase(),
         full_name: full_name?.trim() || null,
+        username: username?.trim() || null,
         is_active: true,
         is_admin: false,
       }, { onConflict: "user_id" });
@@ -89,13 +91,14 @@ Deno.serve(async (req: Request) => {
       return json({ success: true, session: signInData.session, user: signInData.user });
     }
 
-    // ── Admin-only routes ────────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return json({ error: "Unauthorized" }, 401);
-    const token = authHeader.replace("Bearer ", "");
-    const caller = await getCallerProfile(token);
-    if (!caller) return json({ error: "Unauthorized" }, 401);
-    if (!caller.isAdmin) return json({ error: "Admin access required" }, 403);
+    // ── Admin-only routes (JWT + FULL + admin check) ─────────────────────────────
+    const authResult = await requireFullAuthAccess(req);
+    if (!authResult.ok) return deniedResponse();
+    const callerUserId = authResult.userId!;
+
+    const { data: callerProfile } = await supabase
+      .from("profiles").select("is_admin").eq("user_id", callerUserId).maybeSingle();
+    if (!callerProfile?.is_admin) return json({ error: "Admin access required" }, 403);
 
     // POST /admin-users/create — admin creates user with email + phone from the start
     if (req.method === "POST" && action === "create") {
@@ -209,7 +212,7 @@ Deno.serve(async (req: Request) => {
         await supabase.auth.admin.deleteUser(userId);
         try {
           await supabase.from("audit_log").insert({
-            user_id: caller.user.id,
+            user_id: callerUserId,
             module: "security",
             action: "user_create_compensating_delete",
             entity_name: "user",
@@ -233,7 +236,7 @@ Deno.serve(async (req: Request) => {
         await supabase.auth.admin.deleteUser(userId);
         try {
           await supabase.from("audit_log").insert({
-            user_id: caller.user.id,
+            user_id: callerUserId,
             module: "security",
             action: "user_create_verify_failed",
             entity_name: "user",
@@ -248,7 +251,7 @@ Deno.serve(async (req: Request) => {
       // ── Audit ──────────────────────────────────────────────────────────────
       try {
         await supabase.from("audit_log").insert({
-          user_id: caller.user.id,
+          user_id: callerUserId,
           module: "security",
           action: "user_create",
           entity_name: "user",
@@ -270,7 +273,7 @@ Deno.serve(async (req: Request) => {
 
       try {
         await supabase.from("audit_log").insert({
-          user_id: caller.user.id,
+          user_id: callerUserId,
           module: "security",
           action: "admin_password_change",
           entity_name: "user",

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ShieldAlert, RefreshCw, LogOut, KeyRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import type { ReasonCode } from '../../features/auth/types/authSession';
+import type { ReasonCode } from '../features/auth/types/authSession';
 
 interface RestrictedAccessPageProps {
   reasonCode: ReasonCode | null;

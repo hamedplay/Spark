@@ -18,9 +18,9 @@ import { SparkMeetingPrefill } from './components/Spark/SparkAssistant';
 import { Meeting } from './types';
 import { PageRendererProps } from './app/navigation/pageRendererTypes';
 
-function AuthorizedApp() {
+function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuthSession> }) {
   const { prefs, loading: prefsLoading } = useUserPreferences();
-  const { currentUserId, isAdmin, userPermissions } = useAuthSession();
+  const { currentUserId, isAdmin, userPermissions } = authSession;
   const { activePage, navigate } = useNavigation(true, prefsLoading, prefs.default_landing_page);
   const maintenanceMode = useMaintenanceMode();
   const sparkVisible = useSparkVisibility();
@@ -170,14 +170,6 @@ function App() {
       <>
         <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
         <AuthPage onSuccess={() => {
-          void supabase.from('system_config').select('value').eq('section', 'appearance').eq('key', 'splash_enabled').maybeSingle().then(({ data }) => {
-            const enabled = !data || data.value === 'true' || data.value === null;
-            if (enabled && !sessionStorage.getItem('spark_splash_shown')) {
-              sessionStorage.setItem('spark_splash_shown', '1');
-              setShowSplash(true);
-              setSplashDone(false);
-            }
-          }).catch(() => {});
           refreshAccessState();
         }} />
       </>
@@ -188,7 +180,7 @@ function App() {
     <>
       <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
       <UserPreferencesProvider>
-        <AuthorizedApp />
+        <AuthorizedApp authSession={{ loading, hasSession, isFullyAuthorized, isAuthenticated: hasSession && isFullyAuthorized, accessLevel, reasonCode, nextStep, currentUserId, isAdmin, userPermissions, refreshAccessState }} />
       </UserPreferencesProvider>
     </>
   );

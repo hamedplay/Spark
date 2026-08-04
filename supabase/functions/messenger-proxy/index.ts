@@ -2,6 +2,7 @@
 // پراکسی امن برای تلگرام و بله — توکن هرگز به فرانت ارسال نمی‌شود
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 type Channel = 'telegram' | 'bale';
 
@@ -191,44 +192,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    const authHeader = req.headers.get('Authorization');
-
-    if (!authHeader) {
-      return json({
-        ok: false,
-        description: 'احراز هویت لازم است',
-      }, 401);
-    }
+    const authResult = await requireFullAuthAccess(req);
+    if (!authResult.ok) return deniedResponse();
+    const user = { id: authResult.userId! };
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
       return json({
         ok: false,
         description: 'متغیرهای محیطی Supabase کامل تنظیم نشده‌اند',
       }, 500);
-    }
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-    });
-
-    const {
-      data: { user },
-      error: authErr,
-    } = await userClient.auth.getUser();
-
-    if (authErr || !user) {
-      return json({
-        ok: false,
-        description: 'دسترسی غیرمجاز',
-      }, 401);
     }
 
     const admin = createClient(supabaseUrl, supabaseServiceRoleKey);

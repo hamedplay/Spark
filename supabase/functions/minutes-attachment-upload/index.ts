@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,23 +23,11 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return json({ error: "Unauthorized" }, 401);
-  }
-  const token = authHeader.slice("Bearer ".length).trim();
-  if (!token) return json({ error: "Unauthorized" }, 401);
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-
-  // Verify user JWT
-  const authClient = createClient(supabaseUrl, anonKey);
-  const { data: userData, error: authErr } = await authClient.auth.getUser(token);
-  if (authErr || !userData?.user) {
-    return json({ error: "Unauthorized" }, 401);
-  }
 
   let body: {
     minute_id: string;
@@ -60,15 +49,11 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Missing required fields" }, 400);
   }
 
-  // Admin client runs the begin RPC (SECURITY DEFINER) and creates signed upload URL
+  // Admin client creates signed upload URL with service role (bypasses RLS)
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // Run begin RPC as the user (pass user token) so auth.uid() resolves correctly
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-
-  const { data: beginData, error: beginErr } = await userClient.rpc(
+  // Run begin RPC as the user (via authResult.userClient) so auth.uid() resolves correctly
+  const { data: beginData, error: beginErr } = await authResult.userClient!.rpc(
     "begin_minutes_attachment_upload",
     {
       p_minute_id: body.minute_id,

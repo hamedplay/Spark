@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, ImagePlus, MessageSquareOff, MessageSquare, Loader as Loader2, X, ChevronDown } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { useConferenceClient } from './conferenceClient';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
 import type { ConferenceMessage } from './types';
@@ -26,6 +26,7 @@ export function ChatPanel({
   roomId, currentUserId, currentUserName,
   messages, chatEnabled, canToggleChat, onToggleChat, sendSignal, onOwnMessage,
 }: Props) {
+  const supabase = useConferenceClient();
   const [input, setInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);

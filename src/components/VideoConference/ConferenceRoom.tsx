@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users, Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2, Crown, Pin, X, Copy, Check, Smile, ChartBar as BarChart2, PenTool, Volume2, VolumeX, Activity, UserPlus, ShieldAlert, UserX, Mic as Mic2, ChevronUp, ChevronDown, ArrowRightLeft, SlidersHorizontal, LayoutGrid, MonitorPlay, PanelRight, ShieldCheck, ShieldOff, Clock } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { useConferenceClient } from './conferenceClient';
 import { getSharedRTCConfig } from '../../lib/rtcConfig';
 import { startDiagnostics, stopDiagnostics, stopAllDiagnostics, attemptICERestart } from '../../lib/webrtcDiagnostics';
 import type { PeerDiagnostics } from '../../lib/webrtcDiagnostics';
@@ -59,6 +59,7 @@ interface Props {
 // ── Main component ────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 export function ConferenceRoomView({ room, currentUserId, currentUserName, myPeerId, localStream, onLeave, onInvite }: Props) {
+  const supabase = useConferenceClient();
   // ── RTCConfig — loaded from system_config via shared cache on mount
   const rtcConfigRef = useRef<RTCConfiguration>({
     iceServers: [], iceTransportPolicy: 'all',

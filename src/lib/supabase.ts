@@ -220,22 +220,5 @@ supabase.auth.onAuthStateChange((event, session) => {
     try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
   } else if (event === 'TOKEN_REFRESHED' && !session) {
     supabase.auth.signOut();
-  } else if (event === 'SIGNED_IN' && session) {
-    (async () => {
-      if (session.user) {
-        await ensureProfile(session.user.id, session.user.email || '');
-      }
-    })();
   }
 });
-
-// Test connection on module load with better error handling
-if (import.meta.env.DEV) {
-  testSupabaseConnection().then(success => {
-    if (!success) {
-      console.warn('⚠️ Supabase connection test failed. Please check your CORS configuration in Supabase dashboard.');
-    }
-  }).catch(error => {
-    console.warn('⚠️ Supabase connection test error:', error.message);
-  });
-}

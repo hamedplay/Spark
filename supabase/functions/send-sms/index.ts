@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,6 +83,12 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Unauthorized", errorCode: authResult }, 401);
   }
   const caller = authResult;
+
+  // ── FULL auth access gate (only for real user callers; service-to-service calls bypass) ──
+  if (caller.userId !== "service") {
+    const fullAuth = await requireFullAuthAccess(req);
+    if (!fullAuth.ok) return deniedResponse();
+  }
 
   try {
     const supabase = adminClient();

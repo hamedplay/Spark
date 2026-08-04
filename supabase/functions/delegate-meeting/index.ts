@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,10 +25,10 @@ serve(async (req) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return json({ error: "Missing authorization header" }, 401);
-  }
+  // ── FULL auth access gate ──────────────────────────────────────────────────────
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
+  const user = { id: authResult.userId! };
 
   let payload: {
     meeting_id?: string;
@@ -48,26 +49,12 @@ serve(async (req) => {
     );
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-  // Use the user's JWT — no service role needed
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const {
-    data: { user },
-    error: authErr,
-  } = await userClient.auth.getUser();
-
-  if (authErr || !user) {
-    return json({ error: "Unauthorized" }, 401);
-  }
-
   if (delegate_to_id === user.id) {
     return json({ error: "Cannot delegate to yourself" }, 400);
   }
+
+  // Use the user client from the auth gate (user JWT + anon key)
+  const userClient = authResult.userClient!;
 
   // Fetch the inbox entry to get updated_at for optimistic concurrency
   const { data: inboxRow, error: inboxErr } = await userClient

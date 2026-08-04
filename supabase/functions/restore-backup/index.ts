@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -535,16 +536,21 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  // ── FULL auth access gate ──────────────────────────────────────────────────────
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
+  const callerUserId = authResult.userId!;
+
   const jsonRes = (data: unknown, status = 200) =>
     new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return jsonRes({ error: "Unauthorized" }, 401);
-    const token = authHeader.replace("Bearer ", "");
-    const caller = await getCallerProfile(token);
-    if (!caller) return jsonRes({ error: "Unauthorized" }, 401);
-    if (!caller.isAdmin) return jsonRes({ error: "Admin access required" }, 403);
+    const supabase = adminClient();
+
+    // Check admin (FULL access already verified by gate)
+    const { data: callerProfile } = await supabase
+      .from("profiles").select("is_admin").eq("user_id", callerUserId).maybeSingle();
+    if (!callerProfile?.is_admin) return jsonRes({ error: "Admin access required" }, 403);
 
     const { tables, strategy } = await req.json() as {
       tables: Record<string, any[]>;

@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,37 +66,13 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  // ── 1. JWT validation ────────────────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    log("warn", { requestId, status: 401, errorCategory: "missing_auth" });
-    return json({ error: "Unauthorized" }, 401);
-  }
-  const token = authHeader.slice("Bearer ".length).trim();
-  if (!token) {
-    log("warn", { requestId, status: 401, errorCategory: "empty_token" });
-    return json({ error: "Unauthorized" }, 401);
-  }
+  // ── 1. FULL auth access gate ──────────────────────────────────────────────
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
+  const userId = authResult.userId!;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-  // Public client for user auth verification (no service role)
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  const authClient = createClient(supabaseUrl, anonKey);
-
-  let userId: string;
-  try {
-    const { data, error } = await authClient.auth.getUser(token);
-    if (error || !data?.user) {
-      log("warn", { requestId, status: 401, errorCategory: "invalid_jwt" });
-      return json({ error: "Unauthorized" }, 401);
-    }
-    userId = data.user.id;
-  } catch {
-    log("warn", { requestId, status: 401, errorCategory: "auth_exception" });
-    return json({ error: "Unauthorized" }, 401);
-  }
 
   // ── 2. Receive file (multipart/form-data) ─────────────────────────────────
   // Preliminary Content-Length check: allow 2 MiB file + 64 KiB multipart overhead.

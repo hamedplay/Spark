@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChartBar as BarChart2, Loader as Loader2, Trash2, X, Check, Download, ChevronDown, ChevronUp, Users, Lock } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { useConferenceClient } from './conferenceClient';
 import toast from 'react-hot-toast';
 import type { ConferencePoll } from './types';
 
@@ -75,6 +75,7 @@ function csvCell(value: string | number): string {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export function PollPanel({ roomId, userId, isHost }: PollPanelProps) {
+  const supabase = useConferenceClient();
   const [polls, setPolls] = useState<ConferencePoll[]>([]);
   const [loading, setLoading] = useState(true);
   const [question, setQuestion] = useState('');

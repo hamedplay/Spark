@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, User, Phone, Smartphone, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { supabase, ensureProfile, handleSupabaseError, testSupabaseConnection } from '../lib/supabase';
+import { supabase, handleSupabaseError, testSupabaseConnection } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import { normalizeIranPhone } from '../lib/phoneNormalize';
 import toast from 'react-hot-toast';
@@ -125,8 +125,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         auditLabel = identifier;
       }
       if (userId) {
-        await ensureProfile(userId, '');
-        toast.success('ورود با موفقیت انجام شد');
         logAudit({ module: 'auth', action: 'login', entity_name: 'user', entity_id: userId, details: `ورود: ${auditLabel}`, severity: 'info' });
         onSuccess();
       }
@@ -153,7 +151,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
-          body: JSON.stringify({ email: form.email.trim(), password: form.password, full_name: form.fullName.trim() }),
+          body: JSON.stringify({ email: form.email.trim(), password: form.password, full_name: form.fullName.trim(), username: form.username.trim() }),
         }
       );
       const result = await res.json();
@@ -161,11 +159,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       if (result.session) {
         await supabase.auth.setSession({ access_token: result.session.access_token, refresh_token: result.session.refresh_token });
       }
-      // Save username to profile
-      if (result.user?.id) {
-        await supabase.from('profiles').update({ username: form.username.trim() }).eq('user_id', result.user.id);
-      }
-      toast.success('حساب کاربری ایجاد شد');
       logAudit({ module: 'auth', action: 'register', entity_name: 'user', entity_id: result.user?.id, details: `ثبت‌نام: ${form.email.trim()}`, severity: 'info' });
       onSuccess();
     } catch (err: any) { toast.error('خطا در ثبت‌نام'); }
@@ -306,7 +299,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         refresh_token: data.refresh_token,
       });
       if (sessErr || !sessData.user) { toast.error('کد نادرست است یا منقضی شده'); return; }
-      toast.success('با موفقیت وارد شدید');
       logAudit({ module: 'auth', action: 'phone_otp_login', entity_name: 'user', entity_id: sessData.user.id, details: 'ورود با کد یک‌بارمصرف موبایلی', severity: 'info' });
       onSuccess();
     } catch { toast.error('خطا در تأیید کد'); }

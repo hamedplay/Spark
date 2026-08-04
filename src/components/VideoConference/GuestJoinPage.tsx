@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, Loader as Loader2, CircleAlert as AlertCircle, Shield, Lock, Users, ShieldOff, Clock } from 'lucide-react';
-import { supabase, guestSupabase } from '../../lib/supabase';
+import { guestSupabase } from '../../lib/supabase';
 import { ConferenceRoomView } from './ConferenceRoom';
 import { DeviceSelector } from './DeviceSelector';
+import { ConferenceClientContext } from './conferenceClient';
 import type { ConferenceRoom } from './types';
 
 const GUEST_ID_KEY = 'conf_guest_id';
@@ -77,22 +78,12 @@ export function GuestJoinPage({ code }: Props) {
   const localStreamRef = useRef<MediaStream | null>(null);
   const doEnterRoomRef = useRef<((stream: MediaStream, overrideName?: string) => Promise<void>) | null>(null);
 
-  // ── Auth + room loading ─────────────────────────────────────────────────────
+  // ── Room loading (fully anonymous — no auth.getUser, no profiles query) ─────
   useEffect(() => {
     let timeInterval: ReturnType<typeof setInterval> | null = null;
 
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (user) {
-        const { data: profile } = await supabase.from('profiles').select('full_name, email').eq('user_id', user.id).maybeSingle();
-        const name = profile?.full_name || profile?.email || 'کاربر';
-        setAuthUserId(user.id);
-        setAuthUserName(name);
-        setDisplayName(name);
-      }
-    });
-
     setRoomLoading(true);
-    supabase
+    guestSupabase
       .from('conference_rooms')
       .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, record_enabled, meeting_id, created_at, ended_at')
       .eq('code', code.toUpperCase().trim())
@@ -102,9 +93,9 @@ export function GuestJoinPage({ code }: Props) {
         setRoomLoading(false);
         if (fetchErr || !data) { setError('اتاقی با این کد یافت نشد یا جلسه پایان یافته است'); return; }
 
-        const { data: hasPwd } = await supabase.rpc('room_has_password', { p_room_id: data.id });
+        const { data: hasPwd } = await guestSupabase.rpc('room_has_password', { p_room_id: data.id });
 
-        const { count } = await supabase
+        const { count } = await guestSupabase
           .from('conference_participants')
           .select('*', { count: 'exact', head: true })
           .eq('room_id', data.id)
@@ -117,7 +108,7 @@ export function GuestJoinPage({ code }: Props) {
         };
         setRoom(roomData);
 
-        const { data: meeting } = await supabase
+        const { data: meeting } = await guestSupabase
           .from('meetings')
           .select('start_time, request_date')
           .eq('conference_room_id', data.id)
@@ -188,7 +179,7 @@ export function GuestJoinPage({ code }: Props) {
     checkBan();
 
     // Watch for ban being added or removed for this user in realtime
-    const ch = supabase
+    const ch = guestSupabase
       .channel(`my-ban-${room.id}-${userId}`)
       .on(
         'postgres_changes',
@@ -233,7 +224,7 @@ export function GuestJoinPage({ code }: Props) {
     if (!room) { setStep('form'); setError('اتاق یافت نشد'); return; }
 
     // Re-check capacity right before entering
-    const { count } = await supabase
+    const { count } = await guestSupabase
       .from('conference_participants')
       .select('*', { count: 'exact', head: true })
       .eq('room_id', room.id)
@@ -284,7 +275,7 @@ export function GuestJoinPage({ code }: Props) {
 
     let expired = false;
 
-    const ch = supabase
+    const ch = guestSupabase
       .channel(`waiting-${waitingRequestId}`)
       .on(
         'postgres_changes',
@@ -297,7 +288,7 @@ export function GuestJoinPage({ code }: Props) {
         async ({ new: row }) => {
           if (expired) return;
           if (row.status === 'admitted') {
-            supabase.removeChannel(ch);
+            guestSupabase.removeChannel(ch);
             const stream = localStreamRef.current;
             if (stream && doEnterRoomRef.current) {
               await doEnterRoomRef.current(stream);
@@ -306,7 +297,7 @@ export function GuestJoinPage({ code }: Props) {
               setError('خطا در ورود: جریان رسانه موجود نیست');
             }
           } else if (row.status === 'rejected') {
-            supabase.removeChannel(ch);
+            guestSupabase.removeChannel(ch);
             setStep('form');
             setError('متاسفانه میزبان درخواست ورود شما را رد کرد');
           }
@@ -317,7 +308,7 @@ export function GuestJoinPage({ code }: Props) {
     // 5-minute timeout
     const timeout = setTimeout(async () => {
       expired = true;
-      supabase.removeChannel(ch);
+      guestSupabase.removeChannel(ch);
       // Clean up the waiting room record
       if (waitingRequestId) {
         await guestSupabase.from('conference_waiting_room').delete().eq('id', waitingRequestId);
@@ -329,7 +320,7 @@ export function GuestJoinPage({ code }: Props) {
 
     return () => {
       expired = true;
-      supabase.removeChannel(ch);
+      guestSupabase.removeChannel(ch);
       clearTimeout(timeout);
     };
   }, [step, waitingRequestId]);
@@ -364,7 +355,7 @@ export function GuestJoinPage({ code }: Props) {
     setError('');
     setBanDetail(null);
 
-    const { data: validation, error: rpcErr } = await supabase.rpc('validate_room_join', {
+    const { data: validation, error: rpcErr } = await guestSupabase.rpc('validate_room_join', {
       p_room_id: room.id,
       p_password: room.has_password ? password : null,
       p_user_id: authUserId || guestId,
@@ -398,7 +389,7 @@ export function GuestJoinPage({ code }: Props) {
     }
 
     if (room.waiting_room_enabled) {
-      const { data: req, error: waitErr } = await supabase
+      const { data: req, error: waitErr } = await guestSupabase
         .from('conference_waiting_room')
         .insert([{ room_id: room.id, user_id: guestId, display_name: displayName }])
         .select()
@@ -425,7 +416,7 @@ export function GuestJoinPage({ code }: Props) {
 
   const handleCancelWaiting = async () => {
     if (waitingRequestId) {
-      await supabase.from('conference_waiting_room').delete().eq('id', waitingRequestId);
+      await guestSupabase.from('conference_waiting_room').delete().eq('id', waitingRequestId);
       setWaitingRequestId(null);
     }
     setStep('form');
@@ -445,7 +436,7 @@ export function GuestJoinPage({ code }: Props) {
     autoJoinedRef.current = false;
 
     if (room) {
-      const { data: freshRoom } = await supabase
+      const { data: freshRoom } = await guestSupabase
         .from('conference_rooms')
         .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, record_enabled, meeting_id, created_at, ended_at')
         .eq('id', room.id)
@@ -453,7 +444,7 @@ export function GuestJoinPage({ code }: Props) {
         .maybeSingle();
 
       if (!freshRoom) { window.location.href = window.location.origin; return; }
-      const { data: hasPwd } = await supabase.rpc('room_has_password', { p_room_id: freshRoom.id });
+      const { data: hasPwd } = await guestSupabase.rpc('room_has_password', { p_room_id: freshRoom.id });
       setRoom({ ...freshRoom, has_password: hasPwd === true, participant_count: 0 });
     }
   };
@@ -482,16 +473,18 @@ export function GuestJoinPage({ code }: Props) {
     const activeUserId = authUserId || guestId;
     const activeUserName = authUserName || displayName;
     return (
-      <div className="h-screen">
-        <ConferenceRoomView
-          room={room as unknown as ConferenceRoom}
-          currentUserId={activeUserId}
-          currentUserName={activeUserName}
-          myPeerId={myPeerId}
-          localStream={localStream}
-          onLeave={handleLeave}
-        />
-      </div>
+      <ConferenceClientContext.Provider value={guestSupabase}>
+        <div className="h-screen">
+          <ConferenceRoomView
+            room={room as unknown as ConferenceRoom}
+            currentUserId={activeUserId}
+            currentUserName={activeUserName}
+            myPeerId={myPeerId}
+            localStream={localStream}
+            onLeave={handleLeave}
+          />
+        </div>
+      </ConferenceClientContext.Provider>
     );
   }
 

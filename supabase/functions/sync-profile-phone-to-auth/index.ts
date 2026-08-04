@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,6 +62,11 @@ Deno.serve(async (req: Request) => {
       { status: 405, headers: { "Content-Type": "application/json", ...corsHeaders } });
   }
 
+  // ── FULL auth access gate ──────────────────────────────────────────────────────
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
+  const callerId = authResult.userId!;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -71,23 +77,7 @@ Deno.serve(async (req: Request) => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    // 1. Verify JWT from Authorization header
-    const authHeader = req.headers.get("Authorization") || "";
-    const token = authHeader.replace("Bearer ", "");
-    if (!token) {
-      return new Response(JSON.stringify({ ok: false, error: "NO_TOKEN" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
-    }
-
-    const { data: callerData, error: callerErr } = await supabase.auth.getUser(token);
-    if (callerErr || !callerData?.user) {
-      return new Response(JSON.stringify({ ok: false, error: "INVALID_TOKEN" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
-    }
-
-    const callerId = callerData.user.id;
-
-    // 2. Check caller is active admin
+    // 1. Verify caller is active admin (FULL access already verified by gate)
     const { data: callerProfile, error: callerProfileErr } = await supabase
       .from("profiles")
       .select("is_admin, is_active")

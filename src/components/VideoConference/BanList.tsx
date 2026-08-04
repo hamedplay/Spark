@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ShieldOff, UserCheck, Clock } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { useConferenceClient } from './conferenceClient';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
 
@@ -32,6 +32,7 @@ function expiryLabel(ban: BannedUser, now: number): string {
 }
 
 export function BanList({ roomId }: Props) {
+  const supabase = useConferenceClient();
   const [bans, setBans] = useState<BannedUser[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const isMountedRef = useRef(true);
