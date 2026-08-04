@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users, Hand, ScreenShare, ScreenShareOff, Maximize2, Minimize2, Crown, Pin, X, Copy, Check, Smile, ChartBar as BarChart2, PenTool, Volume2, VolumeX, Activity, UserPlus, ShieldAlert, UserX, Mic as Mic2, ChevronUp, ChevronDown, ArrowRightLeft, SlidersHorizontal, LayoutGrid, MonitorPlay, PanelRight, ShieldCheck, ShieldOff, Clock } from 'lucide-react';
 import { useConferenceClient } from './conferenceClient';
-import { getSharedRTCConfig, getGuestRTCConfig } from '../../lib/rtcConfig';
 import { startDiagnostics, stopDiagnostics, stopAllDiagnostics, attemptICERestart } from '../../lib/webrtcDiagnostics';
 import type { PeerDiagnostics } from '../../lib/webrtcDiagnostics';
 import toast from 'react-hot-toast';
@@ -53,31 +52,26 @@ interface Props {
   localStream: MediaStream;
   onLeave: () => void;
   onInvite?: () => void;
+  loadRTCConfig: () => Promise<RTCConfiguration>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Main component ────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
-export function ConferenceRoomView({ room, currentUserId, currentUserName, myPeerId, localStream, onLeave, onInvite }: Props) {
+export function ConferenceRoomView({ room, currentUserId, currentUserName, myPeerId, localStream, onLeave, onInvite, loadRTCConfig }: Props) {
   const supabase = useConferenceClient();
-  // ── RTCConfig — loaded from system_config via shared cache on mount
+  // ── RTCConfig — loaded via injected loader (authenticated or guest)
   const rtcConfigRef = useRef<RTCConfiguration>({
     iceServers: [], iceTransportPolicy: 'all',
     iceCandidatePoolSize: 10, bundlePolicy: 'max-bundle', rtcpMuxPolicy: 'require',
   });
-  const isGuestClient = (() => {
-    try {
-      return (supabase as unknown as { auth?: { config?: { persistSession?: boolean } } }).auth?.config?.persistSession === false;
-    } catch { return false; }
-  })();
   const rtcConfigReadyRef = useRef<Promise<void>>(
-    (isGuestClient ? getGuestRTCConfig() : getSharedRTCConfig()).then(cfg => { rtcConfigRef.current = cfg; })
+    loadRTCConfig().then(cfg => { rtcConfigRef.current = cfg; })
   );
 
   useEffect(() => {
-    const fetcher = isGuestClient ? getGuestRTCConfig : getSharedRTCConfig;
-    rtcConfigReadyRef.current = fetcher().then(cfg => { rtcConfigRef.current = cfg; });
-  }, []);
+    rtcConfigReadyRef.current = loadRTCConfig().then(cfg => { rtcConfigRef.current = cfg; });
+  }, [loadRTCConfig]);
   const [media, dispatch] = useReducer(mediaReducer, {
     isMuted: false, isVideoOff: false, isHandRaised: false,
     isScreenSharing: false, isSpeakerMuted: false,

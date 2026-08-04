@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useOrgUsers } from '../../../lib/useOrgUsers';
-import { getSharedRTCConfig, invalidateRTCConfigCache } from '../../../lib/rtcConfig';
+import { getAuthenticatedRTCConfig, invalidateAuthenticatedRTCConfigCache } from '../../../lib/authenticatedRtcConfig';
 import { startDiagnostics, stopDiagnostics } from '../../../lib/webrtcDiagnostics';
 import type { PeerDiagnostics } from '../../../lib/webrtcDiagnostics';
 import toast from 'react-hot-toast';
@@ -1083,7 +1083,7 @@ export function useE2EECall(
       peerConnectionIdRef.current = '';
     }
 
-    const cfg = await getSharedRTCConfig();
+    const cfg = await getAuthenticatedRTCConfig();
     const pcId = uuidv4();
     peerConnectionIdRef.current = pcId;
     debugStoreSetSession({ peerConnectionId: pcId });
@@ -1435,7 +1435,7 @@ export function useE2EECall(
       myRoleRef.current = 'caller';
       debugStoreSetSession({ role: 'caller' });
       offerSentRef.current = false;
-      invalidateRTCConfigCache();
+      invalidateAuthenticatedRTCConfigCache();
 
       const sessionId = uuidv4();
       sessionIdRef.current = sessionId;
@@ -1546,7 +1546,7 @@ export function useE2EECall(
       debugStoreSetSession({ sessionId: ic.sessionId, generation });
       lockedPeerRef.current = ic.from;
       offerSentRef.current = false;
-      invalidateRTCConfigCache();
+      invalidateAuthenticatedRTCConfigCache();
 
       ecdhKeyPairRef.current = await generateECDHKeyPair();
       myPublicJWKRef.current = await exportPublicKey(ecdhKeyPairRef.current.publicKey);

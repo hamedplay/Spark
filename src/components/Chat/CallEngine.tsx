@@ -4,7 +4,7 @@ import {
   Minimize2, User,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getSharedRTCConfig } from '../../lib/rtcConfig';
+import { getAuthenticatedRTCConfig } from '../../lib/authenticatedRtcConfig';
 import type { UserProfile } from './types';
 
 export interface CallSession {
@@ -255,7 +255,7 @@ export function CallEngine({ currentUserId, otherUser, callType, mode, session, 
     }
 
     // Build PeerConnection using shared config from system_config
-    const rtcConfig = await getSharedRTCConfig();
+    const rtcConfig = await getAuthenticatedRTCConfig();
     const pc = new RTCPeerConnection(rtcConfig);
     pcRef.current = pc;
 
