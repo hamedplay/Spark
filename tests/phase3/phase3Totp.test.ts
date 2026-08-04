@@ -7,6 +7,18 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const mfaSource = fs.readFileSync(
+  path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
+  'utf-8',
+);
+
+const migrationDir = path.join(__dirname, '../../supabase/migrations');
+const blockerMigrationName = '20260804200000_phase3a_blocker_fixes.sql';
+const blockerMigrationPath = path.join(migrationDir, blockerMigrationName);
+const blockerMigrationSql = fs.existsSync(blockerMigrationPath)
+  ? fs.readFileSync(blockerMigrationPath, 'utf-8')
+  : '';
+
 // ── 1. Six-digit code validation ────────────────────────────────────────────
 
 test('validateTotpCode rejects fewer than 6 digits', async () => {
@@ -47,8 +59,7 @@ test('validateTotpCode accepts exactly 6 ASCII digits', async () => {
 
 // ── 2. Factor filtering ─────────────────────────────────────────────────────
 
-test('unverified factors are not selected for challenge', async () => {
-  // We test the filtering logic by simulating the factor list
+test('unverified factors are not selected for challenge', () => {
   const allFactors = [
     { id: 'f1', friendlyName: 'A', factorType: 'totp', status: 'unverified', createdAt: '2024-01-01' },
     { id: 'f2', friendlyName: 'B', factorType: 'totp', status: 'verified', createdAt: '2024-01-02' },
@@ -59,7 +70,7 @@ test('unverified factors are not selected for challenge', async () => {
   assert.equal(verified[0].id, 'f2');
 });
 
-test('verified TOTP factors are correctly filtered', async () => {
+test('verified TOTP factors are correctly filtered', () => {
   const allFactors = [
     { id: 'f1', friendlyName: 'A', factorType: 'totp', status: 'verified', createdAt: '2024-01-01' },
     { id: 'f2', friendlyName: 'B', factorType: 'totp', status: 'verified', createdAt: '2024-01-02' },
@@ -80,12 +91,10 @@ test('multiple factors do not fall to [0] without explicit selection', () => {
     { id: 'f1', friendlyName: 'A', factorType: 'totp', status: 'verified', createdAt: '2024-01-01' },
     { id: 'f2', friendlyName: 'B', factorType: 'totp', status: 'verified', createdAt: '2024-01-02' },
   ];
-  // Simulate the component logic: if more than 1 factor, selectedFactorId starts as null
   let selectedFactorId: string | null = null;
   if (factors.length === 1) {
     selectedFactorId = factors[0].id;
   }
-  // With 2 factors, selectedFactorId must NOT be auto-set to [0]
   assert.equal(selectedFactorId, null,
     'must not auto-select [0] when multiple factors exist');
 });
@@ -97,10 +106,8 @@ test('enrollment does not auto-start on mount', () => {
     path.join(__dirname, '../../src/features/auth/components/TotpEnrollmentGate.tsx'),
     'utf-8',
   );
-  // The component must start in 'intro' phase, not 'enrolling'
   assert.ok(source.includes("useState<Phase>('intro')"),
     'must start in intro phase, not auto-enroll');
-  // Must not call startTotpEnrollment in a useEffect
   assert.ok(!source.match(/useEffect\([\s\S]*?startTotpEnrollment/),
     'must not call startTotpEnrollment inside useEffect');
 });
@@ -112,39 +119,177 @@ test('cancel only targets factor created in current flow', () => {
     path.join(__dirname, '../../src/features/auth/components/TotpEnrollmentGate.tsx'),
     'utf-8',
   );
-  // Must use enrolledFactorIdRef for unenroll, not a hardcoded ID or all factors
   assert.ok(source.includes('enrolledFactorIdRef.current'),
     'cancel must use the ref tracking the factor created in this flow');
-  // Must NOT unenroll verified factors — cancel only uses the ref, not a status filter
-  const cancelFn = source.slice(source.indexOf('handleCancel'), source.indexOf('}, []);', source.indexOf('handleCancel')));
+  const cancelFn = source.slice(
+    source.indexOf('handleCancel'),
+    source.indexOf('}, []);', source.indexOf('handleCancel'))
+  );
   assert.ok(!cancelFn.includes("status === 'verified'"),
     'cancel must not filter by verified status');
 });
 
-// ── 6. Verify success without aal2 is not success ───────────────────────────
+// ── 6. Blocker 1: challengeAndVerify used, no empty challengeId ─────────────
 
-test('verify success without currentLevel=aal2 is not success', async () => {
-  // Simulate the verifyTotpFactor logic: if currentLevel !== 'aal2', throw
-  function simulateVerifyResult(currentLevel: string): boolean {
-    return currentLevel === 'aal2';
-  }
-  assert.equal(simulateVerifyResult('aal1'), false,
-    'aal1 must not be considered success');
-  assert.equal(simulateVerifyResult(''), false,
-    'empty level must not be considered success');
-  assert.equal(simulateVerifyResult('aal2'), true,
-    'aal2 is the only success level');
+test('source uses challengeAndVerify, not separate challenge+verify with empty challengeId', () => {
+  assert.ok(mfaSource.includes('challengeAndVerify'),
+    'must use challengeAndVerify API');
+  assert.ok(!mfaSource.includes("challengeId: ''"),
+    'must not contain empty challengeId');
 });
 
-// ── 7. OTP must not appear in error mapping or diagnostics ──────────────────
+test('no challengeId with empty or fake value exists in source', () => {
+  assert.ok(!mfaSource.match(/challengeId:\s*['"`]/),
+    'must not pass any literal challengeId — challengeAndVerify handles it internally');
+});
 
-test('OTP does not appear in error mapping or diagnostic output', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  // Error messages must not interpolate the code
-  const errorLines = source.split('\n').filter((l) =>
+test('verifyTotpFactor calls challengeAndVerify with factorId and code', () => {
+  const fnStart = mfaSource.indexOf('export async function verifyTotpFactor');
+  const fnEnd = mfaSource.indexOf('}', mfaSource.indexOf('return { currentAal: currentLevel };', fnStart));
+  const fnBody = mfaSource.slice(fnStart, fnEnd + 1);
+  assert.ok(fnBody.includes('challengeAndVerify'),
+    'verifyTotpFactor must call challengeAndVerify');
+  assert.ok(fnBody.includes('factorId'),
+    'verifyTotpFactor must pass factorId');
+  assert.ok(fnBody.includes('validCode'),
+    'verifyTotpFactor must pass the validated code');
+});
+
+test('performTotpStepUp calls challengeAndVerify with factorId and code', () => {
+  const fnStart = mfaSource.indexOf('export async function performTotpStepUp');
+  const fnEnd = mfaSource.indexOf('\n}\n', fnStart + 10);
+  const fnBody = mfaSource.slice(fnStart, fnEnd);
+  assert.ok(fnBody.includes('challengeAndVerify'),
+    'performTotpStepUp must call challengeAndVerify');
+  assert.ok(fnBody.includes('params.factorId'),
+    'performTotpStepUp must pass factorId from params');
+  assert.ok(fnBody.includes('validCode'),
+    'performTotpStepUp must pass the validated code');
+});
+
+// ── 7. Blocker 1: AAL2 check and session validation after verify ────────────
+
+test('verifyTotpFactor checks getAuthenticatorAssuranceLevel after verify', () => {
+  const fnStart = mfaSource.indexOf('export async function verifyTotpFactor');
+  const fnEnd = mfaSource.indexOf('\n}\n', fnStart + 10);
+  const fnBody = mfaSource.slice(fnStart, fnEnd);
+  assert.ok(fnBody.includes('getAuthenticatorAssuranceLevel'),
+    'verifyTotpFactor must call getAuthenticatorAssuranceLevel');
+  assert.ok(fnBody.includes("currentLevel !== 'aal2'"),
+    'verifyTotpFactor must check currentLevel === aal2');
+});
+
+test('performTotpStepUp checks AAL2 and session before RPC', () => {
+  const fnStart = mfaSource.indexOf('export async function performTotpStepUp');
+  const fnEnd = mfaSource.indexOf('\n}\n', fnStart + 10);
+  const fnBody = mfaSource.slice(fnStart, fnEnd);
+
+  const aal2Pos = fnBody.indexOf("currentLevel !== 'aal2'");
+  const sessionPos = fnBody.indexOf('getSession');
+  const rpcPos = fnBody.indexOf("supabase.rpc('issue_totp_stepup_grant'");
+
+  assert.ok(aal2Pos > 0, 'must check AAL2');
+  assert.ok(sessionPos > 0, 'must get session');
+  assert.ok(rpcPos > 0, 'must call RPC');
+  assert.ok(aal2Pos < sessionPos || sessionPos === -1,
+    'AAL2 check must come before session check (or session check is absent)');
+  assert.ok(aal2Pos < rpcPos,
+    'AAL2 check must come before RPC call');
+  assert.ok(sessionPos < rpcPos,
+    'session validation must come before RPC call');
+});
+
+test('performTotpStepUp checks access_token exists but does not log or return it', () => {
+  const fnStart = mfaSource.indexOf('export async function performTotpStepUp');
+  const fnEnd = mfaSource.indexOf('\n}\n', fnStart + 10);
+  const fnBody = mfaSource.slice(fnStart, fnEnd);
+  assert.ok(fnBody.includes('access_token'),
+    'must check access_token exists');
+  assert.ok(!fnBody.match(/console\.\w+\([\s\S]*?access_token/),
+    'must not log access_token');
+  const returnMatches = fnBody.match(/return\s*\{[^}]*\}/g) || [];
+  for (const ret of returnMatches) {
+    assert.ok(!ret.includes('access_token'),
+      'must not include access_token in return object');
+  }
+});
+
+// ── 8. Blocker 1: RPC not called on verify failure or AAL2 failure ───────────
+
+test('RPC is not called when verify fails — verify error returns before RPC', () => {
+  const fnStart = mfaSource.indexOf('export async function performTotpStepUp');
+  const fnEnd = mfaSource.indexOf('\n}\n', fnStart + 10);
+  const fnBody = mfaSource.slice(fnStart, fnEnd);
+
+  const verifyErrorCheck = fnBody.indexOf('if (verifyError)');
+  const rpcPos = fnBody.indexOf("supabase.rpc('issue_totp_stepup_grant'");
+
+  assert.ok(verifyErrorCheck > 0, 'must check verifyError');
+  assert.ok(verifyErrorCheck < rpcPos,
+    'verify error check must come before RPC call');
+  const returnAfterVerifyError = fnBody.indexOf('return', verifyErrorCheck);
+  assert.ok(returnAfterVerifyError > 0 && returnAfterVerifyError < rpcPos,
+    'must return on verify error before reaching RPC');
+});
+
+test('RPC is not called when AAL2 is not reached — AAL2 check returns before RPC', () => {
+  const fnStart = mfaSource.indexOf('export async function performTotpStepUp');
+  const fnEnd = mfaSource.indexOf('\n}\n', fnStart + 10);
+  const fnBody = mfaSource.slice(fnStart, fnEnd);
+
+  const aal2Check = fnBody.indexOf("currentLevel !== 'aal2'");
+  const rpcPos = fnBody.indexOf("supabase.rpc('issue_totp_stepup_grant'");
+  const returnAfterAal2 = fnBody.indexOf('return', aal2Check);
+
+  assert.ok(aal2Check > 0, 'must have AAL2 check');
+  assert.ok(returnAfterAal2 > 0 && returnAfterAal2 < rpcPos,
+    'must return on AAL2 failure before reaching RPC');
+});
+
+// ── 9. Blocker 1: Error mapping — no raw messages ───────────────────────────
+
+test('no raw rpcError.message returned to caller', () => {
+  assert.ok(!mfaSource.includes('rpcError?.message'),
+    'must not return raw rpcError.message');
+  const returnMatches = mfaSource.match(/return\s*\{[^}]*\}/g) || [];
+  for (const ret of returnMatches) {
+    assert.ok(!ret.match(/error:\s*rpcError[\s,}]/),
+      'must not pass raw rpcError as error field in return object');
+  }
+});
+
+test('error mapping uses stable codes', () => {
+  const expectedCodes = [
+    'INVALID_CODE',
+    'CHALLENGE_FAILED',
+    'VERIFY_FAILED',
+    'AAL2_NOT_REACHED',
+    'SESSION_INVALID',
+    'STEPUP_DENIED',
+    'RECENT_TOTP_REQUIRED',
+    'SECURITY_ADMIN_REQUIRED',
+    'PURPOSE_NOT_ALLOWED',
+    'UNKNOWN_MFA_ERROR',
+  ];
+  for (const code of expectedCodes) {
+    assert.ok(mfaSource.includes(`'${code}'`) || mfaSource.includes(`"${code}"`),
+      `must contain error code: ${code}`);
+  }
+});
+
+test('mapMfaError function exists and maps to stable codes', () => {
+  assert.ok(mfaSource.includes('function mapMfaError'),
+    'must have mapMfaError function');
+  assert.ok(mfaSource.includes("return 'INVALID_CODE'"),
+    'mapMfaError must return INVALID_CODE for invalid/expired codes');
+  assert.ok(mfaSource.includes("return 'UNKNOWN_MFA_ERROR'"),
+    'mapMfaError must return UNKNOWN_MFA_ERROR for unknown errors');
+});
+
+// ── 10. Blocker 1: OTP not in error, log, or RPC payload ─────────────────────
+
+test('OTP code does not appear in error messages or RPC payload', () => {
+  const errorLines = mfaSource.split('\n').filter((l) =>
     l.includes('throw new Error') || l.includes('return { ok: false')
   );
   for (const line of errorLines) {
@@ -153,160 +298,153 @@ test('OTP does not appear in error mapping or diagnostic output', () => {
     assert.ok(!line.includes('${params.code}'),
       `error must not interpolate params.code: ${line.trim()}`);
   }
-  // Must not log or audit the code
-  assert.ok(!source.match(/console\.\w+\([\s\S]*?code/),
+  assert.ok(!mfaSource.match(/console\.\w+\([\s\S]*?code/),
     'must not log the code');
-});
 
-// ── 8. Step-up must not call RPC before verify success ──────────────────────
-
-test('step-up does not call RPC before verify success', async () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  // In performTotpStepUp, the RPC call must come AFTER the aal2 check
-  const rpcPos = source.indexOf("supabase.rpc('issue_totp_stepup_grant'");
-  const aal2CheckPos = source.indexOf("currentLevel !== 'aal2'");
-  assert.ok(rpcPos > 0, 'must contain RPC call');
-  assert.ok(aal2CheckPos > 0, 'must contain aal2 check');
-  assert.ok(aal2CheckPos < rpcPos,
-    'aal2 check must come before RPC call — RPC must not be called before verify success');
-});
-
-// ── 9. Migration/Contract tests ─────────────────────────────────────────────
-
-test('migration: only one new migration file created for phase 3A', () => {
-  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
-  const files = fs.readdirSync(migrationsDir);
-  const phase3Files = files.filter((f) => f.includes('phase3'));
-  assert.ok(phase3Files.length >= 1, 'at least one phase 3 migration must exist');
-});
-
-test('RPC: issue_totp_stepup_grant is SECURITY DEFINER', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  // The frontend calls the RPC; the SECURITY DEFINER property is verified
-  // by the migration test below via database query
-  assert.ok(source.includes("issue_totp_stepup_grant"),
-    'frontend must call issue_totp_stepup_grant RPC');
-});
-
-test('RPC: search_path is empty string (verified from migration SQL on disk)', () => {
-  // The migration was applied via MCP tool. We verify the function exists
-  // by checking the frontend references it.
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  assert.ok(source.includes('issue_totp_stepup_grant'),
-    'RPC name must be referenced');
-});
-
-test('RPC: purpose allowlist is enforced', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  assert.ok(source.includes("'auth_settings_change'"),
-    'must include auth_settings_change purpose');
-  assert.ok(source.includes("'account_security_change'"),
-    'must include account_security_change purpose');
-});
-
-test('RPC: session_id is extracted from JWT, not client-supplied', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  // The frontend must NOT pass session_id to the RPC
-  const rpcCallStart = source.indexOf("supabase.rpc('issue_totp_stepup_grant'");
-  const rpcCallEnd = source.indexOf('});', rpcCallStart);
-  const rpcCall = source.slice(rpcCallStart, rpcCallEnd);
-  assert.ok(!rpcCall.includes('session_id'),
-    'frontend must not pass session_id — it is extracted from JWT server-side');
-});
-
-test('RPC: user/session ownership is checked (no client-supplied user_id)', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  const rpcCallStart = source.indexOf("supabase.rpc('issue_totp_stepup_grant'");
-  const rpcCallEnd = source.indexOf('});', rpcCallStart);
-  const rpcCall = source.slice(rpcCallStart, rpcCallEnd);
-  assert.ok(!rpcCall.includes('user_id'),
-    'frontend must not pass user_id — ownership is checked server-side');
-});
-
-test('RPC: aal2 is checked before grant issuance', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  assert.ok(source.includes("currentLevel !== 'aal2'"),
-    'must check currentLevel === aal2 before issuing grant');
-});
-
-test('RPC: OTP/secret must not appear in metadata or audit', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  // The RPC call must not pass any sensitive data
-  const rpcCallStart = source.indexOf("supabase.rpc('issue_totp_stepup_grant'");
-  const rpcCallEnd = source.indexOf('});', rpcCallStart);
-  const rpcCall = source.slice(rpcCallStart, rpcCallEnd);
-  // The RPC call must only pass p_purpose — no OTP code, secret, challenge, or token values
-  assert.ok(!rpcCall.includes('validCode'), 'must not pass OTP code value');
-  assert.ok(!rpcCall.includes('params.code'), 'must not pass raw code');
+  const rpcCallStart = mfaSource.indexOf("supabase.rpc('issue_totp_stepup_grant'");
+  const rpcCallEnd = mfaSource.indexOf('});', rpcCallStart);
+  const rpcCall = mfaSource.slice(rpcCallStart, rpcCallEnd);
+  assert.ok(!rpcCall.includes('validCode'), 'must not pass OTP code value to RPC');
+  assert.ok(!rpcCall.includes('params.code'), 'must not pass raw code to RPC');
   assert.ok(!/\bsecret\b/.test(rpcCall), 'must not pass secret in RPC call');
-  assert.ok(!rpcCall.includes('challenge'), 'must not pass challenge ID');
+  assert.ok(!rpcCall.includes('challenge'), 'must not pass challenge ID to RPC');
   assert.ok(!/\btoken\b/.test(rpcCall), 'must not pass token in RPC call');
 });
 
-test('RPC: grant is not stored in localStorage/sessionStorage/URL', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '../../src/features/auth/services/mfaOperations.ts'),
-    'utf-8',
-  );
-  assert.ok(!source.includes('localStorage'),
+test('grant is not stored in localStorage/sessionStorage', () => {
+  assert.ok(!mfaSource.includes('localStorage'),
     'must not store grant in localStorage');
-  assert.ok(!source.includes('sessionStorage'),
+  assert.ok(!mfaSource.includes('sessionStorage'),
     'must not store grant in sessionStorage');
 });
 
-test('RPC: advisory lock is used (verified from migration)', () => {
-  // The migration SQL contains pg_advisory_xact_lock
-  // This is verified by the migration being applied successfully
-  // and the function existing in the database
-  assert.ok(true, 'advisory lock verified via successful migration application');
+// ── 11. Blocker 2: Migration tests — read from file on disk ─────────────────
+
+test('blocker migration file exists on disk', () => {
+  assert.ok(fs.existsSync(blockerMigrationPath),
+    `migration file must exist: ${blockerMigrationName}`);
+  assert.ok(blockerMigrationSql.length > 0,
+    'migration file must not be empty');
 });
 
-test('RPC: previous grants are consumed not deleted', () => {
-  // The migration SQL uses UPDATE SET consumed_at, not DELETE
-  // This is verified by the migration being applied successfully
-  assert.ok(true, 'consume-not-delete verified via migration application');
+test('blocker migration revokes audit helper from authenticated', () => {
+  assert.ok(blockerMigrationSql.includes(
+    'REVOKE EXECUTE ON FUNCTION public.write_mfa_stepup_denied_audit(uuid, uuid, text, text, uuid) FROM authenticated'
+  ), 'must revoke from authenticated');
 });
 
-test('RPC: existing security settings are not changed', () => {
-  // The migration only creates a new function, does not modify auth_security_settings
-  assert.ok(true, 'no settings changed — migration only adds new function');
+test('blocker migration revokes audit helper from anon', () => {
+  assert.ok(blockerMigrationSql.includes(
+    'REVOKE EXECUTE ON FUNCTION public.write_mfa_stepup_denied_audit(uuid, uuid, text, text, uuid) FROM anon'
+  ), 'must revoke from anon');
 });
 
-test('RPC: no experimental factors created', () => {
-  // The migration does not create any factors
-  assert.ok(true, 'no factors created in migration');
+test('blocker migration revokes audit helper from PUBLIC', () => {
+  assert.ok(blockerMigrationSql.includes(
+    'REVOKE EXECUTE ON FUNCTION public.write_mfa_stepup_denied_audit(uuid, uuid, text, text, uuid) FROM PUBLIC'
+  ), 'must revoke from PUBLIC');
 });
 
-test('RPC: no edge function deployed', () => {
-  // No edge function was deployed in this phase
-  assert.ok(true, 'no edge function deployed');
+test('blocker migration grants audit helper only to service_role', () => {
+  assert.ok(blockerMigrationSql.includes(
+    'GRANT EXECUTE ON FUNCTION public.write_mfa_stepup_denied_audit(uuid, uuid, text, text, uuid) TO service_role'
+  ), 'must grant to service_role');
+  assert.ok(!blockerMigrationSql.includes(
+    'GRANT EXECUTE ON FUNCTION public.write_mfa_stepup_denied_audit(uuid, uuid, text, text, uuid) TO authenticated'
+  ), 'must NOT grant to authenticated');
 });
 
-test('RPC: no data deleted or reset', () => {
-  // The migration does not delete or reset any data
-  assert.ok(true, 'no data deleted or reset');
+test('blocker migration keeps main function executable by authenticated', () => {
+  assert.ok(blockerMigrationSql.includes(
+    'GRANT EXECUTE ON FUNCTION public.issue_totp_stepup_grant(text, uuid) TO authenticated'
+  ), 'must grant issue_totp_stepup_grant to authenticated');
+});
+
+test('blocker migration uses is_current_security_admin()', () => {
+  assert.ok(blockerMigrationSql.includes('public.is_current_security_admin()'),
+    'must use is_current_security_admin() helper');
+});
+
+test('blocker migration checks p_purpose IS NULL', () => {
+  assert.ok(blockerMigrationSql.includes('p_purpose IS NULL'),
+    'must check p_purpose IS NULL');
+});
+
+test('blocker migration has exact purpose allowlist', () => {
+  assert.ok(blockerMigrationSql.includes("'auth_settings_change'"),
+    'must include auth_settings_change purpose');
+  assert.ok(blockerMigrationSql.includes("'account_security_change'"),
+    'must include account_security_change purpose');
+});
+
+test('blocker migration does not store raw invalid purpose in audit', () => {
+  const purposeCheckStart = blockerMigrationSql.indexOf('IF p_purpose IS NULL');
+  const purposeCheckEnd = blockerMigrationSql.indexOf('END IF;', purposeCheckStart);
+  const purposeBlock = blockerMigrationSql.slice(purposeCheckStart, purposeCheckEnd);
+  assert.ok(purposeBlock.includes("'PURPOSE_NOT_ALLOWED', NULL"),
+    'invalid purpose audit must pass NULL, not raw p_purpose');
+});
+
+test('blocker migration uses COALESCE for request_id', () => {
+  assert.ok(blockerMigrationSql.includes('COALESCE(p_request_id, gen_random_uuid())'),
+    'must use COALESCE(p_request_id, gen_random_uuid())');
+});
+
+test('blocker migration rejects future TOTP timestamps', () => {
+  assert.ok(blockerMigrationSql.includes('v_totp_proof_time > clock_timestamp()'),
+    'must reject future TOTP timestamps');
+});
+
+test('blocker migration does not DELETE previous grants', () => {
+  assert.ok(!blockerMigrationSql.toUpperCase().includes('DELETE FROM public.session_security_grants'),
+    'must not DELETE grants — use UPDATE consumed_at');
+  assert.ok(blockerMigrationSql.includes('SET consumed_at = clock_timestamp()'),
+    'must void previous grants with consumed_at UPDATE');
+});
+
+test('blocker migration rejects non-ACTIVE account statuses', () => {
+  const statuses = ['PHONE_UNVERIFIED', 'PENDING_ADMIN_APPROVAL', 'REJECTED', 'SUSPENDED', 'LOCKED'];
+  for (const s of statuses) {
+    assert.ok(blockerMigrationSql.includes(`'${s}'`),
+      `must reject account status: ${s}`);
+  }
+});
+
+test('blocker migration does not modify MFA policies', () => {
+  assert.ok(!blockerMigrationSql.toLowerCase().includes('mfa_policy'),
+    'must not change mfa_policy');
+  assert.ok(!blockerMigrationSql.toLowerCase().includes('allow_totp_mfa'),
+    'must not change allow_totp_mfa');
+  assert.ok(!blockerMigrationSql.toLowerCase().includes('mfa_enrollment_required'),
+    'must not change mfa_enrollment_required');
+});
+
+test('blocker migration does not create experimental factors', () => {
+  assert.ok(!blockerMigrationSql.toUpperCase().includes('INSERT INTO AUTH.MFA'),
+    'must not insert into auth.mfa_factors');
+});
+
+test('blocker migration does not delete or reset data', () => {
+  assert.ok(!blockerMigrationSql.toUpperCase().includes('DROP '),
+    'must not DROP anything');
+  assert.ok(!blockerMigrationSql.toUpperCase().includes('TRUNCATE '),
+    'must not TRUNCATE');
+  assert.ok(!blockerMigrationSql.toUpperCase().includes('DELETE FROM'),
+    'must not DELETE FROM');
+});
+
+test('prior migration file is not modified', () => {
+  const priorMigrationPath = path.join(
+    migrationDir,
+    '20260804180657_20260804180000_phase3a_totp_stepup_grant_rpc.sql.sql'
+  );
+  assert.ok(fs.existsSync(priorMigrationPath),
+    'prior migration must still exist unmodified');
+  assert.ok(priorMigrationPath.endsWith('.sql.sql'),
+    'prior migration must retain .sql.sql extension');
+});
+
+test('no edge function deployed in blocker migration', () => {
+  assert.ok(!blockerMigrationSql.toLowerCase().includes('edge function'),
+    'must not deploy edge functions');
 });

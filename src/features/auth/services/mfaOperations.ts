@@ -30,6 +30,27 @@ export interface StepUpGrantResult {
 
 export type StepUpPurpose = 'auth_settings_change' | 'account_security_change';
 
+type MfaErrorCode =
+  | 'INVALID_CODE'
+  | 'CHALLENGE_FAILED'
+  | 'VERIFY_FAILED'
+  | 'AAL2_NOT_REACHED'
+  | 'SESSION_INVALID'
+  | 'STEPUP_DENIED'
+  | 'RECENT_TOTP_REQUIRED'
+  | 'SECURITY_ADMIN_REQUIRED'
+  | 'PURPOSE_NOT_ALLOWED'
+  | 'UNKNOWN_MFA_ERROR';
+
+function mapMfaError(err: unknown): MfaErrorCode {
+  if (!err || typeof err !== 'object') return 'UNKNOWN_MFA_ERROR';
+  const message = (err as { message?: string }).message ?? '';
+  if (/invalid|expired|code/i.test(message)) return 'INVALID_CODE';
+  if (/challenge/i.test(message)) return 'CHALLENGE_FAILED';
+  if (/verify/i.test(message)) return 'VERIFY_FAILED';
+  return 'UNKNOWN_MFA_ERROR';
+}
+
 export async function listCurrentUserTotpFactors(): Promise<TotpFactor[]> {
   const { data, error } = await supabase.auth.mfa.listFactors();
   if (error) throw error;
@@ -71,17 +92,11 @@ export async function verifyTotpFactor(
   const validCode = validateTotpCode(code);
   if (!validCode) throw new Error('INVALID_CODE');
 
-  const { error: challengeError } = await supabase.auth.mfa.challenge({
+  const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
     factorId,
-  });
-  if (challengeError) throw challengeError;
-
-  const { error: verifyError } = await supabase.auth.mfa.verify({
-    factorId,
-    challengeId: '',
     code: validCode,
   });
-  if (verifyError) throw verifyError;
+  if (verifyError) throw new Error(mapMfaError(verifyError));
 
   const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   const currentLevel = aalData?.currentLevel ?? '';
@@ -111,20 +126,12 @@ export async function performTotpStepUp(
     return { ok: false, grantId: null, purpose: null, expiresAt: null, error: 'INVALID_CODE' };
   }
 
-  const { error: challengeError } = await supabase.auth.mfa.challenge({
+  const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
     factorId: params.factorId,
-  });
-  if (challengeError) {
-    return { ok: false, grantId: null, purpose: null, expiresAt: null, error: 'CHALLENGE_FAILED' };
-  }
-
-  const { error: verifyError } = await supabase.auth.mfa.verify({
-    factorId: params.factorId,
-    challengeId: '',
     code: validCode,
   });
   if (verifyError) {
-    return { ok: false, grantId: null, purpose: null, expiresAt: null, error: 'VERIFY_FAILED' };
+    return { ok: false, grantId: null, purpose: null, expiresAt: null, error: mapMfaError(verifyError) };
   }
 
   const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -133,14 +140,17 @@ export async function performTotpStepUp(
     return { ok: false, grantId: null, purpose: null, expiresAt: null, error: 'AAL2_NOT_REACHED' };
   }
 
-  await supabase.auth.getSession();
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData?.session?.access_token) {
+    return { ok: false, grantId: null, purpose: null, expiresAt: null, error: 'SESSION_INVALID' };
+  }
 
   const { data: rpcData, error: rpcError } = await supabase.rpc('issue_totp_stepup_grant', {
     p_purpose: params.purpose,
   });
 
   if (rpcError || !rpcData || !rpcData.ok) {
-    const errorCode = rpcData?.error || rpcError?.message || 'RPC_FAILED';
+    const errorCode: string = rpcData?.error ?? 'STEPUP_DENIED';
     return { ok: false, grantId: null, purpose: null, expiresAt: null, error: errorCode };
   }
 
