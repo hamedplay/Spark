@@ -9,6 +9,7 @@ import { BaleConnectSection } from './Profile/BaleConnectSection';
 import { TelegramConnectSection } from './Profile/TelegramConnectSection';
 import type { OrgPositionInfo, Profile } from './Profile/types';
 import { empty, LEVEL_LABELS, inp, inpDisabled } from './Profile/types';
+import { TotpFactorManager } from '../features/auth/components/TotpFactorManager';
 
 export function ProfilePage() {
   const [loading, setLoading] = useState(true);
@@ -16,7 +17,7 @@ export function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [avatarProcessing, setAvatarProcessing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [openSection, setOpenSection] = useState<'personal' | 'work' | 'social' | 'calendar'>('personal');
+  const [openSection, setOpenSection] = useState<'personal' | 'work' | 'social' | 'calendar' | 'security'>('personal');
   const [saved, setSaved] = useState(false);
   const [orgPositionInfo, setOrgPositionInfo] = useState<OrgPositionInfo | null>(null);
   const avatarPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -202,7 +203,7 @@ export function ProfilePage() {
   const set = (field: keyof typeof empty, value: string) =>
     setProfile(p => p ? { ...p, [field]: value } : p);
 
-  const SectionHeader = ({ id, title, subtitle }: { id: 'personal' | 'work' | 'social' | 'calendar'; title: string; subtitle: string }) => (
+  const SectionHeader = ({ id, title, subtitle }: { id: 'personal' | 'work' | 'social' | 'calendar' | 'security'; title: string; subtitle: string }) => (
     <button
       type="button"
       onClick={() => setOpenSection(id)}
@@ -446,6 +447,16 @@ export function ProfilePage() {
             <div className="p-6 space-y-5">
               <BaleConnectSection />
               <TelegramConnectSection />
+            </div>
+          )}
+        </div>
+
+        {/* Security / TOTP */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <SectionHeader id="security" title="امنیت حساب" subtitle="مدیریت احراز هویت دومرحله‌ای (TOTP)" />
+          {openSection === 'security' && (
+            <div className="p-6">
+              <TotpFactorManager />
             </div>
           )}
         </div>

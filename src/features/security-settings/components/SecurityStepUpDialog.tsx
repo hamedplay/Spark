@@ -1,0 +1,172 @@
+import { useState, useCallback } from 'react';
+import { KeyRound, Loader as Loader2, Check, X } from 'lucide-react';
+import {
+  listCurrentUserTotpFactors,
+  performTotpStepUp,
+  validateTotpCode,
+  type TotpFactor,
+} from '../../auth/services/mfaOperations';
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
+  const [factors, setFactors] = useState<TotpFactor[]>([]);
+  const [selectedFactorId, setSelectedFactorId] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loadingFactors, setLoadingFactors] = useState(false);
+
+  const loadFactors = useCallback(async () => {
+    setLoadingFactors(true);
+    try {
+      const allFactors = await listCurrentUserTotpFactors();
+      const verified = allFactors.filter((f) => f.status === 'verified');
+      setFactors(verified);
+      if (verified.length === 1) {
+        setSelectedFactorId(verified[0].id);
+      }
+    } catch {
+      setError('برنامه احراز هویت پیدا نشد.');
+    } finally {
+      setLoadingFactors(false);
+    }
+  }, []);
+
+  const handleOpen = useCallback(() => {
+    if (open) {
+      setError(null);
+      setCode('');
+      loadFactors();
+    }
+  }, [open, loadFactors]);
+
+  // Call loadFactors when dialog opens
+  useState(() => {
+    if (open) loadFactors();
+  });
+
+  const handleVerify = useCallback(async () => {
+    const validCode = validateTotpCode(code);
+    if (!validCode) {
+      setError('کد واردشده معتبر نیست.');
+      return;
+    }
+    if (!selectedFactorId) {
+      setError('برنامه احراز هویت انتخاب نشده است.');
+      return;
+    }
+
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await performTotpStepUp({
+        factorId: selectedFactorId,
+        code: validCode,
+        purpose: 'auth_settings_change',
+      });
+
+      if (!result.ok) {
+        setError('احراز هویت دومرحله‌ای ناموفق بود. دوباره تلاش کنید.');
+        return;
+      }
+
+      setCode('');
+      onSuccess();
+    } catch {
+      setError('خطا در احراز هویت.');
+    } finally {
+      setBusy(false);
+    }
+  }, [code, selectedFactorId, onSuccess]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50" dir="rtl">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+            <KeyRound className="w-5 h-5 text-blue-500" />
+            تأیید احراز هویت دومرحله‌ای
+          </h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          برای ذخیره تنظیمات امنیتی، کد ۶ رقمی از برنامه احراز هویت خود را وارد کنید.
+        </p>
+
+        {loadingFactors ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+          </div>
+        ) : factors.length === 0 ? (
+          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl text-sm text-amber-700 dark:text-amber-300">
+            برای تغییر تنظیمات امنیتی ابتدا TOTP را در پروفایل خود فعال کنید.
+          </div>
+        ) : (
+          <>
+            {factors.length > 1 && (
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">
+                  انتخاب برنامه احراز هویت
+                </label>
+                <select
+                  value={selectedFactorId ?? ''}
+                  onChange={(e) => setSelectedFactorId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {factors.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.friendlyName ?? 'بدون نام'} — {new Date(f.createdAt).toLocaleDateString('fa-IR')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="کد ۶ رقمی"
+                className="w-full text-center text-2xl tracking-[0.5em] font-mono px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                dir="ltr"
+              />
+            </div>
+
+            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleVerify}
+                disabled={busy || code.length !== 6 || !selectedFactorId}
+                className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                تأیید و ذخیره
+              </button>
+              <button
+                onClick={() => { setCode(''); setError(null); onClose(); }}
+                disabled={busy}
+                className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                انصراف
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
