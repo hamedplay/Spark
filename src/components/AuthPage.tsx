@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, User, Phone, Smartphone, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { supabase, handleSupabaseError, testSupabaseConnection } from '../lib/supabase';
-import { logAudit } from '../lib/audit';
+import { supabase, handleSupabaseError } from '../lib/supabase';
 import { normalizeIranPhone } from '../lib/phoneNormalize';
 import toast from 'react-hot-toast';
 
@@ -78,7 +77,9 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [recoveryResetToken, setRecoveryResetToken] = useState<string | null>(null);
 
   useEffect(() => {
-    testSupabaseConnection().then(ok => setConnectionStatus(ok ? 'connected' : 'disconnected')).catch(() => setConnectionStatus('disconnected'));
+    supabase.rpc('get_public_auth_config').then(({ data }) => {
+      setConnectionStatus(data ? 'connected' : 'disconnected');
+    }).catch(() => setConnectionStatus('disconnected'));
   }, []);
 
   useEffect(() => {
@@ -125,7 +126,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         auditLabel = identifier;
       }
       if (userId) {
-        logAudit({ module: 'auth', action: 'login', entity_name: 'user', entity_id: userId, details: `ورود: ${auditLabel}`, severity: 'info' });
         onSuccess();
       }
     } catch (err: any) { toast.error('در حال حاضر امکان ورود وجود ندارد. لطفاً دوباره تلاش کنید.'); }
@@ -159,7 +159,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       if (result.session) {
         await supabase.auth.setSession({ access_token: result.session.access_token, refresh_token: result.session.refresh_token });
       }
-      logAudit({ module: 'auth', action: 'register', entity_name: 'user', entity_id: result.user?.id, details: `ثبت‌نام: ${form.email.trim()}`, severity: 'info' });
       onSuccess();
     } catch (err: any) { toast.error('خطا در ثبت‌نام'); }
     finally { setLoading(false); }
@@ -299,7 +298,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         refresh_token: data.refresh_token,
       });
       if (sessErr || !sessData.user) { toast.error('کد نادرست است یا منقضی شده'); return; }
-      logAudit({ module: 'auth', action: 'phone_otp_login', entity_name: 'user', entity_id: sessData.user.id, details: 'ورود با کد یک‌بارمصرف موبایلی', severity: 'info' });
       onSuccess();
     } catch { toast.error('خطا در تأیید کد'); }
     finally { setLoading(false); }

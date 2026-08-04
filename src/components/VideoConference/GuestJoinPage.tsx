@@ -48,7 +48,7 @@ interface RoomPublic {
 const WAITING_TIMEOUT_MS = 5 * 60 * 1000;
 
 export function GuestJoinPage({ code }: Props) {
-  const [step, setStep] = useState<'form' | 'waiting' | 'in-room' | 'auth-joining'>('form');
+  const [step, setStep] = useState<'form' | 'waiting' | 'in-room'>('form');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [room, setRoom] = useState<RoomPublic | null>(null);
@@ -68,11 +68,7 @@ export function GuestJoinPage({ code }: Props) {
   // Stable guest ID persisted across refreshes (prevents ban bypass)
   const [guestId] = useState(() => getOrCreateGuestId());
 
-  const [authUserId, setAuthUserId] = useState<string | null>(null);
-  const [authUserName, setAuthUserName] = useState<string | null>(null);
-
   const lastJoinAttemptRef = useRef<number>(0);
-  const autoJoinedRef = useRef(false);
 
   // Refs for stable access inside async realtime callbacks
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -156,10 +152,10 @@ export function GuestJoinPage({ code }: Props) {
   // ── Ban check on load + realtime watch ────────────────────────────────────
   useEffect(() => {
     if (!room) return;
-    const userId = authUserId || guestId;
+    const userId = guestId;
 
     const checkBan = async () => {
-      const { data } = await supabase
+      const { data } = await guestSupabase
         .from('banned_users')
         .select('reason, expires_at')
         .eq('room_id', room.id)
@@ -203,7 +199,7 @@ export function GuestJoinPage({ code }: Props) {
       .subscribe();
 
     return () => { ch.unsubscribe(); };
-  }, [room, authUserId, guestId]);
+  }, [room, guestId]);
 
   // Tick every 30s to keep countdown fresh when user is on ban screen
   useEffect(() => {
@@ -238,7 +234,7 @@ export function GuestJoinPage({ code }: Props) {
     stream.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
     stream.getVideoTracks().forEach(t => { t.enabled = !isVideoOff; });
 
-    const participantId = authUserId || guestId;
+    const participantId = guestId;
     const participantName = overrideName || displayName;
     const peerId = `${participantId}-${Date.now()}`;
     setMyPeerId(peerId);
@@ -247,7 +243,7 @@ export function GuestJoinPage({ code }: Props) {
       room_id: room.id,
       user_id: participantId,
       display_name: participantName,
-      role: authUserId ? 'member' : 'guest',
+      role: 'guest',
       status: 'joined',
       joined_at: new Date().toISOString(),
       is_muted: isMuted,
@@ -264,7 +260,7 @@ export function GuestJoinPage({ code }: Props) {
 
     setLocalStream(stream);
     setStep('in-room');
-  }, [room, isMuted, isVideoOff, authUserId, guestId, displayName]);
+  }, [room, isMuted, isVideoOff, guestId, displayName]);
 
   // Keep doEnterRoom ref current
   useEffect(() => { doEnterRoomRef.current = doEnterRoom; }, [doEnterRoom]);
@@ -325,20 +321,6 @@ export function GuestJoinPage({ code }: Props) {
     };
   }, [step, waitingRequestId]);
 
-  // Auto-join for authenticated users — triggered once DeviceSelector confirms
-  const handleDeviceSelectorConfirm = useCallback(async (stream: MediaStream) => {
-    stream.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
-    stream.getVideoTracks().forEach(t => { t.enabled = !isVideoOff; });
-    setLocalStream(stream);
-
-    if (authUserId && authUserName && room && joinAllowed && !autoJoinedRef.current) {
-      autoJoinedRef.current = true;
-      setStep('auth-joining');
-      await doEnterRoom(stream, authUserName);
-      return;
-    }
-  }, [isMuted, isVideoOff, authUserId, authUserName, room, joinAllowed, doEnterRoom]);
-
   const handleJoin = async (stream: MediaStream) => {
     const now = Date.now();
     if (now - lastJoinAttemptRef.current < 2000) return;
@@ -358,7 +340,7 @@ export function GuestJoinPage({ code }: Props) {
     const { data: validation, error: rpcErr } = await guestSupabase.rpc('validate_room_join', {
       p_room_id: room.id,
       p_password: room.has_password ? password : null,
-      p_user_id: authUserId || guestId,
+      p_user_id: guestId,
     });
 
     if (rpcErr || !validation) {
@@ -433,7 +415,6 @@ export function GuestJoinPage({ code }: Props) {
     setStep('form');
     setLocalStream(null);
     setMyPeerId('');
-    autoJoinedRef.current = false;
 
     if (room) {
       const { data: freshRoom } = await guestSupabase
@@ -449,29 +430,10 @@ export function GuestJoinPage({ code }: Props) {
     }
   };
 
-  // ── Auth-joining loading screen ─────────────────────────────────────────────
-  if (step === 'auth-joining') {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4" dir="rtl">
-        <div className="flex flex-col items-center gap-5 text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-teal-500" />
-          <p className="text-white font-medium">در حال ورود به جلسه...</p>
-          {authUserName && <p className="text-gray-400 text-sm">{authUserName}</p>}
-          <button
-            onClick={() => { autoJoinedRef.current = false; setStep('form'); }}
-            className="mt-2 px-5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-xl transition-colors"
-          >
-            انصراف
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // ── In room ─────────────────────────────────────────────────────────────────
   if (step === 'in-room' && room && localStream) {
-    const activeUserId = authUserId || guestId;
-    const activeUserName = authUserName || displayName;
+    const activeUserId = guestId;
+    const activeUserName = displayName;
     return (
       <ConferenceClientContext.Provider value={guestSupabase}>
         <div className="h-screen">
@@ -558,11 +520,7 @@ export function GuestJoinPage({ code }: Props) {
         {/* DeviceSelector with extra fields embedded */}
         <DeviceSelector
           onConfirm={(stream) => {
-            if (authUserId && authUserName && room && joinAllowed && !autoJoinedRef.current) {
-              handleDeviceSelectorConfirm(stream);
-            } else {
-              handleJoin(stream);
-            }
+            handleJoin(stream);
           }}
           submitLabel={
             loading ? 'در حال ورود...' :
@@ -627,30 +585,20 @@ export function GuestJoinPage({ code }: Props) {
           {/* Name input */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1.5">نام شما</label>
-            {authUserId ? (
-              <div className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-xl text-gray-200 text-sm flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                  {(authUserName || '?')[0].toUpperCase()}
-                </span>
-                {authUserName}
-                <span className="mr-auto text-xs text-teal-400 bg-teal-900/30 px-2 py-0.5 rounded-full">کاربر سامانه</span>
-              </div>
-            ) : (
-              <input
-                type="text"
-                value={displayName}
-                onChange={e => setDisplayName(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !isSubmitDisabled && localStream) {
-                    handleJoin(localStream);
-                  }
-                }}
-                placeholder="نام و نام خانوادگی"
-                autoFocus
-                maxLength={60}
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
-              />
-            )}
+            <input
+              type="text"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !isSubmitDisabled && localStream) {
+                  handleJoin(localStream);
+                }
+              }}
+              placeholder="نام و نام خانوادگی"
+              autoFocus
+              maxLength={60}
+              className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+            />
           </div>
 
           {/* Password field */}

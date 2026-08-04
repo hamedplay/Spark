@@ -132,11 +132,8 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
 function App() {
   const conferenceCode = new URLSearchParams(window.location.search).get('conference');
 
-  const { loading, hasSession, isFullyAuthorized, reasonCode, nextStep, refreshAccessState } = useAuthSession();
-
-  const [showSplash, setShowSplash] = useState(false);
-  const [splashDone, setSplashDone] = useState(false);
-  useEffect(() => { setSplashDone(true); }, []);
+  const authSession = useAuthSession();
+  const { loading, hasSession, isFullyAuthorized, reasonCode, nextStep, refreshAccessState } = authSession;
 
   if (conferenceCode) {
     return <GuestJoinPage code={conferenceCode} />;
@@ -180,7 +177,7 @@ function App() {
     <>
       <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
       <UserPreferencesProvider>
-        <AuthorizedApp authSession={{ loading, hasSession, isFullyAuthorized, isAuthenticated: hasSession && isFullyAuthorized, accessLevel, reasonCode, nextStep, currentUserId, isAdmin, userPermissions, refreshAccessState }} />
+        <AuthorizedApp authSession={authSession} />
       </UserPreferencesProvider>
     </>
   );
