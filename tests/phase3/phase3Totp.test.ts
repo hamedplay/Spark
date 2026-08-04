@@ -13,7 +13,7 @@ const mfaSource = fs.readFileSync(
 );
 
 const migrationDir = path.join(__dirname, '../../supabase/migrations');
-const blockerMigrationName = '20260804200000_phase3a_blocker_fixes.sql';
+const blockerMigrationName = '20260804182309_20260804200000_phase3a_blocker_fixes.sql.sql';
 const blockerMigrationPath = path.join(migrationDir, blockerMigrationName);
 const blockerMigrationSql = fs.existsSync(blockerMigrationPath)
   ? fs.readFileSync(blockerMigrationPath, 'utf-8')
@@ -319,6 +319,15 @@ test('grant is not stored in localStorage/sessionStorage', () => {
 });
 
 // ── 11. Blocker 2: Migration tests — read from file on disk ─────────────────
+
+test('exactly one blocker migration file exists in repository', () => {
+  const allMigrations = fs.readdirSync(migrationDir);
+  const blockerMigrations = allMigrations.filter((f) => f.includes('phase3a_blocker_fixes'));
+  assert.equal(blockerMigrations.length, 1,
+    `expected exactly 1 phase3a_blocker_fixes migration, found ${blockerMigrations.length}: ${blockerMigrations.join(', ')}`);
+  assert.equal(blockerMigrations[0], blockerMigrationName,
+    `the single blocker migration must be the applied file: ${blockerMigrationName}`);
+});
 
 test('blocker migration file exists on disk', () => {
   assert.ok(fs.existsSync(blockerMigrationPath),
