@@ -85,6 +85,14 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
     }
   }, [code, selectedFactorId, onSuccess]);
 
+  const handleClose = useCallback(() => {
+    if (busy) return;
+
+    setCode('');
+    setError(null);
+    onClose();
+  }, [busy, onClose]);
+
   if (!open) return null;
 
   return (
@@ -95,7 +103,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
             <KeyRound className="w-5 h-5 text-blue-500" />
             تأیید احراز هویت دومرحله‌ای
           </h3>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+          <button type="button" onClick={handleClose} disabled={busy} aria-disabled={busy} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 disabled:opacity-50 disabled:pointer-events-none">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -161,8 +169,9 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
               </button>
               <button
                 type="button"
-                onClick={() => { setCode(''); setError(null); onClose(); }}
+                onClick={handleClose}
                 disabled={busy}
+                aria-disabled={busy}
                 className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
               >
                 انصراف

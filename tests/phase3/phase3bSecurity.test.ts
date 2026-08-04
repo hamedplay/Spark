@@ -15,7 +15,8 @@ const appliedMigrationSql = fs.existsSync(appliedMigrationPath)
   ? fs.readFileSync(appliedMigrationPath, 'utf-8')
   : '';
 
-const hardeningMigrationName = '20260804240000_phase3b_security_console_state_hardening.sql';
+const hardeningMigrationName =
+  '20260804190854_20260804240000_phase3b_security_console_state_hardening.sql.sql';
 const hardeningMigrationPath = path.join(migrationDir, hardeningMigrationName);
 const hardeningMigrationSql = fs.existsSync(hardeningMigrationPath)
   ? fs.readFileSync(hardeningMigrationPath, 'utf-8')
@@ -564,9 +565,36 @@ test('hardening migration: returns only counts, not factor IDs or secrets', () =
 test('migration drift: exactly two phase3b_security_console_state migrations exist', () => {
   const allMigrations = fs.readdirSync(migrationDir);
   const consoleMigrations = allMigrations.filter((f) => f.includes('phase3b_security_console_state'));
-  // Applied migration (.sql.sql) + hardening migration (.sql) = 2 files
   assert.equal(consoleMigrations.length, 2,
     `expected exactly 2 phase3b_security_console_state migrations, found ${consoleMigrations.length}: ${consoleMigrations.join(', ')}`);
+});
+
+test('migration drift: applied migration file has exact name', () => {
+  const appliedPath = path.join(migrationDir, '20260804185047_20260804230000_phase3b_security_console_state.sql.sql');
+  assert.ok(fs.existsSync(appliedPath),
+    'applied migration must be named 20260804185047_20260804230000_phase3b_security_console_state.sql.sql');
+});
+
+test('migration drift: hardening migration file has exact applied name', () => {
+  const hardeningPath = path.join(migrationDir, '20260804190854_20260804240000_phase3b_security_console_state_hardening.sql.sql');
+  assert.ok(fs.existsSync(hardeningPath),
+    'hardening migration must be named 20260804190854_20260804240000_phase3b_security_console_state_hardening.sql.sql');
+});
+
+test('migration drift: pending 20260804240000 hardening file does not exist', () => {
+  const pendingPath = path.join(migrationDir, '20260804240000_phase3b_security_console_state_hardening.sql');
+  assert.ok(!fs.existsSync(pendingPath),
+    'pending hardening migration 20260804240000 must not exist');
+});
+
+test('migration drift: no pending phase3b migrations without applied version prefix', () => {
+  const allMigrations = fs.readdirSync(migrationDir);
+  const consoleMigrations = allMigrations.filter((f) => f.includes('phase3b_security_console_state'));
+  for (const f of consoleMigrations) {
+    // Applied migrations have pattern: <14digits>_<8digits>_<name>.sql.sql
+    assert.ok(f.match(/^\d{14}_\d{8}.*\.sql\.sql$/),
+      `migration file must have applied prefix pattern (timestamp_timestamp...sql.sql): ${f}`);
+  }
 });
 
 test('migration drift: duplicate 20260804230000 file does not exist', () => {
@@ -582,7 +610,89 @@ test('migration drift: applied migration file unchanged', () => {
     'applied migration must still have SECURITY DEFINER');
 });
 
-// ── Import Path Tests ────────────────────────────────────────────────────────
+// ── Dialog Close While Busy Tests ─────────────────────────────────────────────
+
+test('dialog close: header close button has disabled={busy}', () => {
+  const headerBtnMatch = stepUpDialogSource.match(/<button[^>]*onClick=\{handleClose\}[^>]*>/);
+  assert.ok(headerBtnMatch, 'must have a button using handleClose');
+  assert.ok(headerBtnMatch[0].includes('disabled={busy}'),
+    'header close button must have disabled={busy}');
+  assert.ok(headerBtnMatch[0].includes('aria-disabled={busy}'),
+    'header close button must have aria-disabled={busy}');
+});
+
+test('dialog close: handleClose does not call onClose when busy', () => {
+  const handleCloseFn = stepUpDialogSource.slice(
+    stepUpDialogSource.indexOf('const handleClose'),
+    stepUpDialogSource.indexOf('}, [busy, onClose]);') + '}, [busy, onClose]);'.length
+  );
+  assert.ok(handleCloseFn.includes('if (busy) return'),
+    'handleClose must return early when busy');
+  assert.ok(handleCloseFn.includes('onClose()'),
+    'handleClose must call onClose when not busy');
+});
+
+test('dialog close: both header and footer use same handleClose handler', () => {
+  const headerCloseCount = (stepUpDialogSource.match(/onClick=\{handleClose\}/g) || []).length;
+  assert.ok(headerCloseCount >= 2,
+    `both header X and footer cancel must use handleClose, found ${headerCloseCount}`);
+});
+
+test('dialog close: no direct onClose call in button handlers', () => {
+  // After handleClose is defined, no button should call onClose directly
+  const handleClosePos = stepUpDialogSource.indexOf('const handleClose');
+  const afterHandleClose = stepUpDialogSource.slice(handleClosePos);
+  // No button should have onClick={onClose} — must go through handleClose
+  assert.ok(!afterHandleClose.match(/onClick=\{onClose\}/),
+    'no button should call onClose directly — must use handleClose');
+});
+
+// ── Remove Modal Close While Removing Tests ──────────────────────────────────
+
+test('remove modal: closeRemoveDialog does not close when removing', () => {
+  const closeFn = totpFactorManagerSource.slice(
+    totpFactorManagerSource.indexOf('const closeRemoveDialog'),
+    totpFactorManagerSource.indexOf('}, [removing]);') + '}, [removing]);'.length
+  );
+  assert.ok(closeFn.includes('if (removing) return'),
+    'closeRemoveDialog must return early when removing');
+});
+
+test('remove modal: header close has disabled={removing}', () => {
+  const headerMatch = totpFactorManagerSource.match(/<button[^>]*onClick=\{closeRemoveDialog\}[^>]*>/);
+  assert.ok(headerMatch, 'must have a button using closeRemoveDialog');
+  assert.ok(headerMatch[0].includes('disabled={removing}'),
+    'remove modal header close must have disabled={removing}');
+  assert.ok(headerMatch[0].includes('aria-disabled={removing}'),
+    'remove modal header close must have aria-disabled={removing}');
+});
+
+test('remove modal: both header and footer use same closeRemoveDialog', () => {
+  const closeCount = (totpFactorManagerSource.match(/onClick=\{closeRemoveDialog\}/g) || []).length;
+  assert.ok(closeCount >= 2,
+    `both header X and footer cancel must use closeRemoveDialog, found ${closeCount}`);
+});
+
+test('remove modal: no direct setRemoveTarget(null) in button handlers after closeRemoveDialog', () => {
+  const closeDialogPos = totpFactorManagerSource.indexOf('const closeRemoveDialog');
+  const afterCloseDialog = totpFactorManagerSource.slice(closeDialogPos);
+  // No button should directly call setRemoveTarget(null) — must go through closeRemoveDialog
+  assert.ok(!afterCloseDialog.match(/onClick=\{\(\)\s*=>\s*\{\s*setRemoveTarget\(null\)/),
+    'no button should call setRemoveTarget(null) directly — must use closeRemoveDialog');
+});
+
+test('remove modal: no hidden save after cancel during removal', () => {
+  // The handleRemoveConfirm function must not be callable from closeRemoveDialog
+  const closeDialogFn = totpFactorManagerSource.slice(
+    totpFactorManagerSource.indexOf('const closeRemoveDialog'),
+    totpFactorManagerSource.indexOf('}, [removing]);') + '}, [removing]);'.length
+  );
+  assert.ok(!closeDialogFn.includes('handleRemoveConfirm'),
+    'closeRemoveDialog must not call handleRemoveConfirm');
+  assert.ok(!closeDialogFn.includes('unenroll'),
+    'closeRemoveDialog must not call unenroll');
+});
+
 
 test('import path: securitySettingsService resolves to src/lib/supabase', () => {
   assert.ok(securitySettingsServiceSource.includes("from '../../../lib/supabase'"),

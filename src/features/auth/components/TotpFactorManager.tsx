@@ -131,6 +131,13 @@ export function TotpFactorManager() {
     setRemoveCode('');
   }, []);
 
+  const closeRemoveDialog = useCallback(() => {
+    if (removing) return;
+
+    setRemoveTarget(null);
+    setRemoveCode('');
+  }, [removing]);
+
   const handleRemoveConfirm = useCallback(async () => {
     if (!removeTarget) return;
     const validCode = validateTotpCode(removeCode);
@@ -347,7 +354,7 @@ export function TotpFactorManager() {
                 <AlertCircle className="w-5 h-5 text-red-500" />
                 حذف برنامه احراز هویت
               </h3>
-              <button type="button" onClick={() => { setRemoveTarget(null); setRemoveCode(''); }} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+              <button type="button" onClick={closeRemoveDialog} disabled={removing} aria-disabled={removing} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 disabled:opacity-50 disabled:pointer-events-none">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -391,8 +398,9 @@ export function TotpFactorManager() {
               </button>
               <button
                 type="button"
-                onClick={() => { setRemoveTarget(null); setRemoveCode(''); }}
+                onClick={closeRemoveDialog}
                 disabled={removing}
+                aria-disabled={removing}
                 className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
               >
                 انصراف
