@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { useTheme, type AccentKey } from './ThemeContext';
+import { useTheme, ACCENT_COLORS, type AccentKey, type Theme } from './ThemeContext';
 import { useUserPreferences } from '../features/user-preferences';
-import { ACCENT_COLORS } from './ThemeContext';
 
 /**
  * Bridge that syncs theme/accent from user preferences into the pure ThemeProvider.
@@ -18,29 +17,42 @@ export function AuthenticatedThemeSync() {
   const lastRemoteThemeRef = useRef<Theme | null>(null);
   const lastRemoteAccentRef = useRef<AccentKey | null>(null);
 
+  // Refs mirror current local state so the remote effect can read it
+  // without depending on `theme`/`accent` (which would retrigger on user changes).
+  const localThemeRef = useRef<Theme>(theme);
+  const localAccentRef = useRef<AccentKey>(accent);
+  localThemeRef.current = theme;
+  localAccentRef.current = accent;
+
   // Remote → Local: apply DB preferences to local state once loaded.
+  // Dependency array intentionally excludes `theme` and `accent` so that
+  // user-initiated local changes do not retrigger this effect.
   useEffect(() => {
     if (loading) return;
 
-    const validAccent = ACCENT_COLORS.some((c) => c.key === prefs.accent_color)
+    const remoteTheme = prefs.theme;
+
+    const remoteAccent = ACCENT_COLORS.some(
+      (color) => color.key === prefs.accent_color
+    )
       ? (prefs.accent_color as AccentKey)
       : 'teal';
 
-    lastRemoteThemeRef.current = prefs.theme;
-    lastRemoteAccentRef.current = validAccent;
+    lastRemoteThemeRef.current = remoteTheme;
+    lastRemoteAccentRef.current = remoteAccent;
 
-    if (prefs.theme !== theme) {
+    if (localThemeRef.current !== remoteTheme) {
       skipThemePersistRef.current = true;
-      setTheme(prefs.theme);
+      setTheme(remoteTheme);
     }
 
-    if (validAccent !== accent) {
+    if (localAccentRef.current !== remoteAccent) {
       skipAccentPersistRef.current = true;
-      setAccent(validAccent);
+      setAccent(remoteAccent);
     }
 
     hydratedRef.current = true;
-  }, [loading, prefs.theme, prefs.accent_color, theme, accent, setTheme, setAccent]);
+  }, [loading, prefs.theme, prefs.accent_color, setTheme, setAccent]);
 
   // Local → Remote: persist user-initiated theme changes to DB.
   useEffect(() => {
@@ -53,10 +65,15 @@ export function AuthenticatedThemeSync() {
 
     if (lastRemoteThemeRef.current === theme) return;
 
+    const previousRemote = lastRemoteThemeRef.current;
     lastRemoteThemeRef.current = theme;
-    updatePrefs({ theme }).catch((err) => {
-      console.error('[AuthenticatedThemeSync] failed to persist theme', err);
-      lastRemoteThemeRef.current = null;
+
+    void updatePrefs({ theme }).catch((error) => {
+      console.error(
+        '[AuthenticatedThemeSync] failed to persist theme',
+        error
+      );
+      lastRemoteThemeRef.current = previousRemote;
     });
   }, [theme, loading, updatePrefs]);
 
@@ -71,14 +88,17 @@ export function AuthenticatedThemeSync() {
 
     if (lastRemoteAccentRef.current === accent) return;
 
+    const previousRemote = lastRemoteAccentRef.current;
     lastRemoteAccentRef.current = accent;
-    updatePrefs({ accent_color: accent }).catch((err) => {
-      console.error('[AuthenticatedThemeSync] failed to persist accent_color', err);
-      lastRemoteAccentRef.current = null;
+
+    void updatePrefs({ accent_color: accent }).catch((error) => {
+      console.error(
+        '[AuthenticatedThemeSync] failed to persist accent_color',
+        error
+      );
+      lastRemoteAccentRef.current = previousRemote;
     });
   }, [accent, loading, updatePrefs]);
 
   return null;
 }
-
-type Theme = 'light' | 'dark';

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 type Theme = 'light' | 'dark';
 
@@ -56,26 +56,31 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => { applyThemeToDom(theme); }, [theme]);
   useEffect(() => { applyAccentToDom(accent); }, [accent]);
 
-  const setTheme = (next: Theme) => {
+  const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
     localStorage.setItem('theme', next);
-  };
+  }, []);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
       const next = prev === 'light' ? 'dark' : 'light';
       localStorage.setItem('theme', next);
       return next;
     });
-  };
+  }, []);
 
-  const setAccent = (a: AccentKey) => {
-    setAccentState(a);
-    localStorage.setItem('accent_color', a);
-  };
+  const setAccent = useCallback((next: AccentKey) => {
+    setAccentState(next);
+    localStorage.setItem('accent_color', next);
+  }, []);
+
+  const value = useMemo(
+    () => ({ theme, setTheme, toggleTheme, accent, setAccent }),
+    [theme, setTheme, toggleTheme, accent, setAccent]
+  );
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, accent, setAccent }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );
