@@ -49,6 +49,12 @@ export interface AuthSessionState {
   reasonCode: ReasonCode | null;
   nextStep: NextStep;
   currentUserId: string | null;
+  sessionId: string | null;
+  accountStatus: string | null;
+  profileCompletionStatus: string | null;
+  mfaRequired: boolean;
+  hasVerifiedTotp: boolean;
+  currentAal: string | null;
   isAdmin: boolean;
   userPermissions: Record<string, boolean> | null | undefined;
   refreshAccessState: () => Promise<void>;

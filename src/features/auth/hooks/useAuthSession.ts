@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase, handleSupabaseError } from '../../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 import { loadResolvedUserPermissions } from '../../permissions';
 import type { AuthSessionState, AuthAccessState, AccessLevel, ReasonCode, NextStep } from '../types/authSession';
 
@@ -11,6 +11,12 @@ export function useAuthSession(): AuthSessionState {
   const [reasonCode, setReasonCode] = useState<ReasonCode | null>(null);
   const [nextStep, setNextStep] = useState<NextStep>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [accountStatus, setAccountStatus] = useState<string | null>(null);
+  const [profileCompletionStatus, setProfileCompletionStatus] = useState<string | null>(null);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [hasVerifiedTotp, setHasVerifiedTotp] = useState(false);
+  const [currentAal, setCurrentAal] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userPermissions, setUserPermissions] = useState<Record<string, boolean> | null | undefined>(undefined);
 
@@ -37,6 +43,12 @@ export function useAuthSession(): AuthSessionState {
           setReasonCode(null);
           setNextStep('login');
           setCurrentUserId(null);
+          setSessionId(null);
+          setAccountStatus(null);
+          setProfileCompletionStatus(null);
+          setMfaRequired(false);
+          setHasVerifiedTotp(false);
+          setCurrentAal(null);
           setIsAdmin(false);
           setUserPermissions(undefined);
         }
@@ -51,13 +63,11 @@ export function useAuthSession(): AuthSessionState {
           (error?.code && String(error.code).startsWith('PGRST')) ||
           (error?.message && (/fetch/i.test(error.message) || /network/i.test(error.message)));
         if (isNetworkError) {
-          // Network/server error — don't sign out, let the user retry
           setHasSession(true);
           setIsFullyAuthorized(false);
           setAccessLevel('BLOCKED');
           setReasonCode('ACCESS_CHECK_FAILED');
         } else {
-          // Session error — auto sign out and clear storage
           try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
           await supabase.auth.signOut();
           setHasSession(false);
@@ -74,6 +84,12 @@ export function useAuthSession(): AuthSessionState {
       setReasonCode(state.reason_code);
       setNextStep(state.next_step);
       setCurrentUserId(state.user_id);
+      setSessionId(state.session_id);
+      setAccountStatus(state.account_status);
+      setProfileCompletionStatus(state.profile_completion_status);
+      setMfaRequired(state.mfa_required);
+      setHasVerifiedTotp(state.has_verified_totp);
+      setCurrentAal(state.current_aal);
       setIsFullyAuthorized(state.access_level === 'FULL');
 
       if (state.access_level === 'FULL' && state.user_id) {
@@ -111,7 +127,7 @@ export function useAuthSession(): AuthSessionState {
   useEffect(() => {
     refreshAccessState();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) {
         const gen = ++generationRef.current;
         setHasSession(false);
@@ -120,10 +136,16 @@ export function useAuthSession(): AuthSessionState {
         setReasonCode(null);
         setNextStep('login');
         setCurrentUserId(null);
+        setSessionId(null);
+        setAccountStatus(null);
+        setProfileCompletionStatus(null);
+        setMfaRequired(false);
+        setHasVerifiedTotp(false);
+        setCurrentAal(null);
         setIsAdmin(false);
         setUserPermissions(undefined);
         setLoading(false);
-      } else {
+      } else if (event === 'TOKEN_REFRESHED' || event === 'MFA_CHALLENGE_VERIFIED' || event === 'SIGNED_IN') {
         refreshAccessState();
       }
     });
@@ -142,6 +164,12 @@ export function useAuthSession(): AuthSessionState {
     reasonCode,
     nextStep,
     currentUserId,
+    sessionId,
+    accountStatus,
+    profileCompletionStatus,
+    mfaRequired,
+    hasVerifiedTotp,
+    currentAal,
     isAdmin,
     userPermissions,
     refreshAccessState,

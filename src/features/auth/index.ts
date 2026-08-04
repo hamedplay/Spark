@@ -15,3 +15,23 @@ export type {
   SignUpWithPasswordInput,
   AuthUserIdChangeListener,
 } from './services/authOperations';
+
+export {
+  listCurrentUserTotpFactors,
+  startTotpEnrollment,
+  verifyTotpFactor,
+  cancelCurrentTotpEnrollment,
+  performTotpStepUp,
+  validateTotpCode,
+} from './services/mfaOperations';
+
+export type {
+  TotpFactor,
+  TotpEnrollmentResult,
+  StepUpGrantResult,
+  StepUpPurpose,
+  PerformTotpStepUpParams,
+} from './services/mfaOperations';
+
+export { TotpEnrollmentGate } from './components/TotpEnrollmentGate';
+export { TotpChallengeGate } from './components/TotpChallengeGate';

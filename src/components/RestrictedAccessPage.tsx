@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { ShieldAlert, RefreshCw, LogOut, KeyRound } from 'lucide-react';
+import { ShieldAlert, RefreshCw, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ReasonCode } from '../features/auth/types/authSession';
+import { TotpEnrollmentGate } from '../features/auth/components/TotpEnrollmentGate';
+import { TotpChallengeGate } from '../features/auth/components/TotpChallengeGate';
 
 interface RestrictedAccessPageProps {
   reasonCode: ReasonCode | null;
@@ -87,6 +89,28 @@ export function RestrictedAccessPage({ reasonCode, nextStep, onRefresh, onSignOu
     onSignOut();
   };
 
+  if (nextStep === 'enroll_mfa') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900" dir="rtl">
+        <TotpEnrollmentGate
+          onCompleted={onRefresh}
+          onSignOut={handleSignOut}
+        />
+      </div>
+    );
+  }
+
+  if (nextStep === 'verify_mfa') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900" dir="rtl">
+        <TotpChallengeGate
+          onCompleted={onRefresh}
+          onSignOut={handleSignOut}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900" dir="rtl">
       <div className="flex flex-col items-center gap-6 text-center max-w-md px-6">
@@ -110,15 +134,6 @@ export function RestrictedAccessPage({ reasonCode, nextStep, onRefresh, onSignOu
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
               بررسی مجدد وضعیت
-            </button>
-          )}
-          {nextStep === 'verify_mfa' && (
-            <button
-              onClick={() => window.location.href = '/auth/v1/mfa'}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-medium transition-colors"
-            >
-              <KeyRound className="w-4 h-4" />
-              تأیید احراز هویت دو مرحله‌ای
             </button>
           )}
           <button
