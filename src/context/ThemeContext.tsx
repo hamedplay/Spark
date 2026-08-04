@@ -19,6 +19,7 @@ export type AccentKey = typeof ACCENT_COLORS[number]['key'];
 
 interface ThemeContextType {
   theme: Theme;
+  setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   accent: AccentKey;
   setAccent: (a: AccentKey) => void;
@@ -42,7 +43,7 @@ function applyAccentToDom(accent: AccentKey) {
 }
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<Theme>(() => {
+  const [theme, setThemeState] = useState<Theme>(() => {
     const saved = localStorage.getItem('theme') as Theme;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     return saved || (prefersDark ? 'dark' : 'light');
@@ -55,10 +56,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => { applyThemeToDom(theme); }, [theme]);
   useEffect(() => { applyAccentToDom(accent); }, [accent]);
 
-  const toggleTheme = () => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
+  const setTheme = (next: Theme) => {
+    setThemeState(next);
     localStorage.setItem('theme', next);
+  };
+
+  const toggleTheme = () => {
+    setThemeState((prev) => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', next);
+      return next;
+    });
   };
 
   const setAccent = (a: AccentKey) => {
@@ -67,7 +75,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, accent, setAccent }}>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, accent, setAccent }}>
       {children}
     </ThemeContext.Provider>
   );

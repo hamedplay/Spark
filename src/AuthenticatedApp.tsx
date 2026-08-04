@@ -16,7 +16,8 @@ import { AppShell } from './app/layout/AppShell';
 import { SparkMeetingPrefill } from './components/Spark/SparkAssistant';
 import { Meeting } from './types';
 import { PageRendererProps } from './app/navigation/pageRendererTypes';
-import { AuthenticatedThemeProvider } from './context/AuthenticatedThemeProvider';
+import { ThemeProvider } from './context/ThemeContext';
+import { AuthenticatedThemeSync } from './context/AuthenticatedThemeSync';
 
 function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuthSession> }) {
   const { prefs, loading: prefsLoading } = useUserPreferences();
@@ -130,6 +131,14 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
 }
 
 export default function AuthenticatedApp() {
+  return (
+    <ThemeProvider>
+      <AuthenticatedAppContent />
+    </ThemeProvider>
+  );
+}
+
+function AuthenticatedAppContent() {
   const authSession = useAuthSession();
   const { loading, hasSession, isFullyAuthorized, reasonCode, nextStep, refreshAccessState } = authSession;
 
@@ -171,9 +180,8 @@ export default function AuthenticatedApp() {
     <>
       <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
       <UserPreferencesProvider>
-        <AuthenticatedThemeProvider>
-          <AuthorizedApp authSession={authSession} />
-        </AuthenticatedThemeProvider>
+        <AuthenticatedThemeSync />
+        <AuthorizedApp authSession={authSession} />
       </UserPreferencesProvider>
     </>
   );

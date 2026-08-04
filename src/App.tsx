@@ -1,5 +1,4 @@
 import { lazy, Suspense } from 'react';
-import { ThemeProvider } from './context/ThemeContext';
 
 const AuthenticatedApp = lazy(() => import('./AuthenticatedApp'));
 const GuestApplication = lazy(() => import('./GuestApplication'));
@@ -16,15 +15,13 @@ function RootApp() {
   }
 
   return (
-    <ThemeProvider>
-      <Suspense fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-        </div>
-      }>
-        <AuthenticatedApp />
-      </Suspense>
-    </ThemeProvider>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    }>
+      <AuthenticatedApp />
+    </Suspense>
   );
 }
 
