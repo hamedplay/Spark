@@ -49,9 +49,9 @@ function extractFunctionBody(sql: string, funcName: string): string {
 
 // ═══ Migration Tests ═══════════════════════════════════════════════════════════
 
-test('migration: exactly three phase4 migrations exist', () => {
-  assert.equal(phase4Migrations.length, 3,
-    'expected exactly 3 phase4 migrations, found ' + phase4Migrations.length + ': ' + phase4Migrations.join(', '));
+test('migration: exactly four phase4 migrations exist', () => {
+  assert.equal(phase4Migrations.length, 4,
+    'expected exactly 4 phase4 migrations, found ' + phase4Migrations.length + ': ' + phase4Migrations.join(', '));
 });
 
 test('migration: foundation migration exists', () => {
