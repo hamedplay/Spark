@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, Phone, Smartphone, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, Phone, Smartphone, ChevronRight, Eye, EyeOff, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { normalizeIranPhone } from '../lib/phoneNormalize';
 import toast from 'react-hot-toast';
 
 type AuthMode = 'login' | 'register' | 'reset';
-type LoginMethod = 'email' | 'phone';
+type LoginMethod = 'username' | 'email' | 'phone';
 type PasswordRecoveryStep = 'phone' | 'otp' | 'new_password' | 'success';
 
 interface AuthPageProps {
@@ -31,6 +31,12 @@ interface PublicAuthConfig {
   registration_otp_resend_seconds: number;
 }
 
+interface PublicLoginMethods {
+  username_login: boolean;
+  email_login: boolean;
+  phone_login: boolean;
+}
+
 export function AuthPage({ onSuccess }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
@@ -40,6 +46,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [siteDescription, setSiteDescription] = useState('مدیریت حرفه‌ای جلسات، پیگیری اقدامات و همکاری تیمی در یک پلتفرم');
   const [, setLogoUrl] = useState('');
   const [authConfig, setAuthConfig] = useState<PublicAuthConfig | null>(null);
+  const [loginMethods, setLoginMethods] = useState<PublicLoginMethods | null>(null);
 
   useEffect(() => {
     supabase.from('system_config').select('key,value,section').in('key', ['site_title', 'site_description', 'logo_url']).then(({ data }) => {
@@ -61,15 +68,38 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     })();
   }, []);
 
-  // Email/password form
-  const [form, setForm] = useState({ email: '', password: '', confirmPassword: '', fullName: '', username: '' });
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data: configData } = await (supabase.rpc as any)('get_public_auth_config');
+        setConnectionStatus(configData ? 'connected' : 'disconnected');
+      } catch { setConnectionStatus('disconnected'); }
+    })();
+  }, []);
 
-  // Phone OTP form
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [countdown, setCountdown] = useState(0);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data, error } = await (supabase.rpc as any)('get_public_login_methods');
+        if (error || !data) { setLoginMethods(null); return; }
+        const row = Array.isArray(data) ? data[0] : data;
+        const methods: PublicLoginMethods = {
+          username_login: row?.username_login === true,
+          email_login: row?.email_login === true,
+          phone_login: row?.phone_login === true,
+        };
+        setLoginMethods(methods);
+        // Pick first active method
+        if (methods.username_login) setLoginMethod('username');
+        else if (methods.email_login) setLoginMethod('email');
+        else if (methods.phone_login) setLoginMethod('phone');
+      } catch { setLoginMethods(null); }
+    })();
+  }, []);
+
+  // Login form state
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // ── Password recovery state (scoped challenge, no Supabase session) ─
@@ -85,66 +115,51 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [recoveryResetToken, setRecoveryResetToken] = useState<string | null>(null);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const { data: configData } = await (supabase.rpc as any)('get_public_auth_config');
-        setConnectionStatus(configData ? 'connected' : 'disconnected');
-      } catch { setConnectionStatus('disconnected'); }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (countdown <= 0) return;
-    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [countdown]);
-
-  useEffect(() => {
     if (recoveryCountdown <= 0) return;
     const t = setTimeout(() => setRecoveryCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [recoveryCountdown]);
 
-  // ── Email/username login ─────────────────────────────────────────────────────
+  const activeMethods: LoginMethod[] = [];
+  if (loginMethods?.username_login) activeMethods.push('username');
+  if (loginMethods?.email_login) activeMethods.push('email');
+  if (loginMethods?.phone_login) activeMethods.push('phone');
+
+  // ── Unified password login ──────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.email || !form.password) { toast.error('نام کاربری/ایمیل و رمز عبور را وارد کنید'); return; }
+    if (!identifier.trim() || !password) {
+      toast.error('شناسه ورود و رمز عبور را وارد کنید');
+      return;
+    }
     setLoading(true);
     try {
-      const identifier = form.email.trim();
-      const isEmail = identifier.includes('@');
-      let userId: string | undefined;
-      let auditLabel = identifier; void auditLabel;
-      if (isEmail) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: identifier, password: form.password });
-        if (error || !data.user) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
-        userId = data.user.id;
-        auditLabel = identifier;
-      } else {
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/username-login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
-          body: JSON.stringify({ username: identifier, password: form.password }),
-        });
-        if (res.status === 401) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
-        if (res.status === 503) { toast.error('در حال حاضر امکان ورود وجود ندارد. لطفاً دوباره تلاش کنید.'); return; }
-        if (!res.ok) { toast.error('در حال حاضر امکان ورود وجود ندارد. لطفاً دوباره تلاش کنید.'); return; }
-        const session = await res.json();
-        if (!session.access_token || !session.refresh_token) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
-        const { data: sessData, error: sessErr } = await supabase.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
-        if (sessErr || !sessData.user) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
-        userId = sessData.user.id;
-        auditLabel = identifier;
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/password-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+        body: JSON.stringify({ method: loginMethod, identifier: identifier.trim(), password }),
+      });
+      const result = await res.json();
+      if (res.status === 401) { toast.error('شناسه ورود یا رمز عبور صحیح نیست.'); return; }
+      if (res.status === 403) { toast.error('این روش ورود در حال حاضر غیرفعال است.'); return; }
+      if (res.status === 429) { toast.error('تعداد تلاش‌ها بیش از حد مجاز است. کمی بعد دوباره تلاش کنید.'); return; }
+      if (res.status === 503) { toast.error('در حال حاضر امکان ورود وجود ندارد.'); return; }
+      if (!res.ok || !result.access_token || !result.refresh_token) {
+        toast.error('شناسه ورود یا رمز عبور صحیح نیست.');
+        return;
       }
-      if (userId) {
-        onSuccess();
-      }
-    } catch (err: any) { toast.error('در حال حاضر امکان ورود وجود ندارد. لطفاً دوباره تلاش کنید.'); }
-    finally { setLoading(false); }
+      const { data: sessData, error: sessErr } = await supabase.auth.setSession({
+        access_token: result.access_token,
+        refresh_token: result.refresh_token,
+      });
+      if (sessErr || !sessData.user) { toast.error('شناسه ورود یا رمز عبور صحیح نیست.'); return; }
+      onSuccess();
+    } catch {
+      toast.error('در حال حاضر امکان ورود وجود ندارد.');
+    } finally { setLoading(false); }
   };
 
   // ── Register ─────────────────────────────────────────────────────────────────
-  // Registration state machine: details → otp → submitting → success
   type RegStep = 'details' | 'otp' | 'submitting' | 'success';
   const [regStep, setRegStep] = useState<RegStep>('details');
   const [regForm, setRegForm] = useState({ firstName: '', lastName: '', username: '', email: '', phone: '', password: '', confirmPassword: '' });
@@ -228,7 +243,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       if (result.session) {
         await supabase.auth.setSession({ access_token: result.session.access_token, refresh_token: result.session.refresh_token });
       }
-      // Clear sensitive data
       setRegForm({ firstName: '', lastName: '', username: '', email: '', phone: '', password: '', confirmPassword: '' });
       setRegOtp('');
       setRegChallengeId(null);
@@ -260,11 +274,9 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       const { data } = await supabase.functions.invoke('request-phone-password-reset-otp', {
         body: { phone: recoveryPhone },
       });
-      // Always store challenge_id (real or decoy) — response is identical
       const challengeId = data?.challenge_id || crypto.randomUUID();
       setRecoveryChallengeId(challengeId);
     } catch {
-      // Generate a decoy challenge_id so the flow looks identical
       setRecoveryChallengeId(crypto.randomUUID());
     } finally {
       setRecoveryLoading(false);
@@ -287,7 +299,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         toast.error('کد نامعتبر است، منقضی شده یا امکان ادامه بازیابی وجود ندارد.');
         return;
       }
-      // Store reset token in memory only (not localStorage)
       setRecoveryResetToken(data.reset_token);
       setRecoveryStep('new_password');
     } catch {
@@ -310,7 +321,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         toast.error('کد نامعتبر است، منقضی شده یا امکان ادامه بازیابی وجود ندارد.');
         return;
       }
-      // Clear all sensitive state
       setRecoveryPhone('');
       setRecoveryOtp('');
       setRecoveryPassword('');
@@ -324,7 +334,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     } finally { setRecoveryLoading(false); }
   };
 
-  // ── Password recovery: cancel ───────────────────────────────────────────────
   const handleRecoveryCancel = () => {
     setRecoveryPhone('');
     setRecoveryOtp('');
@@ -337,56 +346,19 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     setMode('login');
   };
 
-  // ── Phone OTP ─────────────────────────────────────────────────────────────────
-  const handleSendOtp = async () => {
-    if (!phone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
-    if (authConfig?.phone_login_canonical_ready !== true) { toast.error('ورود با شماره موبایل در حال حاضر فعال نیست.'); return; }
-    const normalized = normalizeIranPhone(phone);
-    if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
-    void normalized;
-    setOtpLoading(true);
-    try {
-      // Use server-side edge function to prevent enumeration
-      // Always returns the same response regardless of whether the phone exists
-      await supabase.functions.invoke('request-phone-login-otp', {
-        body: { phone },
-      });
-      // Always show the same message — never reveal whether the phone exists
-      setOtpSent(true);
-      setCountdown(60);
-      toast.success('اگر شماره معتبر و سرویس در دسترس باشد، کد ورود ارسال می‌شود.');
-    } catch (err: any) {
-      // Same generic message on error
-      setOtpSent(true);
-      setCountdown(60);
-      toast.success('اگر شماره معتبر و سرویس در دسترس باشد، کد ورود ارسال می‌شود.');
-    }
-    finally { setOtpLoading(false); }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (!otp.trim() || otp.length !== 6 || !/^\d{6}$/.test(otp)) { toast.error('کد تأیید باید دقیقاً ۶ رقم باشد'); return; }
-    setLoading(true);
-    try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-phone-login-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
-        body: JSON.stringify({ phone, otp }),
-      });
-      if (!res.ok) { toast.error('کد نادرست است یا منقضی شده'); return; }
-      const data = await res.json();
-      if (!data?.ok || !data?.access_token || !data?.refresh_token) { toast.error('کد نادرست است یا منقضی شده'); return; }
-      const { data: sessData, error: sessErr } = await supabase.auth.setSession({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-      });
-      if (sessErr || !sessData.user) { toast.error('کد نادرست است یا منقضی شده'); return; }
-      onSuccess();
-    } catch { toast.error('خطا در تأیید کد'); }
-    finally { setLoading(false); }
-  };
-
   const inp = 'w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all dark:bg-gray-700 dark:text-white text-sm';
+
+  const methodLabel: Record<LoginMethod, string> = {
+    username: 'نام کاربری',
+    email: 'ایمیل',
+    phone: 'موبایل',
+  };
+
+  const methodPlaceholder: Record<LoginMethod, string> = {
+    username: 'نام کاربری خود را وارد کنید',
+    email: 'example@domain.com',
+    phone: '09123456789',
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-gray-50 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 px-4" dir="rtl">
@@ -442,93 +414,53 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             </h2>
 
             {/* Login method tabs (only on login) */}
-            {mode === 'login' && (() => {
-              const phoneTabEnabled = authConfig?.phone_login_canonical_ready === true;
-              return (
+            {mode === 'login' && activeMethods.length > 0 && (
               <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 mb-6">
-                <button onClick={() => setLoginMethod('email')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'email' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
-                  <Mail className="w-4 h-4" /> ایمیل
-                </button>
-                <button onClick={() => setLoginMethod('phone')}
-                  disabled={!phoneTabEnabled}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'} ${!phoneTabEnabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                  <Smartphone className="w-4 h-4" /> موبایل
-                </button>
-              </div>
-              );
-            })()}
-
-            {/* ── Phone OTP login ────────────────────────────────────── */}
-            {mode === 'login' && loginMethod === 'phone' && (() => {
-              const showForm = authConfig?.phone_login_canonical_ready === true;
-              return (
-              <div className="space-y-4">
-                {!showForm && (
-                  <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl p-3 flex gap-2 text-xs text-gray-500 dark:text-gray-400">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>ورود با شماره موبایل در حال حاضر فعال نیست.</span>
-                  </div>
-                )}
-                {showForm && (
-                <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">شماره موبایل</label>
-                  <div className="relative">
-                    <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="   مثال: 09123456789"
-                      className={inp} dir="ltr" disabled={otpSent} />
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  </div>
-                </div>
-                {otpSent && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">کد تأیید</label>
-                    <input type="text" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0,6))}
-                      placeholder="کد ۶ رقمی" className={inp + ' text-center text-xl tracking-[0.5em] font-mono'} dir="ltr" maxLength={6} />
-                  </div>
-                )}
-                {!otpSent ? (
-                  <button onClick={handleSendOtp} disabled={otpLoading || !phone}
-                    className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
-                    {otpLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Smartphone className="w-5 h-5" />ارسال کد تأیید</>}
+                {activeMethods.includes('username') && (
+                  <button onClick={() => setLoginMethod('username')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'username' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+                    <User className="w-4 h-4" /> نام کاربری
                   </button>
-                ) : (
-                  <div className="space-y-2">
-                    <button onClick={handleVerifyOtp} disabled={loading || otp.length < 4}
-                      className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
-                      {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowRight className="w-5 h-5" />تأیید و ورود</>}
-                    </button>
-                    <button onClick={() => { if (countdown === 0) { setOtpSent(false); setOtp(''); } }}
-                      disabled={countdown > 0}
-                      className="w-full text-sm text-teal-600 dark:text-teal-400 disabled:text-gray-400 py-2 transition-colors">
-                      {countdown > 0 ? `ارسال مجدد پس از ${countdown} ثانیه` : 'ارسال مجدد کد'}
-                    </button>
-                  </div>
                 )}
-                </>
+                {activeMethods.includes('email') && (
+                  <button onClick={() => setLoginMethod('email')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'email' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+                    <Mail className="w-4 h-4" /> ایمیل
+                  </button>
                 )}
-                <button onClick={() => setLoginMethod('email')} className="w-full text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors py-2">
-                  ورود با ایمیل
-                </button>
+                {activeMethods.includes('phone') && (
+                  <button onClick={() => setLoginMethod('phone')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+                    <Smartphone className="w-4 h-4" /> موبایل
+                  </button>
+                )}
               </div>
-              );
-            })()}
+            )}
 
-            {/* ── Email login ────────────────────────────────────── */}
-            {mode === 'login' && loginMethod === 'email' && (
+            {/* No active methods */}
+            {mode === 'login' && activeMethods.length === 0 && (
+              <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl p-4 mb-6">
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">ورود در حال حاضر در دسترس نیست.</p>
+              </div>
+            )}
+
+            {/* ── Unified password login form ────────────────────────────────── */}
+            {mode === 'login' && activeMethods.length > 0 && (
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label htmlFor="login-identifier" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری یا ایمیل</label>
+                  <label htmlFor="login-identifier" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{methodLabel[loginMethod]}</label>
                   <div className="relative">
-                    <input id="login-identifier" type="text" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                      placeholder="نام کاربری یا ایمیل خود را وارد کنید" className={inp + ' pl-10'} autoComplete="username" spellCheck={false} autoCapitalize="off" dir="ltr" disabled={loading} />
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
+                    <input id="login-identifier" type={loginMethod === 'phone' ? 'tel' : 'text'} required value={identifier} onChange={e => setIdentifier(e.target.value)}
+                      placeholder={methodPlaceholder[loginMethod]} className={inp + ' pl-10'} autoComplete="username" spellCheck={false} autoCapitalize="off" dir="ltr" disabled={loading} />
+                    {loginMethod === 'username' && <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />}
+                    {loginMethod === 'email' && <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />}
+                    {loginMethod === 'phone' && <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />}
                   </div>
                 </div>
                 <div>
                   <label htmlFor="login-password" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور</label>
                   <div className="relative">
-                    <input id="login-password" dir="ltr" type={showPassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                    <input id="login-password" dir="ltr" type={showPassword ? 'text' : 'password'} required value={password} onChange={e => setPassword(e.target.value)}
                       placeholder="••••••••" className={inp + ' pl-10 pr-10 !text-left'} autoComplete="current-password" disabled={loading} />
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
                     <button type="button" onClick={() => setShowPassword(v => !v)}

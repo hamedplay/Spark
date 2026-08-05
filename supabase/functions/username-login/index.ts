@@ -1,73 +1,56 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+const baseHeaders: Record<string, string> = {
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
   "Cache-Control": "no-store",
   "Pragma": "no-cache",
 };
 
-const INVALID_CREDENTIALS = { error: "INVALID_CREDENTIALS" };
-const LOGIN_UNAVAILABLE = { error: "LOGIN_UNAVAILABLE" };
+function corsHeaders(allowedOrigin: string | null): Record<string, string> {
+  const h: Record<string, string> = { ...baseHeaders };
+  if (allowedOrigin) {
+    h["Access-Control-Allow-Origin"] = allowedOrigin;
+  }
+  return h;
+}
+
+function json(data: unknown, status: number, allowedOrigin: string | null): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders(allowedOrigin), "Content-Type": "application/json" },
+  });
+}
+
+async function getAllowedOrigin(req: Request): Promise<string | null> {
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { data, error } = await admin.rpc("get_phone_auth_config");
+  if (error || !data) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  const allowedOrigins: string[] = Array.isArray(row?.allowed_origins) ? row.allowed_origins : [];
+  const origin = req.headers.get("Origin");
+  if (!origin) return null;
+  for (const allowed of allowedOrigins) {
+    if (origin === allowed) return origin;
+  }
+  return null;
+}
 
 Deno.serve(async (req: Request) => {
+  const allowedOrigin = await getAllowedOrigin(req);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    return new Response(null, { status: 200, headers: corsHeaders(allowedOrigin) });
   }
 
-  const json = (data: unknown, status: number) =>
-    new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-  if (req.method !== "POST") {
-    return json({ error: "Method Not Allowed" }, 405);
+  if (req.method === "POST") {
+    return json({ error: "LOGIN_ROUTE_REPLACED" }, 410, allowedOrigin);
   }
 
-  let body: { username?: unknown; password?: unknown };
-  try {
-    body = await req.json();
-  } catch {
-    return json(INVALID_CREDENTIALS, 401);
-  }
-
-  const { username, password } = body;
-  if (typeof username !== "string" || typeof password !== "string" || password.length === 0) {
-    return json(INVALID_CREDENTIALS, 401);
-  }
-
-  const trimmedUsername = username.trim();
-  if (trimmedUsername.length === 0 || trimmedUsername.length > 100) {
-    return json(INVALID_CREDENTIALS, 401);
-  }
-
-  try {
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
-
-    const { data: email, error: lookupErr } = await admin.rpc("get_email_by_username", { p_username: trimmedUsername });
-    const usernameExists = !lookupErr && typeof email === "string" && email.length > 0;
-    const candidateEmail = usernameExists ? (email as string) : `invalid-${crypto.randomUUID()}@example.invalid`;
-
-    const anon = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
-
-    const { data: signInData, error: signInErr } = await anon.auth.signInWithPassword({ email: candidateEmail, password });
-    if (!usernameExists || signInErr || !signInData.session) {
-      return json(INVALID_CREDENTIALS, 401);
-    }
-
-    return json({
-      access_token: signInData.session.access_token,
-      refresh_token: signInData.session.refresh_token,
-    }, 200);
-  } catch {
-    return json(LOGIN_UNAVAILABLE, 503);
-  }
+  return json({ error: "METHOD_NOT_ALLOWED" }, 405, allowedOrigin);
 });
