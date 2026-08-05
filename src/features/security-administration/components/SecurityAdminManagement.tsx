@@ -15,16 +15,17 @@ interface Props {
     expectedVersion: number;
     changeReason: string;
   }) => void;
-  stepUpResult: { targetUserId: string; success: boolean } | null;
-  onStepUpConsumed: () => void;
+  refreshVersion: number;
+  changeBusy: boolean;
 }
 
 const PAGE_SIZE = 50;
 
-export function SecurityAdminManagement({ onOpenStepUp, stepUpResult, onStepUpConsumed }: Props) {
+export function SecurityAdminManagement({ onOpenStepUp, refreshVersion, changeBusy }: Props) {
   const [state, setState] = useState<AdminManagementState | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [offset, setOffset] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTarget, setDialogTarget] = useState<AdminUserRow | null>(null);
@@ -48,25 +49,20 @@ export function SecurityAdminManagement({ onOpenStepUp, stepUpResult, onStepUpCo
     }
   }, []);
 
+  // Single debounce effect for search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setOffset(0);
-      void loadData(search, 0);
+      setDebouncedSearch(search.trim());
     }, 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [search, loadData]);
+  }, [search]);
 
+  // Single load effect
   useEffect(() => {
-    void loadData(search, offset);
-  }, [offset, loadData, search]);
-
-  // Handle step-up success: trigger the actual role change
-  useEffect(() => {
-    if (!stepUpResult || !stepUpResult.success) return;
-    // The actual setter call is handled by the parent which has the snapshot
-    onStepUpConsumed();
-  }, [stepUpResult, onStepUpConsumed]);
+    void loadData(debouncedSearch, offset);
+  }, [debouncedSearch, offset, refreshVersion, loadData]);
 
   const handleInitiateChange = useCallback((target: AdminUserRow, newValue: boolean) => {
     setDialogTarget(target);
@@ -87,6 +83,7 @@ export function SecurityAdminManagement({ onOpenStepUp, stepUpResult, onStepUpCo
   }, [dialogTarget, dialogNewValue, onOpenStepUp]);
 
   const actorHasTotp = state?.summary.current_actor_has_verified_totp ?? false;
+  const pagination = state?.pagination;
 
   if (loading && !state) {
     return (
@@ -173,7 +170,7 @@ export function SecurityAdminManagement({ onOpenStepUp, stepUpResult, onStepUpCo
                       <button
                         type="button"
                         onClick={() => handleInitiateChange(user, true)}
-                        disabled={!actorHasTotp}
+                        disabled={!actorHasTotp || changeBusy}
                         className="px-3 py-1.5 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition disabled:opacity-50"
                       >
                         اعطا
@@ -183,7 +180,7 @@ export function SecurityAdminManagement({ onOpenStepUp, stepUpResult, onStepUpCo
                       <button
                         type="button"
                         onClick={() => handleInitiateChange(user, false)}
-                        disabled={!actorHasTotp}
+                        disabled={!actorHasTotp || changeBusy}
                         className="px-3 py-1.5 text-xs font-medium bg-red-500 hover:bg-red-600 text-white rounded-lg transition disabled:opacity-50"
                       >
                         حذف
@@ -208,16 +205,19 @@ export function SecurityAdminManagement({ onOpenStepUp, stepUpResult, onStepUpCo
         <button
           type="button"
           onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-          disabled={offset === 0 || loading}
+          disabled={!pagination || pagination.offset === 0 || loading}
           className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
         >
           <ChevronRight className="w-4 h-4" /> قبلی
         </button>
-        <span className="text-xs text-gray-400">صفحه {Math.floor(offset / PAGE_SIZE) + 1}</span>
+        <span className="text-xs text-gray-400">
+          صفحه {Math.floor((pagination?.offset ?? 0) / PAGE_SIZE) + 1}
+          {pagination && ` از ${Math.ceil(pagination.total_matches / PAGE_SIZE) || 1}`}
+        </span>
         <button
           type="button"
           onClick={() => setOffset(offset + PAGE_SIZE)}
-          disabled={state.users.length < PAGE_SIZE || loading}
+          disabled={!pagination?.has_more || loading}
           className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
         >
           بعدی <ChevronLeft className="w-4 h-4" />

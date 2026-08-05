@@ -36,7 +36,13 @@ const RESULTS = [
   { value: 'error', label: 'خطا' },
 ];
 
-export function SecurityAuditConsole() {
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface Props {
+  refreshVersion: number;
+}
+
+export function SecurityAuditConsole({ refreshVersion }: Props) {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -46,53 +52,107 @@ export function SecurityAuditConsole() {
   const [severity, setSeverity] = useState('');
   const [result, setResult] = useState('');
   const [eventType, setEventType] = useState('');
+  const [actorUserId, setActorUserId] = useState('');
+  const [targetUserId, setTargetUserId] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [actorError, setActorError] = useState<string | null>(null);
+  const [targetError, setTargetError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
-  const loadIdRef = useRef(0);
+  const generationRef = useRef(0);
+
+  const buildParams = useCallback(() => {
+    const actor = actorUserId.trim();
+    const target = targetUserId.trim();
+    let actorUuid: string | null = null;
+    let targetUuid: string | null = null;
+
+    if (actor) {
+      if (!UUID_REGEX.test(actor)) {
+        setActorError('UUID نامعتبر است.');
+        return null;
+      }
+      actorUuid = actor;
+      setActorError(null);
+    } else {
+      setActorError(null);
+    }
+
+    if (target) {
+      if (!UUID_REGEX.test(target)) {
+        setTargetError('UUID نامعتبر است.');
+        return null;
+      }
+      targetUuid = target;
+      setTargetError(null);
+    } else {
+      setTargetError(null);
+    }
+
+    let fromIso: string | null = null;
+    let toIso: string | null = null;
+    if (fromDate) fromIso = new Date(fromDate).toISOString();
+    if (toDate) {
+      const d = new Date(toDate);
+      d.setHours(23, 59, 59, 999);
+      toIso = d.toISOString();
+    }
+
+    return {
+      category: category || null,
+      severity: severity || null,
+      result: result || null,
+      eventType: eventType || null,
+      actorUserId: actorUuid,
+      targetUserId: targetUuid,
+      from: fromIso,
+      to: toIso,
+      limit: PAGE_SIZE,
+    };
+  }, [category, severity, result, eventType, actorUserId, targetUserId, fromDate, toDate]);
 
   const loadInitial = useCallback(async () => {
-    const myLoadId = ++loadIdRef.current;
+    const gen = ++generationRef.current;
+    const params = buildParams();
+    if (!params) return;
+
     setLoading(true);
+    setEvents([]);
+    setHasMore(false);
+    setCursor(null);
+    setSelectedEvent(null);
+
     try {
-      const res = await loadSecurityAuditPage({
-        category: category || null,
-        severity: severity || null,
-        result: result || null,
-        eventType: eventType || null,
-        limit: PAGE_SIZE,
-      });
-      if (myLoadId !== loadIdRef.current) return;
+      const res = await loadSecurityAuditPage(params);
+      if (gen !== generationRef.current) return;
       if (res.ok) {
         setEvents(res.events);
         setHasMore(res.has_more);
         setCursor(res.next_cursor);
       } else {
         setEvents([]);
-        setHasMore(false);
       }
     } finally {
-      if (myLoadId === loadIdRef.current) setLoading(false);
+      if (gen === generationRef.current) setLoading(false);
     }
-  }, [category, severity, result, eventType]);
+  }, [buildParams]);
 
   useEffect(() => {
     void loadInitial();
-  }, [loadInitial]);
+  }, [loadInitial, refreshVersion]);
 
   const handleLoadMore = useCallback(async () => {
     if (!hasMore || !cursor || loadingMore) return;
+    const gen = generationRef.current;
     setLoadingMore(true);
     try {
       const res = await loadSecurityAuditPage({
-        category: category || null,
-        severity: severity || null,
-        result: result || null,
-        eventType: eventType || null,
-        limit: PAGE_SIZE,
+        ...buildParams(),
         beforeCreatedAt: cursor.before_created_at,
         beforeId: cursor.before_id,
       });
+      if (gen !== generationRef.current) return;
       if (res.ok) {
-        // Deduplicate: only append events whose IDs are not already present
         setEvents((prev) => {
           const existingIds = new Set(prev.map((e) => e.id));
           const newEvents = res.events.filter((e) => !existingIds.has(e.id));
@@ -102,13 +162,12 @@ export function SecurityAuditConsole() {
         setCursor(res.next_cursor);
       }
     } finally {
-      setLoadingMore(false);
+      if (gen === generationRef.current) setLoadingMore(false);
     }
-  }, [hasMore, cursor, loadingMore, category, severity, result, eventType]);
+  }, [hasMore, cursor, loadingMore, buildParams]);
 
   return (
     <div className="space-y-4" dir="rtl">
-      {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <Filter className="w-4 h-4 text-gray-400" />
         <Select value={category} onChange={setCategory} options={CATEGORIES} />
@@ -123,7 +182,40 @@ export function SecurityAuditConsole() {
         />
       </div>
 
-      {/* Events */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <input
+          type="text"
+          value={actorUserId}
+          onChange={(e) => setActorUserId(e.target.value)}
+          placeholder="Actor UUID..."
+          className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+          dir="ltr"
+        />
+        <input
+          type="text"
+          value={targetUserId}
+          onChange={(e) => setTargetUserId(e.target.value)}
+          placeholder="Target UUID..."
+          className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+          dir="ltr"
+        />
+        <input
+          type="date"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <input
+          type="date"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value)}
+          className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      {actorError && <p className="text-xs text-red-500">{actorError}</p>}
+      {targetError && <p className="text-xs text-red-500">{targetError}</p>}
+
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />

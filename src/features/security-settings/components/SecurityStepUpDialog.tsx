@@ -15,7 +15,7 @@ export interface SecurityStepUpDialogProps {
   description: string;
   confirmLabel: string;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
 }
 
 export function SecurityStepUpDialog({
@@ -90,7 +90,7 @@ export function SecurityStepUpDialog({
       }
 
       setCode('');
-      onSuccess();
+      await onSuccess();
     } catch {
       setError('خطا در احراز هویت.');
     } finally {

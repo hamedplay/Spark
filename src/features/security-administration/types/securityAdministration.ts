@@ -60,6 +60,13 @@ export interface AdminUserRow {
   eligibility: AdminUserEligibility;
 }
 
+export interface AdminManagementPagination {
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  total_matches: number;
+}
+
 export interface AdminManagementSummary {
   total_users: number;
   active_security_admins: number;
@@ -85,6 +92,7 @@ export interface RoleHistoryEntry {
 export interface AdminManagementState {
   ok: true;
   users: AdminUserRow[];
+  pagination: AdminManagementPagination;
   summary: AdminManagementSummary;
   history: RoleHistoryEntry[];
 }
@@ -148,5 +156,6 @@ export interface VersionConflictSnapshot {
   targetDisplayName: string;
   requestedValue: boolean;
   expectedVersion: number;
+  currentVersion?: number;
   changeReason: string;
 }
