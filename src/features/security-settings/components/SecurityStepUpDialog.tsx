@@ -5,15 +5,28 @@ import {
   performTotpStepUp,
   validateTotpCode,
   type TotpFactor,
+  type StepUpPurpose,
 } from '../../auth/services/mfaOperations';
 
-interface Props {
+export interface SecurityStepUpDialogProps {
   open: boolean;
+  purpose: StepUpPurpose;
+  title: string;
+  description: string;
+  confirmLabel: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
+export function SecurityStepUpDialog({
+  open,
+  purpose,
+  title,
+  description,
+  confirmLabel,
+  onClose,
+  onSuccess,
+}: SecurityStepUpDialogProps) {
   const [factors, setFactors] = useState<TotpFactor[]>([]);
   const [selectedFactorId, setSelectedFactorId] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -68,7 +81,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
       const result = await performTotpStepUp({
         factorId: selectedFactorId,
         code: validCode,
-        purpose: 'auth_settings_change',
+        purpose,
       });
 
       if (!result.ok) {
@@ -83,7 +96,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [code, selectedFactorId, onSuccess]);
+  }, [code, selectedFactorId, purpose, onSuccess]);
 
   const handleClose = useCallback(() => {
     if (busy) return;
@@ -101,7 +114,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
             <KeyRound className="w-5 h-5 text-blue-500" />
-            تأیید احراز هویت دومرحله‌ای
+            {title}
           </h3>
           <button type="button" onClick={handleClose} disabled={busy} aria-disabled={busy} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 disabled:opacity-50 disabled:pointer-events-none">
             <X className="w-4 h-4" />
@@ -109,7 +122,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          برای ذخیره تنظیمات امنیتی، کد ۶ رقمی از برنامه احراز هویت خود را وارد کنید.
+          {description}
         </p>
 
         {loadingFactors ? (
@@ -118,7 +131,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
           </div>
         ) : factors.length === 0 ? (
           <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl text-sm text-amber-700 dark:text-amber-300">
-            برای تغییر تنظیمات امنیتی ابتدا TOTP را در پروفایل خود فعال کنید.
+            برای این عملیات ابتدا TOTP را در پروفایل خود فعال کنید.
           </div>
         ) : (
           <>
@@ -165,7 +178,7 @@ export function SecurityStepUpDialog({ open, onClose, onSuccess }: Props) {
                 className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                تأیید و ذخیره
+                {confirmLabel}
               </button>
               <button
                 type="button"

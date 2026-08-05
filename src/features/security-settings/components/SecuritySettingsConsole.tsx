@@ -192,6 +192,10 @@ export function SecuritySettingsConsole() {
     <div className="space-y-5" dir="rtl">
       <SecurityStepUpDialog
         open={stepUpOpen}
+        purpose="auth_settings_change"
+        title="تأیید احراز هویت دومرحله‌ای"
+        description="برای ذخیره تنظیمات امنیتی، کد ۶ رقمی از برنامه احراز هویت خود را وارد کنید."
+        confirmLabel="تأیید و ذخیره"
         onClose={() => setStepUpOpen(false)}
         onSuccess={handleStepUpSuccess}
       />

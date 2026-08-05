@@ -281,8 +281,14 @@ test('step-up: setter not called before successful step-up', () => {
 });
 
 test('step-up: purpose is auth_settings_change', () => {
-  assert.ok(stepUpDialogSource.includes("purpose: 'auth_settings_change'"),
-    'must use auth_settings_change purpose');
+  // The dialog is now generalized — purpose is a prop.
+  // SecuritySettingsConsole passes auth_settings_change as the purpose.
+  const settingsConsoleSource = fs.readFileSync(
+    path.join(__dirname, '../../src/features/security-settings/components/SecuritySettingsConsole.tsx'),
+    'utf-8',
+  );
+  assert.ok(settingsConsoleSource.includes('auth_settings_change'),
+    'SecuritySettingsConsole must use auth_settings_change purpose');
 });
 
 test('step-up: AAL2 failure stops save', () => {
@@ -865,9 +871,9 @@ test('profile form: all TOTP buttons have type="button"', () => {
 
 // ── MfaPanel replacement ────────────────────────────────────────────────────
 
-test('MfaPanel renders SecuritySettingsConsole', () => {
-  assert.ok(mfaPanelSource.includes('SecuritySettingsConsole'),
-    'MfaPanel must render SecuritySettingsConsole');
+test('MfaPanel renders SecurityControlCenter', () => {
+  assert.ok(mfaPanelSource.includes('SecurityControlCenter'),
+    'MfaPanel must render SecurityControlCenter');
   assert.ok(!mfaPanelSource.includes('system_config'),
     'MfaPanel must not save to system_config');
 });

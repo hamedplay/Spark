@@ -1,5 +1,5 @@
-import { SecuritySettingsConsole } from '../../features/security-settings';
+import { SecurityControlCenter } from '../../features/security-administration';
 
 export function MfaPanel() {
-  return <SecuritySettingsConsole />;
+  return <SecurityControlCenter />;
 }
