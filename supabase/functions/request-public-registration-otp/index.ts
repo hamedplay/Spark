@@ -1,49 +1,23 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function normalizeIranPhone(value?: string | null): string {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (/^00989\d{9}$/.test(digits)) return digits.slice(2);
-  if (/^989\d{9}$/.test(digits)) return digits;
-  if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
-  if (/^9\d{9}$/.test(digits)) return `98${digits}`;
-  return "";
-}
-
-async function hmacSha256Hex(key: string, data: string): Promise<string> {
-  const enc = new TextEncoder();
-  const cryptoKey = await crypto.subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(data));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-function generateOtp(): string {
-  const arr = new Uint32Array(1);
-  crypto.getRandomValues(arr);
-  return String(arr[0] % 1000000).padStart(6, "0");
-}
-
-function adminClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-}
+import {
+  corsResponse,
+  preflightResponse,
+  rejectOrigin,
+  isOriginAllowed,
+  getRequestOrigin,
+  normalizeIranPhone,
+  hmacSha256Hex,
+  generateOtp,
+  adminClient,
+} from "../_shared/registration-security.ts";
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return preflightResponse(req);
 
-  const json = (data: unknown, status = 200) =>
-    new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  const origin = getRequestOrigin(req);
+  if (!isOriginAllowed(origin)) return rejectOrigin(req);
+
+  const json = (data: unknown, status = 200) => corsResponse(req, data, status);
 
   try {
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -56,18 +30,17 @@ Deno.serve(async (req: Request) => {
 
     const { first_name, last_name, username, email, phone } = JSON.parse(body);
 
-    // Validation
     const trimmedFirst = (first_name || "").trim();
     const trimmedLast = (last_name || "").trim();
     const trimmedUsername = (username || "").trim();
     const trimmedEmail = (email || "").trim().toLowerCase();
-    const normalizedPhone = normalizeIranPhone(phone);
+    const phoneDigits = normalizeIranPhone(phone);
 
     if (!trimmedFirst || !trimmedLast) return json({ error: "نام و نام خانوادگی الزامی است" }, 400);
     if (trimmedUsername.length < 3 || trimmedUsername.length > 50) return json({ error: "نام کاربری باید ۳ تا ۵۰ کاراکتر باشد" }, 400);
     if (!/^[a-zA-Z][a-zA-Z0-9._]*$/.test(trimmedUsername)) return json({ error: "نام کاربری نامعتبر است" }, 400);
     if (!/^[^@]+@[^@]+\.[^@]+$/.test(trimmedEmail)) return json({ error: "ایمیل نامعتبر است" }, 400);
-    if (!normalizedPhone) return json({ error: "شماره موبایل نامعتبر است" }, 400);
+    if (!phoneDigits) return json({ error: "شماره موبایل نامعتبر است" }, 400);
 
     const supabase = adminClient();
 
@@ -94,21 +67,18 @@ Deno.serve(async (req: Request) => {
 
     // Rate limit
     const ipHash = await hmacSha256Hex("ip", req.headers.get("x-forwarded-for") || "unknown");
-    const identityHash = await hmacSha256Hex("identity", `${trimmedFirst}|${trimmedLast}|${trimmedUsername}|${trimmedEmail}|${normalizedPhone}`);
-    const phoneHash = await hmacSha256Hex("phone", normalizedPhone);
+    const identityHash = await hmacSha256Hex("identity", `${trimmedFirst}|${trimmedLast}|${trimmedUsername}|${trimmedEmail}|${phoneDigits}`);
+    const phoneHash = await hmacSha256Hex("phone", phoneDigits);
 
-    // Check identity/phone rate limit (3 in 15 min)
     const { count: identityCount } = await supabase.from("public_registration_rate_limit").select("*", { count: "exact", head: true }).eq("identity_hash", identityHash).eq("purpose", "registration_request").gt("created_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
     if (identityCount && identityCount >= 3) return json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
 
     const { count: phoneCount } = await supabase.from("public_registration_rate_limit").select("*", { count: "exact", head: true }).eq("phone_hash", phoneHash).eq("purpose", "registration_request").gt("created_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
     if (phoneCount && phoneCount >= 3) return json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
 
-    // Check IP rate limit (10 in 15 min)
     const { count: ipCount } = await supabase.from("public_registration_rate_limit").select("*", { count: "exact", head: true }).eq("ip_hash", ipHash).eq("purpose", "registration_request").gt("created_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
     if (ipCount && ipCount >= 10) return json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
 
-    // Consume rate limit
     await supabase.rpc("consume_public_registration_rate_limit", {
       p_identity_hash: identityHash,
       p_phone_hash: phoneHash,
@@ -116,22 +86,28 @@ Deno.serve(async (req: Request) => {
       p_purpose: "registration_request",
     });
 
-    // Check uniqueness (but don't reveal which identifier is taken)
-    let hasConflict = false;
-    const { data: existingUsername } = await supabase.from("profiles").select("user_id").eq("normalized_username", trimmedUsername.toLowerCase()).maybeSingle();
-    if (existingUsername) hasConflict = true;
+    // Check identifier availability via RPC
+    const { data: available, error: availError } = await supabase.rpc("check_public_registration_identifiers_available", {
+      p_normalized_username: trimmedUsername,
+      p_normalized_email: trimmedEmail,
+      p_normalized_phone: phoneDigits,
+    });
 
-    if (!hasConflict) {
-      const { data: existingEmail } = await supabase.from("profiles").select("user_id").eq("normalized_email", trimmedEmail).maybeSingle();
-      if (existingEmail) hasConflict = true;
+    if (availError) {
+      return json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
     }
 
-    if (!hasConflict) {
-      const { data: existingPhone } = await supabase.from("profiles").select("user_id").eq("normalized_phone", normalizedPhone).maybeSingle();
-      if (existingPhone) hasConflict = true;
+    const hasConflict = available !== true;
+    if (hasConflict) {
+      // Decoy response — same shape as success, no OTP sent
+      return json({
+        ok: true,
+        challenge_id: crypto.randomUUID(),
+        retry_after_seconds: resendSeconds,
+      });
     }
 
-    // Generate OTP
+    // Generate OTP using Web Crypto (crypto.subtle) via hmacSha256Hex
     const otp = generateOtp();
     const otpHash = await hmacSha256Hex(Deno.env.get("REGISTRATION_PHONE_OTP_SECRET")!, `${identityHash}|${phoneHash}|${otp}`);
     const emailHash = await hmacSha256Hex("email", trimmedEmail);
@@ -152,15 +128,6 @@ Deno.serve(async (req: Request) => {
 
     if (!challengeId) return json({ error: "خطا در ایجاد چالش" }, 500);
 
-    // If conflict, return decoy challenge ID (same response shape)
-    if (hasConflict) {
-      return json({
-        ok: true,
-        challenge_id: crypto.randomUUID(),
-        retry_after_seconds: resendSeconds,
-      });
-    }
-
     // Send OTP via send-sms
     const smsBody = template.body.replace("{{otp}}", otp);
     try {
@@ -174,7 +141,7 @@ Deno.serve(async (req: Request) => {
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
         },
         body: JSON.stringify({
-          phone: `+${normalizedPhone}`,
+          phone: `+${phoneDigits}`,
           message: smsBody,
           provider_id: providerRow.value,
         }),
@@ -208,8 +175,7 @@ Deno.serve(async (req: Request) => {
       challenge_id: challengeId,
       retry_after_seconds: resendSeconds,
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal error";
+  } catch {
     return json({ error: "خطا در پردازش درخواست" }, 500);
   }
 });

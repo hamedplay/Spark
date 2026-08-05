@@ -1,43 +1,22 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function normalizeIranPhone(value?: string | null): string {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (/^00989\d{9}$/.test(digits)) return digits.slice(2);
-  if (/^989\d{9}$/.test(digits)) return digits;
-  if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
-  if (/^9\d{9}$/.test(digits)) return `98${digits}`;
-  return "";
-}
-
-async function hmacSha256Hex(key: string, data: string): Promise<string> {
-  const enc = new TextEncoder();
-  const cryptoKey = await crypto.subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(data));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-function adminClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-}
+import {
+  corsResponse,
+  preflightResponse,
+  rejectOrigin,
+  isOriginAllowed,
+  getRequestOrigin,
+  normalizeIranPhone,
+  hmacSha256Hex,
+  adminClient,
+} from "../_shared/registration-security.ts";
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return preflightResponse(req);
 
-  const json = (data: unknown, status = 200) =>
-    new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  const origin = getRequestOrigin(req);
+  if (!isOriginAllowed(origin)) return rejectOrigin(req);
+
+  const json = (data: unknown, status = 200) => corsResponse(req, data, status);
 
   try {
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -50,32 +29,29 @@ Deno.serve(async (req: Request) => {
 
     const { challenge_id, otp, first_name, last_name, username, email, phone, password } = JSON.parse(body);
 
-    // Validate challenge_id and OTP
     if (!challenge_id) return json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
     if (!otp || !/^\d{6}$/.test(otp)) return json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
 
-    // Validate password
     if (!password || password.length < 8) return json({ error: "رمز عبور باید حداقل ۸ کاراکتر باشد" }, 400);
     if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(password)) return json({ error: "رمز عبور باید شامل حروف و عدد باشد" }, 400);
 
-    // Validate other fields
     const trimmedFirst = (first_name || "").trim();
     const trimmedLast = (last_name || "").trim();
     const trimmedUsername = (username || "").trim();
     const trimmedEmail = (email || "").trim().toLowerCase();
-    const normalizedPhone = normalizeIranPhone(phone);
+    const phoneDigits = normalizeIranPhone(phone);
 
     if (!trimmedFirst || !trimmedLast) return json({ error: "نام و نام خانوادگی الزامی است" }, 400);
     if (trimmedUsername.length < 3 || trimmedUsername.length > 50) return json({ error: "نام کاربری نامعتبر است" }, 400);
     if (!/^[a-zA-Z][a-zA-Z0-9._]*$/.test(trimmedUsername)) return json({ error: "نام کاربری نامعتبر است" }, 400);
     if (!/^[^@]+@[^@]+\.[^@]+$/.test(trimmedEmail)) return json({ error: "ایمیل نامعتبر است" }, 400);
-    if (!normalizedPhone) return json({ error: "شماره موبایل نامعتبر است" }, 400);
+    if (!phoneDigits) return json({ error: "شماره موبایل نامعتبر است" }, 400);
 
     const supabase = adminClient();
 
     // Recompute identity hash
-    const identityHash = await hmacSha256Hex("identity", `${trimmedFirst}|${trimmedLast}|${trimmedUsername}|${trimmedEmail}|${normalizedPhone}`);
-    const phoneHash = await hmacSha256Hex("phone", normalizedPhone);
+    const identityHash = await hmacSha256Hex("identity", `${trimmedFirst}|${trimmedLast}|${trimmedUsername}|${trimmedEmail}|${phoneDigits}`);
+    const phoneHash = await hmacSha256Hex("phone", phoneDigits);
     const otpHash = await hmacSha256Hex(Deno.env.get("REGISTRATION_PHONE_OTP_SECRET")!, `${identityHash}|${phoneHash}|${otp}`);
 
     // Rate limit verify (IP: 20 in 15 min)
@@ -98,7 +74,6 @@ Deno.serve(async (req: Request) => {
     });
 
     if (!claimResult?.ok) {
-      // Audit invalid OTP
       try {
         await supabase.from("security_audit_events").insert({
           event_type: "registration_otp_invalid",
@@ -115,23 +90,22 @@ Deno.serve(async (req: Request) => {
       return json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
     }
 
-    // Recheck uniqueness
-    const { data: existingUsername } = await supabase.from("profiles").select("user_id").eq("normalized_username", trimmedUsername.toLowerCase()).maybeSingle();
-    if (existingUsername) {
+    // Check identifier availability via RPC (checks existingUsername, existingEmail, existingPhone)
+    // The RPC returns boolean: true if all identifiers are available, false if any conflict
+    const { data: available, error: availError } = await supabase.rpc("check_public_registration_identifiers_available", {
+      p_normalized_username: trimmedUsername,
+      p_normalized_email: trimmedEmail,
+      p_normalized_phone: phoneDigits,
+    });
+
+    if (availError) {
       await supabase.rpc("release_public_registration_claim", { p_challenge_id: challenge_id });
-      return json({ error: "این نام کاربری قبلاً استفاده شده است" }, 409);
+      return json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
     }
 
-    const { data: existingEmail } = await supabase.from("profiles").select("user_id").eq("normalized_email", trimmedEmail).maybeSingle();
-    if (existingEmail) {
+    if (available !== true) {
       await supabase.rpc("release_public_registration_claim", { p_challenge_id: challenge_id });
-      return json({ error: "این ایمیل قبلاً ثبت شده است" }, 409);
-    }
-
-    const { data: existingPhone } = await supabase.from("profiles").select("user_id").eq("normalized_phone", normalizedPhone).maybeSingle();
-    if (existingPhone) {
-      await supabase.rpc("release_public_registration_claim", { p_challenge_id: challenge_id });
-      return json({ error: "این شماره موبایل قبلاً ثبت شده است" }, 409);
+      return json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
     }
 
     // Create auth user
@@ -140,7 +114,7 @@ Deno.serve(async (req: Request) => {
       email: trimmedEmail,
       password,
       email_confirm: true,
-      phone: `+${normalizedPhone}`,
+      phone: `+${phoneDigits}`,
       phone_confirm: true,
       user_metadata: {
         first_name: trimmedFirst,
@@ -148,7 +122,7 @@ Deno.serve(async (req: Request) => {
         full_name: fullName,
         username: trimmedUsername,
         email: trimmedEmail,
-        phone: `+${normalizedPhone}`,
+        phone: `+${phoneDigits}`,
       },
       app_metadata: {
         registration_flow: "public_phone_v1",
@@ -198,7 +172,7 @@ Deno.serve(async (req: Request) => {
       session: signInData.session,
       user: signInData.user,
     });
-  } catch (err: unknown) {
+  } catch {
     return json({ error: "خطا در پردازش درخواست" }, 500);
   }
 });
