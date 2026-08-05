@@ -11,6 +11,10 @@ const phase5Migration = migrationFiles.find(
   (f) => f.includes('phase5a_password_login_rate_limit_and_methods'),
 );
 
+const failClosedMigration = migrationFiles.find(
+  (f) => f.includes('phase5a_fail_closed_login_methods'),
+);
+
 const passwordLoginFn = readFileSync(
   join(root, 'supabase', 'functions', 'password-login', 'index.ts'),
   'utf8',
@@ -29,8 +33,11 @@ describe('Phase 5A — Password Login', () => {
     assert.ok(phase5Migration, 'phase5a migration file must exist');
   });
 
+  it('fail-closed migration file exists', () => {
+    assert.ok(failClosedMigration, 'fail-closed migration file must exist');
+  });
+
   it('previous migrations are unchanged (count includes new one)', () => {
-    // The new migration is additive; existing files still present
     const grantMigration = migrationFiles.find((f) =>
       f.includes('grant_private_schema_usage_to_service_role'),
     );
@@ -42,7 +49,6 @@ describe('Phase 5A — Password Login', () => {
     const sql = readFileSync(join(migrationsDir, phase5Migration!), 'utf8');
     assert.ok(sql.includes('identifier_hash'), 'must have identifier_hash column');
     assert.ok(sql.includes('ip_hash'), 'must have ip_hash column');
-    // The table must not have a raw password or identifier column
     assert.ok(!sql.includes('password text'), 'must not store raw password column');
     assert.ok(!sql.includes('identifier text'), 'must not store raw identifier column');
     assert.ok(!sql.includes('raw_identifier'), 'must not store raw identifier');
@@ -61,6 +67,22 @@ describe('Phase 5A — Password Login', () => {
     const sql = readFileSync(join(migrationsDir, phase5Migration!), 'utf8');
     assert.ok(!sql.includes('check_phone_login_dependencies_ready'), 'must not call check_phone_login_dependencies_ready');
     assert.ok(sql.includes('v_row.phone_login'), 'phone_login must come directly from auth_security_settings');
+  });
+
+  it('fail-closed migration returns false,false,false when no settings row', () => {
+    assert.ok(failClosedMigration);
+    const sql = readFileSync(join(migrationsDir, failClosedMigration!), 'utf8');
+    assert.ok(sql.includes('RETURN QUERY SELECT false, false, false'), 'must return false,false,false when no row found');
+    assert.ok(sql.includes('COALESCE(v_row.username_login, false)'), 'must COALESCE username_login');
+    assert.ok(sql.includes('COALESCE(v_row.email_login, false)'), 'must COALESCE email_login');
+    assert.ok(sql.includes('COALESCE(v_row.phone_login, false)'), 'must COALESCE phone_login');
+  });
+
+  it('fail-closed migration preserves grants', () => {
+    assert.ok(failClosedMigration);
+    const sql = readFileSync(join(migrationsDir, failClosedMigration!), 'utf8');
+    assert.ok(sql.includes('REVOKE EXECUTE ON FUNCTION public.get_public_login_methods() FROM PUBLIC'), 'must revoke from PUBLIC');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.get_public_login_methods() TO anon, authenticated, service_role'), 'must grant to anon, authenticated, service_role');
   });
 
   it('password-login supports all three methods', () => {
@@ -87,7 +109,6 @@ describe('Phase 5A — Password Login', () => {
   it('password-login does not return internal email for username login', () => {
     assert.ok(passwordLoginFn.includes('get_email_by_username'), 'must look up email via service role');
     assert.ok(passwordLoginFn.includes('invalid-'), 'must use synthetic email for non-existent username');
-    // The response only returns access_token, refresh_token, login_method
     assert.ok(passwordLoginFn.includes('access_token'));
     assert.ok(passwordLoginFn.includes('refresh_token'));
     assert.ok(passwordLoginFn.includes('login_method'));
@@ -101,16 +122,39 @@ describe('Phase 5A — Password Login', () => {
   });
 
   it('mobile login sends no OTP', () => {
-    // password-login function must not reference OTP sending
     assert.ok(!passwordLoginFn.includes('sendOtp'), 'must not send OTP');
     assert.ok(!passwordLoginFn.includes('otp'), 'must not reference OTP');
   });
 
+  it('origin guard is before req.text(), rate limit, RPC, and signInWithPassword', () => {
+    const guardIdx = passwordLoginFn.indexOf('if (!allowedOrigin)');
+    assert.ok(guardIdx > -1, 'must have if (!allowedOrigin) guard');
+
+    const markers = [
+      'req.text()',
+      'get_public_login_methods',
+      'consume_password_login_rate_limit_v1',
+      'get_email_by_username',
+      'signInWithPassword',
+    ];
+    for (const marker of markers) {
+      const idx = passwordLoginFn.indexOf(marker);
+      assert.ok(idx > guardIdx, `origin guard must come before ${marker}`);
+    }
+  });
+
+  it('origin guard returns INVALID_REQUEST with no ACAO', () => {
+    const guardBlock = passwordLoginFn.slice(
+      passwordLoginFn.indexOf('if (!allowedOrigin)'),
+      passwordLoginFn.indexOf('if (req.method !== "POST"'),
+    );
+    assert.ok(guardBlock.includes('INVALID_REQUEST'), 'must return INVALID_REQUEST');
+    assert.ok(guardBlock.includes('400'), 'must return 400');
+    assert.ok(guardBlock.includes('null'), 'must pass null for allowedOrigin (no ACAO)');
+  });
+
   it('AuthPage calls only password-login for login', () => {
-    // handleLogin should call password-login edge function
     assert.ok(authPageSrc.includes('/functions/v1/password-login'), 'AuthPage must call password-login');
-    // Must not directly call signInWithPassword in handleLogin
-    // Check that supabase.auth.signInWithPassword is not used for login
     const loginSection = authPageSrc.split('handleLogin')[1]?.split('handleRegister')[0] ?? '';
     assert.ok(!loginSection.includes('signInWithPassword'), 'handleLogin must not call signInWithPassword directly');
     assert.ok(!loginSection.includes('username-login'), 'handleLogin must not call old username-login');
@@ -144,10 +188,5 @@ describe('Phase 5A — Password Login', () => {
   it('old username-login returns 405 for non-POST methods', () => {
     assert.ok(usernameLoginFn.includes('405'), 'must return 405 for non-POST');
     assert.ok(usernameLoginFn.includes('METHOD_NOT_ALLOWED'), 'must return METHOD_NOT_ALLOWED');
-  });
-
-  it('tests do not pass via comments or formal expressions only', () => {
-    // This test itself uses real assertions — verify all previous tests used assert.ok
-    assert.ok(true, 'this is a real assertion, not a comment');
   });
 });

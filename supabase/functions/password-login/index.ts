@@ -78,12 +78,26 @@ function randomDelay(): Promise<void> {
 }
 
 Deno.serve(async (req: Request) => {
-  const { origins: allowedOrigins, pepper } = await getAllowedOrigins();
-  const origin = req.headers.get("Origin");
-  const allowedOrigin = checkOrigin(origin, allowedOrigins);
+  let allowedOrigins: string[] = [];
+  let pepper = "";
+  let allowedOrigin: string | null = null;
+
+  try {
+    const config = await getAllowedOrigins();
+    allowedOrigins = config.origins;
+    pepper = config.pepper;
+    const origin = req.headers.get("Origin");
+    allowedOrigin = checkOrigin(origin, allowedOrigins);
+  } catch {
+    return json({ error: "LOGIN_UNAVAILABLE" }, 503, null);
+  }
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders(allowedOrigin) });
+  }
+
+  if (!allowedOrigin) {
+    return json({ error: "INVALID_REQUEST" }, 400, null);
   }
 
   if (req.method !== "POST") {
@@ -100,7 +114,12 @@ Deno.serve(async (req: Request) => {
     return json({ error: "BODY_TOO_LARGE" }, 400, allowedOrigin);
   }
 
-  const rawBody = await req.text();
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return json({ error: "INVALID_BODY" }, 400, allowedOrigin);
+  }
   if (rawBody.length > MAX_BODY_BYTES) {
     return json({ error: "BODY_TOO_LARGE" }, 400, allowedOrigin);
   }
@@ -136,130 +155,134 @@ Deno.serve(async (req: Request) => {
     return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
-  // Read login methods
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
+  let methodsRow: { username_login?: boolean; email_login?: boolean; phone_login?: boolean } | null = null;
+  try {
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
 
-  const { data: methodsData, error: methodsErr } = await admin.rpc("get_public_login_methods");
-  if (methodsErr || !methodsData) {
-    return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-  }
-  const methodsRow = Array.isArray(methodsData) ? methodsData[0] : methodsData;
+    const { data: methodsData, error: methodsErr } = await admin.rpc("get_public_login_methods");
+    if (methodsErr || !methodsData) {
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+    methodsRow = Array.isArray(methodsData) ? methodsData[0] : methodsData;
 
-  const methodEnabled =
-    (method === "username" && methodsRow?.username_login === true) ||
-    (method === "email" && methodsRow?.email_login === true) ||
-    (method === "phone" && methodsRow?.phone_login === true);
+    const methodEnabled =
+      (method === "username" && methodsRow?.username_login === true) ||
+      (method === "email" && methodsRow?.email_login === true) ||
+      (method === "phone" && methodsRow?.phone_login === true);
 
-  if (!methodEnabled) {
-    return json({ error: "LOGIN_METHOD_DISABLED" }, 403, allowedOrigin);
-  }
+    if (!methodEnabled) {
+      return json({ error: "LOGIN_METHOD_DISABLED" }, 403, allowedOrigin);
+    }
 
-  // Canonicalize identifier
-  let canonicalIdentifier: string;
-  let signInIdentifier: string;
-  let signInField: "email" | "phone";
+    // Canonicalize identifier
+    let canonicalIdentifier: string;
+    let signInIdentifier: string;
+    let signInField: "email" | "phone";
 
-  if (method === "username") {
-    canonicalIdentifier = identifier.trim().toLowerCase();
-    signInField = "email";
-    signInIdentifier = "";
-  } else if (method === "email") {
-    canonicalIdentifier = identifier.trim().toLowerCase();
-    signInField = "email";
-    signInIdentifier = canonicalIdentifier;
-  } else {
-    const canonical = canonicalizePhone(identifier);
-    if (!canonical) {
+    if (method === "username") {
+      canonicalIdentifier = identifier.trim().toLowerCase();
+      signInField = "email";
+      signInIdentifier = "";
+    } else if (method === "email") {
+      canonicalIdentifier = identifier.trim().toLowerCase();
+      signInField = "email";
+      signInIdentifier = canonicalIdentifier;
+    } else {
+      const canonical = canonicalizePhone(identifier);
+      if (!canonical) {
+        await randomDelay();
+        return json({ error: "INVALID_CREDENTIALS" }, 401, allowedOrigin);
+      }
+      canonicalIdentifier = canonical;
+      signInField = "phone";
+      signInIdentifier = "+" + canonical;
+    }
+
+    // Compute hashes
+    const clientIp =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip")?.trim() ||
+      "0.0.0.0";
+
+    const identifierHash = await hmacSha256Hex(
+      pepper,
+      `password-login|identifier|${method}|${canonicalIdentifier}`,
+    );
+    const ipHash = await hmacSha256Hex(pepper, `password-login|ip|${clientIp}`);
+
+    // Rate limit
+    const { data: rlData, error: rlErr } = await admin.rpc(
+      "consume_password_login_rate_limit_v1",
+      {
+        p_method: method,
+        p_identifier_hash: identifierHash,
+        p_ip_hash: ipHash,
+        p_pair_limit: 10,
+        p_ip_limit: 50,
+        p_window_seconds: 900,
+      },
+    );
+
+    if (rlErr) {
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
+    const rlRow = Array.isArray(rlData) ? rlData[0] : rlData;
+    if (!rlRow || rlRow.allowed !== true) {
+      const retryAfter = typeof rlRow?.retry_after_seconds === "number" ? rlRow.retry_after_seconds : 900;
+      return json({ error: "RATE_LIMITED", retry_after_seconds: retryAfter }, 429, allowedOrigin);
+    }
+
+    // For username: look up email via service role
+    if (method === "username") {
+      const { data: emailData, error: emailErr } = await admin.rpc("get_email_by_username", {
+        p_username: canonicalIdentifier,
+      });
+      const usernameExists = !emailErr && typeof emailData === "string" && emailData.length > 0;
+      signInIdentifier = usernameExists
+        ? (emailData as string)
+        : `invalid-${crypto.randomUUID()}@example.invalid`;
+    }
+
+    // Sign in with anon client
+    const anon = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+
+    let signInResult;
+    if (signInField === "email") {
+      signInResult = await anon.auth.signInWithPassword({
+        email: signInIdentifier,
+        password,
+      });
+    } else {
+      signInResult = await anon.auth.signInWithPassword({
+        phone: signInIdentifier,
+        password,
+      });
+    }
+
+    if (signInResult.error || !signInResult.data.session) {
       await randomDelay();
       return json({ error: "INVALID_CREDENTIALS" }, 401, allowedOrigin);
     }
-    canonicalIdentifier = canonical;
-    signInField = "phone";
-    signInIdentifier = "+" + canonical;
-  }
 
-  // Compute hashes
-  const clientIp =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip")?.trim() ||
-    "0.0.0.0";
-
-  const identifierHash = await hmacSha256Hex(
-    pepper,
-    `password-login|identifier|${method}|${canonicalIdentifier}`,
-  );
-  const ipHash = await hmacSha256Hex(pepper, `password-login|ip|${clientIp}`);
-
-  // Rate limit
-  const { data: rlData, error: rlErr } = await admin.rpc(
-    "consume_password_login_rate_limit_v1",
-    {
-      p_method: method,
-      p_identifier_hash: identifierHash,
-      p_ip_hash: ipHash,
-      p_pair_limit: 10,
-      p_ip_limit: 50,
-      p_window_seconds: 900,
-    },
-  );
-
-  if (rlErr) {
+    return json(
+      {
+        access_token: signInResult.data.session.access_token,
+        refresh_token: signInResult.data.session.refresh_token,
+        login_method: method,
+      },
+      200,
+      allowedOrigin,
+    );
+  } catch {
     return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
-
-  const rlRow = Array.isArray(rlData) ? rlData[0] : rlData;
-  if (!rlRow || rlRow.allowed !== true) {
-    const retryAfter = typeof rlRow?.retry_after_seconds === "number" ? rlRow.retry_after_seconds : 900;
-    return json({ error: "RATE_LIMITED", retry_after_seconds: retryAfter }, 429, allowedOrigin);
-  }
-
-  // For username: look up email via service role
-  if (method === "username") {
-    const { data: emailData, error: emailErr } = await admin.rpc("get_email_by_username", {
-      p_username: canonicalIdentifier,
-    });
-    const usernameExists = !emailErr && typeof emailData === "string" && emailData.length > 0;
-    signInIdentifier = usernameExists
-      ? (emailData as string)
-      : `invalid-${crypto.randomUUID()}@example.invalid`;
-  }
-
-  // Sign in with anon client
-  const anon = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-
-  let signInResult;
-  if (signInField === "email") {
-    signInResult = await anon.auth.signInWithPassword({
-      email: signInIdentifier,
-      password,
-    });
-  } else {
-    signInResult = await anon.auth.signInWithPassword({
-      phone: signInIdentifier,
-      password,
-    });
-  }
-
-  if (signInResult.error || !signInResult.data.session) {
-    await randomDelay();
-    return json({ error: "INVALID_CREDENTIALS" }, 401, allowedOrigin);
-  }
-
-  return json(
-    {
-      access_token: signInResult.data.session.access_token,
-      refresh_token: signInResult.data.session.refresh_token,
-      login_method: method,
-    },
-    200,
-    allowedOrigin,
-  );
 });
