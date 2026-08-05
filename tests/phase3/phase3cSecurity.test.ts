@@ -3,6 +3,7 @@ import test from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tehranDateToUtcRange } from '../../src/features/security-administration/utils/tehranDateRange';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -943,11 +944,125 @@ test('frontend: no spread of buildParams without null check', () => {
   assert.ok(!auditConsoleSource.includes('...buildParams()'), 'must not spread buildParams() without null check');
 });
 
-test('frontend: date helper uses explicit UTC conversion', () => {
-  assert.ok(auditConsoleSource.includes('dateToUtcStartOfDay'), 'must have dateToUtcStartOfDay helper');
-  assert.ok(auditConsoleSource.includes('dateToUtcEndOfDay'), 'must have dateToUtcEndOfDay helper');
-  assert.ok(auditConsoleSource.includes('Date.UTC'), 'must use Date.UTC for explicit conversion');
+test('frontend: date helper uses tehranDateToUtcRange', () => {
+  assert.ok(auditConsoleSource.includes('tehranDateToUtcRange'), 'must use tehranDateToUtcRange');
+  assert.ok(!auditConsoleSource.includes('dateToUtcStartOfDay'), 'must not use old dateToUtcStartOfDay');
+  assert.ok(!auditConsoleSource.includes('dateToUtcEndOfDay'), 'must not use old dateToUtcEndOfDay');
+  assert.ok(!auditConsoleSource.includes('Date.UTC'), 'must not use Date.UTC directly in audit console');
   assert.ok(!auditConsoleSource.includes('setHours'), 'must not use setHours (local mutation)');
+});
+
+test('frontend: date error message displayed for invalid date', () => {
+  assert.ok(auditConsoleSource.includes('تاریخ واردشده معتبر نیست.'), 'must show date error message');
+  assert.ok(auditConsoleSource.includes('dateError'), 'must have dateError state');
+});
+
+test('frontend: invalid date does not trigger RPC', () => {
+  const buildParamsStart = auditConsoleSource.indexOf('buildParams = useCallback');
+  const buildParamsEnd = auditConsoleSource.indexOf('}, [', buildParamsStart);
+  const buildParamsBody = auditConsoleSource.slice(buildParamsStart, buildParamsEnd);
+  assert.ok(buildParamsBody.includes('tehranDateToUtcRange'), 'buildParams must use tehranDateToUtcRange');
+  assert.ok(buildParamsBody.includes('return null'), 'buildParams must return null on invalid date');
+});
+
+test('frontend: no RPC with invalid date', () => {
+  const loadInitialStart = auditConsoleSource.indexOf('loadInitial = useCallback');
+  const loadInitialBody = auditConsoleSource.slice(loadInitialStart, loadInitialStart + 2000);
+  assert.ok(loadInitialBody.includes('if (!params)'), 'loadInitial must check params null');
+  assert.ok(loadInitialBody.includes('setLoading(false)'), 'must set loading to false on invalid date');
+  assert.ok(loadInitialBody.includes('setLoadingMore(false)'), 'must set loadingMore to false on invalid date');
+});
+
+// ═══ Tehran Timezone Utility Tests ═══════════════════════════════════════════
+
+test('tehran tz: 2026-08-05 start and end UTC correct', () => {
+  const range = tehranDateToUtcRange('2026-08-05');
+  assert.ok(range, 'must return range for valid date');
+  assert.equal(range!.startUtc, '2026-08-04T20:30:00.000Z',
+    `start must be 2026-08-04T20:30:00.000Z, got ${range!.startUtc}`);
+  assert.equal(range!.endUtc, '2026-08-05T20:29:59.999Z',
+    `end must be 2026-08-05T20:29:59.999Z, got ${range!.endUtc}`);
+});
+
+test('tehran tz: 2026-01-01 start and end UTC correct', () => {
+  const range = tehranDateToUtcRange('2026-01-01');
+  assert.ok(range, 'must return range for valid date');
+  // Iran standard offset is +03:30 (no DST in 2026 as Iran abolished DST in 2022)
+  assert.equal(range!.startUtc, '2025-12-31T20:30:00.000Z',
+    `start must be 2025-12-31T20:30:00.000Z, got ${range!.startUtc}`);
+  assert.equal(range!.endUtc, '2026-01-01T20:29:59.999Z',
+    `end must be 2026-01-01T20:29:59.999Z, got ${range!.endUtc}`);
+});
+
+test('tehran tz: invalid date 2026-02-30 returns null', () => {
+  const range = tehranDateToUtcRange('2026-02-30');
+  assert.equal(range, null, '2026-02-30 must return null');
+});
+
+test('tehran tz: invalid month 2026-13-01 returns null', () => {
+  const range = tehranDateToUtcRange('2026-13-01');
+  assert.equal(range, null, '2026-13-01 must return null');
+});
+
+test('tehran tz: invalid format 05/08/2026 returns null', () => {
+  const range = tehranDateToUtcRange('05/08/2026');
+  assert.equal(range, null, '05/08/2026 must return null');
+});
+
+test('tehran tz: empty string returns null', () => {
+  const range = tehranDateToUtcRange('');
+  assert.equal(range, null, 'empty string must return null');
+});
+
+test('tehran tz: consecutive days have no gap or overlap', () => {
+  const day1 = tehranDateToUtcRange('2026-08-05');
+  const day2 = tehranDateToUtcRange('2026-08-06');
+  assert.ok(day1 && day2, 'both dates must be valid');
+  const end1Ms = Date.parse(day1!.endUtc);
+  const start2Ms = Date.parse(day2!.startUtc);
+  assert.equal(start2Ms - end1Ms, 1, 'end day N + 1ms must equal start day N+1');
+});
+
+test('tehran tz: result independent of process.env.TZ', () => {
+  const originalTz = process.env.TZ;
+  try {
+    process.env.TZ = 'America/New_York';
+    const rangeNy = tehranDateToUtcRange('2026-08-05');
+    process.env.TZ = 'Asia/Tehran';
+    const rangeTehran = tehranDateToUtcRange('2026-08-05');
+    process.env.TZ = 'UTC';
+    const rangeUtc = tehranDateToUtcRange('2026-08-05');
+    assert.ok(rangeNy && rangeTehran && rangeUtc, 'all must return valid ranges');
+    assert.equal(rangeNy!.startUtc, rangeTehran!.startUtc, 'NY and Tehran TZ must match');
+    assert.equal(rangeNy!.startUtc, rangeUtc!.startUtc, 'NY and UTC TZ must match');
+    assert.equal(rangeNy!.endUtc, rangeTehran!.endUtc, 'NY and Tehran end must match');
+  } finally {
+    if (originalTz !== undefined) {
+      process.env.TZ = originalTz;
+    } else {
+      delete process.env.TZ;
+    }
+  }
+});
+
+test('tehran tz: leap year 2024-02-29 valid', () => {
+  const range = tehranDateToUtcRange('2024-02-29');
+  assert.ok(range, '2024-02-29 must be valid (leap year)');
+});
+
+test('tehran tz: non-leap year 2025-02-29 returns null', () => {
+  const range = tehranDateToUtcRange('2025-02-29');
+  assert.equal(range, null, '2025-02-29 must return null (non-leap year)');
+});
+
+test('tehran tz: uses Intl.DateTimeFormat not hardcoded offset', () => {
+  const utilSource = fs.readFileSync(
+    path.join(__dirname, '../../src/features/security-administration/utils/tehranDateRange.ts'),
+    'utf-8'
+  );
+  assert.ok(utilSource.includes('Intl.DateTimeFormat'), 'must use Intl.DateTimeFormat');
+  assert.ok(utilSource.includes("'Asia/Tehran'"), 'must reference Asia/Tehran timezone');
+  assert.ok(!utilSource.includes('+03:30'), 'must not hardcode +03:30 offset');
 });
 
 test('frontend: buildParams returns null on invalid UUID', () => {

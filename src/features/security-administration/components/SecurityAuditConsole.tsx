@@ -4,6 +4,7 @@ import { loadSecurityAuditPage } from '../services/securityAdministrationService
 import {
   labelEventType, labelCategory, labelSeverity, labelResult, labelErrorCode,
 } from '../utils/securityAuditLabels';
+import { tehranDateToUtcRange } from '../utils/tehranDateRange';
 import type { AuditEvent, AuditPageCursor } from '../types/securityAdministration';
 import { SecurityAuditDetails } from './SecurityAuditDetails';
 
@@ -55,18 +56,6 @@ interface AuditLoadParamsWithCursor extends AuditLoadParams {
   beforeId?: string;
 }
 
-function dateToUtcStartOfDay(dateString: string): string {
-  const [year, month, day] = dateString.split('-').map(Number);
-  const utcStart = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
-  return new Date(utcStart).toISOString();
-}
-
-function dateToUtcEndOfDay(dateString: string): string {
-  const [year, month, day] = dateString.split('-').map(Number);
-  const utcEnd = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
-  return new Date(utcEnd).toISOString();
-}
-
 interface Props {
   refreshVersion: number;
 }
@@ -87,6 +76,7 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
   const [toDate, setToDate] = useState('');
   const [actorError, setActorError] = useState<string | null>(null);
   const [targetError, setTargetError] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const generationRef = useRef(0);
 
@@ -102,8 +92,16 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
       return null;
     }
 
-    const fromIso = fromDate ? dateToUtcStartOfDay(fromDate) : null;
-    const toIso = toDate ? dateToUtcEndOfDay(toDate) : null;
+    const fromRange = fromDate ? tehranDateToUtcRange(fromDate) : null;
+    const toRange = toDate ? tehranDateToUtcRange(toDate) : null;
+
+    if (fromDate && !fromRange) {
+      return null;
+    }
+
+    if (toDate && !toRange) {
+      return null;
+    }
 
     return {
       category: category || null,
@@ -112,8 +110,8 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
       eventType: eventType || null,
       actorUserId: actor || null,
       targetUserId: target || null,
-      from: fromIso,
-      to: toIso,
+      from: fromRange?.startUtc ?? null,
+      to: toRange?.endUtc ?? null,
       limit: PAGE_SIZE,
     };
   }, [category, severity, result, eventType, actorUserId, targetUserId, fromDate, toDate]);
@@ -140,11 +138,19 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
       } else {
         setTargetError(null);
       }
+      if (fromDate && !tehranDateToUtcRange(fromDate)) {
+        setDateError('تاریخ واردشده معتبر نیست.');
+      } else if (toDate && !tehranDateToUtcRange(toDate)) {
+        setDateError('تاریخ واردشده معتبر نیست.');
+      } else {
+        setDateError(null);
+      }
       return;
     }
 
     setActorError(null);
     setTargetError(null);
+    setDateError(null);
     setLoading(true);
     setEvents([]);
     setHasMore(false);
@@ -164,7 +170,7 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
     } finally {
       if (gen === generationRef.current) setLoading(false);
     }
-  }, [buildParams, actorUserId, targetUserId]);
+  }, [buildParams, actorUserId, targetUserId, fromDate, toDate]);
 
   useEffect(() => {
     void loadInitial();
@@ -251,6 +257,7 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
 
       {actorError && <p className="text-xs text-red-500">{actorError}</p>}
       {targetError && <p className="text-xs text-red-500">{targetError}</p>}
+      {dateError && <p className="text-xs text-red-500">{dateError}</p>}
 
       {loading ? (
         <div className="flex justify-center py-12">
