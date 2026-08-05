@@ -101,7 +101,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      if (updated.phone !== selectedUser.phone) {
+      if (updated.phone !== selectedUser?.phone) {
         if (!token) { toast.error('جلسه منقضی شده'); return; }
         const phoneRes = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/change-user-phone`,
@@ -137,7 +137,6 @@ export function UserManagementPanel({ currentUserId }: Props) {
         bio: updated.bio,
         national_id: updated.national_id,
         is_admin: updated.is_admin,
-        is_active: updated.is_active,
         is_hidden: updated.is_hidden ?? false,
       }).eq('user_id', updated.user_id);
       if (error) { toast.error('خطا در ذخیره'); return; }
@@ -334,6 +333,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
                       <span className={`w-1.5 h-1.5 rounded-full ${p.is_active !== false ? 'bg-green-500' : 'bg-red-500'}`} />
                       {p.is_active !== false ? 'فعال' : 'غیرفعال'}
                     </span>
+                    <p className="text-xs text-gray-400 mt-1">برای تغییر وضعیت حساب به بخش امنیت و دسترسی مراجعه کنید</p>
                   </td>
                   <td className="px-4 py-3 text-center text-xs text-gray-400">
                     {p.created_at ? new Date(p.created_at).toLocaleDateString('fa-IR') : '—'}

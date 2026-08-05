@@ -22,20 +22,18 @@ function maskPhone(phone: string): string {
   return phone.slice(0, 3) + "****" + phone.slice(-4);
 }
 
+function maskEmail(email: string): string {
+  if (!email || !email.includes("@")) return "***";
+  const [local, domain] = email.split("@");
+  return local.slice(0, 2) + "***@" + domain;
+}
+
 function adminClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
-}
-
-async function getCallerProfile(token: string) {
-  const supabase = adminClient();
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return null;
-  const { data } = await supabase.from("profiles").select("is_admin").eq("user_id", user.id).maybeSingle();
-  return { user, isAdmin: data?.is_admin === true };
 }
 
 Deno.serve(async (req: Request) => {
@@ -51,44 +49,9 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const action = url.pathname.split("/").pop();
 
-    // ── Public signup (no auth required) ────────────────────────────────────────
+    // ── Deprecated public signup route ────────────────────────────────────────────
     if (req.method === "POST" && action === "register") {
-      const { email, password, full_name, username } = await req.json();
-      if (!email || !password) return json({ error: "ایمیل و رمز عبور الزامی است" }, 400);
-      if (password.length < 6) return json({ error: "رمز عبور باید حداقل ۶ کاراکتر باشد" }, 400);
-
-      const { data: userData, error: createErr } = await supabase.auth.admin.createUser({
-        email: email.trim().toLowerCase(),
-        password,
-        email_confirm: true,
-        user_metadata: { full_name: full_name || "", username: username || "" },
-      });
-      if (createErr) {
-        if (createErr.message?.includes("already been registered") || createErr.message?.includes("already exists")) {
-          return json({ error: "این ایمیل قبلاً ثبت شده است" }, 400);
-        }
-        return json({ error: createErr.message }, 400);
-      }
-
-      const userId = userData.user.id;
-      await supabase.from("profiles").upsert({
-        user_id: userId,
-        email: email.trim().toLowerCase(),
-        full_name: full_name?.trim() || null,
-        username: username?.trim() || null,
-        is_active: true,
-        is_admin: false,
-      }, { onConflict: "user_id" });
-
-      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-      if (signInErr || !signInData.session) {
-        return json({ error: "حساب ساخته شد اما ورود خودکار ناموفق بود. لطفاً وارد شوید." }, 400);
-      }
-
-      return json({ success: true, session: signInData.session, user: signInData.user });
+      return json({ error: "REGISTRATION_FLOW_REPLACED" }, 410);
     }
 
     // ── Admin-only routes (JWT + FULL + admin check) ─────────────────────────────
@@ -100,7 +63,7 @@ Deno.serve(async (req: Request) => {
       .from("profiles").select("is_admin").eq("user_id", callerUserId).maybeSingle();
     if (!callerProfile?.is_admin) return json({ error: "Admin access required" }, 403);
 
-    // POST /admin-users/create — admin creates user with email + phone from the start
+    // POST /admin-users/create — admin creates user with email + phone
     if (req.method === "POST" && action === "create") {
       const { email, password, profile } = await req.json();
       if (!email || !password) return json({ error: "ایمیل و رمز عبور الزامی است" }, 400);
@@ -108,67 +71,61 @@ Deno.serve(async (req: Request) => {
 
       const trimmedEmail = email.trim().toLowerCase();
 
-      // ── Validate and normalize phone ──────────────────────────────────────
+      // Phone is mandatory for admin create
       const rawPhone: string | undefined = profile?.phone;
       const normalizedPhone = normalizeIranPhone(rawPhone);
-      const hasPhone = normalizedPhone.length > 0;
+      if (!normalizedPhone) return json({ error: "شماره موبایل الزامی است" }, 400);
 
-      // ── Check username uniqueness ─────────────────────────────────────────
-      if (profile?.username) {
-        const { data: existingUsername } = await supabase
-          .from("profiles")
-          .select("user_id")
-          .eq("username", profile.username)
-          .maybeSingle();
-        if (existingUsername) {
-          return json({ error: "این نام کاربری قبلاً استفاده شده است" }, 400);
-        }
-      }
+      // Username is mandatory
+      if (!profile?.username) return json({ error: "نام کاربری الزامی است" }, 400);
 
-      // ── Check email uniqueness in auth.users ───────────────────────────────
-      const { data: existingAuthUsers } = await supabase.auth.admin.listUsers();
-      const emailExists = existingAuthUsers?.users?.some(
-        (u: { email?: string }) => u.email?.toLowerCase() === trimmedEmail,
-      );
-      if (emailExists) {
-        return json({ error: "این ایمیل قبلاً ثبت شده است" }, 400);
-      }
+      // Check username uniqueness via unique index
+      const { data: existingUsername } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("normalized_username", profile.username.toLowerCase())
+        .maybeSingle();
+      if (existingUsername) return json({ error: "این نام کاربری قبلاً استفاده شده است" }, 400);
 
-      // ── Check phone uniqueness in profiles ────────────────────────────────
-      if (hasPhone) {
-        const { data: phoneConflict } = await supabase
-          .from("profiles")
-          .select("user_id")
-          .eq("phone", rawPhone)
-          .maybeSingle();
-        if (phoneConflict) {
-          return json({ error: "این شماره موبایل قبلاً برای کاربر دیگری ثبت شده است" }, 400);
-        }
-      }
+      // Check email uniqueness via unique index
+      const { data: existingEmail } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("normalized_email", trimmedEmail)
+        .maybeSingle();
+      if (existingEmail) return json({ error: "این ایمیل قبلاً ثبت شده است" }, 400);
 
-      // ── Check phone uniqueness in auth.users ───────────────────────────────
-      if (hasPhone) {
-        const { data: authPhoneConflict } = await supabase.auth.admin.listUsers();
-        const phoneInAuth = authPhoneConflict?.users?.some(
-          (u: { phone?: string }) => u.phone && normalizeIranPhone(u.phone) === normalizedPhone,
-        );
-        if (phoneInAuth) {
-          return json({ error: "این شماره موبایل قبلاً در سیستم احراز هویت ثبت شده است" }, 400);
-        }
-      }
+      // Check phone uniqueness via unique index
+      const { data: existingPhone } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("normalized_phone", normalizedPhone)
+        .maybeSingle();
+      if (existingPhone) return json({ error: "این شماره موبایل قبلاً ثبت شده است" }, 400);
 
-      // ── Create one Auth User with email + phone ───────────────────────────
+      // Create auth user with registration_flow marker
       const createParams: Record<string, unknown> = {
         email: trimmedEmail,
         password,
         email_confirm: true,
-        user_metadata: { full_name: profile?.full_name || "" },
+        phone: `+${normalizedPhone}`,
+        phone_confirm: true,
+        user_metadata: {
+          full_name: profile?.full_name || "",
+          username: profile.username,
+          email: trimmedEmail,
+          phone: `+${normalizedPhone}`,
+          first_name: profile?.first_name || "",
+          last_name: profile?.last_name || "",
+          organization: profile?.organization || "",
+          position: profile?.position || "",
+          department: profile?.department || "",
+          employee_id: profile?.employee_id || "",
+        },
+        app_metadata: {
+          registration_flow: "admin_created_v1",
+        },
       };
-
-      if (hasPhone) {
-        createParams.phone = `+${normalizedPhone}`;
-        createParams.phone_confirm = true;
-      }
 
       const { data: userData, error: createErr } = await supabase.auth.admin.createUser(
         createParams as Parameters<typeof supabase.auth.admin.createUser>[0],
@@ -178,77 +135,23 @@ Deno.serve(async (req: Request) => {
         if (createErr.message?.includes("already been registered") || createErr.message?.includes("already exists")) {
           return json({ error: "این ایمیل قبلاً ثبت شده است" }, 400);
         }
-        return json({ error: createErr.message }, 400);
+        return json({ error: "خطا در ایجاد حساب کاربری" }, 400);
       }
 
       const userId = userData.user.id;
 
-      // ── Create Profile with same UUID ─────────────────────────────────────
-      const { error: profileErr } = await supabase.from("profiles").upsert({
-        user_id: userId,
-        email: trimmedEmail,
-        full_name: profile?.full_name || null,
-        username: profile?.username || null,
-        phone: hasPhone ? normalizedPhone : (profile?.phone || null),
-        organization: profile?.organization || null,
-        position: profile?.position || null,
-        department: profile?.department || null,
-        employee_id: profile?.employee_id || null,
-        hire_date: profile?.hire_date || null,
-        birth_date: profile?.birth_date || null,
-        gender: profile?.gender || null,
-        city: profile?.city || null,
-        location: profile?.location || null,
-        bio: profile?.bio || null,
-        website: profile?.website || null,
-        linkedin_url: profile?.linkedin_url || null,
-        national_id: profile?.national_id || null,
-        is_admin: profile?.is_admin === true,
-        is_active: true,
-      }, { onConflict: "user_id" });
-
-      if (profileErr) {
-        // Compensating delete: remove the auth user we just created
-        await supabase.auth.admin.deleteUser(userId);
-        try {
-          await supabase.from("audit_log").insert({
-            user_id: callerUserId,
-            module: "security",
-            action: "user_create_compensating_delete",
-            entity_name: "user",
-            entity_id: userId,
-            details: `Profile creation failed; auth user deleted. Email: ${trimmedEmail}`,
-            severity: "error",
-          });
-        } catch { /* best-effort audit */ }
-        return json({ error: "ساخت پروفایل ناموفق بود و حساب احراز هویت حذف شد" }, 500);
-      }
-
-      // ── Verify match ──────────────────────────────────────────────────────
+      // Verify profile was created by trigger (read-only check)
       const { data: verifyProfile } = await supabase
         .from("profiles")
-        .select("user_id, phone")
+        .select("user_id, account_status, registration_source")
         .eq("user_id", userId)
         .maybeSingle();
 
       if (!verifyProfile) {
-        // Profile didn't actually persist — delete auth user and report
-        await supabase.auth.admin.deleteUser(userId);
-        try {
-          await supabase.from("audit_log").insert({
-            user_id: callerUserId,
-            module: "security",
-            action: "user_create_verify_failed",
-            entity_name: "user",
-            entity_id: userId,
-            details: `Profile verification failed; auth user deleted. Email: ${trimmedEmail}`,
-            severity: "error",
-          });
-        } catch { /* best-effort audit */ }
-        return json({ error: "تأیید پروفایل ناموفق بود و حساب احراز هویت حذف شد" }, 500);
+        return json({ error: "پروفایل به‌صورت خودکار ساخته نشد" }, 500);
       }
 
-      // ── Audit ──────────────────────────────────────────────────────────────
+      // Audit with masked email/phone
       try {
         await supabase.from("audit_log").insert({
           user_id: callerUserId,
@@ -256,7 +159,7 @@ Deno.serve(async (req: Request) => {
           action: "user_create",
           entity_name: "user",
           entity_id: userId,
-          details: `Created user. Email: ${trimmedEmail}, Phone: ${hasPhone ? maskPhone(normalizedPhone) : "none"}`,
+          details: `Created user. Email: ${maskEmail(trimmedEmail)}, Phone: ${maskPhone(normalizedPhone)}`,
           severity: "info",
         });
       } catch { /* best-effort audit */ }
@@ -269,7 +172,7 @@ Deno.serve(async (req: Request) => {
       const { user_id, password } = await req.json();
       if (!user_id || !password || password.length < 6) return json({ error: "اطلاعات ناقص است" }, 400);
       const { error } = await supabase.auth.admin.updateUserById(user_id, { password });
-      if (error) return json({ error: error.message }, 400);
+      if (error) return json({ error: "خطا در تغییر رمز عبور" }, 400);
 
       try {
         await supabase.from("audit_log").insert({
@@ -288,7 +191,6 @@ Deno.serve(async (req: Request) => {
 
     return json({ error: "Not found" }, 404);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal error";
-    return json({ error: message }, 500);
+    return json({ error: "خطا در پردازش درخواست" }, 500);
   }
 });

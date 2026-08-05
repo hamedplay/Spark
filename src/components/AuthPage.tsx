@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, User, Phone, Smartphone, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { supabase, handleSupabaseError } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, Phone, Smartphone, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { normalizeIranPhone } from '../lib/phoneNormalize';
 import toast from 'react-hot-toast';
 
@@ -23,6 +23,12 @@ interface PublicAuthConfig {
   phone_login_canonical_ready: boolean;
   phone_password_recovery_canonical_enabled: boolean;
   phone_password_recovery_canonical_ready: boolean;
+  registration_enabled: boolean;
+  registration_ready: boolean;
+  registration_requires_admin_approval: boolean;
+  require_profile_completion: boolean;
+  registration_otp_ttl_seconds: number;
+  registration_otp_resend_seconds: number;
 }
 
 export function AuthPage({ onSuccess }: AuthPageProps) {
@@ -47,10 +53,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   }, []);
 
   useEffect(() => {
-    supabase.rpc('get_public_auth_config').then(({ data }) => {
-      const row = Array.isArray(data) ? data[0] : data;
-      setAuthConfig(row ?? { phone_login_ready: false, phone_password_recovery_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600, phone_login_canonical_enabled: false, phone_login_canonical_ready: false, phone_password_recovery_canonical_enabled: false, phone_password_recovery_canonical_ready: false });
-    }).catch(() => setAuthConfig({ phone_login_ready: false, phone_password_recovery_ready: false, recovery_template_ready: false, recovery_secret_confirmed: false, recovery_ttl_valid: false, recovery_ttl_seconds: 600, phone_login_canonical_enabled: false, phone_login_canonical_ready: false, phone_password_recovery_canonical_enabled: false, phone_password_recovery_canonical_ready: false }));
+    void (async () => {
+      try {
+        const { data: configData } = await (supabase.rpc as any)('get_public_auth_config');
+        if (configData) setAuthConfig(configData as PublicAuthConfig);
+      } catch { setAuthConfig(null); }
+    })();
   }, []);
 
   // Email/password form
@@ -77,9 +85,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [recoveryResetToken, setRecoveryResetToken] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.rpc('get_public_auth_config').then(({ data }) => {
-      setConnectionStatus(data ? 'connected' : 'disconnected');
-    }).catch(() => setConnectionStatus('disconnected'));
+    void (async () => {
+      try {
+        const { data: configData } = await (supabase.rpc as any)('get_public_auth_config');
+        setConnectionStatus(configData ? 'connected' : 'disconnected');
+      } catch { setConnectionStatus('disconnected'); }
+    })();
   }, []);
 
   useEffect(() => {
@@ -103,7 +114,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       const identifier = form.email.trim();
       const isEmail = identifier.includes('@');
       let userId: string | undefined;
-      let auditLabel = identifier;
+      let auditLabel = identifier; void auditLabel;
       if (isEmail) {
         const { data, error } = await supabase.auth.signInWithPassword({ email: identifier, password: form.password });
         if (error || !data.user) { toast.error('نام کاربری، ایمیل یا رمز عبور صحیح نیست.'); return; }
@@ -133,35 +144,107 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   };
 
   // ── Register ─────────────────────────────────────────────────────────────────
-  const handleRegister = async (e: React.FormEvent) => {
+  // Registration state machine: details → otp → submitting → success
+  type RegStep = 'details' | 'otp' | 'submitting' | 'success';
+  const [regStep, setRegStep] = useState<RegStep>('details');
+  const [regForm, setRegForm] = useState({ firstName: '', lastName: '', username: '', email: '', phone: '', password: '', confirmPassword: '' });
+  const [regChallengeId, setRegChallengeId] = useState<string | null>(null);
+  const [regOtp, setRegOtp] = useState('');
+  const [regCountdown, setRegCountdown] = useState(0);
+  const [regSubmitting, setRegSubmitting] = useState(false);
+  const regSubmitRef = useRef(false);
+
+  useEffect(() => {
+    if (regCountdown <= 0) return;
+    const t = setTimeout(() => setRegCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [regCountdown]);
+
+  const handleRegisterRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.email || !form.password) { toast.error('ایمیل و رمز عبور را وارد کنید'); return; }
-    if (form.password.length < 6) { toast.error('رمز عبور باید حداقل ۶ کاراکتر باشد'); return; }
-    if (form.password !== form.confirmPassword) { toast.error('رمز عبور و تکرار آن مطابقت ندارند'); return; }
-    if (!form.fullName.trim()) { toast.error('نام و نام خانوادگی را وارد کنید'); return; }
-    if (!form.username.trim()) { toast.error('نام کاربری را وارد کنید'); return; }
-    if (!/^[a-zA-Z][a-zA-Z0-9._]*$/.test(form.username.trim()) || form.username.trim().length < 3) {
-      toast.error('نام کاربری باید با حرف شروع شود و فقط شامل حروف انگلیسی، عدد، نقطه و _ باشد (حداقل ۳ کاراکتر)');
-      return;
-    }
-    setLoading(true);
+    if (regSubmitRef.current) return;
+    regSubmitRef.current = true;
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-users/register`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
-          body: JSON.stringify({ email: form.email.trim(), password: form.password, full_name: form.fullName.trim(), username: form.username.trim() }),
-        }
-      );
+      if (!regForm.firstName.trim() || !regForm.lastName.trim()) { toast.error('نام و نام خانوادگی را وارد کنید'); return; }
+      if (!regForm.username.trim() || regForm.username.trim().length < 3) { toast.error('نام کاربری باید حداقل ۳ کاراکتر باشد'); return; }
+      if (!/^[a-zA-Z][a-zA-Z0-9._]*$/.test(regForm.username.trim())) { toast.error('نام کاربری باید با حرف شروع شود و فقط شامل حروف انگلیسی، عدد، نقطه و _ باشد'); return; }
+      if (!regForm.email.trim() || !/^[^@]+@[^@]+\.[^@]+$/.test(regForm.email.trim())) { toast.error('ایمیل معتبر وارد کنید'); return; }
+      if (!regForm.phone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
+      if (regForm.password.length < 8) { toast.error('رمز عبور باید حداقل ۸ کاراکتر باشد'); return; }
+      if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(regForm.password)) { toast.error('رمز عبور باید شامل حروف و عدد باشد'); return; }
+      if (regForm.password !== regForm.confirmPassword) { toast.error('رمز عبور و تکرار آن مطابقت ندارند'); return; }
+      if (authConfig?.registration_ready !== true) { toast.error('ثبت‌نام در حال حاضر فعال نیست.'); return; }
+
+      setLoading(true);
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-public-registration-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+        body: JSON.stringify({ first_name: regForm.firstName.trim(), last_name: regForm.lastName.trim(), username: regForm.username.trim(), email: regForm.email.trim(), phone: regForm.phone.trim() }),
+      });
       const result = await res.json();
-      if (!res.ok || result.error) { toast.error(result.error || 'خطا در ثبت‌نام'); return; }
+      if (!res.ok || result.error) { toast.error(result.error || 'خطا در ارسال کد تأیید'); return; }
+      setRegChallengeId(result.challenge_id);
+      setRegStep('otp');
+      setRegCountdown(authConfig?.registration_otp_resend_seconds ?? 60);
+      toast.success('اگر اطلاعات واردشده قابل ثبت باشد، کد تأیید ارسال شده است.');
+    } catch { toast.error('خطا در ارسال کد تأیید'); }
+    finally { setLoading(false); regSubmitRef.current = false; }
+  };
+
+  const handleRegisterResendOtp = async () => {
+    if (regCountdown > 0 || regSubmitRef.current) return;
+    regSubmitRef.current = true;
+    try {
+      setLoading(true);
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-public-registration-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+        body: JSON.stringify({ first_name: regForm.firstName.trim(), last_name: regForm.lastName.trim(), username: regForm.username.trim(), email: regForm.email.trim(), phone: regForm.phone.trim() }),
+      });
+      const result = await res.json();
+      if (!res.ok || result.error) { toast.error(result.error || 'خطا در ارسال مجدد کد'); return; }
+      setRegChallengeId(result.challenge_id);
+      setRegCountdown(authConfig?.registration_otp_resend_seconds ?? 60);
+      toast.success('اگر اطلاعات واردشده قابل ثبت باشد، کد تأیید ارسال شده است.');
+    } catch { toast.error('خطا در ارسال مجدد کد'); }
+    finally { setLoading(false); regSubmitRef.current = false; }
+  };
+
+  const handleRegisterVerifyOtp = async () => {
+    if (regSubmitRef.current) return;
+    if (!regOtp.trim() || !/^\d{6}$/.test(regOtp)) { toast.error('کد تأیید باید دقیقاً ۶ رقم باشد'); return; }
+    if (!regChallengeId) { toast.error('خطا در فرآیند ثبت‌نام. لطفاً دوباره تلاش کنید.'); return; }
+    regSubmitRef.current = true;
+    setRegSubmitting(true);
+    setRegStep('submitting');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-public-registration-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+        body: JSON.stringify({ challenge_id: regChallengeId, otp: regOtp, first_name: regForm.firstName.trim(), last_name: regForm.lastName.trim(), username: regForm.username.trim(), email: regForm.email.trim(), phone: regForm.phone.trim(), password: regForm.password }),
+      });
+      const result = await res.json();
+      if (!res.ok || result.error) { toast.error(result.error || 'کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد.'); setRegStep('otp'); return; }
       if (result.session) {
         await supabase.auth.setSession({ access_token: result.session.access_token, refresh_token: result.session.refresh_token });
       }
+      // Clear sensitive data
+      setRegForm({ firstName: '', lastName: '', username: '', email: '', phone: '', password: '', confirmPassword: '' });
+      setRegOtp('');
+      setRegChallengeId(null);
+      setRegStep('success');
       onSuccess();
-    } catch (err: any) { toast.error('خطا در ثبت‌نام'); }
-    finally { setLoading(false); }
+    } catch { toast.error('خطا در تأیید کد'); setRegStep('otp'); }
+    finally { setRegSubmitting(false); regSubmitRef.current = false; }
+  };
+
+  const handleRegisterCancel = () => {
+    setRegForm({ firstName: '', lastName: '', username: '', email: '', phone: '', password: '', confirmPassword: '' });
+    setRegOtp('');
+    setRegChallengeId(null);
+    setRegStep('details');
+    setRegCountdown(0);
+    setMode('login');
   };
 
   // ── Check if recovery form should be shown ──────────────────────────────────
@@ -174,7 +257,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     if (!normalized) { toast.error('شماره موبایل نامعتبر است'); return; }
     setRecoveryLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('request-phone-password-reset-otp', {
+      const { data } = await supabase.functions.invoke('request-phone-password-reset-otp', {
         body: { phone: recoveryPhone },
       });
       // Always store challenge_id (real or decoy) — response is identical
@@ -197,10 +280,10 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     if (!recoveryChallengeId) { toast.error('خطا در فرآیند بازیابی. لطفاً دوباره تلاش کنید.'); return; }
     setRecoveryLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('verify-phone-password-reset-otp', {
+      const { data } = await supabase.functions.invoke('verify-phone-password-reset-otp', {
         body: { challenge_id: recoveryChallengeId, otp: recoveryOtp },
       });
-      if (error || !data?.ok) {
+      if (!data?.ok) {
         toast.error('کد نامعتبر است، منقضی شده یا امکان ادامه بازیابی وجود ندارد.');
         return;
       }
@@ -220,10 +303,10 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     if (!recoveryChallengeId || !recoveryResetToken) { toast.error('خطا در فرآیند بازیابی. لطفاً دوباره تلاش کنید.'); return; }
     setRecoveryLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('complete-phone-password-reset', {
+      const { data } = await supabase.functions.invoke('complete-phone-password-reset', {
         body: { challenge_id: recoveryChallengeId, reset_token: recoveryResetToken, new_password: recoveryPassword },
       });
-      if (error || !data?.ok) {
+      if (!data?.ok) {
         toast.error('کد نامعتبر است، منقضی شده یا امکان ادامه بازیابی وجود ندارد.');
         return;
       }
@@ -467,58 +550,87 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             )}
 
             {/* ── Register ─────────────────────────────────────── */}
-            {mode === 'register' && (
-              <form onSubmit={handleRegister} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام و نام خانوادگی *</label>
-                  <div className="relative">
-                    <input type="text" required value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })}
-                      placeholder="نام کامل خود را وارد کنید" className={inp} disabled={loading} />
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            {mode === 'register' && authConfig?.registration_ready === true && regStep === 'details' && (
+              <form onSubmit={handleRegisterRequestOtp} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام *</label>
+                    <input type="text" required value={regForm.firstName} onChange={e => setRegForm({ ...regForm, firstName: e.target.value })} placeholder="نام" className={inp} disabled={loading} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام خانوادگی *</label>
+                    <input type="text" required value={regForm.lastName} onChange={e => setRegForm({ ...regForm, lastName: e.target.value })} placeholder="نام خانوادگی" className={inp} disabled={loading} />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری *</label>
-                  <div className="relative">
-                    <input type="text" required value={form.username}
-                      onChange={e => setForm({ ...form, username: e.target.value.replace(/[^a-zA-Z0-9._]/g, '') })}
-                      placeholder="h.khaleghi" className={inp} dir="ltr" disabled={loading} />
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">@</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1 mr-1">مثال: h.khaleghi — حروف انگلیسی، عدد، نقطه و _</p>
+                  <input type="text" required value={regForm.username} onChange={e => setRegForm({ ...regForm, username: e.target.value.replace(/[^a-zA-Z0-9._]/g, '') })} placeholder="h.khaleghi" className={inp} dir="ltr" disabled={loading} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ایمیل * <span className="text-xs text-gray-400 font-normal">(برای ثبت‌نام)</span></label>
-                  <div className="relative">
-                    <input type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                      placeholder="example@domain.com" className={inp} dir="ltr" disabled={loading} />
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  </div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ایمیل *</label>
+                  <input type="email" required value={regForm.email} onChange={e => setRegForm({ ...regForm, email: e.target.value })} placeholder="example@domain.com" className={inp} dir="ltr" disabled={loading} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">شماره موبایل *</label>
+                  <input type="tel" required value={regForm.phone} onChange={e => setRegForm({ ...regForm, phone: e.target.value })} placeholder="09123456789" className={inp} dir="ltr" disabled={loading} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور *</label>
-                  <div className="relative">
-                    <input type="password" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                      placeholder="حداقل ۶ کاراکتر" className={inp} minLength={6} disabled={loading} />
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  </div>
+                  <input type="password" required value={regForm.password} onChange={e => setRegForm({ ...regForm, password: e.target.value })} placeholder="حداقل ۸ کاراکتر (حروف و عدد)" className={inp} minLength={8} disabled={loading} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تکرار رمز عبور *</label>
-                  <div className="relative">
-                    <input type="password" required value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })}
-                      placeholder="••••••••" className={inp} minLength={6} disabled={loading} />
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  </div>
+                  <input type="password" required value={regForm.confirmPassword} onChange={e => setRegForm({ ...regForm, confirmPassword: e.target.value })} placeholder="••••••••" className={inp} minLength={8} disabled={loading} />
                 </div>
                 <button type="submit" disabled={loading}
                   className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
-                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><UserPlus className="w-5 h-5" />ایجاد حساب</>}
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><UserPlus className="w-5 h-5" />ارسال کد تأیید</>}
                 </button>
                 <button type="button" onClick={() => setMode('login')} className="w-full text-sm text-teal-600 dark:text-teal-400 hover:underline pt-1">
                   قبلاً حساب دارید؟ وارد شوید
                 </button>
               </form>
+            )}
+
+            {/* ── Register OTP step ─────────────────────────────────────── */}
+            {mode === 'register' && authConfig?.registration_ready === true && regStep === 'otp' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">کد تأیید به شماره {regForm.phone} ارسال شد.</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">کد تأیید</label>
+                  <input type="text" value={regOtp} onChange={e => setRegOtp(e.target.value.replace(/\D/g, '').slice(0,6))} placeholder="کد ۶ رقمی" className={inp + ' text-center text-xl tracking-[0.5em] font-mono'} dir="ltr" maxLength={6} disabled={regSubmitting} />
+                </div>
+                <button onClick={handleRegisterVerifyOtp} disabled={regSubmitting || regOtp.length !== 6}
+                  className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
+                  {regSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowRight className="w-5 h-5" />تأیید و ثبت‌نام</>}
+                </button>
+                <button onClick={handleRegisterResendOtp} disabled={regCountdown > 0 || regSubmitting}
+                  className="w-full text-sm text-teal-600 dark:text-teal-400 disabled:text-gray-400 py-2 transition-colors">
+                  {regCountdown > 0 ? `ارسال مجدد پس از ${regCountdown} ثانیه` : 'ارسال مجدد کد'}
+                </button>
+                <button type="button" onClick={handleRegisterCancel} className="w-full text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors py-2">
+                  انصراف و بازگشت به ورود
+                </button>
+              </div>
+            )}
+
+            {/* ── Register submitting ─────────────────────────────────────── */}
+            {mode === 'register' && regStep === 'submitting' && (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-8 h-8 text-teal-500 animate-spin" />
+              </div>
+            )}
+
+            {/* ── Registration not ready ─────────────────────────────────────── */}
+            {mode === 'register' && authConfig?.registration_ready !== true && (
+              <div className="space-y-4 text-center">
+                <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl p-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">ثبت‌نام در حال حاضر فعال نیست.</p>
+                </div>
+                <button type="button" onClick={() => setMode('login')} className="w-full text-sm text-teal-600 dark:text-teal-400 hover:underline pt-1">
+                  بازگشت به ورود
+                </button>
+              </div>
             )}
 
             {/* ── Password recovery (scoped challenge) ──────────────────── */}

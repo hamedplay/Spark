@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import type { ReasonCode } from '../features/auth/types/authSession';
 import { TotpEnrollmentGate } from '../features/auth/components/TotpEnrollmentGate';
 import { TotpChallengeGate } from '../features/auth/components/TotpChallengeGate';
+import { ProfileCompletionGate } from '../features/auth/components/ProfileCompletionGate';
 
 interface RestrictedAccessPageProps {
   reasonCode: ReasonCode | null;
@@ -107,6 +108,26 @@ export function RestrictedAccessPage({ reasonCode, nextStep, onRefresh, onSignOu
           onCompleted={onRefresh}
           onSignOut={handleSignOut}
         />
+      </div>
+    );
+  }
+
+  if (nextStep === 'complete_profile') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4" dir="rtl">
+        <div className="max-w-2xl w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">تکمیل پروفایل</h1>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            >
+              <LogOut className="w-4 h-4" />
+              خروج
+            </button>
+          </div>
+          <ProfileCompletionGate onRefresh={onRefresh} />
+        </div>
       </div>
     );
   }

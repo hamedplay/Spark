@@ -1,15 +1,16 @@
 import { useState, useCallback } from 'react';
-import { Settings as SettingsIcon, Shield, FileText } from 'lucide-react';
+import { Settings as SettingsIcon, Shield, FileText, Users } from 'lucide-react';
 import { SecuritySettingsConsole } from '../../security-settings/components/SecuritySettingsConsole';
 import { SecurityAdminManagement } from './SecurityAdminManagement';
 import { SecurityAuditConsole } from './SecurityAuditConsole';
+import { AccountLifecycleManagement } from './AccountLifecycleManagement';
 import { SecurityStepUpDialog } from '../../security-settings/components/SecurityStepUpDialog';
 import { changeSecurityAdminRole } from '../services/securityAdministrationService';
 import { getSecurityAdminErrorMessage } from '../utils/securityAdministrationValidation';
 import toast from 'react-hot-toast';
 import type { VersionConflictSnapshot } from '../types/securityAdministration';
 
-type Tab = 'settings' | 'admins' | 'audit';
+type Tab = 'settings' | 'admins' | 'audit' | 'lifecycle';
 
 interface PendingChange {
   targetUserId: string;
@@ -93,6 +94,7 @@ export function SecurityControlCenter() {
     { id: 'settings', label: 'تنظیمات امنیتی', icon: SettingsIcon },
     { id: 'admins', label: 'مدیران امنیت', icon: Shield },
     { id: 'audit', label: 'رویدادهای امنیتی', icon: FileText },
+    { id: 'lifecycle', label: 'چرخه عمر حساب‌ها', icon: Users },
   ];
 
   return (
@@ -142,6 +144,7 @@ export function SecurityControlCenter() {
           />
         )}
         {tab === 'audit' && <SecurityAuditConsole refreshVersion={auditRefreshVersion} />}
+        {tab === 'lifecycle' && <AccountLifecycleManagement />}
       </div>
 
       {stepUpOpen && pendingChange && (
