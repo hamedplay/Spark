@@ -16,11 +16,15 @@ const phase4Migrations = fs.readdirSync(migrationDir)
 const foundationMigration = phase4Migrations.find(f => f.includes('account_lifecycle_foundation'));
 const challengeMigration = phase4Migrations.find(f => f.includes('registration_challenge_tables'));
 const completionMigration = phase4Migrations.find(f => f.includes('profile_completion_and_admin_approval'));
+const fixTriggerMigration = phase4Migrations.find(f => f.includes('phase4_fix_lifecycle_trigger_function'));
+const fixSettingsMigration = phase4Migrations.find(f => f.includes('phase4_fix_settings_loading_in_lifecycle_trigger'));
 
 const foundationSql = foundationMigration ? fs.readFileSync(path.join(migrationDir, foundationMigration), 'utf-8') : '';
 const challengeSql = challengeMigration ? fs.readFileSync(path.join(migrationDir, challengeMigration), 'utf-8') : '';
 const completionSql = completionMigration ? fs.readFileSync(path.join(migrationDir, completionMigration), 'utf-8') : '';
-const allPhase4Sql = foundationSql + '\n' + challengeSql + '\n' + completionSql;
+const fixTriggerSql = fixTriggerMigration ? fs.readFileSync(path.join(migrationDir, fixTriggerMigration), 'utf-8') : '';
+const fixSettingsSql = fixSettingsMigration ? fs.readFileSync(path.join(migrationDir, fixSettingsMigration), 'utf-8') : '';
+const allPhase4Sql = foundationSql + '\n' + challengeSql + '\n' + completionSql + '\n' + fixTriggerSql + '\n' + fixSettingsSql;
 
 const authPageSource = fs.readFileSync(path.join(projectRoot, 'src/components/AuthPage.tsx'), 'utf-8');
 const auditConsoleSource = fs.readFileSync(path.join(projectRoot, 'src/features/security-administration/components/SecurityAuditConsole.tsx'), 'utf-8');
@@ -49,11 +53,6 @@ function extractFunctionBody(sql: string, funcName: string): string {
 
 // ═══ Migration Tests ═══════════════════════════════════════════════════════════
 
-test('migration: exactly four phase4 migrations exist', () => {
-  assert.equal(phase4Migrations.length, 4,
-    'expected exactly 4 phase4 migrations, found ' + phase4Migrations.length + ': ' + phase4Migrations.join(', '));
-});
-
 test('migration: foundation migration exists', () => {
   assert.ok(foundationMigration, 'foundation migration must exist');
 });
@@ -64,6 +63,24 @@ test('migration: challenge migration exists', () => {
 
 test('migration: completion migration exists', () => {
   assert.ok(completionMigration, 'completion migration must exist');
+});
+
+test('migration: fix lifecycle trigger migration exists', () => {
+  assert.ok(fixTriggerMigration, 'fix lifecycle trigger migration must exist');
+});
+
+test('migration: fix settings loading migration exists', () => {
+  assert.ok(fixSettingsMigration, 'fix settings loading migration must exist');
+});
+
+test('migration: fix settings trigger has no v_settings record', () => {
+  const triggerBody = extractFunctionBody(fixSettingsSql, 'on_auth_user_created_lifecycle_profile');
+  assert.ok(triggerBody, 'must contain trigger function definition');
+  assert.ok(!triggerBody.includes('v_settings'), 'must not declare v_settings record');
+  assert.ok(triggerBody.includes('v_requires_approval'), 'must declare v_requires_approval explicitly');
+  assert.ok(triggerBody.includes('v_require_completion'), 'must declare v_require_completion explicitly');
+  assert.ok(!triggerBody.includes('public.challenges'), 'must not reference public.challenges');
+  assert.ok(!triggerBody.includes('public.audit_events'), 'must not reference public.audit_events');
 });
 
 test('migration: no prior migrations modified', () => {
