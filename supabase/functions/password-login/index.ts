@@ -10,6 +10,7 @@ const baseHeaders: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
   "Cache-Control": "no-store",
   "Pragma": "no-cache",
+  "Vary": "Origin",
 };
 
 function corsHeaders(allowedOrigin: string | null): Record<string, string> {
@@ -27,15 +28,16 @@ function json(data: unknown, status: number, allowedOrigin: string | null): Resp
   });
 }
 
-async function getAllowedOrigins(): Promise<{ origins: string[]; pepper: string }> {
+async function getConfig(): Promise<{ origins: string[]; pepper: string }> {
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
   const { data, error } = await admin.rpc("get_phone_auth_config");
-  if (error || !data) return { origins: [], pepper: "" };
+  if (error || !data) throw new Error("CONFIG_UNAVAILABLE");
   const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("CONFIG_UNAVAILABLE");
   const allowedOrigins: string[] = Array.isArray(row?.allowed_origins) ? row.allowed_origins : [];
   const pepper: string = typeof row?.pepper === "string" ? row.pepper : "";
   return { origins: allowedOrigins, pepper };
@@ -77,13 +79,44 @@ function randomDelay(): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function base64UrlDecode(str: string): string {
+  const padded = str.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = padded.length % 4 === 0 ? "" : "=".repeat(4 - (padded.length % 4));
+  return atob(padded + pad);
+}
+
+function isValidUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
+function hasPasswordAmr(amr: unknown): boolean {
+  if (!Array.isArray(amr)) return false;
+  return amr.some((item: any) => item?.method === "password");
+}
+
+async function localLogout(accessToken: string): Promise<void> {
+  try {
+    const url = `${Deno.env.get("SUPABASE_URL")}/auth/v1/logout?scope=local`;
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "apikey": Deno.env.get("SUPABASE_ANON_KEY")!,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch {
+    // Suppress — session will be unusable once gate is enabled
+  }
+}
+
 Deno.serve(async (req: Request) => {
   let allowedOrigins: string[] = [];
   let pepper = "";
   let allowedOrigin: string | null = null;
 
   try {
-    const config = await getAllowedOrigins();
+    const config = await getConfig();
     allowedOrigins = config.origins;
     pepper = config.pepper;
     const origin = req.headers.get("Origin");
@@ -109,18 +142,15 @@ Deno.serve(async (req: Request) => {
     return json({ error: "INVALID_CONTENT_TYPE" }, 400, allowedOrigin);
   }
 
-  const contentLength = parseInt(req.headers.get("Content-Length") ?? "0", 10);
-  if (contentLength > MAX_BODY_BYTES) {
-    return json({ error: "BODY_TOO_LARGE" }, 400, allowedOrigin);
-  }
-
   let rawBody: string;
   try {
     rawBody = await req.text();
   } catch {
     return json({ error: "INVALID_BODY" }, 400, allowedOrigin);
   }
-  if (rawBody.length > MAX_BODY_BYTES) {
+
+  const bodyBytes = new TextEncoder().encode(rawBody).byteLength;
+  if (bodyBytes > MAX_BODY_BYTES) {
     return json({ error: "BODY_TOO_LARGE" }, 400, allowedOrigin);
   }
 
@@ -155,7 +185,6 @@ Deno.serve(async (req: Request) => {
     return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
-  let methodsRow: { username_login?: boolean; email_login?: boolean; phone_login?: boolean } | null = null;
   try {
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -167,7 +196,7 @@ Deno.serve(async (req: Request) => {
     if (methodsErr || !methodsData) {
       return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
     }
-    methodsRow = Array.isArray(methodsData) ? methodsData[0] : methodsData;
+    const methodsRow = Array.isArray(methodsData) ? methodsData[0] : methodsData;
 
     const methodEnabled =
       (method === "username" && methodsRow?.username_login === true) ||
@@ -268,14 +297,76 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    if (signInResult.error || !signInResult.data.session) {
+    if (signInResult.error || !signInResult.data.session || !signInResult.data.user) {
       await randomDelay();
       return json({ error: "INVALID_CREDENTIALS" }, 401, allowedOrigin);
     }
 
+    const accessToken = signInResult.data.session.access_token;
+    const userId = signInResult.data.user.id;
+
+    // Decode JWT and extract claims
+    let jwtPayload: { sub?: string; session_id?: string; amr?: unknown };
+    try {
+      const parts = accessToken.split(".");
+      if (parts.length < 2) throw new Error("INVALID_JWT");
+      const payloadJson = base64UrlDecode(parts[1]);
+      jwtPayload = JSON.parse(payloadJson);
+    } catch {
+      await localLogout(accessToken);
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
+    // Validate claims
+    if (jwtPayload.sub !== userId) {
+      await localLogout(accessToken);
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
+    const sessionId = jwtPayload.session_id;
+    if (typeof sessionId !== "string" || !isValidUuid(sessionId)) {
+      await localLogout(accessToken);
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
+    if (!hasPasswordAmr(jwtPayload.amr)) {
+      await localLogout(accessToken);
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
+    // Validate token with admin
+    const { data: userData, error: userErr } = await admin.auth.getUser(accessToken);
+    if (userErr || !userData?.user || userData.user.id !== userId) {
+      await localLogout(accessToken);
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
+    // Authorize gateway session
+    const { data: authData, error: authErr } = await admin.rpc(
+      "authorize_password_gateway_session_v1",
+      {
+        p_session_id: sessionId,
+        p_user_id: userId,
+        p_login_method: method,
+        p_identifier_hash: identifierHash,
+        p_ip_hash: ipHash,
+      },
+    );
+
+    if (authErr || !authData) {
+      await localLogout(accessToken);
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
+    const authRow = Array.isArray(authData) ? authData[0] : authData;
+    if (!authRow || authRow.authorized !== true) {
+      await localLogout(accessToken);
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
     return json(
       {
-        access_token: signInResult.data.session.access_token,
+        access_token: accessToken,
         refresh_token: signInResult.data.session.refresh_token,
         login_method: method,
       },
