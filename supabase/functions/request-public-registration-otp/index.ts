@@ -6,12 +6,13 @@ import {
   isOriginAllowed,
   getRequestOrigin,
   normalizeIranPhone,
-  hmacSha256Hex,
+  getRegistrationSecret,
   hashIdentity,
   hashEmail,
   hashUsername,
   hashPhone,
   hashIp,
+  hashOtp,
   generateOtp,
   adminClient,
   abortAwareDelay,
@@ -48,8 +49,7 @@ Deno.serve(async (req: Request) => {
     if (!/^[^@]+@[^@]+\.[^@]+$/.test(trimmedEmail)) return await json({ error: "ایمیل نامعتبر است" }, 400);
     if (!phoneDigits) return await json({ error: "شماره موبایل نامعتبر است" }, 400);
 
-    const secret = Deno.env.get("REGISTRATION_PHONE_OTP_SECRET") || "";
-    if (secret.length < 32) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
+    const secret = getRegistrationSecret();
     const supabase = adminClient();
 
     // Check registration readiness
@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
     const phoneHash = await hashPhone(secret, phoneDigits);
 
     // Rate limit via V2 RPC
-    const { error: rlError } = await supabase.rpc("consume_public_registration_rate_limit_v2", {
+    const { data: rateRaw, error: rateError } = await supabase.rpc("consume_public_registration_rate_limit_v2", {
       p_identity_hash: identityHash,
       p_phone_hash: phoneHash,
       p_ip_hash: ipHash,
@@ -89,7 +89,9 @@ Deno.serve(async (req: Request) => {
       p_ip_limit: 10,
       p_window_seconds: 900,
     });
-    if (rlError) return await json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
+    if (rateError) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
+    const rate = Array.isArray(rateRaw) ? rateRaw[0] : rateRaw;
+    if (rate?.allowed !== true) return await json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
 
     // Check identifier availability via RPC
     const { data: available, error: availError } = await supabase.rpc("check_public_registration_identifiers_available", {
@@ -116,11 +118,7 @@ Deno.serve(async (req: Request) => {
     // Generate challengeId before hashing OTP
     const challengeId = crypto.randomUUID();
     const otp = generateOtp();
-    // OTP hash: HMAC-SHA256 via Web Crypto (crypto.subtle), challenge-bound
-    const otpEnc = new TextEncoder();
-    const otpCryptoKey = await crypto.subtle.importKey("raw", otpEnc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const otpSig = await crypto.subtle.sign("HMAC", otpCryptoKey, otpEnc.encode(`otp|${challengeId}|${identityHash}|${phoneHash}|${otp}`));
-    const otpHash = Array.from(new Uint8Array(otpSig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const otpHash = await hashOtp(secret, challengeId, identityHash, phoneHash, otp);
     const emailHash = await hashEmail(secret, trimmedEmail);
     const usernameHash = await hashUsername(secret, trimmedUsername);
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
@@ -163,7 +161,12 @@ Deno.serve(async (req: Request) => {
       });
       clearTimeout(timeout);
 
-      if (!sendRes.ok) {
+      let sendResult: { ok?: boolean; success?: boolean } | null = null;
+      if (sendRes.ok) {
+        try { sendResult = await sendRes.json(); } catch { /* ignore parse error */ }
+      }
+
+      if (!sendRes.ok || (sendResult?.ok !== true && sendResult?.success !== true)) {
         deliveryFailed = true;
         console.log("[AUTH_OTP_REDACTED] delivery failed");
       }

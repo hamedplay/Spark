@@ -12,8 +12,14 @@ import {
   hashIp,
   hashOtp,
   adminClient,
-  abortAwareDelay,
 } from "../_shared/registration-security.ts";
+
+interface ClaimResult {
+  ok?: boolean;
+  error?: string;
+  created_user_id?: string;
+  claim_id?: string;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return await preflightResponse(req);
@@ -67,7 +73,7 @@ Deno.serve(async (req: Request) => {
     const otpHash = await hashOtp(secret, challenge_id, identityHash, phoneHash, otp);
 
     // Rate limit verify via V2 RPC
-    const { error: rlError } = await supabase.rpc("consume_public_registration_rate_limit_v2", {
+    const { data: rateRaw, error: rateError } = await supabase.rpc("consume_public_registration_rate_limit_v2", {
       p_identity_hash: identityHash,
       p_phone_hash: phoneHash,
       p_ip_hash: ipHash,
@@ -77,7 +83,9 @@ Deno.serve(async (req: Request) => {
       p_ip_limit: 20,
       p_window_seconds: 900,
     });
-    if (rlError) return await json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
+    if (rateError) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
+    const rate = Array.isArray(rateRaw) ? rateRaw[0] : rateRaw;
+    if (rate?.allowed !== true) return await json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
 
     // Claim challenge via V2 RPC
     const { data: claimResult, error: claimError } = await supabase.rpc("claim_public_registration_challenge_v2", {
@@ -97,26 +105,32 @@ Deno.serve(async (req: Request) => {
           metadata: { error: "claim_error" },
         });
       } catch { /* best-effort */ }
-      return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
+      return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
     }
 
-    const claim = claimResult as { ok?: boolean; status?: string; created_user_id?: string; error?: string };
+    const claim = (Array.isArray(claimResult) ? claimResult[0] : claimResult) as ClaimResult;
 
     if (!claim.ok) {
-      if (claim.status === "ALREADY_CONSUMED" && claim.created_user_id) {
-        // Already consumed — try sign-in with the created user
+      if (claim.error === "ALREADY_CONSUMED" && claim.created_user_id) {
         const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
           email: trimmedEmail,
           password,
         });
-        if (signInErr || !signInData.session) {
+        if (signInErr || !signInData.session || !signInData.user) {
+          return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
+        }
+        if (signInData.user.id !== claim.created_user_id) {
           return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
         }
         return await json({ ok: true, session: signInData.session, user: signInData.user });
       }
 
-      if (claim.status === "ACTIVE_PROCESSING") {
+      if (claim.error === "ACTIVE_PROCESSING") {
         return await json({ error: "درخواست در حال پردازش است. لطفاً صبر کنید." }, 409);
+      }
+
+      if (claim.error === "CHALLENGE_LOCKED") {
+        return await json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
       }
 
       try {
@@ -125,7 +139,7 @@ Deno.serve(async (req: Request) => {
           event_category: "auth",
           severity: "warning",
           result: "failure",
-          metadata: { error: claim.error || claim.status || "unknown" },
+          metadata: { error: claim.error || "unknown" },
         });
       } catch { /* best-effort */ }
 
@@ -183,16 +197,13 @@ Deno.serve(async (req: Request) => {
 
     const userId = userData.user.id;
 
-    // Trigger handles profile creation and challenge consumption.
-    // No finalize RPC, no compensating delete.
-
     // Sign in with email/password
     const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
       email: trimmedEmail,
       password,
     });
 
-    if (signInErr || !signInData.session) {
+    if (signInErr || !signInData.session || !signInData.user || signInData.user.id !== userId) {
       return await json({ error: "حساب ساخته شد اما ورود خودکار ناموفق بود. لطفاً وارد شوید." }, 400);
     }
 

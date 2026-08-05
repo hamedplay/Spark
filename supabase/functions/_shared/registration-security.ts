@@ -20,19 +20,37 @@ export async function getAllowedOrigins(): Promise<Set<string>> {
   if (cachedOrigins && Date.now() - originsCacheTime < 60000) return cachedOrigins;
   const origins = new Set<string>();
   try {
-    const supabase = adminClient();
-    const { data, error } = await supabase.rpc("get_phone_auth_config");
-    if (error) {
-      console.log("[ORIGINS] rpc error:", error.message);
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !key) {
+      console.log("[ORIGINS] missing env vars");
+      return origins;
     }
-    if (data && Array.isArray(data.allowed_origins)) {
-      for (const o of data.allowed_origins) {
-        const trimmed = String(o).trim();
-        if (trimmed) origins.add(trimmed);
-      }
+    const res = await fetch(`${url}/rest/v1/rpc/get_phone_auth_config`, {
+      method: "POST",
+      headers: {
+        "apikey": key,
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    if (!res.ok) {
+      console.log("[ORIGINS] RPC error:", res.status, await res.text().catch(() => ""));
+      return origins;
+    }
+    const data = await res.json();
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || !Array.isArray(row.allowed_origins) || row.allowed_origins.length === 0) {
+      return origins;
+    }
+    for (const o of row.allowed_origins) {
+      const trimmed = String(o).trim();
+      if (trimmed) origins.add(trimmed);
     }
   } catch (err) {
     console.log("[ORIGINS] exception:", String(err));
+    return origins;
   }
   cachedOrigins = origins;
   originsCacheTime = Date.now();
@@ -107,27 +125,27 @@ export async function hmacSha256Hex(key: string, data: string): Promise<string> 
 }
 
 export async function hashIdentity(secret: string, first: string, last: string, username: string, email: string, phone: string): Promise<string> {
-  return hmacSha256Hex(`${secret}|identity`, `${first}|${last}|${username}|${email}|${phone}`);
+  return hmacSha256Hex(secret, `identity|${first}|${last}|${username}|${email}|${phone}`);
 }
 
 export async function hashEmail(secret: string, email: string): Promise<string> {
-  return hmacSha256Hex(`${secret}|email`, email);
+  return hmacSha256Hex(secret, `email|${email}`);
 }
 
 export async function hashUsername(secret: string, username: string): Promise<string> {
-  return hmacSha256Hex(`${secret}|username`, username.toLowerCase());
+  return hmacSha256Hex(secret, `username|${username.toLowerCase()}`);
 }
 
 export async function hashPhone(secret: string, phone: string): Promise<string> {
-  return hmacSha256Hex(`${secret}|phone`, phone);
+  return hmacSha256Hex(secret, `phone|${phone}`);
 }
 
 export async function hashIp(secret: string, ip: string): Promise<string> {
-  return hmacSha256Hex(`${secret}|ip`, ip);
+  return hmacSha256Hex(secret, `ip|${ip}`);
 }
 
 export async function hashOtp(secret: string, challengeId: string, identityHash: string, phoneHash: string, otp: string): Promise<string> {
-  return hmacSha256Hex(`${secret}|otp`, `${challengeId}|${identityHash}|${phoneHash}|${otp}`);
+  return hmacSha256Hex(secret, `otp|${challengeId}|${identityHash}|${phoneHash}|${otp}`);
 }
 
 export function generateOtp(): string {
@@ -153,7 +171,7 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
 
 export async function abortAwareDelay(ms: number, signal?: AbortSignal): Promise<void> {
   try {
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       const timer = setTimeout(() => resolve(), ms);
       signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
     });

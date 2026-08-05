@@ -125,10 +125,8 @@ test('migration: challenge tables ACL revoked from anon and authenticated', () =
 });
 
 test('migration: no raw secrets in DB or repository', () => {
-  // The config key name 'registration_phone_otp_secret_configured' is a boolean proxy, not a secret
-  // The actual env var name 'REGISTRATION_PHONE_OTP_SECRET' should only appear in edge function source
   assert.ok(!allPhase4Sql.match(/secret\s*[:=]\s*['"][a-zA-Z0-9]{32,}['"]/i), 'must not contain actual secret values in SQL');
-  assert.ok(requestOtpSource.includes('REGISTRATION_PHONE_OTP_SECRET'), 'edge function must reference env var name');
+  assert.ok(requestOtpSource.includes('getRegistrationSecret'), 'edge function must use getRegistrationSecret helper');
   assert.ok(!requestOtpSource.match(/secret\s*[:=]\s*['"][a-zA-Z0-9]{32,}['"]/i), 'edge function must not contain actual secret value');
 });
 
@@ -161,9 +159,8 @@ test('registration: password not stored in challenge', () => {
 });
 
 test('registration: OTP uses HMAC', () => {
-  assert.ok(requestOtpSource.includes('hmacSha256Hex'), 'must use HMAC-SHA256');
-  assert.ok(requestOtpSource.includes('REGISTRATION_PHONE_OTP_SECRET'), 'must use secret from env');
-  assert.ok(requestOtpSource.includes('crypto.subtle'), 'must use Web Crypto');
+  assert.ok(requestOtpSource.includes('hashOtp'), 'must use shared hashOtp helper');
+  assert.ok(requestOtpSource.includes('getRegistrationSecret'), 'must use secret from env via helper');
 });
 
 test('registration: OTP not logged', () => {
