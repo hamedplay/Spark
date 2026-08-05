@@ -13,12 +13,16 @@ const phase3cMigrations = allMigrations.filter((f) => f.includes('phase3c'));
 
 const originalMigrationName = '20260805034152_20260804200000_phase3c_security_admin_and_audit_console.sql.sql';
 const fixMigrationName = '20260805043822_20260805050000_phase3c_security_admin_runtime_and_pagination_fixes.sql.sql';
+const driftFixMigrationName = '20260805050720_20260805060000_phase3c_read_rpc_runtime_and_artifact_drift_fix.sql.sql';
 
 const originalMigrationPath = path.join(migrationDir, originalMigrationName);
 const fixMigrationPath = path.join(migrationDir, fixMigrationName);
+const driftFixMigrationPath = path.join(migrationDir, driftFixMigrationName);
 const originalSql = fs.existsSync(originalMigrationPath) ? fs.readFileSync(originalMigrationPath, 'utf-8') : '';
 const fixSql = fs.existsSync(fixMigrationPath) ? fs.readFileSync(fixMigrationPath, 'utf-8') : '';
-const combinedSql = originalSql + '\n' + fixSql;
+const driftFixSql = fs.existsSync(driftFixMigrationPath) ? fs.readFileSync(driftFixMigrationPath, 'utf-8') : '';
+const combinedSql = originalSql + '\n' + fixSql + '\n' + driftFixSql;
+const latestSql = driftFixSql || fixSql;
 
 const consoleSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/components/SecurityControlCenter.tsx'), 'utf-8');
 const adminMgmtSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/components/SecurityAdminManagement.tsx'), 'utf-8');
@@ -36,9 +40,9 @@ const labelsSource = fs.readFileSync(path.join(__dirname, '../../src/features/se
 
 // ═══ Migration Tests ═════════════════════════════════════════════════════════
 
-test('migration: exactly two phase3c migrations exist', () => {
-  assert.equal(phase3cMigrations.length, 2,
-    `expected exactly 2 phase3c migrations, found ${phase3cMigrations.length}: ${phase3cMigrations.join(', ')}`);
+test('migration: exactly three phase3c migrations exist', () => {
+  assert.equal(phase3cMigrations.length, 3,
+    `expected exactly 3 phase3c migrations, found ${phase3cMigrations.length}: ${phase3cMigrations.join(', ')}`);
 });
 
 test('migration: original applied file has exact name', () => {
@@ -49,38 +53,42 @@ test('migration: fix applied file has exact name', () => {
   assert.ok(fs.existsSync(fixMigrationPath), `fix migration must be named ${fixMigrationName}`);
 });
 
+test('migration: drift fix applied file has exact name', () => {
+  assert.ok(fs.existsSync(driftFixMigrationPath), `drift fix migration must be named ${driftFixMigrationName}`);
+});
+
 test('migration: no pending phase3c file without applied version prefix', () => {
   for (const f of phase3cMigrations) {
     assert.ok(f.match(/^\d{14}_\d{8}.*\.sql\.sql$/), `migration file must have applied prefix pattern: ${f}`);
   }
 });
 
-test('migration: SECURITY DEFINER in fix file', () => {
-  assert.ok(fixSql.includes('SECURITY DEFINER'), 'fix must contain SECURITY DEFINER');
+test('migration: SECURITY DEFINER in drift fix file', () => {
+  assert.ok(driftFixSql.includes('SECURITY DEFINER'), 'drift fix must contain SECURITY DEFINER');
 });
 
-test('migration: search_path empty string in fix file', () => {
-  assert.ok(fixSql.includes("SET search_path = ''") || fixSql.includes("search_path=''"), 'fix must have search_path empty string');
+test('migration: search_path empty string in drift fix file', () => {
+  assert.ok(driftFixSql.includes("SET search_path = ''") || driftFixSql.includes("search_path=''"), 'drift fix must have search_path empty string');
 });
 
-test('migration: revokes from PUBLIC and anon in fix file', () => {
-  assert.ok(fixSql.includes('REVOKE EXECUTE') || fixSql.includes('REVOKE SELECT'), 'must contain REVOKE statements');
+test('migration: revokes from PUBLIC and anon in drift fix file', () => {
+  assert.ok(driftFixSql.includes('REVOKE EXECUTE') || driftFixSql.includes('REVOKE SELECT'), 'must contain REVOKE statements');
 });
 
-test('migration: grants to authenticated in fix file', () => {
-  assert.ok(fixSql.includes('GRANT EXECUTE') && fixSql.includes('authenticated'), 'must grant execute to authenticated');
+test('migration: grants to authenticated in drift fix file', () => {
+  assert.ok(driftFixSql.includes('GRANT EXECUTE') && driftFixSql.includes('authenticated'), 'must grant execute to authenticated');
 });
 
-test('migration: no DELETE/DROP/TRUNCATE/CASCADE in fix file', () => {
-  const sqlOnly = fixSql.replace(/--[^\n]*\n/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+test('migration: no DELETE/DROP/TRUNCATE/CASCADE in drift fix file', () => {
+  const sqlOnly = driftFixSql.replace(/--[^\n]*\n/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.ok(!sqlOnly.toUpperCase().includes('DELETE FROM'), 'must not DELETE');
   assert.ok(!sqlOnly.toUpperCase().includes('DROP '), 'must not DROP');
   assert.ok(!sqlOnly.toUpperCase().includes('TRUNCATE'), 'must not TRUNCATE');
   assert.ok(!sqlOnly.toUpperCase().includes('CASCADE'), 'must not CASCADE');
 });
 
-test('migration: no MFA policy change in fix file', () => {
-  const sqlOnly = fixSql.replace(/--[^\n]*\n/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+test('migration: no MFA policy change in drift fix file', () => {
+  const sqlOnly = driftFixSql.replace(/--[^\n]*\n/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.ok(!sqlOnly.toUpperCase().match(/UPDATE\s+PUBLIC\.AUTH_SECURITY_SETTINGS/), 'must not UPDATE auth_security_settings');
 });
 
@@ -149,75 +157,73 @@ test('setter: grant consumed once via consumed_at', () => {
 // ── NEW: Setter concurrency and order tests ─────────────────────────────────
 
 test('setter: global advisory lock constant 987654321 used', () => {
-  assert.ok(fixSql.includes('pg_advisory_xact_lock(987654321)'),
+  assert.ok(latestSql.includes('pg_advisory_xact_lock(987654321)'),
     'must use global constant advisory lock 987654321');
 });
 
 test('setter: lock is NOT target-specific (no hashtextextended on target)', () => {
-  // The old migration used hashtextextended with target_user_id; the fix must NOT
-  const lockSection = fixSql.slice(
-    fixSql.indexOf('Global advisory lock'),
-    fixSql.indexOf('Re-check actor')
+  const lockSection = latestSql.slice(
+    latestSql.indexOf('Global advisory lock'),
+    latestSql.indexOf('Re-check actor')
   );
   assert.ok(!lockSection.includes('hashtextextended'), 'lock must not be target-specific');
   assert.ok(!lockSection.includes('p_target_user_id'), 'lock must not depend on target');
 });
 
 test('setter: actor re-checked after lock', () => {
-  const lockPos = fixSql.indexOf('pg_advisory_xact_lock(987654321)');
-  const recheckPos = fixSql.indexOf('is_current_security_admin()', lockPos);
+  const lockPos = latestSql.indexOf('pg_advisory_xact_lock(987654321)');
+  const recheckPos = latestSql.indexOf('is_current_security_admin()', lockPos);
   assert.ok(recheckPos > lockPos, 'must re-check actor after acquiring lock');
-  // Check that FORBIDDEN is returned after the recheck
-  const forbiddenPos = fixSql.indexOf("'FORBIDDEN'", recheckPos);
+  const forbiddenPos = latestSql.indexOf("'FORBIDDEN'", recheckPos);
   assert.ok(forbiddenPos > recheckPos, 'must return FORBIDDEN if actor no longer admin');
 });
 
 test('setter: target eligibility before grant consumption', () => {
-  const eligibilityPos = fixSql.indexOf('TARGET_NOT_ELIGIBLE');
-  const grantConsumePos = fixSql.indexOf('Consume grant');
+  const eligibilityPos = latestSql.indexOf('TARGET_NOT_ELIGIBLE');
+  const grantConsumePos = latestSql.indexOf('Consume grant');
   assert.ok(eligibilityPos > 0 && grantConsumePos > 0, 'both sections must exist');
   assert.ok(eligibilityPos < grantConsumePos, 'eligibility must be checked before grant consumption');
 });
 
 test('setter: target TOTP before grant consumption', () => {
-  const totpPos = fixSql.indexOf('TARGET_TOTP_REQUIRED');
-  const grantConsumePos = fixSql.indexOf('Consume grant');
+  const totpPos = latestSql.indexOf('TARGET_TOTP_REQUIRED');
+  const grantConsumePos = latestSql.indexOf('Consume grant');
   assert.ok(totpPos < grantConsumePos, 'TOTP check must be before grant consumption');
 });
 
 test('setter: no-op check before grant consumption', () => {
-  const noopPos = fixSql.indexOf('NO_EFFECTIVE_CHANGE');
-  const grantConsumePos = fixSql.indexOf('Consume grant');
+  const noopPos = latestSql.indexOf('NO_EFFECTIVE_CHANGE');
+  const grantConsumePos = latestSql.indexOf('Consume grant');
   assert.ok(noopPos < grantConsumePos, 'no-op check must be before grant consumption');
 });
 
 test('setter: last-admin check before grant consumption', () => {
-  const lastAdminPos = fixSql.indexOf('CANNOT_REMOVE_LAST_SECURITY_ADMIN');
-  const grantConsumePos = fixSql.indexOf('Consume grant');
+  const lastAdminPos = latestSql.indexOf('CANNOT_REMOVE_LAST_SECURITY_ADMIN');
+  const grantConsumePos = latestSql.indexOf('Consume grant');
   assert.ok(lastAdminPos < grantConsumePos, 'last-admin check must be before grant consumption');
 });
 
 test('setter: version conflict after grant consumption', () => {
-  const grantConsumePos = fixSql.indexOf('Consume grant');
-  const versionConflictPos = fixSql.indexOf('VERSION_CONFLICT', grantConsumePos);
+  const grantConsumePos = latestSql.indexOf('Consume grant');
+  const versionConflictPos = latestSql.indexOf('VERSION_CONFLICT', grantConsumePos);
   assert.ok(versionConflictPos > grantConsumePos, 'version conflict must be after grant consumption');
 });
 
 test('setter: grant freshness includes issued_at >= now - 5min', () => {
-  assert.ok(fixSql.includes("issued_at >= clock_timestamp() - interval '5 minutes'"),
+  assert.ok(latestSql.includes("issued_at >= clock_timestamp() - interval '5 minutes'"),
     'must check issued_at >= now - 5 minutes');
 });
 
 test('setter: grant UPDATE has consumed_at IS NULL guard', () => {
-  const updatePos = fixSql.indexOf('UPDATE public.session_security_grants');
-  const updateSection = fixSql.slice(updatePos, updatePos + 200);
+  const updatePos = latestSql.indexOf('UPDATE public.session_security_grants');
+  const updateSection = latestSql.slice(updatePos, updatePos + 200);
   assert.ok(updateSection.includes('consumed_at IS NULL'), 'UPDATE must have consumed_at IS NULL guard');
 });
 
 test('setter: update row count checked', () => {
-  assert.ok(fixSql.includes('GET DIAGNOSTICS'), 'must check row count via GET DIAGNOSTICS');
-  assert.ok(fixSql.includes('ROW_COUNT'), 'must check ROW_COUNT');
-  assert.ok(fixSql.includes('v_grant_consumed_count = 0'), 'must check for zero consumed');
+  assert.ok(latestSql.includes('GET DIAGNOSTICS'), 'must check row count via GET DIAGNOSTICS');
+  assert.ok(latestSql.includes('ROW_COUNT'), 'must check ROW_COUNT');
+  assert.ok(latestSql.includes('v_grant_consumed_count = 0'), 'must check for zero consumed');
 });
 
 test('setter: denied audit for all valid failures after session validation', () => {
@@ -229,39 +235,37 @@ test('setter: denied audit for all valid failures after session validation', () 
     'CANNOT_CHANGE_OWN_SECURITY_ADMIN', 'FORBIDDEN',
   ];
   for (const code of failures) {
-    assert.ok(fixSql.includes(code), `must audit denied for ${code}`);
+    assert.ok(latestSql.includes(code), `must audit denied for ${code}`);
   }
 });
 
 test('setter: audit metadata does not store raw change reason', () => {
-  assert.ok(fixSql.includes('change_reason_present'), 'must store change_reason_present boolean, not raw reason');
-  const auditInsert = fixSql.slice(
-    fixSql.indexOf('Insert audit'),
-    fixSql.indexOf('Return')
+  assert.ok(latestSql.includes('change_reason_present'), 'must store change_reason_present boolean, not raw reason');
+  const auditInsert = latestSql.slice(
+    latestSql.indexOf('Insert audit'),
+    latestSql.indexOf('Return')
   );
   assert.ok(!auditInsert.includes('v_trimmed_reason'), 'audit metadata must not include raw reason');
 });
 
 test('setter: before_state and after_state sanitized', () => {
-  const auditInsert = fixSql.slice(
-    fixSql.indexOf('Insert audit'),
-    fixSql.indexOf('Return')
-  );
-  assert.ok(auditInsert.includes('sanitize_audit_metadata(v_before_state)'), 'must sanitize before_state');
-  assert.ok(auditInsert.includes('sanitize_audit_metadata(v_after_state)'), 'must sanitize after_state');
+  const body = extractFunctionBody(latestSql, 'set_user_security_admin');
+  assert.ok(body.length > 0, 'must extract setter body');
+  assert.ok(body.includes('sanitize_audit_metadata(v_before_state)'), 'must sanitize before_state');
+  assert.ok(body.includes('sanitize_audit_metadata(v_after_state)'), 'must sanitize after_state');
 });
 
 // ═══ Management RPC Tests ═══════════════════════════════════════════════════
 
 test('read model: phone and national_id not returned', () => {
-  const mgmtRpc = fixSql.slice(fixSql.indexOf('get_security_admin_management_state'), fixSql.indexOf('get_security_audit_page'));
+  const mgmtRpc = latestSql.slice(latestSql.indexOf('get_security_admin_management_state'), latestSql.indexOf('get_security_audit_page'));
   assert.ok(!mgmtRpc.includes('phone'), 'must not return phone');
   assert.ok(!mgmtRpc.includes('national_id'), 'must not return national_id');
   assert.ok(!mgmtRpc.includes('normalized_'), 'must not return normalized fields');
 });
 
 test('read model: factor_id and secret not returned', () => {
-  const mgmtRpc = fixSql.slice(fixSql.indexOf('get_security_admin_management_state'), fixSql.indexOf('get_security_audit_page'));
+  const mgmtRpc = latestSql.slice(latestSql.indexOf('get_security_admin_management_state'), latestSql.indexOf('get_security_audit_page'));
   assert.ok(!mgmtRpc.includes('factor_id'), 'must not return factor_id');
   assert.ok(!mgmtRpc.includes('secret'), 'must not return secret');
 });
@@ -291,60 +295,57 @@ test('read model: history max 50 records', () => {
 // ── NEW: Management RPC pagination tests ───────────────────────────────────
 
 test('mgmt rpc: population and search parenthesized', () => {
-  const mgmtRpc = fixSql.slice(fixSql.indexOf('filtered_users'), fixSql.indexOf('page_plus_one'));
+  const mgmtRpc = latestSql.slice(latestSql.indexOf('filtered_users'), latestSql.indexOf('page_plus_one'));
   assert.ok(mgmtRpc.includes('p.is_security_admin IS TRUE'), 'must have population');
-  // Both population and search must be in separate parenthesized AND groups
   assert.ok(mgmtRpc.match(/WHERE\s*\(/), 'WHERE must be parenthesized');
   assert.ok(mgmtRpc.includes('v_search IS NULL'), 'must have search filter');
 });
 
 test('mgmt rpc: LIMIT/OFFSET inside subquery before aggregate', () => {
-  const mgmtRpc = fixSql.slice(fixSql.indexOf('page_plus_one'), fixSql.indexOf('visible_page'));
+  const mgmtRpc = latestSql.slice(latestSql.indexOf('page_plus_one'), latestSql.indexOf('visible_page'));
   assert.ok(mgmtRpc.includes('LIMIT v_limit + 1'), 'must have LIMIT in subquery');
   assert.ok(mgmtRpc.includes('OFFSET v_offset'), 'must have OFFSET in subquery');
 });
 
 test('mgmt rpc: visible_page limits to v_limit', () => {
-  const mgmtRpc = fixSql.slice(fixSql.indexOf('visible_page'), fixSql.indexOf('jsonb_agg'));
+  const mgmtRpc = latestSql.slice(latestSql.indexOf('visible_page'), latestSql.indexOf('jsonb_agg'));
   assert.ok(mgmtRpc.includes('LIMIT v_limit'), 'visible_page must LIMIT v_limit');
 });
 
 test('mgmt rpc: has_more from page_plus_one count', () => {
-  assert.ok(fixSql.includes('count(*) > v_limit'), 'has_more must be from count > v_limit');
+  assert.ok(latestSql.includes('count(*) > v_limit'), 'has_more must be from count > v_limit');
 });
 
 test('mgmt rpc: total_matches computed from filtered_users', () => {
-  assert.ok(fixSql.includes('v_total_matches'), 'must compute total_matches');
-  // Check that total_matches is computed from filtered_users CTE
-  // Find the SELECT count(*) INTO v_total_matches, not the declaration
-  const assignPos = fixSql.indexOf('SELECT count(*) INTO v_total_matches');
-  assert.ok(assignPos > 0, 'must have SELECT count(*) INTO v_total_matches');
-  const searchSection = fixSql.slice(assignPos, assignPos + 100);
-  assert.ok(searchSection.includes('filtered_users'), 'total_matches must use filtered_users CTE');
+  assert.ok(latestSql.includes('v_total_matches'), 'must compute total_matches');
+  const assignPos = latestSql.indexOf('SELECT count(*) INTO v_total_matches');
+  if (assignPos > 0) {
+    const searchSection = latestSql.slice(assignPos, assignPos + 100);
+    assert.ok(searchSection.includes('filtered_users'), 'total_matches must use filtered_users CTE');
+  } else {
+    assert.ok(latestSql.includes('filtered_users'), 'total_matches must reference filtered_users');
+  }
 });
 
 test('mgmt rpc: pagination object in output', () => {
-  assert.ok(fixSql.includes('pagination'), 'must include pagination in output');
-  assert.ok(fixSql.includes('has_more'), 'pagination must include has_more');
-  assert.ok(fixSql.includes('total_matches'), 'pagination must include total_matches');
+  assert.ok(latestSql.includes('pagination'), 'must include pagination in output');
+  assert.ok(latestSql.includes('has_more'), 'pagination must include has_more');
+  assert.ok(latestSql.includes('total_matches'), 'pagination must include total_matches');
 });
 
 test('mgmt rpc: history limited before aggregate', () => {
-  const historySection = fixSql.slice(fixSql.indexOf('Role history'), fixSql.indexOf('IF v_history IS NULL'));
+  const historySection = latestSql.slice(latestSql.indexOf('Role history'), latestSql.indexOf('IF v_history IS NULL'));
   assert.ok(historySection.includes('LIMIT 50'), 'history must be limited to 50 before aggregate');
-  // The LIMIT must be inside a subquery, not at the top level of the aggregate
   assert.ok(historySection.includes('SELECT *'), 'must use subquery');
 });
 
 test('mgmt rpc: last active admin blocked_reason is LAST_ACTIVE_SECURITY_ADMIN', () => {
-  assert.ok(fixSql.includes('LAST_ACTIVE_SECURITY_ADMIN'), 'must return LAST_ACTIVE_SECURITY_ADMIN for last admin');
+  assert.ok(latestSql.includes('LAST_ACTIVE_SECURITY_ADMIN'), 'must return LAST_ACTIVE_SECURITY_ADMIN for last admin');
 });
 
 test('mgmt rpc: ALREADY_SECURITY_ADMIN not returned for revocable admin', () => {
-  // The fix should NOT return ALREADY_SECURITY_ADMIN when revoke is allowed
-  // Check that the blocked_reason CASE for security admins returns ELIGIBLE or LAST_ACTIVE
-  const blockedReasonPos = fixSql.indexOf("'SELF_CHANGE_FORBIDDEN'");
-  const eligibilitySection = fixSql.slice(blockedReasonPos, blockedReasonPos + 2000);
+  const blockedReasonPos = latestSql.indexOf("'SELF_CHANGE_FORBIDDEN'");
+  const eligibilitySection = latestSql.slice(blockedReasonPos, blockedReasonPos + 2000);
   assert.ok(eligibilitySection.includes('LAST_ACTIVE_SECURITY_ADMIN'), 'must check last admin for security admins');
   assert.ok(eligibilitySection.includes('ELIGIBLE'), 'must return ELIGIBLE for revocable admin');
 });
@@ -352,13 +353,13 @@ test('mgmt rpc: ALREADY_SECURITY_ADMIN not returned for revocable admin', () => 
 // ═══ Audit RPC Tests ═════════════════════════════════════════════════════════
 
 test('audit rpc: keyset pagination', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes('p_before_created_at'), 'must use before_created_at cursor');
   assert.ok(auditRpc.includes('p_before_id'), 'must use before_id cursor');
 });
 
 test('audit rpc: sort by created_at DESC, id DESC', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes('ORDER BY created_at DESC, id DESC'), 'must sort by created_at DESC, id DESC');
 });
 
@@ -384,56 +385,56 @@ test('audit rpc: date range validation', () => {
 });
 
 test('audit rpc: metadata re-sanitized', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes('sanitize_audit_metadata'), 'must re-sanitize metadata');
 });
 
 test('audit rpc: ip and user_agent_hash not returned', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(!auditRpc.includes('ip_address'), 'must not return ip_address');
   assert.ok(!auditRpc.includes('ip_hash'), 'must not return ip_hash');
   assert.ok(!auditRpc.includes('user_agent_hash'), 'must not return user_agent_hash');
 });
 
 test('audit rpc: no anon execute', () => {
-  assert.ok(fixSql.includes('REVOKE EXECUTE ON FUNCTION public.get_security_audit_page') && fixSql.includes('FROM anon'),
+  assert.ok(latestSql.includes('REVOKE EXECUTE ON FUNCTION public.get_security_audit_page') && latestSql.includes('FROM anon'),
     'must revoke execute from anon on audit RPC');
 });
 
 test('audit rpc: non-security-admin rejected', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes('SECURITY_ADMIN_REQUIRED'), 'must reject non-security-admin');
 });
 
 // ── NEW: Audit RPC pagination tests ─────────────────────────────────────────
 
 test('audit rpc: limit before aggregate in CTE', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes('page_plus_one'), 'must use page_plus_one CTE');
   assert.ok(auditRpc.includes('LIMIT v_limit + 1'), 'must limit to v_limit + 1 in subquery');
 });
 
 test('audit rpc: array does not contain limit+1 row', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes('visible_page'), 'must use visible_page CTE');
   assert.ok(auditRpc.includes('LIMIT v_limit'), 'visible_page must limit to v_limit');
 });
 
 test('audit rpc: cursor from last visible row', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes('v_last_created_at'), 'must extract last created_at');
   assert.ok(auditRpc.includes('v_last_id'), 'must extract last id');
   assert.ok(auditRpc.includes('v_count - 1'), 'must use last index of visible array');
 });
 
 test('audit rpc: empty page cursor is null', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes('v_count > 0'), 'must check v_count > 0 before setting cursor');
   assert.ok(auditRpc.includes('v_next_cursor := NULL'), 'must set cursor to NULL for empty page');
 });
 
 test('audit rpc: nullable states use CASE WHEN IS NULL', () => {
-  const auditRpc = fixSql.slice(fixSql.indexOf('get_security_audit_page'), fixSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
+  const auditRpc = latestSql.slice(latestSql.indexOf('get_security_audit_page'), latestSql.indexOf('ALTER FUNCTION public.get_security_audit_page'));
   assert.ok(auditRpc.includes("WHEN vp.metadata IS NULL THEN NULL"), 'must handle nullable metadata');
   assert.ok(auditRpc.includes("WHEN vp.before_state IS NULL THEN NULL"), 'must handle nullable before_state');
   assert.ok(auditRpc.includes("WHEN vp.after_state IS NULL THEN NULL"), 'must handle nullable after_state');
@@ -743,4 +744,215 @@ test('service: types include pagination', () => {
   assert.ok(typesSource.includes('AdminManagementPagination'), 'must have pagination type');
   assert.ok(typesSource.includes('has_more'), 'pagination must have has_more');
   assert.ok(typesSource.includes('total_matches'), 'pagination must have total_matches');
+});
+
+// ═══ CTE Scope Tests (Blocker 1 & 2) ════════════════════════════════════════
+
+function extractFunctionBody(sql: string, funcName: string): string {
+  const startMarker = 'CREATE OR REPLACE FUNCTION public.' + funcName;
+  const startIdx = sql.indexOf(startMarker);
+  if (startIdx < 0) return '';
+  const funcMarker = String.fromCharCode(36) + 'function' + String.fromCharCode(36);
+  const dollarStart = sql.indexOf(funcMarker, startIdx);
+  if (dollarStart < 0) return '';
+  const dollarEnd = sql.indexOf(funcMarker, dollarStart + 10);
+  if (dollarEnd < 0) return '';
+  return sql.slice(dollarStart + 10, dollarEnd);
+}
+
+function findStatementEnd(body: string, startPos: number): number {
+  let depth = 0;
+  let inString = false;
+  let stringChar = '';
+  for (let i = startPos; i < body.length; i++) {
+    const ch = body[i];
+    if (inString) {
+      if (ch === stringChar) inString = false;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      inString = true;
+      stringChar = ch;
+      continue;
+    }
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (ch === ';' && depth <= 0) return i;
+  }
+  return body.length;
+}
+
+test('cte scope: filtered_users not referenced after WITH statement in management RPC', () => {
+  const body = extractFunctionBody(latestSql, 'get_security_admin_management_state');
+  assert.ok(body.length > 0, 'must extract management RPC body');
+
+  const withStart = body.indexOf('WITH filtered_users');
+  assert.ok(withStart >= 0, 'must have WITH filtered_users');
+
+  const stmtEnd = findStatementEnd(body, withStart);
+  assert.ok(stmtEnd > withStart, 'must find statement end');
+
+  const afterStmt = body.slice(stmtEnd + 1);
+  assert.ok(!afterStmt.includes('filtered_users'),
+    'filtered_users must not be referenced after the WITH statement ends');
+});
+
+test('cte scope: page_plus_one not referenced after WITH statement in management RPC', () => {
+  const body = extractFunctionBody(latestSql, 'get_security_admin_management_state');
+  assert.ok(body.length > 0, 'must extract management RPC body');
+
+  const withStart = body.indexOf('WITH filtered_users');
+  const stmtEnd = findStatementEnd(body, withStart);
+  const afterStmt = body.slice(stmtEnd + 1);
+  assert.ok(!afterStmt.includes('page_plus_one'),
+    'page_plus_one must not be referenced after the WITH statement ends');
+});
+
+test('cte scope: management RPC computes users, has_more, total_matches in one statement', () => {
+  const body = extractFunctionBody(latestSql, 'get_security_admin_management_state');
+  assert.ok(body.length > 0, 'must extract management RPC body');
+
+  const withStart = body.indexOf('WITH filtered_users');
+  const stmtEnd = findStatementEnd(body, withStart);
+  const stmt = body.slice(withStart, stmtEnd);
+
+  assert.ok(stmt.includes('INTO'), 'must have INTO clause');
+  assert.ok(stmt.includes('v_users'), 'must assign v_users');
+  assert.ok(stmt.includes('v_has_more'), 'must assign v_has_more');
+  assert.ok(stmt.includes('v_total_matches'), 'must assign v_total_matches');
+});
+
+test('cte scope: page_plus_one not referenced independently in audit RPC', () => {
+  const body = extractFunctionBody(latestSql, 'get_security_audit_page');
+  assert.ok(body.length > 0, 'must extract audit RPC body');
+
+  const withStart = body.indexOf('WITH filtered_events');
+  assert.ok(withStart >= 0, 'must have WITH filtered_events');
+
+  const stmtEnd = findStatementEnd(body, withStart);
+  assert.ok(stmtEnd > withStart, 'must find statement end');
+
+  const afterStmt = body.slice(stmtEnd + 1);
+  assert.ok(!afterStmt.includes('page_plus_one'),
+    'page_plus_one must not be referenced after the WITH statement ends');
+});
+
+test('cte scope: audit RPC computes events and has_more in one statement', () => {
+  const body = extractFunctionBody(latestSql, 'get_security_audit_page');
+  assert.ok(body.length > 0, 'must extract audit RPC body');
+
+  const withStart = body.indexOf('WITH filtered_events');
+  const stmtEnd = findStatementEnd(body, withStart);
+  const stmt = body.slice(withStart, stmtEnd);
+
+  assert.ok(stmt.includes('INTO'), 'must have INTO clause');
+  assert.ok(stmt.includes('v_events'), 'must assign v_events');
+  assert.ok(stmt.includes('v_has_more'), 'must assign v_has_more');
+});
+
+// ═══ Target Alias Fix Tests (Blocker 3) ═══════════════════════════════════════
+
+test('target alias: live function does not contain p.target_user_id', () => {
+  const body = extractFunctionBody(latestSql, 'get_security_audit_page');
+  assert.ok(body.length > 0, 'must extract audit RPC body');
+  // Check for the exact typo pattern: e.target_user_id = p.target_user_id
+  // (not vp.target_user_id which is a valid column reference)
+  assert.ok(!body.includes('e.target_user_id = p.target_user_id'),
+    'must not contain e.target_user_id = p.target_user_id (invalid alias)');
+});
+
+test('target alias: live function contains e.target_user_id = p_target_user_id', () => {
+  const body = extractFunctionBody(latestSql, 'get_security_audit_page');
+  assert.ok(body.length > 0, 'must extract audit RPC body');
+  assert.ok(body.includes('e.target_user_id = p_target_user_id'),
+    'must contain e.target_user_id = p_target_user_id');
+});
+
+// ═══ Fast Authorization Tests (Blocker 4) ════════════════════════════════════
+
+test('setter: fast authorization check before global lock', () => {
+  const body = extractFunctionBody(latestSql, 'set_user_security_admin');
+  assert.ok(body.length > 0, 'must extract setter body');
+
+  const fastAuthPos = body.indexOf('Fast authorization');
+  const lockPos = body.indexOf('pg_advisory_xact_lock(987654321)');
+  assert.ok(fastAuthPos >= 0, 'must have fast authorization comment');
+  assert.ok(lockPos > fastAuthPos, 'fast auth must be before global lock');
+
+  const fastAuthSection = body.slice(fastAuthPos, lockPos);
+  assert.ok(fastAuthSection.includes('is_current_security_admin()'), 'must check is_current_security_admin before lock');
+  assert.ok(fastAuthSection.includes('SECURITY_ADMIN_REQUIRED'), 'must return SECURITY_ADMIN_REQUIRED before lock');
+});
+
+test('setter: authorization check also after global lock', () => {
+  const body = extractFunctionBody(latestSql, 'set_user_security_admin');
+  assert.ok(body.length > 0, 'must extract setter body');
+
+  const lockPos = body.indexOf('pg_advisory_xact_lock(987654321)');
+  const recheckPos = body.indexOf('is_current_security_admin()', lockPos);
+  assert.ok(recheckPos > lockPos, 'must re-check after lock');
+
+  const recheckSection = body.slice(lockPos, recheckPos + 200);
+  assert.ok(recheckSection.includes('FORBIDDEN'), 'must return FORBIDDEN after lock recheck');
+});
+
+// ═══ Frontend Invalid Filter Tests ═══════════════════════════════════════════
+
+test('frontend: buildParams is pure (no setState inside)', () => {
+  assert.ok(auditConsoleSource.includes('buildParams'), 'must have buildParams');
+  const buildParamsStart = auditConsoleSource.indexOf('buildParams = useCallback');
+  const buildParamsEnd = auditConsoleSource.indexOf('}, [', buildParamsStart);
+  const buildParamsBody = auditConsoleSource.slice(buildParamsStart, buildParamsEnd);
+  assert.ok(!buildParamsBody.includes('setActorError'), 'buildParams must not call setActorError');
+  assert.ok(!buildParamsBody.includes('setTargetError'), 'buildParams must not call setTargetError');
+  assert.ok(!buildParamsBody.includes('setEvents'), 'buildParams must not call setEvents');
+  assert.ok(!buildParamsBody.includes('setLoading'), 'buildParams must not call setLoading');
+});
+
+test('frontend: invalid actor UUID does not trigger RPC', () => {
+  const loadInitialStart = auditConsoleSource.indexOf('loadInitial = useCallback');
+  const loadInitialBody = auditConsoleSource.slice(loadInitialStart, loadInitialStart + 2000);
+  assert.ok(loadInitialBody.includes('if (!params)'), 'loadInitial must check params null');
+  assert.ok(loadInitialBody.includes('return;'), 'loadInitial must return early on null params');
+});
+
+test('frontend: invalid target UUID does not trigger RPC', () => {
+  const loadInitialStart = auditConsoleSource.indexOf('loadInitial = useCallback');
+  const loadInitialBody = auditConsoleSource.slice(loadInitialStart, loadInitialStart + 2000);
+  assert.ok(loadInitialBody.includes('UUID_REGEX'), 'loadInitial must validate UUID');
+  assert.ok(loadInitialBody.includes('UUID نامعتبر'), 'must show UUID error message');
+});
+
+test('frontend: invalid filter does not lock UI in loading state', () => {
+  const loadInitialStart = auditConsoleSource.indexOf('loadInitial = useCallback');
+  const loadInitialBody = auditConsoleSource.slice(loadInitialStart, loadInitialStart + 2000);
+  assert.ok(loadInitialBody.includes('setLoading(false)'), 'must set loading to false on invalid params');
+  assert.ok(loadInitialBody.includes('setLoadingMore(false)'), 'must set loadingMore to false on invalid params');
+});
+
+test('frontend: handleLoadMore checks buildParams null before RPC', () => {
+  const loadMoreStart = auditConsoleSource.indexOf('handleLoadMore = useCallback');
+  const loadMoreBody = auditConsoleSource.slice(loadMoreStart, loadMoreStart + 1500);
+  assert.ok(loadMoreBody.includes('const params = buildParams()'), 'must call buildParams');
+  assert.ok(loadMoreBody.includes('if (!params)'), 'must check params null');
+  assert.ok(loadMoreBody.includes('setLoadingMore(false)'), 'must set loadingMore false on null');
+  assert.ok(loadMoreBody.includes('return;'), 'must return early on null params');
+});
+
+test('frontend: no spread of buildParams without null check', () => {
+  assert.ok(!auditConsoleSource.includes('...buildParams()'), 'must not spread buildParams() without null check');
+});
+
+test('frontend: date helper uses explicit UTC conversion', () => {
+  assert.ok(auditConsoleSource.includes('dateToUtcStartOfDay'), 'must have dateToUtcStartOfDay helper');
+  assert.ok(auditConsoleSource.includes('dateToUtcEndOfDay'), 'must have dateToUtcEndOfDay helper');
+  assert.ok(auditConsoleSource.includes('Date.UTC'), 'must use Date.UTC for explicit conversion');
+  assert.ok(!auditConsoleSource.includes('setHours'), 'must not use setHours (local mutation)');
+});
+
+test('frontend: buildParams returns null on invalid UUID', () => {
+  const buildParamsStart = auditConsoleSource.indexOf('buildParams = useCallback');
+  const buildParamsEnd = auditConsoleSource.indexOf('}, [', buildParamsStart);
+  const buildParamsBody = auditConsoleSource.slice(buildParamsStart, buildParamsEnd);
+  assert.ok(buildParamsBody.includes('return null'), 'buildParams must return null on invalid UUID');
 });

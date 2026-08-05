@@ -38,6 +38,35 @@ const RESULTS = [
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+interface AuditLoadParams {
+  category: string | null;
+  severity: string | null;
+  result: string | null;
+  eventType: string | null;
+  actorUserId: string | null;
+  targetUserId: string | null;
+  from: string | null;
+  to: string | null;
+  limit: number;
+}
+
+interface AuditLoadParamsWithCursor extends AuditLoadParams {
+  beforeCreatedAt?: string;
+  beforeId?: string;
+}
+
+function dateToUtcStartOfDay(dateString: string): string {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const utcStart = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+  return new Date(utcStart).toISOString();
+}
+
+function dateToUtcEndOfDay(dateString: string): string {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const utcEnd = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+  return new Date(utcEnd).toISOString();
+}
+
 interface Props {
   refreshVersion: number;
 }
@@ -61,50 +90,28 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const generationRef = useRef(0);
 
-  const buildParams = useCallback(() => {
+  const buildParams = useCallback((): AuditLoadParams | null => {
     const actor = actorUserId.trim();
     const target = targetUserId.trim();
-    let actorUuid: string | null = null;
-    let targetUuid: string | null = null;
 
-    if (actor) {
-      if (!UUID_REGEX.test(actor)) {
-        setActorError('UUID نامعتبر است.');
-        return null;
-      }
-      actorUuid = actor;
-      setActorError(null);
-    } else {
-      setActorError(null);
+    if (actor && !UUID_REGEX.test(actor)) {
+      return null;
     }
 
-    if (target) {
-      if (!UUID_REGEX.test(target)) {
-        setTargetError('UUID نامعتبر است.');
-        return null;
-      }
-      targetUuid = target;
-      setTargetError(null);
-    } else {
-      setTargetError(null);
+    if (target && !UUID_REGEX.test(target)) {
+      return null;
     }
 
-    let fromIso: string | null = null;
-    let toIso: string | null = null;
-    if (fromDate) fromIso = new Date(fromDate).toISOString();
-    if (toDate) {
-      const d = new Date(toDate);
-      d.setHours(23, 59, 59, 999);
-      toIso = d.toISOString();
-    }
+    const fromIso = fromDate ? dateToUtcStartOfDay(fromDate) : null;
+    const toIso = toDate ? dateToUtcEndOfDay(toDate) : null;
 
     return {
       category: category || null,
       severity: severity || null,
       result: result || null,
       eventType: eventType || null,
-      actorUserId: actorUuid,
-      targetUserId: targetUuid,
+      actorUserId: actor || null,
+      targetUserId: target || null,
       from: fromIso,
       to: toIso,
       limit: PAGE_SIZE,
@@ -114,8 +121,30 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
   const loadInitial = useCallback(async () => {
     const gen = ++generationRef.current;
     const params = buildParams();
-    if (!params) return;
 
+    if (!params) {
+      generationRef.current += 1;
+      setEvents([]);
+      setCursor(null);
+      setHasMore(false);
+      setSelectedEvent(null);
+      setLoading(false);
+      setLoadingMore(false);
+      if (actorUserId.trim() && !UUID_REGEX.test(actorUserId.trim())) {
+        setActorError('UUID نامعتبر است.');
+      } else {
+        setActorError(null);
+      }
+      if (targetUserId.trim() && !UUID_REGEX.test(targetUserId.trim())) {
+        setTargetError('UUID نامعتبر است.');
+      } else {
+        setTargetError(null);
+      }
+      return;
+    }
+
+    setActorError(null);
+    setTargetError(null);
     setLoading(true);
     setEvents([]);
     setHasMore(false);
@@ -135,7 +164,7 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
     } finally {
       if (gen === generationRef.current) setLoading(false);
     }
-  }, [buildParams]);
+  }, [buildParams, actorUserId, targetUserId]);
 
   useEffect(() => {
     void loadInitial();
@@ -143,14 +172,21 @@ export function SecurityAuditConsole({ refreshVersion }: Props) {
 
   const handleLoadMore = useCallback(async () => {
     if (!hasMore || !cursor || loadingMore) return;
+
+    const params = buildParams();
+    if (!params) {
+      setLoadingMore(false);
+      return;
+    }
+
     const gen = generationRef.current;
     setLoadingMore(true);
     try {
       const res = await loadSecurityAuditPage({
-        ...buildParams(),
+        ...params,
         beforeCreatedAt: cursor.before_created_at,
         beforeId: cursor.before_id,
-      });
+      } as AuditLoadParamsWithCursor);
       if (gen !== generationRef.current) return;
       if (res.ok) {
         setEvents((prev) => {
