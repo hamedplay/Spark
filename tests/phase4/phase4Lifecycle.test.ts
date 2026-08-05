@@ -202,9 +202,8 @@ test('registration: app metadata marker used', () => {
 });
 
 test('registration: duplicate race handled by unique constraint', () => {
-  assert.ok(verifyOtpSource.includes('existingUsername'), 'must check username uniqueness');
-  assert.ok(verifyOtpSource.includes('existingEmail'), 'must check email uniqueness');
-  assert.ok(verifyOtpSource.includes('existingPhone'), 'must check phone uniqueness');
+  assert.ok(verifyOtpSource.includes('check_public_registration_identifiers_available'), 'must check identifier uniqueness via RPC');
+  assert.ok(verifyOtpSource.includes('release_public_registration_claim'), 'must release claim on conflict');
 });
 
 test('registration: retry does not create second user', () => {

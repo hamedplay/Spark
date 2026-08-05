@@ -6,34 +6,39 @@ import {
   isOriginAllowed,
   getRequestOrigin,
   normalizeIranPhone,
-  hmacSha256Hex,
+  getRegistrationSecret,
+  hashIdentity,
+  hashPhone,
+  hashIp,
+  hashOtp,
   adminClient,
+  abortAwareDelay,
 } from "../_shared/registration-security.ts";
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return preflightResponse(req);
+  if (req.method === "OPTIONS") return await preflightResponse(req);
 
   const origin = getRequestOrigin(req);
-  if (!isOriginAllowed(origin)) return rejectOrigin(req);
+  if (!(await isOriginAllowed(origin))) return rejectOrigin();
 
   const json = (data: unknown, status = 200) => corsResponse(req, data, status);
 
   try {
-    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+    if (req.method !== "POST") return await json({ error: "Method not allowed" }, 405);
 
     const contentType = req.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) return json({ error: "Content-Type must be JSON" }, 400);
+    if (!contentType.includes("application/json")) return await json({ error: "Content-Type must be JSON" }, 400);
 
     const body = await req.text();
-    if (body.length > 8192) return json({ error: "Body too large" }, 400);
+    if (body.length > 8192) return await json({ error: "Body too large" }, 400);
 
     const { challenge_id, otp, first_name, last_name, username, email, phone, password } = JSON.parse(body);
 
-    if (!challenge_id) return json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
-    if (!otp || !/^\d{6}$/.test(otp)) return json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
+    if (!challenge_id) return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
+    if (!otp || !/^\d{6}$/.test(otp)) return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
 
-    if (!password || password.length < 8) return json({ error: "رمز عبور باید حداقل ۸ کاراکتر باشد" }, 400);
-    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(password)) return json({ error: "رمز عبور باید شامل حروف و عدد باشد" }, 400);
+    if (!password || password.length < 8) return await json({ error: "رمز عبور باید حداقل ۸ کاراکتر باشد" }, 400);
+    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(password)) return await json({ error: "رمز عبور باید شامل حروف و عدد باشد" }, 400);
 
     const trimmedFirst = (first_name || "").trim();
     const trimmedLast = (last_name || "").trim();
@@ -41,57 +46,93 @@ Deno.serve(async (req: Request) => {
     const trimmedEmail = (email || "").trim().toLowerCase();
     const phoneDigits = normalizeIranPhone(phone);
 
-    if (!trimmedFirst || !trimmedLast) return json({ error: "نام و نام خانوادگی الزامی است" }, 400);
-    if (trimmedUsername.length < 3 || trimmedUsername.length > 50) return json({ error: "نام کاربری نامعتبر است" }, 400);
-    if (!/^[a-zA-Z][a-zA-Z0-9._]*$/.test(trimmedUsername)) return json({ error: "نام کاربری نامعتبر است" }, 400);
-    if (!/^[^@]+@[^@]+\.[^@]+$/.test(trimmedEmail)) return json({ error: "ایمیل نامعتبر است" }, 400);
-    if (!phoneDigits) return json({ error: "شماره موبایل نامعتبر است" }, 400);
+    if (!trimmedFirst || !trimmedLast) return await json({ error: "نام و نام خانوادگی الزامی است" }, 400);
+    if (trimmedUsername.length < 3 || trimmedUsername.length > 50) return await json({ error: "نام کاربری نامعتبر است" }, 400);
+    if (!/^[a-zA-Z][a-zA-Z0-9._]*$/.test(trimmedUsername)) return await json({ error: "نام کاربری نامعتبر است" }, 400);
+    if (!/^[^@]+@[^@]+\.[^@]+$/.test(trimmedEmail)) return await json({ error: "ایمیل نامعتبر است" }, 400);
+    if (!phoneDigits) return await json({ error: "شماره موبایل نامعتبر است" }, 400);
 
+    const secret = getRegistrationSecret();
     const supabase = adminClient();
 
-    // Recompute identity hash
-    const identityHash = await hmacSha256Hex("identity", `${trimmedFirst}|${trimmedLast}|${trimmedUsername}|${trimmedEmail}|${phoneDigits}`);
-    const phoneHash = await hmacSha256Hex("phone", phoneDigits);
-    const otpHash = await hmacSha256Hex(Deno.env.get("REGISTRATION_PHONE_OTP_SECRET")!, `${identityHash}|${phoneHash}|${otp}`);
+    // Recompute hashes with domain separation
+    const identityHash = await hashIdentity(secret, trimmedFirst, trimmedLast, trimmedUsername, trimmedEmail, phoneDigits);
+    const phoneHash = await hashPhone(secret, phoneDigits);
+    const ipHash = await hashIp(secret, req.headers.get("x-forwarded-for") || "unknown");
 
-    // Rate limit verify (IP: 20 in 15 min)
-    const ipHash = await hmacSha256Hex("ip", req.headers.get("x-forwarded-for") || "unknown");
-    const { count: ipVerifyCount } = await supabase.from("public_registration_rate_limit").select("*", { count: "exact", head: true }).eq("ip_hash", ipHash).eq("purpose", "registration_verify").gt("created_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
-    if (ipVerifyCount && ipVerifyCount >= 20) return json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
+    // Generate claimId
+    const claimId = crypto.randomUUID();
 
-    await supabase.rpc("consume_public_registration_rate_limit", {
+    // Compute OTP hash bound to challenge
+    const otpHash = await hashOtp(secret, challenge_id, identityHash, phoneHash, otp);
+
+    // Rate limit verify via V2 RPC
+    const { error: rlError } = await supabase.rpc("consume_public_registration_rate_limit_v2", {
       p_identity_hash: identityHash,
       p_phone_hash: phoneHash,
       p_ip_hash: ipHash,
       p_purpose: "registration_verify",
+      p_identity_limit: 5,
+      p_phone_limit: 5,
+      p_ip_limit: 20,
+      p_window_seconds: 900,
     });
+    if (rlError) return await json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
 
-    // Claim challenge
-    const { data: claimResult } = await supabase.rpc("claim_public_registration_challenge", {
+    // Claim challenge via V2 RPC
+    const { data: claimResult, error: claimError } = await supabase.rpc("claim_public_registration_challenge_v2", {
       p_challenge_id: challenge_id,
       p_identity_hash: identityHash,
       p_otp_hash: otpHash,
+      p_claim_id: claimId,
     });
 
-    if (!claimResult?.ok) {
+    if (claimError || !claimResult) {
       try {
         await supabase.from("security_audit_events").insert({
           event_type: "registration_otp_invalid",
           event_category: "auth",
           severity: "warning",
           result: "failure",
-          metadata: { error: claimResult?.error || "unknown" },
+          metadata: { error: "claim_error" },
+        });
+      } catch { /* best-effort */ }
+      return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
+    }
+
+    const claim = claimResult as { ok?: boolean; status?: string; created_user_id?: string; error?: string };
+
+    if (!claim.ok) {
+      if (claim.status === "ALREADY_CONSUMED" && claim.created_user_id) {
+        // Already consumed — try sign-in with the created user
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        });
+        if (signInErr || !signInData.session) {
+          return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
+        }
+        return await json({ ok: true, session: signInData.session, user: signInData.user });
+      }
+
+      if (claim.status === "ACTIVE_PROCESSING") {
+        return await json({ error: "درخواست در حال پردازش است. لطفاً صبر کنید." }, 409);
+      }
+
+      try {
+        await supabase.from("security_audit_events").insert({
+          event_type: "registration_otp_invalid",
+          event_category: "auth",
+          severity: "warning",
+          result: "failure",
+          metadata: { error: claim.error || claim.status || "unknown" },
         });
       } catch { /* best-effort */ }
 
-      if (claimResult?.error === "CHALLENGE_LOCKED") {
-        return json({ error: "تعداد تلاش‌ها بیش از حد مجاز است" }, 429);
-      }
-      return json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
+      return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
     }
 
-    // Check identifier availability via RPC (checks existingUsername, existingEmail, existingPhone)
-    // The RPC returns boolean: true if all identifiers are available, false if any conflict
+    // Check identifier availability via RPC
     const { data: available, error: availError } = await supabase.rpc("check_public_registration_identifiers_available", {
       p_normalized_username: trimmedUsername,
       p_normalized_email: trimmedEmail,
@@ -99,13 +140,13 @@ Deno.serve(async (req: Request) => {
     });
 
     if (availError) {
-      await supabase.rpc("release_public_registration_claim", { p_challenge_id: challenge_id });
-      return json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
+      await supabase.rpc("release_public_registration_claim_v2", { p_challenge_id: challenge_id, p_claim_id: claimId });
+      return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
     }
 
     if (available !== true) {
-      await supabase.rpc("release_public_registration_claim", { p_challenge_id: challenge_id });
-      return json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
+      await supabase.rpc("release_public_registration_claim_v2", { p_challenge_id: challenge_id, p_claim_id: claimId });
+      return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
     }
 
     // Create auth user
@@ -126,24 +167,24 @@ Deno.serve(async (req: Request) => {
       },
       app_metadata: {
         registration_flow: "public_phone_v1",
+        registration_challenge_id: challenge_id,
+        registration_claim_id: claimId,
+        registration_identity_hash: identityHash,
       },
     });
 
     if (createErr) {
-      await supabase.rpc("release_public_registration_claim", { p_challenge_id: challenge_id });
+      await supabase.rpc("release_public_registration_claim_v2", { p_challenge_id: challenge_id, p_claim_id: claimId });
       if (createErr.message?.includes("already") || createErr.message?.includes("duplicate")) {
-        return json({ error: "این ایمیل یا شماره قبلاً ثبت شده است" }, 409);
+        return await json({ error: "این ایمیل یا شماره قبلاً ثبت شده است" }, 409);
       }
-      return json({ error: "خطا در ایجاد حساب کاربری" }, 500);
+      return await json({ error: "خطا در ایجاد حساب کاربری" }, 500);
     }
 
     const userId = userData.user.id;
 
-    // Finalize challenge
-    await supabase.rpc("finalize_public_registration_challenge", {
-      p_challenge_id: challenge_id,
-      p_created_user_id: userId,
-    });
+    // Trigger handles profile creation and challenge consumption.
+    // No finalize RPC, no compensating delete.
 
     // Sign in with email/password
     const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
@@ -152,7 +193,7 @@ Deno.serve(async (req: Request) => {
     });
 
     if (signInErr || !signInData.session) {
-      return json({ error: "حساب ساخته شد اما ورود خودکار ناموفق بود. لطفاً وارد شوید." }, 400);
+      return await json({ error: "حساب ساخته شد اما ورود خودکار ناموفق بود. لطفاً وارد شوید." }, 400);
     }
 
     // Audit
@@ -167,12 +208,12 @@ Deno.serve(async (req: Request) => {
       });
     } catch { /* best-effort */ }
 
-    return json({
+    return await json({
       ok: true,
       session: signInData.session,
       user: signInData.user,
     });
   } catch {
-    return json({ error: "خطا در پردازش درخواست" }, 500);
+    return await json({ error: "خطا در پردازش درخواست" }, 500);
   }
 });
