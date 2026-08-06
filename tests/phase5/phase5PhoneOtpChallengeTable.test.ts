@@ -15,6 +15,10 @@ const configMigration = migrationFiles.find((f) =>
   f.includes('phase5e_phone_otp_configuration'),
 );
 
+const fixMigration = migrationFiles.find((f) =>
+  f.includes('phase5e_fix_challenge_claim_state_constraint'),
+);
+
 describe('Phase 5E-B1 — Phone OTP Login Challenge Table', () => {
   it('phase5e challenge table migration file exists on disk', () => {
     assert.ok(challengeMigration, 'phase5e_phone_otp_challenge_table migration must exist');
@@ -240,6 +244,131 @@ describe('Phase 5E-B1 — Phone OTP Login Challenge Table', () => {
   });
 
   it('no formal or comment-only tests exist in this file', () => {
+    const testFile = readFileSync(join(root, 'tests', 'phase5', 'phase5PhoneOtpChallengeTable.test.ts'), 'utf8');
+    const lines = testFile.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+      if (/^assert\.ok\(\s*true\s*\)\s*;?\s*$/.test(trimmed)) {
+        assert.fail('must not contain formal assert.ok(true) test');
+      }
+    }
+  });
+});
+
+describe('Phase 5E-B1 Fix — Challenge Claim State Constraint', () => {
+  it('fix migration file exists on disk', () => {
+    assert.ok(fixMigration, 'phase5e_fix_challenge_claim_state_constraint migration must exist');
+  });
+
+  it('drops only the tautological constraint', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(
+      /DROP\s+CONSTRAINT\s+phone_otp_login_challenges_v2_non_processing_no_claim_required/i.test(sql),
+      'must drop the tautological constraint',
+    );
+  });
+
+  it('adds claim_state_consistency constraint', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(
+      /phone_otp_login_challenges_v2_claim_state_consistency/i.test(sql),
+      'must add claim_state_consistency constraint',
+    );
+    assert.ok(/ADD\s+CONSTRAINT/i.test(sql), 'must use ADD CONSTRAINT');
+  });
+
+  it('new constraint requires both claim fields non-null for processing', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    const consistencyIdx = sql.indexOf('claim_state_consistency');
+    const constraintBody = sql.substring(consistencyIdx);
+    assert.ok(
+      /status\s*=\s*'processing'\s*\n\s*AND\s*claim_id\s*IS\s*NOT\s*NULL\s*\n\s*AND\s*claim_expires_at\s*IS\s*NOT\s*NULL/i.test(constraintBody),
+      'processing must require both claim_id and claim_expires_at non-null',
+    );
+  });
+
+  it('new constraint requires both claim fields null for non-processing', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    const consistencyIdx = sql.indexOf('claim_state_consistency');
+    const constraintBody = sql.substring(consistencyIdx);
+    assert.ok(
+      /status\s*<>\s*'processing'\s*\n\s*AND\s*claim_id\s*IS\s*NULL\s*\n\s*AND\s*claim_expires_at\s*IS\s*NULL/i.test(constraintBody),
+      'non-processing must require both claim_id and claim_expires_at null',
+    );
+  });
+
+  it('does not contain tautological expression claim_id IS NULL OR claim_id IS NOT NULL', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(
+      !/claim_id\s*IS\s*NULL\s*OR\s*claim_id\s*IS\s*NOT\s*NULL/i.test(sql),
+      'must not contain tautological claim_id IS NULL OR claim_id IS NOT NULL',
+    );
+  });
+
+  it('does not create tables, functions, RPCs, triggers, or policies', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(!/CREATE\s+TABLE/i.test(sql), 'must not create tables');
+    assert.ok(!/CREATE\s+(OR\s+REPLACE\s+)?FUNCTION/i.test(sql), 'must not create functions');
+    assert.ok(!/CREATE\s+PROCEDURE/i.test(sql), 'must not create procedures');
+    assert.ok(!/CREATE\s+TRIGGER/i.test(sql), 'must not create triggers');
+    assert.ok(!/CREATE\s+POLICY/i.test(sql), 'must not create policies');
+  });
+
+  it('does not execute DELETE, UPDATE, INSERT, or TRUNCATE', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(!/DELETE\s+FROM/i.test(sql), 'must not contain DELETE FROM');
+    assert.ok(!/UPDATE\s+private/i.test(sql), 'must not contain UPDATE on private table');
+    assert.ok(!/INSERT\s+INTO\s+private/i.test(sql), 'must not contain INSERT INTO private table');
+    assert.ok(!/TRUNCATE/i.test(sql), 'must not contain TRUNCATE');
+  });
+
+  it('does not drop tables or functions', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(!/DROP\s+TABLE/i.test(sql), 'must not drop tables');
+    assert.ok(!/DROP\s+FUNCTION/i.test(sql), 'must not drop functions');
+  });
+
+  it('verifies old constraint exists before dropping', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(
+      /pg_constraint/i.test(sql),
+      'must check pg_constraint for old constraint existence',
+    );
+    assert.ok(
+      /RAISE\s+EXCEPTION/i.test(sql),
+      'must raise exception if old constraint does not exist',
+    );
+  });
+
+  it('does not modify processing_requires_claim constraint', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(
+      !/phone_otp_login_challenges_v2_processing_requires_claim/i.test(sql),
+      'must not touch processing_requires_claim constraint',
+    );
+  });
+
+  it('previous challenge table migration is not modified', () => {
+    assert.ok(challengeMigration, 'phase5e_phone_otp_challenge_table migration must still exist');
+    const sql = readFileSync(join(migrationsDir, challengeMigration!), 'utf8');
+    assert.ok(
+      sql.includes('phone_otp_login_challenges_v2_non_processing_no_claim_required'),
+      'original migration must still contain the old tautological constraint name',
+    );
+  });
+
+  it('no formal or comment-only tests exist in fix section', () => {
     const testFile = readFileSync(join(root, 'tests', 'phase5', 'phase5PhoneOtpChallengeTable.test.ts'), 'utf8');
     const lines = testFile.split('\n');
     for (const line of lines) {
