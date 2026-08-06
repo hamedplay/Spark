@@ -13,6 +13,10 @@ import {
   hashOtp,
   adminClient,
 } from "../_shared/registration-security.ts";
+import {
+  authorizeGatewaySession,
+  revokeLocalSession,
+} from "../_shared/authorizeGatewaySession.ts";
 
 interface ClaimResult {
   ok?: boolean;
@@ -36,7 +40,8 @@ Deno.serve(async (req: Request) => {
     if (!contentType.includes("application/json")) return await json({ error: "Content-Type must be JSON" }, 400);
 
     const body = await req.text();
-    if (body.length > 8192) return await json({ error: "Body too large" }, 400);
+    const bodyBytes = new TextEncoder().encode(body).byteLength;
+    if (bodyBytes > 8192) return await json({ error: "Body too large" }, 400);
 
     const { challenge_id, otp, first_name, last_name, username, email, phone, password } = JSON.parse(body);
 
@@ -122,6 +127,23 @@ Deno.serve(async (req: Request) => {
         if (signInData.user.id !== claim.created_user_id) {
           return await json({ error: "کد نامعتبر است، منقضی شده یا امکان تکمیل ثبت‌نام وجود ندارد." }, 400);
         }
+
+        // Gateway session authorization
+        const accessToken = signInData.session.access_token;
+        const authResult = await authorizeGatewaySession({
+          adminClient: supabase,
+          accessToken,
+          expectedUserId: signInData.user.id,
+          loginMethod: "public_registration",
+          identifierHash: identityHash,
+          ipHash,
+        });
+
+        if (!authResult.authorized) {
+          await revokeLocalSession(accessToken);
+          return await json({ error: "ثبت‌نام یا ورود در حال حاضر در دسترس نیست" }, 503);
+        }
+
         return await json({ ok: true, session: signInData.session, user: signInData.user });
       }
 
@@ -205,6 +227,22 @@ Deno.serve(async (req: Request) => {
 
     if (signInErr || !signInData.session || !signInData.user || signInData.user.id !== userId) {
       return await json({ error: "حساب ساخته شد اما ورود خودکار ناموفق بود. لطفاً وارد شوید." }, 400);
+    }
+
+    // Gateway session authorization
+    const accessToken = signInData.session.access_token;
+    const authResult = await authorizeGatewaySession({
+      adminClient: supabase,
+      accessToken,
+      expectedUserId: userId,
+      loginMethod: "public_registration",
+      identifierHash: identityHash,
+      ipHash,
+    });
+
+    if (!authResult.authorized) {
+      await revokeLocalSession(accessToken);
+      return await json({ error: "حساب ایجاد شد اما ورود خودکار در حال حاضر در دسترس نیست" }, 503);
     }
 
     // Audit
