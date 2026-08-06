@@ -8,6 +8,10 @@ const migrationsDir = join(root, 'supabase', 'migrations');
 const migrationFiles = readdirSync(migrationsDir);
 
 const targetMigration = migrationFiles.find((f) =>
+  f.includes('phase5e_fix_phone_otp_gateway_aal_null_validation'),
+);
+
+const originalMigration = migrationFiles.find((f) =>
   f.includes('phase5e_phone_otp_gateway_finalization_rpc'),
 );
 
@@ -53,7 +57,14 @@ const challengeTableMigration = migrationFiles.find((f) =>
 
 describe('Phase 5E-C5B — Phone OTP Gateway Finalization RPC', () => {
   it('migration file exists on disk', () => {
-    assert.ok(targetMigration, 'phase5e_phone_otp_gateway_finalization_rpc migration must exist');
+    assert.ok(targetMigration, 'phase5e_fix_phone_otp_gateway_aal_null_validation migration must exist');
+  });
+
+  it('uses CREATE OR REPLACE FUNCTION', () => {
+    assert.ok(targetMigration);
+    const sql = readFileSync(join(migrationsDir, targetMigration!), 'utf8');
+    assert.ok(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.authorize_phone_otp_gateway_session_v1\s*\(/i.test(sql),
+      'must use CREATE OR REPLACE FUNCTION');
   });
 
   it('has exact function signature and return type', () => {
@@ -206,6 +217,26 @@ describe('Phase 5E-C5B — Phone OTP Gateway Finalization RPC', () => {
     assert.ok(/v_session_aal\s+NOT\s+IN\s*\(\s*'aal1'\s*,\s*'aal2'\s*,\s*'aal3'\s*\)/i.test(sql),
       'must check aal in aal1, aal2, aal3');
     assert.ok(/'error_code',\s*'INVALID_SESSION'/i.test(sql), 'must return INVALID_SESSION');
+  });
+
+  it('has explicit v_session_aal IS NULL check before NOT IN', () => {
+    assert.ok(targetMigration);
+    const sql = readFileSync(join(migrationsDir, targetMigration!), 'utf8');
+    const nullIdx = sql.search(/v_session_aal\s+IS\s+NULL/i);
+    const notInIdx = sql.search(/v_session_aal\s+NOT\s+IN\s*\(\s*'aal1'\s*,\s*'aal2'\s*,\s*'aal3'\s*\)/i);
+    assert.ok(nullIdx >= 0, 'must have v_session_aal IS NULL check');
+    assert.ok(notInIdx >= 0, 'must have v_session_aal NOT IN allowlist');
+    assert.ok(nullIdx < notInIdx, 'v_session_aal IS NULL must appear before NOT IN');
+  });
+
+  it('session with NULL aal fails to INVALID_SESSION', () => {
+    assert.ok(targetMigration);
+    const sql = readFileSync(join(migrationsDir, targetMigration!), 'utf8');
+    const sessionBlockMatch = sql.match(/IF\s+NOT\s+v_session_found[\s\S]*?THEN[\s\S]*?INVALID_SESSION/i);
+    assert.ok(sessionBlockMatch, 'must have session validation block returning INVALID_SESSION');
+    const sessionBlock = sessionBlockMatch![0];
+    assert.ok(/v_session_aal\s+IS\s+NULL/i.test(sessionBlock),
+      'session validation block must include v_session_aal IS NULL');
   });
 
   it('idempotency only for consumed challenge and exact gateway match', () => {
@@ -417,7 +448,32 @@ describe('Phase 5E-C5B — Phone OTP Gateway Finalization RPC', () => {
       'must not reference or modify authorize_password_gateway_session_v1');
   });
 
+  it('does not create or modify tables, columns, constraints, indexes, triggers, policies, or views', () => {
+    assert.ok(targetMigration);
+    const sql = readFileSync(join(migrationsDir, targetMigration!), 'utf8');
+    assert.ok(!/CREATE\s+TABLE/i.test(sql), 'must not create tables');
+    assert.ok(!/ALTER\s+TABLE.*ADD\s+COLUMN/i.test(sql), 'must not add columns');
+    assert.ok(!/ALTER\s+TABLE.*DROP\s+COLUMN/i.test(sql), 'must not drop columns');
+    assert.ok(!/ALTER\s+TABLE.*ADD\s+CONSTRAINT/i.test(sql), 'must not add constraints');
+    assert.ok(!/ALTER\s+TABLE.*DROP\s+CONSTRAINT/i.test(sql), 'must not drop constraints');
+    assert.ok(!/CREATE\s+INDEX/i.test(sql), 'must not create indexes');
+    assert.ok(!/DROP\s+INDEX/i.test(sql), 'must not drop indexes');
+    assert.ok(!/CREATE\s+TRIGGER/i.test(sql), 'must not create triggers');
+    assert.ok(!/CREATE\s+POLICY/i.test(sql), 'must not create policies');
+    assert.ok(!/DROP\s+POLICY/i.test(sql), 'must not drop policies');
+    assert.ok(!/CREATE\s+VIEW/i.test(sql), 'must not create views');
+    assert.ok(!/CREATE\s+OR\s+REPLACE\s+VIEW/i.test(sql), 'must not replace views');
+  });
+
+  it('has no DELETE or TRUNCATE', () => {
+    assert.ok(targetMigration);
+    const sql = readFileSync(join(migrationsDir, targetMigration!), 'utf8');
+    assert.ok(!/DELETE\s+FROM/i.test(sql), 'must not contain DELETE');
+    assert.ok(!/TRUNCATE/i.test(sql), 'must not contain TRUNCATE');
+  });
+
   it('previous migrations are not modified', () => {
+    assert.ok(originalMigration, 'original finalization RPC migration must still exist');
     assert.ok(gatewayMethodMigration, 'gateway method migration must still exist');
     assert.ok(releaseMigration, 'release migration must still exist');
     assert.ok(completeMigration, 'complete migration must still exist');
