@@ -27,3 +27,6 @@ verify_jwt = false
 
 [functions.check-phone-password-reset-runtime]
 verify_jwt = true
+
+[functions.verify-phone-login-otp-v2]
+verify_jwt = false
