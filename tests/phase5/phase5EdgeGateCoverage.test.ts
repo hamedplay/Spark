@@ -113,13 +113,49 @@ describe('Phase 5B-3 — Edge Gate Coverage', () => {
   });
 
   describe('check-phone-password-reset-runtime', () => {
-    it('imports requireFullAuthAccess and deniedResponse', () => {
+    it('imports requireFullAuthAccess only, not deniedResponse', () => {
       assert.ok(checkResetSrc.includes('requireFullAuthAccess'), 'must import requireFullAuthAccess');
-      assert.ok(checkResetSrc.includes('deniedResponse'), 'must import deniedResponse');
+      assert.ok(!checkResetSrc.includes('deniedResponse'), 'must not import or use deniedResponse');
     });
 
     it('does not call auth.getUser directly', () => {
       assert.ok(!checkResetSrc.includes('auth.getUser'), 'must not call auth.getUser directly');
+    });
+
+    it('does not use PHONE_LOGIN_ALLOWED_ORIGINS env var', () => {
+      assert.ok(!checkResetSrc.includes('PHONE_LOGIN_ALLOWED_ORIGINS'), 'must not reference PHONE_LOGIN_ALLOWED_ORIGINS');
+    });
+
+    it('calls get_phone_auth_config RPC', () => {
+      assert.ok(checkResetSrc.includes('get_phone_auth_config'), 'must call get_phone_auth_config RPC');
+    });
+
+    it('uses only allowed_origins for CORS', () => {
+      assert.ok(checkResetSrc.includes('allowed_origins'), 'must read allowed_origins from RPC');
+      assert.ok(!checkResetSrc.includes('pepper'), 'must not reference pepper');
+    });
+
+    it('uses exact match with allowedOrigins.includes(origin)', () => {
+      assert.ok(checkResetSrc.includes('allowedOrigins.includes(origin)'), 'must use exact origin match');
+      assert.ok(!checkResetSrc.includes('startsWith'), 'must not use startsWith');
+      assert.ok(!checkResetSrc.includes('endsWith'), 'must not use endsWith');
+    });
+
+    it('does not use wildcard CORS', () => {
+      assert.ok(!checkResetSrc.includes('"Access-Control-Allow-Origin": "*"'), 'must not use wildcard ACAO');
+      assert.ok(!checkResetSrc.includes("'Access-Control-Allow-Origin': '*'"), 'must not use wildcard ACAO');
+    });
+
+    it('does not use "null" as ACAO value', () => {
+      assert.ok(!checkResetSrc.includes('"null"'), 'must not use "null" as ACAO value');
+    });
+
+    it('includes Vary: Origin header', () => {
+      assert.ok(checkResetSrc.includes('"Vary": "Origin"'), 'must include Vary: Origin');
+    });
+
+    it('config error is RUNTIME_CONFIG_UNAVAILABLE', () => {
+      assert.ok(checkResetSrc.includes('RUNTIME_CONFIG_UNAVAILABLE'), 'must return RUNTIME_CONFIG_UNAVAILABLE on config error');
     });
 
     it('origin gate runs before auth gate', () => {
@@ -148,6 +184,10 @@ describe('Phase 5B-3 — Edge Gate Coverage', () => {
     it('checks is_admin and is_active via service role', () => {
       assert.ok(checkResetSrc.includes('is_admin'), 'must check is_admin');
       assert.ok(checkResetSrc.includes('is_active'), 'must check is_active');
+    });
+
+    it('builds AUTH_ACCESS_RESTRICTED response with local CORS', () => {
+      assert.ok(checkResetSrc.includes('AUTH_ACCESS_RESTRICTED'), 'must return AUTH_ACCESS_RESTRICTED');
     });
   });
 
