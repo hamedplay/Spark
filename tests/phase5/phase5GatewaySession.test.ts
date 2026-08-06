@@ -11,6 +11,10 @@ const foundationMigration = migrationFiles.find((f) =>
   f.includes('phase5b1_session_allowlist_foundation'),
 );
 
+const raceFixMigration = migrationFiles.find((f) =>
+  f.includes('phase5b1_fix_authorize_race_condition'),
+);
+
 const passwordLoginFn = readFileSync(
   join(root, 'supabase', 'functions', 'password-login', 'index.ts'),
   'utf8',
@@ -20,6 +24,10 @@ describe('Phase 5B-1 — Gateway Session Allowlist Foundation', () => {
 
   it('foundation migration file exists', () => {
     assert.ok(foundationMigration, 'phase5b1 foundation migration must exist');
+  });
+
+  it('race fix migration file exists', () => {
+    assert.ok(raceFixMigration, 'phase5b1 race fix migration must exist');
   });
 
   it('enforcement table created with enabled=false', () => {
@@ -78,32 +86,74 @@ describe('Phase 5B-1 — Gateway Session Allowlist Foundation', () => {
   });
 
   it('authorize RPC is granted only to service_role', () => {
-    assert.ok(foundationMigration);
-    const sql = readFileSync(join(migrationsDir, foundationMigration!), 'utf8');
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
     assert.ok(sql.includes('REVOKE EXECUTE ON FUNCTION\npublic.authorize_password_gateway_session_v1'), 'must revoke execute');
     assert.ok(sql.includes('FROM PUBLIC, anon, authenticated'), 'must revoke from public/anon/authenticated');
     assert.ok(sql.includes('TO service_role'), 'must grant to service_role only');
   });
 
   it('authorize RPC validates session existence in auth.sessions', () => {
-    assert.ok(foundationMigration);
-    const sql = readFileSync(join(migrationsDir, foundationMigration!), 'utf8');
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
     assert.ok(sql.includes('FROM auth.sessions\n    WHERE id = p_session_id AND user_id = p_user_id'), 'must check auth.sessions for session existence');
   });
 
-  it('authorize RPC rejects conflict with different user or method', () => {
-    assert.ok(foundationMigration);
-    const sql = readFileSync(join(migrationsDir, foundationMigration!), 'utf8');
-    assert.ok(sql.includes('v_existing_method'), 'must check existing method on conflict');
-    assert.ok(sql.includes('IF v_existing_method <> p_login_method THEN'), 'must reject different method');
-    assert.ok(sql.includes("RETURN jsonb_build_object('authorized', false)"), 'must return authorized=false on conflict');
+  it('authorize RPC uses INSERT with RETURNING session_id INTO v_inserted_session_id', () => {
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
+    assert.ok(sql.includes('RETURNING session_id\n  INTO v_inserted_session_id'), 'must use RETURNING session_id INTO v_inserted_session_id');
+    assert.ok(sql.includes('ON CONFLICT (session_id) DO NOTHING'), 'must use ON CONFLICT DO NOTHING');
   });
 
-  it('authorize RPC supports idempotent re-authorization', () => {
-    assert.ok(foundationMigration);
-    const sql = readFileSync(join(migrationsDir, foundationMigration!), 'utf8');
-    assert.ok(sql.includes('Idempotent success'), 'must have idempotent success path');
-    assert.ok(sql.includes("'authorized', true, 'session_id', p_session_id"), 'must return authorized=true for idempotent');
+  it('authorize RPC returns authorized=true when insert succeeds', () => {
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
+    assert.ok(sql.includes('IF v_inserted_session_id IS NOT NULL THEN'), 'must check v_inserted_session_id is not null');
+    assert.ok(sql.includes("'authorized', true,\n      'session_id', p_session_id"), 'must return authorized=true on successful insert');
+  });
+
+  it('authorize RPC re-reads user_id and login_method after conflict', () => {
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
+    assert.ok(sql.includes('SELECT user_id, login_method\n  INTO v_existing_user_id, v_existing_method'), 'must re-read user_id and login_method after conflict');
+    assert.ok(sql.includes('FROM private.password_gateway_session_authorizations\n  WHERE session_id = p_session_id'), 'must read from authorizations table on conflict');
+  });
+
+  it('authorize RPC succeeds on conflict with same user and method', () => {
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
+    assert.ok(sql.includes('IF v_existing_user_id = p_user_id AND v_existing_method = p_login_method THEN'), 'must check exact match of user_id and method');
+    assert.ok(sql.includes("'authorized', true,\n      'session_id', p_session_id"), 'must return authorized=true for matching conflict');
+  });
+
+  it('authorize RPC rejects conflict with different user or method', () => {
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
+    // The final return after all checks must be authorized=false
+    const lastAuthorizedFalse = sql.lastIndexOf("RETURN jsonb_build_object('authorized', false)");
+    const lastAuthorizedTrue = sql.lastIndexOf("'authorized', true");
+    assert.ok(lastAuthorizedFalse > lastAuthorizedTrue, 'final fallthrough must return authorized=false');
+  });
+
+  it('authorize RPC does not UPDATE existing authorization rows', () => {
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
+    assert.ok(!sql.includes('UPDATE private.password_gateway_session_authorizations'), 'must not UPDATE existing rows');
+    assert.ok(!sql.includes('SET identifier_hash'), 'must not update identifier_hash');
+    assert.ok(!sql.includes('SET ip_hash'), 'must not update ip_hash');
+  });
+
+  it('authorize RPC does not use pre-check before insert', () => {
+    assert.ok(raceFixMigration);
+    const sql = readFileSync(join(migrationsDir, raceFixMigration!), 'utf8');
+    // The old pattern had SELECT login_method INTO v_existing_method before INSERT
+    // The new pattern must not have a pre-check SELECT before the INSERT
+    const insertIdx = sql.indexOf('INSERT INTO private.password_gateway_session_authorizations');
+    const selectExistingIdx = sql.indexOf('SELECT user_id, login_method\n  INTO v_existing_user_id, v_existing_method');
+    assert.ok(insertIdx > -1, 'must have INSERT');
+    assert.ok(selectExistingIdx > -1, 'must have SELECT after conflict');
+    assert.ok(selectExistingIdx > insertIdx, 'SELECT for conflict resolution must come AFTER insert, not before');
   });
 
   it('gate function checks enforcement enabled flag', () => {
@@ -183,9 +233,19 @@ describe('Phase 5B-1 — Gateway Session Allowlist Foundation', () => {
   });
 
   it('no formal or comment-only tests exist in this file', () => {
-    // Verify this test file has real assertions by checking the test count
     const testFile = readFileSync(join(root, 'tests', 'phase5', 'phase5GatewaySession.test.ts'), 'utf8');
     const assertCount = (testFile.match(/assert\.ok\(/g) || []).length;
     assert.ok(assertCount > 20, 'must have substantial real assertions, not formal tests');
+    // Check no formal test exists by verifying every assert.ok has a real condition
+    const lines = testFile.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Skip lines that are string literals containing the description
+      if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+      // A formal test would be a line that is exactly assert.ok(true) with no message
+      if (/^assert\.ok\(\s*true\s*\)\s*;?\s*$/.test(trimmed)) {
+        assert.fail('must not contain formal assert.ok(true) test');
+      }
+    }
   });
 });
