@@ -4,6 +4,20 @@ import { supabase } from '../lib/supabase';
 import { normalizeIranPhone } from '../lib/phoneNormalize';
 import toast from 'react-hot-toast';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
+
+function isValidOtpTimer(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 30 && value <= 300;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
 type AuthMode = 'login' | 'register' | 'reset';
 type LoginMethod = 'username' | 'email' | 'phone';
 type LoginTab = 'password' | 'phone_otp';
@@ -181,6 +195,17 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const phoneOtpTabVisible = authConfig?.phone_login_canonical_enabled === true;
   const phoneOtpTabDisabled = authConfig?.phone_login_ready !== true;
 
+  // Auto-select the only usable login tab
+  useEffect(() => {
+    if (mode !== 'login') return;
+    if (!passwordTabVisible && phoneOtpTabVisible && !phoneOtpTabDisabled && loginTab !== 'phone_otp') {
+      setLoginTab('phone_otp');
+    }
+    if ((!phoneOtpTabVisible || phoneOtpTabDisabled) && passwordTabVisible && loginTab !== 'password') {
+      setLoginTab('password');
+    }
+  }, [mode, passwordTabVisible, phoneOtpTabVisible, phoneOtpTabDisabled, loginTab]);
+
   // ── Unified password login ──────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,9 +256,11 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       throw new Error('RATE_LIMITED');
     }
     if (res.status === 503) { toast.error('ورود پیامکی در دسترس نیست'); throw new Error('UNAVAILABLE'); }
-    if (!res.ok || !result.ok || !result.challenge_id ||
-        typeof result.retry_after_seconds !== 'number' ||
-        typeof result.expires_in_seconds !== 'number') {
+    if (!res.ok || result.ok !== true ||
+        !isValidUuid(result.challenge_id) ||
+        !isValidOtpTimer(result.retry_after_seconds) ||
+        !isValidOtpTimer(result.expires_in_seconds) ||
+        result.retry_after_seconds > result.expires_in_seconds) {
       toast.error('ورود پیامکی در دسترس نیست');
       throw new Error('UNAVAILABLE');
     }
@@ -297,7 +324,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         return;
       }
       if (res.status === 503) { toast.error('ورود پیامکی در دسترس نیست'); return; }
-      if (!res.ok || !result.access_token || !result.refresh_token) {
+      if (!res.ok || !isNonEmptyString(result.access_token) || !isNonEmptyString(result.refresh_token)) {
         toast.error('ورود پیامکی در دسترس نیست');
         return;
       }

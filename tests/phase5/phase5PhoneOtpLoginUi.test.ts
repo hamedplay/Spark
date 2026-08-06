@@ -185,4 +185,98 @@ test('Phase 5E-D4 — Phone OTP Login UI', async (t) => {
   await t.test('no placeholder assertions', () => {
     assert.ok(!/assert\.ok\(true\)/.test(src), 'no placeholder true assertions');
   });
+
+  await t.test('isValidUuid helper exists and validates UUID format', () => {
+    assert.ok(/function isValidUuid\(value: unknown\): value is string/.test(src), 'must declare isValidUuid with type guard');
+    assert.ok(/UUID_RE/.test(src), 'must define UUID regex');
+    assert.ok(/isValidUuid\(result\.challenge_id\)/.test(src), 'must validate challenge_id with isValidUuid');
+  });
+
+  await t.test('isValidOtpTimer helper exists and validates integer range 30-300', () => {
+    assert.ok(/function isValidOtpTimer\(value: unknown\): value is number/.test(src), 'must declare isValidOtpTimer with type guard');
+    assert.ok(/Number\.isInteger/.test(src), 'must check integer');
+    assert.ok(/>= 30/.test(src), 'must check min 30');
+    assert.ok(/<= 300/.test(src), 'must check max 300');
+    assert.ok(/isValidOtpTimer\(result\.retry_after_seconds\)/.test(src), 'must validate retry_after_seconds');
+    assert.ok(/isValidOtpTimer\(result\.expires_in_seconds\)/.test(src), 'must validate expires_in_seconds');
+  });
+
+  await t.test('invalid challenge_id is rejected', () => {
+    const reqSection = src.match(/request-phone-login-otp-v2[\s\S]*?setPhoneOtpStep\('otp'\)/)![0];
+    assert.ok(/result\.ok !== true/.test(reqSection), 'must check ok === true strictly');
+    assert.ok(/!isValidUuid\(result\.challenge_id\)/.test(reqSection), 'must reject invalid challenge_id');
+    assert.ok(/throw new Error\('UNAVAILABLE'\)/.test(reqSection), 'must throw on invalid response');
+  });
+
+  await t.test('negative, decimal, zero, or out-of-range timers are rejected', () => {
+    assert.ok(/Number\.isFinite/.test(src), 'must reject non-finite (NaN/Infinity)');
+    assert.ok(/Number\.isInteger/.test(src), 'must reject decimals');
+    assert.ok(/>= 30/.test(src), 'must reject < 30 (including zero/negative)');
+    assert.ok(/<= 300/.test(src), 'must reject > 300');
+  });
+
+  await t.test('retry_after_seconds > expires_in_seconds is rejected', () => {
+    assert.ok(/result\.retry_after_seconds > result\.expires_in_seconds/.test(src),
+      'must reject retry > expires');
+  });
+
+  await t.test('state only changes after fully valid response', () => {
+    const reqSection = src.match(/request-phone-login-otp-v2[\s\S]*?setPhoneOtpStep\('otp'\)/)![0];
+    const validationBlock = reqSection.match(/if \(!res\.ok[\s\S]*?throw new Error\('UNAVAILABLE'\);/);
+    assert.ok(validationBlock, 'must find validation block before state changes');
+    const beforeState = reqSection.indexOf(validationBlock![0]);
+    const stateChange = reqSection.indexOf('setPhoneOtpChallengeId');
+    assert.ok(stateChange > beforeState, 'state changes must come after validation block');
+  });
+
+  await t.test('non-string or empty tokens do not reach setSession', () => {
+    assert.ok(/function isNonEmptyString/.test(src), 'must declare isNonEmptyString helper');
+    assert.ok(/isNonEmptyString\(result\.access_token\)/.test(src), 'must validate access_token is non-empty string');
+    assert.ok(/isNonEmptyString\(result\.refresh_token\)/.test(src), 'must validate refresh_token is non-empty string');
+    const verifySection = src.match(/verify-phone-login-otp-v2[\s\S]*?onSuccess\(\)/)![0];
+    const checkIdx = verifySection.indexOf('isNonEmptyString');
+    const setSessionIdx = verifySection.indexOf('setSession');
+    assert.ok(checkIdx > -1 && setSessionIdx > -1, 'must have both check and setSession');
+    assert.ok(checkIdx < setSessionIdx, 'token check must come before setSession');
+  });
+
+  await t.test('auto-select only usable tab when password tab unavailable', () => {
+    assert.ok(/!passwordTabVisible && phoneOtpTabVisible && !phoneOtpTabDisabled/.test(src),
+      'must auto-select phone_otp when password unavailable and OTP ready');
+    assert.ok(/loginTab !== 'phone_otp'/.test(src), 'must avoid redundant tab set');
+  });
+
+  await t.test('auto-select password tab when OTP hidden or disabled', () => {
+    assert.ok(/\(!phoneOtpTabVisible \|\| phoneOtpTabDisabled\) && passwordTabVisible/.test(src),
+      'must auto-select password when OTP hidden or disabled');
+    assert.ok(/loginTab !== 'password'/.test(src), 'must avoid redundant tab set');
+  });
+
+  await t.test('disabled OTP tab is never auto-selected', () => {
+    const autoEffect = src.match(/useEffect\(\(\) => \{[\s\S]*?if \(mode !== 'login'\) return;[\s\S]*?\}, \[mode, passwordTabVisible, phoneOtpTabVisible, phoneOtpTabDisabled, loginTab\]\)/);
+    assert.ok(autoEffect, 'must have auto-tab useEffect with proper deps');
+    const block = autoEffect![0];
+    assert.ok(/!phoneOtpTabDisabled/.test(block), 'must check !phoneOtpTabDisabled before selecting phone_otp');
+    assert.ok(!/setLoginTab\('phone_otp'\)[\s\S]*?phoneOtpTabDisabled/.test(block.replace(/!phoneOtpTabDisabled && loginTab !== 'phone_otp'[\s\S]*?setLoginTab\('phone_otp'\);/, '')),
+      'must not select disabled OTP tab');
+  });
+
+  await t.test('request and verify V2, timers, resend, and error mapping preserved', () => {
+    assert.ok(/request-phone-login-otp-v2/.test(src), 'V2 request endpoint preserved');
+    assert.ok(/verify-phone-login-otp-v2/.test(src), 'V2 verify endpoint preserved');
+    assert.ok(/phoneOtpResendSeconds/.test(src), 'resend timer preserved');
+    assert.ok(/phoneOtpExpiresSeconds/.test(src), 'expiry timer preserved');
+    assert.ok(/handleResendPhoneOtp/.test(src), 'resend handler preserved');
+    assert.ok(/شماره موبایل نامعتبر/.test(src), 'request 400 error mapping preserved');
+    assert.ok(/کد اشتباه یا منقضی/.test(src), 'verify 401 error mapping preserved');
+  });
+
+  await t.test('registration and recovery unchanged', () => {
+    assert.ok(/request-public-registration-otp/.test(src), 'registration request preserved');
+    assert.ok(/verify-public-registration-otp/.test(src), 'registration verify preserved');
+    assert.ok(/request-phone-password-reset-otp/.test(src), 'recovery request preserved');
+    assert.ok(/complete-phone-password-reset/.test(src), 'recovery complete preserved');
+    assert.ok(/regStep/.test(src), 'registration step state preserved');
+    assert.ok(/recoveryStep/.test(src), 'recovery step state preserved');
+  });
 });
