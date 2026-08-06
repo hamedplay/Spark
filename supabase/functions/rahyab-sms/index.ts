@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  requireFullAuthAccess,
+  deniedResponse,
+} from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -179,11 +183,12 @@ function adminClient() {
  * Validates the caller. Accepts two token forms:
  *  1. SUPABASE_SERVICE_ROLE_KEY — trusted internal service-to-service call
  *     (used when send-sms proxies here on behalf of an authenticated admin).
- *  2. A valid Supabase user JWT belonging to an active admin.
+ *  2. A valid Supabase user JWT belonging to an active admin (via centralized gate).
  *
  * Returns the authorization level or null if unauthorised.
  */
-async function authorize(authHeader: string | null): Promise<"service" | "admin" | null> {
+async function authorize(req: Request): Promise<"service" | "admin" | null> {
+  const authHeader = req.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
 
@@ -200,14 +205,16 @@ async function authorize(authHeader: string | null): Promise<"service" | "admin"
     }
   }
 
-  // 2. Validate as an admin user JWT
+  // 2. Validate as an admin user via centralized auth gate
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return null;
+  const callerUserId = authResult.userId!;
+
   const supabase = adminClient();
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return null;
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_admin, is_active")
-    .eq("user_id", user.id)
+    .eq("user_id", callerUserId)
     .maybeSingle();
   if (!profile?.is_active || !profile?.is_admin) return null;
   return "admin";
@@ -220,8 +227,8 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ── Authentication & authorisation ──────────────────────────────────────
-    const callerType = await authorize(req.headers.get("Authorization"));
-    if (!callerType) return json({ ok: false, error: "Unauthorized" }, 401);
+    const callerType = await authorize(req);
+    if (!callerType) return deniedResponse();
 
     const supabase = adminClient();
 

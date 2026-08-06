@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  requireFullAuthAccess,
+  deniedResponse,
+} from "../_shared/requireFullAuthAccess.ts";
 
 // Daily report edge function — sends daily management meeting summaries
 const corsHeaders = {
@@ -200,7 +204,7 @@ function timingSafeCompare(a: string, b: string): boolean {
 
 // ─── Authorization ───────────────────────────────────────────────────────────
 async function authorize(
-  authHeader: string | null,
+  req: Request,
   cronSecretHeader: string | null,
 ): Promise<"cron" | "admin" | null> {
   // 1. X-Cron-Secret header — preferred for VPS cron / systemd
@@ -216,6 +220,7 @@ async function authorize(
     if (data === true) return "cron";
   }
 
+  const authHeader = req.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
 
@@ -223,22 +228,20 @@ async function authorize(
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   if (serviceKey.length > 0 && timingSafeCompare(token, serviceKey)) return "cron";
 
-  // 3. Anon key — trusted as cron caller (for pg_cron via pg_net)
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  if (anonKey.length > 0 && timingSafeCompare(token, anonKey)) return "cron";
-
-  // 4. Legacy CRON_SECRET env var
+  // 3. Legacy CRON_SECRET env var
   const legacyCronSecret = Deno.env.get("CRON_SECRET") ?? "";
   if (legacyCronSecret.length > 0 && timingSafeCompare(token, legacyCronSecret)) return "cron";
 
-  // 5. Admin JWT check
+  // 4. Admin JWT via centralized auth gate
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return null;
+  const callerUserId = authResult.userId!;
+
   const supabase = adminClient();
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return null;
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_admin, is_active")
-    .eq("user_id", user.id)
+    .eq("user_id", callerUserId)
     .maybeSingle();
   if (!profile?.is_active || !profile?.is_admin) return null;
   return "admin";
@@ -361,9 +364,9 @@ Deno.serve(async (req: Request) => {
   // ── Auth ──
   // X-Cron-Secret header for VPS cron / systemd; Authorization Bearer for admin UI
   const cronSecretHeader = req.headers.get("x-cron-secret") || req.headers.get("X-Cron-Secret");
-  const callerType = await authorize(req.headers.get("Authorization"), cronSecretHeader);
+  const callerType = await authorize(req, cronSecretHeader);
 
-  if (!callerType) return json({ ok: false, error: "Unauthorized" }, 401);
+  if (!callerType) return deniedResponse();
 
   try {
     const supabase = adminClient();

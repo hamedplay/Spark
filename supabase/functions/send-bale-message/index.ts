@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import {
+  requireFullAuthAccess,
+  deniedResponse,
+} from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,19 +21,10 @@ function json(body: unknown, status = 200) {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
-  // ── Authentication ──────────────────────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ ok: false, error: "احراز هویت لازم است" }, 401);
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: { user }, error: authErr } = await userClient.auth.getUser();
-  if (authErr || !user) return json({ ok: false, error: "دسترسی غیرمجاز" }, 401);
+  const callerUserId = authResult.userId!;
 
   // ── Parse body ──────────────────────────────────────────────────────────────
   let body: { userId?: string; text?: string };
@@ -43,14 +38,15 @@ Deno.serve(async (req: Request) => {
   if (!userId || typeof userId !== "string") return json({ ok: false, error: "userId لازم است" }, 400);
   if (!text || typeof text !== "string") return json({ ok: false, error: "text لازم است" }, 400);
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(supabaseUrl, serviceKey);
 
   // ── Authorization: caller must be admin OR in the same organization ─────────
-  // Fetch caller's profile
   const { data: callerProfile, error: callerErr } = await admin
     .from("profiles")
     .select("is_admin, is_active, organization")
-    .eq("user_id", user.id)
+    .eq("user_id", callerUserId)
     .maybeSingle();
 
   if (callerErr || !callerProfile) {

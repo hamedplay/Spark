@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import {
+  requireFullAuthAccess,
+  deniedResponse,
+} from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,31 +26,23 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return json({ error: "Unauthorized" }, 401);
-  }
-  const token = authHeader.slice("Bearer ".length).trim();
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
+
+  const callerUserId = authResult.userId!;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-
-  // Verify user is admin
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-  const { data: userData, error: authErr } = await userClient.auth.getUser(token);
-  if (authErr || !userData?.user) {
-    return json({ error: "Unauthorized" }, 401);
-  }
-
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // Check admin via RPC
-  const { data: isAdmin, error: adminErr } = await userClient.rpc("is_current_user_admin");
-  if (adminErr || !isAdmin) {
-    return json({ error: "Admin required" }, 403);
+  const { data: profile, error: profileErr } = await adminClient
+    .from("profiles")
+    .select("is_admin, is_active")
+    .eq("user_id", callerUserId)
+    .maybeSingle();
+
+  if (profileErr || !profile || !profile.is_active || !profile.is_admin) {
+    return json({ error: "ADMIN_REQUIRED" }, 403);
   }
 
   let body: { max_age_hours?: number };

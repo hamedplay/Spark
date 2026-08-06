@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  requireFullAuthAccess,
+  deniedResponse,
+} from "../_shared/requireFullAuthAccess.ts";
 
 function corsHeaders(allowedOrigin: string | null): Record<string, string> {
   return {
@@ -38,6 +42,12 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  // ── Centralized auth gate ──────────────────────────────────────────────────
+  const authResult = await requireFullAuthAccess(req);
+  if (!authResult.ok) return deniedResponse();
+
+  const callerUserId = authResult.userId!;
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -45,25 +55,11 @@ Deno.serve(async (req: Request) => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    // 1. Verify JWT from Authorization header
-    const authHeader = req.headers.get("Authorization") || "";
-    const token = authHeader.replace("Bearer ", "");
-    if (!token) {
-      return new Response(JSON.stringify({ ok: false, error: "NO_TOKEN" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...cors } });
-    }
-
-    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
-    if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ ok: false, error: "INVALID_TOKEN" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...cors } });
-    }
-
-    // 2. Check profile is active and is_admin=true
+    // Check profile is active and is_admin=true
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("is_admin, is_active")
-      .eq("user_id", userData.user.id)
+      .eq("user_id", callerUserId)
       .maybeSingle();
 
     if (profileErr || !profile || !profile.is_active || !profile.is_admin) {
@@ -71,18 +67,18 @@ Deno.serve(async (req: Request) => {
         { status: 403, headers: { "Content-Type": "application/json", ...cors } });
     }
 
-    // 3. Check PHONE_PASSWORD_RESET_SECRET by byte length (not string length)
+    // Check PHONE_PASSWORD_RESET_SECRET by byte length (not string length)
     const secret = Deno.env.get("PHONE_PASSWORD_RESET_SECRET") || "";
     const secretBytes = new TextEncoder().encode(secret).byteLength;
     const secretConfigured = secretBytes >= 32;
 
-    // 4. Check PHONE_LOGIN_ALLOWED_ORIGINS exists
+    // Check PHONE_LOGIN_ALLOWED_ORIGINS exists
     const originsConfigured = allowedStr.length > 0 && allowed.length > 0;
 
-    // 5. Compute runtime ready
+    // Compute runtime ready
     const runtimeReady = secretConfigured && originsConfigured;
 
-    // 6. Update config securely with select
+    // Update config securely with select
     const { data: updatedRows, error: updateError } = await supabase
       .from("system_config")
       .update({ value: runtimeReady ? "true" : "false" })
@@ -102,7 +98,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 7. Re-read config to confirm it matches runtimeReady
+    // Re-read config to confirm it matches runtimeReady
     const { data: confirmRows } = await supabase
       .from("system_config")
       .select("value")
@@ -123,7 +119,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 8. Return only status — no secret values or full origins
+    // Return only status — no secret values or full origins
     return new Response(JSON.stringify({
       ok: true,
       secret_configured: secretConfigured,
