@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 
 type AuthMode = 'login' | 'register' | 'reset';
 type LoginMethod = 'username' | 'email' | 'phone';
+type LoginTab = 'password' | 'phone_otp';
+type PhoneOtpStep = 'phone' | 'otp';
 type PasswordRecoveryStep = 'phone' | 'otp' | 'new_password' | 'success';
 
 interface AuthPageProps {
@@ -39,6 +41,7 @@ interface PublicLoginMethods {
 
 export function AuthPage({ onSuccess }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>('login');
+  const [loginTab, setLoginTab] = useState<LoginTab>('password');
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
@@ -89,7 +92,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
           phone_login: row?.phone_login === true,
         };
         setLoginMethods(methods);
-        // Pick first active method
         if (methods.username_login) setLoginMethod('username');
         else if (methods.email_login) setLoginMethod('email');
         else if (methods.phone_login) setLoginMethod('phone');
@@ -101,6 +103,56 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // ── Phone OTP login state ──────────────────────────────────────────────────
+  const [phoneOtpStep, setPhoneOtpStep] = useState<PhoneOtpStep>('phone');
+  const [phoneOtpPhone, setPhoneOtpPhone] = useState('');
+  const [phoneOtpCode, setPhoneOtpCode] = useState('');
+  const [phoneOtpChallengeId, setPhoneOtpChallengeId] = useState<string | null>(null);
+  const [phoneOtpResendSeconds, setPhoneOtpResendSeconds] = useState(0);
+  const [phoneOtpExpiresSeconds, setPhoneOtpExpiresSeconds] = useState(0);
+  const [phoneOtpLoading, setPhoneOtpLoading] = useState(false);
+  const phoneOtpRequestRef = useRef(false);
+  const phoneOtpVerifyRef = useRef(false);
+
+  // Resend timer
+  useEffect(() => {
+    if (phoneOtpResendSeconds <= 0) return;
+    const t = setTimeout(() => setPhoneOtpResendSeconds(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [phoneOtpResendSeconds]);
+
+  // Expiry timer
+  useEffect(() => {
+    if (phoneOtpExpiresSeconds <= 0) return;
+    const t = setTimeout(() => setPhoneOtpExpiresSeconds(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [phoneOtpExpiresSeconds]);
+
+  // Expiry reached → clear challenge, go back to phone step
+  useEffect(() => {
+    if (phoneOtpExpiresSeconds === 0 && phoneOtpStep === 'otp' && phoneOtpChallengeId) {
+      setPhoneOtpChallengeId(null);
+      setPhoneOtpCode('');
+      setPhoneOtpStep('phone');
+      toast.error('کد تأیید منقضی شده است. لطفاً دوباره درخواست ارسال کد کنید.');
+    }
+  }, [phoneOtpExpiresSeconds, phoneOtpStep, phoneOtpChallengeId]);
+
+  // Clear OTP state when leaving phone OTP tab or changing mode
+  useEffect(() => {
+    if (mode !== 'login' || loginTab !== 'phone_otp') {
+      setPhoneOtpStep('phone');
+      setPhoneOtpPhone('');
+      setPhoneOtpCode('');
+      setPhoneOtpChallengeId(null);
+      setPhoneOtpResendSeconds(0);
+      setPhoneOtpExpiresSeconds(0);
+      setPhoneOtpLoading(false);
+      phoneOtpRequestRef.current = false;
+      phoneOtpVerifyRef.current = false;
+    }
+  }, [mode, loginTab]);
 
   // ── Password recovery state (scoped challenge, no Supabase session) ─
   const [recoveryStep, setRecoveryStep] = useState<PasswordRecoveryStep>('phone');
@@ -124,6 +176,10 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   if (loginMethods?.username_login) activeMethods.push('username');
   if (loginMethods?.email_login) activeMethods.push('email');
   if (loginMethods?.phone_login) activeMethods.push('phone');
+
+  const passwordTabVisible = activeMethods.length > 0;
+  const phoneOtpTabVisible = authConfig?.phone_login_canonical_enabled === true;
+  const phoneOtpTabDisabled = authConfig?.phone_login_ready !== true;
 
   // ── Unified password login ──────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
@@ -157,6 +213,116 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     } catch {
       toast.error('در حال حاضر امکان ورود وجود ندارد.');
     } finally { setLoading(false); }
+  };
+
+  // ── Phone OTP login: request ─────────────────────────────────────────────────
+  const requestPhoneOtp = async (phone: string): Promise<void> => {
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-phone-login-otp-v2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+      body: JSON.stringify({ phone }),
+    });
+    const result = await res.json().catch(() => ({}));
+
+    if (res.status === 400) { toast.error('شماره موبایل نامعتبر است'); throw new Error('INVALID_PHONE'); }
+    if (res.status === 429) {
+      const retry = typeof result.retry_after_seconds === 'number' ? result.retry_after_seconds : 60;
+      toast.error(`محدودیت درخواست. ${retry} ثانیه بعد تلاش کنید.`);
+      throw new Error('RATE_LIMITED');
+    }
+    if (res.status === 503) { toast.error('ورود پیامکی در دسترس نیست'); throw new Error('UNAVAILABLE'); }
+    if (!res.ok || !result.ok || !result.challenge_id ||
+        typeof result.retry_after_seconds !== 'number' ||
+        typeof result.expires_in_seconds !== 'number') {
+      toast.error('ورود پیامکی در دسترس نیست');
+      throw new Error('UNAVAILABLE');
+    }
+
+    setPhoneOtpChallengeId(result.challenge_id);
+    setPhoneOtpResendSeconds(result.retry_after_seconds);
+    setPhoneOtpExpiresSeconds(result.expires_in_seconds);
+    setPhoneOtpStep('otp');
+    setPhoneOtpCode('');
+    toast.success('کد تأیید ارسال شد.');
+  };
+
+  const handleRequestPhoneOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (phoneOtpRequestRef.current) return;
+    if (!phoneOtpPhone.trim()) { toast.error('شماره موبایل را وارد کنید'); return; }
+    phoneOtpRequestRef.current = true;
+    setPhoneOtpLoading(true);
+    try {
+      await requestPhoneOtp(phoneOtpPhone.trim());
+    } catch { /* toast already shown */ }
+    finally { setPhoneOtpLoading(false); phoneOtpRequestRef.current = false; }
+  };
+
+  const handleResendPhoneOtp = async () => {
+    if (phoneOtpRequestRef.current) return;
+    if (phoneOtpResendSeconds > 0 || phoneOtpExpiresSeconds <= 0 || phoneOtpLoading) return;
+    phoneOtpRequestRef.current = true;
+    setPhoneOtpLoading(true);
+    try {
+      await requestPhoneOtp(phoneOtpPhone.trim());
+    } catch { /* toast already shown */ }
+    finally { setPhoneOtpLoading(false); phoneOtpRequestRef.current = false; }
+  };
+
+  // ── Phone OTP login: verify ──────────────────────────────────────────────────
+  const handleVerifyPhoneOtp = async () => {
+    if (phoneOtpVerifyRef.current) return;
+    if (!phoneOtpCode.trim() || !/^\d{6}$/.test(phoneOtpCode)) { toast.error('کد تأیید باید دقیقاً ۶ رقم باشد'); return; }
+    if (!phoneOtpChallengeId) { toast.error('خطا در فرآیند ورود. لطفاً دوباره تلاش کنید.'); return; }
+    phoneOtpVerifyRef.current = true;
+    setPhoneOtpLoading(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-phone-login-otp-v2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+        body: JSON.stringify({
+          challenge_id: phoneOtpChallengeId,
+          phone: phoneOtpPhone.trim(),
+          otp: phoneOtpCode,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+
+      if (res.status === 400) { toast.error('اطلاعات یا کد نامعتبر است'); return; }
+      if (res.status === 401) { toast.error('کد اشتباه یا منقضی شده است'); return; }
+      if (res.status === 409) { toast.error('درخواست قبلی در حال پردازش است. لطفاً صبر کنید.'); return; }
+      if (res.status === 429) {
+        const retry = typeof result.retry_after_seconds === 'number' ? result.retry_after_seconds : 60;
+        toast.error(`تلاش بیش از حد. ${retry} ثانیه بعد تلاش کنید.`);
+        return;
+      }
+      if (res.status === 503) { toast.error('ورود پیامکی در دسترس نیست'); return; }
+      if (!res.ok || !result.access_token || !result.refresh_token) {
+        toast.error('ورود پیامکی در دسترس نیست');
+        return;
+      }
+
+      const { data: sessData, error: sessErr } = await supabase.auth.setSession({
+        access_token: result.access_token,
+        refresh_token: result.refresh_token,
+      });
+      if (sessErr || !sessData.user) { toast.error('ورود پیامکی در دسترس نیست'); return; }
+
+      setPhoneOtpChallengeId(null);
+      setPhoneOtpCode('');
+      setPhoneOtpStep('phone');
+      onSuccess();
+    } catch {
+      toast.error('ورود پیامکی در دسترس نیست');
+    } finally { setPhoneOtpLoading(false); phoneOtpVerifyRef.current = false; }
+  };
+
+  const handleChangePhoneNumber = () => {
+    setPhoneOtpStep('phone');
+    setPhoneOtpCode('');
+    setPhoneOtpChallengeId(null);
+    setPhoneOtpResendSeconds(0);
+    setPhoneOtpExpiresSeconds(0);
   };
 
   // ── Register ─────────────────────────────────────────────────────────────────
@@ -360,6 +526,11 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     phone: '09123456789',
   };
 
+  const maskPhone = (phone: string): string => {
+    if (phone.length < 4) return phone;
+    return phone.slice(0, 4) + '***' + phone.slice(-3);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-gray-50 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 px-4" dir="rtl">
       <div className="w-full max-w-5xl flex flex-col lg:flex-row rounded-3xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800">
@@ -413,40 +584,58 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
               {mode === 'login' ? 'ورود به سیستم' : mode === 'register' ? 'ثبت‌نام' : 'بازیابی رمز'}
             </h2>
 
-            {/* Login method tabs (only on login) */}
-            {mode === 'login' && activeMethods.length > 0 && (
+            {/* ── Main login tabs ─────────────────────────────────────────── */}
+            {mode === 'login' && (passwordTabVisible || phoneOtpTabVisible) && (
               <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 mb-6">
-                {activeMethods.includes('username') && (
-                  <button onClick={() => setLoginMethod('username')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'username' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
-                    <User className="w-4 h-4" /> نام کاربری
+                {passwordTabVisible && (
+                  <button onClick={() => setLoginTab('password')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginTab === 'password' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+                    <Lock className="w-4 h-4" /> ورود با رمز عبور
                   </button>
                 )}
-                {activeMethods.includes('email') && (
-                  <button onClick={() => setLoginMethod('email')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'email' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
-                    <Mail className="w-4 h-4" /> ایمیل
-                  </button>
-                )}
-                {activeMethods.includes('phone') && (
-                  <button onClick={() => setLoginMethod('phone')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginMethod === 'phone' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
-                    <Smartphone className="w-4 h-4" /> موبایل
+                {phoneOtpTabVisible && (
+                  <button onClick={() => { if (!phoneOtpTabDisabled) setLoginTab('phone_otp'); }}
+                    disabled={phoneOtpTabDisabled}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${loginTab === 'phone_otp' ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' : phoneOtpTabDisabled ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' : 'text-gray-500 dark:text-gray-400'}`}>
+                    <Smartphone className="w-4 h-4" /> ورود با کد پیامکی{phoneOtpTabDisabled ? ' (غیرفعال)' : ''}
                   </button>
                 )}
               </div>
             )}
 
-            {/* No active methods */}
-            {mode === 'login' && activeMethods.length === 0 && (
+            {/* No active methods and no OTP tab */}
+            {mode === 'login' && !passwordTabVisible && !phoneOtpTabVisible && (
               <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl p-4 mb-6">
                 <p className="text-sm text-gray-500 dark:text-gray-400 text-center">ورود در حال حاضر در دسترس نیست.</p>
               </div>
             )}
 
-            {/* ── Unified password login form ────────────────────────────────── */}
-            {mode === 'login' && activeMethods.length > 0 && (
+            {/* ── Password login tab ─────────────────────────────────────── */}
+            {mode === 'login' && loginTab === 'password' && passwordTabVisible && (
               <form onSubmit={handleLogin} className="space-y-4">
+                {/* Internal identifier-type selector */}
+                {activeMethods.length > 1 && (
+                  <div className="flex gap-2 mb-2">
+                    {activeMethods.includes('username') && (
+                      <button type="button" onClick={() => setLoginMethod('username')}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${loginMethod === 'username' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                        نام کاربری
+                      </button>
+                    )}
+                    {activeMethods.includes('email') && (
+                      <button type="button" onClick={() => setLoginMethod('email')}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${loginMethod === 'email' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                        ایمیل
+                      </button>
+                    )}
+                    {activeMethods.includes('phone') && (
+                      <button type="button" onClick={() => setLoginMethod('phone')}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${loginMethod === 'phone' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                        موبایل
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div>
                   <label htmlFor="login-identifier" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{methodLabel[loginMethod]}</label>
                   <div className="relative">
@@ -479,6 +668,57 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                   <button type="button" onClick={() => setMode('register')} className="text-teal-600 dark:text-teal-400 hover:underline">ثبت‌نام</button>
                 </div>
               </form>
+            )}
+
+            {/* ── Phone OTP login tab: phone step ─────────────────────────── */}
+            {mode === 'login' && loginTab === 'phone_otp' && phoneOtpTabVisible && phoneOtpStep === 'phone' && (
+              <form onSubmit={handleRequestPhoneOtp} className="space-y-4">
+                <div>
+                  <label htmlFor="otp-phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">شماره موبایل</label>
+                  <div className="relative">
+                    <input id="otp-phone" type="tel" required value={phoneOtpPhone} onChange={e => setPhoneOtpPhone(e.target.value)}
+                      placeholder="09123456789" className={inp + ' pl-10'} dir="ltr" disabled={phoneOtpLoading} />
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
+                  </div>
+                </div>
+                <button type="submit" disabled={phoneOtpLoading || !phoneOtpPhone.trim()}
+                  className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
+                  {phoneOtpLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Smartphone className="w-5 h-5" />ارسال کد</>}
+                </button>
+                <div className="flex justify-between text-sm pt-1">
+                  <button type="button" onClick={() => setMode('reset')} className="text-teal-600 dark:text-teal-400 hover:underline">فراموشی رمز</button>
+                  <button type="button" onClick={() => setMode('register')} className="text-teal-600 dark:text-teal-400 hover:underline">ثبت‌نام</button>
+                </div>
+              </form>
+            )}
+
+            {/* ── Phone OTP login tab: OTP step ───────────────────────────── */}
+            {mode === 'login' && loginTab === 'phone_otp' && phoneOtpTabVisible && phoneOtpStep === 'otp' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">کد تأیید به شماره {maskPhone(phoneOtpPhone)} ارسال شد.</p>
+                <div>
+                  <label htmlFor="otp-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">کد تأیید</label>
+                  <input id="otp-code" type="text" inputMode="numeric" maxLength={6} value={phoneOtpCode}
+                    onChange={e => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="کد ۶ رقمی" className={inp + ' text-center text-xl tracking-[0.5em] font-mono'} dir="ltr" disabled={phoneOtpLoading} />
+                </div>
+                {phoneOtpExpiresSeconds > 0 && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
+                    زمان باقی‌مانده: {Math.floor(phoneOtpExpiresSeconds / 60)}:{String(phoneOtpExpiresSeconds % 60).padStart(2, '0')}
+                  </p>
+                )}
+                <button onClick={handleVerifyPhoneOtp} disabled={phoneOtpLoading || phoneOtpCode.length !== 6}
+                  className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50">
+                  {phoneOtpLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowRight className="w-5 h-5" />تأیید و ورود</>}
+                </button>
+                <button onClick={handleResendPhoneOtp} disabled={phoneOtpResendSeconds > 0 || phoneOtpExpiresSeconds <= 0 || phoneOtpLoading}
+                  className="w-full text-sm text-teal-600 dark:text-teal-400 disabled:text-gray-400 py-2 transition-colors">
+                  {phoneOtpResendSeconds > 0 ? `ارسال مجدد پس از ${phoneOtpResendSeconds} ثانیه` : 'ارسال مجدد کد'}
+                </button>
+                <button type="button" onClick={handleChangePhoneNumber} className="w-full text-sm text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors py-2">
+                  تغییر شماره
+                </button>
+              </div>
             )}
 
             {/* ── Register ─────────────────────────────────────── */}
