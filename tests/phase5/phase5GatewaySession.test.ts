@@ -361,3 +361,168 @@ describe('Phase 5C-2 — Gateway Authorization Session FK Cleanup', () => {
       'must not touch authorize_password_gateway_session_v1');
   });
 });
+
+describe('Phase 5D — Phone Password Login Resolver Migration', () => {
+  const resolverMigration = migrationFiles.find((f) =>
+    f.includes('phase5d_phone_password_login_resolver'),
+  );
+
+  it('phase5d resolver migration file exists on disk', () => {
+    assert.ok(resolverMigration, 'phase5d_phone_password_login_resolver migration must exist');
+  });
+
+  it('creates resolve_phone_password_login_v1 RPC', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(sql.includes('resolve_phone_password_login_v1'), 'must create resolve_phone_password_login_v1');
+  });
+
+  it('RPC returns only user_id', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(sql.includes('RETURNS TABLE(user_id uuid)'), 'must return only user_id');
+  });
+
+  it('RPC is SECURITY DEFINER with empty search_path', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(/SECURITY\s+DEFINER/i.test(sql), 'must be SECURITY DEFINER');
+    assert.ok(/search_path\s*TO\s*''/i.test(sql), 'must have empty search_path');
+  });
+
+  it('RPC is STABLE', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(/STABLE/i.test(sql), 'must be STABLE');
+  });
+
+  it('RPC validates canonical phone format ^989[0-9]{9}
+, () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(sql.includes('^989[0-9]{9}
+), 'must validate canonical phone format');
+  });
+
+  it('RPC resolves from public.profiles with normalize_iran_phone_sql', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(sql.includes('public.profiles'), 'must query public.profiles');
+    assert.ok(sql.includes('public.normalize_iran_phone_sql'), 'must use normalize_iran_phone_sql');
+    assert.ok(sql.includes('p.phone IS NOT NULL'), 'must check phone IS NOT NULL');
+  });
+
+  it('RPC resolves from auth.users with normalize_iran_phone_sql and email check', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(sql.includes('auth.users'), 'must query auth.users');
+    assert.ok(sql.includes('u.phone IS NOT NULL'), 'must check phone IS NOT NULL in auth.users');
+    assert.ok(sql.includes('u.email IS NOT NULL'), 'must check email IS NOT NULL');
+    assert.ok(sql.includes("btrim(u.email) <> ''"), 'must check btrim(email) is not empty');
+  });
+
+  it('RPC requires exactly one profile match', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(sql.includes('IF NOT FOUND'), 'must check NOT FOUND');
+    assert.ok(/> 1/.test(sql), 'must check count > 1 for profiles');
+  });
+
+  it('RPC requires exactly one auth.users match', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(/> 1/.test(sql), 'must check count > 1 for auth.users');
+  });
+
+  it('RPC requires profile and auth user IDs to match', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(sql.includes('IS DISTINCT FROM'), 'must check user IDs match');
+  });
+
+  it('RPC does not return email, phone, or profile data', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(!/RETURN\s+QUERY\s+SELECT.*email/i.test(sql), 'must not return email');
+    assert.ok(!/RETURN\s+QUERY\s+SELECT.*phone/i.test(sql), 'must not return phone');
+    assert.ok(!/RETURN\s+QUERY\s+SELECT.*\*/i.test(sql), 'must not return all columns');
+  });
+
+  it('RPC revokes execute from PUBLIC, anon, authenticated', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(/REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.resolve_phone_password_login_v1\(text\)\s+FROM\s+PUBLIC,\s*anon,\s*authenticated/i.test(sql),
+      'must revoke execute from PUBLIC, anon, authenticated');
+  });
+
+  it('RPC grants execute only to service_role', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(/GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.resolve_phone_password_login_v1\(text\)\s+TO\s+service_role/i.test(sql),
+      'must grant execute to service_role');
+  });
+
+  it('RPC does not contain DELETE, TRUNCATE, DROP TABLE, or UPDATE', () => {
+    assert.ok(resolverMigration);
+    const sql = readFileSync(join(migrationsDir, resolverMigration!), 'utf8');
+    assert.ok(!/DELETE\s+FROM/i.test(sql), 'must not contain DELETE FROM');
+    assert.ok(!/TRUNCATE/i.test(sql), 'must not contain TRUNCATE');
+    assert.ok(!/DROP\s+TABLE/i.test(sql), 'must not contain DROP TABLE');
+    assert.ok(!/UPDATE\s+/i.test(sql), 'must not contain UPDATE');
+  });
+
+  it('password-login calls resolve_phone_password_login_v1 RPC in phone branch', () => {
+    assert.ok(passwordLoginFn.includes('resolve_phone_password_login_v1'),
+      'must call resolve_phone_password_login_v1 RPC');
+  });
+
+  it('password-login calls admin.auth.admin.getUserById for phone resolution', () => {
+    assert.ok(passwordLoginFn.includes('getUserById'),
+      'must call getUserById for phone-to-email resolution');
+  });
+
+  it('password-login signs in with email for phone method, not phone field', () => {
+    assert.ok(!passwordLoginFn.includes('phone: signInIdentifier'),
+      'must not use phone: signInIdentifier');
+    assert.ok(passwordLoginFn.includes('email: signInIdentifier'),
+      'must use email: signInIdentifier for all methods');
+  });
+
+  it('password-login still returns login_method as phone for phone method', () => {
+    assert.ok(passwordLoginFn.includes('login_method: method'),
+      'must return login_method as the original method');
+  });
+
+  it('password-login identifier hash uses canonical phone for phone method', () => {
+    const hashIdx = passwordLoginFn.indexOf('password-login|identifier|${method}|${canonicalIdentifier}');
+    assert.ok(hashIdx > -1, 'must build identifier hash from method and canonicalIdentifier');
+  });
+
+  it('password-login has no OTP or SMS in phone path', () => {
+    assert.ok(!passwordLoginFn.includes('request-phone-login-otp'), 'must not call OTP endpoint');
+    assert.ok(!passwordLoginFn.includes('verify-phone-login-otp'), 'must not call OTP verify endpoint');
+    assert.ok(!passwordLoginFn.includes('sendOtp'), 'must not send OTP');
+    assert.ok(!passwordLoginFn.includes('sendSms'), 'must not send SMS');
+  });
+
+  it('password-login uses artificial invalid email for anti-enumeration', () => {
+    assert.ok(passwordLoginFn.includes('invalid-${crypto.randomUUID()}@example.invalid'),
+      'must use artificial invalid email for anti-enumeration');
+  });
+
+  it('password-login returns 503 LOGIN_UNAVAILABLE on RPC error for phone', () => {
+    const rpcIdx = passwordLoginFn.indexOf('resolve_phone_password_login_v1');
+    assert.ok(rpcIdx > -1);
+    const errBlock = passwordLoginFn.indexOf('LOGIN_UNAVAILABLE', rpcIdx);
+    assert.ok(errBlock > -1, 'must return LOGIN_UNAVAILABLE on RPC error');
+    const status503 = passwordLoginFn.indexOf('503', errBlock);
+    assert.ok(status503 > -1, 'must return 503 status on RPC error');
+  });
+
+  it('password-login returns 503 LOGIN_UNAVAILABLE on admin API error for phone', () => {
+    const getUserByIdIdx = passwordLoginFn.indexOf('getUserById');
+    assert.ok(getUserByIdIdx > -1);
+    const errBlock = passwordLoginFn.indexOf('LOGIN_UNAVAILABLE', getUserByIdIdx);
+    assert.ok(errBlock > -1, 'must return LOGIN_UNAVAILABLE on admin API error');
+  });
+});

@@ -210,7 +210,7 @@ Deno.serve(async (req: Request) => {
     // Canonicalize identifier
     let canonicalIdentifier: string;
     let signInIdentifier: string;
-    let signInField: "email" | "phone";
+    let signInField: "email";
 
     if (method === "username") {
       canonicalIdentifier = identifier.trim().toLowerCase();
@@ -227,8 +227,8 @@ Deno.serve(async (req: Request) => {
         return json({ error: "INVALID_CREDENTIALS" }, 401, allowedOrigin);
       }
       canonicalIdentifier = canonical;
-      signInField = "phone";
-      signInIdentifier = "+" + canonical;
+      signInField = "email";
+      signInIdentifier = "";
     }
 
     // Compute hashes
@@ -277,6 +277,29 @@ Deno.serve(async (req: Request) => {
         : `invalid-${crypto.randomUUID()}@example.invalid`;
     }
 
+    // For phone: resolve phone → user_id → internal email via service role
+    if (method === "phone") {
+      const { data: resolveData, error: resolveErr } = await admin.rpc(
+        "resolve_phone_password_login_v1",
+        { p_normalized_phone: canonicalIdentifier },
+      );
+      if (resolveErr) {
+        return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+      }
+      const resolveRow = Array.isArray(resolveData) ? resolveData[0] : resolveData;
+      const phoneUserId = resolveRow?.user_id;
+      if (typeof phoneUserId === "string" && isValidUuid(phoneUserId)) {
+        const { data: phoneUserData, error: phoneUserErr } =
+          await admin.auth.admin.getUserById(phoneUserId);
+        if (phoneUserErr || !phoneUserData?.user?.email) {
+          return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+        }
+        signInIdentifier = phoneUserData.user.email;
+      } else {
+        signInIdentifier = `invalid-${crypto.randomUUID()}@example.invalid`;
+      }
+    }
+
     // Sign in with anon client
     const anon = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -284,18 +307,10 @@ Deno.serve(async (req: Request) => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    let signInResult;
-    if (signInField === "email") {
-      signInResult = await anon.auth.signInWithPassword({
-        email: signInIdentifier,
-        password,
-      });
-    } else {
-      signInResult = await anon.auth.signInWithPassword({
-        phone: signInIdentifier,
-        password,
-      });
-    }
+    const signInResult = await anon.auth.signInWithPassword({
+      email: signInIdentifier,
+      password,
+    });
 
     if (signInResult.error || !signInResult.data.session || !signInResult.data.user) {
       await randomDelay();

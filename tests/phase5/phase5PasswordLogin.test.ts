@@ -114,16 +114,18 @@ describe('Phase 5A — Password Login', () => {
     assert.ok(passwordLoginFn.includes('login_method'));
   });
 
-  it('phone login uses signInWithPassword, not OTP', () => {
+  it('phone login uses email-based internal sign-in, not OTP or phone provider', () => {
     assert.ok(passwordLoginFn.includes('signInWithPassword'), 'must use signInWithPassword');
-    assert.ok(passwordLoginFn.includes("phone: signInIdentifier"), 'must sign in with phone');
+    assert.ok(!passwordLoginFn.includes('phone: signInIdentifier'), 'must not sign in with phone field');
+    assert.ok(passwordLoginFn.includes('resolve_phone_password_login_v1'), 'must call phone resolver RPC');
+    assert.ok(passwordLoginFn.includes('getUserById'), 'must resolve user via admin API');
     assert.ok(!passwordLoginFn.includes('request-phone-login-otp'), 'must not call OTP endpoint');
     assert.ok(!passwordLoginFn.includes('verify-phone-login-otp'), 'must not call OTP verify endpoint');
   });
 
   it('mobile login sends no OTP', () => {
     assert.ok(!passwordLoginFn.includes('sendOtp'), 'must not send OTP');
-    assert.ok(!passwordLoginFn.includes('otp'), 'must not reference OTP');
+    assert.ok(!/\botp\b/i.test(passwordLoginFn), 'must not reference OTP');
   });
 
   it('origin guard is before req.text(), rate limit, RPC, and signInWithPassword', () => {
@@ -135,6 +137,7 @@ describe('Phase 5A — Password Login', () => {
       'get_public_login_methods',
       'consume_password_login_rate_limit_v1',
       'get_email_by_username',
+      'resolve_phone_password_login_v1',
       'signInWithPassword',
     ];
     for (const marker of markers) {
