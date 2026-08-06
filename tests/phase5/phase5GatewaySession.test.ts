@@ -526,3 +526,111 @@ describe('Phase 5D — Phone Password Login Resolver Migration', () => {
     assert.ok(errBlock > -1, 'must return LOGIN_UNAVAILABLE on admin API error');
   });
 });
+
+describe('Phase 5D Fix — Phone Resolver Profile user_id Correction', () => {
+  const fixMigration = migrationFiles.find((f) =>
+    f.includes('phase5d_fix_phone_resolver_profile_user_id'),
+  );
+
+  it('fix migration file exists on disk', () => {
+    assert.ok(fixMigration, 'phase5d_fix_phone_resolver_profile_user_id migration must exist');
+  });
+
+  it('uses CREATE OR REPLACE FUNCTION for the same RPC', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(/CREATE\s+OR\s+REPLACE\s+FUNCTION/i.test(sql), 'must use CREATE OR REPLACE FUNCTION');
+    assert.ok(sql.includes('resolve_phone_password_login_v1'), 'must target resolve_phone_password_login_v1');
+  });
+
+  it('preserves same signature: (p_normalized_phone text) RETURNS TABLE(user_id uuid)', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(sql.includes('p_normalized_phone text'), 'must have same parameter');
+    assert.ok(sql.includes('RETURNS TABLE(user_id uuid)'), 'must return TABLE(user_id uuid)');
+  });
+
+  it('preserves SECURITY DEFINER, STABLE, and empty search_path', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(/SECURITY\s+DEFINER/i.test(sql), 'must be SECURITY DEFINER');
+    assert.ok(/STABLE/i.test(sql), 'must be STABLE');
+    assert.ok(/search_path\s*TO\s*''/i.test(sql), 'must have empty search_path');
+  });
+
+  it('uses SELECT p.user_id instead of SELECT p.id', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(/SELECT\s+p\.user_id/i.test(sql), 'must use SELECT p.user_id');
+  });
+
+  it('does not contain SELECT p.id INTO v_profile_user_id', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(!/SELECT\s+p\.id\s+INTO\s+v_profile_user_id/i.test(sql),
+      'must not contain SELECT p.id INTO v_profile_user_id');
+  });
+
+  it('uses v_profile_count <> 1 for exactly-one profile check', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(sql.includes('v_profile_count <> 1'), 'must check v_profile_count <> 1');
+  });
+
+  it('uses v_auth_count <> 1 for exactly-one auth.users check', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(sql.includes('v_auth_count <> 1'), 'must check v_auth_count <> 1');
+  });
+
+  it('compares v_profile_user_id with v_auth_user_id using IS DISTINCT FROM', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(sql.includes('v_profile_user_id IS DISTINCT FROM v_auth_user_id'),
+      'must compare profile and auth user IDs');
+  });
+
+  it('returns only user_id via RETURN QUERY SELECT', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(/RETURN\s+QUERY\s+SELECT\s+v_auth_user_id/i.test(sql),
+      'must return only v_auth_user_id');
+    assert.ok(!/RETURN\s+QUERY\s+SELECT.*email/i.test(sql), 'must not return email');
+    assert.ok(!/RETURN\s+QUERY\s+SELECT.*phone/i.test(sql), 'must not return phone');
+  });
+
+  it('re-asserts ACL: revokes from PUBLIC, anon, authenticated and grants only service_role', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(/REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.resolve_phone_password_login_v1\(text\)\s+FROM\s+PUBLIC,\s*anon,\s*authenticated/i.test(sql),
+      'must revoke execute from PUBLIC, anon, authenticated');
+    assert.ok(/GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.resolve_phone_password_login_v1\(text\)\s+TO\s+service_role/i.test(sql),
+      'must grant execute to service_role only');
+  });
+
+  it('sets owner to postgres', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(/ALTER\s+FUNCTION\s+public\.resolve_phone_password_login_v1\(text\)\s+OWNER\s+TO\s+postgres/i.test(sql),
+      'must set owner to postgres');
+  });
+
+  it('does not contain DELETE, TRUNCATE, DROP TABLE, or UPDATE', () => {
+    assert.ok(fixMigration);
+    const sql = readFileSync(join(migrationsDir, fixMigration!), 'utf8');
+    assert.ok(!/DELETE\s+FROM/i.test(sql), 'must not contain DELETE FROM');
+    assert.ok(!/TRUNCATE/i.test(sql), 'must not contain TRUNCATE');
+    assert.ok(!/DROP\s+TABLE/i.test(sql), 'must not contain DROP TABLE');
+    assert.ok(!/UPDATE\s+/i.test(sql), 'must not contain UPDATE');
+  });
+
+  it('original resolver migration is not modified (still on disk unchanged)', () => {
+    const originalMigration = migrationFiles.find((f) =>
+      f.includes('phase5d_phone_password_login_resolver') && !f.includes('fix'),
+    );
+    assert.ok(originalMigration, 'original phase5d migration must still exist');
+    const sql = readFileSync(join(migrationsDir, originalMigration!), 'utf8');
+    assert.ok(/SELECT\s+p\.id\s+INTO\s+v_profile_user_id/i.test(sql),
+      'original migration must still contain the old p.id pattern (immutable)');
+  });
+});
