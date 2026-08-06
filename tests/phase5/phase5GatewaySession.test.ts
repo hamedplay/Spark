@@ -236,16 +236,128 @@ describe('Phase 5B-1 — Gateway Session Allowlist Foundation', () => {
     const testFile = readFileSync(join(root, 'tests', 'phase5', 'phase5GatewaySession.test.ts'), 'utf8');
     const assertCount = (testFile.match(/assert\.ok\(/g) || []).length;
     assert.ok(assertCount > 20, 'must have substantial real assertions, not formal tests');
-    // Check no formal test exists by verifying every assert.ok has a real condition
     const lines = testFile.split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
-      // Skip lines that are string literals containing the description
       if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
-      // A formal test would be a line that is exactly assert.ok(true) with no message
       if (/^assert\.ok\(\s*true\s*\)\s*;?\s*$/.test(trimmed)) {
         assert.fail('must not contain formal assert.ok(true) test');
       }
     }
+  });
+});
+
+describe('Phase 5C-2 — Gateway Authorization Session FK Cleanup', () => {
+  const fkMigration = migrationFiles.find((f) =>
+    f.includes('phase5c_gateway_authorization_session_fk'),
+  );
+
+  it('phase5c FK migration file exists on disk', () => {
+    assert.ok(fkMigration, 'phase5c_gateway_authorization_session_fk migration must exist');
+  });
+
+  it('targets exactly private.password_gateway_session_authorizations table', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(sql.includes('private.password_gateway_session_authorizations'),
+      'must target private.password_gateway_session_authorizations');
+  });
+
+  it('defines FK on exactly session_id column', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(/FOREIGN KEY\s*\(\s*session_id\s*\)/i.test(sql),
+      'must define FOREIGN KEY on session_id');
+  });
+
+  it('references exactly auth.sessions(id)', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(/REFERENCES\s+auth\.sessions\s*\(\s*id\s*\)/i.test(sql),
+      'must reference auth.sessions(id)');
+  });
+
+  it('includes ON DELETE CASCADE', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(/ON DELETE CASCADE/i.test(sql), 'must include ON DELETE CASCADE');
+  });
+
+  it('uses exact constraint name', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(sql.includes('password_gateway_session_authorizations_session_id_fkey'),
+      'must use exact constraint name');
+  });
+
+  it('rejects pre-existing constraint with PASSWORD_GATEWAY_SESSION_FK_ALREADY_EXISTS', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(sql.includes('PASSWORD_GATEWAY_SESSION_FK_ALREADY_EXISTS'),
+      'must raise exception when constraint already exists');
+  });
+
+  it('checks pg_constraint before adding', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(sql.includes('pg_constraint'), 'must check pg_constraint');
+    assert.ok(sql.includes("conname ="), 'must check conname');
+  });
+
+  it('contains no DELETE FROM statement', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!/DELETE\s+FROM/i.test(sql), 'must not contain DELETE FROM');
+  });
+
+  it('contains no TRUNCATE statement', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!/TRUNCATE/i.test(sql), 'must not contain TRUNCATE');
+  });
+
+  it('contains no DROP TABLE statement', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!/DROP\s+TABLE/i.test(sql), 'must not contain DROP TABLE');
+  });
+
+  it('contains no UPDATE statement', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!/UPDATE\s+/i.test(sql), 'must not contain UPDATE');
+  });
+
+  it('does not modify auth.users', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!sql.includes('auth.users'), 'must not touch auth.users');
+  });
+
+  it('does not modify public.profiles', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!sql.includes('profiles'), 'must not touch profiles');
+  });
+
+  it('does not modify private.password_gateway_enforcement', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!sql.includes('password_gateway_enforcement'),
+      'must not touch password_gateway_enforcement');
+  });
+
+  it('does not modify private.evaluate_current_auth_access', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!sql.includes('evaluate_current_auth_access'),
+      'must not touch evaluate_current_auth_access');
+  });
+
+  it('does not modify public.authorize_password_gateway_session_v1', () => {
+    assert.ok(fkMigration);
+    const sql = readFileSync(join(migrationsDir, fkMigration!), 'utf8');
+    assert.ok(!sql.includes('authorize_password_gateway_session_v1'),
+      'must not touch authorize_password_gateway_session_v1');
   });
 });
