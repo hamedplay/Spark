@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Mail, Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, Phone, Smartphone, ChevronRight, Eye, EyeOff, User } from 'lucide-react';
+import { Lock, UserPlus, KeyRound, ArrowRight, Loader as Loader2, CircleAlert as AlertCircle, Wifi, WifiOff, Phone, Smartphone, ChevronRight, Eye, EyeOff, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { normalizeIranPhone } from '../lib/phoneNormalize';
 import toast from 'react-hot-toast';
@@ -47,23 +47,15 @@ interface PublicAuthConfig {
   registration_otp_resend_seconds: number;
 }
 
-interface PublicLoginMethods {
-  username_login: boolean;
-  email_login: boolean;
-  phone_login: boolean;
-}
-
 export function AuthPage({ onSuccess }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [loginTab, setLoginTab] = useState<LoginTab>('password');
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [siteTitle, setSiteTitle] = useState('اسپارک سامانه هوشمند مدیریت سازمانی');
   const [siteDescription, setSiteDescription] = useState('مدیریت حرفه‌ای جلسات، پیگیری اقدامات و همکاری تیمی در یک پلتفرم');
   const [, setLogoUrl] = useState('');
   const [authConfig, setAuthConfig] = useState<PublicAuthConfig | null>(null);
-  const [loginMethods, setLoginMethods] = useState<PublicLoginMethods | null>(null);
 
   useEffect(() => {
     supabase.from('system_config').select('key,value,section').in('key', ['site_title', 'site_description', 'logo_url']).then(({ data }) => {
@@ -79,37 +71,19 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   useEffect(() => {
     void (async () => {
       try {
-        const { data: configData } = await (supabase.rpc as any)('get_public_auth_config');
-        if (configData) setAuthConfig(configData as PublicAuthConfig);
-      } catch { setAuthConfig(null); }
-    })();
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const { data: configData } = await (supabase.rpc as any)('get_public_auth_config');
-        setConnectionStatus(configData ? 'connected' : 'disconnected');
-      } catch { setConnectionStatus('disconnected'); }
-    })();
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const { data, error } = await (supabase.rpc as any)('get_public_login_methods');
-        if (error || !data) { setLoginMethods(null); return; }
+        const { data, error } = await (supabase.rpc as any)('get_public_auth_config');
         const row = Array.isArray(data) ? data[0] : data;
-        const methods: PublicLoginMethods = {
-          username_login: row?.username_login === true,
-          email_login: row?.email_login === true,
-          phone_login: row?.phone_login === true,
-        };
-        setLoginMethods(methods);
-        if (methods.username_login) setLoginMethod('username');
-        else if (methods.email_login) setLoginMethod('email');
-        else if (methods.phone_login) setLoginMethod('phone');
-      } catch { setLoginMethods(null); }
+        if (error || !row || typeof row !== 'object') {
+          setAuthConfig(null);
+          setConnectionStatus('disconnected');
+          return;
+        }
+        setAuthConfig(row as PublicAuthConfig);
+        setConnectionStatus('connected');
+      } catch {
+        setAuthConfig(null);
+        setConnectionStatus('disconnected');
+      }
     })();
   }, []);
 
@@ -186,12 +160,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     return () => clearTimeout(t);
   }, [recoveryCountdown]);
 
-  const activeMethods: LoginMethod[] = [];
-  if (loginMethods?.username_login) activeMethods.push('username');
-  if (loginMethods?.email_login) activeMethods.push('email');
-  if (loginMethods?.phone_login) activeMethods.push('phone');
-
-  const passwordTabVisible = activeMethods.length > 0;
+  const passwordTabVisible = true;
   const phoneOtpTabVisible = authConfig?.phone_login_canonical_enabled === true;
   const phoneOtpTabDisabled = authConfig?.phone_login_ready !== true;
 
@@ -206,6 +175,17 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     }
   }, [mode, passwordTabVisible, phoneOtpTabVisible, phoneOtpTabDisabled, loginTab]);
 
+  function detectPasswordLoginMethod(value: string): LoginMethod {
+    const trimmed = value.trim();
+    if (normalizeIranPhone(trimmed)) {
+      return 'phone';
+    }
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return 'email';
+    }
+    return 'username';
+  }
+
   // ── Unified password login ──────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,12 +193,14 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       toast.error('شناسه ورود و رمز عبور را وارد کنید');
       return;
     }
+    const trimmedIdentifier = identifier.trim();
+    const detectedMethod = detectPasswordLoginMethod(trimmedIdentifier);
     setLoading(true);
     try {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/password-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
-        body: JSON.stringify({ method: loginMethod, identifier: identifier.trim(), password }),
+        body: JSON.stringify({ method: detectedMethod, identifier: trimmedIdentifier, password }),
       });
       const result = await res.json();
       if (res.status === 401) { toast.error('شناسه ورود یا رمز عبور صحیح نیست.'); return; }
@@ -541,18 +523,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
   const inp = 'w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all dark:bg-gray-700 dark:text-white text-sm';
 
-  const methodLabel: Record<LoginMethod, string> = {
-    username: 'نام کاربری',
-    email: 'ایمیل',
-    phone: 'موبایل',
-  };
-
-  const methodPlaceholder: Record<LoginMethod, string> = {
-    username: 'نام کاربری خود را وارد کنید',
-    email: 'example@domain.com',
-    phone: '09123456789',
-  };
-
   const maskPhone = (phone: string): string => {
     if (phone.length < 4) return phone;
     return phone.slice(0, 4) + '***' + phone.slice(-3);
@@ -640,37 +610,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             {/* ── Password login tab ─────────────────────────────────────── */}
             {mode === 'login' && loginTab === 'password' && passwordTabVisible && (
               <form onSubmit={handleLogin} className="space-y-4">
-                {/* Internal identifier-type selector */}
-                {activeMethods.length > 1 && (
-                  <div className="flex gap-2 mb-2">
-                    {activeMethods.includes('username') && (
-                      <button type="button" onClick={() => setLoginMethod('username')}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${loginMethod === 'username' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                        نام کاربری
-                      </button>
-                    )}
-                    {activeMethods.includes('email') && (
-                      <button type="button" onClick={() => setLoginMethod('email')}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${loginMethod === 'email' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                        ایمیل
-                      </button>
-                    )}
-                    {activeMethods.includes('phone') && (
-                      <button type="button" onClick={() => setLoginMethod('phone')}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${loginMethod === 'phone' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                        موبایل
-                      </button>
-                    )}
-                  </div>
-                )}
                 <div>
-                  <label htmlFor="login-identifier" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{methodLabel[loginMethod]}</label>
+                  <label htmlFor="login-identifier" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری، ایمیل یا شماره موبایل</label>
                   <div className="relative">
-                    <input id="login-identifier" type={loginMethod === 'phone' ? 'tel' : 'text'} required value={identifier} onChange={e => setIdentifier(e.target.value)}
-                      placeholder={methodPlaceholder[loginMethod]} className={inp + ' pl-10'} autoComplete="username" spellCheck={false} autoCapitalize="off" dir="ltr" disabled={loading} />
-                    {loginMethod === 'username' && <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />}
-                    {loginMethod === 'email' && <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />}
-                    {loginMethod === 'phone' && <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />}
+                    <input id="login-identifier" type="text" required value={identifier} onChange={e => setIdentifier(e.target.value)}
+                      placeholder="نام کاربری، ایمیل یا 09123456789" className={inp + ' pl-10'} autoComplete="username" spellCheck={false} autoCapitalize="off" dir="ltr" disabled={loading} />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
                   </div>
                 </div>
                 <div>
