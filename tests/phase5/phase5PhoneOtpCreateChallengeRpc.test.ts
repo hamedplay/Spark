@@ -11,6 +11,10 @@ const createChallengeMigration = migrationFiles.find((f) =>
   f.includes('phase5e_phone_otp_create_challenge_rpc'),
 );
 
+const foundFixMigration = migrationFiles.find((f) =>
+  f.includes('phase5e_fix_create_challenge_found_detection'),
+);
+
 const rateLimitRpcMigration = migrationFiles.find((f) =>
   f.includes('phase5e_phone_otp_rate_limit_rpc'),
 );
@@ -253,6 +257,185 @@ describe('Phase 5E-C1 — Atomic Phone OTP Challenge Creation RPC', () => {
   });
 
   it('no formal or comment-only tests exist in this file', () => {
+    const testFile = readFileSync(join(root, 'tests', 'phase5', 'phase5PhoneOtpCreateChallengeRpc.test.ts'), 'utf8');
+    const lines = testFile.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+      if (/^assert\.ok\(\s*true\s*\)\s*;?\s*$/.test(trimmed)) {
+        assert.fail('must not contain formal assert.ok(true) test');
+      }
+    }
+  });
+});
+
+describe('Phase 5E-C1 Fix — Reliable SELECT FOUND Detection', () => {
+  it('fix migration file exists on disk', () => {
+    assert.ok(foundFixMigration, 'phase5e_fix_create_challenge_found_detection migration must exist');
+  });
+
+  it('uses CREATE OR REPLACE FUNCTION', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.create_phone_otp_login_challenge_v2/i.test(sql),
+      'must use CREATE OR REPLACE FUNCTION');
+  });
+
+  it('declares v_existing_found boolean', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/v_existing_found\s+boolean/i.test(sql), 'must declare v_existing_found boolean');
+  });
+
+  it('declares v_last_active_found boolean', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/v_last_active_found\s+boolean/i.test(sql), 'must declare v_last_active_found boolean');
+  });
+
+  it('stores FOUND after idempotency SELECT INTO', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/v_existing_found\s*:=\s*FOUND/i.test(sql),
+      'must store v_existing_found := FOUND after idempotency query');
+  });
+
+  it('stores FOUND after resend gate SELECT INTO', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/v_last_active_found\s*:=\s*FOUND/i.test(sql),
+      'must store v_last_active_found := FOUND after resend gate query');
+  });
+
+  it('idempotency uses IF v_existing_found not IS NOT NULL', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/IF\s+v_existing_found\s+THEN/i.test(sql),
+      'must use IF v_existing_found THEN for idempotency');
+    assert.ok(!/v_existing\s+IS\s+NOT\s+NULL/i.test(sql),
+      'must not use v_existing IS NOT NULL');
+  });
+
+  it('resend gate uses v_last_active_found not IS NOT NULL', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/IF\s+v_last_active_found\s+AND\s+v_last_active\.resend_available_at\s*>\s*v_now\s+THEN/i.test(sql),
+      'must use IF v_last_active_found AND v_last_active.resend_available_at > v_now THEN');
+    assert.ok(!/v_last_active\s+IS\s+NOT\s+NULL/i.test(sql),
+      'must not use v_last_active IS NOT NULL');
+  });
+
+  it('preserves request lock before phone lock ordering', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    const requestLockIdx = sql.search(/pg_advisory_xact_lock\(v_request_lock_key\)/i);
+    const phoneLockIdx = sql.search(/pg_advisory_xact_lock\(v_phone_lock_key\)/i);
+    assert.ok(requestLockIdx > -1, 'must acquire request lock');
+    assert.ok(phoneLockIdx > -1, 'must acquire phone lock');
+    assert.ok(requestLockIdx < phoneLockIdx, 'request lock must still be before phone lock');
+  });
+
+  it('preserves distinct domain prefixes for locks', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(sql.includes("'phone-otp-login-challenge-v2|request|"), 'must preserve request domain prefix');
+    assert.ok(sql.includes("'phone-otp-login-challenge-v2|phone|"), 'must preserve phone domain prefix');
+  });
+
+  it('preserves idempotency with request_id and FOR UPDATE', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/WHERE\s+request_id\s*=\s*p_request_id\s+FOR\s+UPDATE/i.test(sql),
+      'must preserve SELECT ... WHERE request_id = p_request_id FOR UPDATE');
+  });
+
+  it('preserves IS DISTINCT FROM comparison', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    const distinctCount = (sql.match(/IS\s+DISTINCT\s+FROM/gi) || []).length;
+    assert.ok(distinctCount >= 8, 'must preserve IS DISTINCT FROM for all 8 payload fields');
+  });
+
+  it('preserves REQUEST_ID_REUSE_MISMATCH', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/RAISE\s+EXCEPTION\s+'REQUEST_ID_REUSE_MISMATCH'/i.test(sql),
+      'must preserve REQUEST_ID_REUSE_MISMATCH');
+  });
+
+  it('preserves RESEND_NOT_READY with dynamic retry', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/'error_code',\s*'RESEND_NOT_READY'/i.test(sql), 'must preserve RESEND_NOT_READY');
+    assert.ok(/GREATEST\(1,\s*CEIL/i.test(sql), 'must preserve GREATEST(1, CEIL(...)) for retry');
+    assert.ok(/EXTRACT\(EPOCH\s+FROM\s*\(v_last_active\.resend_available_at\s*-\s*v_now\)\)/i.test(sql),
+      'must preserve dynamic retry calculation');
+  });
+
+  it('preserves both supersede UPDATEs', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/UPDATE\s+private\.phone_otp_login_challenges_v2.*SET\s+status\s*=\s*'superseded'.*WHERE\s+phone_hash\s*=\s*p_phone_hash\s+AND\s+status\s*=\s*'pending'/is.test(sql),
+      'must preserve supersede pending challenges');
+    assert.ok(/status\s*=\s*'processing'\s+AND\s+claim_expires_at\s*<=\s*v_now/i.test(sql),
+      'must preserve supersede processing with expired claim');
+    assert.ok(/claim_id\s*=\s*null/i.test(sql), 'must preserve claim_id = null');
+    assert.ok(/claim_expires_at\s*=\s*null/i.test(sql), 'must preserve claim_expires_at = null');
+  });
+
+  it('preserves exactly one INSERT', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    const insertCount = (sql.match(/INSERT\s+INTO\s+private\.phone_otp_login_challenges_v2/gi) || []).length;
+    assert.equal(insertCount, 1, 'must preserve exactly one INSERT');
+  });
+
+  it('preserves owner, search_path, and ACL', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(/SECURITY\s+DEFINER/i.test(sql), 'must preserve SECURITY DEFINER');
+    assert.ok(/SET\s+search_path\s+TO\s+''/i.test(sql), 'must preserve empty search_path');
+    assert.ok(/ALTER\s+FUNCTION.*OWNER\s+TO\s+postgres/i.test(sql), 'must preserve owner postgres');
+    assert.ok(/GRANT\s+EXECUTE.*TO\s+service_role/i.test(sql), 'must preserve grant to service_role');
+    assert.ok(/REVOKE\s+ALL.*FROM\s+PUBLIC,\s*anon,\s*authenticated/i.test(sql),
+      'must preserve revoke from PUBLIC, anon, authenticated');
+    assert.ok(!/GRANT.*TO\s+anon/i.test(sql), 'must not grant to anon');
+    assert.ok(!/GRANT.*TO\s+authenticated/i.test(sql), 'must not grant to authenticated');
+  });
+
+  it('does not add EXCEPTION WHEN OTHERS', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(!/EXCEPTION\s+WHEN/i.test(sql) && !/WHEN\s+OTHERS/i.test(sql),
+      'must not add exception handling');
+  });
+
+  it('does not create tables, triggers, policies, or views', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(!/CREATE\s+TABLE/i.test(sql), 'must not create tables');
+    assert.ok(!/CREATE\s+TRIGGER/i.test(sql), 'must not create triggers');
+    assert.ok(!/CREATE\s+POLICY/i.test(sql), 'must not create policies');
+    assert.ok(!/CREATE\s+(OR\s+REPLACE\s+)?VIEW/i.test(sql), 'must not create views');
+  });
+
+  it('does not contain DELETE or TRUNCATE', () => {
+    assert.ok(foundFixMigration);
+    const sql = readFileSync(join(migrationsDir, foundFixMigration!), 'utf8');
+    assert.ok(!/DELETE\s+FROM/i.test(sql), 'must not contain DELETE FROM');
+    assert.ok(!/TRUNCATE/i.test(sql), 'must not contain TRUNCATE');
+  });
+
+  it('previous C1 migration is not modified', () => {
+    assert.ok(createChallengeMigration, 'original C1 migration must still exist');
+    const sql = readFileSync(join(migrationsDir, createChallengeMigration!), 'utf8');
+    assert.ok(/CREATE\s+FUNCTION\s+public\.create_phone_otp_login_challenge_v2/i.test(sql),
+      'original C1 migration must still have CREATE FUNCTION');
+    assert.ok(!/CREATE\s+OR\s+REPLACE\s+FUNCTION/i.test(sql),
+      'original C1 migration must not have CREATE OR REPLACE');
+  });
+
+  it('no formal or comment-only tests exist in fix section', () => {
     const testFile = readFileSync(join(root, 'tests', 'phase5', 'phase5PhoneOtpCreateChallengeRpc.test.ts'), 'utf8');
     const lines = testFile.split('\n');
     for (const line of lines) {
