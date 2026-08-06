@@ -10,6 +10,12 @@ import {
   checkOrigin,
   jsonResponse,
 } from "../_shared/phoneOtpLoginV2.ts";
+import {
+  type GatewayParams,
+  type GatewayRpcResult,
+  type ReconcileRpcResult,
+  finalizeGateway,
+} from "./gatewayFinalization.ts";
 
 const MAX_BODY_BYTES = 2048;
 const MAX_RAW_PHONE_LEN = 32;
@@ -144,14 +150,27 @@ async function releaseClaim(
   admin: ReturnType<typeof adminClient>,
   challengeId: string,
   claimId: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await admin.rpc("release_phone_otp_login_challenge_v2", {
+    const { data, error } = await admin.rpc("release_phone_otp_login_challenge_v2", {
       p_challenge_id: challengeId,
       p_claim_id: claimId,
     });
+
+    if (error) return false;
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row !== "object") return false;
+
+    const released = row.released === true;
+    const errorCode = typeof row.error_code === "string" ? row.error_code : null;
+
+    if (released && errorCode === null) return true;
+    if (errorCode === "ALREADY_CONSUMED") return true;
+
+    return false;
   } catch {
-    // best effort
+    return false;
   }
 }
 
@@ -308,7 +327,7 @@ async function localLogout(accessToken: string): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    await fetch(`${Deno.env.get("SUPABASE_URL")!}/auth/v1/logout?scope=local`, {
+    const response = await fetch(`${Deno.env.get("SUPABASE_URL")!}/auth/v1/logout?scope=local`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -316,6 +335,9 @@ async function localLogout(accessToken: string): Promise<void> {
       },
       signal: controller.signal,
     });
+    if (!response.ok) {
+      throw new Error("LOCAL_LOGOUT_FAILED");
+    }
   } catch {
     // best effort
   } finally {
@@ -323,23 +345,31 @@ async function localLogout(accessToken: string): Promise<void> {
   }
 }
 
-interface GatewayResult {
-  authorized: boolean;
-  sessionId: string | null;
-  errorCode: string | null;
+async function cleanupCreatedSession(
+  admin: ReturnType<typeof adminClient>,
+  accessToken: string,
+  challengeId: string,
+  claimId: string,
+): Promise<boolean> {
+  let logoutOk = false;
+  let releaseOk = false;
+
+  try {
+    await localLogout(accessToken);
+    logoutOk = true;
+  } catch {
+    logoutOk = false;
+  }
+
+  releaseOk = await releaseClaim(admin, challengeId, claimId);
+
+  return logoutOk && releaseOk;
 }
 
 async function authorizeGateway(
   admin: ReturnType<typeof adminClient>,
-  params: {
-    sessionId: string;
-    userId: string;
-    challengeId: string;
-    claimId: string;
-    phoneHash: string;
-    ipHash: string;
-  },
-): Promise<GatewayResult> {
+  params: GatewayParams,
+): Promise<GatewayRpcResult> {
   const rpcArgs = {
     p_session_id: params.sessionId,
     p_user_id: params.userId,
@@ -349,38 +379,51 @@ async function authorizeGateway(
     p_ip_hash: params.ipHash,
   };
 
-  let lastError: unknown = null;
+  const { data, error } = await admin.rpc("authorize_phone_otp_gateway_session_v1", rpcArgs);
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const { data, error } = await admin.rpc("authorize_phone_otp_gateway_session_v1", rpcArgs);
+  if (error) throw new Error("GATEWAY_UNAVAILABLE");
 
-    if (error) {
-      lastError = error;
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 100));
-        continue;
-      }
-      throw new Error("GATEWAY_UNAVAILABLE");
-    }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("GATEWAY_UNAVAILABLE");
 
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) throw new Error("GATEWAY_UNAVAILABLE");
+  const authorized = row.authorized === true;
+  const sessionId = typeof row.session_id === "string" ? row.session_id : null;
+  const errorCode = typeof row.error_code === "string" ? row.error_code : null;
 
-    const authorized = row.authorized === true;
-    const sessionId = typeof row.session_id === "string" ? row.session_id : null;
-    const errorCode = typeof row.error_code === "string" ? row.error_code : null;
-
-    if (!authorized) {
-      return { authorized: false, sessionId, errorCode };
-    }
-
-    if (sessionId !== params.sessionId) throw new Error("GATEWAY_UNAVAILABLE");
-    if (errorCode !== null) throw new Error("GATEWAY_UNAVAILABLE");
-
-    return { authorized: true, sessionId, errorCode: null };
+  if (!authorized) {
+    return { authorized: false, sessionId, errorCode };
   }
 
-  throw new Error("GATEWAY_UNAVAILABLE");
+  if (sessionId !== params.sessionId) throw new Error("GATEWAY_UNAVAILABLE");
+  if (errorCode !== null) throw new Error("GATEWAY_UNAVAILABLE");
+
+  return { authorized: true, sessionId, errorCode: null };
+}
+
+async function reconcileGateway(
+  admin: ReturnType<typeof adminClient>,
+  params: GatewayParams,
+): Promise<ReconcileRpcResult> {
+  const rpcArgs = {
+    p_session_id: params.sessionId,
+    p_user_id: params.userId,
+    p_challenge_id: params.challengeId,
+    p_claim_id: params.claimId,
+    p_phone_hash: params.phoneHash,
+    p_ip_hash: params.ipHash,
+  };
+
+  const { data, error } = await admin.rpc("reconcile_phone_otp_gateway_session_v1", rpcArgs);
+
+  if (error) throw new Error("GATEWAY_UNAVAILABLE");
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("GATEWAY_UNAVAILABLE");
+
+  const authorized = row.authorized === true;
+  const errorCode = typeof row.error_code === "string" ? row.error_code : null;
+
+  return { authorized, errorCode };
 }
 
 async function writeAudit(
@@ -596,8 +639,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (session.userId !== claim.userId) {
-    await localLogout(session.accessToken);
-    await releaseClaim(admin, challengeIdRaw, claimId);
+    await cleanupCreatedSession(admin, session.accessToken, challengeIdRaw, claimId);
     console.log("[PHONE_OTP_VERIFY_V2] session creation unavailable");
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
@@ -606,15 +648,13 @@ Deno.serve(async (req: Request) => {
   try {
     jwtClaims = decodeJwt(session.accessToken);
   } catch {
-    await localLogout(session.accessToken);
-    await releaseClaim(admin, challengeIdRaw, claimId);
+    await cleanupCreatedSession(admin, session.accessToken, challengeIdRaw, claimId);
     console.log("[PHONE_OTP_VERIFY_V2] session creation unavailable");
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
   if (jwtClaims.sub !== claim.userId) {
-    await localLogout(session.accessToken);
-    await releaseClaim(admin, challengeIdRaw, claimId);
+    await cleanupCreatedSession(admin, session.accessToken, challengeIdRaw, claimId);
     console.log("[PHONE_OTP_VERIFY_V2] session creation unavailable");
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
@@ -622,31 +662,38 @@ Deno.serve(async (req: Request) => {
   try {
     await validateTokenWithAdmin(admin, session.accessToken, claim.userId);
   } catch {
-    await localLogout(session.accessToken);
-    await releaseClaim(admin, challengeIdRaw, claimId);
+    await cleanupCreatedSession(admin, session.accessToken, challengeIdRaw, claimId);
     console.log("[PHONE_OTP_VERIFY_V2] session creation unavailable");
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
-  let gateway: GatewayResult;
+  const gatewayParams: GatewayParams = {
+    sessionId: jwtClaims.sessionId,
+    userId: claim.userId,
+    challengeId: challengeIdRaw,
+    claimId,
+    phoneHash,
+    ipHash,
+  };
+
+  let gatewayOutcome: { authorized: boolean };
   try {
-    gateway = await authorizeGateway(admin, {
-      sessionId: jwtClaims.sessionId,
-      userId: claim.userId,
-      challengeId: challengeIdRaw,
-      claimId,
-      phoneHash,
-      ipHash,
-    });
+    gatewayOutcome = await finalizeGateway(
+      {
+        authorizeGateway: (p: GatewayParams) => authorizeGateway(admin, p),
+        reconcileGateway: (p: GatewayParams) => reconcileGateway(admin, p),
+        cleanupCreatedSession: (at: string, cid: string, clid: string) =>
+          cleanupCreatedSession(admin, at, cid, clid),
+      },
+      gatewayParams,
+      session.accessToken,
+    );
   } catch {
-    await releaseClaim(admin, challengeIdRaw, claimId);
     console.log("[PHONE_OTP_VERIFY_V2] gateway finalization unavailable");
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
-  if (!gateway.authorized) {
-    await localLogout(session.accessToken);
-    await releaseClaim(admin, challengeIdRaw, claimId);
+  if (!gatewayOutcome.authorized) {
     console.log("[PHONE_OTP_VERIFY_V2] gateway finalization unavailable");
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }

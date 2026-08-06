@@ -309,33 +309,43 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
   });
 
   it('finalization has at most one retry with 100ms delay', () => {
-    assert.ok(/setTimeout\(r,\s*100\)/.test(funcSrc), 'must have 100ms delay between retries');
-    assert.ok(/attempt\s*===\s*0/.test(funcSrc), 'must only retry on first attempt');
+    const helperSrc = readFileSync(join(functionsDir, 'verify-phone-login-otp-v2', 'gatewayFinalization.ts'), 'utf8');
+    assert.ok(/setTimeout\(r,\s*100\)/.test(helperSrc), 'must have 100ms delay between retries in helper');
+    assert.ok(/attempt\s*<\s*2/.test(helperSrc), 'must limit to 2 attempts in helper');
   });
 
   it('retry does not create new claim, session, or magic link', () => {
-    const gatewayMatch = funcSrc.match(/authorizeGateway[\s\S]*?return\s+\{[^}]*authorized:\s*true/);
-    assert.ok(gatewayMatch, 'must find gateway function');
-    const gatewayBlock = gatewayMatch![0];
-    assert.ok(!/crypto\.randomUUID/.test(gatewayBlock), 'gateway must not create new claim ID');
-    assert.ok(!/generateLink/.test(gatewayBlock), 'gateway must not create new magic link');
-    assert.ok(!/verifyOtp/.test(gatewayBlock), 'gateway must not create new session');
+    const helperSrc = readFileSync(join(functionsDir, 'verify-phone-login-otp-v2', 'gatewayFinalization.ts'), 'utf8');
+    assert.ok(!/crypto\.randomUUID/.test(helperSrc), 'helper must not create new claim ID');
+    assert.ok(!/generateLink/.test(helperSrc), 'helper must not create new magic link');
+    assert.ok(!/verifyOtp/.test(helperSrc), 'helper must not create new session');
   });
 
-  it('explicit failure performs logout and release', () => {
-    const explicitMatch = funcSrc.match(/if\s*\(!gateway\.authorized\)[\s\S]*?return/);
-    assert.ok(explicitMatch, 'must have explicit failure path');
-    const block = explicitMatch![0];
-    assert.ok(/localLogout/.test(block), 'must call localLogout on explicit failure');
-    assert.ok(/releaseClaim/.test(block), 'must call releaseClaim on explicit failure');
+  it('explicit failure and ambiguous failure are handled by finalizeGateway helper', () => {
+    assert.ok(/finalizeGateway/.test(funcSrc), 'must call finalizeGateway for gateway flow');
+    assert.ok(/gatewayOutcome/.test(funcSrc), 'must use gatewayOutcome result');
+    assert.ok(/!gatewayOutcome\.authorized/.test(funcSrc), 'must check gatewayOutcome.authorized');
   });
 
-  it('ambiguous failure includes releaseClaim but not localLogout', () => {
-    const ambiguousMatch = funcSrc.match(/}\s*catch\s*\{\s*await releaseClaim\([^;]*;\s*console\.log\("[^"]*gateway finalization unavailable"\);\s*return[^;]*;\s*}/);
-    assert.ok(ambiguousMatch, 'must have ambiguous failure catch with releaseClaim');
-    const block = ambiguousMatch![0];
-    assert.ok(/releaseClaim/.test(block), 'ambiguous failure must call releaseClaim');
-    assert.ok(!/localLogout/.test(block), 'ambiguous failure must not call localLogout');
+  it('gateway throw triggers reconciliation via helper', () => {
+    assert.ok(/reconcileGateway/.test(funcSrc), 'must wire reconcileGateway to helper');
+    assert.ok(/reconcile_phone_otp_gateway_session_v1/.test(funcSrc), 'must call reconciliation RPC');
+  });
+
+  it('reconciliation success leads to token response', () => {
+    const successMatch = funcSrc.match(/gatewayOutcome\.authorized[\s\S]*?return\s+jsonResponse\(\s*\{[^}]*access_token/);
+    assert.ok(successMatch, 'must return tokens after authorized=true from helper');
+  });
+
+  it('failure leads to cleanup and 503', () => {
+    assert.ok(/!gatewayOutcome\.authorized[\s\S]*?LOGIN_UNAVAILABLE[\s\S]*?503/.test(funcSrc),
+      'must return 503 on gateway failure');
+  });
+
+  it('explicit failure is not merged with ambiguous failure', () => {
+    assert.ok(/cleanupCreatedSession/.test(funcSrc), 'must use cleanupCreatedSession for both paths');
+    assert.ok(!/if\s*\(!gateway\.authorized\)[\s\S]*?localLogout/.test(funcSrc),
+      'must not have inline explicit failure with localLogout - handled by helper');
   });
 
   it('tokens are returned only after authorized=true', () => {
@@ -353,7 +363,37 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
   it('release_phone_otp_login_challenge_v2 is called in failure paths', () => {
     assert.ok(/release_phone_otp_login_challenge_v2/.test(funcSrc), 'must call release challenge RPC');
     const releaseCount = (funcSrc.match(/releaseClaim\(/g) ?? []).length;
-    assert.ok(releaseCount >= 4, 'must call releaseClaim in multiple failure paths');
+    assert.ok(releaseCount >= 3, 'must call releaseClaim in multiple failure paths');
+  });
+
+  it('releaseClaim checks both data and error from RPC', () => {
+    assert.ok(/releaseClaim/.test(funcSrc), 'must have releaseClaim function');
+    const releaseMatch = funcSrc.match(/async\s+function\s+releaseClaim[\s\S]*?^\}/m);
+    assert.ok(releaseMatch, 'must find releaseClaim function');
+    const block = releaseMatch![0];
+    assert.ok(/error/.test(block), 'must check error from RPC');
+    assert.ok(/data/.test(block), 'must check data from RPC');
+    assert.ok(/released\s*===\s*true/.test(block), 'must check released===true');
+    assert.ok(/ALREADY_CONSUMED/.test(block), 'must accept ALREADY_CONSUMED as success');
+  });
+
+  it('localLogout checks response.ok', () => {
+    const logoutMatch = funcSrc.match(/async\s+function\s+localLogout[\s\S]*?^\}/m);
+    assert.ok(logoutMatch, 'must find localLogout function');
+    const block = logoutMatch![0];
+    assert.ok(/response\.ok/.test(block), 'must check response.ok');
+    assert.ok(/LOCAL_LOGOUT_FAILED/.test(block), 'must throw LOCAL_LOGOUT_FAILED on non-ok');
+  });
+
+  it('cleanupCreatedSession attempts both logout and release', () => {
+    const cleanupMatch = funcSrc.match(/async\s+function\s+cleanupCreatedSession[\s\S]*?^\}/m);
+    assert.ok(cleanupMatch, 'must find cleanupCreatedSession function');
+    const block = cleanupMatch![0];
+    assert.ok(/localLogout/.test(block), 'must call localLogout');
+    assert.ok(/releaseClaim/.test(block), 'must call releaseClaim');
+    assert.ok(/logoutOk/.test(block), 'must track logoutOk');
+    assert.ok(/releaseOk/.test(block), 'must track releaseOk');
+    assert.ok(/logoutOk\s*&&\s*releaseOk/.test(block), 'must return success only if both ok');
   });
 
   it('does not return OTP, phone, email, user_id, session_id, challenge_id, claim_id, phone_hash, ip_hash, hashed_token, action_link, or email_otp', () => {
@@ -395,10 +435,17 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
     assert.ok(/best effort/i.test(funcSrc), 'audit must be best effort');
   });
 
-  it('does not create new migrations', () => {
+  it('does not create new migrations for verify edge', () => {
     const migrationFiles = readdirSync(migrationsDir);
     const hasNewMigration = migrationFiles.some(f => f.includes('phase5e_phone_otp_verify_edge'));
-    assert.ok(!hasNewMigration, 'must not create new migration');
+    assert.ok(!hasNewMigration, 'must not create new migration for verify edge');
+  });
+
+  it('previous migrations are not modified', () => {
+    const migrationFiles = readdirSync(migrationsDir);
+    assert.ok(migrationFiles.some(f => f.includes('phase5e_phone_otp_gateway_finalization_rpc')), 'finalization RPC migration must exist');
+    assert.ok(migrationFiles.some(f => f.includes('phase5e_phone_otp_challenge_table')), 'challenge table migration must exist');
+    assert.ok(migrationFiles.some(f => f.includes('phase5e_phone_otp_release_claim_rpc')), 'release claim RPC migration must exist');
   });
 
   it('does not modify backend_ready', () => {
