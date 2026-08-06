@@ -62,6 +62,10 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
       'must not use wildcard in Allow-Origin');
   });
 
+  it('OPTIONS response includes Content-Type application/json', () => {
+    assert.ok(/Content-Type.*application\/json/.test(sharedSrc), 'base CORS headers must include Content-Type');
+  });
+
   it('CORS fails closed when origin not allowed', () => {
     assert.ok(/if\s*\(!allowedOrigin\)/i.test(funcSrc), 'must check if origin is not allowed');
     assert.ok(/INVALID_REQUEST/.test(funcSrc), 'must return INVALID_REQUEST for disallowed origin');
@@ -86,17 +90,22 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
   });
 
   it('only accepts phone field in body', () => {
-    assert.ok(/bodyKeys\.length\s*!==\s*1\s*&&\s*bodyKeys\[0\]\s*!==\s*["']phone["']/.test(funcSrc) ||
-              /bodyKeys\.length\s*!==\s*1\s*\|\|\s*bodyKeys\[0\]\s*!==\s*["']phone["']/.test(funcSrc),
+    assert.ok(/bodyKeys\.length\s*!==\s*1\s*\|\|\s*bodyKeys\[0\]\s*!==\s*["']phone["']/.test(funcSrc),
       'must reject extra fields');
+  });
+
+  it('parsed body must be non-null, non-array object', () => {
+    assert.ok(/parsed\s*===\s*null/.test(funcSrc), 'must reject null');
+    assert.ok(/typeof\s*parsed\s*!==\s*["']object["']/.test(funcSrc), 'must reject non-objects');
+    assert.ok(/Array\.isArray\(parsed\)/.test(funcSrc), 'must reject arrays');
   });
 
   it('has canonicalization for Iran phone numbers', () => {
     assert.ok(/canonicalizeIranPhone/.test(sharedSrc), 'must have canonicalizeIranPhone');
-    assert.ok(/\\^989\\d\{9\}\$/.test(sharedSrc), 'must produce ^989[0-9]{9}$ canonical format');
-    assert.ok(/\\^09\\d\{9\}\$/.test(sharedSrc), 'must accept 09xxxxxxxxx');
-    assert.ok(/\\^\\+989\\d\{9\}\$/.test(sharedSrc), 'must accept +989xxxxxxxxx');
-    assert.ok(/\\^00989\\d\{9\}\$/.test(sharedSrc), 'must accept 00989xxxxxxxxx');
+    assert.ok(/\^989\\d\{9\}\$/.test(sharedSrc), 'must produce ^989[0-9]{9}$ canonical format');
+    assert.ok(/\^09\\d\{9\}\$/.test(sharedSrc), 'must accept 09xxxxxxxxx');
+    assert.ok(/\^\\\+989\\d\{9\}\$/.test(sharedSrc), 'must accept +989xxxxxxxxx');
+    assert.ok(/\^00989\\d\{9\}\$/.test(sharedSrc), 'must accept 00989xxxxxxxxx');
   });
 
   it('pepper is obtained from get_phone_auth_config', () => {
@@ -113,6 +122,22 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(/phone_login_canonical_enabled/.test(funcSrc), 'must check canonical_enabled');
   });
 
+  it('security config query uses section=security with exactly 5 keys', () => {
+    assert.ok(/SECURITY_CONFIG_KEYS/.test(funcSrc), 'must have SECURITY_CONFIG_KEYS constant');
+    assert.ok(/eq\(["']section["'],\s*["']security["']\)/.test(funcSrc), 'must query section=security');
+    assert.ok(/secData\.length\s*!==\s*SECURITY_CONFIG_KEYS\.length/.test(funcSrc), 'must check exact row count');
+  });
+
+  it('provider ID is read from section=sms, not section=security', () => {
+    const secQueryMatch = funcSrc.match(/eq\(["']section["'],\s*["']security["']\)[\s\S]*?in\(["']key["'],\s*\[\.\.\.SECURITY_CONFIG_KEYS\]\)/);
+    assert.ok(secQueryMatch, 'must have security query with SECURITY_CONFIG_KEYS');
+    const secBlock = secQueryMatch![0];
+    assert.ok(!/phone_login_sms_provider_id/.test(secBlock), 'security query must not include phone_login_sms_provider_id');
+    assert.ok(/eq\(["']section["'],\s*["']sms["']\)/.test(funcSrc), 'must query section=sms');
+    assert.ok(/eq\(["']key["'],\s*["']phone_login_sms_provider_id["']\)/.test(funcSrc), 'must query key=phone_login_sms_provider_id from sms section');
+    assert.ok(/maybeSingle\(\)/.test(funcSrc), 'must use maybeSingle for sms config');
+  });
+
   it('TTL, resend, and max attempts are fail-closed', () => {
     assert.ok(/ttlSeconds\s*<\s*30\s*\|\|\s*ttlSeconds\s*>\s*300/.test(funcSrc), 'must validate TTL 30-300');
     assert.ok(/resendSeconds\s*<\s*30\s*\|\|\s*resendSeconds\s*>\s*300/.test(funcSrc), 'must validate resend 30-300');
@@ -125,11 +150,12 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(/is_active/.test(funcSrc), 'must check is_active');
   });
 
-  it('template is auth/login_otp/all with {{otp}} placeholder', () => {
+  it('template is auth/login_otp/all with exactly one {{otp}} placeholder', () => {
     assert.ok(/category["']\s*,\s*["']auth/.test(funcSrc), 'must query category=auth');
     assert.ok(/event_type["']\s*,\s*["']login_otp/.test(funcSrc), 'must query event_type=login_otp');
     assert.ok(/audience["']\s*,\s*["']all/.test(funcSrc), 'must query audience=all');
-    assert.ok(/\{\{otp\}\}/.test(funcSrc), 'must check for {{otp}} placeholder');
+    assert.ok(/matches\.length\s*!==\s*1/.test(funcSrc), 'must check exactly one {{otp}} placeholder');
+    assert.ok(/\\{\\{otp\\}\\}.*g/.test(funcSrc), 'must use regex with global flag to count placeholders');
   });
 
   it('OTP is generated with crypto.getRandomValues', () => {
@@ -194,8 +220,13 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(/ACTIVE/.test(funcSrc), 'must check account_status is ACTIVE');
   });
 
+  it('operational auth error throws, not decoy', () => {
+    assert.ok(/AUTH_UNAVAILABLE/.test(funcSrc), 'must throw AUTH_UNAVAILABLE on auth error');
+    assert.ok(/PROFILE_UNAVAILABLE/.test(funcSrc), 'must throw PROFILE_UNAVAILABLE on profile error');
+  });
+
   it('decoy path does not create challenge or send SMS', () => {
-    const decoyMatch = funcSrc.match(/if\s*\(!resolved\)[\s\S]*?return\s+jsonResponse/);
+    const decoyMatch = funcSrc.match(/if\s*\(!resolved\)[\s\S]*?allowedOrigin\s*\)/);
     assert.ok(decoyMatch, 'must have decoy path for unresolved user');
     const decoyBlock = decoyMatch![0];
     assert.ok(/crypto\.randomUUID/.test(decoyBlock), 'decoy must use random UUID');
@@ -228,10 +259,21 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(/p_max_attempts/.test(funcSrc), 'must pass p_max_attempts');
   });
 
-  it('RESEND_NOT_READY maps to RATE_LIMITED 429', () => {
+  it('RESEND_NOT_READY maps to RATE_LIMITED 429 with dynamic retry', () => {
     assert.ok(/RESEND_NOT_READY/.test(funcSrc), 'must handle RESEND_NOT_READY');
+    assert.ok(/retryAfterSeconds/.test(funcSrc), 'must use dynamic retryAfterSeconds from RPC');
+    assert.ok(/challengeResult\.retryAfterSeconds/.test(funcSrc), 'must pass RPC retry value, not sysConfig.resendSeconds');
     const match = funcSrc.match(/RESEND_NOT_READY[\s\S]*?RATE_LIMITED[\s\S]*?429/);
     assert.ok(match, 'RESEND_NOT_READY must map to RATE_LIMITED 429');
+  });
+
+  it('RESEND_NOT_READY with null retry_after_seconds fails to 503', () => {
+    assert.ok(/retryAfterSeconds\s*===\s*null/.test(funcSrc), 'must check null retryAfterSeconds and return 503');
+  });
+
+  it('challenge_id from RPC must match local challenge ID', () => {
+    assert.ok(/CHALLENGE_ID_MISMATCH/.test(funcSrc), 'must throw CHALLENGE_ID_MISMATCH on mismatch');
+    assert.ok(/rpcChallengeId\s*!==\s*params\.challengeId/.test(funcSrc), 'must compare RPC challenge_id with local');
   });
 
   it('SMS is sent only via send-sms with mode auth_otp', () => {
@@ -253,8 +295,9 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
 
   it('delivery result is recorded via set_phone_otp_login_delivery_v2', () => {
     assert.ok(/set_phone_otp_login_delivery_v2/.test(funcSrc), 'must call set_phone_otp_login_delivery_v2');
-    assert.ok(/p_sent:\s*true/.test(funcSrc), 'must record sent=true on success');
-    assert.ok(/p_sent:\s*false/.test(funcSrc), 'must record sent=false on failure');
+    assert.ok(/p_sent:\s*sent/.test(funcSrc), 'must pass p_sent parameter');
+    assert.ok(/setDeliveryResult\(admin,\s*challengeId,\s*true\)/.test(funcSrc), 'must call setDeliveryResult with true on success');
+    assert.ok(/setDeliveryResult\(admin,\s*challengeId,\s*false\)/.test(funcSrc), 'must call setDeliveryResult with false on failure');
   });
 
   it('does not return OTP, phone, hash, user_id, email, request_id, or provider_id', () => {

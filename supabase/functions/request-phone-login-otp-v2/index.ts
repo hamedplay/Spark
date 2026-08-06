@@ -40,41 +40,55 @@ interface SystemConfig {
   providerId: string;
 }
 
+const SECURITY_CONFIG_KEYS = [
+  "phone_otp_login_backend_ready",
+  "phone_login_canonical_enabled",
+  "phone_otp_login_ttl_seconds",
+  "phone_otp_login_resend_seconds",
+  "phone_otp_login_max_attempts",
+] as const;
+
 async function getSystemConfig(): Promise<SystemConfig> {
   const admin = adminClient();
-  const keys = [
-    "phone_otp_login_backend_ready",
-    "phone_login_canonical_enabled",
-    "phone_otp_login_ttl_seconds",
-    "phone_otp_login_resend_seconds",
-    "phone_otp_login_max_attempts",
-    "phone_login_sms_provider_id",
-  ];
-  const { data, error } = await admin
+
+  const { data: secData, error: secError } = await admin
     .from("system_config")
     .select("key, value")
     .eq("section", "security")
-    .in("key", keys);
+    .in("key", [...SECURITY_CONFIG_KEYS]);
 
-  if (error || !data) throw new Error("CONFIG_UNAVAILABLE");
+  if (secError || !secData) throw new Error("CONFIG_UNAVAILABLE");
+  if (secData.length !== SECURITY_CONFIG_KEYS.length) throw new Error("CONFIG_UNAVAILABLE");
 
-  const map: Record<string, string> = {};
-  for (const row of data) {
-    map[row.key] = row.value;
+  const secMap: Record<string, string> = {};
+  for (const row of secData) {
+    secMap[row.key] = row.value;
+  }
+  for (const key of SECURITY_CONFIG_KEYS) {
+    if (!(key in secMap)) throw new Error("CONFIG_UNAVAILABLE");
   }
 
-  const backendReady = map["phone_otp_login_backend_ready"] === "true";
-  const canonicalEnabled = map["phone_login_canonical_enabled"] === "true";
-  const ttlSeconds = parseInt(map["phone_otp_login_ttl_seconds"] ?? "", 10);
-  const resendSeconds = parseInt(map["phone_otp_login_resend_seconds"] ?? "", 10);
-  const maxAttempts = parseInt(map["phone_otp_login_max_attempts"] ?? "", 10);
-  const providerId = map["phone_login_sms_provider_id"] ?? "";
+  const backendReady = secMap["phone_otp_login_backend_ready"] === "true";
+  const canonicalEnabled = secMap["phone_login_canonical_enabled"] === "true";
+  const ttlSeconds = parseInt(secMap["phone_otp_login_ttl_seconds"] ?? "", 10);
+  const resendSeconds = parseInt(secMap["phone_otp_login_resend_seconds"] ?? "", 10);
+  const maxAttempts = parseInt(secMap["phone_otp_login_max_attempts"] ?? "", 10);
 
   if (!backendReady || !canonicalEnabled) throw new Error("BACKEND_NOT_READY");
   if (isNaN(ttlSeconds) || ttlSeconds < 30 || ttlSeconds > 300) throw new Error("CONFIG_UNAVAILABLE");
   if (isNaN(resendSeconds) || resendSeconds < 30 || resendSeconds > 300) throw new Error("CONFIG_UNAVAILABLE");
   if (resendSeconds > ttlSeconds) throw new Error("CONFIG_UNAVAILABLE");
   if (isNaN(maxAttempts) || maxAttempts < 3 || maxAttempts > 10) throw new Error("CONFIG_UNAVAILABLE");
+
+  const { data: smsData, error: smsError } = await admin
+    .from("system_config")
+    .select("key, value")
+    .eq("section", "sms")
+    .eq("key", "phone_login_sms_provider_id")
+    .maybeSingle();
+
+  if (smsError || !smsData) throw new Error("CONFIG_UNAVAILABLE");
+  const providerId = smsData.value ?? "";
   if (!isValidUuid(providerId)) throw new Error("CONFIG_UNAVAILABLE");
 
   return { backendReady, canonicalEnabled, ttlSeconds, resendSeconds, maxAttempts, providerId };
@@ -102,7 +116,8 @@ async function getTemplate(admin: ReturnType<typeof adminClient>): Promise<strin
     .maybeSingle();
   if (error || !data) return null;
   const body: string = data.body ?? "";
-  if (!body.includes("{{otp}}")) return null;
+  const matches = body.match(/\{\{otp\}\}/g) ?? [];
+  if (matches.length !== 1) return null;
   return body;
 }
 
@@ -164,7 +179,8 @@ async function checkEligibility(
   userId: string,
 ): Promise<EligibilityResult> {
   const { data: authData, error: authErr } = await admin.auth.admin.getUserById(userId);
-  if (authErr || !authData?.user?.email) return { eligible: false };
+  if (authErr) throw new Error("AUTH_UNAVAILABLE");
+  if (!authData?.user || !authData.user.email) return { eligible: false };
 
   const user = authData.user;
   const phoneConfirmedAt = user.phone_confirmed_at;
@@ -185,7 +201,8 @@ async function checkEligibility(
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (profileErr || !profile) return { eligible: false };
+  if (profileErr) throw new Error("PROFILE_UNAVAILABLE");
+  if (!profile) return { eligible: false };
   if (profile.account_status !== "ACTIVE") return { eligible: false };
   if (profile.is_active !== true) return { eligible: false };
 
@@ -194,7 +211,10 @@ async function checkEligibility(
 
 interface ChallengeCreationResult {
   created: boolean;
+  idempotent: boolean;
+  challengeId: string | null;
   errorCode: string | null;
+  retryAfterSeconds: number | null;
 }
 
 async function createChallenge(
@@ -228,15 +248,19 @@ async function createChallenge(
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error("CHALLENGE_UNAVAILABLE");
 
+  const retryAfter = typeof row.retry_after_seconds === "number" ? Math.max(1, row.retry_after_seconds) : null;
+
   if (row.created === true && row.idempotent === false && row.error_code === null) {
-    return { created: true, errorCode: null };
+    const rpcChallengeId = typeof row.challenge_id === "string" ? row.challenge_id : null;
+    if (rpcChallengeId !== params.challengeId) throw new Error("CHALLENGE_ID_MISMATCH");
+    return { created: true, idempotent: false, challengeId: rpcChallengeId, errorCode: null, retryAfterSeconds: null };
   }
 
   if (row.error_code === "RESEND_NOT_READY") {
-    return { created: false, errorCode: "RESEND_NOT_READY" };
+    return { created: false, idempotent: false, challengeId: null, errorCode: "RESEND_NOT_READY", retryAfterSeconds: retryAfter };
   }
 
-  return { created: false, errorCode: row.error_code ?? "UNKNOWN" };
+  return { created: false, idempotent: false, challengeId: null, errorCode: row.error_code ?? "UNKNOWN", retryAfterSeconds: retryAfter };
 }
 
 async function setDeliveryResult(
@@ -348,13 +372,18 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "BODY_TOO_LARGE" }, 400, allowedOrigin);
   }
 
-  let body: Record<string, unknown>;
+  let parsed: unknown;
   try {
-    body = JSON.parse(rawBody);
+    parsed = JSON.parse(rawBody);
   } catch {
     return jsonResponse({ error: "INVALID_BODY" }, 400, allowedOrigin);
   }
 
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return jsonResponse({ error: "INVALID_BODY" }, 400, allowedOrigin);
+  }
+
+  const body = parsed as Record<string, unknown>;
   const bodyKeys = Object.keys(body);
   if (bodyKeys.length !== 1 || bodyKeys[0] !== "phone") {
     return jsonResponse({ error: "INVALID_BODY" }, 400, allowedOrigin);
@@ -536,8 +565,11 @@ Deno.serve(async (req: Request) => {
 
   if (!challengeResult.created) {
     if (challengeResult.errorCode === "RESEND_NOT_READY") {
+      if (challengeResult.retryAfterSeconds === null) {
+        return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+      }
       return jsonResponse(
-        { error: "RATE_LIMITED", retry_after_seconds: sysConfig.resendSeconds },
+        { error: "RATE_LIMITED", retry_after_seconds: challengeResult.retryAfterSeconds },
         429,
         allowedOrigin,
       );

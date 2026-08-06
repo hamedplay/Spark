@@ -62,6 +62,7 @@ export async function minimumResponseDelay(start: number): Promise<void> {
 export const baseCorsHeaders: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Content-Type": "application/json",
   "Cache-Control": "no-store",
   "Pragma": "no-cache",
   "Vary": "Origin",
