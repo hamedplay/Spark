@@ -272,6 +272,17 @@ describe('Phase 5B-3 — Edge Gate Coverage', () => {
       const jsonIdx = dailySrc.indexOf('req.json()');
       assert.ok(gateIdx < jsonIdx, 'gate must run before body read');
     });
+
+    it('no-recipients branch uses meeting_count: 0 not meetingCount', () => {
+      assert.ok(
+        dailySrc.includes('meeting_count: 0'),
+        'no-recipients branch must set meeting_count: 0',
+      );
+      assert.ok(
+        !dailySrc.includes('meeting_count: meetingCount'),
+        'must not reference undefined meetingCount variable',
+      );
+    });
   });
 
   describe('no formal tests', () => {

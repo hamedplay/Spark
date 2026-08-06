@@ -560,7 +560,7 @@ Deno.serve(async (req: Request) => {
         already_processed: false,
         reason: "skipped_no_recipients",
         recipient_count: 0,
-        meeting_count: meetingCount,
+        meeting_count: 0,
       });
     }
 
