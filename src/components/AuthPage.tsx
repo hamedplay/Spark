@@ -614,7 +614,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                   <label htmlFor="login-identifier" dir="rtl" className="block w-full !text-left text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری، ایمیل یا شماره موبایل</label>
                   <div className="relative">
                     <input id="login-identifier" type="text" required value={identifier} onChange={e => setIdentifier(e.target.value)}
-                      placeholder="نام کاربری، ایمیل یا 09123456789" className={inp + ' pl-10'} autoComplete="username" spellCheck={false} autoCapitalize="off" dir="ltr" disabled={loading} />
+                      placeholder="نام کاربری، ایمیل یا شماره موبایل" className={inp + ' pl-10'} autoComplete="username" spellCheck={false} autoCapitalize="off" dir="ltr" disabled={loading} />
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" aria-hidden="true" />
                   </div>
                 </div>
