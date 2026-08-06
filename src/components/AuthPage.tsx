@@ -56,6 +56,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [siteDescription, setSiteDescription] = useState('مدیریت حرفه‌ای جلسات، پیگیری اقدامات و همکاری تیمی در یک پلتفرم');
   const [, setLogoUrl] = useState('');
   const [authConfig, setAuthConfig] = useState<PublicAuthConfig | null>(null);
+  const [passwordLoginAvailable, setPasswordLoginAvailable] = useState(false);
 
   useEffect(() => {
     supabase.from('system_config').select('key,value,section').in('key', ['site_title', 'site_description', 'logo_url']).then(({ data }) => {
@@ -71,17 +72,35 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   useEffect(() => {
     void (async () => {
       try {
-        const { data, error } = await (supabase.rpc as any)('get_public_auth_config');
-        const row = Array.isArray(data) ? data[0] : data;
-        if (error || !row || typeof row !== 'object') {
+        const [authConfigResult, loginMethodsResult] = await Promise.all([
+          (supabase.rpc as any)('get_public_auth_config'),
+          (supabase.rpc as any)('get_public_login_methods'),
+        ]);
+
+        const authConfigRow = Array.isArray(authConfigResult.data)
+          ? authConfigResult.data[0]
+          : authConfigResult.data;
+
+        const loginMethodsRow = Array.isArray(loginMethodsResult.data)
+          ? loginMethodsResult.data[0]
+          : loginMethodsResult.data;
+
+        if (authConfigResult.error || !authConfigRow || typeof authConfigRow !== 'object') {
           setAuthConfig(null);
           setConnectionStatus('disconnected');
-          return;
+        } else {
+          setAuthConfig(authConfigRow as PublicAuthConfig);
+          setConnectionStatus('connected');
         }
-        setAuthConfig(row as PublicAuthConfig);
-        setConnectionStatus('connected');
+
+        setPasswordLoginAvailable(
+          loginMethodsRow?.username_login === true ||
+          loginMethodsRow?.email_login === true ||
+          loginMethodsRow?.phone_login === true
+        );
       } catch {
         setAuthConfig(null);
+        setPasswordLoginAvailable(false);
         setConnectionStatus('disconnected');
       }
     })();
@@ -160,7 +179,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     return () => clearTimeout(t);
   }, [recoveryCountdown]);
 
-  const passwordTabVisible = true;
+  const passwordTabVisible = passwordLoginAvailable;
   const phoneOtpTabVisible = authConfig?.phone_login_canonical_enabled === true;
   const phoneOtpTabDisabled = authConfig?.phone_login_ready !== true;
 

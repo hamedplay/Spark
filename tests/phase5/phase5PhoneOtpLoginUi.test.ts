@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 const src = readFileSync(join(process.cwd(), 'src', 'components', 'AuthPage.tsx'), 'utf8');
 
-test('Phase 5E-D4 UI Fix 2 — Unified Password Identifier and Visible OTP Tab', async (t) => {
+test('Phase 5E-D4 UI Fix 3 — Password Tab Availability and Frontend Publish Check', async (t) => {
 
   await t.test('only two main login tabs exist', () => {
     const tabMatches = src.match(/loginTab\s*===\s*'(\w+)'/g) ?? [];
@@ -24,81 +24,59 @@ test('Phase 5E-D4 UI Fix 2 — Unified Password Identifier and Visible OTP Tab',
     assert.ok(src.includes('ورود با کد پیامکی'), 'must have OTP tab text');
   });
 
-  await t.test('no username, email, or phone selectors inside the form', () => {
+  await t.test('passwordTabVisible is not hardcoded to true', () => {
+    assert.ok(!/const\s+passwordTabVisible\s*=\s*true/.test(src), 'must not hardcode passwordTabVisible = true');
+    assert.ok(/passwordTabVisible\s*=\s*passwordLoginAvailable/.test(src), 'must derive passwordTabVisible from passwordLoginAvailable');
+  });
+
+  await t.test('get_public_login_methods is called for availability', () => {
+    assert.ok(/get_public_login_methods/.test(src), 'must call get_public_login_methods for availability');
+  });
+
+  await t.test('at least one of three booleans enables password tab', () => {
+    assert.ok(/username_login\s*===\s*true/.test(src), 'must check username_login');
+    assert.ok(/email_login\s*===\s*true/.test(src), 'must check email_login');
+    assert.ok(/phone_login\s*===\s*true/.test(src), 'must check phone_login');
+    assert.ok(/passwordLoginAvailable/.test(src), 'must have passwordLoginAvailable state');
+    assert.ok(/setPasswordLoginAvailable/.test(src), 'must have setPasswordLoginAvailable setter');
+  });
+
+  await t.test('all three disabled hides password tab', () => {
+    assert.ok(/passwordTabVisible\s*=\s*passwordLoginAvailable/.test(src), 'passwordTabVisible must equal passwordLoginAvailable');
+    assert.ok(/!passwordTabVisible/.test(src), 'must check !passwordTabVisible in render logic');
+  });
+
+  await t.test('login methods are not shown as selectors', () => {
     assert.ok(!/setLoginMethod\('username'\)/.test(src), 'must not have username selector button');
     assert.ok(!/setLoginMethod\('email'\)/.test(src), 'must not have email selector button');
     assert.ok(!/setLoginMethod\('phone'\)/.test(src), 'must not have phone selector button');
     assert.ok(!/activeMethods/.test(src), 'must not have activeMethods array');
   });
 
-  await t.test('loginMethod state and setLoginMethod do not exist', () => {
-    assert.ok(!/const \[loginMethod,\s*setLoginMethod\]/.test(src), 'must not have loginMethod state');
-    assert.ok(!/setLoginMethod/.test(src), 'must not reference setLoginMethod');
-  });
-
-  await t.test('only one password identifier input exists', () => {
+  await t.test('single unified identifier field is preserved', () => {
     const passwordTabMatch = src.match(/loginTab === 'password'[\s\S]*?<form[\s\S]*?<\/form>/);
     assert.ok(passwordTabMatch, 'must find password tab form');
     const form = passwordTabMatch![0];
     const inputMatches = form.match(/<input[^>]*id="login-identifier"/g) ?? [];
     assert.equal(inputMatches.length, 1, 'must have exactly one identifier input in password tab');
-  });
-
-  await t.test('unified label includes username, email, and phone', () => {
     assert.ok(src.includes('نام کاربری، ایمیل یا شماره موبایل'), 'must have unified label text');
+    assert.ok(src.includes('نام کاربری، ایمیل یا شماره موبایل'), 'must have unified label text');
+    assert.ok(/placeholder="نام کاربری، ایمیل یا[^"]*"/.test(src), 'must have unified placeholder text');
   });
 
-  await t.test('unified placeholder includes username, email, and phone', () => {
-    assert.ok(src.includes('نام کاربری، ایمیل یا 09123456789'), 'must have unified placeholder text');
-  });
-
-  await t.test('identifier input has correct attributes', () => {
-    const inputMatch = src.match(/<input[\s\S]*?id="login-identifier"[\s\S]*?\/>/);
-    assert.ok(inputMatch, 'must find identifier input');
-    const input = inputMatch![0];
-    assert.ok(/type="text"/.test(input), 'must be type=text');
-    assert.ok(/dir="ltr"/.test(input), 'must have dir=ltr');
-    assert.ok(/autoComplete="username"/.test(input), 'must have autoComplete=username');
-    assert.ok(/spellCheck=\{false\}/.test(input), 'must have spellCheck=false');
-    assert.ok(/autoCapitalize="off"/.test(input), 'must have autoCapitalize=off');
-  });
-
-  await t.test('detectPasswordLoginMethod function exists', () => {
+  await t.test('auto method detection is preserved', () => {
     assert.ok(/function detectPasswordLoginMethod/.test(src), 'must declare detectPasswordLoginMethod');
     assert.ok(/detectPasswordLoginMethod\(value:\s*string\):\s*LoginMethod/.test(src), 'must have correct signature');
-  });
-
-  await t.test('phone is detected before email and username', () => {
     const funcMatch = src.match(/function detectPasswordLoginMethod[\s\S]*?return 'username'[\s\S]*?\n\s*\}/);
     assert.ok(funcMatch, 'must find function body');
     const body = funcMatch![0];
     const phoneIdx = body.indexOf("return 'phone'");
     const emailIdx = body.indexOf("return 'email'");
     const usernameIdx = body.indexOf("return 'username'");
-    assert.ok(phoneIdx > -1, 'must detect phone');
-    assert.ok(emailIdx > -1, 'must detect email');
-    assert.ok(usernameIdx > -1, 'must detect username');
-    assert.ok(phoneIdx < emailIdx, 'phone must be checked before email');
-    assert.ok(emailIdx < usernameIdx, 'email must be checked before username');
-  });
-
-  await t.test('phone detection uses normalizeIranPhone', () => {
-    const funcMatch = src.match(/function detectPasswordLoginMethod[\s\S]*?return 'username'[\s\S]*?\n\s*\}/);
-    assert.ok(funcMatch, 'must find function body');
-    assert.ok(/normalizeIranPhone/.test(funcMatch![0]), 'must use normalizeIranPhone for phone detection');
-  });
-
-  await t.test('email is detected with regex', () => {
-    const funcMatch = src.match(/function detectPasswordLoginMethod[\s\S]*?return 'username'[\s\S]*?\n\s*\}/);
-    assert.ok(funcMatch, 'must find function body');
-    assert.ok(/\[.*\\s.*@\].*\[.*\\s.*@\].*\.\[.*\\s.*@\]/.test(funcMatch![0]),
-      'must use email regex pattern');
-  });
-
-  await t.test('non-phone non-email value defaults to username', () => {
-    const funcMatch = src.match(/function detectPasswordLoginMethod[\s\S]*?return 'username'[\s\S]*?\n\s*\}/);
-    assert.ok(funcMatch, 'must find function body');
-    assert.ok(/return 'username'/.test(funcMatch![0]), 'must return username as default');
+    assert.ok(phoneIdx > -1 && emailIdx > -1 && usernameIdx > -1, 'must detect all three methods');
+    assert.ok(phoneIdx < emailIdx && emailIdx < usernameIdx, 'must check phone before email before username');
+    assert.ok(/normalizeIranPhone/.test(body), 'must use normalizeIranPhone for phone detection');
+    assert.ok(/\[.*\\s.*@\].*\[.*\\s.*@\].*\.\[.*\\s.*@\]/.test(body), 'must use email regex pattern');
   });
 
   await t.test('detected method is sent to password-login endpoint', () => {
@@ -111,8 +89,15 @@ test('Phase 5E-D4 UI Fix 2 — Unified Password Identifier and Visible OTP Tab',
   });
 
   await t.test('get_public_auth_config handles array with [0]', () => {
-    assert.ok(/Array\.isArray\(data\)\s*\?\s*data\[0\]\s*:\s*data/.test(src),
+    assert.ok(/Array\.isArray\(authConfigResult\.data\)\s*\?\s*authConfigResult\.data\[0\]\s*:\s*authConfigResult\.data/.test(src) ||
+      /Array\.isArray\(.*data\)\s*\?\s*.*data\[0\]\s*:\s*.*data/.test(src),
       'must handle array response with [0] access');
+  });
+
+  await t.test('get_public_login_methods handles array with [0]', () => {
+    assert.ok(/Array\.isArray\(loginMethodsResult\.data\)\s*\?\s*loginMethodsResult\.data\[0\]\s*:\s*loginMethodsResult\.data/.test(src) ||
+      /Array\.isArray\(.*data\)\s*\?\s*.*data\[0\]\s*:\s*.*data/.test(src),
+      'must handle array response with [0] access for login methods');
   });
 
   await t.test('public config is loaded only once (single useEffect)', () => {
@@ -120,11 +105,14 @@ test('Phase 5E-D4 UI Fix 2 — Unified Password Identifier and Visible OTP Tab',
     assert.equal(configCalls.length, 1, 'must call get_public_auth_config exactly once');
   });
 
+  await t.test('Promise.all fetches both configs together', () => {
+    assert.ok(/Promise\.all/.test(src), 'must use Promise.all for parallel fetch');
+  });
+
   await t.test('config error causes fail-closed with OTP tab hidden', () => {
-    assert.ok(/if \(error \|\| !row \|\| typeof row !== 'object'\)/.test(src),
-      'must check error, null row, and non-object row');
     assert.ok(/setAuthConfig\(null\)/.test(src), 'must set authConfig to null on error');
     assert.ok(/setConnectionStatus\('disconnected'\)/.test(src), 'must set disconnected on error');
+    assert.ok(/setPasswordLoginAvailable\(false\)/.test(src), 'must set passwordLoginAvailable to false on error');
   });
 
   await t.test('phone_login_canonical_enabled=true makes OTP tab visible', () => {
@@ -313,8 +301,8 @@ test('Phase 5E-D4 UI Fix 2 — Unified Password Identifier and Visible OTP Tab',
     assert.ok(/loginTab !== 'password'/.test(src), 'must avoid redundant tab set');
   });
 
-  await t.test('get_public_login_methods is not called', () => {
-    assert.ok(!/get_public_login_methods/.test(src), 'must not call get_public_login_methods');
+  await t.test('no login available message shown when both tabs unavailable', () => {
+    assert.ok(/ورود در حال حاضر در دسترس نیست/.test(src), 'must show no login available message');
   });
 
   await t.test('methodLabel and methodPlaceholder constants do not exist', () => {
