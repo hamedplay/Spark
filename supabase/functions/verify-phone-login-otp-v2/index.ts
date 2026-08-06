@@ -129,11 +129,12 @@ async function claimChallenge(
   const errorCode = typeof row.error_code === "string" ? row.error_code : null;
 
   if (claimed) {
+    if (errorCode !== null) throw new Error("CLAIM_UNAVAILABLE");
     if (!isValidUuid(userId)) throw new Error("CLAIM_UNAVAILABLE");
-    if (!phoneHash) throw new Error("CLAIM_UNAVAILABLE");
+    if (!/^[0-9a-f]{64}$/.test(phoneHash)) throw new Error("CLAIM_UNAVAILABLE");
     if (!claimExpiresAt) throw new Error("CLAIM_UNAVAILABLE");
     const expiry = new Date(claimExpiresAt).getTime();
-    if (isNaN(expiry) || expiry <= Date.now()) throw new Error("CLAIM_UNAVAILABLE");
+    if (!Number.isFinite(expiry) || expiry <= Date.now()) throw new Error("CLAIM_UNAVAILABLE");
   }
 
   return { claimed, userId, phoneHash, claimExpiresAt, errorCode };
@@ -263,7 +264,12 @@ interface JwtClaims {
 function decodeJwt(token: string): JwtClaims {
   const parts = token.split(".");
   if (parts.length !== 3) throw new Error("JWT_INVALID");
-  const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+  const encodedPayload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const paddedPayload = encodedPayload.padEnd(
+    encodedPayload.length + ((4 - (encodedPayload.length % 4)) % 4),
+    "=",
+  );
+  const payload = JSON.parse(atob(paddedPayload));
 
   const sub = payload.sub;
   const sessionId = payload.session_id;
@@ -292,19 +298,16 @@ async function validateTokenWithAdmin(
   admin: ReturnType<typeof adminClient>,
   accessToken: string,
   expectedUserId: string,
-): Promise<string> {
+): Promise<void> {
   const { data, error } = await admin.auth.getUser(accessToken);
   if (error || !data?.user) throw new Error("JWT_INVALID");
   if (data.user.id !== expectedUserId) throw new Error("JWT_INVALID");
-  const sessionId = (data.user as unknown as Record<string, unknown>).session_id as string | undefined;
-  if (typeof sessionId !== "string" || !isValidUuid(sessionId)) throw new Error("JWT_INVALID");
-  return sessionId;
 }
 
 async function localLogout(accessToken: string): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
     await fetch(`${Deno.env.get("SUPABASE_URL")!}/auth/v1/logout?scope=local`, {
       method: "POST",
       headers: {
@@ -313,9 +316,10 @@ async function localLogout(accessToken: string): Promise<void> {
       },
       signal: controller.signal,
     });
-    clearTimeout(timer);
   } catch {
     // best effort
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -615,17 +619,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
-  let validatedSessionId: string;
   try {
-    validatedSessionId = await validateTokenWithAdmin(admin, session.accessToken, claim.userId);
+    await validateTokenWithAdmin(admin, session.accessToken, claim.userId);
   } catch {
-    await localLogout(session.accessToken);
-    await releaseClaim(admin, challengeIdRaw, claimId);
-    console.log("[PHONE_OTP_VERIFY_V2] session creation unavailable");
-    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-  }
-
-  if (validatedSessionId !== jwtClaims.sessionId) {
     await localLogout(session.accessToken);
     await releaseClaim(admin, challengeIdRaw, claimId);
     console.log("[PHONE_OTP_VERIFY_V2] session creation unavailable");
@@ -643,6 +639,7 @@ Deno.serve(async (req: Request) => {
       ipHash,
     });
   } catch {
+    await releaseClaim(admin, challengeIdRaw, claimId);
     console.log("[PHONE_OTP_VERIFY_V2] gateway finalization unavailable");
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }

@@ -180,10 +180,13 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
     assert.ok(/claim\.phoneHash\s*!==\s*phoneHash/.test(funcSrc), 'must compare RPC phone_hash with computed');
   });
 
-  it('claim success requires valid user_id, phone_hash, and future claim_expires_at', () => {
+  it('claim success requires error_code=null, valid user_id, 64-hex phone_hash, and future claim_expires_at', () => {
+    assert.ok(/errorCode\s*!==\s*null/.test(funcSrc), 'must reject non-null error_code on claimed=true');
     assert.ok(/isValidUuid\(userId\)/.test(funcSrc), 'must validate user_id as UUID');
+    assert.ok(/\^\[0-9a-f\]\{64\}\$/.test(funcSrc), 'must validate phone_hash as 64 lowercase hex');
     assert.ok(/claimExpiresAt/.test(funcSrc), 'must check claim_expires_at');
-    assert.ok(/expiry.*<=\s*Date\.now|getTime\(\).*<=\s*Date\.now/.test(funcSrc), 'must check expiry is in the future');
+    assert.ok(/Number\.isFinite\(expiry\)/.test(funcSrc), 'must use Number.isFinite for expiry check');
+    assert.ok(/expiry\s*<=\s*Date\.now/.test(funcSrc), 'must check expiry is in the future');
   });
 
   it('claim error codes map to INVALID_OR_EXPIRED_OTP 401', () => {
@@ -261,12 +264,14 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
     assert.ok(/session\.userId\s*!==\s*claim\.userId/.test(funcSrc), 'must compare user IDs');
   });
 
-  it('JWT validation checks sub, session_id, role, aal, and AMR', () => {
+  it('JWT validation checks sub, session_id, role, aal, and AMR with Base64URL padding', () => {
     assert.ok(/decodeJwt/.test(funcSrc), 'must decode JWT');
     assert.ok(/jwtClaims\.sub\s*!==\s*claim\.userId/.test(funcSrc), 'must compare sub with claimed userId');
     assert.ok(/session_id/.test(funcSrc), 'must check session_id');
     assert.ok(/role.*authenticated/.test(funcSrc), 'must check role=authenticated');
     assert.ok(/aal.*aal1/.test(funcSrc), 'must check aal=aal1');
+    assert.ok(/paddedPayload/.test(funcSrc), 'must pad Base64URL payload before atob');
+    assert.ok(/padEnd/.test(funcSrc), 'must use padEnd for Base64URL padding');
   });
 
   it('AMR must include magiclink and exclude password', () => {
@@ -276,9 +281,14 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
     assert.ok(/hasPassword/.test(funcSrc), 'must check for password in AMR');
   });
 
-  it('token is validated with admin.auth.getUser', () => {
+  it('token is validated with admin.auth.getUser (Promise<void>, user_id only)', () => {
     assert.ok(/admin\.auth\.getUser/.test(funcSrc), 'must call admin.auth.getUser');
     assert.ok(/validateTokenWithAdmin/.test(funcSrc), 'must have validateTokenWithAdmin function');
+    assert.ok(/Promise<void>/.test(funcSrc), 'validateTokenWithAdmin must return Promise<void>');
+    assert.ok(/data\.user\.id\s*!==\s*expectedUserId/.test(funcSrc), 'must compare data.user.id with expectedUserId');
+    assert.ok(!/data\.user\.session_id/.test(funcSrc), 'must not access data.user.session_id');
+    assert.ok(!/user\.session_id/.test(funcSrc), 'must not access user.session_id');
+    assert.ok(!/validatedSessionId/.test(funcSrc), 'must not have validatedSessionId variable');
   });
 
   it('gateway RPC is authorize_phone_otp_gateway_session_v1 with six parameters', () => {
@@ -289,6 +299,7 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
     assert.ok(/p_claim_id/.test(funcSrc), 'must pass p_claim_id');
     assert.ok(/p_phone_hash/.test(funcSrc), 'must pass p_phone_hash');
     assert.ok(/p_ip_hash/.test(funcSrc), 'must pass p_ip_hash');
+    assert.ok(/jwtClaims\.sessionId/.test(funcSrc), 'gateway must use jwtClaims.sessionId');
   });
 
   it('gateway success requires authorized=true and session_id match', () => {
@@ -319,9 +330,12 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
     assert.ok(/releaseClaim/.test(block), 'must call releaseClaim on explicit failure');
   });
 
-  it('ambiguous failure does not logout but does release', () => {
-    const ambiguousMatch = funcSrc.match(/GATEWAY_UNAVAILABLE[\s\S]*?return\s+jsonResponse\(\s*\{\s*error:\s*["']LOGIN_UNAVAILABLE["']\s*\},\s*503/);
-    assert.ok(ambiguousMatch, 'must have ambiguous failure path');
+  it('ambiguous failure includes releaseClaim but not localLogout', () => {
+    const ambiguousMatch = funcSrc.match(/}\s*catch\s*\{\s*await releaseClaim\([^;]*;\s*console\.log\("[^"]*gateway finalization unavailable"\);\s*return[^;]*;\s*}/);
+    assert.ok(ambiguousMatch, 'must have ambiguous failure catch with releaseClaim');
+    const block = ambiguousMatch![0];
+    assert.ok(/releaseClaim/.test(block), 'ambiguous failure must call releaseClaim');
+    assert.ok(!/localLogout/.test(block), 'ambiguous failure must not call localLogout');
   });
 
   it('tokens are returned only after authorized=true', () => {
@@ -393,11 +407,12 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
       'must not set backend_ready to true');
   });
 
-  it('local logout uses POST /auth/v1/logout?scope=local with 5 second timeout', () => {
+  it('local logout uses POST /auth/v1/logout?scope=local with 5 second timeout and finally cleanup', () => {
     assert.ok(/auth\/v1\/logout\?scope=local/.test(funcSrc), 'must call local logout endpoint');
     assert.ok(/5000/.test(funcSrc), 'must have 5 second timeout');
     assert.ok(/Bearer/.test(funcSrc), 'must use Bearer token');
     assert.ok(/apikey/.test(funcSrc), 'must include apikey header');
+    assert.ok(/finally\s*\{[\s\S]*?clearTimeout\(timer\)/.test(funcSrc), 'must clear timer in finally block');
   });
 
   it('no formal assert.ok(true) assertions in this test file', () => {
