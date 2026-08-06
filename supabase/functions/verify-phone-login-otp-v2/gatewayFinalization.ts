@@ -22,6 +22,7 @@ export interface GatewayDeps {
   authorizeGateway: (params: GatewayParams) => Promise<GatewayRpcResult>;
   reconcileGateway: (params: GatewayParams) => Promise<ReconcileRpcResult>;
   cleanupCreatedSession: (accessToken: string, challengeId: string, claimId: string) => Promise<boolean>;
+  releaseClaimOnly: (challengeId: string, claimId: string) => Promise<boolean>;
 }
 
 export interface GatewayOutcome {
@@ -70,10 +71,26 @@ export async function finalizeGateway(
     return { authorized: false };
   }
 
-  const reconciliation = await deps.reconcileGateway(params);
+  let reconciliation: ReconcileRpcResult;
+  try {
+    reconciliation = await deps.reconcileGateway(params);
+  } catch {
+    await deps.releaseClaimOnly(params.challengeId, params.claimId);
+    throw new Error("GATEWAY_UNAVAILABLE");
+  }
 
   if (reconciliation.authorized) {
+    if (reconciliation.errorCode !== null) {
+      throw new Error("GATEWAY_UNAVAILABLE");
+    }
     return { authorized: true };
+  }
+
+  if (
+    reconciliation.errorCode !== "NOT_COMMITTED" &&
+    reconciliation.errorCode !== "INCONSISTENT_STATE"
+  ) {
+    throw new Error("GATEWAY_UNAVAILABLE");
   }
 
   await deps.cleanupCreatedSession(accessToken, params.challengeId, params.claimId);

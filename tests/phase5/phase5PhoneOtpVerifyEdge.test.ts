@@ -377,12 +377,16 @@ describe('Phase 5E-D2 — Verify Phone OTP Edge Function V2', () => {
     assert.ok(/ALREADY_CONSUMED/.test(block), 'must accept ALREADY_CONSUMED as success');
   });
 
-  it('localLogout checks response.ok', () => {
+  it('localLogout returns boolean (no throw, response.ok check)', () => {
     const logoutMatch = funcSrc.match(/async\s+function\s+localLogout[\s\S]*?^\}/m);
     assert.ok(logoutMatch, 'must find localLogout function');
     const block = logoutMatch![0];
+    assert.ok(/Promise<boolean>/.test(block), 'must return Promise<boolean>');
     assert.ok(/response\.ok/.test(block), 'must check response.ok');
-    assert.ok(/LOCAL_LOGOUT_FAILED/.test(block), 'must throw LOCAL_LOGOUT_FAILED on non-ok');
+    assert.ok(/return\s+false/.test(block), 'must return false on non-ok');
+    assert.ok(/return\s+true/.test(block), 'must return true on ok');
+    assert.ok(!/throw/.test(block), 'must not throw from localLogout');
+    assert.ok(/finally\s*\{[\s\S]*?clearTimeout/.test(block), 'must clearTimeout in finally');
   });
 
   it('cleanupCreatedSession attempts both logout and release', () => {

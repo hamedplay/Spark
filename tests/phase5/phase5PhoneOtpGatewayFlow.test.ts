@@ -23,10 +23,11 @@ describe('Phase 5E-D3 — Gateway Flow with Dependency Injection', () => {
     assert.ok(/export\s+async\s+function\s+finalizeGateway/.test(helperSrc), 'must export finalizeGateway');
   });
 
-  it('GatewayDeps has authorizeGateway, reconcileGateway, cleanupCreatedSession', () => {
+  it('GatewayDeps has authorizeGateway, reconcileGateway, cleanupCreatedSession, releaseClaimOnly', () => {
     assert.ok(/authorizeGateway/.test(helperSrc), 'must have authorizeGateway in deps');
     assert.ok(/reconcileGateway/.test(helperSrc), 'must have reconcileGateway in deps');
     assert.ok(/cleanupCreatedSession/.test(helperSrc), 'must have cleanupCreatedSession in deps');
+    assert.ok(/releaseClaimOnly/.test(helperSrc), 'must have releaseClaimOnly in deps');
   });
 
   it('Primary Gateway Success does not run reconciliation or cleanup', () => {
@@ -68,10 +69,29 @@ describe('Phase 5E-D3 — Gateway Flow with Dependency Injection', () => {
     assert.ok(failMatch, 'reconciliation failure must call cleanup');
   });
 
-  it('Reconciliation Throw runs cleanup', () => {
-    assert.ok(/await\s+deps\.reconcileGateway/.test(helperSrc), 'must call reconcileGateway');
-    const afterRecon = helperSrc.substring(helperSrc.search(/await\s+deps\.reconcileGateway/));
-    assert.ok(/cleanupCreatedSession/.test(afterRecon), 'must call cleanup after reconciliation');
+  it('Reconciliation Throw runs releaseClaimOnly, not cleanup or logout', () => {
+    const reconThrowMatch = helperSrc.match(/await\s+deps\.reconcileGateway\(params\);\s*\}\s*catch\s*\{\s*await\s+deps\.releaseClaimOnly[\s\S]*?throw/);
+    assert.ok(reconThrowMatch, 'reconciliation throw must call releaseClaimOnly then throw');
+    const block = reconThrowMatch![0];
+    assert.ok(/releaseClaimOnly/.test(block), 'must call releaseClaimOnly on reconciliation throw');
+    assert.ok(!/cleanupCreatedSession/.test(block), 'must not call cleanup on reconciliation throw');
+    assert.ok(!/localLogout/.test(block), 'must not call localLogout on reconciliation throw');
+    assert.ok(/throw/.test(block), 'must throw after releaseClaimOnly');
+  });
+
+  it('Reconciliation authorized=true requires errorCode=null', () => {
+    const successMatch = helperSrc.match(/reconciliation\.authorized[\s\S]*?reconciliation\.errorCode[\s\S]*?return\s*\{\s*authorized:\s*true\s*\}/);
+    assert.ok(successMatch, 'must check errorCode before returning authorized=true');
+  });
+
+  it('Reconciliation unknown error code throws GATEWAY_UNAVAILABLE', () => {
+    const unknownMatch = helperSrc.match(/NOT_COMMITTED[\s\S]*?INCONSISTENT_STATE[\s\S]*?GATEWAY_UNAVAILABLE/);
+    assert.ok(unknownMatch, 'unknown error code must throw GATEWAY_UNAVAILABLE');
+  });
+
+  it('Reconciliation authorized=true with non-null errorCode throws', () => {
+    const badAuthMatch = helperSrc.match(/reconciliation\.authorized\)[\s\S]*?reconciliation\.errorCode[\s\S]*?null[\s\S]*?GATEWAY_UNAVAILABLE/);
+    assert.ok(badAuthMatch, 'authorized=true with non-null errorCode must throw');
   });
 
   it('cleanup is called at most once', () => {
@@ -112,11 +132,12 @@ describe('Phase 5E-D3 — Gateway Flow with Dependency Injection', () => {
     assert.ok(!/verifyOtp/.test(helperSrc), 'must not create session in helper');
   });
 
-  it('index.ts wires finalizeGateway with all three deps', () => {
+  it('index.ts wires finalizeGateway with all four deps', () => {
     assert.ok(/finalizeGateway/.test(funcSrc), 'must call finalizeGateway');
     assert.ok(/authorizeGateway/.test(funcSrc), 'must wire authorizeGateway');
     assert.ok(/reconcileGateway/.test(funcSrc), 'must wire reconcileGateway');
     assert.ok(/cleanupCreatedSession/.test(funcSrc), 'must wire cleanupCreatedSession');
+    assert.ok(/releaseClaimOnly/.test(funcSrc), 'must wire releaseClaimOnly');
   });
 
   it('index.ts passes jwtClaims.sessionId to gateway params', () => {

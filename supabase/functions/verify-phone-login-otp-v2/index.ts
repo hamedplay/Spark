@@ -323,7 +323,7 @@ async function validateTokenWithAdmin(
   if (data.user.id !== expectedUserId) throw new Error("JWT_INVALID");
 }
 
-async function localLogout(accessToken: string): Promise<void> {
+async function localLogout(accessToken: string): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
@@ -336,10 +336,11 @@ async function localLogout(accessToken: string): Promise<void> {
       signal: controller.signal,
     });
     if (!response.ok) {
-      throw new Error("LOCAL_LOGOUT_FAILED");
+      return false;
     }
+    return true;
   } catch {
-    // best effort
+    return false;
   } finally {
     clearTimeout(timer);
   }
@@ -351,18 +352,8 @@ async function cleanupCreatedSession(
   challengeId: string,
   claimId: string,
 ): Promise<boolean> {
-  let logoutOk = false;
-  let releaseOk = false;
-
-  try {
-    await localLogout(accessToken);
-    logoutOk = true;
-  } catch {
-    logoutOk = false;
-  }
-
-  releaseOk = await releaseClaim(admin, challengeId, claimId);
-
+  const logoutOk = await localLogout(accessToken);
+  const releaseOk = await releaseClaim(admin, challengeId, claimId);
   return logoutOk && releaseOk;
 }
 
@@ -684,6 +675,8 @@ Deno.serve(async (req: Request) => {
         reconcileGateway: (p: GatewayParams) => reconcileGateway(admin, p),
         cleanupCreatedSession: (at: string, cid: string, clid: string) =>
           cleanupCreatedSession(admin, at, cid, clid),
+        releaseClaimOnly: (cid: string, clid: string) =>
+          releaseClaim(admin, cid, clid),
       },
       gatewayParams,
       session.accessToken,
