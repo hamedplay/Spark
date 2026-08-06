@@ -11,6 +11,10 @@ const rpcMigration = migrationFiles.find((f) =>
   f.includes('phase5e_phone_otp_rate_limit_rpc'),
 );
 
+const nullFixMigration = migrationFiles.find((f) =>
+  f.includes('phase5e_fix_rate_limit_rpc_null_validation'),
+);
+
 const rateLimitTableMigration = migrationFiles.find((f) =>
   f.includes('phase5e_phone_otp_rate_limit_table'),
 );
@@ -257,6 +261,179 @@ describe('Phase 5E-B3 — Atomic Phone OTP Rate Limit RPC', () => {
   });
 
   it('no formal or comment-only tests exist in this file', () => {
+    const testFile = readFileSync(join(root, 'tests', 'phase5', 'phase5PhoneOtpRateLimitRpc.test.ts'), 'utf8');
+    const lines = testFile.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+      if (/^assert\.ok\(\s*true\s*\)\s*;?\s*$/.test(trimmed)) {
+        assert.fail('must not contain formal assert.ok(true) test');
+      }
+    }
+  });
+});
+
+describe('Phase 5E-B3 Fix — Fail-closed NULL Input Validation', () => {
+  it('fix migration file exists on disk', () => {
+    assert.ok(nullFixMigration, 'phase5e_fix_rate_limit_rpc_null_validation migration must exist');
+  });
+
+  it('uses CREATE OR REPLACE FUNCTION', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.consume_phone_otp_login_rate_limit_v2/i.test(sql),
+      'must use CREATE OR REPLACE FUNCTION');
+  });
+
+  it('all six parameters have explicit IS NULL checks', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(/p_purpose\s+IS\s+NULL/i.test(sql), 'p_purpose must have IS NULL check');
+    assert.ok(/p_phone_hash\s+IS\s+NULL/i.test(sql), 'p_phone_hash must have IS NULL check');
+    assert.ok(/p_ip_hash\s+IS\s+NULL/i.test(sql), 'p_ip_hash must have IS NULL check');
+    assert.ok(/p_phone_limit\s+IS\s+NULL/i.test(sql), 'p_phone_limit must have IS NULL check');
+    assert.ok(/p_ip_limit\s+IS\s+NULL/i.test(sql), 'p_ip_limit must have IS NULL check');
+    assert.ok(/p_window_seconds\s+IS\s+NULL/i.test(sql), 'p_window_seconds must have IS NULL check');
+  });
+
+  it('preserves regex validation after IS NULL for phone_hash and ip_hash', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(/p_phone_hash\s+IS\s+NULL\s*OR\s*p_phone_hash\s*!~\s*'\^\[0-9a-f\]\{64\}\
+/i.test(sql),
+      'phone_hash must preserve hex64 regex after IS NULL');
+    assert.ok(/p_ip_hash\s+IS\s+NULL\s*OR\s*p_ip_hash\s*!~\s*'\^\[0-9a-f\]\{64\}\
+/i.test(sql),
+      'ip_hash must preserve hex64 regex after IS NULL');
+  });
+
+  it('preserves range validation after IS NULL for all limit parameters', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(/p_phone_limit\s+IS\s+NULL\s*OR\s*p_phone_limit\s*<\s*1\s*OR\s*p_phone_limit\s*>\s*100/i.test(sql),
+      'p_phone_limit must preserve range 1-100 after IS NULL');
+    assert.ok(/p_ip_limit\s+IS\s+NULL\s*OR\s*p_ip_limit\s*<\s*1\s*OR\s*p_ip_limit\s*>\s*1000/i.test(sql),
+      'p_ip_limit must preserve range 1-1000 after IS NULL');
+    assert.ok(/p_window_seconds\s+IS\s+NULL\s*OR\s*p_window_seconds\s*<\s*30\s*OR\s*p_window_seconds\s*>\s*86400/i.test(sql),
+      'p_window_seconds must preserve range 30-86400 after IS NULL');
+  });
+
+  it('preserves purpose validation after IS NULL', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(/p_purpose\s+IS\s+NULL\s*OR\s*p_purpose\s+NOT\s+IN/i.test(sql),
+      'p_purpose must preserve NOT IN check after IS NULL');
+    assert.ok(sql.includes("'phone_otp_login_request'"), 'must still validate phone_otp_login_request');
+    assert.ok(sql.includes("'phone_otp_login_verify'"), 'must still validate phone_otp_login_verify');
+  });
+
+  it('all invalid inputs still produce INVALID_RATE_LIMIT_CONFIGURATION with 22023', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    const raiseCount = (sql.match(/RAISE\s+EXCEPTION\s+'INVALID_RATE_LIMIT_CONFIGURATION'/gi) || []).length;
+    assert.ok(raiseCount >= 6, 'must have at least 6 raise exception blocks');
+    assert.ok(/USING\s+ERRCODE\s*=\s*'22023'/i.test(sql), 'must use SQLSTATE 22023');
+  });
+
+  it('preserves phone lock before ip lock ordering', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    const phoneLockIdx = sql.search(/pg_advisory_xact_lock\(v_phone_lock_key\)/i);
+    const ipLockIdx = sql.search(/pg_advisory_xact_lock\(v_ip_lock_key\)/i);
+    assert.ok(phoneLockIdx > -1, 'must acquire phone lock');
+    assert.ok(ipLockIdx > -1, 'must acquire ip lock');
+    assert.ok(phoneLockIdx < ipLockIdx, 'phone lock must still be before ip lock');
+  });
+
+  it('preserves distinct domain prefixes for locks', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(sql.includes("'phone-otp-login-rate-v2|phone|"), 'must preserve phone domain prefix');
+    assert.ok(sql.includes("'phone-otp-login-rate-v2|ip|"), 'must preserve ip domain prefix');
+  });
+
+  it('preserves independent phone and ip counts', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    const phoneCountIdx = sql.search(/v_phone_count.*MIN\(created_at\)/i);
+    assert.ok(phoneCountIdx > -1, 'must preserve phone count with MIN(created_at)');
+    const phoneBlock = sql.substring(phoneCountIdx, phoneCountIdx + 400);
+    assert.ok(/purpose\s*=\s*p_purpose/i.test(phoneBlock), 'phone count must still filter by purpose');
+    assert.ok(/phone_hash\s*=\s*p_phone_hash/i.test(phoneBlock), 'phone count must still filter by phone_hash');
+    assert.ok(!/ip_hash/i.test(phoneBlock), 'phone count must not filter by ip_hash');
+    const ipCountIdx = sql.search(/v_ip_count.*MIN\(created_at\)/i);
+    assert.ok(ipCountIdx > -1, 'must preserve ip count with MIN(created_at)');
+    const ipBlock = sql.substring(ipCountIdx, ipCountIdx + 400);
+    assert.ok(/purpose\s*=\s*p_purpose/i.test(ipBlock), 'ip count must still filter by purpose');
+    assert.ok(/ip_hash\s*=\s*p_ip_hash/i.test(ipBlock), 'ip count must still filter by ip_hash');
+    assert.ok(!/phone_hash/i.test(ipBlock), 'ip count must not filter by phone_hash');
+  });
+
+  it('preserves dynamic retry with minimum 1 second and GREATEST', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(/GREATEST\(1,\s*CEIL/i.test(sql), 'must preserve GREATEST(1, CEIL(...)) for retry');
+    assert.ok(/GREATEST\(v_phone_retry,\s*v_ip_retry\)/i.test(sql),
+      'must preserve GREATEST(phone_retry, ip_retry) for concurrent limits');
+    assert.ok(/EXTRACT\(EPOCH\s+FROM/i.test(sql), 'must preserve EXTRACT(EPOCH FROM ...) for dynamic retry');
+  });
+
+  it('preserves exactly one insert in allowed path', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(/INSERT\s+INTO\s+private\.phone_otp_login_rate_limit_v2/i.test(sql),
+      'must preserve insert into rate limit table');
+    assert.ok(/RETURN\s+QUERY\s+SELECT\s+true,\s*0/i.test(sql),
+      'must preserve return true, 0 when allowed');
+  });
+
+  it('preserves owner, search_path, and ACL', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(/SECURITY\s+DEFINER/i.test(sql), 'must preserve SECURITY DEFINER');
+    assert.ok(/SET\s+search_path\s+TO\s+''/i.test(sql), 'must preserve empty search_path');
+    assert.ok(/ALTER\s+FUNCTION.*OWNER\s+TO\s+postgres/i.test(sql), 'must preserve owner postgres');
+    assert.ok(/GRANT\s+EXECUTE.*TO\s+service_role/i.test(sql), 'must preserve grant to service_role');
+    assert.ok(/REVOKE\s+ALL.*FROM\s+PUBLIC,\s*anon,\s*authenticated/i.test(sql),
+      'must preserve revoke from PUBLIC, anon, authenticated');
+    assert.ok(!/GRANT.*TO\s+anon/i.test(sql), 'must not grant to anon');
+    assert.ok(!/GRANT.*TO\s+authenticated/i.test(sql), 'must not grant to authenticated');
+  });
+
+  it('does not add EXCEPTION WHEN OTHERS', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(!/EXCEPTION\s+WHEN/i.test(sql) && !/WHEN\s+OTHERS/i.test(sql),
+      'must not add exception handling');
+  });
+
+  it('does not create tables, triggers, policies, or views', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(!/CREATE\s+TABLE/i.test(sql), 'must not create tables');
+    assert.ok(!/CREATE\s+TRIGGER/i.test(sql), 'must not create triggers');
+    assert.ok(!/CREATE\s+POLICY/i.test(sql), 'must not create policies');
+    assert.ok(!/CREATE\s+(OR\s+REPLACE\s+)?VIEW/i.test(sql), 'must not create views');
+  });
+
+  it('does not contain DELETE, UPDATE, or TRUNCATE', () => {
+    assert.ok(nullFixMigration);
+    const sql = readFileSync(join(migrationsDir, nullFixMigration!), 'utf8');
+    assert.ok(!/DELETE\s+FROM/i.test(sql), 'must not contain DELETE FROM');
+    assert.ok(!/UPDATE\s+private/i.test(sql), 'must not contain UPDATE on private table');
+    assert.ok(!/TRUNCATE/i.test(sql), 'must not contain TRUNCATE');
+  });
+
+  it('previous B3 RPC migration is not modified', () => {
+    assert.ok(rpcMigration, 'original RPC migration must still exist');
+    const sql = readFileSync(join(migrationsDir, rpcMigration!), 'utf8');
+    assert.ok(/CREATE\s+FUNCTION\s+public\.consume_phone_otp_login_rate_limit_v2/i.test(sql),
+      'original RPC migration must still have CREATE FUNCTION');
+    assert.ok(!/CREATE\s+OR\s+REPLACE\s+FUNCTION/i.test(sql),
+      'original RPC migration must not have CREATE OR REPLACE');
+  });
+
+  it('no formal or comment-only tests exist in fix section', () => {
     const testFile = readFileSync(join(root, 'tests', 'phase5', 'phase5PhoneOtpRateLimitRpc.test.ts'), 'utf8');
     const lines = testFile.split('\n');
     for (const line of lines) {
