@@ -112,7 +112,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
               'Authorization': `Bearer ${token}`,
               'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
             },
-            body: JSON.stringify({ user_id: updated.user_id, phone: updated.phone || '' }),
+            body: JSON.stringify({ user_id: updated.user_id, new_phone: updated.phone || '' }),
           },
         );
         const phoneResult = await phoneRes.json();

@@ -90,9 +90,9 @@ Deno.serve(async (req: Request) => {
         const r = row as { user_id: string; masked_phone: string };
         // Fetch profile phone
         const { data: profile } = await supabase
-          .from("profiles").select("phone").eq("user_id", r.user_id).maybeSingle();
+          .from("profiles").select("phone, is_active").eq("user_id", r.user_id).maybeSingle();
 
-        if (!profile?.phone) {
+        if (!profile?.is_active || !profile.phone) {
           results.push({ user_id: r.user_id, masked_phone: r.masked_phone, success: false, status: 0, error: "PROFILE_PHONE_NULL" });
           continue;
         }
@@ -106,6 +106,19 @@ Deno.serve(async (req: Request) => {
         const e164 = `+${normalized}`;
 
         try {
+          const { data: currentAuth } = await supabase.auth.admin.getUserById(r.user_id);
+          const currentUser = currentAuth?.user;
+          if (!currentUser || currentUser.deleted_at || (currentUser.banned_until && new Date(currentUser.banned_until) > new Date())) {
+            results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_USER_NOT_ELIGIBLE" });
+            continue;
+          }
+          const currentAuthPhone = normalizeIranPhone(currentUser.phone);
+          if (currentAuthPhone && currentAuthPhone !== normalized) {
+            results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_PHONE_CONFLICT" });
+            await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "sync_profile_phone", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "AUTH_PHONE_CONFLICT" });
+            continue;
+          }
+
           const syncResp = await fetch(
             `${authBaseUrl}/auth/v1/admin/users/${r.user_id}`,
             {
@@ -121,44 +134,46 @@ Deno.serve(async (req: Request) => {
           );
 
           if (syncResp.ok) {
-            results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: true, status: syncResp.status, error: null });
-
-            // Audit
-            try {
-              await supabase.from("audit_log").insert({
-                user_id: callerUserId,
-                entity_name: "user",
-                entity_id: r.user_id,
-                details: `Bulk sync phone ${maskPhone(normalized)} to auth`,
-                severity: "info",
-              });
-            } catch { /* best-effort */ }
+            const { data: verifiedAuth } = await supabase.auth.admin.getUserById(r.user_id);
+            const verifiedPhone = normalizeIranPhone(verifiedAuth?.user?.phone);
+            const verified = verifiedPhone === normalized && Boolean(verifiedAuth?.user?.phone_confirmed_at);
+            if (verified) {
+              results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: true, status: syncResp.status, error: null });
+              try {
+                await supabase.from("audit_log").insert({
+                  user_id: callerUserId,
+                  module: "security",
+                  action: "bulk_sync_profile_phone_to_auth",
+                  entity_name: "user",
+                  entity_id: r.user_id,
+                  details: `Bulk sync phone ${maskPhone(normalized)} to auth`,
+                  severity: "info",
+                });
+              } catch { /* best-effort */ }
+            } else {
+              results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "VERIFY_MISMATCH" });
+              await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "sync_profile_phone", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "VERIFY_MISMATCH" });
+            }
           } else {
-            const errBody = await syncResp.text();
-            results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: errBody.slice(0, 200) });
-
-            // Record in repair queue
-            try {
-              await supabase.from("phone_auth_sync_repairs").insert({
-                user_id: r.user_id,
-                operation_type: "sync_profile_phone",
-                masked_phone: maskPhone(normalized),
-                status: "NEEDS_ADMIN_REVIEW",
-                last_error_code: `HTTP_${syncResp.status}`,
-              });
-            } catch { /* best-effort */ }
+            await syncResp.text();
+            results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "AUTH_UPDATE_FAILED" });
+            await supabase.from("phone_auth_sync_repairs").insert({
+              user_id: r.user_id,
+              operation_type: "sync_profile_phone",
+              masked_phone: maskPhone(normalized),
+              status: "NEEDS_ADMIN_REVIEW",
+              last_error_code: "AUTH_UPDATE_FAILED",
+            });
           }
         } catch (fetchErr) {
-          const errMsg = fetchErr instanceof Error ? fetchErr.message : "fetch error";
-          results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: errMsg });
-
+          results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_UPDATE_FAILED" });
           try {
             await supabase.from("phone_auth_sync_repairs").insert({
               user_id: r.user_id,
               operation_type: "sync_profile_phone",
               masked_phone: maskPhone(normalized),
               status: "NEEDS_ADMIN_REVIEW",
-              last_error_code: "FETCH_ERROR",
+              last_error_code: "AUTH_UPDATE_FAILED",
             });
           } catch { /* best-effort */ }
         }

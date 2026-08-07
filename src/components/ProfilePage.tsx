@@ -21,6 +21,7 @@ export function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [orgPositionInfo, setOrgPositionInfo] = useState<OrgPositionInfo | null>(null);
   const avatarPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const originalPhoneRef = useRef<string | null>(null);
 
   useEffect(() => { fetchProfile(); }, []);
 
@@ -68,6 +69,7 @@ export function ProfilePage() {
 
       if (data) {
         setProfile({ ...empty, ...data } as unknown as Profile);
+        originalPhoneRef.current = data.phone ?? null;
         fetchOrgInfo(data.primary_position_id || null);
       } else {
         const newProfile = { ...empty, user_id: user.id, email: user.email ?? '' };
@@ -75,6 +77,7 @@ export function ProfilePage() {
           .from('profiles').insert([newProfile]).select().single();
         if (ce) throw ce;
         setProfile(created as unknown as Profile);
+        originalPhoneRef.current = created.phone ?? null;
       }
     } catch (error: any) {
       toast.error(error.message || 'خطا در دریافت پروفایل');
@@ -91,7 +94,6 @@ export function ProfilePage() {
       // date fields: send null instead of empty string to avoid Postgres date parse error
       const payload: Pick<Profile, 'full_name' | 'phone' | 'national_id' | 'birth_date' | 'gender' | 'city' | 'bio' | 'employee_id' | 'hire_date' | 'location'> & { updated_at: string } = {
         full_name: profile.full_name,
-        phone: profile.phone,
         national_id: profile.national_id,
         birth_date: profile.birth_date ?? null,
         gender: profile.gender,
@@ -102,6 +104,15 @@ export function ProfilePage() {
         location: profile.location,
         updated_at: new Date().toISOString(),
       };
+      if (profile.phone !== originalPhoneRef.current) {
+        const { data: phoneSync, error: phoneSyncError } = await supabase.functions.invoke('change-user-phone', {
+          body: { user_id: profile.user_id, new_phone: profile.phone },
+        });
+        if (phoneSyncError || !phoneSync?.ok) {
+          throw new Error(phoneSync?.error || phoneSyncError?.message || 'تغییر شماره موبایل ناموفق بود');
+        }
+        originalPhoneRef.current = profile.phone;
+      }
       const { error } = await supabase.from('profiles').update(payload).eq('id', profile.id);
       if (error) throw error;
       toast.success('پروفایل با موفقیت ذخیره شد');
