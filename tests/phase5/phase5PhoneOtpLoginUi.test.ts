@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 const src = readFileSync(join(process.cwd(), 'src', 'components', 'AuthPage.tsx'), 'utf8');
 
-test('Phase 5E-D4 UI Fix 3 — Password Tab Availability and Frontend Publish Check', async (t) => {
+test('Phase 5E-D4 UI Fix 4 — Correct Phone Masking', async (t) => {
 
   await t.test('only two main login tabs exist', () => {
     const tabMatches = src.match(/loginTab\s*===\s*'(\w+)'/g) ?? [];
@@ -308,5 +308,73 @@ test('Phase 5E-D4 UI Fix 3 — Password Tab Availability and Frontend Publish Ch
   await t.test('methodLabel and methodPlaceholder constants do not exist', () => {
     assert.ok(!/methodLabel/.test(src), 'must not have methodLabel constant');
     assert.ok(!/methodPlaceholder/.test(src), 'must not have methodPlaceholder constant');
+  });
+
+  await t.test('maskPhone does not use hardcoded three stars', () => {
+    assert.ok(!/'\*\*\*'/.test(src), 'must not have hardcoded *** in maskPhone');
+    assert.ok(!/\+ '\*\*\*'/.test(src), 'must not concatenate hardcoded three stars');
+  });
+
+  await t.test('maskPhone calculates hidden length dynamically', () => {
+    const maskMatch = src.match(/const maskPhone[\s\S]*?\n\s*\};/);
+    assert.ok(maskMatch, 'must find maskPhone function');
+    const body = maskMatch![0];
+    assert.ok(/hiddenLength/.test(body), 'must calculate hiddenLength');
+    assert.ok(/normalized\.length\s*-\s*7/.test(body), 'must compute hidden length as length minus 7');
+    assert.ok(/'\*'\.repeat\(hiddenLength\)/.test(body), 'must use repeat for dynamic star count');
+  });
+
+  await t.test('maskPhone produces four hidden chars for 11-digit number', () => {
+    const maskMatch = src.match(/const maskPhone[\s\S]*?\n\s*\};/);
+    assert.ok(maskMatch, 'must find maskPhone function');
+    const body = maskMatch![0];
+    assert.ok(/slice\(0,\s*4\)/.test(body), 'must keep first 4 chars');
+    assert.ok(/slice\(-3\)/.test(body), 'must keep last 3 chars');
+    assert.ok(/normalized\.length\s*-\s*7/.test(body), 'must subtract 7 for hidden length');
+  });
+
+  await t.test('maskPhone output length equals input length', () => {
+    const maskMatch = src.match(/const maskPhone[\s\S]*?\n\s*\};/);
+    assert.ok(maskMatch, 'must find maskPhone function');
+    const body = maskMatch![0];
+    assert.ok(/visibleStart/.test(body), 'must have visibleStart');
+    assert.ok(/visibleEnd/.test(body), 'must have visibleEnd');
+    assert.ok(/\$\{visibleStart\}/.test(body), 'must interpolate visibleStart');
+    assert.ok(/\$\{visibleEnd\}/.test(body), 'must interpolate visibleEnd');
+  });
+
+  await t.test('maskPhone preserves first 4 and last 3 digits', () => {
+    const maskMatch = src.match(/const maskPhone[\s\S]*?\n\s*\};/);
+    assert.ok(maskMatch, 'must find maskPhone function');
+    const body = maskMatch![0];
+    assert.ok(/slice\(0,\s*4\)/.test(body), 'must slice first 4');
+    assert.ok(/slice\(-3\)/.test(body), 'must slice last 3');
+  });
+
+  await t.test('masked phone displayed with dir=ltr in span', () => {
+    assert.ok(/<span\s+dir="ltr"[^>]*>\{maskPhone\(phoneOtpPhone\)\}<\/span>/.test(src),
+      'must wrap masked phone in span with dir=ltr');
+  });
+
+  await t.test('masked phone uses font-mono class', () => {
+    assert.ok(/<span[^>]*className="inline-block font-mono"[^>]*>\{maskPhone/.test(src) ||
+      /<span[^>]*font-mono[^>]*>\{maskPhone/.test(src),
+      'must use font-mono class on masked phone span');
+  });
+
+  await t.test('full phone number not displayed in OTP step text', () => {
+    assert.ok(!/\{phoneOtpPhone\}<\/span>/.test(src), 'must not render raw phoneOtpPhone in a span');
+    assert.ok(!/>\{phoneOtpPhone\}</.test(src), 'must not render raw phoneOtpPhone between tags');
+  });
+
+  await t.test('OTP step text contains ارسال شد', () => {
+    assert.ok(/ارسال شد/.test(src), 'must have ارسال شد text in OTP step');
+  });
+
+  await t.test('maskPhone handles short numbers by returning as-is', () => {
+    const maskMatch = src.match(/const maskPhone[\s\S]*?\n\s*\};/);
+    assert.ok(maskMatch, 'must find maskPhone function');
+    const body = maskMatch![0];
+    assert.ok(/<=\s*7/.test(body), 'must check length <= 7 for short numbers');
   });
 });

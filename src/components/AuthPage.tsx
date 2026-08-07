@@ -543,8 +543,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const inp = 'w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all dark:bg-gray-700 dark:text-white text-sm';
 
   const maskPhone = (phone: string): string => {
-    if (phone.length < 4) return phone;
-    return phone.slice(0, 4) + '***' + phone.slice(-3);
+    const normalized = phone.trim();
+    if (normalized.length <= 7) return normalized;
+    const visibleStart = normalized.slice(0, 4);
+    const visibleEnd = normalized.slice(-3);
+    const hiddenLength = normalized.length - 7;
+    return `${visibleStart}${'*'.repeat(hiddenLength)}${visibleEnd}`;
   };
 
   return (
@@ -686,7 +690,11 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             {/* ── Phone OTP login tab: OTP step ───────────────────────────── */}
             {mode === 'login' && loginTab === 'phone_otp' && phoneOtpTabVisible && phoneOtpStep === 'otp' && (
               <div className="space-y-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">کد تأیید به شماره {maskPhone(phoneOtpPhone)} ارسال شد.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                  کد تأیید به شماره{' '}
+                  <span dir="ltr" className="inline-block font-mono">{maskPhone(phoneOtpPhone)}</span>{' '}
+                  ارسال شد.
+                </p>
                 <div>
                   <label htmlFor="otp-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">کد تأیید</label>
                   <input id="otp-code" type="text" inputMode="numeric" maxLength={6} value={phoneOtpCode}
