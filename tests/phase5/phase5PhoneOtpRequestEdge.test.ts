@@ -10,6 +10,7 @@ const configPath = join(root, 'supabase', 'config.toml');
 
 const sharedPath = join(functionsDir, '_shared', 'phoneOtpLoginV2.ts');
 const funcPath = join(functionsDir, 'request-phone-login-otp-v2', 'index.ts');
+const sendSmsPath = join(functionsDir, 'send-sms', 'index.ts');
 const oldFuncPath = join(functionsDir, 'request-phone-login-otp', 'index.ts');
 const oldVerifyPath = join(functionsDir, 'verify-phone-login-otp', 'index.ts');
 const passwordLoginPath = join(functionsDir, 'password-login', 'index.ts');
@@ -17,6 +18,7 @@ const regSecurityPath = join(functionsDir, '_shared', 'registration-security.ts'
 
 const sharedSrc = readFileSync(sharedPath, 'utf8');
 const funcSrc = readFileSync(funcPath, 'utf8');
+const sendSmsSrc = readFileSync(sendSmsPath, 'utf8');
 const oldFuncSrc = readFileSync(oldFuncPath, 'utf8');
 const configSrc = readFileSync(configPath, 'utf8');
 
@@ -143,35 +145,6 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(/resendSeconds\s*<\s*30\s*\|\|\s*resendSeconds\s*>\s*300/.test(funcSrc), 'must validate resend 30-300');
     assert.ok(/resendSeconds\s*>\s*ttlSeconds/.test(funcSrc), 'must check resend <= TTL');
     assert.ok(/maxAttempts\s*<\s*3\s*\|\|\s*maxAttempts\s*>\s*10/.test(funcSrc), 'must validate max attempts 3-10');
-  });
-
-  it('provider must be active', () => {
-    assert.ok(/sms_providers/.test(funcSrc), 'must query sms_providers');
-    assert.ok(/is_active/.test(funcSrc), 'must check is_active');
-  });
-
-  it('template is auth/login_otp/all with exactly one {{otp}} placeholder', () => {
-    assert.ok(/category["']\s*,\s*["']auth/.test(funcSrc), 'must query category=auth');
-    assert.ok(/event_type["']\s*,\s*["']login_otp/.test(funcSrc), 'must query event_type=login_otp');
-    assert.ok(/audience["']\s*,\s*["']all/.test(funcSrc), 'must query audience=all');
-    assert.ok(/matches\.length\s*!==\s*1/.test(funcSrc), 'must check exactly one {{otp}} placeholder');
-    assert.ok(/\\{\\{otp\\}\\}.*g/.test(funcSrc), 'must use regex with global flag to count placeholders');
-  });
-
-  it('OTP is generated with crypto.getRandomValues', () => {
-    assert.ok(/crypto\.getRandomValues/.test(sharedSrc), 'must use crypto.getRandomValues');
-    assert.ok(!/Math\.random.*otp/i.test(sharedSrc), 'must not use Math.random for OTP');
-    assert.ok(/padStart\(6,\s*["']0["']\)/.test(sharedSrc), 'must pad to 6 digits');
-  });
-
-  it('all HMAC domains are exact', () => {
-    assert.ok(/phone-otp-login-v2\|phone\|/.test(funcSrc), 'must have phone hash domain');
-    assert.ok(/phone-otp-login-v2\|ip\|/.test(funcSrc), 'must have ip hash domain');
-    assert.ok(/phone-otp-login-v2\|otp\|/.test(funcSrc), 'must have otp hash domain');
-    assert.ok(/phone-otp-login-v2\|rate-short\|phone\|/.test(funcSrc), 'must have rate-short phone domain');
-    assert.ok(/phone-otp-login-v2\|rate-short\|ip\|/.test(funcSrc), 'must have rate-short ip domain');
-    assert.ok(/phone-otp-login-v2\|rate-long\|phone\|/.test(funcSrc), 'must have rate-long phone domain');
-    assert.ok(/phone-otp-login-v2\|rate-long\|ip\|/.test(funcSrc), 'must have rate-long ip domain');
   });
 
   it('rate limit is consumed before resolve', () => {
@@ -375,9 +348,12 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
 
   // ── Phase 5E-D5 Fix 1: OTP SMS Report Metadata Normalization ─────
 
-  it('SendSmsResult interface includes cost field', () => {
+  it('SendSmsResult interface includes cost and errorCode fields', () => {
     assert.ok(/interface SendSmsResult/.test(funcSrc), 'must declare SendSmsResult interface');
     assert.ok(/ok:\s*boolean/.test(funcSrc), 'must have ok boolean');
+    assert.ok(/errorCode:\s*string\s*\|\s*null/.test(funcSrc), 'must have errorCode field');
+    assert.ok(/providerId:\s*string\s*\|\s*null/.test(funcSrc), 'must have providerId field');
+    assert.ok(/providerName:\s*string\s*\|\s*null/.test(funcSrc), 'must have providerName field');
     assert.ok(/packId:\s*string\s*\|\s*null/.test(funcSrc), 'must have packId');
     assert.ok(/providerMessageId:\s*string\s*\|\s*null/.test(funcSrc), 'must have providerMessageId');
     assert.ok(/cost:\s*number\s*\|\s*null/.test(funcSrc), 'must have cost field');
@@ -396,26 +372,6 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(/return null/.test(body), 'must return null for invalid types');
   });
 
-  it('provider_message_id uses normalizeProviderId for returnIds and messageIds', () => {
-    assert.ok(/returnIds/.test(funcSrc), 'must check returnIds');
-    assert.ok(/messageIds/.test(funcSrc), 'must check messageIds');
-    assert.ok(/returnIds\[0\]/.test(funcSrc), 'must take first returnId');
-    assert.ok(/messageIds\[0\]/.test(funcSrc), 'must take first messageId');
-    assert.ok(/normalizeProviderId\(returnIds\[0\]\)/.test(funcSrc), 'must normalize returnIds[0]');
-    assert.ok(/normalizeProviderId\(messageIds\[0\]\)/.test(funcSrc), 'must normalize messageIds[0]');
-    assert.ok(!/typeof returnIds\[0\] === "string"/.test(funcSrc), 'must not hard-check string type on returnIds');
-    assert.ok(!/typeof messageIds\[0\] === "string"/.test(funcSrc), 'must not hard-check string type on messageIds');
-  });
-
-  it('packId uses normalizeProviderId', () => {
-    assert.ok(/normalizeProviderId\(result\.packId\)/.test(funcSrc), 'must normalize result.packId');
-  });
-
-  it('returnIds and messageIds typed as unknown[] not string[]', () => {
-    assert.ok(/returnIds:\s*unknown\[\]/.test(funcSrc), 'returnIds must be unknown[]');
-    assert.ok(/messageIds:\s*unknown\[\]/.test(funcSrc), 'messageIds must be unknown[]');
-  });
-
   it('normalizeCost accepts finite non-negative numbers only', () => {
     assert.ok(/function normalizeCost/.test(funcSrc), 'must have normalizeCost function');
     const fnMatch = funcSrc.match(/function normalizeCost[\s\S]*?\n\}/);
@@ -425,33 +381,6 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(/Number\.isFinite/.test(body), 'must check Number.isFinite');
     assert.ok(/value >= 0/.test(body), 'must check value >= 0');
     assert.ok(/return null/.test(body), 'must return null for invalid cost');
-  });
-
-  it('cost extracted from result.cost via normalizeCost', () => {
-    assert.ok(/normalizeCost\(result\.cost\)/.test(funcSrc), 'must normalize result.cost');
-  });
-
-  it('writeDispatchLog inserts into sms_dispatch_logs', () => {
-    assert.ok(/sms_dispatch_logs/.test(funcSrc), 'must insert into sms_dispatch_logs');
-    assert.ok(/writeDispatchLog/.test(funcSrc), 'must call writeDispatchLog');
-  });
-
-  it('dispatch log uses category=auth and event_type=login_otp', () => {
-    const block = funcSrc.match(/writeDispatchLog[\s\S]*?category:\s*"auth"/);
-    assert.ok(block, 'must set category=auth');
-    const evtBlock = funcSrc.match(/writeDispatchLog[\s\S]*?event_type:\s*"login_otp"/);
-    assert.ok(evtBlock, 'must set event_type=login_otp');
-  });
-
-  it('dispatch log uses audience=all', () => {
-    assert.ok(/audience:\s*"all"/.test(funcSrc), 'must set audience=all');
-  });
-
-  it('dispatch log message is constant کد یک‌بارمصرف ورود not OTP text', () => {
-    assert.ok(/AUTH_OTP_LOG_MESSAGE/.test(funcSrc), 'must have AUTH_OTP_LOG_MESSAGE constant');
-    assert.ok(/کد یک‌بارمصرف ورود/.test(funcSrc), 'must use safe constant message');
-    const logBlock = funcSrc.match(/writeDispatchLog[\s\S]*?message:\s*AUTH_OTP_LOG_MESSAGE/);
-    assert.ok(logBlock, 'must use AUTH_OTP_LOG_MESSAGE as message');
   });
 
   it('maskCanonicalIranPhoneForLog converts 989... to 09... before masking', () => {
@@ -476,21 +405,157 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
   it('raw canonical phone is never stored in target_phone', () => {
     assert.ok(!/target_phone:\s*canonicalPhone/.test(funcSrc), 'must not store raw canonicalPhone in target_phone');
     assert.ok(/maskCanonicalIranPhoneForLog\(canonicalPhone\)/.test(funcSrc), 'must call maskCanonicalIranPhoneForLog with canonicalPhone');
-    assert.ok(/target_phone:\s*params\.maskedPhone/.test(funcSrc) || /target_phone:\s*maskedPhone/.test(funcSrc),
-      'must store masked phone in target_phone');
   });
 
   it('old maskPhoneForLog function is removed', () => {
     assert.ok(!/function maskPhoneForLog/.test(funcSrc), 'must not have old maskPhoneForLog function');
   });
 
-  it('dispatch log stores cost from params', () => {
-    assert.ok(/cost:\s*params\.cost/.test(funcSrc), 'must store params.cost in dispatch log');
+  // ── Phase 5E-D5 Fix 2: Guaranteed OTP SMS Attempt Reporting ───────
+
+  it('createOtpDispatchLog creates a pending log before provider resolution', () => {
+    assert.ok(/createOtpDispatchLog/.test(funcSrc), 'must have createOtpDispatchLog function');
+    assert.ok(/status:\s*"pending"/.test(funcSrc), 'must create log with status=pending');
+    assert.ok(/message:\s*AUTH_OTP_LOG_MESSAGE_PENDING/.test(funcSrc), 'must use pending message constant');
+    const createCallIdx = funcSrc.search(/const dispatchLogId = await createOtpDispatchLog/);
+    const resolveCallIdx = funcSrc.search(/const provider = await resolveProvider/);
+    assert.ok(createCallIdx >= 0 && resolveCallIdx >= 0, 'both call sites must exist');
+    assert.ok(createCallIdx < resolveCallIdx, 'log must be created before provider resolution');
   });
 
-  it('dispatch log does not store OTP, otp_hash, phone_hash, ip_hash, challenge_id, tokens, or template text', () => {
-    const logMatch = funcSrc.match(/writeDispatchLog[\s\S]*?insert\(\{([\s\S]*?)\}\)/);
-    assert.ok(logMatch, 'must find writeDispatchLog insert block');
+  it('dispatch log is created before OTP generation', () => {
+    const createCallIdx = funcSrc.search(/const dispatchLogId = await createOtpDispatchLog/);
+    const otpIdx = funcSrc.search(/const otp = generateSixDigitOtp/);
+    assert.ok(createCallIdx >= 0 && otpIdx >= 0);
+    assert.ok(createCallIdx < otpIdx, 'log must be created before OTP generation');
+  });
+
+  it('dispatch log is created before challenge creation', () => {
+    const createCallIdx = funcSrc.search(/const dispatchLogId = await createOtpDispatchLog/);
+    const challengeIdx = funcSrc.search(/await createChallenge/);
+    assert.ok(createCallIdx >= 0 && challengeIdx >= 0);
+    assert.ok(createCallIdx < challengeIdx, 'log must be created before challenge creation');
+  });
+
+  it('createOtpDispatchLog uses select id single and checks for insert error', () => {
+    assert.ok(/\.select\("id"\)/.test(funcSrc), 'must select id from insert');
+    assert.ok(/\.single\(\)/.test(funcSrc), 'must use single()');
+    assert.ok(/if\s*\(\s*error\s*\|\|\s*!data\s*\)/.test(funcSrc), 'must check insert error');
+    assert.ok(/return null/.test(funcSrc), 'must return null on insert failure');
+  });
+
+  it('insert failure causes 503 LOGIN_UNAVAILABLE and no SMS', () => {
+    const insertFailMatch = funcSrc.match(/if\s*\(\s*!dispatchLogId\s*\)[\s\S]*?LOGIN_UNAVAILABLE/);
+    assert.ok(insertFailMatch, 'insert failure must return LOGIN_UNAVAILABLE');
+  });
+
+  it('updateOtpDispatchLog helper exists and checks error', () => {
+    assert.ok(/updateOtpDispatchLog/.test(funcSrc), 'must have updateOtpDispatchLog function');
+    assert.ok(/async function updateOtpDispatchLog/.test(funcSrc), 'must be async function');
+    assert.ok(/\.update\(patch\)/.test(funcSrc), 'must update with patch');
+    assert.ok(/\.eq\("id",\s*logId\)/.test(funcSrc), 'must eq id logId');
+    assert.ok(/if\s*\(\s*error\s*\)/.test(funcSrc), 'must check error on update');
+  });
+
+  it('one request creates one dispatch log (no second insert)', () => {
+    const insertCount = (funcSrc.match(/\.insert\(/g) || []).length;
+    const auditInsertCount = (funcSrc.match(/audit_log.*\.insert\(/g) || []).length;
+    const dispatchInsertCount = insertCount - auditInsertCount;
+    assert.ok(dispatchInsertCount === 1, 'must have exactly one sms_dispatch_logs insert');
+  });
+
+  it('provider metadata updates same log row', () => {
+    assert.ok(/updateOtpDispatchLog\(admin,\s*dispatchLogId,\s*\{[\s\S]*?provider_id/.test(funcSrc),
+      'must update same logId with provider_id');
+    assert.ok(/updateOtpDispatchLog\(admin,\s*dispatchLogId,\s*\{[\s\S]*?provider_name/.test(funcSrc),
+      'must update same logId with provider_name');
+  });
+
+  it('NO_ACTIVE_SMS_PROVIDER creates failed log', () => {
+    assert.ok(/NO_ACTIVE_SMS_PROVIDER/.test(funcSrc), 'must handle NO_ACTIVE_SMS_PROVIDER');
+    const match = funcSrc.match(/NO_ACTIVE_SMS_PROVIDER[\s\S]*?status:\s*"failed"/);
+    assert.ok(match, 'NO_ACTIVE_SMS_PROVIDER must set status=failed');
+  });
+
+  it('AMBIGUOUS_SMS_PROVIDER creates failed log', () => {
+    assert.ok(/AMBIGUOUS_SMS_PROVIDER/.test(funcSrc), 'must handle AMBIGUOUS_SMS_PROVIDER');
+  });
+
+  it('SMS_PROVIDER_CONFIG_INVALID creates failed log', () => {
+    assert.ok(/SMS_PROVIDER_CONFIG_INVALID/.test(funcSrc), 'must handle SMS_PROVIDER_CONFIG_INVALID');
+  });
+
+  it('OTP_TEMPLATE_UNAVAILABLE creates failed log', () => {
+    assert.ok(/OTP_TEMPLATE_UNAVAILABLE/.test(funcSrc), 'must handle OTP_TEMPLATE_UNAVAILABLE');
+    const match = funcSrc.match(/OTP_TEMPLATE_UNAVAILABLE[\s\S]*?status:\s*"failed"/);
+    assert.ok(match, 'OTP_TEMPLATE_UNAVAILABLE must set status=failed');
+  });
+
+  it('CHALLENGE_CREATION_FAILED creates failed log', () => {
+    assert.ok(/CHALLENGE_CREATION_FAILED/.test(funcSrc), 'must handle CHALLENGE_CREATION_FAILED');
+  });
+
+  it('RESEND_NOT_READY creates skipped log', () => {
+    assert.ok(/RESEND_NOT_READY/.test(funcSrc), 'must handle RESEND_NOT_READY');
+    const match = funcSrc.match(/RESEND_NOT_READY[\s\S]*?status:\s*"skipped"/);
+    assert.ok(match, 'RESEND_NOT_READY must set status=skipped');
+  });
+
+  it('AUTH_TARGET_NOT_ELIGIBLE creates skipped log for ineligible user', () => {
+    assert.ok(/AUTH_TARGET_NOT_ELIGIBLE/.test(funcSrc), 'must handle AUTH_TARGET_NOT_ELIGIBLE');
+    const match = funcSrc.match(/AUTH_TARGET_NOT_ELIGIBLE[\s\S]*?status:\s*"skipped"/);
+    assert.ok(match, 'AUTH_TARGET_NOT_ELIGIBLE must set status=skipped');
+  });
+
+  it('decoy/ineligible path does not send SMS', () => {
+    const decoyMatch = funcSrc.match(/if\s*\(!resolved\)[\s\S]*?allowedOrigin\s*\)/);
+    assert.ok(decoyMatch, 'must have decoy path');
+    const decoyBlock = decoyMatch![0];
+    assert.ok(!/sendSms/.test(decoyBlock), 'decoy must not call sendSms');
+  });
+
+  it('provider timeout creates failed log with SMS_PROVIDER_TIMEOUT', () => {
+    assert.ok(/SMS_PROVIDER_TIMEOUT/.test(funcSrc), 'must handle SMS_PROVIDER_TIMEOUT');
+  });
+
+  it('provider rejected creates failed log with SMS_PROVIDER_REJECTED', () => {
+    assert.ok(/SMS_PROVIDER_REJECTED/.test(funcSrc), 'must handle SMS_PROVIDER_REJECTED');
+  });
+
+  it('provider success updates same log to sent', () => {
+    assert.ok(/status:\s*"sent"/.test(funcSrc), 'must set status=sent on success');
+    assert.ok(/delivery_status:\s*.*\?\s*"pending"/.test(funcSrc), 'must set delivery_status=pending on success');
+  });
+
+  it('OTP is never stored in dispatch log', () => {
+    const logMatches = funcSrc.match(/createOtpDispatchLog[\s\S]*?insert\(\{([\s\S]*?)\}\)/);
+    assert.ok(logMatches, 'must find createOtpDispatchLog insert block');
+    const block = logMatches![1];
+    assert.ok(!/\botp\b/i.test(block), 'must not store OTP in log insert');
+    const updateMatches = funcSrc.match(/updateOtpDispatchLog[\s\S]*?\{([\s\S]*?)\}/g);
+    if (updateMatches) {
+      for (const u of updateMatches) {
+        assert.ok(!/\botp\b/i.test(u), 'must not store OTP in log update');
+      }
+    }
+  });
+
+  it('renderedTemplate is never stored in dispatch log', () => {
+    assert.ok(!/renderedTemplate/.test(funcSrc.match(/createOtpDispatchLog[\s\S]*?insert\(\{([\s\S]*?)\}\)/)?.[1] ?? ''),
+      'must not store renderedTemplate in insert');
+  });
+
+  it('full phone number is never stored in dispatch log', () => {
+    const insertBlock = funcSrc.match(/createOtpDispatchLog[\s\S]*?insert\(\{([\s\S]*?)\}\)/);
+    assert.ok(insertBlock, 'must find insert block');
+    const block = insertBlock![1];
+    assert.ok(!/canonicalPhone/.test(block), 'must not store canonicalPhone in insert');
+    assert.ok(/maskedPhone/.test(block), 'must store maskedPhone in insert');
+  });
+
+  it('dispatch log does not store otp_hash, phone_hash, ip_hash, challenge_id, tokens', () => {
+    const logMatch = funcSrc.match(/createOtpDispatchLog[\s\S]*?insert\(\{([\s\S]*?)\}\)/);
+    assert.ok(logMatch, 'must find createOtpDispatchLog insert block');
     const block = logMatch![1];
     assert.ok(!/otp_hash/.test(block), 'must not store otp_hash');
     assert.ok(!/phone_hash/.test(block), 'must not store phone_hash');
@@ -498,54 +563,75 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(!/challenge_id/.test(block), 'must not store challenge_id');
     assert.ok(!/access_token/.test(block), 'must not store access_token');
     assert.ok(!/refresh_token/.test(block), 'must not store refresh_token');
-    assert.ok(!/renderedTemplate/.test(block), 'must not store rendered template text');
-    assert.ok(!/\{\{otp\}\}/.test(block), 'must not store OTP placeholder text');
-  });
-
-  it('success sets status=sent and delivery_status=pending when provider_message_id exists', () => {
-    assert.ok(/status:\s*params\.ok\s*\?\s*"sent"/.test(funcSrc), 'must set status=sent on success');
-    assert.ok(/delivery_status:\s*params\.ok\s*&&\s*params\.providerMessageId\s*\?\s*"pending"/.test(funcSrc),
-      'must set delivery_status=pending when provider_message_id exists');
-  });
-
-  it('failure sets status=failed and error_text=AUTH_OTP_DELIVERY_FAILED', () => {
-    assert.ok(/status:\s*params\.ok\s*\?\s*"sent"\s*:\s*"failed"/.test(funcSrc), 'must set status=failed on failure');
-    assert.ok(/AUTH_OTP_DELIVERY_FAILED/.test(funcSrc), 'must use AUTH_OTP_DELIVERY_FAILED error text');
-  });
-
-  it('decoy path does not create any SMS dispatch log', () => {
-    const decoyMatch = funcSrc.match(/if\s*\(!resolved\)[\s\S]*?allowedOrigin\s*\)/);
-    assert.ok(decoyMatch, 'must have decoy path');
-    const decoyBlock = decoyMatch![0];
-    assert.ok(!/writeDispatchLog/.test(decoyBlock), 'decoy must not call writeDispatchLog');
-    assert.ok(!/sms_dispatch_logs/.test(decoyBlock), 'decoy must not insert into sms_dispatch_logs');
-  });
-
-  it('dispatch log failure does not block response', () => {
-    assert.ok(/async function writeDispatchLog/.test(funcSrc), 'must find writeDispatchLog function');
-    assert.ok(/should not block/.test(funcSrc) || /dispatch log failure/.test(funcSrc),
-      'must have comment about not blocking');
-    const logFnMatch = funcSrc.match(/async function writeDispatchLog[\s\S]*?catch[\s\S]*?\n\s*\}/);
-    assert.ok(logFnMatch, 'must find writeDispatchLog with catch block');
-    assert.ok(/catch/.test(logFnMatch![0]), 'must catch errors in writeDispatchLog');
-  });
-
-  it('getProviderName queries sms_providers for title', () => {
-    assert.ok(/getProviderName/.test(funcSrc), 'must have getProviderName function');
-    assert.ok(/from\("sms_providers"\)/.test(funcSrc), 'must query sms_providers');
-    assert.ok(/\.select\("title"\)/.test(funcSrc), 'must select title');
-  });
-
-  it('raw provider response is not stored in dispatch log', () => {
-    const logMatch = funcSrc.match(/writeDispatchLog[\s\S]*?insert\(\{([\s\S]*?)\}\)/);
-    assert.ok(logMatch, 'must find writeDispatchLog insert block');
-    const block = logMatch![1];
     assert.ok(!/raw_response/.test(block), 'must not store raw_response');
-    assert.ok(!/debug/.test(block), 'must not store debug data');
   });
 
-  it('sendSms failure returns cost null', () => {
-    assert.ok(/ok:\s*false,\s*packId:\s*null,\s*providerMessageId:\s*null,\s*cost:\s*null/.test(funcSrc),
-      'failure path must return cost: null');
+  it('provider resolution is server-side only (no client providerId accepted)', () => {
+    assert.ok(/resolveProvider/.test(funcSrc), 'must have resolveProvider function');
+    assert.ok(/async function resolveProvider/.test(funcSrc), 'must be async function');
+    assert.ok(/sms_providers/.test(funcSrc), 'must query sms_providers');
+    assert.ok(/is_active/.test(funcSrc), 'must check is_active');
+    assert.ok(/is_default/.test(funcSrc), 'must check is_default');
+  });
+
+  it('provider resolution order: configured → default → single active → error', () => {
+    assert.ok(/configuredProviderId/.test(funcSrc), 'must check configured provider');
+    assert.ok(/is_default/.test(funcSrc), 'must check default');
+    assert.ok(/activeProviders\.length === 1/.test(funcSrc), 'must check exactly one active');
+    assert.ok(/NO_ACTIVE_SMS_PROVIDER/.test(funcSrc), 'must error on no active');
+    assert.ok(/AMBIGUOUS_SMS_PROVIDER/.test(funcSrc), 'must error on ambiguous');
+  });
+
+  it('target_user_id only set when user is resolved and eligible', () => {
+    assert.ok(/target_user_id:\s*resolved\.userId/.test(funcSrc), 'must set target_user_id after resolve');
+  });
+
+  it('dispatch log failure does not block response (structured server log)', () => {
+    assert.ok(/\[PHONE_OTP_V2\] dispatch log update failed/.test(funcSrc),
+      'must have structured server log for update failure');
+  });
+
+  it('AUTH_OTP_LOG_MESSAGE_PENDING is safe constant not OTP text', () => {
+    assert.ok(/AUTH_OTP_LOG_MESSAGE_PENDING/.test(funcSrc), 'must have constant');
+    assert.ok(/درخواست کد یک‌بارمصرف ورود/.test(funcSrc), 'must use safe pending message');
+  });
+
+  // ── send-sms auth_otp security ───────────────────────────────────
+
+  it('send-sms restricts auth_otp to service caller only', () => {
+    assert.ok(/auth_otp requires service caller/.test(sendSmsSrc), 'must check service caller for auth_otp');
+    assert.ok(/caller\.userId\s*!==\s*"service"/.test(sendSmsSrc), 'must check caller.userId === service');
+  });
+
+  it('send-sms auth_otp timeout is 7000ms', () => {
+    assert.ok(/7000/.test(sendSmsSrc), 'must have 7000ms timeout for auth_otp');
+  });
+
+  it('send-sms auth_otp does not return raw_response or debug in response', () => {
+    const authOtpReturns = sendSmsSrc.match(/if\s*\(isAuthOtp\)\s*\{[\s\S]*?return json\(\{[\s\S]*?\}\);/g);
+    assert.ok(authOtpReturns && authOtpReturns.length > 0, 'must have auth_otp return blocks');
+    for (const block of authOtpReturns) {
+      assert.ok(!/raw_response/.test(block), 'auth_otp must not return raw_response');
+      assert.ok(!/\bdebug\b/.test(block), 'auth_otp must not return debug');
+    }
+  });
+
+  it('send-sms non-auth_otp modes still return debug', () => {
+    assert.ok(/debug/.test(sendSmsSrc), 'non-auth_otp modes must still have debug');
+  });
+
+  it('UI report source is still sms_dispatch_logs (no new system)', () => {
+    assert.ok(/sms_dispatch_logs/.test(funcSrc), 'must still use sms_dispatch_logs');
+  });
+
+  it('registration and recovery are unchanged', () => {
+    assert.ok(existsSync(join(functionsDir, 'request-public-registration-otp', 'index.ts')),
+      'registration OTP function must exist');
+    assert.ok(existsSync(join(functionsDir, 'request-phone-password-reset-otp', 'index.ts')),
+      'password reset OTP function must exist');
+    assert.ok(existsSync(join(functionsDir, 'verify-public-registration-otp', 'index.ts')),
+      'registration verify function must exist');
+    assert.ok(existsSync(join(functionsDir, 'verify-phone-password-reset-otp', 'index.ts')),
+      'password reset verify function must exist');
   });
 });

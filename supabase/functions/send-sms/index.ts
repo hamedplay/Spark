@@ -247,7 +247,11 @@ Deno.serve(async (req: Request) => {
     // Internal mode for Auth Send SMS Hook. Uses explicit providerId.
     // Falls through to the same provider dispatch logic as 'send' mode —
     // no recursive self-call. The caller handles redacted logging.
+    // Only service-to-service callers (service role key) may use auth_otp.
     if (mode === "auth_otp") {
+      if (caller.userId !== "service") {
+        return json({ ok: false, error: "Forbidden: auth_otp requires service caller" }, 403);
+      }
       const rawMobiles: string[] = body.mobiles || [];
       const message: string = body.message || "";
       if (!rawMobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
@@ -337,6 +341,16 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      if (isAuthOtp) {
+        return json({
+          ok: result.ok,
+          errorCode: result.ok ? null : "SMS_PROVIDER_REJECTED",
+          packId: result.packId ?? null,
+          messageIds: result.messageIds ?? null,
+          returnIds: result.returnIds ?? null,
+          cost: result.cost ?? null,
+        });
+      }
       return json({
         ok: result.ok,
         status: result.ok ? "sent" : "failed",
@@ -425,7 +439,7 @@ Deno.serve(async (req: Request) => {
         method: "GET" | "POST" = "GET",
       ): Promise<{ ok: boolean; status: number; body: string; durationMs: number; t0: number; error?: string }> => {
         const controller = new AbortController();
-        const restTimeoutMs = isAuthOtp ? 2500 : 13000;
+        const restTimeoutMs = isAuthOtp ? 7000 : 13000;
         const timer = setTimeout(() => controller.abort(), restTimeoutMs);
         const t0 = Date.now();
         try {
@@ -769,6 +783,15 @@ Deno.serve(async (req: Request) => {
           }
         }
 
+        if (isAuthOtp) {
+          return json({
+            ok: errors.length === 0,
+            errorCode: errors.length === 0 ? null : "SMS_PROVIDER_REJECTED",
+            returnIds: allValidIds,
+            packId: null,
+            cost: null,
+          });
+        }
         return json({ ok: errors.length === 0, sent: allValidIds.length, returnIds: allValidIds, errors });
       }
 
@@ -974,6 +997,18 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify(rahyabBody),
       });
       const data = await resp.json();
+      if (isAuthOtp) {
+        return new Response(JSON.stringify({
+          ok: data.ok === true || data.success === true,
+          errorCode: (data.ok === true || data.success === true) ? null : "SMS_PROVIDER_REJECTED",
+          returnIds: data.returnIds ?? data.validReturnIds ?? null,
+          packId: data.packId ?? null,
+          cost: data.cost ?? null,
+        }), {
+          status: resp.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify(data), {
         status: resp.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1094,7 +1129,7 @@ Deno.serve(async (req: Request) => {
     const sendReqTimestamp = new Date().toISOString();
     const sendT0 = Date.now();
 
-    const restProviderTimeoutMs = isAuthOtp ? 2500 : 13000;
+    const restProviderTimeoutMs = isAuthOtp ? 7000 : 13000;
     const restController = new AbortController();
     const restTimer = setTimeout(() => restController.abort(), restProviderTimeoutMs);
     let smsRaw: Response;
@@ -1148,15 +1183,30 @@ Deno.serve(async (req: Request) => {
     };
 
     if (!smsRaw.ok) {
+      if (isAuthOtp) {
+        return json({ ok: false, errorCode: "SMS_PROVIDER_REJECTED" });
+      }
       return json({ ok: false, httpStatus: smsRaw.status, response: smsData,
         error: smsData?.message || `HTTP ${smsRaw.status}`, debug: [sendDebugEntry] });
     }
 
     if (smsData?.status !== 1) {
+      if (isAuthOtp) {
+        return json({ ok: false, errorCode: "SMS_PROVIDER_REJECTED" });
+      }
       return json({ ok: false, response: smsData,
         error: smsData?.message || "ارسال ناموفق", debug: [sendDebugEntry] });
     }
 
+    if (isAuthOtp) {
+      return json({
+        ok: true,
+        packId: smsData.data?.packId ?? null,
+        messageIds: smsData.data?.messageIds ?? null,
+        returnIds: smsData.data?.messageIds ?? null,
+        cost: smsData.data?.cost ?? null,
+      });
+    }
     return json({
       ok: true,
       sent: normalized.length,

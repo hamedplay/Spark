@@ -37,7 +37,7 @@ interface SystemConfig {
   ttlSeconds: number;
   resendSeconds: number;
   maxAttempts: number;
-  providerId: string;
+  configuredProviderId: string | null;
 }
 
 const SECURITY_CONFIG_KEYS = [
@@ -87,22 +87,59 @@ async function getSystemConfig(): Promise<SystemConfig> {
     .eq("key", "phone_login_sms_provider_id")
     .maybeSingle();
 
-  if (smsError || !smsData) throw new Error("CONFIG_UNAVAILABLE");
-  const providerId = smsData.value ?? "";
-  if (!isValidUuid(providerId)) throw new Error("CONFIG_UNAVAILABLE");
+  if (smsError) throw new Error("CONFIG_UNAVAILABLE");
+  const configuredProviderId = smsData?.value ?? null;
+  if (configuredProviderId !== null && !isValidUuid(configuredProviderId)) throw new Error("CONFIG_UNAVAILABLE");
 
-  return { backendReady, canonicalEnabled, ttlSeconds, resendSeconds, maxAttempts, providerId };
+  return { backendReady, canonicalEnabled, ttlSeconds, resendSeconds, maxAttempts, configuredProviderId };
 }
 
-async function validateProvider(admin: ReturnType<typeof adminClient>, providerId: string): Promise<boolean> {
-  const { data, error } = await admin
+interface ResolvedProvider {
+  providerId: string;
+  providerName: string;
+  errorCode: string | null;
+}
+
+async function resolveProvider(
+  admin: ReturnType<typeof adminClient>,
+  configuredProviderId: string | null,
+): Promise<ResolvedProvider> {
+  if (configuredProviderId && isValidUuid(configuredProviderId)) {
+    const { data, error } = await admin
+      .from("sms_providers")
+      .select("id, title, is_active")
+      .eq("id", configuredProviderId)
+      .maybeSingle();
+    if (error) return { providerId: "", providerName: "", errorCode: "SMS_PROVIDER_CONFIG_INVALID" };
+    if (data && data.is_active === true) {
+      return { providerId: data.id, providerName: data.title ?? "", errorCode: null };
+    }
+  }
+
+  const { data: defaultProviders, error: defaultError } = await admin
     .from("sms_providers")
-    .select("id, is_active")
-    .eq("id", providerId)
+    .select("id, title")
     .eq("is_active", true)
-    .maybeSingle();
-  if (error || !data) return false;
-  return true;
+    .eq("is_default", true)
+    .limit(1);
+  if (defaultError) return { providerId: "", providerName: "", errorCode: "SMS_PROVIDER_CONFIG_INVALID" };
+  if (defaultProviders && defaultProviders.length > 0) {
+    return { providerId: defaultProviders[0].id, providerName: defaultProviders[0].title ?? "", errorCode: null };
+  }
+
+  const { data: activeProviders, error: activeError } = await admin
+    .from("sms_providers")
+    .select("id, title")
+    .eq("is_active", true);
+  if (activeError) return { providerId: "", providerName: "", errorCode: "SMS_PROVIDER_CONFIG_INVALID" };
+  if (!activeProviders || activeProviders.length === 0) {
+    return { providerId: "", providerName: "", errorCode: "NO_ACTIVE_SMS_PROVIDER" };
+  }
+  if (activeProviders.length === 1) {
+    return { providerId: activeProviders[0].id, providerName: activeProviders[0].title ?? "", errorCode: null };
+  }
+
+  return { providerId: "", providerName: "", errorCode: "AMBIGUOUS_SMS_PROVIDER" };
 }
 
 async function getTemplate(admin: ReturnType<typeof adminClient>): Promise<string | null> {
@@ -278,10 +315,15 @@ async function setDeliveryResult(
   return row === true;
 }
 
+// ── SendSmsResult ────────────────────────────────────────────────────
+
 interface SendSmsResult {
   ok: boolean;
-  packId: string | null;
+  errorCode: string | null;
+  providerId: string | null;
+  providerName: string | null;
   providerMessageId: string | null;
+  packId: string | null;
   cost: number | null;
 }
 
@@ -307,6 +349,7 @@ async function sendSms(
   canonicalPhone: string,
   message: string,
   providerId: string,
+  providerName: string,
 ): Promise<SendSmsResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
@@ -328,7 +371,9 @@ async function sendSms(
     });
     clearTimeout(timer);
 
-    if (!resp.ok) return { ok: false, packId: null, providerMessageId: null, cost: null };
+    if (!resp.ok) {
+      return { ok: false, errorCode: "SMS_DISPATCH_FAILED", providerId, providerName, providerMessageId: null, packId: null, cost: null };
+    }
     const result = await resp.json();
     const ok = result.ok === true || result.success === true;
     const returnIds: unknown[] | undefined = result.returnIds;
@@ -339,12 +384,18 @@ async function sendSms(
       null;
     const packId = normalizeProviderId(result.packId);
     const cost = normalizeCost(result.cost);
-    return { ok, packId, providerMessageId, cost };
+    if (!ok) {
+      const ec = typeof result.errorCode === "string" ? result.errorCode : "SMS_PROVIDER_REJECTED";
+      return { ok: false, errorCode: ec, providerId, providerName, providerMessageId: null, packId: null, cost: null };
+    }
+    return { ok: true, errorCode: null, providerId, providerName, providerMessageId, packId, cost };
   } catch {
     clearTimeout(timer);
-    return { ok: false, packId: null, providerMessageId: null, cost: null };
+    return { ok: false, errorCode: "SMS_PROVIDER_TIMEOUT", providerId, providerName, providerMessageId: null, packId: null, cost: null };
   }
 }
+
+// ── Masking ──────────────────────────────────────────────────────────
 
 function maskCanonicalIranPhoneForLog(canonicalPhone: string): string {
   if (!/^989\d{9}$/.test(canonicalPhone)) {
@@ -358,57 +409,57 @@ function maskCanonicalIranPhoneForLog(canonicalPhone: string): string {
   );
 }
 
-const AUTH_OTP_LOG_MESSAGE = "کد یک‌بارمصرف ورود";
+// ── Dispatch Log Lifecycle ────────────────────────────────────────────
 
-async function writeDispatchLog(
+const AUTH_OTP_LOG_MESSAGE_PENDING = "درخواست کد یک‌بارمصرف ورود";
+
+async function createOtpDispatchLog(
   admin: ReturnType<typeof adminClient>,
   params: {
-    targetUserId: string;
-    providerId: string;
-    providerName: string;
     maskedPhone: string;
-    ok: boolean;
-    packId: string | null;
-    providerMessageId: string | null;
-    cost: number | null;
+    targetUserId: string | null;
   },
-): Promise<void> {
-  try {
-    await admin.from("sms_dispatch_logs").insert({
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from("sms_dispatch_logs")
+    .insert({
       target_user_id: params.targetUserId,
       category: "auth",
       event_type: "login_otp",
       audience: "all",
+      message: AUTH_OTP_LOG_MESSAGE_PENDING,
       target_phone: params.maskedPhone,
-      message: AUTH_OTP_LOG_MESSAGE,
-      provider_id: params.providerId,
-      provider_name: params.providerName,
-      status: params.ok ? "sent" : "failed",
-      pack_id: params.packId,
-      provider_message_id: params.providerMessageId,
-      cost: params.cost,
-      delivery_status: params.ok && params.providerMessageId ? "pending" : null,
-      error_text: params.ok ? null : "AUTH_OTP_DELIVERY_FAILED",
-    });
-  } catch {
-    // dispatch log failure should not block response
-  }
+      status: "pending",
+      provider_id: null,
+      provider_name: null,
+      provider_message_id: null,
+      pack_id: null,
+      cost: null,
+      delivery_status: null,
+      error_text: null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return null;
+  return typeof data.id === "string" ? data.id : null;
 }
 
-async function getProviderName(
+async function updateOtpDispatchLog(
   admin: ReturnType<typeof adminClient>,
-  providerId: string,
-): Promise<string> {
-  try {
-    const { data } = await admin
-      .from("sms_providers")
-      .select("title")
-      .eq("id", providerId)
-      .maybeSingle();
-    return data?.title ?? "";
-  } catch {
-    return "";
+  logId: string,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  const { error } = await admin
+    .from("sms_dispatch_logs")
+    .update(patch)
+    .eq("id", logId);
+
+  if (error) {
+    console.log("[PHONE_OTP_V2] dispatch log update failed");
+    return false;
   }
+  return true;
 }
 
 async function writeAudit(
@@ -514,26 +565,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const admin = adminClient();
-
-  let providerActive: boolean;
-  try {
-    providerActive = await validateProvider(admin, sysConfig.providerId);
-  } catch {
-    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-  }
-  if (!providerActive) {
-    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-  }
-
-  let templateBody: string | null;
-  try {
-    templateBody = await getTemplate(admin);
-  } catch {
-    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-  }
-  if (!templateBody) {
-    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-  }
+  const maskedPhone = maskCanonicalIranPhoneForLog(canonicalPhone);
 
   const clientIp = getClientIp(req);
 
@@ -589,15 +621,32 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Resolve user
+  // ── Create dispatch log BEFORE any provider/user/challenge work ──
+  const dispatchLogId = await createOtpDispatchLog(admin, {
+    maskedPhone,
+    targetUserId: null,
+  });
+  if (!dispatchLogId) {
+    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+  }
+
+  // ── Resolve user ──────────────────────────────────────────────────
   let resolved: ResolvedUser | null;
   try {
     resolved = await resolveUser(admin, canonicalPhone);
   } catch {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      status: "failed",
+      error_text: "RESOLVE_UNAVAILABLE",
+    });
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
   if (!resolved) {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      status: "skipped",
+      error_text: "AUTH_TARGET_NOT_ELIGIBLE",
+    });
     // Decoy path — no challenge, no SMS, same response shape
     await minimumResponseDelay(startedAt);
     return jsonResponse(
@@ -612,15 +661,25 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Check eligibility
+  // ── Check eligibility ─────────────────────────────────────────────
   let eligibility: EligibilityResult;
   try {
     eligibility = await checkEligibility(admin, resolved.userId);
   } catch {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      target_user_id: resolved.userId,
+      status: "failed",
+      error_text: "AUTH_UNAVAILABLE",
+    });
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
   if (!eligibility.eligible) {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      target_user_id: resolved.userId,
+      status: "skipped",
+      error_text: "AUTH_TARGET_NOT_ELIGIBLE",
+    });
     // Decoy path
     await minimumResponseDelay(startedAt);
     return jsonResponse(
@@ -635,7 +694,46 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Create challenge
+  // ── Update log with target_user_id ───────────────────────────────
+  await updateOtpDispatchLog(admin, dispatchLogId, {
+    target_user_id: resolved.userId,
+  });
+
+  // ── Resolve provider (server-side only) ──────────────────────────
+  const provider = await resolveProvider(admin, sysConfig.configuredProviderId);
+  if (provider.errorCode) {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      status: "failed",
+      error_text: provider.errorCode,
+    });
+    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+  }
+
+  await updateOtpDispatchLog(admin, dispatchLogId, {
+    provider_id: provider.providerId,
+    provider_name: provider.providerName,
+  });
+
+  // ── Template ──────────────────────────────────────────────────────
+  let templateBody: string | null;
+  try {
+    templateBody = await getTemplate(admin);
+  } catch {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      status: "failed",
+      error_text: "OTP_TEMPLATE_UNAVAILABLE",
+    });
+    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+  }
+  if (!templateBody) {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      status: "failed",
+      error_text: "OTP_TEMPLATE_UNAVAILABLE",
+    });
+    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+  }
+
+  // ── Challenge ─────────────────────────────────────────────────────
   const challengeId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
   const otp = generateSixDigitOtp();
@@ -659,11 +757,19 @@ Deno.serve(async (req: Request) => {
       maxAttempts: sysConfig.maxAttempts,
     });
   } catch {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      status: "failed",
+      error_text: "CHALLENGE_CREATION_FAILED",
+    });
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
   if (!challengeResult.created) {
     if (challengeResult.errorCode === "RESEND_NOT_READY") {
+      await updateOtpDispatchLog(admin, dispatchLogId, {
+        status: "skipped",
+        error_text: "RESEND_NOT_READY",
+      });
       if (challengeResult.retryAfterSeconds === null) {
         return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
       }
@@ -673,31 +779,39 @@ Deno.serve(async (req: Request) => {
         allowedOrigin,
       );
     }
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      status: "failed",
+      error_text: "CHALLENGE_CREATION_FAILED",
+    });
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
 
-  // Send SMS
+  // ── Send SMS ──────────────────────────────────────────────────────
   const renderedTemplate = templateBody.replace(/\{\{otp\}\}/g, otp);
-  const smsResult = await sendSms(canonicalPhone, renderedTemplate, sysConfig.providerId);
-  const providerName = await getProviderName(admin, sysConfig.providerId);
-  const maskedPhone = maskCanonicalIranPhoneForLog(canonicalPhone);
-
-  await writeDispatchLog(admin, {
-    targetUserId: resolved.userId,
-    providerId: sysConfig.providerId,
-    providerName,
-    maskedPhone,
-    ok: smsResult.ok,
-    packId: smsResult.packId,
-    providerMessageId: smsResult.providerMessageId,
-    cost: smsResult.cost,
-  });
+  const smsResult = await sendSms(canonicalPhone, renderedTemplate, provider.providerId, provider.providerName);
 
   if (!smsResult.ok) {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      status: "failed",
+      delivery_status: null,
+      error_text: smsResult.errorCode,
+    });
     console.log("[PHONE_OTP_V2] delivery failed");
     await setDeliveryResult(admin, challengeId, false);
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
   }
+
+  // ── Success: update log ───────────────────────────────────────────
+  await updateOtpDispatchLog(admin, dispatchLogId, {
+    status: "sent",
+    provider_id: smsResult.providerId,
+    provider_name: smsResult.providerName,
+    provider_message_id: smsResult.providerMessageId,
+    pack_id: smsResult.packId,
+    cost: smsResult.cost,
+    delivery_status: smsResult.providerMessageId ? "pending" : null,
+    error_text: null,
+  });
 
   // Record delivery result
   const deliveryRecorded = await setDeliveryResult(admin, challengeId, true);
