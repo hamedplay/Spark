@@ -372,4 +372,114 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
       }
     }
   });
+
+  // ── Phase 5E-D5: Secure Dispatch Logging ───────────────────────────
+
+  it('sendSms returns structured result with ok, packId, providerMessageId', () => {
+    assert.ok(/interface SendSmsResult/.test(funcSrc), 'must declare SendSmsResult interface');
+    assert.ok(/ok:\s*boolean/.test(funcSrc), 'must have ok boolean');
+    assert.ok(/packId:\s*string\s*\|\s*null/.test(funcSrc), 'must have packId');
+    assert.ok(/providerMessageId:\s*string\s*\|\s*null/.test(funcSrc), 'must have providerMessageId');
+    assert.ok(/Promise<SendSmsResult>/.test(funcSrc), 'sendSms must return Promise<SendSmsResult>');
+  });
+
+  it('provider_message_id extracted from returnIds or messageIds', () => {
+    assert.ok(/returnIds/.test(funcSrc), 'must check returnIds');
+    assert.ok(/messageIds/.test(funcSrc), 'must check messageIds');
+    assert.ok(/returnIds\[0\]/.test(funcSrc), 'must take first returnId');
+    assert.ok(/messageIds\[0\]/.test(funcSrc), 'must take first messageId');
+  });
+
+  it('writeDispatchLog inserts into sms_dispatch_logs', () => {
+    assert.ok(/sms_dispatch_logs/.test(funcSrc), 'must insert into sms_dispatch_logs');
+    assert.ok(/writeDispatchLog/.test(funcSrc), 'must call writeDispatchLog');
+  });
+
+  it('dispatch log uses category=auth and event_type=login_otp', () => {
+    const logMatch = funcSrc.match(/writeDispatchLog[\s\S]*?insert\(\{[\s\S]*?\}\)/);
+    assert.ok(logMatch, 'must find writeDispatchLog insert');
+    const block = funcSrc.match(/writeDispatchLog[\s\S]*?category:\s*"auth"/);
+    assert.ok(block, 'must set category=auth');
+    const evtBlock = funcSrc.match(/writeDispatchLog[\s\S]*?event_type:\s*"login_otp"/);
+    assert.ok(evtBlock, 'must set event_type=login_otp');
+  });
+
+  it('dispatch log uses audience=all', () => {
+    assert.ok(/audience:\s*"all"/.test(funcSrc), 'must set audience=all');
+  });
+
+  it('dispatch log message is constant کد یک‌بارمصرف ورود not OTP text', () => {
+    assert.ok(/AUTH_OTP_LOG_MESSAGE/.test(funcSrc), 'must have AUTH_OTP_LOG_MESSAGE constant');
+    assert.ok(/کد یک‌بارمصرف ورود/.test(funcSrc), 'must use safe constant message');
+    const logBlock = funcSrc.match(/writeDispatchLog[\s\S]*?message:\s*AUTH_OTP_LOG_MESSAGE/);
+    assert.ok(logBlock, 'must use AUTH_OTP_LOG_MESSAGE as message');
+  });
+
+  it('dispatch log stores masked phone not full phone', () => {
+    assert.ok(/maskPhoneForLog/.test(funcSrc), 'must have maskPhoneForLog function');
+    const maskMatch = funcSrc.match(/function maskPhoneForLog[\s\S]*?\n\s*\}/);
+    assert.ok(maskMatch, 'must find maskPhoneForLog function');
+    const body = maskMatch![0];
+    assert.ok(/slice\(0,\s*4\)/.test(body), 'must keep first 4 chars');
+    assert.ok(/slice\(-3\)/.test(body), 'must keep last 3 chars');
+    assert.ok(/repeat\(hiddenLength\)/.test(body), 'must repeat stars dynamically');
+    assert.ok(/target_phone:\s*params\.maskedPhone/.test(funcSrc) || /target_phone:\s*maskedPhone/.test(funcSrc),
+      'must store masked phone in target_phone');
+  });
+
+  it('dispatch log does not store OTP, otp_hash, phone_hash, ip_hash, challenge_id, tokens, or template text', () => {
+    const logMatch = funcSrc.match(/writeDispatchLog[\s\S]*?insert\(\{([\s\S]*?)\}\)/);
+    assert.ok(logMatch, 'must find writeDispatchLog insert block');
+    const block = logMatch![1];
+    assert.ok(!/otp_hash/.test(block), 'must not store otp_hash');
+    assert.ok(!/phone_hash/.test(block), 'must not store phone_hash');
+    assert.ok(!/ip_hash/.test(block), 'must not store ip_hash');
+    assert.ok(!/challenge_id/.test(block), 'must not store challenge_id');
+    assert.ok(!/access_token/.test(block), 'must not store access_token');
+    assert.ok(!/refresh_token/.test(block), 'must not store refresh_token');
+    assert.ok(!/renderedTemplate/.test(block), 'must not store rendered template text');
+    assert.ok(!/\{\{otp\}\}/.test(block), 'must not store OTP placeholder text');
+  });
+
+  it('success sets status=sent and delivery_status=pending when provider_message_id exists', () => {
+    assert.ok(/status:\s*params\.ok\s*\?\s*"sent"/.test(funcSrc), 'must set status=sent on success');
+    assert.ok(/delivery_status:\s*params\.ok\s*&&\s*params\.providerMessageId\s*\?\s*"pending"/.test(funcSrc),
+      'must set delivery_status=pending when provider_message_id exists');
+  });
+
+  it('failure sets status=failed and error_text=AUTH_OTP_DELIVERY_FAILED', () => {
+    assert.ok(/status:\s*params\.ok\s*\?\s*"sent"\s*:\s*"failed"/.test(funcSrc), 'must set status=failed on failure');
+    assert.ok(/AUTH_OTP_DELIVERY_FAILED/.test(funcSrc), 'must use AUTH_OTP_DELIVERY_FAILED error text');
+  });
+
+  it('decoy path does not create any SMS dispatch log', () => {
+    const decoyMatch = funcSrc.match(/if\s*\(!resolved\)[\s\S]*?allowedOrigin\s*\)/);
+    assert.ok(decoyMatch, 'must have decoy path');
+    const decoyBlock = decoyMatch![0];
+    assert.ok(!/writeDispatchLog/.test(decoyBlock), 'decoy must not call writeDispatchLog');
+    assert.ok(!/sms_dispatch_logs/.test(decoyBlock), 'decoy must not insert into sms_dispatch_logs');
+  });
+
+  it('dispatch log failure does not block response', () => {
+    assert.ok(/async function writeDispatchLog/.test(funcSrc), 'must find writeDispatchLog function');
+    assert.ok(/should not block/.test(funcSrc) || /dispatch log failure/.test(funcSrc),
+      'must have comment about not blocking');
+    const logFnMatch = funcSrc.match(/async function writeDispatchLog[\s\S]*?catch[\s\S]*?\n\s*\}/);
+    assert.ok(logFnMatch, 'must find writeDispatchLog with catch block');
+    assert.ok(/catch/.test(logFnMatch![0]), 'must catch errors in writeDispatchLog');
+  });
+
+  it('getProviderName queries sms_providers for title', () => {
+    assert.ok(/getProviderName/.test(funcSrc), 'must have getProviderName function');
+    assert.ok(/from\("sms_providers"\)/.test(funcSrc), 'must query sms_providers');
+    assert.ok(/\.select\("title"\)/.test(funcSrc), 'must select title');
+  });
+
+  it('raw provider response is not stored in dispatch log', () => {
+    const logMatch = funcSrc.match(/writeDispatchLog[\s\S]*?insert\(\{([\s\S]*?)\}\)/);
+    assert.ok(logMatch, 'must find writeDispatchLog insert block');
+    const block = logMatch![1];
+    assert.ok(!/raw_response/.test(block), 'must not store raw_response');
+    assert.ok(!/debug/.test(block), 'must not store debug data');
+  });
 });

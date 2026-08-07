@@ -377,4 +377,55 @@ test('Phase 5E-D4 UI Fix 4 — Correct Phone Masking', async (t) => {
     const body = maskMatch![0];
     assert.ok(/<=\s*7/.test(body), 'must check length <= 7 for short numbers');
   });
+
+  // ── Phase 5E-D5: Reports UI labels for auth/login_otp ──────────────
+
+  await t.test('Reports UI has auth category label', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/auth:\s*'احراز هویت'/.test(typesSrc), 'must have auth category label in types');
+  });
+
+  await t.test('Reports UI has login_otp event label', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/login_otp:\s*'کد ورود'/.test(typesSrc), 'must have login_otp event label in types');
+  });
+
+  await t.test('Reports UI has auth category color', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/auth:\s*'bg-cyan/.test(typesSrc), 'must have auth category color in CATEGORY_COLORS');
+  });
+
+  await t.test('Reports UI displays target_phone field', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/target_phone/.test(reportsSrc), 'must display target_phone in reports');
+  });
+
+  await t.test('Reports UI displays provider_message_id and pack_id', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/provider_message_id/.test(reportsSrc), 'must display provider_message_id');
+    assert.ok(/pack_id/.test(reportsSrc), 'must display pack_id');
+  });
+
+  await t.test('Reports UI displays message text', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/log\.message/.test(reportsSrc), 'must display log.message');
+  });
+
+  await t.test('Reports UI displays provider name', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/provider_name/.test(reportsSrc), 'must display provider_name');
+  });
+
+  await t.test('Reports UI displays status', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/log\.status/.test(reportsSrc), 'must display log.status');
+  });
 });

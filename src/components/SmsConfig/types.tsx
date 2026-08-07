@@ -72,6 +72,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   note:    'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
   report:  'bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400',
   system:  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+  auth:    'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400',
 };
 
 export const inp = 'w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition text-sm [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-gray-700 dark:[&>option]:text-white';
@@ -145,12 +146,12 @@ export const DELIVERY_STATUS_UI: Record<string, { label: string; className: stri
 };
 
 export const CATEGORY_LABEL: Record<string, string> = {
-  meeting: 'جلسه', task: 'اقدام', calendar: 'تقویم', chat: 'چت', system: 'سیستم',
+  meeting: 'جلسه', task: 'اقدام', calendar: 'تقویم', chat: 'چت', system: 'سیستم', auth: 'احراز هویت',
 };
 
 export const EVENT_LABEL: Record<string, string> = {
   invite: 'دعوت', change: 'تغییر', cancel: 'لغو', reminder: 'یادآور',
-  assign: 'تخصیص', complete: 'تکمیل', event_invite: 'دعوت رویداد', mention: 'منشن',
+  assign: 'تخصیص', complete: 'تکمیل', event_invite: 'دعوت رویداد', mention: 'منشن', login_otp: 'کد ورود',
 };
 
 import { CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock } from 'lucide-react';

@@ -278,11 +278,17 @@ async function setDeliveryResult(
   return row === true;
 }
 
+interface SendSmsResult {
+  ok: boolean;
+  packId: string | null;
+  providerMessageId: string | null;
+}
+
 async function sendSms(
   canonicalPhone: string,
   message: string,
   providerId: string,
-): Promise<boolean> {
+): Promise<SendSmsResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
 
@@ -303,12 +309,80 @@ async function sendSms(
     });
     clearTimeout(timer);
 
-    if (!resp.ok) return false;
+    if (!resp.ok) return { ok: false, packId: null, providerMessageId: null };
     const result = await resp.json();
-    return result.ok === true || result.success === true;
+    const ok = result.ok === true || result.success === true;
+    const returnIds: string[] | undefined = result.returnIds;
+    const messageIds: string[] | undefined = result.messageIds;
+    const providerMessageId =
+      (Array.isArray(returnIds) && returnIds.length > 0 && typeof returnIds[0] === "string" && returnIds[0]) ||
+      (Array.isArray(messageIds) && messageIds.length > 0 && typeof messageIds[0] === "string" && messageIds[0]) ||
+      null;
+    const packId = typeof result.packId === "string" ? result.packId : null;
+    return { ok, packId, providerMessageId };
   } catch {
     clearTimeout(timer);
-    return false;
+    return { ok: false, packId: null, providerMessageId: null };
+  }
+}
+
+function maskPhoneForLog(phone: string): string {
+  const normalized = phone.trim();
+  if (normalized.length <= 7) return normalized;
+  const visibleStart = normalized.slice(0, 4);
+  const visibleEnd = normalized.slice(-3);
+  const hiddenLength = normalized.length - 7;
+  return `${visibleStart}${"*".repeat(hiddenLength)}${visibleEnd}`;
+}
+
+const AUTH_OTP_LOG_MESSAGE = "کد یک‌بارمصرف ورود";
+
+async function writeDispatchLog(
+  admin: ReturnType<typeof adminClient>,
+  params: {
+    targetUserId: string;
+    providerId: string;
+    providerName: string;
+    maskedPhone: string;
+    ok: boolean;
+    packId: string | null;
+    providerMessageId: string | null;
+  },
+): Promise<void> {
+  try {
+    await admin.from("sms_dispatch_logs").insert({
+      target_user_id: params.targetUserId,
+      category: "auth",
+      event_type: "login_otp",
+      audience: "all",
+      target_phone: params.maskedPhone,
+      message: AUTH_OTP_LOG_MESSAGE,
+      provider_id: params.providerId,
+      provider_name: params.providerName,
+      status: params.ok ? "sent" : "failed",
+      pack_id: params.packId,
+      provider_message_id: params.providerMessageId,
+      delivery_status: params.ok && params.providerMessageId ? "pending" : null,
+      error_text: params.ok ? null : "AUTH_OTP_DELIVERY_FAILED",
+    });
+  } catch {
+    // dispatch log failure should not block response
+  }
+}
+
+async function getProviderName(
+  admin: ReturnType<typeof adminClient>,
+  providerId: string,
+): Promise<string> {
+  try {
+    const { data } = await admin
+      .from("sms_providers")
+      .select("title")
+      .eq("id", providerId)
+      .maybeSingle();
+    return data?.title ?? "";
+  } catch {
+    return "";
   }
 }
 
@@ -579,9 +653,21 @@ Deno.serve(async (req: Request) => {
 
   // Send SMS
   const renderedTemplate = templateBody.replace(/\{\{otp\}\}/g, otp);
-  const smsSuccess = await sendSms(canonicalPhone, renderedTemplate, sysConfig.providerId);
+  const smsResult = await sendSms(canonicalPhone, renderedTemplate, sysConfig.providerId);
+  const providerName = await getProviderName(admin, sysConfig.providerId);
+  const maskedPhone = maskPhoneForLog(canonicalPhone);
 
-  if (!smsSuccess) {
+  await writeDispatchLog(admin, {
+    targetUserId: resolved.userId,
+    providerId: sysConfig.providerId,
+    providerName,
+    maskedPhone,
+    ok: smsResult.ok,
+    packId: smsResult.packId,
+    providerMessageId: smsResult.providerMessageId,
+  });
+
+  if (!smsResult.ok) {
     console.log("[PHONE_OTP_V2] delivery failed");
     await setDeliveryResult(admin, challengeId, false);
     return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
