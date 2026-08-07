@@ -8,7 +8,18 @@ import {
 import { JalaliDateFilter } from '../NotificationsConfig/JalaliDateFilter';
 import { jalaliToUtcRange } from '../NotificationsConfig/jalaliDateFilter';
 import type { DispatchLog } from './types';
-import { CATEGORY_COLORS, STATUS_CONFIG, DELIVERY_STATUS_UI, CATEGORY_LABEL, EVENT_LABEL } from './types';
+import {
+  CATEGORY_COLORS,
+  STATUS_CONFIG,
+  DELIVERY_STATUS_UI,
+  CATEGORY_LABEL,
+  EVENT_LABEL,
+  SMS_ERROR_LABELS,
+  smsErrorLabel,
+  smsDeliveryLabel,
+  isLoginOtpLog,
+  loginOtpStageInfo,
+} from './types';
 
 export function ReportsTab() {
   const [logs, setLogs] = useState<DispatchLog[]>([]);
@@ -230,37 +241,96 @@ export function ReportsTab() {
 
                   {isOpen && (
                     <div className="px-4 pb-4 pt-1 bg-gray-50 dark:bg-gray-700/20 border-t border-gray-100 dark:border-gray-700 space-y-2">
+                      {isLoginOtpLog(log) && (() => {
+                        const stage = loginOtpStageInfo(log);
+                        const stageRows = [
+                          { label: 'درخواست ورود', value: stage.requestRegistered ? 'ثبت شد' : '—' },
+                          { label: 'تطبیق کاربر', value: stage.userMatched === 'matched' ? 'موفق' : stage.userMatched === 'not_matched' ? 'ناموفق' : 'نامشخص' },
+                          { label: 'تولید کد', value: stage.otpGenerated === 'generated' ? 'کد ۶ رقمی تولید شد' : 'تولید نشد' },
+                          { label: 'سرویس‌دهنده', value: stage.providerSelected === 'selected' ? (log.provider_name || 'سرویس‌دهنده انتخاب‌شده') : 'انتخاب نشد' },
+                          { label: 'آماده‌سازی پیام', value: stage.messagePrepared === 'prepared' ? 'آماده شد' : 'انجام نشد' },
+                          { label: 'ارسال به سرویس‌دهنده', value: stage.dispatchAttempted === 'sent' ? 'ارسال شد' : stage.dispatchAttempted === 'failed' ? 'ناموفق' : 'انجام نشد' },
+                          { label: 'وضعیت تحویل', value: stage.deliveryStatus === 'delivered' ? 'تحویل شده' : stage.deliveryStatus === 'pending' ? 'در انتظار' : stage.deliveryStatus === 'failed' ? 'ناموفق' : 'قابل بررسی نیست' },
+                        ];
+                        return (
+                          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">فرآیند ورود پیامکی</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {stageRows.map((r, i) => (
+                                <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                                  <span className="text-gray-400">{r.label}</span>
+                                  <span className="font-medium text-gray-700 dark:text-gray-200">{r.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">نوع عملیات</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200">
+                            {isLoginOtpLog(log) ? 'ورود با کد پیامکی' : `${CATEGORY_LABEL[log.category] || log.category} / ${EVENT_LABEL[log.event_type] || log.event_type}`}
+                          </p>
+                        </div>
                         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
                           <p className="text-gray-400 mb-0.5">وضعیت ارسال</p>
                           <p className="font-medium text-gray-700 dark:text-gray-200">{st.label}</p>
                         </div>
                         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
                           <p className="text-gray-400 mb-0.5">وضعیت تحویل</p>
-                          {log.delivery_status
-                            ? <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${DELIVERY_STATUS_UI[log.delivery_status]?.className || 'bg-gray-100 text-gray-600'}`}>
-                                {DELIVERY_STATUS_UI[log.delivery_status]?.label || log.delivery_status}
-                              </span>
-                            : <p className="font-medium text-gray-400">بررسی نشده</p>
-                          }
+                          <p className="font-medium text-gray-700 dark:text-gray-200">{smsDeliveryLabel(log)}</p>
                         </div>
-                        {[
-                          { label: 'دسته', value: `${CATEGORY_LABEL[log.category] || log.category} / ${EVENT_LABEL[log.event_type] || log.event_type}` },
-                          { label: 'مخاطب', value: log.audience },
-                          { label: 'شماره', value: log.target_phone || '—', mono: true },
-                          { label: 'سرویس‌دهنده', value: log.provider_name || 'پیش‌فرض' },
-                          { label: 'شناسه سرویس‌دهنده', value: log.provider_message_id || '—', mono: true },
-                          { label: 'Pack ID', value: log.pack_id || '—', mono: true },
-                          { label: 'کد تحویل', value: log.delivery_code || '—', mono: true },
-                          { label: 'هزینه', value: log.cost != null ? String(log.cost) : '—' },
-                          { label: 'آخرین استعلام', value: log.delivery_checked_at ? formatDate(log.delivery_checked_at) : '—' },
-                          { label: 'تاریخ ارسال', value: formatDate(log.created_at) },
-                        ].map(item => (
-                          <div key={item.label} className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
-                            <p className="text-gray-400 mb-0.5">{item.label}</p>
-                            <p className={`font-medium text-gray-700 dark:text-gray-200 break-all ${item.mono ? 'font-mono' : ''}`}>{item.value}</p>
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">دسته</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200">{CATEGORY_LABEL[log.category] || log.category} / {EVENT_LABEL[log.event_type] || log.event_type}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">{log.target_user_id ? 'شماره مقصد' : 'شماره واردشده'}</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200 break-all font-mono" dir="ltr">{log.target_phone || '—'}</p>
+                        </div>
+                        {isLoginOtpLog(log) && (
+                          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                            <p className="text-gray-400 mb-0.5">وضعیت تطبیق کاربر</p>
+                            <p className="font-medium text-gray-700 dark:text-gray-200">
+                              {log.target_user_id ? 'تطبیق موفق' : 'کاربر معتبری با این شماره برای ورود پیامکی تطبیق داده نشد'}
+                            </p>
                           </div>
-                        ))}
+                        )}
+                        {isLoginOtpLog(log) && (
+                          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                            <p className="text-gray-400 mb-0.5">وضعیت تولید کد</p>
+                            <p className="font-medium text-gray-700 dark:text-gray-200">
+                              {log.message && log.message !== 'درخواست کد یک‌بارمصرف ورود' && log.message.includes('******') ? 'کد ۶ رقمی تولید شد' : 'تولید نشد'}
+                            </p>
+                          </div>
+                        )}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">سرویس‌دهنده</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200">
+                            {log.provider_id || log.provider_name ? (log.provider_name || 'سرویس‌دهنده انتخاب‌شده') : 'انتخاب نشد'}
+                          </p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">شناسه سرویس‌دهنده</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200 break-all font-mono">{log.provider_message_id || '—'}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">Pack ID</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200 break-all font-mono">{log.pack_id || '—'}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">هزینه</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200">{log.cost != null ? String(log.cost) : '—'}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">آخرین استعلام</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200">{log.delivery_checked_at ? formatDate(log.delivery_checked_at) : '—'}</p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-gray-400 mb-0.5">تاریخ درخواست</p>
+                          <p className="font-medium text-gray-700 dark:text-gray-200">{formatDate(log.created_at)}</p>
+                        </div>
                       </div>
                       {log.provider_message_id && log.provider_id && (
                         <div className="flex items-center gap-3">
@@ -282,13 +352,20 @@ export function ReportsTab() {
                       {log.message && (
                         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
                           <p className="text-xs text-gray-400 mb-1">متن پیامک</p>
-                          <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{log.message}</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
+                            {isLoginOtpLog(log) && log.message === 'درخواست کد یک‌بارمصرف ورود'
+                              ? 'پیامک تولید نشد'
+                              : log.message}
+                          </p>
                         </div>
                       )}
                       {log.error_text && (
                         <div className="bg-red-50 dark:bg-red-900/10 rounded-xl p-3 border border-red-100 dark:border-red-800">
-                          <p className="text-xs text-red-500 font-semibold mb-1">جزئیات خطا</p>
-                          <p className="text-xs text-red-600 dark:text-red-400">{log.error_text}</p>
+                          <p className="text-xs text-red-500 font-semibold mb-1">علت</p>
+                          <p className="text-xs text-red-600 dark:text-red-400">{smsErrorLabel(log.error_text) ?? log.error_text}</p>
+                          {log.error_text && (
+                            <p className="text-[10px] text-red-400 dark:text-red-500 mt-1 font-mono break-all">{log.error_text}</p>
+                          )}
                         </div>
                       )}
                     </div>

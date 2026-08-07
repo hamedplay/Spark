@@ -1,3 +1,5 @@
+import { CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock } from 'lucide-react';
+
 export interface SmsProvider {
   id: string;
   title: string;
@@ -130,13 +132,13 @@ export const SAMPLE_VALUES: Record<string, string> = {
 
 export const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
   sent:    { label: 'ارسال شد',    icon: <CheckCircle  className="w-4 h-4" />, cls: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30' },
-  failed:  { label: 'خطا',         icon: <XCircle      className="w-4 h-4" />, cls: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' },
-  skipped: { label: 'رد شد',       icon: <MinusCircle  className="w-4 h-4" />, cls: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30' },
-  pending: { label: 'در انتظار',   icon: <Clock        className="w-4 h-4" />, cls: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' },
+  failed:  { label: 'ناموفق',      icon: <XCircle      className="w-4 h-4" />, cls: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' },
+  skipped: { label: 'ارسال انجام نشد', icon: <MinusCircle  className="w-4 h-4" />, cls: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30' },
+  pending: { label: 'در حال پردازش', icon: <Clock        className="w-4 h-4" />, cls: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' },
 };
 
 export const DELIVERY_STATUS_UI: Record<string, { label: string; className: string }> = {
-  pending:       { label: 'در انتظار تعیین وضعیت', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  pending:       { label: 'در انتظار نتیجه تحویل', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
   delivered:     { label: 'تحویل شده',              className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
   not_delivered: { label: 'تحویل نشده',             className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
   blocked:       { label: 'بلاک / ارسال نشده',      className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
@@ -154,4 +156,78 @@ export const EVENT_LABEL: Record<string, string> = {
   assign: 'تخصیص', complete: 'تکمیل', event_invite: 'دعوت رویداد', mention: 'منشن', login_otp: 'کد ورود',
 };
 
-import { CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock } from 'lucide-react';
+export const SMS_ERROR_LABELS: Record<string, string> = {
+  AUTH_TARGET_NOT_ELIGIBLE:
+    'شماره موبایل برای ورود پیامکی قابل استفاده نیست',
+  RESOLVE_UNAVAILABLE:
+    'بررسی حساب کاربری در حال حاضر امکان‌پذیر نیست',
+  AUTH_UNAVAILABLE:
+    'بررسی وضعیت حساب کاربری با خطا مواجه شد',
+  NO_ACTIVE_SMS_PROVIDER:
+    'هیچ سرویس‌دهنده پیامک فعالی وجود ندارد',
+  AMBIGUOUS_SMS_PROVIDER:
+    'سرویس‌دهنده پیامک به‌صورت مشخص انتخاب نشده است',
+  SMS_PROVIDER_CONFIG_INVALID:
+    'تنظیمات سرویس‌دهنده پیامک ناقص یا نامعتبر است',
+  OTP_TEMPLATE_UNAVAILABLE:
+    'قالب پیامک کد ورود در دسترس نیست یا معتبر نیست',
+  CHALLENGE_CREATION_FAILED:
+    'ایجاد درخواست کد تأیید ناموفق بود',
+  RESEND_NOT_READY:
+    'ارسال مجدد کد هنوز مجاز نیست',
+  SMS_PROVIDER_TIMEOUT:
+    'سرویس‌دهنده پیامک در زمان مقرر پاسخ نداد',
+  SMS_PROVIDER_CONNECTION_FAILED:
+    'ارتباط با سرویس‌دهنده پیامک برقرار نشد',
+  SMS_PROVIDER_REJECTED:
+    'سرویس‌دهنده پیامک درخواست ارسال را رد کرد',
+  SMS_DISPATCH_FAILED:
+    'ارسال پیامک با خطا مواجه شد',
+};
+
+export function smsErrorLabel(code: string | null): string | null {
+  if (!code) return null;
+  return SMS_ERROR_LABELS[code] ?? 'خطای ثبت‌شده در فرآیند ارسال';
+}
+
+export function smsDeliveryLabel(log: DispatchLog): string {
+  if (log.delivery_status) {
+    return DELIVERY_STATUS_UI[log.delivery_status]?.label ?? log.delivery_status;
+  }
+  if (log.status === 'sent') return 'وضعیت تحویل توسط سرویس‌دهنده ارائه نشده';
+  return 'قابل بررسی نیست';
+}
+
+export function isLoginOtpLog(log: { category: string; event_type: string }): boolean {
+  return log.category === 'auth' && log.event_type === 'login_otp';
+}
+
+export function loginOtpStageInfo(log: DispatchLog): {
+  requestRegistered: boolean;
+  userMatched: 'matched' | 'not_matched' | 'unknown';
+  otpGenerated: 'generated' | 'not_generated';
+  providerSelected: 'selected' | 'not_selected';
+  messagePrepared: 'prepared' | 'not_prepared';
+  dispatchAttempted: 'sent' | 'failed' | 'not_attempted';
+  deliveryStatus: 'delivered' | 'pending' | 'failed' | 'unknown';
+} {
+  const requestRegistered = true;
+  const userMatched = log.target_user_id
+    ? 'matched'
+    : (log.error_text === 'AUTH_TARGET_NOT_ELIGIBLE' ? 'not_matched' : 'unknown');
+  const otpGenerated = log.message && log.message !== 'درخواست کد یک‌بارمصرف ورود' && log.message.includes('******')
+    ? 'generated'
+    : 'not_generated';
+  const providerSelected = log.provider_id || log.provider_name
+    ? 'selected'
+    : 'not_selected';
+  const messagePrepared = otpGenerated === 'generated' ? 'prepared' : 'not_prepared';
+  const dispatchAttempted = log.status === 'sent'
+    ? 'sent'
+    : (log.status === 'failed' && providerSelected === 'selected' ? 'failed' : 'not_attempted');
+  const deliveryStatus = log.delivery_status === 'delivered'
+    ? 'delivered'
+    : (log.delivery_status === 'pending' ? 'pending'
+    : (log.delivery_status === 'not_delivered' || log.delivery_status === 'blocked' ? 'failed' : 'unknown'));
+  return { requestRegistered, userMatched, otpGenerated, providerSelected, messagePrepared, dispatchAttempted, deliveryStatus };
+}

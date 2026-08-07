@@ -1020,7 +1020,10 @@ Deno.serve(async (req: Request) => {
     const lineNumber: string = p.line_number || "";
     const baseUrl: string = (p.api_url || "https://api.sms.ir").replace(/\/$/, "");
 
-    if (!apiKey) return json({ ok: false, error: "کلید API تنظیم نشده است" }, 400);
+    if (!apiKey) {
+      if (isAuthOtp) return json({ ok: false, errorCode: "SMS_PROVIDER_CONFIG_INVALID" });
+      return json({ ok: false, error: "کلید API تنظیم نشده است" }, 400);
+    }
 
     // ── MODE: test_connection ─────────────────────────────────────────
     if (mode === "test_connection") {
@@ -1087,8 +1090,14 @@ Deno.serve(async (req: Request) => {
     const messageTextsInput: string[] | undefined = body.messageTexts;
     const sendDateTime: number | null = body.sendDateTime ?? null;
 
-    if (!rawMobiles.length) return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
-    if (!lineNumber) return json({ ok: false, error: "شماره خط ارسال تنظیم نشده است" }, 400);
+    if (!rawMobiles.length) {
+      if (isAuthOtp) return json({ ok: false, errorCode: "SMS_PROVIDER_CONFIG_INVALID" });
+      return json({ ok: false, error: "شماره موبایل وارد نشده" }, 400);
+    }
+    if (!lineNumber) {
+      if (isAuthOtp) return json({ ok: false, errorCode: "SMS_PROVIDER_CONFIG_INVALID" });
+      return json({ ok: false, error: "شماره خط ارسال تنظیم نشده است" }, 400);
+    }
 
     // Validate each destination number before any external call
     const invalidNumbers = rawMobiles.filter(m => !isValidPhone(m.replace(/\s/g, "")));
@@ -1147,6 +1156,10 @@ Deno.serve(async (req: Request) => {
       clearTimeout(restTimer);
     } catch (e: any) {
       clearTimeout(restTimer);
+      if (isAuthOtp) {
+        const isTimeout = e instanceof Error && e.name === "AbortError";
+        return json({ ok: false, errorCode: isTimeout ? "SMS_PROVIDER_TIMEOUT" : "SMS_PROVIDER_CONNECTION_FAILED" });
+      }
       const durationMs = Date.now() - sendT0;
       const debugEntry = {
         soapAction: "POST /v1/send/likeToLike",
@@ -1218,6 +1231,9 @@ Deno.serve(async (req: Request) => {
     });
 
   } catch (err: any) {
+    if (isAuthOtp) {
+      return json({ ok: false, errorCode: "SMS_DISPATCH_FAILED" });
+    }
     return json({ ok: false, error: err?.message || "خطای داخلی سرور" }, 500);
   }
 });

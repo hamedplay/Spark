@@ -620,6 +620,43 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(/debug/.test(sendSmsSrc), 'non-auth_otp modes must still have debug');
   });
 
+  it('send-sms outer catch returns SMS_DISPATCH_FAILED for auth_otp', () => {
+    assert.ok(/isAuthOtp[\s\S]*?SMS_DISPATCH_FAILED/.test(sendSmsSrc), 'outer catch must return SMS_DISPATCH_FAILED for auth_otp');
+  });
+
+  it('send-sms auth_otp network catch returns TIMEOUT or CONNECTION_FAILED', () => {
+    assert.ok(/SMS_PROVIDER_TIMEOUT/.test(sendSmsSrc), 'must handle SMS_PROVIDER_TIMEOUT');
+    assert.ok(/SMS_PROVIDER_CONNECTION_FAILED/.test(sendSmsSrc), 'must handle SMS_PROVIDER_CONNECTION_FAILED');
+    assert.ok(/AbortError/.test(sendSmsSrc), 'must detect AbortError for timeout');
+  });
+
+  it('send-sms auth_otp config invalid returns SMS_PROVIDER_CONFIG_INVALID', () => {
+    assert.ok(/SMS_PROVIDER_CONFIG_INVALID/.test(sendSmsSrc), 'must handle SMS_PROVIDER_CONFIG_INVALID');
+  });
+
+  it('request-otp-v2 stores redacted template with ****** in message', () => {
+    assert.ok(/redactedRenderedTemplate/.test(funcSrc), 'must have redactedRenderedTemplate variable');
+    assert.ok(/\*\*\*\*\*\*/.test(funcSrc), 'must use ****** as redaction');
+    assert.ok(/message:\s*redactedRenderedTemplate/.test(funcSrc), 'must store redacted template in message');
+  });
+
+  it('request-otp-v2 never stores raw renderedTemplate in dispatch log', () => {
+    const updateBlocks = funcSrc.match(/updateOtpDispatchLog\([\s\S]*?\{[\s\S]*?\}/g);
+    assert.ok(updateBlocks, 'must have updateOtpDispatchLog calls');
+    for (const block of updateBlocks!) {
+      assert.ok(!/message:\s*renderedTemplate\b/.test(block), 'must not store raw renderedTemplate in message');
+    }
+  });
+
+  it('request-otp-v2 never stores raw OTP in dispatch log', () => {
+    const updateBlocks = funcSrc.match(/updateOtpDispatchLog\([\s\S]*?\{[\s\S]*?\}/g);
+    if (updateBlocks) {
+      for (const block of updateBlocks!) {
+        assert.ok(!/message:\s*otp\b/.test(block), 'must not store raw OTP in message');
+      }
+    }
+  });
+
   it('UI report source is still sms_dispatch_logs (no new system)', () => {
     assert.ok(/sms_dispatch_logs/.test(funcSrc), 'must still use sms_dispatch_logs');
   });

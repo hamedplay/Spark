@@ -788,6 +788,12 @@ Deno.serve(async (req: Request) => {
 
   // ── Send SMS ──────────────────────────────────────────────────────
   const renderedTemplate = templateBody.replace(/\{\{otp\}\}/g, otp);
+  const redactedRenderedTemplate = templateBody.replace(/\{\{otp\}\}/g, "******");
+
+  await updateOtpDispatchLog(admin, dispatchLogId, {
+    message: redactedRenderedTemplate,
+  });
+
   const smsResult = await sendSms(canonicalPhone, renderedTemplate, provider.providerId, provider.providerName);
 
   if (!smsResult.ok) {

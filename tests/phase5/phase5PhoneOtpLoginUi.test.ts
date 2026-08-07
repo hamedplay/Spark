@@ -428,4 +428,114 @@ test('Phase 5E-D4 UI Fix 4 — Correct Phone Masking', async (t) => {
     const reportsSrc = readFileSync(reportsPath, 'utf8');
     assert.ok(/log\.status/.test(reportsSrc), 'must display log.status');
   });
+
+  // ── Phase 5E-D5 Final Fix: Complete OTP Dispatch Report UX ─────────
+
+  await t.test('Reports UI has SMS_ERROR_LABELS mapping', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/AUTH_TARGET_NOT_ELIGIBLE/.test(typesSrc), 'must map AUTH_TARGET_NOT_ELIGIBLE');
+    assert.ok(/NO_ACTIVE_SMS_PROVIDER/.test(typesSrc), 'must map NO_ACTIVE_SMS_PROVIDER');
+    assert.ok(/SMS_PROVIDER_TIMEOUT/.test(typesSrc), 'must map SMS_PROVIDER_TIMEOUT');
+    assert.ok(/SMS_PROVIDER_REJECTED/.test(typesSrc), 'must map SMS_PROVIDER_REJECTED');
+    assert.ok(/SMS_DISPATCH_FAILED/.test(typesSrc), 'must map SMS_DISPATCH_FAILED');
+    assert.ok(/OTP_TEMPLATE_UNAVAILABLE/.test(typesSrc), 'must map OTP_TEMPLATE_UNAVAILABLE');
+    assert.ok(/CHALLENGE_CREATION_FAILED/.test(typesSrc), 'must map CHALLENGE_CREATION_FAILED');
+    assert.ok(/RESEND_NOT_READY/.test(typesSrc), 'must map RESEND_NOT_READY');
+    assert.ok(/SMS_PROVIDER_CONFIG_INVALID/.test(typesSrc), 'must map SMS_PROVIDER_CONFIG_INVALID');
+    assert.ok(/SMS_PROVIDER_CONNECTION_FAILED/.test(typesSrc), 'must map SMS_PROVIDER_CONNECTION_FAILED');
+    assert.ok(/AMBIGUOUS_SMS_PROVIDER/.test(typesSrc), 'must map AMBIGUOUS_SMS_PROVIDER');
+  });
+
+  await t.test('Reports UI has smsErrorLabel function', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/function smsErrorLabel/.test(typesSrc), 'must have smsErrorLabel function');
+    assert.ok(/خطای ثبت‌شده در فرآیند ارسال/.test(typesSrc), 'must have fallback label for unknown codes');
+  });
+
+  await t.test('Reports UI uses smsErrorLabel for error display', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/smsErrorLabel/.test(reportsSrc), 'must call smsErrorLabel for error display');
+    assert.ok(/علت/.test(reportsSrc), 'must have علت label for error');
+  });
+
+  await t.test('Reports UI never shows پیش‌فرض for null provider', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(!/پیش‌فرض/.test(reportsSrc), 'must not show پیش‌فرض for null provider');
+    assert.ok(/انتخاب نشد/.test(reportsSrc), 'must show انتخاب نشد for null provider');
+  });
+
+  await t.test('Reports UI shows شماره واردشده for unresolved user', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/شماره واردشده/.test(reportsSrc), 'must show شماره واردشده for null target_user_id');
+    assert.ok(/شماره مقصد/.test(reportsSrc), 'must show شماره مقصد for resolved user');
+  });
+
+  await t.test('Reports UI shows قابل بررسی نیست for non-sent delivery', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/قابل بررسی نیست/.test(typesSrc), 'must have قابل بررسی نیست label');
+    assert.ok(/وضعیت تحویل توسط سرویس‌دهنده ارائه نشده/.test(typesSrc), 'must have sent but no delivery label');
+  });
+
+  await t.test('Reports UI shows ارسال انجام نشد for skipped status', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/ارسال انجام نشد/.test(typesSrc), 'must show ارسال انجام نشد for skipped status');
+  });
+
+  await t.test('Reports UI has login OTP stage section', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/فرآیند ورود پیامکی/.test(reportsSrc), 'must have فرآیند ورود پیامکی section');
+    assert.ok(/تطبیق کاربر/.test(reportsSrc), 'must show user match stage');
+    assert.ok(/تولید کد/.test(reportsSrc), 'must show OTP generation stage');
+    assert.ok(/آماده‌سازی پیام/.test(reportsSrc), 'must show message preparation stage');
+    assert.ok(/ارسال به سرویس‌دهنده/.test(reportsSrc), 'must show dispatch stage');
+  });
+
+  await t.test('Reports UI shows ورود با کد پیامکی for login OTP', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/ورود با کد پیامکی/.test(reportsSrc), 'must show ورود با کد پیامکی for login OTP');
+  });
+
+  await t.test('Reports UI shows پیامک تولید نشد for pre-OTP message', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/پیامک تولید نشد/.test(reportsSrc), 'must show پیامک تولید نشد for pre-OTP message');
+  });
+
+  await t.test('Reports UI shows وضعیت تطبیق کاربر', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/وضعیت تطبیق کاربر/.test(reportsSrc), 'must show وضعیت تطبیق کاربر');
+    assert.ok(/تطبیق موفق/.test(reportsSrc), 'must show تطبیق موفق for resolved user');
+    assert.ok(/کاربر معتبری/.test(reportsSrc), 'must show ineligible user message');
+  });
+
+  await t.test('Reports UI shows وضعیت تولید کد', () => {
+    const reportsPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'ReportsTab.tsx');
+    const reportsSrc = readFileSync(reportsPath, 'utf8');
+    assert.ok(/وضعیت تولید کد/.test(reportsSrc), 'must show وضعیت تولید کد');
+    assert.ok(/کد ۶ رقمی تولید شد/.test(reportsSrc), 'must show کد ۶ رقمی تولید شد');
+    assert.ok(/تولید نشد/.test(reportsSrc), 'must show تولید نشد for pre-OTP');
+  });
+
+  await t.test('Reports UI has isLoginOtpLog and loginOtpStageInfo helpers', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/function isLoginOtpLog/.test(typesSrc), 'must have isLoginOtpLog function');
+    assert.ok(/function loginOtpStageInfo/.test(typesSrc), 'must have loginOtpStageInfo function');
+  });
+
+  await t.test('Reports UI has smsDeliveryLabel function', () => {
+    const typesPath = join(process.cwd(), 'src', 'components', 'SmsConfig', 'types.tsx');
+    const typesSrc = readFileSync(typesPath, 'utf8');
+    assert.ok(/function smsDeliveryLabel/.test(typesSrc), 'must have smsDeliveryLabel function');
+  });
 });
