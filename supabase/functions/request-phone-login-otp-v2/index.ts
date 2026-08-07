@@ -282,6 +282,25 @@ interface SendSmsResult {
   ok: boolean;
   packId: string | null;
   providerMessageId: string | null;
+  cost: number | null;
+}
+
+function normalizeProviderId(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+}
+
+function normalizeCost(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  return null;
 }
 
 async function sendSms(
@@ -309,30 +328,34 @@ async function sendSms(
     });
     clearTimeout(timer);
 
-    if (!resp.ok) return { ok: false, packId: null, providerMessageId: null };
+    if (!resp.ok) return { ok: false, packId: null, providerMessageId: null, cost: null };
     const result = await resp.json();
     const ok = result.ok === true || result.success === true;
-    const returnIds: string[] | undefined = result.returnIds;
-    const messageIds: string[] | undefined = result.messageIds;
+    const returnIds: unknown[] | undefined = result.returnIds;
+    const messageIds: unknown[] | undefined = result.messageIds;
     const providerMessageId =
-      (Array.isArray(returnIds) && returnIds.length > 0 && typeof returnIds[0] === "string" && returnIds[0]) ||
-      (Array.isArray(messageIds) && messageIds.length > 0 && typeof messageIds[0] === "string" && messageIds[0]) ||
+      (Array.isArray(returnIds) && returnIds.length > 0 && normalizeProviderId(returnIds[0])) ||
+      (Array.isArray(messageIds) && messageIds.length > 0 && normalizeProviderId(messageIds[0])) ||
       null;
-    const packId = typeof result.packId === "string" ? result.packId : null;
-    return { ok, packId, providerMessageId };
+    const packId = normalizeProviderId(result.packId);
+    const cost = normalizeCost(result.cost);
+    return { ok, packId, providerMessageId, cost };
   } catch {
     clearTimeout(timer);
-    return { ok: false, packId: null, providerMessageId: null };
+    return { ok: false, packId: null, providerMessageId: null, cost: null };
   }
 }
 
-function maskPhoneForLog(phone: string): string {
-  const normalized = phone.trim();
-  if (normalized.length <= 7) return normalized;
-  const visibleStart = normalized.slice(0, 4);
-  const visibleEnd = normalized.slice(-3);
-  const hiddenLength = normalized.length - 7;
-  return `${visibleStart}${"*".repeat(hiddenLength)}${visibleEnd}`;
+function maskCanonicalIranPhoneForLog(canonicalPhone: string): string {
+  if (!/^989\d{9}$/.test(canonicalPhone)) {
+    return "***";
+  }
+  const localPhone = `0${canonicalPhone.slice(2)}`;
+  return (
+    localPhone.slice(0, 4) +
+    "*".repeat(localPhone.length - 7) +
+    localPhone.slice(-3)
+  );
 }
 
 const AUTH_OTP_LOG_MESSAGE = "کد یک‌بارمصرف ورود";
@@ -347,6 +370,7 @@ async function writeDispatchLog(
     ok: boolean;
     packId: string | null;
     providerMessageId: string | null;
+    cost: number | null;
   },
 ): Promise<void> {
   try {
@@ -362,6 +386,7 @@ async function writeDispatchLog(
       status: params.ok ? "sent" : "failed",
       pack_id: params.packId,
       provider_message_id: params.providerMessageId,
+      cost: params.cost,
       delivery_status: params.ok && params.providerMessageId ? "pending" : null,
       error_text: params.ok ? null : "AUTH_OTP_DELIVERY_FAILED",
     });
@@ -655,7 +680,7 @@ Deno.serve(async (req: Request) => {
   const renderedTemplate = templateBody.replace(/\{\{otp\}\}/g, otp);
   const smsResult = await sendSms(canonicalPhone, renderedTemplate, sysConfig.providerId);
   const providerName = await getProviderName(admin, sysConfig.providerId);
-  const maskedPhone = maskPhoneForLog(canonicalPhone);
+  const maskedPhone = maskCanonicalIranPhoneForLog(canonicalPhone);
 
   await writeDispatchLog(admin, {
     targetUserId: resolved.userId,
@@ -665,6 +690,7 @@ Deno.serve(async (req: Request) => {
     ok: smsResult.ok,
     packId: smsResult.packId,
     providerMessageId: smsResult.providerMessageId,
+    cost: smsResult.cost,
   });
 
   if (!smsResult.ok) {

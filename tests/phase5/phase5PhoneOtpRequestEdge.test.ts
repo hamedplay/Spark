@@ -373,21 +373,62 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     }
   });
 
-  // ── Phase 5E-D5: Secure Dispatch Logging ───────────────────────────
+  // ── Phase 5E-D5 Fix 1: OTP SMS Report Metadata Normalization ─────
 
-  it('sendSms returns structured result with ok, packId, providerMessageId', () => {
+  it('SendSmsResult interface includes cost field', () => {
     assert.ok(/interface SendSmsResult/.test(funcSrc), 'must declare SendSmsResult interface');
     assert.ok(/ok:\s*boolean/.test(funcSrc), 'must have ok boolean');
     assert.ok(/packId:\s*string\s*\|\s*null/.test(funcSrc), 'must have packId');
     assert.ok(/providerMessageId:\s*string\s*\|\s*null/.test(funcSrc), 'must have providerMessageId');
+    assert.ok(/cost:\s*number\s*\|\s*null/.test(funcSrc), 'must have cost field');
     assert.ok(/Promise<SendSmsResult>/.test(funcSrc), 'sendSms must return Promise<SendSmsResult>');
   });
 
-  it('provider_message_id extracted from returnIds or messageIds', () => {
+  it('normalizeProviderId accepts string and number, rejects other types', () => {
+    assert.ok(/function normalizeProviderId/.test(funcSrc), 'must have normalizeProviderId function');
+    const fnMatch = funcSrc.match(/function normalizeProviderId[\s\S]*?\n\}/);
+    assert.ok(fnMatch, 'must find normalizeProviderId function body');
+    const body = fnMatch![0];
+    assert.ok(/typeof value === "string"/.test(body), 'must accept string');
+    assert.ok(/typeof value === "number"/.test(body), 'must accept number');
+    assert.ok(/Number\.isFinite/.test(body), 'must check Number.isFinite for numbers');
+    assert.ok(/String\(value\)/.test(body), 'must convert number to String');
+    assert.ok(/return null/.test(body), 'must return null for invalid types');
+  });
+
+  it('provider_message_id uses normalizeProviderId for returnIds and messageIds', () => {
     assert.ok(/returnIds/.test(funcSrc), 'must check returnIds');
     assert.ok(/messageIds/.test(funcSrc), 'must check messageIds');
     assert.ok(/returnIds\[0\]/.test(funcSrc), 'must take first returnId');
     assert.ok(/messageIds\[0\]/.test(funcSrc), 'must take first messageId');
+    assert.ok(/normalizeProviderId\(returnIds\[0\]\)/.test(funcSrc), 'must normalize returnIds[0]');
+    assert.ok(/normalizeProviderId\(messageIds\[0\]\)/.test(funcSrc), 'must normalize messageIds[0]');
+    assert.ok(!/typeof returnIds\[0\] === "string"/.test(funcSrc), 'must not hard-check string type on returnIds');
+    assert.ok(!/typeof messageIds\[0\] === "string"/.test(funcSrc), 'must not hard-check string type on messageIds');
+  });
+
+  it('packId uses normalizeProviderId', () => {
+    assert.ok(/normalizeProviderId\(result\.packId\)/.test(funcSrc), 'must normalize result.packId');
+  });
+
+  it('returnIds and messageIds typed as unknown[] not string[]', () => {
+    assert.ok(/returnIds:\s*unknown\[\]/.test(funcSrc), 'returnIds must be unknown[]');
+    assert.ok(/messageIds:\s*unknown\[\]/.test(funcSrc), 'messageIds must be unknown[]');
+  });
+
+  it('normalizeCost accepts finite non-negative numbers only', () => {
+    assert.ok(/function normalizeCost/.test(funcSrc), 'must have normalizeCost function');
+    const fnMatch = funcSrc.match(/function normalizeCost[\s\S]*?\n\}/);
+    assert.ok(fnMatch, 'must find normalizeCost function body');
+    const body = fnMatch![0];
+    assert.ok(/typeof value === "number"/.test(body), 'must check typeof number');
+    assert.ok(/Number\.isFinite/.test(body), 'must check Number.isFinite');
+    assert.ok(/value >= 0/.test(body), 'must check value >= 0');
+    assert.ok(/return null/.test(body), 'must return null for invalid cost');
+  });
+
+  it('cost extracted from result.cost via normalizeCost', () => {
+    assert.ok(/normalizeCost\(result\.cost\)/.test(funcSrc), 'must normalize result.cost');
   });
 
   it('writeDispatchLog inserts into sms_dispatch_logs', () => {
@@ -396,8 +437,6 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
   });
 
   it('dispatch log uses category=auth and event_type=login_otp', () => {
-    const logMatch = funcSrc.match(/writeDispatchLog[\s\S]*?insert\(\{[\s\S]*?\}\)/);
-    assert.ok(logMatch, 'must find writeDispatchLog insert');
     const block = funcSrc.match(/writeDispatchLog[\s\S]*?category:\s*"auth"/);
     assert.ok(block, 'must set category=auth');
     const evtBlock = funcSrc.match(/writeDispatchLog[\s\S]*?event_type:\s*"login_otp"/);
@@ -415,16 +454,38 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     assert.ok(logBlock, 'must use AUTH_OTP_LOG_MESSAGE as message');
   });
 
-  it('dispatch log stores masked phone not full phone', () => {
-    assert.ok(/maskPhoneForLog/.test(funcSrc), 'must have maskPhoneForLog function');
-    const maskMatch = funcSrc.match(/function maskPhoneForLog[\s\S]*?\n\s*\}/);
-    assert.ok(maskMatch, 'must find maskPhoneForLog function');
-    const body = maskMatch![0];
-    assert.ok(/slice\(0,\s*4\)/.test(body), 'must keep first 4 chars');
+  it('maskCanonicalIranPhoneForLog converts 989... to 09... before masking', () => {
+    assert.ok(/maskCanonicalIranPhoneForLog/.test(funcSrc), 'must have maskCanonicalIranPhoneForLog function');
+    const fnMatch = funcSrc.match(/function maskCanonicalIranPhoneForLog[\s\S]*?\n\}/);
+    assert.ok(fnMatch, 'must find maskCanonicalIranPhoneForLog function body');
+    const body = fnMatch![0];
+    assert.ok(/\/\^989\\d\{9\}\$\//.test(body), 'must validate canonical 989... format');
+    assert.ok(/canonicalPhone\.slice\(2\)/.test(body), 'must convert to 0... local format using slice(2)');
+    assert.ok(/slice\(0,\s*4\)/.test(body), 'must keep first 4 chars of local phone');
     assert.ok(/slice\(-3\)/.test(body), 'must keep last 3 chars');
-    assert.ok(/repeat\(hiddenLength\)/.test(body), 'must repeat stars dynamically');
+    assert.ok(/repeat\(localPhone\.length - 7\)/.test(body), 'must repeat stars dynamically');
+  });
+
+  it('maskCanonicalIranPhoneForLog returns *** for unexpected input', () => {
+    const fnMatch = funcSrc.match(/function maskCanonicalIranPhoneForLog[\s\S]*?\n\}/);
+    assert.ok(fnMatch, 'must find maskCanonicalIranPhoneForLog function body');
+    const body = fnMatch![0];
+    assert.ok(/"\*\*\*"/.test(body), 'must return *** for invalid input');
+  });
+
+  it('raw canonical phone is never stored in target_phone', () => {
+    assert.ok(!/target_phone:\s*canonicalPhone/.test(funcSrc), 'must not store raw canonicalPhone in target_phone');
+    assert.ok(/maskCanonicalIranPhoneForLog\(canonicalPhone\)/.test(funcSrc), 'must call maskCanonicalIranPhoneForLog with canonicalPhone');
     assert.ok(/target_phone:\s*params\.maskedPhone/.test(funcSrc) || /target_phone:\s*maskedPhone/.test(funcSrc),
       'must store masked phone in target_phone');
+  });
+
+  it('old maskPhoneForLog function is removed', () => {
+    assert.ok(!/function maskPhoneForLog/.test(funcSrc), 'must not have old maskPhoneForLog function');
+  });
+
+  it('dispatch log stores cost from params', () => {
+    assert.ok(/cost:\s*params\.cost/.test(funcSrc), 'must store params.cost in dispatch log');
   });
 
   it('dispatch log does not store OTP, otp_hash, phone_hash, ip_hash, challenge_id, tokens, or template text', () => {
@@ -481,5 +542,10 @@ describe('Phase 5E-D1 — Request Phone OTP Edge Function V2', () => {
     const block = logMatch![1];
     assert.ok(!/raw_response/.test(block), 'must not store raw_response');
     assert.ok(!/debug/.test(block), 'must not store debug data');
+  });
+
+  it('sendSms failure returns cost null', () => {
+    assert.ok(/ok:\s*false,\s*packId:\s*null,\s*providerMessageId:\s*null,\s*cost:\s*null/.test(funcSrc),
+      'failure path must return cost: null');
   });
 });
