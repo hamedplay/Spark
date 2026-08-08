@@ -276,6 +276,51 @@ export function SecuritySettingsConsole() {
         </div>
       </SectionCard>
 
+      {/* Custom MFA */}
+      <SectionCard title="احراز هویت سفارشی" icon={Shield}>
+        <ToggleRow
+          label="فعال‌سازی زیرساخت MFA سفارشی"
+          value={draft.custom_mfa_enabled}
+          onChange={(v) => setDraft({ ...draft, custom_mfa_enabled: v })}
+        />
+        <ToggleRow
+          label="الزام MFA سفارشی"
+          value={draft.custom_mfa_required}
+          onChange={(v) => setDraft({ ...draft, custom_mfa_required: v })}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <NumberRow label="مهلت کد (ثانیه)" value={draft.custom_mfa_challenge_ttl_seconds} min={30} max={3600} onChange={(v) => setDraft({ ...draft, custom_mfa_challenge_ttl_seconds: v })} />
+          <NumberRow label="عمر مجوز (دقیقه)" value={draft.custom_mfa_grant_lifetime_minutes} min={1} max={1440} onChange={(v) => setDraft({ ...draft, custom_mfa_grant_lifetime_minutes: v })} />
+          <NumberRow label="حداکثر تلاش" value={draft.custom_mfa_max_attempts} min={1} max={20} onChange={(v) => setDraft({ ...draft, custom_mfa_max_attempts: v })} />
+          <NumberRow label="ارسال مجدد" value={draft.custom_mfa_max_resends} min={0} max={10} onChange={(v) => setDraft({ ...draft, custom_mfa_max_resends: v })} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            ['totp', 'TOTP'],
+            ['sms', 'پیامک'],
+            ['bale', 'بله'],
+            ['email', 'ایمیل پشتیبان'],
+            ['recovery', 'کد بازیابی'],
+          ].map(([value, label]) => (
+            <label key={value} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={draft.custom_mfa_allowed_factors.includes(value)}
+                onChange={(e) => {
+                  const factors = e.target.checked
+                    ? [...draft.custom_mfa_allowed_factors, value]
+                    : draft.custom_mfa_allowed_factors.filter((factor) => factor !== value);
+                  setDraft({ ...draft, custom_mfa_allowed_factors: factors });
+                }}
+                className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-400"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-amber-600 dark:text-amber-400">هیچ عامل اجباری بدون آماده‌بودن مسیر ارسال و تأیید فعال نمی‌شود.</p>
+      </SectionCard>
+
       {/* Impact Card */}
       <MfaPolicyImpactCard impact={state.impact} visible={showImpact} />
 

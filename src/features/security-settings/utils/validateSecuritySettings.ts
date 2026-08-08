@@ -31,6 +31,21 @@ export function validateSecuritySettings(
     };
   }
 
+  const customMfaEnabled = patch.custom_mfa_enabled ?? draft.custom_mfa_enabled;
+  const customMfaRequired = patch.custom_mfa_required ?? draft.custom_mfa_required;
+  const customMfaFactors = patch.custom_mfa_allowed_factors ?? draft.custom_mfa_allowed_factors;
+  const validCustomFactors = ['totp', 'sms', 'bale', 'email', 'recovery'];
+
+  if (customMfaRequired && !customMfaEnabled) {
+    return { ok: false, error: 'MFA_REQUIRED_WITHOUT_FACTOR', message: 'احراز هویت سفارشی اجباری بدون فعال‌سازی مجاز نیست.' };
+  }
+  if (customMfaRequired && customMfaFactors.length === 0) {
+    return { ok: false, error: 'MFA_REQUIRED_WITHOUT_FACTOR', message: 'برای اجباری‌کردن احراز هویت سفارشی حداقل یک عامل لازم است.' };
+  }
+  if (customMfaFactors.some((factor) => !validCustomFactors.includes(factor))) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'عامل احراز هویت سفارشی نامعتبر است.' };
+  }
+
   // idle <= absolute
   const effectiveIdle = patch.session_idle_timeout_minutes ?? draft.session_idle_timeout_minutes;
   const effectiveAbsolute = patch.session_absolute_lifetime_minutes ?? draft.session_absolute_lifetime_minutes;
@@ -61,6 +76,26 @@ export function validateSecuritySettings(
   if (patch.lock_threshold !== undefined) {
     if (patch.lock_threshold < 1 || patch.lock_threshold > 50) {
       return { ok: false, error: 'OUT_OF_RANGE', message: 'آستانه قفل باید بین ۱ تا ۵۰ باشد.' };
+    }
+  }
+  if (patch.custom_mfa_challenge_ttl_seconds !== undefined) {
+    if (patch.custom_mfa_challenge_ttl_seconds < 30 || patch.custom_mfa_challenge_ttl_seconds > 3600) {
+      return { ok: false, error: 'OUT_OF_RANGE', message: 'مهلت کد باید بین ۳۰ تا ۳۶۰۰ ثانیه باشد.' };
+    }
+  }
+  if (patch.custom_mfa_max_resends !== undefined) {
+    if (patch.custom_mfa_max_resends < 0 || patch.custom_mfa_max_resends > 10) {
+      return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر ارسال مجدد باید بین ۰ تا ۱۰ باشد.' };
+    }
+  }
+  if (patch.custom_mfa_max_attempts !== undefined) {
+    if (patch.custom_mfa_max_attempts < 1 || patch.custom_mfa_max_attempts > 20) {
+      return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر تلاش باید بین ۱ تا ۲۰ باشد.' };
+    }
+  }
+  if (patch.custom_mfa_grant_lifetime_minutes !== undefined) {
+    if (patch.custom_mfa_grant_lifetime_minutes < 1 || patch.custom_mfa_grant_lifetime_minutes > 1440) {
+      return { ok: false, error: 'OUT_OF_RANGE', message: 'عمر مجوز باید بین ۱ تا ۱۴۴۰ دقیقه باشد.' };
     }
   }
   if (patch.lock_duration_minutes !== undefined) {

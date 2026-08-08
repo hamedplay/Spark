@@ -21,6 +21,13 @@ export interface SecuritySettings {
   recovery_enabled: boolean;
   config_schema_version: number;
   updated_at: string;
+  custom_mfa_enabled: boolean;
+  custom_mfa_required: boolean;
+  custom_mfa_allowed_factors: string[];
+  custom_mfa_challenge_ttl_seconds: number;
+  custom_mfa_max_resends: number;
+  custom_mfa_max_attempts: number;
+  custom_mfa_grant_lifetime_minutes: number;
 }
 
 export interface SecurityImpact {
@@ -85,6 +92,13 @@ export interface SecuritySettingsPatch {
   lock_threshold?: number;
   lock_duration_minutes?: number;
   recovery_enabled?: boolean;
+  custom_mfa_enabled?: boolean;
+  custom_mfa_required?: boolean;
+  custom_mfa_allowed_factors?: string[];
+  custom_mfa_challenge_ttl_seconds?: number;
+  custom_mfa_max_resends?: number;
+  custom_mfa_max_attempts?: number;
+  custom_mfa_grant_lifetime_minutes?: number;
 }
 
 export const SECURITY_ERROR_MESSAGES: Record<string, string> = {

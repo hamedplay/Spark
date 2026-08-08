@@ -15,6 +15,13 @@ const PATCHABLE_KEYS: (keyof SecuritySettingsPatch)[] = [
   'lock_threshold',
   'lock_duration_minutes',
   'recovery_enabled',
+  'custom_mfa_enabled',
+  'custom_mfa_required',
+  'custom_mfa_allowed_factors',
+  'custom_mfa_challenge_ttl_seconds',
+  'custom_mfa_max_resends',
+  'custom_mfa_max_attempts',
+  'custom_mfa_grant_lifetime_minutes',
 ];
 
 export function buildSecuritySettingsPatch(
