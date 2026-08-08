@@ -224,6 +224,16 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/auth/')) return;
 
   /**
+   * Never cache security-sensitive edge function routes.
+   * Covers login, MFA, recovery, reset, session, challenge, token, security.
+   */
+  const sensitiveSegments = [
+    'login', 'mfa', 'recovery', 'reset', 'security', 'session', 'challenge', 'token',
+  ];
+  const pathParts = url.pathname.split('/');
+  if (pathParts.some((seg) => sensitiveSegments.includes(seg.toLowerCase()))) return;
+
+  /**
    * Never cache the E2EE worker script — it must always be the latest version
    * so that any updates to ping/pong or frame-transform logic take effect immediately.
    */

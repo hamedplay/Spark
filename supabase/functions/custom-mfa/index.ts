@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
-  headers: { ...corsHeaders, "Content-Type": "application/json" },
+  headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store", "Pragma": "no-cache" },
 });
 
 interface JwtPayload { sub?: string; session_id?: string; amr?: Array<{ method?: string }>; }
