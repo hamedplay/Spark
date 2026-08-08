@@ -30,34 +30,38 @@ interface RepairResult {
   error: string | null;
 }
 
-interface IdentityVerifyResult {
-  auth_phone_ok: boolean;
-  phone_confirmed: boolean;
-  identity_created: boolean;
+interface IdentityState {
+  identity_count: number;
+  exactly_one_phone_identity: boolean;
   identity_same_user: boolean;
+  identity_sub_matches_user: boolean;
+  identity_phone_matches: boolean;
+  identity_phone_verified: boolean;
 }
 
-async function verifyIdentityAfterUpdate(
+async function getIdentityState(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  normalized: string,
-): Promise<IdentityVerifyResult> {
-  const { data: verifiedAuth } = await supabase.auth.admin.getUserById(userId);
-  const verifiedPhone = normalizeIranPhone(verifiedAuth?.user?.phone);
-  const auth_phone_ok = verifiedPhone === normalized;
-  const phone_confirmed = Boolean(verifiedAuth?.user?.phone_confirmed_at);
+  normalizedPhone: string,
+): Promise<IdentityState | null> {
+  const { data, error } = await supabase.rpc("get_phone_auth_identity_state_v1", {
+    p_user_id: userId,
+    p_expected_normalized_phone: normalizedPhone,
+  });
+  if (error || !data) return null;
+  return data as unknown as IdentityState;
+}
 
-  const { data: identityData } = await supabase
-    .from("auth.identities" as never)
-    .select("user_id, provider")
-    .eq("user_id", userId)
-    .eq("provider", "phone");
-
-  const identityRows = (identityData as unknown as Array<{ user_id: string; provider: string }>) || [];
-  const identity_created = identityRows.length === 1;
-  const identity_same_user = identity_created && identityRows[0].user_id === userId;
-
-  return { auth_phone_ok, phone_confirmed, identity_created, identity_same_user };
+function isCanonicalIdentity(state: IdentityState | null): boolean {
+  if (!state) return false;
+  return (
+    state.identity_count === 1 &&
+    state.exactly_one_phone_identity &&
+    state.identity_same_user &&
+    state.identity_sub_matches_user &&
+    state.identity_phone_matches &&
+    state.identity_phone_verified
+  );
 }
 
 async function repairOneIdentity(
@@ -100,6 +104,14 @@ async function repairOneIdentity(
       return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_PHONE_UNCONFIRMED" };
     }
 
+    // Idempotency: check if identity already exists via RPC
+    const preState = await getIdentityState(supabase, row.user_id, normalized);
+    if (preState && preState.identity_count > 0) {
+      if (isCanonicalIdentity(preState)) {
+        return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: true, status: 200, error: null };
+      }
+    }
+
     const syncResp = await fetch(
       `${authBaseUrl}/auth/v1/admin/users/${row.user_id}`,
       {
@@ -120,8 +132,20 @@ async function repairOneIdentity(
       return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "IDENTITY_REPAIR_FAILED" };
     }
 
-    const verify = await verifyIdentityAfterUpdate(supabase, row.user_id, normalized);
-    if (verify.auth_phone_ok && verify.phone_confirmed && verify.identity_created && verify.identity_same_user) {
+    // Post-verify via secure RPC
+    const postState = await getIdentityState(supabase, row.user_id, normalized);
+    if (!postState) {
+      await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "IDENTITY_VERIFY_UNAVAILABLE" });
+      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "IDENTITY_VERIFY_UNAVAILABLE" };
+    }
+
+    // Also verify auth.users phone via Admin API
+    const { data: verifiedAuth } = await supabase.auth.admin.getUserById(row.user_id);
+    const verifiedPhone = normalizeIranPhone(verifiedAuth?.user?.phone);
+    const authPhoneOk = verifiedPhone === normalized;
+    const phoneConfirmed = Boolean(verifiedAuth?.user?.phone_confirmed_at);
+
+    if (authPhoneOk && phoneConfirmed && isCanonicalIdentity(postState)) {
       try {
         await supabase.from("audit_log").insert({
           user_id: callerUserId,
@@ -134,6 +158,12 @@ async function repairOneIdentity(
         });
       } catch { /* best-effort */ }
       return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: true, status: syncResp.status, error: null };
+    }
+
+    // GoTrue accepted but identity not created
+    if (authPhoneOk && phoneConfirmed && postState.identity_count === 0) {
+      await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "GOTRUE_IDENTITY_REPAIR_UNSUPPORTED" });
+      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "GOTRUE_IDENTITY_REPAIR_UNSUPPORTED" };
     }
 
     await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "IDENTITY_VERIFY_FAILED" });
@@ -312,28 +342,52 @@ Deno.serve(async (req: Request) => {
         return json({ ok: true, mode: "identity_canary", result: "NO_CANDIDATES", message: "No IDENTITY_REPAIR_REQUIRED users found" });
       }
 
-      // Deterministic: pick first by user_id (already sorted by created_at ASC in classifier)
       const canary = repairNeeded[0] as { user_id: string; masked_phone: string };
-
       const result = await repairOneIdentity(supabase, authBaseUrl, serviceRoleKey, callerUserId, canary, "repair_phone_auth_identity_canary");
 
       return json({ ok: true, mode: "identity_canary", canary_result: result, canary_passed: result.success });
     }
 
-    // ── Identity Repair: bulk repair all IDENTITY_REPAIR_REQUIRED ───────────
+    // ── Identity Repair: canary-first, then bulk ───────────────────────────
     if (mode === "identity_repair") {
-      const { data: classifications, error } = await supabase.rpc("bulk_classify_phone_sync", { p_dry_run: false });
-      if (error) return json({ ok: false, error: "CLASSIFY_FAILED" }, 500);
+      // Phase 1: Canary — always run first, non-bypassable
+      const { data: canaryClassifications, error: canaryErr } = await supabase.rpc("bulk_classify_phone_sync", { p_dry_run: false });
+      if (canaryErr) return json({ ok: false, error: "CLASSIFY_FAILED" }, 500);
 
-      const rows = classifications || [];
-      const repairNeeded = rows.filter((r: { status: string }) => r.status === "IDENTITY_REPAIR_REQUIRED");
+      const canaryRows = canaryClassifications || [];
+      const canaryCandidates = canaryRows.filter((r: { status: string }) => r.status === "IDENTITY_REPAIR_REQUIRED");
 
-      const results: RepairResult[] = [];
+      if (canaryCandidates.length === 0) {
+        return json({ ok: true, mode: "identity_repair", canary_passed: true, total: 0, succeeded: 0, failed: 0, results: [], message: "No IDENTITY_REPAIR_REQUIRED users found" });
+      }
+
+      const canaryRow = canaryCandidates[0] as { user_id: string; masked_phone: string };
+      const canaryResult = await repairOneIdentity(supabase, authBaseUrl, serviceRoleKey, callerUserId, canaryRow, "repair_phone_auth_identity_canary");
+
+      if (!canaryResult.success) {
+        return json({
+          ok: false,
+          mode: "identity_repair",
+          canary_passed: false,
+          canary_result: canaryResult,
+          error: "CANARY_FAILED",
+          message: "Canary repair failed. Bulk repair aborted.",
+        });
+      }
+
+      // Phase 2: Re-classify and repair remaining
+      const { data: bulkClassifications, error: bulkErr } = await supabase.rpc("bulk_classify_phone_sync", { p_dry_run: false });
+      if (bulkErr) return json({ ok: false, error: "CLASSIFY_FAILED" }, 500);
+
+      const bulkRows = bulkClassifications || [];
+      const repairNeeded = bulkRows.filter((r: { status: string }) => r.status === "IDENTITY_REPAIR_REQUIRED");
+
+      const results: RepairResult[] = [canaryResult];
 
       for (const row of repairNeeded) {
         const r = row as { user_id: string; masked_phone: string };
 
-        // Re-check runtime preconditions before each repair
+        // Runtime revalidation
         const { data: profile } = await supabase
           .from("profiles").select("phone, is_active").eq("user_id", r.user_id).maybeSingle();
 
@@ -350,7 +404,6 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Check if identity already exists (idempotency)
         const { data: currentAuth } = await supabase.auth.admin.getUserById(r.user_id);
         const currentUser = currentAuth?.user;
         if (!currentUser || currentUser.deleted_at || (currentUser.banned_until && new Date(currentUser.banned_until) > new Date())) {
@@ -372,15 +425,9 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Check if identity already exists — skip (idempotent)
-        const { data: existingIdentity } = await supabase
-          .from("auth.identities" as never)
-          .select("user_id, provider")
-          .eq("user_id", r.user_id)
-          .eq("provider", "phone");
-
-        const existingRows = (existingIdentity as unknown as Array<{ user_id: string; provider: string }>) || [];
-        if (existingRows.length > 0) {
+        // Idempotency via RPC
+        const preState = await getIdentityState(supabase, r.user_id, normalized);
+        if (preState && preState.identity_count > 0 && isCanonicalIdentity(preState)) {
           results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: true, status: 200, error: null });
           continue;
         }
@@ -392,7 +439,7 @@ Deno.serve(async (req: Request) => {
       const succeeded = results.filter(r => r.success).length;
       const failed = results.filter(r => !r.success).length;
 
-      return json({ ok: true, mode: "identity_repair", total: repairNeeded.length, succeeded, failed, results });
+      return json({ ok: true, mode: "identity_repair", canary_passed: true, total: results.length, succeeded, failed, results });
     }
 
     return json({ ok: false, error: "INVALID_MODE" }, 400);

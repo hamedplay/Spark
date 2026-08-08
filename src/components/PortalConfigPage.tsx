@@ -23,6 +23,7 @@ import { NAV_ITEMS, HIDDEN_SECURITY_CONFIG_KEYS } from './PortalConfig/constants
 import { ConfigField } from './PortalConfig/ConfigField';
 import { SectionCard } from './PortalConfig/SectionCard';
 import { PhoneAuthCard } from './PortalConfig/PhoneAuthCard';
+import { IdentityRepairCard } from './PortalConfig/IdentityRepairCard';
 import { UsersListOld } from './PortalConfig/UsersListOld';
 import type { ConfigEntry, AuditEntry, Profile, Props } from './PortalConfig/types';
 
@@ -494,6 +495,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
               {cfgs('security').filter(c => !HIDDEN_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
             <PhoneAuthCard />
+            <IdentityRepairCard />
           </div>
         );
 
