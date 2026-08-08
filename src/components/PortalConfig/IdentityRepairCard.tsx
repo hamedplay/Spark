@@ -17,7 +17,6 @@ interface DryRunSummary {
 }
 
 interface CanaryResult {
-  user_id: string;
   masked_phone: string;
   success: boolean;
   status: number;
@@ -32,6 +31,7 @@ interface RepairResponse {
   total?: number;
   succeeded?: number;
   failed?: number;
+  skipped?: number;
   results?: CanaryResult[];
   error?: string;
   message?: string;

@@ -22,12 +22,23 @@ function maskPhone(phone: string): string {
   return phone.slice(0, 3) + "****" + phone.slice(-4);
 }
 
-interface RepairResult {
+interface InternalRepairResult {
   user_id: string;
   masked_phone: string;
   success: boolean;
   status: number;
   error: string | null;
+}
+
+interface PublicRepairResult {
+  masked_phone: string;
+  success: boolean;
+  status: number;
+  error: string | null;
+}
+
+function toPublic(r: InternalRepairResult): PublicRepairResult {
+  return { masked_phone: r.masked_phone, success: r.success, status: r.status, error: r.error };
 }
 
 interface IdentityState {
@@ -64,6 +75,18 @@ function isCanonicalIdentity(state: IdentityState | null): boolean {
   );
 }
 
+async function logRepair(supabase: ReturnType<typeof createClient>, userId: string, masked: string, code: string) {
+  try {
+    await supabase.from("phone_auth_sync_repairs").insert({
+      user_id: userId,
+      operation_type: "identity_repair",
+      masked_phone: masked,
+      status: "NEEDS_ADMIN_REVIEW",
+      last_error_code: code,
+    });
+  } catch { /* best-effort */ }
+}
+
 async function repairOneIdentity(
   supabase: ReturnType<typeof createClient>,
   authBaseUrl: string,
@@ -71,7 +94,7 @@ async function repairOneIdentity(
   callerUserId: string,
   row: { user_id: string; masked_phone: string },
   auditAction: string,
-): Promise<RepairResult> {
+): Promise<InternalRepairResult> {
   const { data: profile } = await supabase
     .from("profiles").select("phone, is_active").eq("user_id", row.user_id).maybeSingle();
 
@@ -84,34 +107,48 @@ async function repairOneIdentity(
     return { user_id: row.user_id, masked_phone: row.masked_phone, success: false, status: 0, error: "INVALID_PHONE" };
   }
 
+  const masked = maskPhone(normalized);
   const e164 = `+${normalized}`;
 
   try {
     const { data: currentAuth } = await supabase.auth.admin.getUserById(row.user_id);
     const currentUser = currentAuth?.user;
     if (!currentUser || currentUser.deleted_at || (currentUser.banned_until && new Date(currentUser.banned_until) > new Date())) {
-      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_USER_NOT_ELIGIBLE" };
+      return { user_id: row.user_id, masked_phone: masked, success: false, status: 0, error: "AUTH_USER_NOT_ELIGIBLE" };
     }
 
     const currentAuthPhone = normalizeIranPhone(currentUser.phone);
     if (currentAuthPhone && currentAuthPhone !== normalized) {
-      await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "AUTH_PHONE_CONFLICT" });
-      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_PHONE_CONFLICT" };
+      await logRepair(supabase, row.user_id, masked, "AUTH_PHONE_CONFLICT");
+      return { user_id: row.user_id, masked_phone: masked, success: false, status: 0, error: "AUTH_PHONE_CONFLICT" };
     }
 
     if (!currentUser.phone_confirmed_at) {
-      await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "AUTH_PHONE_UNCONFIRMED" });
-      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_PHONE_UNCONFIRMED" };
+      await logRepair(supabase, row.user_id, masked, "AUTH_PHONE_UNCONFIRMED");
+      return { user_id: row.user_id, masked_phone: masked, success: false, status: 0, error: "AUTH_PHONE_UNCONFIRMED" };
     }
 
-    // Idempotency: check if identity already exists via RPC
+    // ── Pre-verification: MUST succeed before any GoTrue write ──────────────
     const preState = await getIdentityState(supabase, row.user_id, normalized);
-    if (preState && preState.identity_count > 0) {
-      if (isCanonicalIdentity(preState)) {
-        return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: true, status: 200, error: null };
-      }
+
+    // Fail-closed: RPC unavailable → NO WRITE
+    if (!preState) {
+      await logRepair(supabase, row.user_id, masked, "IDENTITY_VERIFY_UNAVAILABLE");
+      return { user_id: row.user_id, masked_phone: masked, success: false, status: 0, error: "IDENTITY_VERIFY_UNAVAILABLE" };
     }
 
+    // Already canonical → idempotent success, NO WRITE
+    if (isCanonicalIdentity(preState)) {
+      return { user_id: row.user_id, masked_phone: masked, success: true, status: 200, error: null };
+    }
+
+    // Identity exists but non-canonical → CONFLICT, NO WRITE
+    if (preState.identity_count > 0) {
+      await logRepair(supabase, row.user_id, masked, "IDENTITY_STATE_CONFLICT");
+      return { user_id: row.user_id, masked_phone: masked, success: false, status: 0, error: "IDENTITY_STATE_CONFLICT" };
+    }
+
+    // Only identity_count === 0 reaches GoTrue PUT
     const syncResp = await fetch(
       `${authBaseUrl}/auth/v1/admin/users/${row.user_id}`,
       {
@@ -128,18 +165,17 @@ async function repairOneIdentity(
 
     if (!syncResp.ok) {
       await syncResp.text();
-      await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "IDENTITY_REPAIR_FAILED" });
-      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "IDENTITY_REPAIR_FAILED" };
+      await logRepair(supabase, row.user_id, masked, "IDENTITY_REPAIR_FAILED");
+      return { user_id: row.user_id, masked_phone: masked, success: false, status: syncResp.status, error: "IDENTITY_REPAIR_FAILED" };
     }
 
-    // Post-verify via secure RPC
+    // ── Post-verify via secure RPC ─────────────────────────────────────────
     const postState = await getIdentityState(supabase, row.user_id, normalized);
     if (!postState) {
-      await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "IDENTITY_VERIFY_UNAVAILABLE" });
-      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "IDENTITY_VERIFY_UNAVAILABLE" };
+      await logRepair(supabase, row.user_id, masked, "IDENTITY_VERIFY_UNAVAILABLE");
+      return { user_id: row.user_id, masked_phone: masked, success: false, status: syncResp.status, error: "IDENTITY_VERIFY_UNAVAILABLE" };
     }
 
-    // Also verify auth.users phone via Admin API
     const { data: verifiedAuth } = await supabase.auth.admin.getUserById(row.user_id);
     const verifiedPhone = normalizeIranPhone(verifiedAuth?.user?.phone);
     const authPhoneOk = verifiedPhone === normalized;
@@ -153,26 +189,24 @@ async function repairOneIdentity(
           action: auditAction,
           entity_name: "user",
           entity_id: row.user_id,
-          details: `Identity repair ${maskPhone(normalized)} — phone identity created`,
+          details: `Identity repair ${masked} — phone identity created`,
           severity: "info",
         });
       } catch { /* best-effort */ }
-      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: true, status: syncResp.status, error: null };
+      return { user_id: row.user_id, masked_phone: masked, success: true, status: syncResp.status, error: null };
     }
 
     // GoTrue accepted but identity not created
     if (authPhoneOk && phoneConfirmed && postState.identity_count === 0) {
-      await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "GOTRUE_IDENTITY_REPAIR_UNSUPPORTED" });
-      return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "GOTRUE_IDENTITY_REPAIR_UNSUPPORTED" };
+      await logRepair(supabase, row.user_id, masked, "GOTRUE_IDENTITY_REPAIR_UNSUPPORTED");
+      return { user_id: row.user_id, masked_phone: masked, success: false, status: syncResp.status, error: "GOTRUE_IDENTITY_REPAIR_UNSUPPORTED" };
     }
 
-    await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "IDENTITY_VERIFY_FAILED" });
-    return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "IDENTITY_VERIFY_FAILED" };
+    await logRepair(supabase, row.user_id, masked, "IDENTITY_VERIFY_FAILED");
+    return { user_id: row.user_id, masked_phone: masked, success: false, status: syncResp.status, error: "IDENTITY_VERIFY_FAILED" };
   } catch {
-    try {
-      await supabase.from("phone_auth_sync_repairs").insert({ user_id: row.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "IDENTITY_REPAIR_FAILED" });
-    } catch { /* best-effort */ }
-    return { user_id: row.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "IDENTITY_REPAIR_FAILED" };
+    await logRepair(supabase, row.user_id, masked, "IDENTITY_REPAIR_FAILED");
+    return { user_id: row.user_id, masked_phone: masked, success: false, status: 0, error: "IDENTITY_REPAIR_FAILED" };
   }
 }
 
@@ -207,7 +241,7 @@ Deno.serve(async (req: Request) => {
     const authBaseUrl = Deno.env.get("SUPABASE_INTERNAL_URL") ?? Deno.env.get("SUPABASE_URL") ?? "http://kong:8000";
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // ── Dry Run: classify all profiles ──────────────────────────────────────
+    // ── Dry Run: classify all profiles (summary only, no user data) ─────────
     if (mode === "dry_run") {
       const { data: classifications, error } = await supabase.rpc("bulk_classify_phone_sync", { p_dry_run: true });
       if (error) return json({ ok: false, error: "CLASSIFY_FAILED" }, 500);
@@ -219,7 +253,7 @@ Deno.serve(async (req: Request) => {
         summary[st] = (summary[st] || 0) + 1;
       }
 
-      return json({ ok: true, mode: "dry_run", summary, classifications: rows });
+      return json({ ok: true, mode: "dry_run", summary });
     }
 
     // ── Execute: sync only SAFE_TO_SYNC users ──────────────────────────────
@@ -230,7 +264,7 @@ Deno.serve(async (req: Request) => {
       const rows = classifications || [];
       const safeToSync = rows.filter((r: { status: string }) => r.status === "SAFE_TO_SYNC");
 
-      const results: RepairResult[] = [];
+      const results: InternalRepairResult[] = [];
 
       for (const row of safeToSync) {
         const r = row as { user_id: string; masked_phone: string };
@@ -260,7 +294,7 @@ Deno.serve(async (req: Request) => {
           const currentAuthPhone = normalizeIranPhone(currentUser.phone);
           if (currentAuthPhone && currentAuthPhone !== normalized) {
             results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_PHONE_CONFLICT" });
-            await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "sync_profile_phone", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "AUTH_PHONE_CONFLICT" });
+            await logRepair(supabase, r.user_id, maskPhone(normalized), "AUTH_PHONE_CONFLICT");
             continue;
           }
 
@@ -297,37 +331,23 @@ Deno.serve(async (req: Request) => {
               } catch { /* best-effort */ }
             } else {
               results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "VERIFY_MISMATCH" });
-              await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "sync_profile_phone", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "VERIFY_MISMATCH" });
+              await logRepair(supabase, r.user_id, maskPhone(normalized), "VERIFY_MISMATCH");
             }
           } else {
             await syncResp.text();
             results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: syncResp.status, error: "AUTH_UPDATE_FAILED" });
-            await supabase.from("phone_auth_sync_repairs").insert({
-              user_id: r.user_id,
-              operation_type: "sync_profile_phone",
-              masked_phone: maskPhone(normalized),
-              status: "NEEDS_ADMIN_REVIEW",
-              last_error_code: "AUTH_UPDATE_FAILED",
-            });
+            await logRepair(supabase, r.user_id, maskPhone(normalized), "AUTH_UPDATE_FAILED");
           }
         } catch {
           results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_UPDATE_FAILED" });
-          try {
-            await supabase.from("phone_auth_sync_repairs").insert({
-              user_id: r.user_id,
-              operation_type: "sync_profile_phone",
-              masked_phone: maskPhone(normalized),
-              status: "NEEDS_ADMIN_REVIEW",
-              last_error_code: "AUTH_UPDATE_FAILED",
-            });
-          } catch { /* best-effort */ }
+          await logRepair(supabase, r.user_id, maskPhone(normalized), "AUTH_UPDATE_FAILED");
         }
       }
 
       const succeeded = results.filter(r => r.success).length;
       const failed = results.filter(r => !r.success).length;
 
-      return json({ ok: true, mode: "execute", total: safeToSync.length, succeeded, failed, results });
+      return json({ ok: true, mode: "execute", total: safeToSync.length, succeeded, failed, results: results.map(toPublic) });
     }
 
     // ── Identity Canary: repair ONE IDENTITY_REPAIR_REQUIRED user ───────────
@@ -345,7 +365,7 @@ Deno.serve(async (req: Request) => {
       const canary = repairNeeded[0] as { user_id: string; masked_phone: string };
       const result = await repairOneIdentity(supabase, authBaseUrl, serviceRoleKey, callerUserId, canary, "repair_phone_auth_identity_canary");
 
-      return json({ ok: true, mode: "identity_canary", canary_result: result, canary_passed: result.success });
+      return json({ ok: true, mode: "identity_canary", canary_result: toPublic(result), canary_passed: result.success });
     }
 
     // ── Identity Repair: canary-first, then bulk ───────────────────────────
@@ -358,7 +378,7 @@ Deno.serve(async (req: Request) => {
       const canaryCandidates = canaryRows.filter((r: { status: string }) => r.status === "IDENTITY_REPAIR_REQUIRED");
 
       if (canaryCandidates.length === 0) {
-        return json({ ok: true, mode: "identity_repair", canary_passed: true, total: 0, succeeded: 0, failed: 0, results: [], message: "No IDENTITY_REPAIR_REQUIRED users found" });
+        return json({ ok: true, mode: "identity_repair", canary_passed: true, total: 0, succeeded: 0, failed: 0, skipped: 0, results: [], message: "No IDENTITY_REPAIR_REQUIRED users found" });
       }
 
       const canaryRow = canaryCandidates[0] as { user_id: string; masked_phone: string };
@@ -369,7 +389,7 @@ Deno.serve(async (req: Request) => {
           ok: false,
           mode: "identity_repair",
           canary_passed: false,
-          canary_result: canaryResult,
+          canary_result: toPublic(canaryResult),
           error: "CANARY_FAILED",
           message: "Canary repair failed. Bulk repair aborted.",
         });
@@ -382,7 +402,8 @@ Deno.serve(async (req: Request) => {
       const bulkRows = bulkClassifications || [];
       const repairNeeded = bulkRows.filter((r: { status: string }) => r.status === "IDENTITY_REPAIR_REQUIRED");
 
-      const results: RepairResult[] = [canaryResult];
+      const results: InternalRepairResult[] = [canaryResult];
+      let skipped = 0;
 
       for (const row of repairNeeded) {
         const r = row as { user_id: string; masked_phone: string };
@@ -393,14 +414,16 @@ Deno.serve(async (req: Request) => {
 
         if (!profile?.is_active || !profile.phone) {
           results.push({ user_id: r.user_id, masked_phone: r.masked_phone, success: false, status: 0, error: "RUNTIME_STATE_CHANGED" });
-          await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "identity_repair", masked_phone: r.masked_phone, status: "NEEDS_ADMIN_REVIEW", last_error_code: "RUNTIME_STATE_CHANGED" });
+          await logRepair(supabase, r.user_id, r.masked_phone, "RUNTIME_STATE_CHANGED");
+          skipped++;
           continue;
         }
 
         const normalized = normalizeIranPhone(profile.phone);
         if (!normalized) {
           results.push({ user_id: r.user_id, masked_phone: r.masked_phone, success: false, status: 0, error: "RUNTIME_STATE_CHANGED" });
-          await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "identity_repair", masked_phone: r.masked_phone, status: "NEEDS_ADMIN_REVIEW", last_error_code: "RUNTIME_STATE_CHANGED" });
+          await logRepair(supabase, r.user_id, r.masked_phone, "RUNTIME_STATE_CHANGED");
+          skipped++;
           continue;
         }
 
@@ -408,27 +431,44 @@ Deno.serve(async (req: Request) => {
         const currentUser = currentAuth?.user;
         if (!currentUser || currentUser.deleted_at || (currentUser.banned_until && new Date(currentUser.banned_until) > new Date())) {
           results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_USER_NOT_ELIGIBLE" });
-          await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "AUTH_USER_NOT_ELIGIBLE" });
+          await logRepair(supabase, r.user_id, maskPhone(normalized), "AUTH_USER_NOT_ELIGIBLE");
+          skipped++;
           continue;
         }
 
         const currentAuthPhone = normalizeIranPhone(currentUser.phone);
         if (currentAuthPhone !== normalized) {
           results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "RUNTIME_STATE_CHANGED" });
-          await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "RUNTIME_STATE_CHANGED" });
+          await logRepair(supabase, r.user_id, maskPhone(normalized), "RUNTIME_STATE_CHANGED");
+          skipped++;
           continue;
         }
 
         if (!currentUser.phone_confirmed_at) {
           results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "AUTH_PHONE_UNCONFIRMED" });
-          await supabase.from("phone_auth_sync_repairs").insert({ user_id: r.user_id, operation_type: "identity_repair", masked_phone: maskPhone(normalized), status: "NEEDS_ADMIN_REVIEW", last_error_code: "AUTH_PHONE_UNCONFIRMED" });
+          await logRepair(supabase, r.user_id, maskPhone(normalized), "AUTH_PHONE_UNCONFIRMED");
+          skipped++;
           continue;
         }
 
-        // Idempotency via RPC
+        // Pre-verification fail-closed
         const preState = await getIdentityState(supabase, r.user_id, normalized);
-        if (preState && preState.identity_count > 0 && isCanonicalIdentity(preState)) {
+        if (!preState) {
+          results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "IDENTITY_VERIFY_UNAVAILABLE" });
+          await logRepair(supabase, r.user_id, maskPhone(normalized), "IDENTITY_VERIFY_UNAVAILABLE");
+          skipped++;
+          continue;
+        }
+
+        if (isCanonicalIdentity(preState)) {
           results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: true, status: 200, error: null });
+          continue;
+        }
+
+        if (preState.identity_count > 0) {
+          results.push({ user_id: r.user_id, masked_phone: maskPhone(normalized), success: false, status: 0, error: "IDENTITY_STATE_CONFLICT" });
+          await logRepair(supabase, r.user_id, maskPhone(normalized), "IDENTITY_STATE_CONFLICT");
+          skipped++;
           continue;
         }
 
@@ -439,7 +479,7 @@ Deno.serve(async (req: Request) => {
       const succeeded = results.filter(r => r.success).length;
       const failed = results.filter(r => !r.success).length;
 
-      return json({ ok: true, mode: "identity_repair", canary_passed: true, total: results.length, succeeded, failed, results });
+      return json({ ok: true, mode: "identity_repair", canary_passed: true, total: results.length, succeeded, failed, skipped, results: results.map(toPublic) });
     }
 
     return json({ ok: false, error: "INVALID_MODE" }, 400);
