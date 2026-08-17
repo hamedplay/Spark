@@ -1,0 +1,330 @@
+/* Authentication, recovery and restricted-access visual bridge. */
+.spark-auth-flow {
+  min-height: 100vh;
+  color: #0f172a;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(99, 102, 241, 0.10), transparent 30rem),
+    radial-gradient(circle at 92% 94%, rgba(6, 182, 212, 0.07), transparent 26rem),
+    linear-gradient(135deg, #ffffff, #f8fafc 52%, #eef2ff);
+  -webkit-font-smoothing: antialiased;
+}
+
+.spark-auth-flow > .min-h-screen {
+  min-height: 100vh;
+  background: transparent !important;
+  padding: 1rem !important;
+}
+
+.spark-auth-flow .max-w-5xl {
+  max-width: 920px !important;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 1.25rem !important;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.10) !important;
+}
+
+.spark-auth-flow [class*='from-teal-800'] {
+  background: linear-gradient(145deg, rgba(49, 46, 129, 0.91), rgba(91, 33, 182, 0.82)) !important;
+}
+
+.spark-auth-flow [class~='p-8'] {
+  padding: 1.5rem !important;
+}
+
+.spark-auth-flow [class~='md:p-12'] {
+  padding: 2rem !important;
+}
+
+.spark-auth-flow .text-3xl {
+  font-size: 1.5rem !important;
+  line-height: 2rem !important;
+}
+
+.spark-auth-flow .text-2xl {
+  font-size: 1.25rem !important;
+  line-height: 1.75rem !important;
+}
+
+.spark-auth-flow .font-medium {
+  font-weight: 400 !important;
+}
+
+.spark-auth-flow .font-semibold,
+.spark-auth-flow .font-black {
+  font-weight: 700 !important;
+}
+
+.spark-auth-flow input:not([type='checkbox']):not([type='radio']),
+.spark-auth-flow select,
+.spark-auth-flow textarea {
+  border-color: #e2e8f0 !important;
+  border-radius: 0.625rem !important;
+  background: #fff !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+.spark-auth-flow input:not([type='checkbox']):not([type='radio']):focus,
+.spark-auth-flow select:focus,
+.spark-auth-flow textarea:focus {
+  border-color: #c4b5fd !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.10) !important;
+  outline: none !important;
+}
+
+.spark-auth-flow [class~='bg-teal-500'],
+.spark-auth-flow [class~='bg-teal-600'] {
+  background-color: #7c3aed !important;
+}
+
+.spark-auth-flow [class*='hover:bg-teal-600']:hover,
+.spark-auth-flow [class*='hover:bg-teal-700']:hover {
+  background-color: #6d28d9 !important;
+}
+
+.spark-auth-flow [class~='text-teal-600'],
+.spark-auth-flow [class~='text-teal-500'] {
+  color: #7c3aed !important;
+}
+
+.spark-auth-flow [class*='focus:ring-teal-500']:focus {
+  --tw-ring-color: rgba(139, 92, 246, 0.25) !important;
+}
+
+.spark-auth-flow [class~='bg-gray-100'] {
+  background-color: #f1f5f9 !important;
+}
+
+.spark-auth-flow [class~='bg-gray-50'] {
+  background-color: #f8fafc !important;
+}
+
+.spark-auth-flow [class~='border-gray-200'],
+.spark-auth-flow [class~='border-gray-300'] {
+  border-color: #e2e8f0 !important;
+}
+
+.spark-auth-flow [class~='text-gray-800'],
+.spark-auth-flow [class~='text-gray-900'] {
+  color: #0f172a !important;
+}
+
+.spark-auth-flow [class~='text-gray-500'],
+.spark-auth-flow [class~='text-gray-600'],
+.spark-auth-flow [class~='text-gray-700'] {
+  color: #64748b !important;
+}
+
+.spark-auth-flow [class~='bg-green-50'] {
+  background-color: #ecfdf5 !important;
+}
+
+.spark-auth-flow [class~='text-green-700'] {
+  color: #047857 !important;
+}
+
+.spark-auth-flow [class~='bg-red-50'] {
+  background-color: #fff1f2 !important;
+}
+
+.spark-auth-flow [class~='text-red-700'] {
+  color: #be123c !important;
+}
+
+.spark-auth-flow [class~='bg-amber-50'] {
+  background-color: #fffbeb !important;
+}
+
+.spark-auth-flow [class~='text-amber-700'] {
+  color: #b45309 !important;
+}
+
+/* Guest conference: only the pre-join and waiting surfaces are restyled.
+   The actual ConferenceRoomView keeps its dedicated dark media-room UI. */
+.spark-auth-flow > .min-h-screen.bg-gray-950,
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] {
+  background: transparent !important;
+}
+
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] > [class*='bg-cover'] {
+  opacity: 0.035 !important;
+}
+
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] > [class*='from-gray-950'] {
+  display: none !important;
+}
+
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] .text-white,
+.spark-auth-flow > .min-h-screen.bg-gray-950 .text-white {
+  color: #0f172a !important;
+}
+
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] :is(.text-gray-300, .text-gray-400, .text-gray-500),
+.spark-auth-flow > .min-h-screen.bg-gray-950 :is(.text-gray-300, .text-gray-400, .text-gray-500) {
+  color: #64748b !important;
+}
+
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] .bg-gray-800,
+.spark-auth-flow > .min-h-screen.bg-gray-950 .bg-gray-800,
+.spark-auth-flow > .min-h-screen.bg-gray-950 .bg-gray-900 {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-color: #e2e8f0 !important;
+}
+
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] .border-gray-700,
+.spark-auth-flow > .min-h-screen.bg-gray-950 :is(.border-gray-700, .border-gray-800) {
+  border-color: #e2e8f0 !important;
+}
+
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] .text-teal-400,
+.spark-auth-flow > .min-h-screen.bg-gray-950 .text-teal-400 {
+  color: #7c3aed !important;
+}
+
+.spark-auth-flow > .min-h-screen.bg-gray-950 > .max-w-sm,
+.spark-auth-flow > .min-h-screen[style*='#0f172a'] .max-w-md {
+  border-radius: 1rem !important;
+}
+
+/* First-run onboarding has no auth wrapper because it gates authenticated
+   content. Target its unique gradient signature and normalize it here. */
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] {
+  padding: 1rem !important;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(99, 102, 241, 0.09), transparent 28rem),
+    linear-gradient(135deg, #ffffff, #f8fafc 58%, #eef2ff) !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] > .max-w-5xl {
+  max-width: 900px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 1.15rem !important;
+  box-shadow: 0 22px 65px rgba(15, 23, 42, 0.09) !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] [class~='min-h-[560px]'] {
+  min-height: 460px !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] :is(.p-10, .p-8) {
+  padding: 1.5rem !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] .text-4xl {
+  font-size: 1.65rem !important;
+  line-height: 2.15rem !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] .text-3xl {
+  font-size: 1.4rem !important;
+  line-height: 1.9rem !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] :is(.bg-teal-500, .bg-teal-600) {
+  background-color: #7c3aed !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] :is(.text-teal-600, .text-teal-700, .text-teal-800) {
+  color: #6d28d9 !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] :is(.bg-teal-50, .bg-teal-100) {
+  background-color: #f5f3ff !important;
+}
+
+[class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] :is(.border-teal-100, .border-teal-200) {
+  border-color: #ddd6fe !important;
+}
+
+.dark .spark-auth-flow {
+  color: #e2e8f0;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(99, 102, 241, 0.16), transparent 30rem),
+    radial-gradient(circle at 90% 96%, rgba(6, 182, 212, 0.08), transparent 28rem),
+    linear-gradient(135deg, #020617, #07101e 58%, #0f172a);
+}
+
+.dark .spark-auth-flow .max-w-5xl {
+  border-color: #1e293b;
+  background-color: #0f172a !important;
+}
+
+.dark .spark-auth-flow input:not([type='checkbox']):not([type='radio']),
+.dark .spark-auth-flow select,
+.dark .spark-auth-flow textarea {
+  border-color: #334155 !important;
+  background: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+.dark .spark-auth-flow [class~='bg-gray-100'],
+.dark .spark-auth-flow [class~='bg-gray-700'],
+.dark .spark-auth-flow [class~='bg-gray-800'] {
+  background-color: #172033 !important;
+}
+
+.dark .spark-auth-flow [class~='border-gray-600'],
+.dark .spark-auth-flow [class~='border-gray-700'] {
+  border-color: #334155 !important;
+}
+
+.dark .spark-auth-flow [class~='text-gray-800'],
+.dark .spark-auth-flow [class~='text-gray-900'] {
+  color: #f8fafc !important;
+}
+
+.dark .spark-auth-flow [class~='text-gray-500'],
+.dark .spark-auth-flow [class~='text-gray-600'],
+.dark .spark-auth-flow [class~='text-gray-700'] {
+  color: #94a3b8 !important;
+}
+
+.dark .spark-auth-flow > .min-h-screen[style*='#0f172a'] .text-white,
+.dark .spark-auth-flow > .min-h-screen.bg-gray-950 .text-white {
+  color: #f8fafc !important;
+}
+
+.dark .spark-auth-flow > .min-h-screen[style*='#0f172a'] .bg-gray-800,
+.dark .spark-auth-flow > .min-h-screen.bg-gray-950 .bg-gray-800,
+.dark .spark-auth-flow > .min-h-screen.bg-gray-950 .bg-gray-900 {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+.dark .spark-auth-flow > .min-h-screen[style*='#0f172a'] :is(.text-gray-300, .text-gray-400, .text-gray-500),
+.dark .spark-auth-flow > .min-h-screen.bg-gray-950 :is(.text-gray-300, .text-gray-400, .text-gray-500) {
+  color: #94a3b8 !important;
+}
+
+.dark [class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(99, 102, 241, 0.15), transparent 28rem),
+    linear-gradient(135deg, #020617, #07101e 58%, #0f172a) !important;
+}
+
+.dark [class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] > .max-w-5xl {
+  border-color: #1e293b !important;
+  background-color: rgba(15, 23, 42, 0.96) !important;
+}
+
+@media (max-width: 640px) {
+  .spark-auth-flow > .min-h-screen {
+    padding: 0.75rem !important;
+  }
+
+  .spark-auth-flow .max-w-5xl {
+    border-radius: 1rem !important;
+  }
+
+  .spark-auth-flow [class~='p-8'],
+  .spark-auth-flow [class~='md:p-12'] {
+    padding: 1rem !important;
+  }
+
+  [class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] {
+    padding: 0.75rem !important;
+  }
+
+  [class~='min-h-screen'][class~='from-teal-50'][class~='via-white'][class~='to-sky-50'] > .max-w-5xl {
+    border-radius: 1rem !important;
+  }
+}

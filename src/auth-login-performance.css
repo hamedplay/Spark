@@ -1,0 +1,48 @@
+/* Login-only performance layer.
+   Preserve the neon theme and interactive hover/focus states while stopping
+   continuous decorative animations that trigger repeated paint/layout work. */
+
+/* Binary text was reported as the LCP element even though it is decorative. */
+.spark-reference-login .spark-reference-matrix::before,
+.spark-reference-login .spark-reference-matrix::after {
+  content: none !important;
+}
+
+/* Background-position / paint-heavy ambient loops. Static visuals remain. */
+.spark-reference-login::before,
+.spark-reference-login::after,
+.spark-reference-login .spark-reference-matrix,
+.spark-reference-login .spark-reference-grid,
+.spark-reference-login .spark-reference-aurora,
+.spark-reference-login .spark-reference-form-panel,
+.spark-reference-login .spark-reference-hero,
+.spark-reference-login .spark-reference-form-panel::before,
+.spark-reference-login .spark-reference-hero::before,
+.spark-reference-login .spark-reference-brand-mark img,
+.spark-reference-login .spark-reference-wordmark,
+.spark-reference-login .spark-reference-tabs,
+.spark-reference-login .spark-reference-tabs::before,
+.spark-reference-login .spark-reference-input-wrap,
+.spark-reference-login .spark-reference-input-wrap::after,
+.spark-reference-login .spark-reference-link,
+.spark-reference-login .spark-reference-check input:checked + .spark-reference-checkbox,
+.spark-reference-login .spark-reference-submit,
+.spark-reference-login .spark-reference-submit::before,
+.spark-reference-login .spark-reference-secondary-actions button,
+.spark-reference-login .spark-reference-secure-note,
+.spark-reference-login .spark-reference-hero-scan,
+.spark-reference-login .spark-reference-feature::before,
+.spark-reference-login .spark-reference-feature-copy i,
+.spark-reference-login .spark-reference-feature-icon,
+.spark-reference-login .spark-reference-hologram::before,
+.spark-reference-login .spark-reference-core {
+  animation: none !important;
+}
+
+/* The hidden native credential tabs are retained only to drive React state.
+   Do not spend animation/paint work on the 1px off-screen compatibility UI. */
+.spark-reference-login .spark-reference-form > .spark-reference-tabs,
+.spark-reference-login .spark-reference-form > .spark-reference-tabs *,
+.spark-reference-login .spark-reference-form > .spark-reference-tabs::before {
+  animation: none !important;
+}

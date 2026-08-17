@@ -1,0 +1,143 @@
+/* Notes page visual bridge — aligned with the compact Meetings/Tasks pages. */
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) {
+  position: relative;
+  min-height: 0 !important;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 24px;
+  background: linear-gradient(135deg, #ffffff 0%, rgba(248, 250, 252, 0.82) 54%, rgba(238, 242, 255, 0.5) 100%) !important;
+  padding: 12px;
+  color: #0f172a;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::before,
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  border-radius: 999px;
+  filter: blur(72px);
+  pointer-events: none;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::before {
+  top: -90px;
+  left: -75px;
+  width: 220px;
+  height: 220px;
+  background: rgba(196, 181, 253, 0.12);
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::after {
+  top: 120px;
+  right: -70px;
+  width: 190px;
+  height: 190px;
+  background: rgba(165, 243, 252, 0.11);
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > * {
+  position: relative;
+  z-index: 1;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl {
+  width: 100%;
+  max-width: none !important;
+  padding: 0 !important;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl > div:first-child {
+  margin-bottom: 12px !important;
+  gap: 10px;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl > div:first-child h2 {
+  font-size: 18px !important;
+  line-height: 28px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.015em;
+  color: #0f172a;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl > div:first-child button {
+  min-height: 36px;
+  border-radius: 12px !important;
+  background: linear-gradient(to left, #7c3aed, #4f46e5) !important;
+  padding: 0 14px !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  box-shadow: 0 7px 20px rgba(79, 70, 229, 0.18);
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl > .grid {
+  gap: 10px !important;
+}
+
+/* Keep note cards medium-sized and content-led rather than fixed-height tiles. */
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) .note-card {
+  min-height: 172px;
+}
+
+/* Compact floating voice-note action. */
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .fixed.bottom-6.left-6 {
+  bottom: 16px !important;
+  left: 16px !important;
+  z-index: 40;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .fixed.bottom-6.left-6 > button {
+  width: 42px !important;
+  height: 42px !important;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  background: linear-gradient(135deg, #7c3aed, #4f46e5) !important;
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.2) !important;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .fixed.bottom-6.left-6 > button[class*="bg-red"] {
+  border-color: rgba(244, 63, 94, 0.25);
+  background: #f43f5e !important;
+  box-shadow: 0 10px 24px rgba(244, 63, 94, 0.2) !important;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .fixed.bottom-6.left-6 svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+html.dark [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) {
+  border-color: #1e293b;
+  background: linear-gradient(135deg, #020617 0%, #020617 55%, rgba(49, 46, 129, 0.16) 100%) !important;
+  color: #f8fafc;
+  box-shadow: 0 18px 50px rgba(2, 6, 23, 0.25);
+}
+
+html.dark [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::before {
+  background: rgba(124, 58, 237, 0.1);
+}
+
+html.dark [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::after {
+  background: rgba(6, 182, 212, 0.08);
+}
+
+html.dark [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl > div:first-child h2 {
+  color: #f8fafc;
+}
+
+@media (min-width: 640px) {
+  [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 639px) {
+  [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl > div:first-child {
+    align-items: center;
+  }
+
+  [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl > div:first-child button {
+    padding-inline: 11px !important;
+  }
+}

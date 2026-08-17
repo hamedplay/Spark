@@ -1,0 +1,679 @@
+/* Spark login corrective layer — fixes viewport sizing, card collisions, and input rendering. */
+
+.spark-reference-login {
+  color-scheme: dark;
+}
+
+/* Keep the complete login experience inside a normal browser viewport at 100% zoom. */
+.spark-reference-shell {
+  width: min(1320px, calc(100vw - 32px));
+  height: min(790px, calc(100dvh - 24px));
+  min-height: 0;
+  margin: 12px auto;
+  gap: 14px;
+  grid-template-columns: minmax(360px, .76fr) minmax(0, 1.18fr);
+}
+
+.spark-reference-form-panel,
+.spark-reference-hero {
+  min-height: 0;
+  border-radius: 26px;
+}
+
+.spark-reference-form-inner {
+  width: min(100%, 470px);
+  height: 100%;
+  min-height: 0;
+  padding: 26px 32px 18px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--spark-neon) / .28) transparent;
+}
+
+/* The connection state is useful internally but was not part of the supplied visual reference. */
+.spark-reference-connection {
+  display: none;
+}
+
+.spark-reference-brand {
+  margin-bottom: 14px;
+}
+
+.spark-reference-brand-mark {
+  width: 66px;
+  height: 66px;
+  margin-bottom: 0;
+}
+
+.spark-reference-brand-mark img {
+  width: 60px;
+  height: 60px;
+}
+
+.spark-reference-brand-halo {
+  inset: 10px;
+}
+
+.spark-reference-wordmark {
+  font-size: clamp(40px, 3.4vw, 50px);
+}
+
+.spark-reference-brand h1 {
+  margin-top: 8px;
+  font-size: 16px;
+}
+
+.spark-reference-brand p {
+  margin-top: 5px;
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.spark-reference-form {
+  gap: 11px;
+}
+
+.spark-reference-tabs {
+  min-height: 46px;
+  margin-bottom: 2px;
+}
+
+.spark-reference-tabs button {
+  padding: 8px 6px;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.spark-reference-tabs button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.spark-reference-field {
+  font-size: 10px;
+}
+
+.spark-reference-field > span {
+  margin-bottom: 5px;
+}
+
+/* Force the dark glass input appearance even when browser/global autofill styles try to paint white. */
+.spark-reference-input-wrap {
+  min-height: 50px;
+  background: linear-gradient(100deg, rgb(1 16 18 / .94), rgb(4 30 31 / .84)) !important;
+}
+
+.spark-reference-input-wrap input {
+  height: 48px;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: #f7fffd !important;
+  -webkit-text-fill-color: #f7fffd !important;
+  caret-color: rgb(var(--spark-neon-soft));
+  box-shadow: none !important;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.spark-reference-input-wrap input::placeholder {
+  color: #6f817d !important;
+  -webkit-text-fill-color: #6f817d !important;
+  opacity: 1;
+}
+
+.spark-reference-input-wrap input:-webkit-autofill,
+.spark-reference-input-wrap input:-webkit-autofill:hover,
+.spark-reference-input-wrap input:-webkit-autofill:focus,
+.spark-reference-input-wrap input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f7fffd !important;
+  caret-color: rgb(var(--spark-neon-soft));
+  box-shadow: 0 0 0 1000px rgb(2 22 24) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px rgb(2 22 24) inset !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
+.spark-reference-input-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.spark-reference-options {
+  min-height: 30px;
+}
+
+.spark-reference-submit {
+  min-height: 52px;
+  margin-top: 2px;
+  font-size: 15px;
+}
+
+.spark-reference-submit svg {
+  width: 23px;
+  height: 23px;
+}
+
+.spark-reference-secondary-actions {
+  min-height: 22px;
+  margin-top: -1px;
+}
+
+.spark-reference-secure-note {
+  padding-top: 13px;
+  font-size: 10px;
+}
+
+.spark-reference-secure-note svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Hero proportions closer to the reference while staying inside the viewport. */
+.spark-reference-hero {
+  padding: 28px 32px 18px;
+}
+
+.spark-reference-hero-header h2 {
+  font-size: clamp(29px, 2.5vw, 38px);
+  line-height: 1.45;
+}
+
+.spark-reference-hero-header p {
+  font-size: clamp(12px, 1.1vw, 15px);
+}
+
+.spark-reference-feature-grid {
+  gap: 12px 14px;
+  margin-top: 16px;
+}
+
+.spark-reference-feature {
+  min-height: 88px;
+}
+
+/* The screenshot showed the feature text running into the icon. Reserve the RTL icon column explicitly. */
+.spark-reference-feature-copy {
+  justify-content: center;
+  align-items: flex-start;
+  padding: 14px 82px 14px 18px;
+  text-align: right;
+  direction: rtl;
+}
+
+.spark-reference-feature-copy strong {
+  width: 100%;
+  color: #f5fffc;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.spark-reference-feature-copy span {
+  width: 100%;
+  margin-top: 5px;
+  color: #8ca19b;
+  font-size: 9px;
+  line-height: 1.7;
+  white-space: normal;
+}
+
+.spark-reference-feature-copy i {
+  left: 14px;
+  bottom: 9px;
+  width: 35px;
+}
+
+.spark-reference-feature-icon {
+  right: 15px;
+  width: 50px;
+  height: 50px;
+}
+
+.spark-reference-feature-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.spark-reference-hologram {
+  min-height: 270px;
+  margin-top: 0;
+}
+
+.spark-reference-hologram::before {
+  bottom: 7px;
+  width: 86%;
+  height: 55%;
+}
+
+.spark-reference-data-rain {
+  bottom: 96px;
+  width: 220px;
+  height: 150px;
+  font-size: 9px;
+}
+
+.spark-reference-orbit-one {
+  height: 164px;
+  bottom: 26px;
+}
+
+.spark-reference-orbit-two {
+  height: 132px;
+  bottom: 43px;
+}
+
+.spark-reference-orbit-three {
+  height: 102px;
+  bottom: 57px;
+}
+
+.spark-reference-platform {
+  bottom: 34px;
+  width: 220px;
+  height: 130px;
+}
+
+.spark-reference-platform-layer {
+  height: 58px;
+  border-radius: 22px;
+}
+
+.spark-reference-platform .layer-two { bottom: 18px; }
+.spark-reference-platform .layer-three { bottom: 36px; }
+
+.spark-reference-core {
+  bottom: 55px;
+  width: 82px;
+  height: 74px;
+  border-radius: 18px;
+}
+
+.spark-reference-core img {
+  width: 62px;
+  height: 62px;
+}
+
+.spark-reference-node {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+}
+
+.spark-reference-node svg {
+  width: 31px;
+  height: 31px;
+}
+
+.spark-reference-node::before {
+  height: 48px;
+}
+
+.spark-reference-node::after {
+  top: calc(100% + 42px);
+  width: 42px;
+  height: 11px;
+}
+
+.spark-reference-node-users { left: 10%; top: 34%; }
+.spark-reference-node-chart { right: 10%; top: 32%; }
+.spark-reference-node-monitor { left: 7%; bottom: 14%; }
+.spark-reference-node-shield { right: 7%; bottom: 13%; }
+
+/* Common laptop/browser viewport: keep everything visible at 100% zoom. */
+@media (max-height: 760px) and (min-width: 961px) {
+  .spark-reference-shell {
+    height: calc(100dvh - 16px);
+    width: min(1280px, calc(100vw - 24px));
+    margin: 8px auto;
+    gap: 12px;
+  }
+
+  .spark-reference-form-panel,
+  .spark-reference-hero {
+    border-radius: 23px;
+  }
+
+  .spark-reference-form-inner {
+    padding: 16px 26px 12px;
+  }
+
+  .spark-reference-brand {
+    margin-bottom: 9px;
+  }
+
+  .spark-reference-brand-mark {
+    width: 54px;
+    height: 54px;
+  }
+
+  .spark-reference-brand-mark img {
+    width: 50px;
+    height: 50px;
+  }
+
+  .spark-reference-wordmark {
+    font-size: 38px;
+  }
+
+  .spark-reference-brand h1 {
+    margin-top: 5px;
+    font-size: 14px;
+  }
+
+  .spark-reference-brand p {
+    margin-top: 3px;
+    font-size: 9px;
+    line-height: 1.55;
+  }
+
+  .spark-reference-form {
+    gap: 8px;
+  }
+
+  .spark-reference-tabs {
+    min-height: 42px;
+    border-radius: 13px;
+  }
+
+  .spark-reference-tabs button {
+    padding: 7px 5px;
+    border-radius: 10px;
+    font-size: 10px;
+  }
+
+  .spark-reference-field {
+    font-size: 9px;
+  }
+
+  .spark-reference-field > span {
+    margin-bottom: 4px;
+  }
+
+  .spark-reference-input-wrap {
+    min-height: 44px;
+    border-radius: 12px;
+  }
+
+  .spark-reference-input-wrap input {
+    height: 42px;
+    padding-inline: 43px;
+    font-size: 12px;
+  }
+
+  .spark-reference-input-icon {
+    left: 14px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .spark-reference-eye {
+    width: 32px;
+    height: 32px;
+  }
+
+  .spark-reference-eye svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .spark-reference-options {
+    min-height: 25px;
+  }
+
+  .spark-reference-link,
+  .spark-reference-check {
+    font-size: 9px;
+  }
+
+  .spark-reference-checkbox {
+    width: 18px;
+    height: 18px;
+  }
+
+  .spark-reference-submit {
+    min-height: 46px;
+    border-radius: 13px;
+    font-size: 14px;
+  }
+
+  .spark-reference-submit svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .spark-reference-secondary-actions {
+    min-height: 18px;
+  }
+
+  .spark-reference-secondary-actions button {
+    font-size: 9px;
+  }
+
+  .spark-reference-secure-note {
+    padding-top: 7px;
+    font-size: 9px;
+  }
+
+  .spark-reference-secure-note svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .spark-reference-hero {
+    padding: 18px 26px 12px;
+  }
+
+  .spark-reference-hero-header h2 {
+    font-size: 30px;
+    line-height: 1.35;
+  }
+
+  .spark-reference-hero-header p {
+    font-size: 11px;
+  }
+
+  .spark-reference-feature-grid {
+    margin-top: 10px;
+    gap: 8px 10px;
+  }
+
+  .spark-reference-feature {
+    min-height: 72px;
+    border-radius: 13px;
+  }
+
+  .spark-reference-feature-copy {
+    padding: 9px 69px 9px 13px;
+  }
+
+  .spark-reference-feature-copy strong {
+    font-size: 11px;
+  }
+
+  .spark-reference-feature-copy span {
+    margin-top: 3px;
+    font-size: 8px;
+  }
+
+  .spark-reference-feature-copy i {
+    left: 10px;
+    bottom: 6px;
+    width: 28px;
+    height: 3px;
+  }
+
+  .spark-reference-feature-icon {
+    right: 12px;
+    width: 43px;
+    height: 43px;
+  }
+
+  .spark-reference-feature-icon svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .spark-reference-hologram {
+    min-height: 220px;
+  }
+
+  .spark-reference-hologram::before {
+    bottom: 3px;
+    height: 50%;
+  }
+
+  .spark-reference-data-rain {
+    bottom: 70px;
+    height: 118px;
+    font-size: 8px;
+  }
+
+  .spark-reference-orbit-one { height: 130px; bottom: 16px; }
+  .spark-reference-orbit-two { height: 104px; bottom: 28px; }
+  .spark-reference-orbit-three { height: 80px; bottom: 39px; }
+
+  .spark-reference-platform {
+    bottom: 18px;
+    width: 180px;
+    height: 105px;
+  }
+
+  .spark-reference-platform-layer {
+    height: 48px;
+  }
+
+  .spark-reference-platform .layer-two { bottom: 14px; }
+  .spark-reference-platform .layer-three { bottom: 29px; }
+
+  .spark-reference-core {
+    bottom: 43px;
+    width: 70px;
+    height: 62px;
+  }
+
+  .spark-reference-core img {
+    width: 52px;
+    height: 52px;
+  }
+
+  .spark-reference-node {
+    width: 50px;
+    height: 50px;
+    border-radius: 13px;
+  }
+
+  .spark-reference-node svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .spark-reference-node::before {
+    height: 35px;
+  }
+
+  .spark-reference-node::after {
+    top: calc(100% + 30px);
+    width: 35px;
+    height: 9px;
+  }
+
+  .spark-reference-node-users { top: 31%; }
+  .spark-reference-node-chart { top: 29%; }
+  .spark-reference-node-monitor { bottom: 12%; }
+  .spark-reference-node-shield { bottom: 11%; }
+}
+
+@media (max-height: 640px) and (min-width: 961px) {
+  .spark-reference-form-inner {
+    padding-top: 12px;
+    padding-bottom: 9px;
+  }
+
+  .spark-reference-brand-mark {
+    width: 48px;
+    height: 48px;
+  }
+
+  .spark-reference-brand-mark img {
+    width: 44px;
+    height: 44px;
+  }
+
+  .spark-reference-wordmark {
+    font-size: 34px;
+  }
+
+  .spark-reference-brand h1 {
+    font-size: 13px;
+  }
+
+  .spark-reference-brand p {
+    font-size: 8px;
+  }
+
+  .spark-reference-tabs {
+    min-height: 38px;
+  }
+
+  .spark-reference-input-wrap {
+    min-height: 41px;
+  }
+
+  .spark-reference-input-wrap input {
+    height: 39px;
+  }
+
+  .spark-reference-submit {
+    min-height: 43px;
+  }
+
+  .spark-reference-hero {
+    padding-top: 14px;
+  }
+
+  .spark-reference-hero-header h2 {
+    font-size: 27px;
+  }
+
+  .spark-reference-feature-grid {
+    margin-top: 8px;
+  }
+
+  .spark-reference-feature {
+    min-height: 66px;
+  }
+
+  .spark-reference-hologram {
+    min-height: 190px;
+  }
+
+  .spark-reference-node-users { top: 29%; }
+  .spark-reference-node-chart { top: 27%; }
+}
+
+@media (max-width: 1180px) and (min-width: 961px) {
+  .spark-reference-shell {
+    grid-template-columns: minmax(340px, .82fr) minmax(0, 1.08fr);
+    width: min(1120px, calc(100vw - 24px));
+  }
+
+  .spark-reference-feature-copy {
+    padding-right: 72px;
+  }
+
+  .spark-reference-feature-icon {
+    right: 12px;
+  }
+}
+
+@media (max-width: 960px) {
+  .spark-reference-shell {
+    height: auto;
+    min-height: auto;
+  }
+
+  .spark-reference-form-inner {
+    height: auto;
+    overflow: visible;
+  }
+}

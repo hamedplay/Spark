@@ -1,0 +1,55 @@
+/* Login-only browser form-paint guard.
+   Keeps Spark credential controls on the dark glass palette when browser
+   autofill or native form-control painting tries to apply a light surface. */
+
+.spark-reference-login .spark-reference-input-wrap {
+  color-scheme: dark;
+  background: linear-gradient(100deg, rgb(1 16 18 / .94), rgb(4 30 31 / .84)) !important;
+}
+
+.spark-reference-login .spark-reference-input-wrap > input {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: #f7fffd !important;
+  -webkit-text-fill-color: #f7fffd !important;
+  caret-color: rgb(var(--spark-neon-soft));
+}
+
+.spark-reference-login .spark-reference-input-wrap > input::placeholder {
+  color: #6f817d !important;
+  -webkit-text-fill-color: #6f817d !important;
+  opacity: 1;
+}
+
+/* Standards-based autofill state. */
+.spark-reference-login .spark-reference-input-wrap > input:autofill {
+  background: transparent !important;
+  color: #f7fffd !important;
+  box-shadow: 0 0 0 1000px rgb(2 22 24) inset !important;
+  caret-color: rgb(var(--spark-neon-soft));
+}
+
+/* Chromium / WebKit autofill state. */
+.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill,
+.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:hover,
+.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:focus,
+.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f7fffd !important;
+  caret-color: rgb(var(--spark-neon-soft));
+  box-shadow: 0 0 0 1000px rgb(2 22 24) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px rgb(2 22 24) inset !important;
+  -webkit-background-clip: text;
+  background-clip: text;
+  transition: background-color 9999s ease-out 0s, color 9999s ease-out 0s;
+}
+
+/* Firefox autofill state. */
+@supports selector(input:-moz-autofill) {
+  .spark-reference-login .spark-reference-input-wrap > input:-moz-autofill {
+    background: transparent !important;
+    color: #f7fffd !important;
+    box-shadow: 0 0 0 1000px rgb(2 22 24) inset !important;
+    caret-color: rgb(var(--spark-neon-soft));
+    filter: none;
+  }
+}
