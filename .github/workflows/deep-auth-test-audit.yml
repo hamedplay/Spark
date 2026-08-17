@@ -1,0 +1,64 @@
+name: Deep Auth Test Audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/deep-auth-test-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - run: npm ci
+      - name: Run omitted Phase 5 and Phase 8 suites
+        shell: bash
+        run: |
+          set +e
+          failed=0
+          for script in \
+            test:phase5-login \
+            test:phase5-gateway \
+            test:phase5-session-issuers \
+            test:phase5-edge-gates \
+            test:phase5-cutover \
+            test:phase5-phone-otp-config \
+            test:phase5-phone-otp-challenge-table \
+            test:phase5-phone-otp-rate-limit-table \
+            test:phase5-phone-otp-rate-limit-rpc \
+            test:phase5-phone-otp-create-challenge-rpc \
+            test:phase5-phone-otp-delivery-result-rpc \
+            test:phase5-phone-otp-claim-challenge-rpc \
+            test:phase5-phone-otp-complete-claim-rpc \
+            test:phase5-phone-otp-release-claim-rpc \
+            test:phase5-phone-otp-gateway-method \
+            test:phase5-phone-otp-gateway-finalization-rpc \
+            test:phase5-phone-otp-request-edge \
+            test:phase5-phone-otp-verify-edge \
+            test:phase5-phone-otp-gateway-flow \
+            test:phase5-phone-otp-gateway-reconciliation-rpc \
+            test:phase5-phone-otp-activation \
+            test:phase5-phone-otp-login-ui \
+            test:phase8-identity-health \
+            test:phase8-runtime-p0 \
+            test:phase8-ready-gates
+          do
+            echo "::group::$script"
+            npm run "$script"
+            code=$?
+            echo "::endgroup::"
+            if [ "$code" -ne 0 ]; then
+              echo "FAILED: $script"
+              failed=1
+            else
+              echo "PASSED: $script"
+            fi
+          done
+          exit "$failed"
