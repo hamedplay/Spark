@@ -1,0 +1,73 @@
+import { supabase } from '../../../lib/supabase';
+
+/**
+ * Loads and resolves effective permissions for a non-admin user.
+ * Returns `null` for full access (when a group grants `all`),
+ * otherwise a merged record of granted permission keys.
+ *
+ * Precedence (later sources override earlier):
+ *   1. Legacy user-group permissions
+ *   2. Organization-level permissions (by primary position level)
+ *   3. Position-level overrides
+ *
+ * Network work is intentionally performed in two parallel phases instead of
+ * a serial chain, while preserving the exact permission precedence above.
+ */
+export async function loadResolvedUserPermissions(
+  userId: string,
+): Promise<Record<string, boolean> | null> {
+  // Phase 1: membership sources are independent and can be resolved together.
+  const [membershipsResult, primaryMemberResult] = await Promise.all([
+    supabase
+      .from('user_group_members')
+      .select('group_id')
+      .eq('user_id', userId),
+    supabase
+      .from('org_position_members')
+      .select('position_id, org_positions(level)')
+      .eq('user_id', userId)
+      .eq('is_primary', true)
+      .maybeSingle(),
+  ]);
+
+  const memberships = membershipsResult.data || [];
+  const primaryMember = primaryMemberResult.data;
+  const groupIds = memberships.map((m: { group_id: string }) => m.group_id);
+  const positionId = primaryMember?.position_id || null;
+  const posLevel = (primaryMember as unknown as { org_positions?: { level?: number } } | null)?.org_positions?.level;
+
+  // Phase 2: once ids are known, all permission sources are independent reads.
+  const [groupsResult, levelPermsResult, posPermsResult] = await Promise.all([
+    groupIds.length > 0
+      ? supabase.from('user_groups').select('permissions').in('id', groupIds)
+      : Promise.resolve({ data: [] as Array<{ permissions: unknown }> }),
+    posLevel
+      ? supabase.from('org_level_permissions').select('permission_key, granted').eq('level', posLevel)
+      : Promise.resolve({ data: [] as Array<{ permission_key: string; granted: boolean }> }),
+    positionId
+      ? supabase.from('org_position_permissions').select('permission_key, granted').eq('position_id', positionId)
+      : Promise.resolve({ data: [] as Array<{ permission_key: string; granted: boolean }> }),
+  ]);
+
+  const merged: Record<string, boolean> = {};
+
+  for (const g of (groupsResult.data || [])) {
+    const permissions = (g.permissions || {}) as Record<string, boolean>;
+    if (permissions.all) return null;
+    Object.entries(permissions).forEach(([key, granted]) => {
+      if (granted) merged[key] = true;
+    });
+  }
+
+  for (const permission of (levelPermsResult.data || [])) {
+    if (permission.granted) merged[permission.permission_key] = true;
+    else delete merged[permission.permission_key];
+  }
+
+  for (const permission of (posPermsResult.data || [])) {
+    if (permission.granted) merged[permission.permission_key] = true;
+    else delete merged[permission.permission_key];
+  }
+
+  return merged;
+}
