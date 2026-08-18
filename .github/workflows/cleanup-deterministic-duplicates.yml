@@ -1,4 +1,4 @@
-# one-time execution trigger
+# retry: create shared UI directory before transformation
 name: Cleanup deterministic duplicates
 
 on:
@@ -44,6 +44,7 @@ jobs:
           NO_COLOR=1 deno check --node-modules-dir=auto supabase/functions/send-daily-meetings/index.ts > /tmp/deno-before.log 2>&1
           baseline_deno_rc=$?
 
+          mkdir -p src/shared/ui
           node scripts/cleanup-deterministic-duplicates.mjs >> /tmp/deterministic-duplicates.log 2>&1
           transform_rc=$?
           build_rc=99
