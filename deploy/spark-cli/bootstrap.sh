@@ -81,7 +81,7 @@ grep -q '^mainmenu()' "$tmp/vendor/terminal-menus.sh" || {
   exit 1
 }
 
-grep -q 'SPARK_MANAGER_WRAPPER_VERSION="1.3.2"' "$tmp/spark-tui.sh" || {
+grep -q 'SPARK_MANAGER_WRAPPER_VERSION="1.3.3"' "$tmp/spark-tui.sh" || {
   echo "Spark TUI wrapper version validation failed." >&2
   exit 1
 }
@@ -97,6 +97,14 @@ if grep -Fq 'command="$(TUI_MODE="fullscreen" mainmenu' "$tmp/spark-tui.sh"; the
   echo "Spark TUI wrapper still runs mainmenu inside command substitution." >&2
   exit 1
 fi
+grep -Fq "IFS=\$' \\t\\n'" "$tmp/spark-tui.sh" || {
+  echo "Spark TUI wrapper is missing the terminal-menus IFS compatibility boundary." >&2
+  exit 1
+}
+grep -q 'SPARK_TUI_DIAG_LOG=' "$tmp/spark-tui.sh" || {
+  echo "Spark TUI wrapper is missing diagnostic logging." >&2
+  exit 1
+}
 
 install -d -m 0755 "$TUI_VENDOR_DIR"
 install -m 0644 "$tmp/vendor/terminal-menus.sh" "$TUI_VENDOR_DIR/terminal-menus.sh"
@@ -131,7 +139,7 @@ if ! version_output="$($CLI_PATH --version 2>/dev/null)"; then
   fi
   exit 1
 fi
-if [[ "$version_output" != "Spark Server Manager 1.3.2" ]]; then
+if [[ "$version_output" != "Spark Server Manager 1.3.3" ]]; then
   echo "Unexpected Spark Server Manager version: ${version_output}" >&2
   rm -f "$CLI_PATH"
   rm -rf "$TARGET"
@@ -143,4 +151,4 @@ if [[ "$version_output" != "Spark Server Manager 1.3.2" ]]; then
 fi
 
 rm -rf "$backup"
-printf 'Spark Server Manager %s installed from %s. Run: spark\n' "1.3.2" "${MAIN_SHA:0:12}"
+printf 'Spark Server Manager %s installed from %s. Run: spark\n' "1.3.3" "${MAIN_SHA:0:12}"
