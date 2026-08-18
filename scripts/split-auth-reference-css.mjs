@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 
+// One-time, build-gated split of the oversized reference login stylesheet.
 const cssPath = 'src/auth-reference-login.css';
 const heroPath = 'src/auth-reference-login-hero.css';
 const mainPath = 'src/main.tsx';
