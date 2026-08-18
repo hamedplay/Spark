@@ -106,7 +106,7 @@ jobs:
           fi
 
           if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$test_rc" -eq 0 ]; then
-            deno check supabase/functions/send-sms/index.ts supabase/functions/send-daily-meetings/index.ts >> /tmp/refactor-validation.log 2>&1
+            deno check --node-modules-dir=auto supabase/functions/send-sms/index.ts supabase/functions/send-daily-meetings/index.ts >> /tmp/refactor-validation.log 2>&1
             deno_rc=$?
           fi
 
