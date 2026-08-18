@@ -27,39 +27,55 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Remove guarded dead files
-        run: node scripts/remove-confirmed-dead-files.mjs
-
-      - name: Production build gate
-        run: npm run build
-
-      - name: Re-run reachability audit
-        run: node scripts/audit-dead-code.mjs
-
-      - name: Verify removed files stay absent
+      - name: Guarded cleanup and validation
+        id: guarded
         shell: bash
         run: |
-          for f in \
-            src/app/hooks/useMaintenanceMode.ts \
-            src/app/hooks/useSparkVisibility.ts \
-            src/components/Minutes/Form/JalaliDateField.tsx \
-            src/components/PortalConfig/AuditLists.tsx \
-            src/components/PortalConfig/BaleOtpConfigCard.tsx \
-            src/components/PortalConfig/PhoneSyncCard.tsx \
-            src/components/TelegramWebhookSetup.tsx \
-            src/components/ThemeToggle.tsx \
-            src/components/VideoConference/Room/SidePanelHeader.tsx \
-            src/features/auth/services/recoveryService.ts \
-            src/features/meetings/components/MeetingCard/MeetingEditForm.tsx \
-            src/shared/repositories/publicProfileRepository.ts
-          do
-            test ! -e "$f"
-          done
+          set +e
+          : > /tmp/dead-file-cleanup.log
+          node scripts/remove-confirmed-dead-files.mjs >> /tmp/dead-file-cleanup.log 2>&1
+          remove_rc=$?
+          build_rc=99
+          audit_rc=99
+          if [ "$remove_rc" -eq 0 ]; then
+            npm run build >> /tmp/dead-file-cleanup.log 2>&1
+            build_rc=$?
+          fi
+          if [ "$remove_rc" -eq 0 ] && [ "$build_rc" -eq 0 ]; then
+            node scripts/audit-dead-code.mjs >> /tmp/dead-file-cleanup.log 2>&1
+            audit_rc=$?
+          fi
+
+          if [ "$remove_rc" -ne 0 ] || [ "$build_rc" -ne 0 ] || [ "$audit_rc" -ne 0 ]; then
+            git reset --hard HEAD
+            {
+              echo "VALIDATION_FAILED"
+              echo "remove_rc=$remove_rc"
+              echo "build_rc=$build_rc"
+              echo "audit_rc=$audit_rc"
+              echo
+              cat /tmp/dead-file-cleanup.log
+            } > scripts/.dead-file-cleanup-status.txt
+            echo "success=false" >> "$GITHUB_OUTPUT"
+          else
+            rm -f scripts/.dead-file-cleanup-status.txt
+            echo "success=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Commit validated cleanup
+        if: steps.guarded.outputs.success == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -u src
           git commit -m "cleanup: remove confirmed dead application files"
+          git push origin HEAD:main
+
+      - name: Commit failure evidence
+        if: steps.guarded.outputs.success != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/.dead-file-cleanup-status.txt
+          git commit -m "chore: record dead file cleanup validation failure" || exit 0
           git push origin HEAD:main
