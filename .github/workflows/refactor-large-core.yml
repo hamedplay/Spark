@@ -58,6 +58,7 @@ jobs:
                   src/components/VideoConference/Room/useConferenceHostActions.ts \
                   src/components/Chat/E2EECall/useE2EECallCore.ts \
                   src/components/Chat/E2EECall/useE2EERtpDiagnostics.ts \
+                  src/components/Chat/E2EECall/useE2EELifecycleHelpers.ts \
                   src/components/Chat/E2EECall/useE2EESessionChannel.ts \
                   src/components/Chat/E2EECall/useE2EECallFlow.ts \
                   src/components/Chat/E2EECall/useE2EEMediaControls.ts \
