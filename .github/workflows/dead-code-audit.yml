@@ -1,4 +1,4 @@
-# rerun after dead-file cleanup
+# final-pass rerun after dead-code and duplication cleanup
 name: One-time dead code audit
 
 on:
