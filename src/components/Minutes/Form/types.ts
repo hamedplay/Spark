@@ -111,7 +111,13 @@ export interface DraftAgendaItem {
 
 export interface DraftDecision {
   id: string;
+  /** Stable DB identity. New unsaved decisions receive a UUID immediately so
+   * parent/child relations can be sent atomically on the first draft save. */
   decisionId: string | null;
+  /** Null for a resolution parent; set to the parent decision UUID for a clause. */
+  parentDecisionId: string | null;
+  /** 1-based order inside a parent. Null for parent resolutions. */
+  clauseOrder: number | null;
   agendaResultId: string | null;
   /** Stable link to the source agenda item (real meeting_agenda_item_id).
    *  Used to resolve agenda_result_id server-side. Never the temp React id. */
