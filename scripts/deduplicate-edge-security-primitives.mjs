@@ -1,3 +1,4 @@
+// one-time execution trigger
 import fs from 'node:fs';
 import ts from 'typescript';
 
