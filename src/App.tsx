@@ -1,10 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import SparkLoader from './components/ui/SparkLoader';
+import { isKnownSparkPath } from './app/navigation/rootPath';
 import { supabase } from './lib/supabase';
 
 const PublicAuthRoot = lazy(() => import('./PublicAuthRoot'));
 const AuthenticatedRoot = lazy(() => import('./AuthenticatedRoot'));
 const GuestApplication = lazy(() => import('./GuestApplication'));
+const NotFoundPage = lazy(() => import('./features/not-found/pages/NotFoundPage'));
 
 type RootAuthState = 'checking' | 'public' | 'authenticated';
 
@@ -58,6 +60,14 @@ function RootApp() {
     return (
       <Suspense fallback={<SparkLoader message="در حال بارگذاری..." />}>
         <GuestApplication code={conferenceCode} />
+      </Suspense>
+    );
+  }
+
+  if (!isKnownSparkPath(window.location.pathname)) {
+    return (
+      <Suspense fallback={<SparkLoader message="در حال بارگذاری صفحه..." />}>
+        <NotFoundPage />
       </Suspense>
     );
   }
