@@ -1,0 +1,157 @@
+name: Cleanup deterministic duplicates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/cleanup-deterministic-duplicates.mjs
+      - .github/workflows/cleanup-deterministic-duplicates.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Guarded transform and validation
+        id: guarded
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/deterministic-duplicates.log
+          mapfile -t TEST_FILES < <(find tests -type f \( -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.test.mjs' -o -name '*.test.js' \) | sort)
+          NO_COLOR=1 node --import tsx --test "${TEST_FILES[@]}" > /tmp/tests-before.log 2>&1
+          baseline_test_rc=$?
+          NO_COLOR=1 deno check --node-modules-dir=auto supabase/functions/send-daily-meetings/index.ts > /tmp/deno-before.log 2>&1
+          baseline_deno_rc=$?
+
+          node scripts/cleanup-deterministic-duplicates.mjs >> /tmp/deterministic-duplicates.log 2>&1
+          transform_rc=$?
+          build_rc=99
+          test_rc=99
+          deno_rc=99
+          audit_rc=99
+
+          if [ "$transform_rc" -eq 0 ]; then
+            npm run build >> /tmp/deterministic-duplicates.log 2>&1
+            build_rc=$?
+          fi
+
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ]; then
+            NO_COLOR=1 node --import tsx --test "${TEST_FILES[@]}" > /tmp/tests-after.log 2>&1
+            after_test_rc=$?
+            python3 - <<'PY' >> /tmp/deterministic-duplicates.log 2>&1
+          import collections,re
+          from pathlib import Path
+          def names(path, failed=False):
+              out=[]
+              for line in Path(path).read_text(errors='replace').splitlines():
+                  s=line.strip()
+                  if failed:
+                      if not s.startswith('✖ '): continue
+                  elif not (s.startswith('✔ ') or s.startswith('✖ ')): continue
+                  out.append(re.sub(r'\s+\([^)]*ms\)$','',s[2:]))
+              return collections.Counter(out)
+          before_all=names('/tmp/tests-before.log'); after_all=names('/tmp/tests-after.log')
+          before_fail=names('/tmp/tests-before.log',True); after_fail=names('/tmp/tests-after.log',True)
+          print('tests before=',sum(before_all.values()),'after=',sum(after_all.values()))
+          print('failures before=',sum(before_fail.values()),'after=',sum(after_fail.values()))
+          if before_all != after_all:
+              print('TEST_SET_CHANGED', list((before_all-after_all).elements()), list((after_all-before_all).elements()))
+              raise SystemExit(1)
+          new=after_fail-before_fail
+          if new:
+              print('NEW_TEST_FAILURES',list(new.elements())); raise SystemExit(1)
+          PY
+            test_rc=$?
+          fi
+
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$test_rc" -eq 0 ]; then
+            NO_COLOR=1 deno check --node-modules-dir=auto supabase/functions/send-daily-meetings/index.ts > /tmp/deno-after.log 2>&1
+            after_deno_rc=$?
+            python3 - <<'PY' >> /tmp/deterministic-duplicates.log 2>&1
+          import collections,re
+          from pathlib import Path
+          def d(p):
+              t=Path(p).read_text(errors='replace')
+              r=re.compile(r'TS(\d+) \[ERROR\]: ([^\n]+).*?at (?:file://)?[^\n]*?/(supabase/functions/[^:\n]+):\d+:\d+',re.S)
+              return collections.Counter((f,c,re.sub(r'\s+',' ',m).strip()) for c,m,f in r.findall(t))
+          before=d('/tmp/deno-before.log'); after=d('/tmp/deno-after.log'); new=after-before
+          if new:
+              print('NEW_DENO_DIAGNOSTICS')
+              for x,n in sorted(new.items()): print(n,x)
+              raise SystemExit(1)
+          PY
+            deno_rc=$?
+          fi
+
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$test_rc" -eq 0 ] && [ "$deno_rc" -eq 0 ]; then
+            node scripts/audit-dead-code.mjs >> /tmp/deterministic-duplicates.log 2>&1
+            audit_exec_rc=$?
+            python3 - <<'PY' >> /tmp/deterministic-duplicates.log 2>&1
+          import json
+          from pathlib import Path
+          r=json.loads(Path('scripts/.dead-code-audit.json').read_text())
+          if r['production_unreachable'] != ['src/vite-env.d.ts']:
+              print('unexpected unreachable=',r['production_unreachable']); raise SystemExit(1)
+          print('exact duplicate groups after=',len(r['exact_duplicate_functions']))
+          if len(r['exact_duplicate_functions']) >= 16:
+              print('duplicate count did not improve'); raise SystemExit(1)
+          PY
+            audit_assert_rc=$?
+            if [ "$audit_exec_rc" -eq 0 ] && [ "$audit_assert_rc" -eq 0 ]; then audit_rc=0; else audit_rc=1; fi
+          fi
+
+          if [ "$transform_rc" -ne 0 ] || [ "$build_rc" -ne 0 ] || [ "$test_rc" -ne 0 ] || [ "$deno_rc" -ne 0 ] || [ "$audit_rc" -ne 0 ]; then
+            git reset --hard HEAD
+            {
+              echo "VALIDATION_FAILED"
+              echo "transform_rc=$transform_rc"
+              echo "build_rc=$build_rc"
+              echo "test_rc=$test_rc"
+              echo "deno_rc=$deno_rc"
+              echo "audit_rc=$audit_rc"
+              echo
+              tail -n 400 /tmp/deterministic-duplicates.log
+            } > scripts/.deterministic-duplicates-status.txt
+            echo "success=false" >> "$GITHUB_OUTPUT"
+          else
+            rm -f scripts/.deterministic-duplicates-status.txt
+            echo "success=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit validated source changes
+        if: steps.guarded.outputs.success == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src supabase/functions/send-daily-meetings
+          git commit -m "cleanup: remove deterministic duplicate logic"
+          git push origin HEAD:main
+
+      - name: Commit failure evidence
+        if: steps.guarded.outputs.success != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/.deterministic-duplicates-status.txt
+          git commit -m "chore: record deterministic duplicate cleanup failure" || exit 0
+          git push origin HEAD:main
