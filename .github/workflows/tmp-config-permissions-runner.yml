@@ -17,7 +17,7 @@ jobs:
       - name: Checkout isolated fix branch
         uses: actions/checkout@v6
         with:
-          ref: fix/config-permissions-dashboard-20260819-v2
+          ref: fix/config-permissions-dashboard-20260819-v3
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -28,6 +28,7 @@ jobs:
           package-manager-cache: false
 
       - name: Repair known transformer boundary
+        id: repair
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -40,27 +41,34 @@ jobs:
           NODE
 
       - name: Transform source in working tree
+        id: transform
         run: node scripts/tmp-config-permissions-fix.mjs
 
       - name: Install dependencies
+        id: install
         run: npm ci
 
       - name: Test granular configuration permissions
+        id: config_test
         run: node --import tsx --test tests/app/configPermissions.test.ts
 
       - name: Test existing navigation contract
+        id: nav_test
         run: npm run test:layout-navigation
 
       - name: Production build
+        id: build
         run: npm run build
 
       - name: Inspect transformed diff
+        id: diff
         run: |
           git status --short
           git diff --check
           git diff --stat
 
       - name: Commit validated production changes
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -82,4 +90,36 @@ jobs:
             tests/app/configPermissions.test.ts
           git diff --cached --check
           git commit -m "fix: enforce granular config permissions and dashboard access"
-          git push origin HEAD:fix/config-permissions-dashboard-20260819-v2
+          git push origin HEAD:fix/config-permissions-dashboard-20260819-v3
+
+      - name: Record diagnostic failure without source changes
+        if: failure()
+        env:
+          REPAIR: ${{ steps.repair.outcome }}
+          TRANSFORM: ${{ steps.transform.outcome }}
+          INSTALL: ${{ steps.install.outcome }}
+          CONFIG_TEST: ${{ steps.config_test.outcome }}
+          NAV_TEST: ${{ steps.nav_test.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          DIFF: ${{ steps.diff.outcome }}
+          COMMIT_STEP: ${{ steps.commit.outcome }}
+        run: |
+          git reset --hard HEAD
+          git clean -fd
+          cat > .tmp-config-permissions-status.txt <<EOF
+          result=FAILED
+          run_id=${GITHUB_RUN_ID}
+          repair=${REPAIR}
+          transform=${TRANSFORM}
+          install=${INSTALL}
+          config_test=${CONFIG_TEST}
+          nav_test=${NAV_TEST}
+          build=${BUILD}
+          diff=${DIFF}
+          commit=${COMMIT_STEP}
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .tmp-config-permissions-status.txt
+          git commit -m "chore: record config permissions validation failure"
+          git push origin HEAD:fix/config-permissions-dashboard-20260819-v3
