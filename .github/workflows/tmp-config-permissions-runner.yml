@@ -36,6 +36,38 @@ jobs:
         id: transform
         run: node scripts/tmp-config-permissions-fix.mjs
 
+      - name: Repair generated test harness
+        run: |
+          cat > tests/app/configBackendPermissions.test.ts <<'EOF'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import test from 'node:test';
+
+          const read = (p: string) => fs.readFileSync(p, 'utf8');
+
+          test('delegated config Edge Functions use exact RBAC keys', () => {
+            assert.ok(read('supabase/functions/backup-data/index.ts').includes('hasCurrentPermission(auth, "config_backup")'));
+            assert.ok(read('supabase/functions/restore-backup/index.ts').includes('hasCurrentPermission(auth, "config_backup")'));
+            assert.ok(read('supabase/functions/send-daily-meetings/dailyReportSupport.ts').includes('config_notifications.daily_report'));
+            assert.ok(read('supabase/functions/messenger-proxy/index.ts').includes('config_notifications.social_notifications'));
+            assert.ok(read('supabase/functions/check-phone-password-reset-runtime/index.ts').includes('config_access.security'));
+            assert.ok(read('supabase/functions/send-sms/index.ts').includes('config_notifications.sms'));
+          });
+
+          test('special identity-repair gate remains untouched', () => {
+            const source = read('src/components/PortalConfig/IdentityRepairCard.tsx');
+            assert.match(source, /is_security_admin/);
+            assert.match(source, /MFA_STEP_UP_REQUIRED|mfa/i);
+          });
+
+          test('delegated group rights do not expose group metadata mutation', () => {
+            const source = read('src/components/UserGroupsPanel.tsx');
+            assert.match(source, /isAdmin.*ویرایش گروه/s);
+            assert.match(source, /canManageAccess.*مدیریت اعضا/s);
+            assert.match(source, /canManageAccess.*حقوق دسترسی/s);
+          });
+          EOF
+
       - name: Install dependencies
         id: install
         run: npm ci
