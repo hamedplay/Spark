@@ -1,0 +1,58 @@
+name: Temporary Interactive 404 Validation
+
+on:
+  push:
+    branches:
+      - work/interactive-404-20260818
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interactive-404-validation
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Inspect frontend path handling
+        shell: bash
+        run: |
+          echo '--- pathname references ---'
+          grep -RInE "location\.pathname|window\.location\.pathname|/admin|conference" src \
+            --include='*.ts' --include='*.tsx' || true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Targeted 404 tests
+        shell: bash
+        run: |
+          if [ -f tests/app/rootPath404.test.ts ]; then
+            node --import tsx --test tests/app/rootPath404.test.ts
+          else
+            echo 'Targeted 404 test not added yet.'
+          fi
+
+      - name: Verify no unintended database changes
+        shell: bash
+        run: |
+          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '^supabase/'; then
+            echo 'Unexpected Supabase/database change in 404 scope.' >&2
+            exit 1
+          fi
