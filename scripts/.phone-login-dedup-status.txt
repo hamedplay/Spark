@@ -1,8 +1,8 @@
 VALIDATION_FAILED
 transform_rc=0
 build_rc=0
-deno_rc=1
-audit_rc=99
+deno_rc=0
+audit_rc=1
 
 phone login route/config deduplication completed
 
@@ -176,14 +176,17 @@ dist/assets/minutesWordExport-DLtmCJ7z.js         380.61 kB │ gzip: 107.51 kB
 dist/assets/index-CenAasKg.js                     411.01 kB │ gzip: 117.99 kB
 dist/assets/exceljs.min-BsF42dRL.js               929.58 kB │ gzip: 256.39 kB
 
-[32m✓ built in 3.24s[39m
+[32m✓ built in 3.21s[39m
 [33m[plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
-deno before= 1 after= 3
-NEW_DENO_DIAGNOSTICS
-1 ('supabase/functions/request-phone-login-otp-v2/index.ts', '2304', "Cannot find name 'PhoneAuthConfig'.")
-1 ('supabase/functions/verify-phone-login-otp-v2/index.ts', '2304', "Cannot find name 'PhoneAuthConfig'.")
-baseline_deno_rc=1 after_deno_rc=1 comparison_rc=1
+deno before= 1 after= 1
+baseline_deno_rc=1 after_deno_rc=1 comparison_rc=0
+code_files=616
+production_reachable=615
+production_unreachable=1
+strong_dead_file_candidates=0
+exact_duplicate_function_groups=17
+legacy full-file duplicate still present
