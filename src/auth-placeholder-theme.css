@@ -1,0 +1,23 @@
+/* Public-auth placeholder palette.
+   Keep every placeholder in the Spark green/teal visual language across
+   login, registration, recovery and OTP-related fields. */
+
+.spark-reference-login input::placeholder,
+.spark-reference-login textarea::placeholder {
+  color: rgb(var(--spark-neon-soft, 111 255 226) / .72) !important;
+  -webkit-text-fill-color: rgb(var(--spark-neon-soft, 111 255 226) / .72) !important;
+  opacity: 1 !important;
+}
+
+.spark-reference-login input::-webkit-input-placeholder,
+.spark-reference-login textarea::-webkit-input-placeholder {
+  color: rgb(var(--spark-neon-soft, 111 255 226) / .72) !important;
+  -webkit-text-fill-color: rgb(var(--spark-neon-soft, 111 255 226) / .72) !important;
+  opacity: 1 !important;
+}
+
+.spark-reference-login input::-moz-placeholder,
+.spark-reference-login textarea::-moz-placeholder {
+  color: rgb(var(--spark-neon-soft, 111 255 226) / .72) !important;
+  opacity: 1 !important;
+}
