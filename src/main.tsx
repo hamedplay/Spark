@@ -12,13 +12,9 @@ import './corporate-theme.css';
 // references this stylesheet, but Vite de-duplicates the module; the important
 // part is that its position in the entry cascade is stable.
 import './auth-modern.css';
-import './auth-reference-login.css';
-import './auth-reference-login-hero.css';
-import './auth-reference-login-fixes.css';
-import './auth-login-unified-tabs.css';
-import './auth-login-theme-guard.css';
-import './auth-login-performance.css';
-import './auth-login-lunara-button.css';
+// Public auth now has one authoritative visual layer instead of stacked
+// reference/fix/theme/performance overrides that competed in the cascade.
+import './auth-login-v2.css';
 import './auth-login-unified-tabs.ts';
 import './auth-pointer-glow.ts';
 
