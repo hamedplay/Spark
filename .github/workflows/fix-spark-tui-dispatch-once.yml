@@ -17,6 +17,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Sync latest main
+        shell: bash
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+
       - name: Repair mainmenu command dispatch
         shell: bash
         run: |
@@ -169,4 +175,5 @@ jobs:
           git add deploy/spark-cli/spark .github/workflows/fix-spark-tui-dispatch-once.yml
           git diff --cached --check
           git commit -m 'fix: execute Spark TUI selections'
+          git pull --rebase origin main
           git push origin HEAD:main
