@@ -26,6 +26,23 @@ import {
   useUserPreferences,
 } from '../../../features/user-preferences';
 
+const HALF_HOUR_OPTION_ELEMENTS = Array.from(
+                        { length: 48 },
+                        (_, i) => {
+                          const h = Math.floor(i / 2)
+                            .toString()
+                            .padStart(2, '0');
+                          const m =
+                            i % 2 === 0 ? '00' : '30';
+                          return (
+                            <option
+                              key={i}
+                              value={`${h}:${m}`}
+                            >{`${h}:${m}`}</option>
+                          );
+                        }
+                      );
+
 export interface UserSettingsModalProps {
   onClose: () => void;
 }
@@ -314,22 +331,7 @@ export function UserSettingsModal({
                       dir="ltr"
                     >
                       <option value="">پیش‌فرض</option>
-                      {Array.from(
-                        { length: 48 },
-                        (_, i) => {
-                          const h = Math.floor(i / 2)
-                            .toString()
-                            .padStart(2, '0');
-                          const m =
-                            i % 2 === 0 ? '00' : '30';
-                          return (
-                            <option
-                              key={i}
-                              value={`${h}:${m}`}
-                            >{`${h}:${m}`}</option>
-                          );
-                        }
-                      )}
+                      {HALF_HOUR_OPTION_ELEMENTS}
                     </select>
                   </div>
                   <div>
@@ -350,22 +352,7 @@ export function UserSettingsModal({
                       dir="ltr"
                     >
                       <option value="">پیش‌فرض</option>
-                      {Array.from(
-                        { length: 48 },
-                        (_, i) => {
-                          const h = Math.floor(i / 2)
-                            .toString()
-                            .padStart(2, '0');
-                          const m =
-                            i % 2 === 0 ? '00' : '30';
-                          return (
-                            <option
-                              key={i}
-                              value={`${h}:${m}`}
-                            >{`${h}:${m}`}</option>
-                          );
-                        }
-                      )}
+                      {HALF_HOUR_OPTION_ELEMENTS}
                     </select>
                   </div>
                 </div>

@@ -10,23 +10,15 @@ export type MeetingChangeSet = {
   hasAnyChanges: boolean;
 };
 
-export interface ParticipantDiff {
+export interface RecipientDiff {
   added: string[];
   retained: string[];
   removed: string[];
 }
 
-export interface ObserverDiff {
-  added: string[];
-  retained: string[];
-  removed: string[];
-}
-
-export interface ExternalDiff {
-  added: string[];
-  retained: string[];
-  removed: string[];
-}
+export type ParticipantDiff = RecipientDiff;
+export type ObserverDiff = RecipientDiff;
+export type ExternalDiff = RecipientDiff;
 
 export interface NotificationPlanEvent {
   recipientId: string;
@@ -129,7 +121,7 @@ export function computeMeetingChangeSet(existing: Record<string, any>, next: Rec
   return { importantFields, minorFields, participantChanged, notifyUsersChanged, externalChanged, hasNonParticipantChanges, hasAnyChanges };
 }
 
-export function computeParticipantDiff(prevIds: string[], nextIds: string[]): ParticipantDiff {
+function computeRecipientDiff(prevIds: string[], nextIds: string[]): RecipientDiff {
   const prev = new Set(prevIds.filter(x => !!x));
   const next = new Set(nextIds.filter(x => !!x));
   return {
@@ -139,14 +131,12 @@ export function computeParticipantDiff(prevIds: string[], nextIds: string[]): Pa
   };
 }
 
+export function computeParticipantDiff(prevIds: string[], nextIds: string[]): ParticipantDiff {
+  return computeRecipientDiff(prevIds, nextIds);
+}
+
 export function computeObserverDiff(prevIds: string[], nextIds: string[]): ObserverDiff {
-  const prev = new Set(prevIds.filter(x => !!x));
-  const next = new Set(nextIds.filter(x => !!x));
-  return {
-    added: [...next].filter(id => !prev.has(id)),
-    retained: [...next].filter(id => prev.has(id)),
-    removed: [...prev].filter(id => !next.has(id)),
-  };
+  return computeRecipientDiff(prevIds, nextIds);
 }
 
 export function computeExternalDiff(prevNames: string[], nextNames: string[]): ExternalDiff {

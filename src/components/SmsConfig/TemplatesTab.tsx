@@ -16,6 +16,15 @@ import type { SmsTemplate } from './types';
 import { CATEGORY_COLORS, inp, SAMPLE_VALUES } from './types';
 import { SmsToggle as Toggle } from '../ConfigToggle';
 
+function insertTemplatePlaceholder(ph: string, textarea: HTMLTextAreaElement | null, body: string, applyBody: (body: string) => void) {
+  const pos = textarea?.selectionStart ?? body.length;
+  const newBody = body.slice(0, pos) + ph + body.slice(pos);
+  applyBody(newBody);
+  requestAnimationFrame(() => {
+    if (textarea) { textarea.focus(); textarea.selectionStart = textarea.selectionEnd = pos + ph.length; }
+  });
+}
+
 function fillPreview(body: string, customVars: Record<string, string>): string {
   const vars = { ...SAMPLE_VALUES, ...customVars };
   return body.replace(/\{\{(\w+)\}\}/g, (_match, key) => {
@@ -78,20 +87,7 @@ function NewTemplateForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
   const [phInput, setPhInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const insertPlaceholder = (ph: string) => {
-    const token = `{{${ph}}}`;
-    const ta = textareaRef.current;
-    const start = ta?.selectionStart ?? form.body.length;
-    const end = ta?.selectionEnd ?? form.body.length;
-    const newBody = form.body.slice(0, start) + token + form.body.slice(end);
-    setForm(f => ({ ...f, body: newBody, placeholders: extractPlaceholders(newBody) }));
-    requestAnimationFrame(() => {
-      if (!ta) return;
-      const cursor = start + token.length;
-      ta.focus();
-      ta.setSelectionRange(cursor, cursor);
-    });
-  };
+  const insertPlaceholder = (ph: string) => insertTemplatePlaceholder(ph, textareaRef.current, form.body, body => setForm(f => ({ ...f, body })));
 
   const handleBodyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const body = e.target.value;
@@ -308,20 +304,7 @@ function TemplateEditor({ template, onSave, onCancel }: {
     onSave({ ...form });
   };
 
-  const insertPlaceholder = (ph: string) => {
-    const token = `{{${ph}}}`;
-    const ta = textareaRef.current;
-    const start = ta?.selectionStart ?? form.body.length;
-    const end = ta?.selectionEnd ?? form.body.length;
-    const newBody = form.body.slice(0, start) + token + form.body.slice(end);
-    setForm(f => ({ ...f, body: newBody, placeholders: extractPlaceholders(newBody) }));
-    requestAnimationFrame(() => {
-      if (!ta) return;
-      const cursor = start + token.length;
-      ta.focus();
-      ta.setSelectionRange(cursor, cursor);
-    });
-  };
+  const insertPlaceholder = (ph: string) => insertTemplatePlaceholder(ph, textareaRef.current, form.body, body => setForm(f => ({ ...f, body })));
 
   const handleBodyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const body = e.target.value;

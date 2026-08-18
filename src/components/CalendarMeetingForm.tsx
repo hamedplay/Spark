@@ -23,6 +23,7 @@ import type {
   CalendarMeetingFormProps,
   CommitSnapshot,
 } from './CalendarMeetingForm/types';
+import { mapOrgGroupsToMultiSelectGroups } from '../lib/orgUserOptions';
 
 export type { CommitSnapshot } from './CalendarMeetingForm/types';
 
@@ -102,16 +103,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
   const { groups: orgGroups, allUsers: orgAllUsers, loading: orgUsersLoading, usersById } = useOrgUsers(userId);
 
-  const systemUserGroups = orgGroups.map(g => ({
-    label: g.unit_name,
-    options: g.users.map(u => {
-      const subs: string[] = [];
-      if (u.position_title) subs.push(u.position_title);
-      const others = u.assignments.filter(a => a.positionTitle && a.positionTitle !== u.position_title);
-      if (others.length) subs.push(others.map(a => a.positionTitle).join('، '));
-      return { id: u.user_id, name: u.full_name || '', sub: subs.join(' · ') };
-    }),
-  }));
+  const systemUserGroups = mapOrgGroupsToMultiSelectGroups(orgGroups);
 
   const isPlaceholderName = (name: string): boolean => {
     const trimmed = name.trim();

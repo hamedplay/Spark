@@ -48,6 +48,7 @@ import { MeetingMetadataFields } from './CreateMeetingForm/MeetingMetadataFields
 import { MeetingManagerField } from './CreateMeetingForm/MeetingManagerField';
 import { MeetingReminderField } from './CreateMeetingForm/MeetingReminderField';
 import { MeetingFormActions } from './CreateMeetingForm/MeetingFormActions';
+import { mapOrgGroupsToMultiSelectGroups } from '../../../lib/orgUserOptions';
 
 interface CalendarEntry {
   id: string;
@@ -85,16 +86,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   // گروه‌بندی کاربران بر اساس واحد سازمانی
   const { groups: orgGroups, allUsers } = useOrgUsers(userId);
 
-  const systemUserGroups = orgGroups.map(g => ({
-    label: g.unit_name,
-    options: g.users.map(u => {
-      const subs: string[] = [];
-      if (u.position_title) subs.push(u.position_title);
-      const others = u.assignments.filter(a => a.positionTitle && a.positionTitle !== u.position_title);
-      if (others.length) subs.push(others.map(a => a.positionTitle).join('، '));
-      return { id: u.user_id, name: u.full_name || '', sub: subs.join(' · ') };
-    }),
-  }));
+  const systemUserGroups = mapOrgGroupsToMultiSelectGroups(orgGroups);
 
   const allUsersRef = useRef(allUsers);
 

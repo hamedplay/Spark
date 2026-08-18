@@ -93,6 +93,16 @@ export function VideoArea(props: {
     );
   }
 
+  const promoteTile = (peerId: string) => setTileOrder(prev => {
+          const ids = orderedTiles.map(x => x.peerId);
+          const si = ids.indexOf(peerId);
+          if (si <= 0) return prev;
+          const next = [...ids];
+          next.splice(si, 1);
+          next.unshift(peerId);
+          return next;
+        });
+
   // ── Gallery ────────────────────────────────────────────────────────
   if (layoutMode === 'gallery') {
     return (
@@ -114,15 +124,7 @@ export function VideoArea(props: {
         tileReactions={tileReactions}
         makeDraggable={makeDraggable}
         onPinSpeaker={peerId => setPinnedPeerId(peerId)}
-        onPromoteThumbnail={peerId => setTileOrder(prev => {
-          const ids = orderedTiles.map(x => x.peerId);
-          const si = ids.indexOf(peerId);
-          if (si <= 0) return prev;
-          const next = [...ids];
-          next.splice(si, 1);
-          next.unshift(peerId);
-          return next;
-        })}
+        onPromoteThumbnail={promoteTile}
       />
     );
   }
@@ -134,15 +136,7 @@ export function VideoArea(props: {
       tileReactions={tileReactions}
       makeDraggable={makeDraggable}
       onPinMain={peerId => setPinnedPeerId(p => p === peerId ? null : peerId)}
-      onPromoteSidebar={peerId => setTileOrder(prev => {
-        const ids = orderedTiles.map(x => x.peerId);
-        const si = ids.indexOf(peerId);
-        if (si <= 0) return prev;
-        const next = [...ids];
-        next.splice(si, 1);
-        next.unshift(peerId);
-        return next;
-      })}
+      onPromoteSidebar={promoteTile}
     />
   );
 }

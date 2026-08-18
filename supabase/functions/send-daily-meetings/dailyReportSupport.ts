@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
+import { timingSafeCompare } from '../_shared/crypto.ts';
 
 // Daily report edge function — sends daily management meeting summaries
 export const corsHeaders = {
@@ -187,16 +188,6 @@ export function adminClient() {
 // ─── Grace period ───────────────────────────────────────────────────────────
 export const SCHEDULE_GRACE_PERIOD_MINUTES = 15;
 export const SEND_WINDOW_MINUTES = 5;
-
-export function timingSafeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  const enc = new TextEncoder();
-  const ba = enc.encode(a);
-  const bb = enc.encode(b);
-  let diff = 0;
-  for (let i = 0; i < ba.length; i++) diff |= ba[i] ^ bb[i];
-  return diff === 0;
-}
 
 // ─── Authorization ───────────────────────────────────────────────────────────
 export async function authorize(

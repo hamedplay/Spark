@@ -455,24 +455,7 @@ export function MeetingInboxButton() {
                   {isSearching ? (
                     filteredDelegates.length === 0 ? (
                       <p className="text-sm text-gray-400 text-center py-8">کاربری یافت نشد</p>
-                    ) : filteredDelegates.map(u => (
-                      <button
-                        key={u.user_id}
-                        onClick={() => handleDelegate(delegateForEntry, u.user_id)}
-                        disabled={loading}
-                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-b border-gray-50 dark:border-gray-700/50 last:border-0 disabled:opacity-50 text-right"
-                      >
-                        <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                            {(u.full_name || '?').charAt(0)}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0 text-right">
-                          <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
-                          <p className="text-xs text-gray-400 truncate">{u.position_title || u.unit_name || ''}</p>
-                        </div>
-                      </button>
-                    ))
+                    ) : filteredDelegates.map(renderDelegateOption)
                   ) : (
                     orgGroups.length === 0 ? (
                       <p className="text-sm text-gray-400 text-center py-8">کاربری یافت نشد</p>
@@ -490,24 +473,7 @@ export function MeetingInboxButton() {
                             <span className="flex-1 text-xs font-semibold text-gray-600 dark:text-gray-300 truncate">{group.unit_name}</span>
                             <span className="text-xs text-gray-400 bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded-full flex-shrink-0">{group.users.length}</span>
                           </button>
-                          {isOpen && group.users.map(u => (
-                            <button
-                              key={u.user_id}
-                              onClick={() => handleDelegate(delegateForEntry, u.user_id)}
-                              disabled={loading}
-                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-b border-gray-50 dark:border-gray-700/50 last:border-0 disabled:opacity-50 text-right"
-                            >
-                              <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
-                                <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                                  {(u.full_name || '?').charAt(0)}
-                                </span>
-                              </div>
-                              <div className="flex-1 min-w-0 text-right">
-                                <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
-                                <p className="text-xs text-gray-400 truncate">{u.position_title || u.unit_name || ''}</p>
-                              </div>
-                            </button>
-                          ))}
+                          {isOpen && group.users.map(renderDelegateOption)}
                         </div>
                       );
                     })
@@ -702,7 +668,26 @@ export function MeetingInboxButton() {
                 if (start && end) formattedTimeRange = `${start} تا ${end}`;
                 else if (start) formattedTimeRange = `شروع: ${start}`;
                 else formattedTimeRange = 'ساعت نامشخص';
-                return (
+                const renderDelegateOption = (u: (typeof filteredDelegates)[number]) => (
+                      <button
+                        key={u.user_id}
+                        onClick={() => handleDelegate(delegateForEntry, u.user_id)}
+                        disabled={loading}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-b border-gray-50 dark:border-gray-700/50 last:border-0 disabled:opacity-50 text-right"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                            {(u.full_name || '?').charAt(0)}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0 text-right">
+                          <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{u.full_name || '—'}</p>
+                          <p className="text-xs text-gray-400 truncate">{u.position_title || u.unit_name || ''}</p>
+                        </div>
+                      </button>
+                    );
+
+  return (
                   <div key={i} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 space-y-2">
                     <p className="text-sm font-semibold text-gray-800 dark:text-white">{conflictTitle}</p>
                     <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">

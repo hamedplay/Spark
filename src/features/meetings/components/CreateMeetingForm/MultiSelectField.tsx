@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
+import { handleMultiSelectKeyDown } from '../../../../shared/ui/multiSelectKeyboard';
 
 export interface MultiSelectOption {
   id: string;
@@ -54,26 +55,7 @@ export function MultiSelectField({
 
   useEffect(() => { setHighlightedIndex(0); }, [query, open]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (open && filtered.length > 0) {
-        const item = filtered[highlightedIndex] || filtered[0];
-        onAdd({ id: item.id, name: item.name });
-        setQuery('');
-        setHighlightedIndex(0);
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setOpen(true);
-      setHighlightedIndex(i => Math.min(i + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Escape') {
-      setOpen(false);
-    }
-  };
+  const handleKeyDown = (e: React.KeyboardEvent) => handleMultiSelectKeyDown(e, { open, filtered, highlightedIndex, onAdd, setQuery, setOpen, setHighlightedIndex });
 
   const isSearching = query.trim().length > 0;
 

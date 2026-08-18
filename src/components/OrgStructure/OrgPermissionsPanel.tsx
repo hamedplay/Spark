@@ -125,47 +125,14 @@ function OrgPermissionsPanel({
     setShowViewWarning(false);
   };
 
-  const handleToggleAllInGroup = (groupLabel: string, groupKeys: string[], enable: boolean) => {
-    if (groupLabel === MINUTES_GROUP_LABEL) {
-      setPerms(prev => {
+  const handleToggleAllInGroup = (groupKeys: string[], enable: boolean) => {
+    setPerms(prev => { const updated = { ...prev }; groupKeys.forEach(k => { updated[k] = enable; }); return updated; });
+    if (mode === 'position') {
+      setOverrides(prev => {
         const updated = { ...prev };
-        groupKeys.forEach(k => { updated[k] = enable; });
+        groupKeys.forEach(k => { const baseValue = levelPerms[k] ?? false; if (enable === baseValue) delete updated[k]; else updated[k] = enable; });
         return updated;
       });
-      if (mode === 'position') {
-        setOverrides(prev => {
-          const updated = { ...prev };
-          groupKeys.forEach(k => {
-            const baseValue = levelPerms[k] ?? false;
-            if (enable === baseValue) {
-              delete updated[k];
-            } else {
-              updated[k] = enable;
-            }
-          });
-          return updated;
-        });
-      }
-    } else {
-      setPerms(prev => {
-        const updated = { ...prev };
-        groupKeys.forEach(k => { updated[k] = enable; });
-        return updated;
-      });
-      if (mode === 'position') {
-        setOverrides(prev => {
-          const updated = { ...prev };
-          groupKeys.forEach(k => {
-            const baseValue = levelPerms[k] ?? false;
-            if (enable === baseValue) {
-              delete updated[k];
-            } else {
-              updated[k] = enable;
-            }
-          });
-          return updated;
-        });
-      }
     }
   };
 
@@ -368,7 +335,7 @@ function OrgPermissionsPanel({
                       >
                         <span className="text-xs font-bold" style={{ color: group.color }}>{group.group}</span>
                         <button
-                          onClick={() => handleToggleAllInGroup(group.group, groupKeys, !allGranted)}
+                          onClick={() => handleToggleAllInGroup(groupKeys, !allGranted)}
                           className="text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors"
                           style={{
                             backgroundColor: allGranted ? group.color : someGranted ? group.color + '40' : '#e5e7eb',

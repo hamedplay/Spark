@@ -8,6 +8,7 @@ import { MembersPanel } from './UserGroups/MembersPanel';
 import { AccessPanel } from './UserGroups/AccessPanel';
 import { GroupEventsPanel } from './UserGroups/GroupEventsPanel';
 import type { UserGroup, Panel, Props } from './UserGroups/types';
+import { useDismissOnOutsideClick } from '../shared/ui/useDismissOnOutsideClick';
 
 export { GroupEventsPanel };
 
@@ -31,14 +32,7 @@ export function UserGroupsPanel({}: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(null);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [menuOpen]);
+  useDismissOnOutsideClick(menuOpen !== null, menuRef, setMenuOpen);
 
   const openPanel = (p: Panel, group: UserGroup) => {
     setSelected(group);

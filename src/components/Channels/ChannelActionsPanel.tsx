@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, SlidersHorizontal, X, Check, ChevronDown, Star, GitFork } from 'lucide-react';
+import { Search, SlidersHorizontal, X, ChevronDown, Star, GitFork } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import type { ChannelProfile, GroupTask } from './types';
+import { MultiToggleFilterOption, SingleSelectFilterOption } from '../../shared/ui/ActionFilterOptions';
 
 interface ChannelSearchResult {
   id: string;
@@ -231,15 +232,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
               </button>
               {activeDropdown === 'type' && (
                 <div className="absolute top-full mt-1 right-0 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 py-1 z-50">
-                  {TYPE_OPTIONS.map(opt => (
-                    <button key={opt.key} onClick={() => toggleTypeFilter(opt.key)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300">
-                      <span>{opt.label}</span>
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${typeFilters.has(opt.key) ? 'bg-teal-500 border-teal-500' : 'border-gray-300 dark:border-gray-600'}`}>
-                        {typeFilters.has(opt.key) && <Check className="w-2.5 h-2.5 text-white" />}
-                      </div>
-                    </button>
-                  ))}
+                  {TYPE_OPTIONS.map(opt => <MultiToggleFilterOption key={opt.key} option={opt} selected={typeFilters.has(opt.key)} onToggle={toggleTypeFilter} />)}
                 </div>
               )}
             </div>
@@ -255,21 +248,7 @@ export function ChannelActionsPanel({ currentUserId, channelId, channelName, all
               </button>
               {activeDropdown === 'date' && (
                 <div className="absolute top-full mt-1 right-0 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 py-1 z-50">
-                  {DATE_OPTIONS.map(opt => (
-                    <div key={opt.key}>
-                      <button onClick={() => { setDateFilter(opt.key); if (opt.key !== 'custom') setActiveDropdown(null); }}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${dateFilter === opt.key ? 'text-teal-600 dark:text-teal-400 font-semibold' : 'text-gray-700 dark:text-gray-300'}`}>
-                        <span>{opt.label}</span>
-                        {dateFilter === opt.key && <Check className="w-3.5 h-3.5 text-teal-500" />}
-                      </button>
-                      {opt.key === 'custom' && dateFilter === 'custom' && (
-                        <div className="px-3 pb-2">
-                          <input type="date" value={customDate} onChange={e => setCustomDate(e.target.value)}
-                            className="w-full px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-white outline-none focus:border-teal-400" />
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {DATE_OPTIONS.map(opt => <SingleSelectFilterOption key={opt.key} option={opt} selected={dateFilter === opt.key} customKey="custom" onSelect={setDateFilter} onClose={() => setActiveDropdown(null)} />)}
                 </div>
               )}
             </div>

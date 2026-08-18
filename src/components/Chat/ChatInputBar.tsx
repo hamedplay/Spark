@@ -6,6 +6,8 @@ import { EmojiPicker } from './EmojiPicker';
 import type { ChatMessage, ChatMessageType, UserProfile } from './types';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../../context/PermissionsContext';
+import { MessageTypeOptionButton, pushEditorHistory } from '../../shared/chat/MessageInputPrimitives';
+import { updateMessageBody } from '../../shared/chat/MessageInputPrimitives';
 
 interface Props {
   conversationId: string;
@@ -103,24 +105,9 @@ export function ChatInputBar({
     ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
   };
 
-  const pushHistory = (val: string) => {
-    const hist = historyRef.current.slice(0, historyIndexRef.current + 1);
-    hist.push(val);
-    historyRef.current = hist.slice(-50);
-    historyIndexRef.current = historyRef.current.length - 1;
-  };
+  const pushHistory = (val: string) => pushEditorHistory(historyRef, historyIndexRef, val);
 
-  const handleBodyChange = (val: string) => {
-    setBody(val);
-    pushHistory(val);
-    const lastAt = val.lastIndexOf('@');
-    if (lastAt >= 0 && (lastAt === val.length - 1 || val.slice(lastAt + 1).match(/^\w*$/))) {
-      setShowMentionMenu(true);
-      setMentionSearch(val.slice(lastAt + 1));
-    } else {
-      setShowMentionMenu(false);
-    }
-  };
+  const handleBodyChange = (val: string) => updateMessageBody(val, setBody, pushHistory, setShowMentionMenu, setMentionSearch);
 
   const handleUndo = () => {
     if (historyIndexRef.current > 0) {
@@ -816,18 +803,7 @@ export function ChatInputBar({
                     if (t.key === 'urgent') return hasPermission('chat_send_urgent');
                     if (t.key === 'confidential') return hasPermission('chat_send_confidential');
                     return true;
-                  }).map(t => (
-                    <button key={t.key}
-                      onClick={() => { setMessageType(t.key); setShowTypeMenu(false); }}
-                      className={`w-full flex items-start gap-3 px-3 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${messageType === t.key ? 'bg-gray-50 dark:bg-gray-700' : ''}`}>
-                      <span className={`mt-0.5 flex-shrink-0 ${t.color}`}>{t.icon}</span>
-                      <div className="text-right flex-1 min-w-0">
-                        <p className={`font-medium ${t.color}`}>{t.label}</p>
-                        {t.desc && <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{t.desc}</p>}
-                      </div>
-                      {messageType === t.key && <span className="text-teal-500 text-xs mt-0.5">✓</span>}
-                    </button>
-                  ))}
+                  }).map(t => <MessageTypeOptionButton key={t.key} option={t} selected={messageType} onSelect={setMessageType} onClose={() => setShowTypeMenu(false)} />)}
                 </div>
               )}
             </div>

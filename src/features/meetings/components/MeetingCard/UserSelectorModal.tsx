@@ -189,17 +189,7 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
             <div className="space-y-1.5 px-2 pt-2">
               {filteredAll.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-6">کاربری یافت نشد</p>
-              ) : filteredAll.map(u => (
-                <UserRow
-                  key={u.user_id}
-                  userId={u.user_id}
-                  name={u.full_name || ''}
-                  assignments={u.assignments}
-                  sending={sendingToUserId === u.user_id}
-                  disabled={loading}
-                  onSend={handleSendToUser}
-                />
-              ))}
+              ) : filteredAll.map(renderUserRow)}
             </div>
           ) : visibleGroups.length === 0 ? (
             <p className="text-center text-sm text-gray-400 py-8">کاربری یافت نشد</p>
@@ -229,17 +219,7 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
                     </button>
                     {isOpen && (
                       <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                        {group.users.map(u => (
-                          <UserRow
-                            key={u.user_id}
-                            userId={u.user_id}
-                            name={u.full_name || ''}
-                            assignments={u.assignments}
-                            sending={sendingToUserId === u.user_id}
-                            disabled={loading}
-                            onSend={handleSendToUser}
-                          />
-                        ))}
+                        {group.users.map(renderUserRow)}
                       </div>
                     )}
                   </div>
@@ -264,6 +244,18 @@ function UserRow({
   onSend: (userId: string, name: string) => void;
 }) {
   const hasAssignments = assignments.length > 0;
+  const renderUserRow = (u: OrgUserProfile) => (
+                <UserRow
+                  key={u.user_id}
+                  userId={u.user_id}
+                  name={u.full_name || ''}
+                  assignments={u.assignments}
+                  sending={sendingToUserId === u.user_id}
+                  disabled={loading}
+                  onSend={handleSendToUser}
+                />
+              );
+
   return (
     <div className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
       <div className="flex items-center gap-2.5 min-w-0">
