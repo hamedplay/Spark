@@ -30,15 +30,22 @@ jobs:
         run: npm ci
 
       - name: Refactor large cores
-        run: node scripts/refactor-large-core-files.mjs
+        id: refactor
+        continue-on-error: true
+        run: node scripts/refactor-large-core-files.mjs > /tmp/refactor.log 2>&1
 
       - name: Build
-        run: npm run build
+        id: build
+        if: steps.refactor.outcome == 'success'
+        continue-on-error: true
+        run: npm run build > /tmp/build.log 2>&1
 
       - name: Commit refactor
+        if: steps.refactor.outcome == 'success' && steps.build.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f scripts/.refactor-status.txt
           git add src/components/CalendarPageCore.tsx \
                   src/components/Calendar/CalendarPageView.tsx \
                   src/components/Calendar/useCalendarDataActions.ts \
@@ -50,10 +57,32 @@ jobs:
                   src/components/Chat/E2EECall/useE2EERtpDiagnostics.ts \
                   src/components/Chat/E2EECall/useE2EESessionChannel.ts \
                   src/components/Chat/E2EECall/useE2EECallFlow.ts \
-                  src/components/Chat/E2EECall/useE2EEMediaControls.ts
+                  src/components/Chat/E2EECall/useE2EEMediaControls.ts \
+                  scripts/.refactor-status.txt
           if git diff --cached --quiet; then
             echo "No generated refactor changes"
             exit 1
           fi
           git commit -m "refactor: split remaining large core modules"
           git push origin HEAD:main
+
+      - name: Record failure
+        if: steps.refactor.outcome != 'success' || steps.build.outcome == 'failure'
+        run: |
+          REF_OUTCOME='${{ steps.refactor.outcome }}'
+          BUILD_OUTCOME='${{ steps.build.outcome }}'
+          git reset --hard HEAD
+          {
+            echo "refactor=$REF_OUTCOME"
+            echo "build=$BUILD_OUTCOME"
+            echo "--- refactor log ---"
+            tail -n 200 /tmp/refactor.log 2>/dev/null || true
+            echo "--- build log ---"
+            tail -n 200 /tmp/build.log 2>/dev/null || true
+          } > scripts/.refactor-status.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/.refactor-status.txt
+          git commit -m "chore: record large-core refactor failure"
+          git push origin HEAD:main
+          exit 1
