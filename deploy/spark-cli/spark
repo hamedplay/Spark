@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="1.2.0"
+SPARK_MANAGER_VERSION="1.3.0"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
 SPARK_ROOT="/opt/spark"
@@ -16,6 +16,13 @@ LOG_DIR="/var/log/spark-manager"
 BACKUP_DIR="/var/backups/spark"
 CLI_PATH="/usr/local/bin/spark"
 
+TUI_VENDOR_REF="52d8e84ce008531f25dfe8339ac9474e1d6feb49"
+TUI_VENDOR_DIR="/usr/local/share/spark-manager"
+TUI_VENDOR_FILE="${TUI_VENDOR_DIR}/terminal-menus.sh"
+TUI_VENDOR_LICENSE="${TUI_VENDOR_DIR}/terminal-menus.LICENSE.md"
+TUI_VENDOR_REF_FILE="${TUI_VENDOR_DIR}/terminal-menus.ref"
+TUI_VENDOR_RAW="https://raw.githubusercontent.com/sc0ttj/terminal-menus.sh/${TUI_VENDOR_REF}"
+
 C_RESET=$'\033[0m'
 C_GREEN=$'\033[32m'
 C_RED=$'\033[31m'
@@ -27,13 +34,15 @@ C_BOLD=$'\033[1m'
 C_DIM=$'\033[2m'
 
 CURRENT_LOG=""
+SPARK_TUI_READY=0
+SPARK_TUI_STATE_DIR="${STATE_DIR}/tui"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
 fi
 
-mkdir -p "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
-chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
+mkdir -p "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR" "$SPARK_TUI_STATE_DIR"
+chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR" "$SPARK_TUI_STATE_DIR"
 
 SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SOURCE" ]]; do
@@ -58,7 +67,6 @@ for module in core install-base install-platform-a install-platform-b install-pl
 done
 unset module module_path
 
-# Presentation layer only. Operational modules remain unchanged.
 pause() {
   printf '\n'
   read -r -p "Press Enter to continue..." _
@@ -71,378 +79,598 @@ confirm_word() {
   [[ "$answer" == "$word" ]]
 }
 
-ui_refresh_dimensions() {
-  local cols
-  cols="$(tput cols 2>/dev/null || printf '80')"
-  [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
-  UI_WIDTH="$cols"
-  (( UI_WIDTH > 95 )) && UI_WIDTH=95
-  (( UI_WIDTH < 41 )) && UI_WIDTH=41
-  (( UI_WIDTH % 2 == 0 )) && ((UI_WIDTH--))
-  UI_INNER=$((UI_WIDTH - 4))
-  UI_LABEL_WIDTH=$(( (UI_WIDTH - 17) / 2 ))
-  (( UI_LABEL_WIDTH < 8 )) && UI_LABEL_WIDTH=8
+title() {
+  clear_screen
+  printf '%s%s SPARK SERVER MANAGER%s  %s· Production Infrastructure Control%s\n' \
+    "$C_BOLD" "$C_GREEN" "$C_RESET" "$C_DIM" "$C_RESET"
+  printf '%s%s%s\n' "$C_GREEN" "────────────────────────────────────────────────────────────────────────" "$C_RESET"
+  printf '%sHost:%s %-24s %sVersion:%s %s\n\n' \
+    "$C_DIM" "$C_RESET" "$(hostname -s 2>/dev/null || hostname)" \
+    "$C_DIM" "$C_RESET" "$SPARK_MANAGER_VERSION"
+}
+
+ensure_tui_vendor() {
+  local installed_ref=""
+  if [[ -r "$TUI_VENDOR_REF_FILE" ]]; then
+    installed_ref="$(tr -d '[:space:]' <"$TUI_VENDOR_REF_FILE")"
+  fi
+  if [[ -r "$TUI_VENDOR_FILE" && "$installed_ref" == "$TUI_VENDOR_REF" ]]; then
+    return 0
+  fi
+
+  command -v curl >/dev/null 2>&1 || {
+    fail "The terminal UI library is missing or outdated and curl is unavailable."
+    info "Re-run the Spark Manager bootstrap installer."
+    return 1
+  }
+
+  local tmp
+  tmp="$(mktemp -d)"
+
+  info "Installing pinned terminal UI library (${TUI_VENDOR_REF:0:12})..."
+  if ! curl -fsSL "${TUI_VENDOR_RAW}/terminal-menus.sh" -o "${tmp}/terminal-menus.sh"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! curl -fsSL "${TUI_VENDOR_RAW}/LICENSE.md" -o "${tmp}/LICENSE.md"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! bash -n "${tmp}/terminal-menus.sh"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! grep -q '^mainmenu()' "${tmp}/terminal-menus.sh"; then
+    fail "Pinned terminal UI library does not expose mainmenu()."
+    rm -rf "$tmp"
+    return 1
+  fi
+
+  install -d -m 0755 "$TUI_VENDOR_DIR"
+  install -m 0644 "${tmp}/terminal-menus.sh" "$TUI_VENDOR_FILE"
+  install -m 0644 "${tmp}/LICENSE.md" "$TUI_VENDOR_LICENSE"
+  printf '%s\n' "$TUI_VENDOR_REF" >"$TUI_VENDOR_REF_FILE"
+  chmod 0644 "$TUI_VENDOR_REF_FILE"
+  rm -rf "$tmp"
+}
+
+spark_tui_theme() {
+  BG_MAIN="5;13;15"
+  BG_WIDGET="13;29;31"
+  BG_ACTIVE="0;176;150"
+  HL_BLUE="$BG_ACTIVE"
+  FG_TEXT="229;244;241"
+  FG_HINT="112;151;148"
+  FG_BACKTITLE="92;242;207"
+  BG_BACKTITLE="7;21;23"
+  BG_INPUT="3;9;11"
+  FG_INPUT="92;242;207"
+  BG_MODAL="17;35;37"
+}
+
+spark_tui_init() {
+  local rc
+  if (( SPARK_TUI_READY == 1 )); then
+    spark_tui_theme
+    set +e +u
+    _init_tui
+    rc=$?
+    set -Eeuo pipefail
+    return "$rc"
+  fi
+
+  ensure_tui_vendor || return 1
+  spark_tui_theme
+
+  set +e +u
+  source "$TUI_VENDOR_FILE"
+  rc=$?
+  if (( rc == 0 )); then
+    spark_tui_theme
+    _init_tui
+    rc=$?
+  fi
+  set -Eeuo pipefail
+  (( rc == 0 )) || {
+    fail "Unable to load terminal-menus.sh."
+    return 1
+  }
+
+  SPARK_TUI_READY=1
+}
+
+spark_tui_help() {
+  local body
+  body=$'   ____  ____   _    ____  _  __\n'
+  body+=$'  / ___||  _ \\ / \\  |  _ \\| |/ /\n'
+  body+=$'  \\___ \\| |_) / _ \\ | |_) |   <\n'
+  body+=$'   ___) |  __/ ___ \\|  _ <| |\\ \\\n'
+  body+=$'  |____/|_| /_/   \\_\\_| \\_\\_| \\_\\\n\n'
+  body+="Spark Server Manager v${SPARK_MANAGER_VERSION}\n\n"
+  body+=$'Navigation\n'
+  body+=$'  ↑/↓ or j/k     Move\n'
+  body+=$'  Tab / ← / →    Switch pane\n'
+  body+=$'  Enter          Run selected action\n'
+  body+=$'  /              Filter current table\n'
+  body+=$'  1-9            Sort by column\n'
+  body+=$'  q              Back / Quit\n'
+  body+=$'  ?              Show this help\n\n'
+  body+=$'Production actions keep their existing validation and confirmation rules.'
+  TUI_MODE="centered" modal "msgbox 'SPARK' \"\$body\""
+}
+
+spark_tui_extra_keys() {
+  TUI_EXTRA_KEYS=$'?=spark_tui_help'
+  export TUI_EXTRA_KEYS
+}
+
+spark_tui_status_completed() {
+  local count=0
+  if [[ -d "$STEP_DIR" ]]; then
+    count="$(find "$STEP_DIR" -maxdepth 1 -type f -name '*.ok' 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  [[ "$count" =~ ^[0-9]+$ ]] || count=0
+  (( count > 20 )) && count=20
+  printf '%s/20 complete' "$count"
+}
+
+spark_tui_admin_state() {
+  if ss -lnt 2>/dev/null | grep -q ':8443 '; then
+    printf 'OPEN'
+  else
+    printf 'CLOSED'
+  fi
+}
+
+spark_tui_backup_state() {
+  local count=0
+  if [[ -d "$BACKUP_DIR" ]]; then
+    count="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  [[ "$count" =~ ^[0-9]+$ ]] || count=0
+  printf '%s stored' "$count"
+}
+
+spark_tui_write_main_data() {
+  local dir="$SPARK_TUI_STATE_DIR"
+  local install_state admin_state backup_state
+  install_state="$(spark_tui_status_completed)"
+  admin_state="$(spark_tui_admin_state)"
+  backup_state="$(spark_tui_backup_state)"
+
+  cat >"${dir}/deployment.csv" <<EOF
+Action,Scope,Status,Command
+Install / Configure,Guided single-host production setup,${install_state},spark_tui_open install
+Health Checks & Logs,Validation diagnostics and runtime logs,On demand,spark_tui_open health
+Update Spark,GitHub migrations functions frontend and worker,Controlled,spark_plain_action update
+EOF
+
+  cat >"${dir}/system.csv" <<'EOF'
+Action,Scope,Status,Command
+Update Linux Packages,APT packages and reboot state,Controlled,spark_plain_action linux
+Node / npm / Audit,Dependency maintenance and security audit,Dry-run safe,spark_tui_open npm
+Resource Monitor,CPU memory disk processes and containers,Live,spark_plain_action resources
+EOF
+
+  cat >"${dir}/security.csv" <<EOF
+Action,Scope,Status,Command
+Open Supabase Admin,TLS 8443 restricted to ADMIN_CIDR,${admin_state},spark_plain_action open-admin
+Close Supabase Admin,Remove the temporary admin gateway,${admin_state},spark_plain_action close-admin
+TLS Certificates,Inspect validate and renew certificates,Managed,spark_tui_open certs
+EOF
+
+  cat >"${dir}/operations.csv" <<EOF
+Action,Scope,Status,Command
+Backup Management,Database and runtime configuration backups,${backup_state},spark_tui_open backup
+Service Management,Status restart and reload operations,Controlled,spark_tui_open services
+Version & Security,Runtime deployment and pinned versions,Info,spark_plain_action versions
+Update Spark Manager,Refresh this management console,Current ${SPARK_MANAGER_VERSION},spark_plain_action manager-update
+Exit Manager,Close Spark Server Manager,Ready,spark_tui_exit
+EOF
+}
+
+spark_tui_main_config() {
+  local dir="$SPARK_TUI_STATE_DIR"
+  printf '%s\n' \
+    "Deployment:Install update and validate:${dir}/deployment.csv" \
+    "System:Host and dependency maintenance:${dir}/system.csv" \
+    "Security:Administrative access and TLS:${dir}/security.csv" \
+    "Operations:Backups services and manager:${dir}/operations.csv"
+}
+
+spark_tui_exit() {
+  cleanup >/dev/null 2>&1 || true
+  printf '\033[0m\033[2J\033[H'
+  exit 0
+}
+
+spark_plain_prepare() {
+  cleanup >/dev/null 2>&1 || true
+  printf '\033[0m\033[2J\033[H'
+}
+
+spark_plain_finish() {
+  spark_tui_init >/dev/null 2>&1 || true
+}
+
+spark_plain_action() {
+  local action="$1"
+  local rc=0
+
+  set -Eeuo pipefail
+  spark_plain_prepare
+
+  case "$action" in
+    update) update_spark || rc=$? ;;
+    linux) linux_update || rc=$? ;;
+    resources) resource_status || rc=$? ;;
+    open-admin) open_supabase_admin_access || rc=$? ;;
+    close-admin) close_supabase_admin_access || rc=$? ;;
+    versions) version_info || rc=$? ;;
+    manager-update) self_update || rc=$? ;;
+    *) fail "Unknown Spark action: $action"; rc=2 ;;
+  esac
+
+  pause || true
+  spark_plain_finish
+  set +e +u
   return 0
 }
 
-ui_repeat() {
-  local char="$1" count="$2" out
-  printf -v out '%*s' "$count" ''
-  out="${out// /$char}"
-  printf '%s' "$out"
-}
+spark_plain_install_step() {
+  local step="$1"
+  set -Eeuo pipefail
+  spark_plain_prepare
 
-ui_top() {
-  printf '%s┌' "$C_GREEN"
-  ui_repeat '─' $((UI_WIDTH - 2))
-  printf '┐%s\n' "$C_RESET"
-}
-
-ui_rule() {
-  printf '%s├' "$C_GREEN"
-  ui_repeat '─' $((UI_WIDTH - 2))
-  printf '┤%s\n' "$C_RESET"
-}
-
-ui_bottom() {
-  printf '%s└' "$C_GREEN"
-  ui_repeat '─' $((UI_WIDTH - 2))
-  printf '┘%s\n' "$C_RESET"
-}
-
-ui_row() {
-  local text="$1" style="${2:-}" max pad
-  max="$UI_INNER"
-  (( ${#text} > max )) && text="${text:0:max}"
-  pad=$((max - ${#text}))
-  printf '%s│%s %s%s%s%*s %s│%s\n' \
-    "$C_GREEN" "$C_RESET" "$style" "$text" "$C_RESET" "$pad" '' "$C_GREEN" "$C_RESET"
-}
-
-ui_center() {
-  local text="$1" style="${2:-}" max left right
-  max="$UI_INNER"
-  (( ${#text} > max )) && text="${text:0:max}"
-  left=$(( (max - ${#text}) / 2 ))
-  right=$((max - ${#text} - left))
-  printf '%s│%s %*s%s%s%s%*s %s│%s\n' \
-    "$C_GREEN" "$C_RESET" "$left" '' "$style" "$text" "$C_RESET" "$right" '' "$C_GREEN" "$C_RESET"
-}
-
-ui_pair() {
-  local key1="$1" label1="$2" key2="${3:-}" label2="${4:-}"
-  local width="$UI_LABEL_WIDTH"
-  label1="${label1:0:width}"
-  label2="${label2:0:width}"
-  if [[ -n "$key2" ]]; then
-    printf '%s│%s %s[%2s]%s %s%-*s%s %s│%s %s[%2s]%s %s%-*s%s %s│%s\n' \
-      "$C_GREEN" "$C_RESET" "$C_CYAN" "$key1" "$C_RESET" "$C_BOLD" "$width" "$label1" "$C_RESET" \
-      "$C_GREEN" "$C_RESET" "$C_CYAN" "$key2" "$C_RESET" "$C_BOLD" "$width" "$label2" "$C_RESET" \
-      "$C_GREEN" "$C_RESET"
+  if [[ "$step" == "21" ]]; then
+    run_all_install || true
   else
-    printf '%s│%s %s[%2s]%s %s%-*s%s %s│%s %*s %s│%s\n' \
-      "$C_GREEN" "$C_RESET" "$C_CYAN" "$key1" "$C_RESET" "$C_BOLD" "$width" "$label1" "$C_RESET" \
-      "$C_GREEN" "$C_RESET" $((width + 5)) '' "$C_GREEN" "$C_RESET"
+    run_install_step "$step" || true
   fi
+
+  pause || true
+  spark_tui_write_install_data
+  spark_plain_finish
+  set +e +u
+  return 0
 }
 
-ui_step_pair() {
-  local step1="$1" label1="$2" step2="$3" label2="$4"
-  local width=$((UI_LABEL_WIDTH - 2)) icon1='·' icon2='·' style1="$C_DIM" style2="$C_DIM"
-  [[ -f "${STEP_DIR}/${step1}.ok" ]] && { icon1='✓'; style1="$C_GREEN"; }
-  [[ -f "${STEP_DIR}/${step2}.ok" ]] && { icon2='✓'; style2="$C_GREEN"; }
-  (( width < 6 )) && width=6
-  label1="${label1:0:width}"
-  label2="${label2:0:width}"
-  printf '%s│%s %s[%2s]%s %s%s%s %s%-*s%s %s│%s %s[%2s]%s %s%s%s %s%-*s%s %s│%s\n' \
-    "$C_GREEN" "$C_RESET" "$C_CYAN" "$step1" "$C_RESET" "$style1" "$icon1" "$C_RESET" "$C_BOLD" "$width" "$label1" "$C_RESET" \
-    "$C_GREEN" "$C_RESET" "$C_CYAN" "$step2" "$C_RESET" "$style2" "$icon2" "$C_RESET" "$C_BOLD" "$width" "$label2" "$C_RESET" \
-    "$C_GREEN" "$C_RESET"
-}
+spark_tui_write_install_data() {
+  local dir="$SPARK_TUI_STATE_DIR"
+  local step label status group file
+  local labels=(
+    "DNS verification"
+    "Installation configuration"
+    "Packages Docker Node 24"
+    "Spark repository"
+    "Pinned Supabase source"
+    "Supabase secrets"
+    "Supabase environment"
+    "Edge Functions sync"
+    "Provider and worker env"
+    "Compose hardening"
+    "Validate and start Supabase"
+    "Database migrations"
+    "Frontend deployment"
+    "Nginx bootstrap"
+    "TLS certificates"
+    "Production Nginx"
+    "Local schedulers"
+    "TURN and Coturn"
+    "Certbot renewal hook"
+    "Production firewall"
+  )
 
-ui_screen_start() {
-  local heading="$1" subtitle="${2:-}"
-  ui_refresh_dimensions
-  clear_screen
-  ui_top
-  ui_center "$heading" "$C_BOLD$C_CYAN"
-  [[ -n "$subtitle" ]] && ui_center "$subtitle" "$C_DIM"
-  ui_rule
-}
-
-ui_read_choice() {
-  local __var="$1" hint="${2:-Select an option}"
-  local answer
-  ui_rule
-  ui_row "$hint" "$C_DIM"
-  ui_row "Select:"
-  ui_bottom
-  if [[ -t 0 && -t 1 ]]; then
-    printf '\033[2A\033[10C'
-    read -r answer
-  else
-    read -r -p 'Select: ' answer
-  fi
-  printf -v "$__var" '%s' "$answer"
-}
-
-menu_section() {
-  ui_row "▸ $1" "$C_BOLD$C_GREEN"
-}
-
-menu_option() {
-  ui_pair "$1" "$2"
-}
-
-menu_option_status() {
-  local key="$1" badge="$2" label="$3"
-  ui_row "[$key] $badge $label"
-}
-
-menu_hint() {
-  ui_row "$1" "$C_DIM"
-}
-
-title() {
-  local host
-  host="$(hostname -s 2>/dev/null || hostname)"
-  ui_screen_start "SPARK SERVER MANAGER" "Host: ${host}  |  Version: ${SPARK_MANAGER_VERSION}"
-  ui_bottom
-}
-
-welcome_screen() {
-  ui_refresh_dimensions
-  clear_screen
-  ui_top
-  ui_center '  ____  ____   _    ____  _  __' "$C_BOLD$C_GREEN"
-  ui_center ' / ___||  _ \ / \  |  _ \| |/ /' "$C_BOLD$C_GREEN"
-  ui_center ' \___ \| |_) / _ \ | |_) |   < ' "$C_BOLD$C_GREEN"
-  ui_center '  ___) |  __/ ___ \|  _ <| |\ \' "$C_BOLD$C_GREEN"
-  ui_center ' |____/|_| /_/   \_\_| \_\_| \_\' "$C_BOLD$C_GREEN"
-  ui_center 'Welcome to Spark Server Manager' "$C_BOLD$C_CYAN"
-  ui_rule
-}
-
-main_menu() {
-  while true; do
-    welcome_screen
-    ui_pair "1" "Install / Configure" "2" "Health Checks & Logs"
-    ui_pair "3" "Update Spark" "4" "Update Linux Packages"
-    ui_pair "5" "Node / npm / Audit" "6" "Open Supabase Admin"
-    ui_pair "7" "Close Supabase Admin" "8" "Resource Monitor"
-    ui_pair "9" "Backup Management" "10" "Service Management"
-    ui_pair "11" "TLS Certificates" "12" "Version & Security"
-    ui_pair "13" "Update Spark Manager" "0" "Exit"
-    ui_read_choice choice "Production infrastructure control | v${SPARK_MANAGER_VERSION}"
-    case "$choice" in
-      0) clear_screen; exit 0 ;;
-      1) install_menu ;;
-      2) test_menu ;;
-      3) update_spark || true; pause ;;
-      4) linux_update || true; pause ;;
-      5) npm_menu ;;
-      6) open_supabase_admin_access || true; pause ;;
-      7) close_supabase_admin_access || true; pause ;;
-      8) resource_status; pause ;;
-      9) backup_menu ;;
-      10) service_menu ;;
-      11) certificate_menu ;;
-      12) version_info; pause ;;
-      13) self_update || true; pause ;;
-      *) fail "Invalid option"; sleep 1 ;;
-    esac
+  for group in foundation platform deployment network; do
+    file="${dir}/install-${group}.csv"
+    printf 'Step,Status,Component,Command\n' >"$file"
   done
+
+  for step in $(seq 1 20); do
+    label="${labels[step-1]}"
+    if [[ -f "${STEP_DIR}/${step}.ok" ]]; then
+      status="DONE"
+    else
+      status="PENDING"
+    fi
+
+    case "$step" in
+      1|2|3|4|5) group="foundation" ;;
+      6|7|8|9|10) group="platform" ;;
+      11|12|13|14|15|16) group="deployment" ;;
+      *) group="network" ;;
+    esac
+
+    printf '%02d,%s,%s,spark_plain_install_step %d\n' \
+      "$step" "$status" "$label" "$step" >>"${dir}/install-${group}.csv"
+  done
+
+  cat >"${dir}/install-automation.csv" <<'EOF'
+Step,Status,Component,Command
+21,ACTION,Run all installation steps 1 through 20,spark_plain_install_step 21
+EOF
+}
+
+spark_tui_install_config() {
+  local dir="$SPARK_TUI_STATE_DIR"
+  printf '%s\n' \
+    "Foundation:Host DNS packages and source:${dir}/install-foundation.csv" \
+    "Platform:Secrets environment functions and compose:${dir}/install-platform.csv" \
+    "Deployment:Runtime migrations frontend and Nginx:${dir}/install-deployment.csv" \
+    "Network:Schedulers TURN certificates and firewall:${dir}/install-network.csv" \
+    "Automation:Run the complete guided workflow:${dir}/install-automation.csv"
 }
 
 install_menu() {
-  while true; do
-    ui_screen_start "SINGLE-HOST INSTALLATION" "Completed steps are marked with green checks"
-    ui_step_pair "1" "DNS verification" "2" "Install configuration"
-    ui_step_pair "3" "Packages / Docker / Node" "4" "Spark repository"
-    ui_step_pair "5" "Pinned Supabase source" "6" "Supabase secrets"
-    ui_step_pair "7" "Supabase environment" "8" "Edge Functions sync"
-    ui_step_pair "9" "Provider / worker env" "10" "Compose hardening"
-    ui_step_pair "11" "Start Supabase" "12" "Database migrations"
-    ui_step_pair "13" "Frontend deployment" "14" "Nginx bootstrap"
-    ui_step_pair "15" "TLS certificates" "16" "Production Nginx"
-    ui_step_pair "17" "Local schedulers" "18" "TURN / Coturn"
-    ui_step_pair "19" "Certbot renewal hook" "20" "Production firewall"
-    ui_pair "21" "Run all steps 1-20" "0" "Back"
-    ui_read_choice choice "Workflow: deploy/manual-production/single-host.md"
-    case "$choice" in
-      0) return ;;
-      [1-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;
-      21) run_all_install || true; pause ;;
-      *) fail "Invalid option"; sleep 1 ;;
-    esac
-  done
+  spark_tui_init || return 1
+  spark_tui_write_install_data
+  spark_tui_extra_keys
+
+  BACKTITLE="⚡ SPARK · INSTALLATION · $(hostname -s 2>/dev/null || hostname)"
+  export BACKTITLE
+  TUI_PERSISTENT_FILTERS=true
+  export TUI_PERSISTENT_FILTERS
+
+  local config rc
+  config="$(spark_tui_install_config)"
+  set +e +u
+  TUI_MODE="fullscreen" mainmenu \
+    "SPARK INSTALLATION" \
+    "Guided single-host deployment · completed steps are tracked automatically" \
+    "$config" 1
+  rc=$?
+  set -Eeuo pipefail
+  return 0
 }
 
-docker_logs_menu() {
-  new_log "logs-docker"
-  if [[ ! -f "${SUPABASE_ROOT}/docker-compose.yml" ]]; then
-    fail "Supabase compose file was not found."
-    pause
-    return
-  fi
-  local services choice service i left right
-  mapfile -t services < <(compose config --services)
-  while true; do
-    ui_screen_start "DOCKER SERVICE LOGS" "Select a service to display its last 200 log lines"
-    for ((i=0; i<${#services[@]}; i+=2)); do
-      left=$((i + 1))
-      right=$((i + 2))
-      if (( i + 1 < ${#services[@]} )); then
-        ui_pair "$left" "${services[i]}" "$right" "${services[i+1]}"
-      else
-        ui_pair "$left" "${services[i]}" "0" "Back"
-      fi
-    done
-    if (( ${#services[@]} % 2 == 0 )); then
-      ui_pair "0" "Back"
-    fi
-    ui_read_choice choice "Choose a service number"
-    [[ "$choice" == "0" ]] && return
-    [[ "$choice" =~ ^[0-9]+$ ]] || { fail "Invalid option"; sleep 1; continue; }
-    (( choice >= 1 && choice <= ${#services[@]} )) || { fail "Invalid option"; sleep 1; continue; }
-    service="${services[choice-1]}"
-    run_report "Logs: ${service}" compose logs --tail=200 --timestamps "$service"
-    pause
-    return
-  done
+spark_tui_pick() {
+  local title_text="$1" message="$2" default_index="$3"
+  shift 3
+  local result rc
+  set +e +u
+  result="$(TUI_MODE="fullscreen" menu "$title_text" "$message" "$default_index" "$@")"
+  rc=$?
+  set -Eeuo pipefail
+  (( rc == 0 )) || return "$rc"
+  printf '%s' "$result"
 }
 
 test_menu() {
+  spark_tui_init || return 1
+  spark_tui_extra_keys
+  local choice
   while true; do
-    ui_screen_start "HEALTH CHECKS & LOGS" "Validation, diagnostics and runtime visibility"
-    ui_pair "1" "Full Validation" "2" "Frontend"
-    ui_pair "3" "API / Auth / Functions" "4" "Docker Status"
-    ui_pair "5" "Docker Service Logs" "6" "Nginx Status & Logs"
-    ui_pair "7" "Scheduler Status & Logs" "8" "TURN Status & Logs"
-    ui_pair "9" "DB / API Exposure" "10" "DNS & TLS"
-    ui_pair "11" "Listening Ports & UFW" "12" "Migration Dry Run"
-    ui_pair "0" "Back"
-    ui_read_choice choice "Logs: /var/log/spark-manager/"
-    case "$choice" in
-      0) return ;;
-      1) new_log "test-full"; run_visible "Full validation" test_full_validation || true; pause ;;
-      2) new_log "test-frontend"; run_visible "Frontend" test_frontend || true; pause ;;
-      3) new_log "test-api"; run_visible "API" test_api || true; pause ;;
-      4) new_log "test-docker"; run_visible "Docker status" compose ps || true; pause ;;
-      5) docker_logs_menu ;;
-      6)
+    BACKTITLE="⚡ SPARK · HEALTH & LOGS"
+    export BACKTITLE
+    choice="$(spark_tui_pick "HEALTH CHECKS & LOGS" \
+      "Navigate with arrows · Enter runs · q goes back" 1 \
+      "01  Full Validation" \
+      "02  Frontend" \
+      "03  API / Auth / Functions" \
+      "04  Docker Status" \
+      "05  Docker Service Logs" \
+      "06  Nginx Status & Logs" \
+      "07  Scheduler Status & Logs" \
+      "08  TURN Status & Logs" \
+      "09  DB / API Exposure Check" \
+      "10  DNS & TLS" \
+      "11  Listening Ports & UFW" \
+      "12  Migration Dry Run")" || return 0
+
+    spark_plain_prepare
+    case "${choice:0:2}" in
+      01) new_log "test-full"; run_visible "Full validation" test_full_validation || true ;;
+      02) new_log "test-frontend"; run_visible "Frontend" test_frontend || true ;;
+      03) new_log "test-api"; run_visible "API" test_api || true ;;
+      04) new_log "test-docker"; run_visible "Docker status" compose ps || true ;;
+      05) docker_logs_menu; spark_plain_finish; continue ;;
+      06)
         new_log "test-nginx"
         run_report "Nginx status" systemctl status nginx --no-pager
         journalctl -u nginx -n 120 --no-pager 2>&1 | tee -a "$CURRENT_LOG" || true
-        pause ;;
-      7) new_log "test-schedulers"; run_report "Scheduler status" test_schedulers; scheduler_logs; pause ;;
-      8)
+        ;;
+      07) new_log "test-schedulers"; run_report "Scheduler status" test_schedulers; scheduler_logs ;;
+      08)
         new_log "test-turn"
         run_report "TURN test" test_turn
         journalctl -u coturn -n 120 --no-pager 2>&1 | tee -a "$CURRENT_LOG" || true
-        pause ;;
-      9) new_log "test-exposure"; run_visible "Public exposure check" test_db_exposure || true; pause ;;
-      10) new_log "test-dns-ssl"; run_visible "DNS/TLS" test_ssl_dns || true; pause ;;
+        ;;
+      09) new_log "test-exposure"; run_visible "Public exposure check" test_db_exposure || true ;;
+      10) new_log "test-dns-ssl"; run_visible "DNS/TLS" test_ssl_dns || true ;;
       11)
         new_log "test-ports-firewall"
         run_report "Listening ports" ss -lntup
         run_report "UFW" ufw status verbose
-        pause ;;
-      12) new_log "test-migration-dryrun"; run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" || true; pause ;;
-      *) fail "Invalid option"; sleep 1 ;;
+        ;;
+      12) new_log "test-migration-dryrun"; run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" || true ;;
     esac
+    pause || true
+    spark_plain_finish
+  done
+}
+
+docker_logs_menu() {
+  spark_tui_init || return 1
+  new_log "logs-docker"
+  if [[ ! -f "${SUPABASE_ROOT}/docker-compose.yml" ]]; then
+    spark_plain_prepare
+    fail "Supabase compose file was not found."
+    pause || true
+    spark_plain_finish
+    return 0
+  fi
+
+  local services choice
+  mapfile -t services < <(compose config --services)
+  ((${#services[@]})) || return 0
+
+  BACKTITLE="⚡ SPARK · DOCKER LOGS"
+  export BACKTITLE
+  choice="$(spark_tui_pick "DOCKER SERVICE LOGS" \
+    "Select a service to display its last 200 log lines" 1 "${services[@]}")" || return 0
+
+  spark_plain_prepare
+  run_report "Logs: ${choice}" compose logs --tail=200 --timestamps "$choice"
+  pause || true
+  spark_plain_finish
+}
+
+npm_menu() {
+  spark_tui_init || return 1
+  local choice
+  while true; do
+    BACKTITLE="⚡ SPARK · NODE / NPM / AUDIT"
+    export BACKTITLE
+    choice="$(spark_tui_pick "NODE.JS / NPM / AUDIT" \
+      "Production-safe dependency maintenance · audit fix remains dry-run only" 1 \
+      "01  Show Node / npm Versions" \
+      "02  Update Global npm 11" \
+      "03  Run npm ci" \
+      "04  Full npm Audit" \
+      "05  Production npm Audit" \
+      "06  Show Outdated Packages" \
+      "07  Audit Fix Dry Run")" || return 0
+
+    spark_plain_prepare
+    new_log "npm-maintenance"
+    case "${choice:0:2}" in
+      01) run_report "Versions" bash -c 'node --version; npm --version' ;;
+      02) run_visible "Update npm" npm install -g 'npm@^11.6.2' || true ;;
+      03) run_visible "npm ci" bash -c "cd '$SPARK_ROOT' && npm ci" || true ;;
+      04) run_report "npm audit" bash -c "cd '$SPARK_ROOT' && npm audit" ;;
+      05) run_report "npm audit production" bash -c "cd '$SPARK_ROOT' && npm audit --omit=dev" ;;
+      06) run_report "npm outdated" bash -c "cd '$SPARK_ROOT' && npm outdated" ;;
+      07) run_report "npm audit fix dry-run" bash -c "cd '$SPARK_ROOT' && npm audit fix --dry-run" ;;
+    esac
+    pause || true
+    spark_plain_finish
   done
 }
 
 backup_menu() {
+  spark_tui_init || return 1
+  local choice
   while true; do
-    ui_screen_start "BACKUP MANAGEMENT" "Database and production configuration backups"
-    ui_pair "1" "Create Manual Backup" "2" "List Backups"
-    ui_pair "0" "Back"
-    ui_read_choice c "Backups are stored under ${BACKUP_DIR}"
-    case "$c" in
-      0) return ;;
-      1)
+    BACKTITLE="⚡ SPARK · BACKUP MANAGEMENT"
+    export BACKTITLE
+    choice="$(spark_tui_pick "BACKUP MANAGEMENT" \
+      "PostgreSQL database and production runtime configuration" 1 \
+      "01  Create Manual Backup" \
+      "02  List Backups")" || return 0
+
+    spark_plain_prepare
+    case "${choice:0:2}" in
+      01)
         new_log "backup-manual"
         if run_visible "Create backup" create_backup manual; then ok "Backup created successfully."; fi
-        pause ;;
-      2) new_log "backup-list"; run_report "Backups" list_backups; pause ;;
-      *) fail "Invalid option"; sleep 1 ;;
+        ;;
+      02) new_log "backup-list"; run_report "Backups" list_backups ;;
     esac
-  done
-}
-
-npm_menu() {
-  while true; do
-    ui_screen_start "NODE.JS / NPM / AUDIT" "Dependency maintenance without automatic source mutation"
-    ui_pair "1" "Show Versions" "2" "Update npm"
-    ui_pair "3" "Install Dependencies" "4" "Full npm Audit"
-    ui_pair "5" "Production npm Audit" "6" "Outdated Packages"
-    ui_pair "7" "Audit Fix Dry Run" "0" "Back"
-    ui_read_choice c "npm audit fix remains dry-run only"
-    new_log "npm-maintenance"
-    case "$c" in
-      0) return ;;
-      1) run_report "Versions" bash -c 'node --version; npm --version'; pause ;;
-      2) run_visible "Update npm" npm install -g 'npm@^11.6.2' || true; pause ;;
-      3) run_visible "npm ci" bash -c "cd '$SPARK_ROOT' && npm ci" || true; pause ;;
-      4) run_report "npm audit" bash -c "cd '$SPARK_ROOT' && npm audit"; pause ;;
-      5) run_report "npm audit production" bash -c "cd '$SPARK_ROOT' && npm audit --omit=dev"; pause ;;
-      6) run_report "npm outdated" bash -c "cd '$SPARK_ROOT' && npm outdated"; pause ;;
-      7) run_report "npm audit fix dry-run" bash -c "cd '$SPARK_ROOT' && npm audit fix --dry-run"; pause ;;
-      *) fail "Invalid option"; sleep 1 ;;
-    esac
+    pause || true
+    spark_plain_finish
   done
 }
 
 service_menu() {
+  spark_tui_init || return 1
+  local choice
   while true; do
-    ui_screen_start "SERVICE MANAGEMENT" "Controlled service status, restart and reload operations"
-    ui_pair "1" "Show Service Status" "2" "Restart Functions + Worker"
-    ui_pair "3" "Reload Nginx" "4" "Restart Coturn"
-    ui_pair "5" "Restart Supabase Stack" "6" "Restart Scheduler Timers"
-    ui_pair "0" "Back"
-    ui_read_choice c "Potentially disruptive actions still require confirmation"
+    BACKTITLE="⚡ SPARK · SERVICE MANAGEMENT"
+    export BACKTITLE
+    choice="$(spark_tui_pick "SERVICE MANAGEMENT" \
+      "Controlled service status restart and reload operations" 1 \
+      "01  Show Service Status" \
+      "02  Restart Functions + Worker" \
+      "03  Reload Nginx" \
+      "04  Restart Coturn" \
+      "05  Restart Supabase Stack" \
+      "06  Restart Scheduler Timers")" || return 0
+
+    spark_plain_prepare
     new_log "service-management"
-    case "$c" in
-      0) return ;;
-      1)
+    case "${choice:0:2}" in
+      01)
         run_report "Nginx" systemctl status nginx --no-pager
         run_report "Coturn" systemctl status coturn --no-pager
         run_report "Docker" compose ps
         run_report "Timers" systemctl list-timers 'spark-*' --no-pager
-        pause ;;
-      2) run_visible "Restart Functions + Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate functions avatar-worker" || true; pause ;;
-      3) run_visible "Nginx test/reload" bash -c 'nginx -t && systemctl reload nginx' || true; pause ;;
-      4) run_visible "Restart Coturn" systemctl restart coturn || true; pause ;;
-      5)
+        ;;
+      02) run_visible "Restart Functions + Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate functions avatar-worker" || true ;;
+      03) run_visible "Nginx test/reload" bash -c 'nginx -t && systemctl reload nginx' || true ;;
+      04) run_visible "Restart Coturn" systemctl restart coturn || true ;;
+      05)
         if confirm_word "The entire Supabase stack will be recreated and may cause a brief service interruption." "RESTART"; then
           run_visible "Restart Supabase stack" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate" || true
         fi
-        pause ;;
-      6)
-        run_visible "Restart timers" bash -c 'systemctl restart spark-daily-report.timer spark-minutes-reminder.timer spark-decision-due.timer spark-notification-outbox.timer' || true
-        pause ;;
-      *) fail "Invalid option"; sleep 1 ;;
+        ;;
+      06) run_visible "Restart timers" bash -c 'systemctl restart spark-daily-report.timer spark-minutes-reminder.timer spark-decision-due.timer spark-notification-outbox.timer' || true ;;
     esac
+    pause || true
+    spark_plain_finish
   done
 }
 
 certificate_menu() {
+  spark_tui_init || return 1
+  local choice
   while true; do
-    ui_screen_start "TLS CERTIFICATE MANAGEMENT" "Certbot certificate inspection and renewal"
-    ui_pair "1" "Show Certificates" "2" "Renewal Dry Run"
-    ui_pair "3" "Run Certbot Renew" "0" "Back"
-    ui_read_choice c "Certificate operations use the existing production configuration"
+    BACKTITLE="⚡ SPARK · TLS CERTIFICATES"
+    export BACKTITLE
+    choice="$(spark_tui_pick "TLS CERTIFICATE MANAGEMENT" \
+      "Certbot certificate inspection validation and renewal" 1 \
+      "01  Show Certificates" \
+      "02  Renewal Dry Run" \
+      "03  Run Certbot Renew")" || return 0
+
+    spark_plain_prepare
     new_log "certificate-management"
-    case "$c" in
-      0) return ;;
-      1) run_report "Certificates" certbot certificates; pause ;;
-      2) run_visible "Renewal dry-run" certbot renew --dry-run || true; pause ;;
-      3) run_visible "Certbot renew" certbot renew || true; pause ;;
-      *) fail "Invalid option"; sleep 1 ;;
+    case "${choice:0:2}" in
+      01) run_report "Certificates" certbot certificates ;;
+      02) run_visible "Renewal dry-run" certbot renew --dry-run || true ;;
+      03) run_visible "Certbot renew" certbot renew || true ;;
     esac
+    pause || true
+    spark_plain_finish
   done
+}
+
+spark_tui_open() {
+  local target="$1"
+  case "$target" in
+    install) install_menu ;;
+    health) test_menu ;;
+    npm) npm_menu ;;
+    backup) backup_menu ;;
+    services) service_menu ;;
+    certs) certificate_menu ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
+main_menu() {
+  spark_tui_init || return 1
+  spark_tui_write_main_data
+  spark_tui_extra_keys
+
+  BACKTITLE="⚡ SPARK SERVER MANAGER · v${SPARK_MANAGER_VERSION} · $(hostname -s 2>/dev/null || hostname)"
+  export BACKTITLE
+  TUI_PERSISTENT_FILTERS=true
+  export TUI_PERSISTENT_FILTERS
+
+  local config rc
+  config="$(spark_tui_main_config)"
+  set +e +u
+  TUI_MODE="fullscreen" mainmenu \
+    "⚡ SPARK" \
+    "Production Infrastructure Control · Tab switches panes · Enter runs · / filters · ? help" \
+    "$config" 1
+  rc=$?
+  set -Eeuo pipefail
+
+  cleanup >/dev/null 2>&1 || true
+  clear_screen
+  return 0
 }
 
 case "${1:-}" in
@@ -454,7 +682,7 @@ case "${1:-}" in
     cat <<EOF
 Usage: spark [option]
 
-Run without an option to open the interactive control center.
+Run without an option to open the interactive full-screen control center.
 
   --version       Show Spark Manager version
   --test          Run full validation
