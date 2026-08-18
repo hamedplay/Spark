@@ -1,6 +1,6 @@
-/* Public-auth placeholder palette.
-   Keep every placeholder in the Spark green/teal visual language across
-   login, registration, recovery and OTP-related fields. */
+/* Public-auth browser paint guard.
+   Keep placeholders green and prevent browser autofill/native input painting
+   from replacing Spark's dark teal field surface across all public auth flows. */
 
 .spark-reference-login input::placeholder,
 .spark-reference-login textarea::placeholder {
@@ -20,4 +20,52 @@
 .spark-reference-login textarea::-moz-placeholder {
   color: rgb(var(--spark-neon-soft, 111 255 226) / .72) !important;
   opacity: 1 !important;
+}
+
+/* Paint the input itself, not only its wrapper. This prevents the browser's
+   light native/autofill surface from covering the dark Spark field. */
+.spark-reference-login .spark-reference-input-wrap > input {
+  color-scheme: dark !important;
+  background: rgb(8 26 27) !important;
+  background-color: rgb(8 26 27) !important;
+  background-image: none !important;
+  color: #effff9 !important;
+  -webkit-text-fill-color: #effff9 !important;
+  caret-color: rgb(var(--spark-neon-soft, 111 255 226)) !important;
+}
+
+.spark-reference-login .spark-reference-input-wrap:focus-within > input {
+  background: rgb(7 31 31) !important;
+  background-color: rgb(7 31 31) !important;
+  background-image: none !important;
+}
+
+/* Standards-based autofill plus Chromium/WebKit. */
+.spark-reference-login .spark-reference-input-wrap > input:autofill,
+.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill,
+.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:hover,
+.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:focus,
+.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:active {
+  background: rgb(8 26 27) !important;
+  background-color: rgb(8 26 27) !important;
+  background-image: none !important;
+  color: #effff9 !important;
+  -webkit-text-fill-color: #effff9 !important;
+  caret-color: rgb(var(--spark-neon-soft, 111 255 226)) !important;
+  -webkit-box-shadow: 0 0 0 1000px rgb(8 26 27) inset !important;
+  box-shadow: 0 0 0 1000px rgb(8 26 27) inset !important;
+  transition: background-color 9999s ease-out 0s !important;
+}
+
+/* Firefox applies a native autofill filter/surface. Neutralize both. */
+@supports selector(input:-moz-autofill) {
+  .spark-reference-login .spark-reference-input-wrap > input:-moz-autofill {
+    background: rgb(8 26 27) !important;
+    background-color: rgb(8 26 27) !important;
+    background-image: none !important;
+    color: #effff9 !important;
+    caret-color: rgb(var(--spark-neon-soft, 111 255 226)) !important;
+    box-shadow: 0 0 0 1000px rgb(8 26 27) inset !important;
+    filter: none !important;
+  }
 }
