@@ -1,3 +1,4 @@
+// one-time execution trigger
 import fs from 'node:fs';
 import childProcess from 'node:child_process';
 
