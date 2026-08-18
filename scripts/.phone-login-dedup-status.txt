@@ -1,0 +1,189 @@
+VALIDATION_FAILED
+transform_rc=0
+build_rc=0
+deno_rc=1
+audit_rc=99
+
+phone login route/config deduplication completed
+
+> meeting-manager@0.0.0 build
+> node node_modules/typescript/bin/tsc && node node_modules/vite/bin/vite.js build
+
+[36mvite v8.2.1 [32mbuilding client environment for production...[36m[39m
+[2Ktransforming...✓ 2407 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     4.43 kB │ gzip:   1.64 kB
+dist/assets/fetchMinutesConfig-DHm8p3qk.css         7.66 kB │ gzip:   1.82 kB
+dist/assets/index-CMX8rzb7.css                    301.69 kB │ gzip:  45.01 kB
+dist/assets/notifications-Cru5V1BO.js               0.04 kB │ gzip:   0.06 kB
+dist/assets/chevron-up-DWmw0r10.js                  0.12 kB │ gzip:   0.13 kB
+dist/assets/chevron-left-Bw8T13Rm.js                0.12 kB │ gzip:   0.14 kB
+dist/assets/circle-D4WOZto7.js                      0.12 kB │ gzip:   0.12 kB
+dist/assets/loader-circle-CUw3swqK.js               0.14 kB │ gzip:   0.15 kB
+dist/assets/square-DdbxoOW6.js                      0.14 kB │ gzip:   0.14 kB
+dist/assets/navigation-gVtB9EBb.js                  0.14 kB │ gzip:   0.14 kB
+dist/assets/plus-CF0bHBTf.js                        0.14 kB │ gzip:   0.14 kB
+dist/assets/terminal-BfjD--TP.js                    0.15 kB │ gzip:   0.15 kB
+dist/assets/clock-3-BdKQUZNd.js                     0.16 kB │ gzip:   0.16 kB
+dist/assets/search-O54fqak0.js                      0.17 kB │ gzip:   0.16 kB
+dist/assets/gauge-BdUwg-fi.js                       0.17 kB │ gzip:   0.16 kB
+dist/assets/user-round-Coma8iAj.js                  0.17 kB │ gzip:   0.17 kB
+dist/assets/play--0gBs3_A.js                        0.18 kB │ gzip:   0.17 kB
+dist/assets/list-filter-FouhM6QZ.js                 0.19 kB │ gzip:   0.16 kB
+dist/assets/user-CnIxUE3C.js                        0.19 kB │ gzip:   0.17 kB
+dist/assets/at-sign-DcMMXNn-.js                     0.19 kB │ gzip:   0.18 kB
+dist/assets/circle-stop-BfgY-Z0Z.js                 0.19 kB │ gzip:   0.17 kB
+dist/assets/rotate-ccw-B8dsL64L.js                  0.19 kB │ gzip:   0.17 kB
+dist/assets/text-align-justify-BZdvcAP3.js          0.19 kB │ gzip:   0.16 kB
+dist/assets/info-Cobvaye1.js                        0.20 kB │ gzip:   0.17 kB
+dist/assets/lock-B7hsWPmb.js                        0.20 kB │ gzip:   0.18 kB
+dist/assets/credit-card-DMf44iFW.js                 0.20 kB │ gzip:   0.18 kB
+dist/assets/mail-BFQqqVgR.js                        0.20 kB │ gzip:   0.19 kB
+dist/assets/briefcase-nOD-5IMC.js                   0.21 kB │ gzip:   0.19 kB
+dist/assets/target-Cyj9d4tC.js                      0.22 kB │ gzip:   0.16 kB
+dist/assets/upload-D7Hbvszh.js                      0.22 kB │ gzip:   0.18 kB
+dist/assets/log-in-C30FFu2t.js                      0.22 kB │ gzip:   0.18 kB
+dist/assets/message-square-B4w1Tmjv.js              0.22 kB │ gzip:   0.19 kB
+dist/assets/paperclip-DQlQa5Ve.js                   0.22 kB │ gzip:   0.19 kB
+dist/assets/activity-BYQACzbN.js                    0.23 kB │ gzip:   0.19 kB
+dist/assets/ellipsis-vertical-SXptvD9r.js           0.23 kB │ gzip:   0.16 kB
+dist/assets/maximize-2-DC3bnPvC.js                  0.23 kB │ gzip:   0.18 kB
+dist/assets/globe-Bu36b0sE.js                       0.23 kB │ gzip:   0.18 kB
+dist/assets/link-2-B6WEHA8Z.js                      0.23 kB │ gzip:   0.20 kB
+dist/assets/database-UE3LdO3r.js                    0.23 kB │ gzip:   0.19 kB
+dist/assets/user-check-DT2rKBhh.js                  0.23 kB │ gzip:   0.20 kB
+dist/assets/rotate-ccw-clock-DPxB3awm.js            0.24 kB │ gzip:   0.19 kB
+dist/assets/chart-column-Bh1O0FjS.js                0.24 kB │ gzip:   0.19 kB
+dist/assets/archive-C4gLPs7G.js                     0.24 kB │ gzip:   0.20 kB
+dist/assets/lock-keyhole-Cyz22ABK.js                0.25 kB │ gzip:   0.21 kB
+dist/assets/link-knPGXulK.js                        0.25 kB │ gzip:   0.19 kB
+dist/assets/user-minus-CwQBuVUy.js                  0.25 kB │ gzip:   0.21 kB
+dist/assets/map-pin-Cry8H_xc.js                     0.25 kB │ gzip:   0.22 kB
+dist/assets/circle-user-B8y2Y4Pi.js                 0.25 kB │ gzip:   0.19 kB
+dist/assets/triangle-alert-DHnzOa_M.js              0.26 kB │ gzip:   0.21 kB
+dist/assets/image-qV9IK2WR.js                       0.26 kB │ gzip:   0.21 kB
+dist/assets/file-e-elrvtY.js                        0.26 kB │ gzip:   0.20 kB
+dist/assets/zap-CuBDdn34.js                         0.26 kB │ gzip:   0.21 kB
+dist/assets/pencil-qET1Y-7m.js                      0.27 kB │ gzip:   0.22 kB
+dist/assets/list-checks-DE283XC9.js                 0.27 kB │ gzip:   0.18 kB
+dist/assets/wifi-0_-xuHf6.js                        0.27 kB │ gzip:   0.20 kB
+dist/assets/bell-BFl6LeFy.js                        0.28 kB │ gzip:   0.23 kB
+dist/assets/send-BlcnPX6n.js                        0.28 kB │ gzip:   0.22 kB
+dist/assets/hash-BB4WleGY.js                        0.29 kB │ gzip:   0.18 kB
+dist/assets/list-todo-05UsZUbh.js                   0.29 kB │ gzip:   0.21 kB
+dist/assets/user-x-gnZ8YFEZ.js                      0.30 kB │ gzip:   0.22 kB
+dist/assets/user-plus-B8-ROR1l.js                   0.30 kB │ gzip:   0.23 kB
+dist/assets/printer-D9_tS8B7.js                     0.31 kB │ gzip:   0.23 kB
+dist/assets/save-C3-RJomo.js                        0.32 kB │ gzip:   0.22 kB
+dist/assets/trash-2-Cp-b2x21.js                     0.32 kB │ gzip:   0.21 kB
+dist/assets/git-fork-D5ScUT-G.js                    0.32 kB │ gzip:   0.23 kB
+dist/assets/file-down-BHbwcjZy.js                   0.35 kB │ gzip:   0.24 kB
+dist/assets/share-2-33WB4eyT.js                     0.35 kB │ gzip:   0.23 kB
+dist/assets/crown-BKhsr5h7.js                       0.35 kB │ gzip:   0.25 kB
+dist/assets/bell-off-CxVhqO2e.js                    0.36 kB │ gzip:   0.26 kB
+dist/assets/radio-Ci6dkpG4.js                       0.37 kB │ gzip:   0.24 kB
+dist/assets/building-2-pkeSfyTx.js                  0.37 kB │ gzip:   0.23 kB
+dist/assets/group-D4mF4jxJ.js                       0.42 kB │ gzip:   0.27 kB
+dist/assets/sliders-horizontal-B2OqY7Ll.js          0.42 kB │ gzip:   0.23 kB
+dist/assets/Spinner-CG-t4Cwq.js                     0.43 kB │ gzip:   0.28 kB
+dist/assets/circle-plus-BTftXy1p.js                 0.44 kB │ gzip:   0.28 kB
+dist/assets/tag-ClP9L9Cj.js                         0.44 kB │ gzip:   0.30 kB
+dist/assets/timer-B0k11Q83.js                       0.45 kB │ gzip:   0.30 kB
+dist/assets/wifi-off-CUiBYjxm.js                    0.45 kB │ gzip:   0.26 kB
+dist/assets/unlink-BATXBWNF.js                      0.52 kB │ gzip:   0.29 kB
+dist/assets/reply-B8hs5C9q.js                       0.53 kB │ gzip:   0.29 kB
+dist/assets/pin-CmGWO7Uo.js                         0.56 kB │ gzip:   0.33 kB
+dist/assets/repeat-BjRg0lS5.js                      0.57 kB │ gzip:   0.31 kB
+dist/assets/brain-Bx0EQRXd.js                       0.57 kB │ gzip:   0.30 kB
+dist/assets/MinutesBackButton-BARH6GJt.js           0.71 kB │ gzip:   0.43 kB
+dist/assets/camera-DzDrw2Aq.js                      0.84 kB │ gzip:   0.41 kB
+dist/assets/authenticatedRtcConfig-BA4tVwYS.js      0.90 kB │ gzip:   0.52 kB
+dist/assets/invokeEdgeFunction-CjoWCWQc.js          0.92 kB │ gzip:   0.53 kB
+dist/assets/rolldown-runtime-Dd_uD5pT.js            1.10 kB │ gzip:   0.62 kB
+dist/assets/ContactFormFields-CsHl9G94.js           1.28 kB │ gzip:   0.61 kB
+dist/assets/minutesMeetingAccess-B9HSNLbf.js        1.68 kB │ gzip:   0.66 kB
+dist/assets/users-round-Byxxo6pG.js                 1.81 kB │ gzip:   0.84 kB
+dist/assets/webrtcDiagnostics-B4eaIs6H.js           1.82 kB │ gzip:   0.90 kB
+dist/assets/CreateMeetingPage-DStVgr9P.js           1.86 kB │ gzip:   0.87 kB
+dist/assets/xlsxCompat-Bo9Rxpv2.js                  1.90 kB │ gzip:   0.97 kB
+dist/assets/screen-share-CfecXLf2.js                1.96 kB │ gzip:   0.80 kB
+dist/assets/useOrgUsers-tcVN8JEK.js                 2.25 kB │ gzip:   1.12 kB
+dist/assets/sparkDateUtils-BvSSdvdi.js              2.53 kB │ gzip:   1.07 kB
+dist/assets/mfaOperations-ByJQYTEb.js               2.60 kB │ gzip:   1.07 kB
+dist/assets/minutesDate-D8SYjoa1.js                 3.37 kB │ gzip:   1.18 kB
+dist/assets/SearchableSelect-C9CGVb9M.js            3.60 kB │ gzip:   1.48 kB
+dist/assets/jalaliDateFilter-DlfTuMOu.js            4.52 kB │ gzip:   1.82 kB
+dist/assets/JalaliDatePicker-6hr5Y4_e.js            4.70 kB │ gzip:   2.03 kB
+dist/assets/fetchMinutesConfig-eq8AQVsl.js         10.36 kB │ gzip:   3.22 kB
+dist/assets/ContactsEmailPage-BauqJify.js          10.63 kB │ gzip:   3.29 kB
+dist/assets/MinutesMeetingReportPage-CvQNBRcS.js   10.77 kB │ gzip:   2.94 kB
+dist/assets/ThemeContext-BPArTdmr.js               10.81 kB │ gzip:   4.41 kB
+dist/assets/IceTesterPanel-h4XXRTx_.js             11.97 kB │ gzip:   3.29 kB
+dist/assets/es-BtQ7BWGC.js                         12.61 kB │ gzip:   5.04 kB
+dist/assets/auth-BQQstyDJ.js                       13.36 kB │ gzip:   3.75 kB
+dist/assets/shield-check-CSx09Zzf.js               13.77 kB │ gzip:   5.63 kB
+dist/assets/MinutesApprovalsPage-C2GHmxQj.js       14.12 kB │ gzip:   4.06 kB
+dist/assets/GuestApplication-yZ3hxM0N.js           14.61 kB │ gzip:   5.08 kB
+dist/assets/MinutesHubPage-Cw2VX3of.js             15.16 kB │ gzip:   4.32 kB
+dist/assets/MyDecisionsPage-C-hy5tZh.js            15.62 kB │ gzip:   4.23 kB
+dist/assets/FullScreenPreview-DhpvBrmH.js          15.72 kB │ gzip:   5.43 kB
+dist/assets/MinutesListPage-Br_73g4Z.js            16.54 kB │ gzip:   5.00 kB
+dist/assets/MinutesConfigPanel-DoJ2aJco.js         16.79 kB │ gzip:   4.95 kB
+dist/assets/MinutesShared-T7A5ugFE.js              17.04 kB │ gzip:   4.54 kB
+dist/assets/MinutesReportsPage-CGlfkVcK.js         18.34 kB │ gzip:   4.66 kB
+dist/assets/DecisionsFollowupPage-2TOm5n34.js      18.39 kB │ gzip:   4.68 kB
+dist/assets/CalendarOccasionsPanel-BLEtTGri.js     19.45 kB │ gzip:   4.80 kB
+dist/assets/ChatSettingsPage-lJ6jXnN9.js           20.77 kB │ gzip:   7.44 kB
+dist/assets/AuditLogPage-1NaTSau-.js               21.23 kB │ gzip:   5.21 kB
+dist/assets/SparkPage-C8buIR16.js                  22.28 kB │ gzip:   5.80 kB
+dist/assets/DailyReportConfigPanel-5Up0pUTv.js     24.80 kB │ gzip:   6.16 kB
+dist/assets/ReportsPage-DztzpFED.js                24.84 kB │ gzip:   6.32 kB
+dist/assets/ManagementDashboardPage-CPrqrBkX.js    25.01 kB │ gzip:   7.12 kB
+dist/assets/templateCatalog-atus-i_d.js            25.20 kB │ gzip:   4.04 kB
+dist/assets/GroupsPage-6ZuUtLtY.js                 25.22 kB │ gzip:   5.87 kB
+dist/assets/MinutesDashboardPage-CTYWGlDc.js       25.78 kB │ gzip:   6.74 kB
+dist/assets/ContactsPage-7eKhUvGC.js               26.50 kB │ gzip:   6.32 kB
+dist/assets/PublicAuthRoot-B_lyEaiH.js             31.60 kB │ gzip:   6.93 kB
+dist/assets/BackupPanel-B_iQuk1b.js                35.20 kB │ gzip:   8.60 kB
+dist/assets/NotesPage-BhZxcd0q.js                  35.52 kB │ gzip:   9.60 kB
+dist/assets/UserGroupsPanel-Dw_utlsf.js            35.84 kB │ gzip:   7.96 kB
+dist/assets/VideoConferencePage-CQLhocih.js        36.63 kB │ gzip:   9.72 kB
+dist/assets/SocialNotificationsPanel-DEMwz5Dd.js   37.71 kB │ gzip:   9.74 kB
+dist/assets/SparkAssistant-DC_ZHqJS.js             38.54 kB │ gzip:  11.85 kB
+dist/assets/SparkConfigPanel-DCooy-V8.js           42.87 kB │ gzip:   9.63 kB
+dist/assets/DecisionFilters-BLpra5H1.js            47.01 kB │ gzip:  10.22 kB
+dist/assets/NotificationsConfigPanel-Asu1OOsc.js   53.73 kB │ gzip:  11.16 kB
+dist/assets/CreateMeetingForm-BpXDIu-2.js          54.09 kB │ gzip:  12.16 kB
+dist/assets/TasksPage-Dm2ip5sw.js                  54.30 kB │ gzip:  12.16 kB
+dist/assets/ProfilePage-C5Ukinzz.js                55.56 kB │ gzip:  12.29 kB
+dist/assets/PortalConfigPage-DBGhw8IL.js           61.61 kB │ gzip:  16.36 kB
+dist/assets/MeetingsPage-DUlnnAW2.js               66.54 kB │ gzip:  16.00 kB
+dist/assets/MinutesDetailPage-BDgjq6fU.js          68.13 kB │ gzip:  15.31 kB
+dist/assets/SystemMonitoringPage-D0yLs-G8.js       71.35 kB │ gzip:  12.24 kB
+dist/assets/OrgStructurePage-C0m1Cbn4.js           76.58 kB │ gzip:  15.38 kB
+dist/assets/moment-jalaali-D7ipNpsB.js             79.14 kB │ gzip:  25.06 kB
+dist/assets/Tutorial-BfoTgMGI.js                   81.00 kB │ gzip:  19.88 kB
+dist/assets/MinutesFormPage-njpOZiFT.js            94.88 kB │ gzip:  20.77 kB
+dist/assets/UserManagementPanel-DoHKRZ3k.js       100.78 kB │ gzip:  23.05 kB
+dist/assets/SmsConfigPanel-mKDFIWkz.js            130.24 kB │ gzip:  23.93 kB
+dist/assets/DeviceSelector-ElFJctei.js            147.54 kB │ gzip:  39.46 kB
+dist/assets/ChannelsPage-U2Jw_Pr3.js              151.42 kB │ gzip:  34.34 kB
+dist/assets/AuthenticatedRoot-BgvC_x8W.js         184.07 kB │ gzip:  47.08 kB
+dist/assets/CalendarPage-B9H-MCro.js              272.39 kB │ gzip:  63.26 kB
+dist/assets/ChatPage-B4CdDNua.js                  277.77 kB │ gzip:  70.45 kB
+dist/assets/minutesWordExport-DLtmCJ7z.js         380.61 kB │ gzip: 107.51 kB
+dist/assets/index-CenAasKg.js                     411.01 kB │ gzip: 117.99 kB
+dist/assets/exceljs.min-BsF42dRL.js               929.58 kB │ gzip: 256.39 kB
+
+[32m✓ built in 3.00s[39m
+[33m[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+deno before= 1 after= 3
+NEW_DENO_DIAGNOSTICS
+1 ('supabase/functions/request-phone-login-otp-v2/index.ts', '2304', "Cannot find name 'PhoneAuthConfig'.")
+1 ('supabase/functions/verify-phone-login-otp-v2/index.ts', '2304', "Cannot find name 'PhoneAuthConfig'.")
+baseline_deno_rc=1 after_deno_rc=1 comparison_rc=1
