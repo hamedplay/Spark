@@ -27,11 +27,8 @@ if [[ ! -r "$BASE_ENTRYPOINT" ]]; then
   exit 1
 fi
 
-# Load the existing, validated Spark Manager implementation without running its CLI.
-# The temporary exit() override lets the base --version branch return from source.
 set +e +u
 exit() { return "${1:-0}"; }
-# shellcheck source=/dev/null
 source "$BASE_ENTRYPOINT" --version >/dev/null 2>&1
 base_rc=$?
 unset -f exit
@@ -97,7 +94,7 @@ main_menu() {
     TUI_MODE="fullscreen" mainmenu \
       "SPARK CONTROL CENTER" \
       "Production deployment · operations · security · observability" \
-      "$config" 1 1
+      "$config" 1 1 >/dev/null
     rc=$?
     command="${TUI_RESULT:-}"
     set -Eeuo pipefail
@@ -127,7 +124,7 @@ install_menu() {
     TUI_MODE="fullscreen" mainmenu \
       "SPARK INSTALLATION" \
       "Guided single-host deployment · completed steps are tracked automatically" \
-      "$config" 1 1
+      "$config" 1 1 >/dev/null
     rc=$?
     command="${TUI_RESULT:-}"
     set -Eeuo pipefail
@@ -138,8 +135,6 @@ install_menu() {
   done
 }
 
-# Preserve the wrapper/base installation model when installation step 4 refreshes
-# the manager from /opt/spark.
 install_manager_from_dir() {
   local source_dir="$1"
   local stage backup module
@@ -185,8 +180,6 @@ install_manager_from_dir() {
   rm -rf "$backup"
 }
 
-# Self-update through the bootstrap installer so the wrapper, base entrypoint,
-# modules and pinned TUI runtime are updated as one atomic unit.
 self_update() {
   title
   new_log "manager-self-update"
