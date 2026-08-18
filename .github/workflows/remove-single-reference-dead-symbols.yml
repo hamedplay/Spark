@@ -1,3 +1,4 @@
+# final-head execution trigger
 name: Remove single-reference dead symbols
 
 on:
