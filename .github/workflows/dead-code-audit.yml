@@ -1,3 +1,4 @@
+# rerun after dead-file cleanup
 name: One-time dead code audit
 
 on:
