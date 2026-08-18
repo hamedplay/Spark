@@ -4,6 +4,119 @@ build_rc=0
 test_rc=0
 deno_rc=1
 
+[0m[32mInitialize[0m core-util-is@1.0.3
+[0m[32mInitialize[0m isarray@1.0.0
+[0m[32mInitialize[0m any-promise@1.3.0
+[0m[32mInitialize[0m safe-buffer@5.1.2
+[0m[32mInitialize[0m moment@2.30.1
+[0m[32mInitialize[0m mkdirp@0.5.6
+[0m[32mInitialize[0m @fast-csv/parse@4.3.6
+[0m[32mInitialize[0m lodash.defaults@4.2.0
+[0m[32mInitialize[0m archiver-utils@3.0.4
+[0m[32mInitialize[0m fs-constants@1.0.0
+[0m[32mInitialize[0m lodash.isnil@4.0.0
+[0m[32mInitialize[0m lodash.isplainobject@4.0.6
+[0m[32mInitialize[0m hasown@2.0.4
+[0m[32mInitialize[0m p-limit@3.1.0
+[0m[32mInitialize[0m glob@7.2.3
+[0m[32mInitialize[0m function-bind@1.1.2
+[0m[32mInitialize[0m lodash.isequal@4.5.0
+[0m[32mInitialize[0m pako@1.0.11
+[0m[32mInitialize[0m buffers@0.1.1
+[0m[32mInitialize[0m @floating-ui/dom@1.8.0
+[0m[32mInitialize[0m compress-commons@4.1.2
+[0m[32mInitialize[0m bl@4.1.0
+[0m[32mInitialize[0m @jridgewell/sourcemap-codec@1.5.5
+[0m[32mInitialize[0m escalade@3.2.0
+[0m[32mInitialize[0m end-of-stream@1.4.5
+[0m[32mInitialize[0m rimraf@2.7.1
+[0m[32mInitialize[0m minimatch@5.1.9
+[0m[32mInitialize[0m lodash.flatten@4.4.0
+[0m[32mInitialize[0m run-parallel@1.2.0
+[0m[32mInitialize[0m lodash.groupby@4.6.0
+[0m[32mInitialize[0m lodash.isfunction@3.0.9
+[0m[32mInitialize[0m yallist@3.1.1
+[0m[32mInitialize[0m json-buffer@3.0.1
+[0m[32mInitialize[0m reusify@1.1.0
+[0m[32mInitialize[0m chainsaw@0.1.0
+[0m[32mInitialize[0m thenify@3.3.1
+[0m[32mInitialize[0m lodash.isundefined@3.0.1
+[0m[32mInitialize[0m lodash.difference@4.5.0
+[0m[32mInitialize[0m lazystream@1.0.1
+[0m[32mInitialize[0m big-integer@1.6.52
+[0m[32mInitialize[0m lodash.isboolean@3.0.3
+[0m[32mInitialize[0m lodash.uniq@4.5.0
+[0m[32mInitialize[0m to-regex-range@5.0.1
+[0m[32mInitialize[0m lodash.escaperegexp@4.1.2
+[0m[32mInitialize[0m lodash.union@4.6.0
+[0m[32mInitialize[0m brace-expansion@2.1.4
+[0m[32mInitialize[0m fs.realpath@1.0.0
+[0m[32mInitialize[0m queue-microtask@1.2.3
+[0m[32mInitialize[0m crc32-stream@4.0.3
+[0m[32mInitialize[0m buffer@5.7.1
+[0m[32mInitialize[0m traverse@0.3.9
+[0m[32mInitialize[0m yocto-queue@0.1.0
+[0m[32mInitialize[0m wrappy@1.0.2
+[0m[32mInitialize[0m once@1.4.0
+[0m[32mInitialize[0m inflight@1.0.6
+[0m[32mInitialize[0m path-is-absolute@1.0.1
+[0m[32mInitialize[0m balanced-match@1.0.2
+[0m[32mInitialize[0m minimist@1.2.8
+[0m[32mInitialize[0m ieee754@1.2.1
+[0m[32mInitialize[0m is-number@7.0.0
+[0m[32mInitialize[0m crc-32@1.2.2
+[0m[32mInitialize[0m minimatch@3.1.5
+[0m[32mInitialize[0m @typescript-eslint/eslint-plugin@8.67.0
+[0m[32mInitialize[0m @jridgewell/resolve-uri@3.1.2
+[0m[32mInitialize[0m @floating-ui/core@1.8.0
+[0m[32mInitialize[0m brace-expansion@1.1.18
+[0m[32mInitialize[0m base64-js@1.5.1
+[0m[32mInitialize[0m @jridgewell/trace-mapping@0.3.31
+[0m[32mInitialize[0m async@3.2.6
+[0m[32mInitialize[0m readable-stream@2.3.8
+[0m[32mInitialize[0m @floating-ui/react@0.27.20
+[0m[32mInitialize[0m tabbable@6.5.0
+[0m[32mInitialize[0m @types/node@25.9.5
+[0m[32mInitialize[0m concat-map@0.0.1
+[0m[32mInitialize[0m @types/node@14.18.63
+[0m[32mInitialize[0m lightningcss-linux-x64-gnu@1.33.0
+[0m[32mInitialize[0m lightningcss-linux-x64-musl@1.33.0
+[0m[32mInitialize[0m react-dom@19.2.8
+[0m[32mInitialize[0m react-datepicker@9.1.0
+[0m[32mInitialize[0m @supabase/auth-js@2.112.3
+[0m[32mInitialize[0m typescript@6.0.3
+[0m[32mInitialize[0m @esbuild/linux-x64@0.28.2
+[0m[32mInitialize[0m @rolldown/binding-linux-x64-gnu@1.2.4
+[0m[32mInitialize[0m @rolldown/binding-linux-x64-musl@1.2.4
+[0m[32mInitialize[0m zod@4.4.3
+[0m[32mInitialize[0m exceljs@4.4.0
+[0m[32mInitialize[0m caniuse-lite@1.0.30001809
+[0m[32mInitialize[0m date-fns@3.6.0
+[0m[32mInitialize[0m date-fns@4.4.0
+[0m[32mInitialize[0m lucide-react@1.31.0
+[0m[33m╭[0m [0m[1m[33mWarning[0m
+[0m[33m│[0m
+[0m[33m│[0m  The following packages are deprecated:
+[0m[33m│[0m  [0m[38;5;245mnpm:uuid@8.3.2 (uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).)[0m
+[0m[33m│[0m  [0m[38;5;245mnpm:fstream@1.0.12 (This package is no longer supported.)[0m
+[0m[33m│[0m  [0m[38;5;245mnpm:glob@7.2.3 (Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me)[0m
+[0m[33m│[0m  [0m[38;5;245mnpm:lodash.isequal@4.5.0 (This package is deprecated. Use require('node:util').isDeepStrictEqual instead.)[0m
+[0m[33m│[0m  [0m[38;5;245mnpm:rimraf@2.7.1 (Rimraf versions prior to v4 are no longer supported)[0m
+[0m[33m│[0m  [0m[38;5;245mnpm:inflight@1.0.6 (This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.)[0m
+[0m[33m╰─[0m
+[0m[32mDownload[0m https://jsr.io/@supabase/functions-js/meta.json
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/meta.json
+[0m[32mDownload[0m https://jsr.io/@supabase/functions-js/2.111.0_meta.json
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0_meta.json
+[0m[32mDownload[0m https://jsr.io/@supabase/functions-js/2.111.0/src/edge-runtime.d.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/index.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/SupabaseClient.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/types.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/constants.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/fetch.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/helpers.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/SupabaseAuthClient.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/rest/types/common/rpc.ts
 [0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/rest/types/common/common.ts
 [0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/version.ts
 [0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/_internal/tracing/index.ts
@@ -51,22 +164,22 @@ deno_rc=1
 [0m[32mDownload[0m https://registry.npmjs.org/@supabase/realtime-js/-/realtime-js-2.111.0.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/@supabase/auth-js/-/auth-js-2.111.0.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/@supabase/storage-js/-/storage-js-2.111.0.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/@types/node/-/node-18.19.130.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/@types/node-fetch/-/node-fetch-2.6.13.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/agentkeepalive/-/agentkeepalive-4.6.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/@types/node/-/node-18.19.130.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/form-data-encoder/-/form-data-encoder-1.7.2.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/formdata-node/-/formdata-node-4.4.1.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/agentkeepalive/-/agentkeepalive-4.6.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/node-fetch/-/node-fetch-2.7.0.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/event-target-shim/-/event-target-shim-5.0.1.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/undici-types/-/undici-types-5.26.5.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/form-data/-/form-data-4.0.6.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/humanize-ms/-/humanize-ms-1.2.1.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/undici-types/-/undici-types-5.26.5.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-4.0.0-beta.3.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/node-domexception/-/node-domexception-1.0.0.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/humanize-ms/-/humanize-ms-1.2.1.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/event-target-shim/-/event-target-shim-5.0.1.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/whatwg-url/-/whatwg-url-5.0.0.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/tr46/-/tr46-0.0.3.tgz
@@ -76,51 +189,51 @@ deno_rc=1
 [0m[32mDownload[0m https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz
-[0m[32mDownload[0m https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz
+[0m[32mDownload[0m https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz
 [0m[32mDownload[0m https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz
-[0m[32mInitialize[0m form-data-encoder@1.7.2
-[0m[32mInitialize[0m agentkeepalive@4.6.0
-[0m[32mInitialize[0m formdata-node@4.4.1
 [0m[32mInitialize[0m form-data@4.0.6
-[0m[32mInitialize[0m delayed-stream@1.0.0
-[0m[32mInitialize[0m web-streams-polyfill@4.0.0-beta.3
-[0m[32mInitialize[0m humanize-ms@1.2.1
-[0m[32mInitialize[0m call-bind-apply-helpers@1.0.2
-[0m[32mInitialize[0m whatwg-url@5.0.0
-[0m[32mInitialize[0m combined-stream@1.0.8
 [0m[32mInitialize[0m undici-types@5.26.5
-[0m[32mInitialize[0m get-intrinsic@1.3.0
-[0m[32mInitialize[0m has-symbols@1.1.0
-[0m[32mInitialize[0m es-set-tostringtag@2.1.0
 [0m[32mInitialize[0m mime-types@2.1.35
-[0m[32mInitialize[0m has-tostringtag@1.0.2
-[0m[32mInitialize[0m es-object-atoms@1.1.2
-[0m[32mInitialize[0m asynckit@0.4.0
-[0m[32mInitialize[0m get-proto@1.0.1
-[0m[32mInitialize[0m math-intrinsics@1.1.0
-[0m[32mInitialize[0m @types/node-fetch@2.6.13
-[0m[32mInitialize[0m @types/node@18.19.130
-[0m[32mInitialize[0m @supabase/functions-js@2.111.0
 [0m[32mInitialize[0m node-fetch@2.7.0
-[0m[32mInitialize[0m abort-controller@3.0.0
-[0m[32mInitialize[0m event-target-shim@5.0.1
-[0m[32mInitialize[0m webidl-conversions@3.0.1
-[0m[32mInitialize[0m dunder-proto@1.0.1
-[0m[32mInitialize[0m @supabase/storage-js@2.111.0
-[0m[32mInitialize[0m node-domexception@1.0.0
-[0m[32mInitialize[0m mime-db@1.52.0
-[0m[32mInitialize[0m gopd@1.2.0
+[0m[32mInitialize[0m web-streams-polyfill@4.0.0-beta.3
+[0m[32mInitialize[0m agentkeepalive@4.6.0
 [0m[32mInitialize[0m tr46@0.0.3
+[0m[32mInitialize[0m whatwg-url@5.0.0
+[0m[32mInitialize[0m asynckit@0.4.0
+[0m[32mInitialize[0m formdata-node@4.4.1
+[0m[32mInitialize[0m node-domexception@1.0.0
+[0m[32mInitialize[0m abort-controller@3.0.0
+[0m[32mInitialize[0m gopd@1.2.0
+[0m[32mInitialize[0m event-target-shim@5.0.1
+[0m[32mInitialize[0m combined-stream@1.0.8
+[0m[32mInitialize[0m humanize-ms@1.2.1
+[0m[32mInitialize[0m form-data-encoder@1.7.2
+[0m[32mInitialize[0m @types/node-fetch@2.6.13
+[0m[32mInitialize[0m get-intrinsic@1.3.0
+[0m[32mInitialize[0m webidl-conversions@3.0.1
+[0m[32mInitialize[0m delayed-stream@1.0.0
+[0m[32mInitialize[0m math-intrinsics@1.1.0
+[0m[32mInitialize[0m has-symbols@1.1.0
+[0m[32mInitialize[0m call-bind-apply-helpers@1.0.2
+[0m[32mInitialize[0m @supabase/functions-js@2.111.0
+[0m[32mInitialize[0m es-object-atoms@1.1.2
+[0m[32mInitialize[0m mime-db@1.52.0
+[0m[32mInitialize[0m es-set-tostringtag@2.1.0
+[0m[32mInitialize[0m dunder-proto@1.0.1
+[0m[32mInitialize[0m has-tostringtag@1.0.2
 [0m[32mInitialize[0m es-define-property@1.0.1
+[0m[32mInitialize[0m @supabase/storage-js@2.111.0
 [0m[32mInitialize[0m @supabase/realtime-js@2.111.0
+[0m[32mInitialize[0m get-proto@1.0.1
+[0m[32mInitialize[0m @types/node@18.19.130
 [0m[32mInitialize[0m @supabase/postgrest-js@2.111.0
-[0m[32mInitialize[0m @supabase/auth-js@2.111.0
 [0m[32mInitialize[0m openai@4.104.0
+[0m[32mInitialize[0m @supabase/auth-js@2.111.0
 [0m[33m╭[0m [0m[1m[33mWarning[0m
 [0m[33m│[0m
 [0m[33m│[0m  The following packages are deprecated:
@@ -128,32 +241,6 @@ deno_rc=1
 [0m[33m╰─[0m
 [0m[32mCheck[0m supabase/functions/send-sms/index.ts
 [0m[32mCheck[0m supabase/functions/send-daily-meetings/index.ts
-[0m[1mTS2322 [0m[ERROR]: Type 'SupabaseClient<any, "public", "public", any, any>' is not assignable to type 'SupabaseClient<unknown, { PostgrestVersion: string; }, never, never, { PostgrestVersion: string; }>'.
-  Types of property 'rest' are incompatible.
-    Type 'PostgrestClient<any, any, "public", any>' is not assignable to type 'PostgrestClient<unknown, { PostgrestVersion: string; }, never, never>'.
-      Type '"public"' is not assignable to type 'never'.
-      return await handleDispatchMode({ supabase, body, caller, json });
-[0m[31m                                        ~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/index.ts[0m:[0m[33m96[0m:[0m[33m41[0m
-
-    The expected type comes from property 'supabase' which is declared here on type 'ModeContext'
-      supabase: SmsClient;
-    [0m[36m  ~~~~~~~~[0m
-        at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m8[0m:[0m[33m3[0m
-
-[0m[1mTS2322 [0m[ERROR]: Type 'SupabaseClient<any, "public", "public", any, any>' is not assignable to type 'SupabaseClient<unknown, { PostgrestVersion: string; }, never, never, { PostgrestVersion: string; }>'.
-  Types of property 'rest' are incompatible.
-    Type 'PostgrestClient<any, any, "public", any>' is not assignable to type 'PostgrestClient<unknown, { PostgrestVersion: string; }, never, never>'.
-      Type '"public"' is not assignable to type 'never'.
-      return await handleExternalMode({ supabase, body, caller, json, isAuthOtp });
-[0m[31m                                        ~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/index.ts[0m:[0m[33m122[0m:[0m[33m41[0m
-
-    The expected type comes from property 'supabase' which is declared here on type 'ModeContext & { isAuthOtp: boolean; }'
-      supabase: SmsClient;
-    [0m[36m  ~~~~~~~~[0m
-        at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m8[0m:[0m[33m3[0m
-
 [0m[1mTS2304 [0m[ERROR]: Cannot find name 'isValidPhone'.
     const invalidNumbers = rawMobiles.filter(m => !isValidPhone(m.replace(/\s/g, "")));
 [0m[31m                                                   ~~~~~~~~~~~~[0m
@@ -164,93 +251,6 @@ deno_rc=1
 [0m[31m        ~~~~~~~~~[0m
     at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/index.ts[0m:[0m[33m992[0m:[0m[33m9[0m
 
-[0m[1mTS2353 [0m[ERROR]: Object literal may only specify known properties, and 'target_phone' does not exist in type 'never[]'.
-          ...logBase, target_phone: null, status: "skipped",
-[0m[31m                      ~~~~~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m43[0m:[0m[33m23[0m
-
-[0m[1mTS2345 [0m[ERROR]: Argument of type '{ target_user_id: string; p_category: string; }' is not assignable to parameter of type 'undefined'.
-        .rpc("get_sms_dispatch_info", { target_user_id: targetUserId, p_category: category });
-[0m[31m                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m51[0m:[0m[33m39[0m
-
-[0m[1mTS2353 [0m[ERROR]: Object literal may only specify known properties, and 'target_phone' does not exist in type 'never[]'.
-          ...logBase, target_phone: null, status: "failed",
-[0m[31m                      ~~~~~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m55[0m:[0m[33m23[0m
-
-[0m[1mTS2339 [0m[ERROR]: Property 'length' does not exist on type 'never'.
-      if (!dispatchRows?.length) {
-[0m[31m                         ~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m61[0m:[0m[33m26[0m
-
-[0m[1mTS2353 [0m[ERROR]: Object literal may only specify known properties, and 'target_phone' does not exist in type 'never[]'.
-          ...logBase, target_phone: null, status: "skipped",
-[0m[31m                      ~~~~~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m63[0m:[0m[33m23[0m
-
-[0m[1mTS2339 [0m[ERROR]: Property 'provider_id' does not exist on type 'never'.
-      const resolvedProviderId: string | null = dispatchRows[0].provider_id ?? null;
-[0m[31m                                                                ~~~~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m69[0m:[0m[33m65[0m
-
-[0m[1mTS2339 [0m[ERROR]: Property 'phone' does not exist on type 'never'.
-      const rawPhone: string = dispatchRows[0].phone?.trim() ?? "";
-[0m[31m                                               ~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m70[0m:[0m[33m48[0m
-
-[0m[1mTS2353 [0m[ERROR]: Object literal may only specify known properties, and 'target_phone' does not exist in type 'never[]'.
-          ...logBase, target_phone: rawPhone || null, provider_id: resolvedProviderId,
-[0m[31m                      ~~~~~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m74[0m:[0m[33m23[0m
-
-[0m[1mTS2339 [0m[ERROR]: Property 'title' does not exist on type 'never'.
-        providerName = prov?.title ?? null;
-[0m[31m                             ~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m85[0m:[0m[33m30[0m
-
-[0m[1mTS2339 [0m[ERROR]: Property 'id' does not exist on type 'never'.
-        if (defProv) { effectiveProviderId = defProv.id; providerName = defProv.title; }
-[0m[31m                                                     ~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m88[0m:[0m[33m54[0m
-
-[0m[1mTS2339 [0m[ERROR]: Property 'title' does not exist on type 'never'.
-        if (defProv) { effectiveProviderId = defProv.id; providerName = defProv.title; }
-[0m[31m                                                                                ~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m88[0m:[0m[33m81[0m
-
-[0m[1mTS2353 [0m[ERROR]: Object literal may only specify known properties, and 'target_phone' does not exist in type 'never[]'.
-          target_phone: rawPhone,
-[0m[31m          ~~~~~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m112[0m:[0m[33m11[0m
-
-[0m[1mTS2353 [0m[ERROR]: Object literal may only specify known properties, and 'target_phone' does not exist in type 'never[]'.
-          target_phone: rawPhone,
-[0m[31m          ~~~~~~~~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m135[0m:[0m[33m11[0m
-
-[0m[1mTS2339 [0m[ERROR]: Property 'id' does not exist on type 'never'.
-      const logProviderId: string | null = defProv?.id ?? null;
-[0m[31m                                                    ~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m193[0m:[0m[33m53[0m
-
-[0m[1mTS2339 [0m[ERROR]: Property 'title' does not exist on type 'never'.
-      const logProviderName: string | null = defProv?.title ?? null;
-[0m[31m                                                      ~~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m194[0m:[0m[33m55[0m
-
-[0m[1mTS2345 [0m[ERROR]: Argument of type '{ target_phone: string; provider_id: string | null; provider_name: string | null; status: string; error_text: string | null; pack_id: any; message_ids: any; raw_response: any; triggered_by_user_id: string | null; ... 4 more ...; message: string; }[]' is not assignable to parameter of type 'never[]'.
-  Type '{ target_phone: string; provider_id: string | null; provider_name: string | null; status: string; error_text: string | null; pack_id: any; message_ids: any; raw_response: any; triggered_by_user_id: string | null; ... 4 more ...; message: string; }' is not assignable to type 'never'.
-      await supabase.from("sms_dispatch_logs").insert(logs);
-[0m[31m                                                      ~~~~[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m216[0m:[0m[33m55[0m
-
-[0m[1mTS2345 [0m[ERROR]: Argument of type '{ target_phone: string; status: string; error_text: string; triggered_by_user_id: string | null; target_user_id: null; category: string; event_type: string; audience: string; message: string; }[]' is not assignable to parameter of type 'never[]'.
-  Type '{ target_phone: string; status: string; error_text: string; triggered_by_user_id: string | null; target_user_id: null; category: string; event_type: string; audience: string; message: string; }' is not assignable to type 'never'.
-          invalidMobiles.map(phone => ({
-[0m[31m          ^[0m
-    at [0m[36mfile:///home/runner/work/Spark/Spark/supabase/functions/send-sms/requestModes.ts[0m:[0m[33m221[0m:[0m[33m11[0m
-
-Found 21 errors.
+Found 2 errors.
 
 [0m[1m[31merror[0m: Type checking failed.
