@@ -10,7 +10,7 @@ const REPORT = 'scripts/.dead-code-audit.json';
 const tracked = childProcess.execFileSync('git', ['ls-files'], { encoding: 'utf8' })
   .split(/\r?\n/).filter(Boolean);
 const sourceExt = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
-const codeFiles = tracked.filter((p) => sourceExt.test(p) && (p.startsWith('src/') || p.startsWith('supabase/functions/')));
+const codeFiles = tracked.filter((p) => fs.existsSync(p) && sourceExt.test(p) && (p.startsWith('src/') || p.startsWith('supabase/functions/')));
 const codeSet = new Set(codeFiles);
 
 const configFile = ts.readConfigFile('tsconfig.json', ts.sys.readFile);
@@ -95,7 +95,7 @@ function reachableFrom(entries) {
 const prodReachable = reachableFrom(productionEntries);
 
 const textualReferences = new Map(codeFiles.map((f) => [f, []]));
-const nonCodeTextFiles = tracked.filter((p) => !codeSet.has(p) && /\.(?:json|jsonc|yaml|yml|md|html|toml|sh|mjs|js|ts|tsx)$/.test(p));
+const nonCodeTextFiles = tracked.filter((p) => fs.existsSync(p) && !codeSet.has(p) && /\.(?:json|jsonc|yaml|yml|md|html|toml|sh|mjs|js|ts|tsx)$/.test(p));
 for (const target of codeFiles) {
   const base = path.basename(target).replace(/\.(?:ts|tsx|js|jsx|mjs|cjs)$/, '');
   const relNoExt = target.replace(/\.(?:ts|tsx|js|jsx|mjs|cjs)$/, '');
