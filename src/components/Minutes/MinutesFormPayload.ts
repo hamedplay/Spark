@@ -7,6 +7,7 @@ import type {
   DraftMeetingInfo,
   ProfileOption,
 } from './Form/types';
+import { getDraftDecisionClauses, getParentDraftDecisions } from './decisionHierarchy';
 
 interface PayloadInput {
   info: DraftMeetingInfo;
@@ -99,32 +100,70 @@ export function buildMinutesDraftPayload({
   };
 }
 
-export function buildDecisionsPayload(decisions: DraftDecision[]) {
-  return decisions.map(decision => ({
+function serializeDecision(
+  decision: DraftDecision,
+  executionSource: DraftDecision,
+  parent: DraftDecision | undefined,
+) {
+  return {
     id: decision.decisionId || null,
-    meeting_agenda_item_id: decision.meetingAgendaItemId || null,
+    parent_decision_id: decision.parentDecisionId || null,
+    clause_order: decision.parentDecisionId ? decision.clauseOrder : null,
+    meeting_agenda_item_id: (parent?.meetingAgendaItemId || decision.meetingAgendaItemId) || null,
     agenda_result_id: null,
     title: decision.title.trim(),
     description: decision.description || null,
-    primary_owner_user_id: decision.responsiblePartyType === 'external'
+    primary_owner_user_id: executionSource.responsiblePartyType === 'external'
       ? null
-      : (decision.primaryOwnerUserId || null),
-    responsible_unit_id: decision.responsibleUnitId || null,
-    responsible_unit_name_snapshot: decision.responsibleUnitNameSnapshot || null,
-    priority: decision.priority,
-    start_date: decision.startDate || null,
-    due_date: decision.dueDate || null,
-    requires_followup: decision.requiresFollowup,
-    latest_update: decision.latestUpdate || null,
+      : (executionSource.primaryOwnerUserId || null),
+    responsible_unit_id: executionSource.responsibleUnitId || null,
+    responsible_unit_name_snapshot: executionSource.responsibleUnitNameSnapshot || null,
+    priority: executionSource.priority,
+    start_date: executionSource.startDate || null,
+    due_date: executionSource.dueDate || null,
+    requires_followup: executionSource.requiresFollowup,
+    latest_update: executionSource.latestUpdate || null,
     discussion_result: decision.discussionResult || null,
     result_type: decision.resultType || null,
     additional_notes: decision.additionalNotes || null,
-    responsible_party_type: decision.responsiblePartyType,
-    external_responsible_participant_id: decision.externalResponsibleParticipantId || null,
-    external_responsible_name_snapshot: decision.externalResponsibleNameSnapshot || null,
-    external_responsible_organization_snapshot: decision.externalResponsibleOrganizationSnapshot || null,
-    external_responsible_position_snapshot: decision.externalResponsiblePositionSnapshot || null,
-  }));
+    responsible_party_type: executionSource.responsiblePartyType,
+    external_responsible_participant_id: executionSource.externalResponsibleParticipantId || null,
+    external_responsible_name_snapshot: executionSource.externalResponsibleNameSnapshot || null,
+    external_responsible_organization_snapshot: executionSource.externalResponsibleOrganizationSnapshot || null,
+    external_responsible_position_snapshot: executionSource.externalResponsiblePositionSnapshot || null,
+  };
+}
+
+export function buildDecisionsPayload(decisions: DraftDecision[]) {
+  const byId = new Map(
+    decisions
+      .filter(decision => decision.decisionId)
+      .map(decision => [decision.decisionId as string, decision]),
+  );
+
+  return decisions.map(decision => {
+    const parent = decision.parentDecisionId ? byId.get(decision.parentDecisionId) : undefined;
+    const clauses = !decision.parentDecisionId
+      ? getDraftDecisionClauses(decisions, decision.decisionId)
+      : [];
+    // The parent remains non-executable in the UI, but existing DB constraints
+    // require compatible execution fields. Mirror the first clause internally.
+    const executionSource = clauses.length > 0 ? clauses[0] : decision;
+    return serializeDecision(decision, executionSource, parent);
+  });
+}
+
+function validateExecutionOwner(decision: DraftDecision, noun: 'مصوبه' | 'بند'): string | null {
+  if (decision.responsiblePartyType === 'internal' && !decision.primaryOwnerUserId) {
+    return `انتخاب مسئول برای هر ${noun} الزامی است`;
+  }
+  if (decision.responsiblePartyType === 'external' && !decision.externalResponsibleNameSnapshot.trim()) {
+    return `انتخاب مسئول خارج سازمان برای هر ${noun} الزامی است`;
+  }
+  if (decision.startDate && decision.dueDate && decision.dueDate < decision.startDate) {
+    return `مهلت ${noun} نمی‌تواند قبل از تاریخ شروع باشد`;
+  }
+  return null;
 }
 
 export function validateMinutesForm({
@@ -145,17 +184,32 @@ export function validateMinutesForm({
   if (!info.meetingDate.trim()) return 'تاریخ جلسه الزامی است';
   if (!info.secretaryUserId) return 'انتخاب دبیر جلسه الزامی است';
   if (!info.chairUserId) return 'انتخاب رئیس جلسه الزامی است';
-  for (const decision of decisions) {
-    if (!decision.title.trim()) return 'عنوان هر مصوبه الزامی است';
-    if (decision.responsiblePartyType === 'internal' && !decision.primaryOwnerUserId) {
-      return 'انتخاب مسئول اصلی برای هر مصوبه الزامی است';
+
+  const parents = getParentDraftDecisions(decisions);
+  if (parents.length !== decisions.filter(decision => !decision.parentDecisionId).length) {
+    return 'ساختار مصوبات نامعتبر است';
+  }
+
+  for (const parent of parents) {
+    if (!parent.title.trim()) return 'عنوان هر مصوبه الزامی است';
+    const clauses = getDraftDecisionClauses(decisions, parent.decisionId);
+    if (clauses.length === 0) {
+      const ownerError = validateExecutionOwner(parent, 'مصوبه');
+      if (ownerError) return ownerError;
+      continue;
     }
-    if (decision.responsiblePartyType === 'external' && !decision.externalResponsibleNameSnapshot.trim()) {
-      return 'انتخاب مسئول خارج سازمان برای هر مصوبه الزامی است';
-    }
-    if (decision.startDate && decision.dueDate && decision.dueDate < decision.startDate) {
-      return 'مهلت مصوبه نمی‌تواند قبل از تاریخ شروع باشد';
+
+    for (const clause of clauses) {
+      if (!clause.title.trim()) return 'متن هر بند الزامی است';
+      const ownerError = validateExecutionOwner(clause, 'بند');
+      if (ownerError) return ownerError;
     }
   }
+
+  const parentIds = new Set(parents.map(parent => parent.decisionId).filter(Boolean));
+  if (decisions.some(decision => decision.parentDecisionId && !parentIds.has(decision.parentDecisionId))) {
+    return 'یکی از بندها به مصوبه معتبر متصل نیست';
+  }
+
   return null;
 }
