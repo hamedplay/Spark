@@ -93,11 +93,10 @@ Deno.serve(async (req: Request) => {
   if (!isTaskName(payload.task)) return json({ error: "invalid_task" }, 400);
   const task = payload.task;
   const config = TASKS[task];
-  const targetSecret = Deno.env.get(config.secretEnv) ?? "";
-  if (!targetSecret) {
-    console.error(`[scheduler-dispatch] ${config.secretEnv} is not configured`);
-    return json({ error: "target_secret_missing", task }, 503);
-  }
+
+  // Server 3 keeps its worker-specific secrets. Hosted deployments can fall
+  // back to the same Vault-backed secret that authenticated this dispatcher.
+  const targetSecret = Deno.env.get(config.secretEnv) || providedSecret;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
