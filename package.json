@@ -48,7 +48,7 @@
     "test:theme-sync": "node --import tsx --test tests/theme/themeSync.test.ts",
     "test:phase3-totp": "node --import tsx --test tests/phase3/phase3Totp.test.ts",
     "test:phase3b-security": "node --import tsx --test tests/phase3/phase3bSecurity.test.ts",
-    "test:phase3c-security": "node --import tsx --test tests/phase3/phase3cSecurity.test.ts",
+    "test:phase3c-security": "node --import tsx --test tests/phase3/phase3cSecurity.test.ts tests/phase3/phase3cSecurityService.test.ts",
     "test:phase4-lifecycle": "node --import tsx --test tests/phase4/phase4Lifecycle.test.ts",
     "test:phase5-login": "node --import tsx --test tests/phase5/phase5PasswordLogin.test.ts",
     "test:phase5-gateway": "node --import tsx --test tests/phase5/phase5GatewaySession.test.ts",
