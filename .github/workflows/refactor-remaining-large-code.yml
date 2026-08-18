@@ -1,0 +1,101 @@
+name: Refactor remaining large code files
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/refactor-remaining-large-code.mjs
+      - .github/workflows/refactor-remaining-large-code.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Transform and validate
+        id: guarded
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/refactor-validation.log
+
+          node scripts/refactor-remaining-large-code.mjs >> /tmp/refactor-validation.log 2>&1
+          transform_rc=$?
+
+          build_rc=99
+          test_rc=99
+          deno_rc=99
+          if [ "$transform_rc" -eq 0 ]; then
+            npm run build >> /tmp/refactor-validation.log 2>&1
+            build_rc=$?
+          fi
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ]; then
+            npm run test:phase3c-security >> /tmp/refactor-validation.log 2>&1
+            test_rc=$?
+          fi
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$test_rc" -eq 0 ]; then
+            deno check supabase/functions/send-sms/index.ts supabase/functions/send-daily-meetings/index.ts >> /tmp/refactor-validation.log 2>&1
+            deno_rc=$?
+          fi
+
+          if [ "$transform_rc" -ne 0 ] || [ "$build_rc" -ne 0 ] || [ "$test_rc" -ne 0 ] || [ "$deno_rc" -ne 0 ]; then
+            git reset --hard HEAD
+            {
+              echo "VALIDATION_FAILED"
+              echo "transform_rc=$transform_rc"
+              echo "build_rc=$build_rc"
+              echo "test_rc=$test_rc"
+              echo "deno_rc=$deno_rc"
+              echo
+              tail -n 250 /tmp/refactor-validation.log
+            } > scripts/.remaining-large-refactor-status.txt
+            echo "success=false" >> "$GITHUB_OUTPUT"
+          else
+            rm -f scripts/.remaining-large-refactor-status.txt
+            echo "success=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit validated source changes
+        if: steps.guarded.outputs.success == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            package.json \
+            supabase/functions/send-daily-meetings/index.ts \
+            supabase/functions/send-daily-meetings/dailyReportSupport.ts \
+            supabase/functions/send-sms/index.ts \
+            supabase/functions/send-sms/requestModes.ts \
+            supabase/functions/send-sms/phone.ts \
+            tests/phase3/phase3cSecurity.test.ts \
+            tests/phase3/phase3cSecurityService.test.ts
+          git commit -m "refactor: split remaining large code modules"
+          git push origin HEAD:main
+
+      - name: Commit failure report
+        if: steps.guarded.outputs.success != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/.remaining-large-refactor-status.txt
+          git commit -m "chore: record remaining refactor validation failure" || exit 0
+          git push origin HEAD:main
