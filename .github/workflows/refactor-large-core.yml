@@ -1,0 +1,59 @@
+name: Refactor large core files
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/refactor-large-core-files.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.1
+          cache: npm
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refactor large cores
+        run: node scripts/refactor-large-core-files.mjs
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit refactor
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/CalendarPageCore.tsx \
+                  src/components/Calendar/CalendarPageView.tsx \
+                  src/components/Calendar/useCalendarDataActions.ts \
+                  src/components/VideoConference/ConferenceRoomCore.tsx \
+                  src/components/VideoConference/Room/useConferenceWebRTC.ts \
+                  src/components/VideoConference/Room/useConferenceMediaControls.ts \
+                  src/components/VideoConference/Room/useConferenceHostActions.ts \
+                  src/components/Chat/E2EECall/useE2EECallCore.ts \
+                  src/components/Chat/E2EECall/useE2EERtpDiagnostics.ts \
+                  src/components/Chat/E2EECall/useE2EESessionChannel.ts \
+                  src/components/Chat/E2EECall/useE2EECallFlow.ts \
+                  src/components/Chat/E2EECall/useE2EEMediaControls.ts
+          if git diff --cached --quiet; then
+            echo "No generated refactor changes"
+            exit 1
+          fi
+          git commit -m "refactor: split remaining large core modules"
+          git push origin HEAD:main
