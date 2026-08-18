@@ -1,3 +1,4 @@
+# one-time execution trigger
 name: One-time final dead-code audit
 
 on:
