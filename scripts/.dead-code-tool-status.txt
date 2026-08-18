@@ -1,2 +1,0 @@
-knip_rc=1
-jscpd_rc=0
