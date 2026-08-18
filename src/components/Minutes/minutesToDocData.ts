@@ -9,17 +9,18 @@ import type {
   AgendaResultRow, ApprovalRow, ApprovalCommentRow,
 } from './Detail/types';
 import type { DecisionRow } from './types';
+import { getDecisionRowClauses, getParentDecisionRows } from './decisionHierarchy';
 
 export interface ToDocDataInput {
   minute: Pick<DocMinute, (
-    'id' | 'meeting_title_snapshot' | 'meeting_date_snapshot' |
+    'meeting_title_snapshot' | 'meeting_date_snapshot' |
     'meeting_start_time_snapshot' | 'meeting_end_time_snapshot' |
     'meeting_location_snapshot' | 'meeting_type' |
     'org_unit_name_snapshot' | 'secretary_name_snapshot' |
     'chair_name_snapshot' | 'notes' | 'confidentiality' | 'status' |
     'approval_mode' | 'revision_number' | 'secretary_confirmed_at' |
     'chair_confirmed_at' | 'published_at'
-  )>;
+  )> & { id?: string };
   internalParts: InternalParticipantRow[];
   externalParts: ExternalParticipantRow[];
   agendaResults: AgendaResultRow[];
@@ -78,13 +79,13 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     allocatedTime: a.allocated_minutes_snapshot != null ? String(a.allocated_minutes_snapshot) : null,
   }));
 
-  const decisions: DocDecision[] = props.decisions.map(d => ({
+  const decisions: DocDecision[] = getParentDecisionRows(props.decisions).map(d => ({
     id: d.id,
     title: d.title,
     description: d.description || '',
     primaryOwnerName: d.responsible_party_type === 'external'
       ? (d.external_responsible_name_snapshot || 'خارج سازمان')
-      : (props.ownerNames[d.primary_owner_user_id] || ''),
+      : (d.primary_owner_user_id ? (props.ownerNames[d.primary_owner_user_id] || '') : ''),
     responsibleUnitName: d.responsible_party_type === 'external'
       ? (d.external_responsible_organization_snapshot || 'خارج سازمان')
       : d.responsible_unit_name_snapshot,
@@ -97,6 +98,15 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     discussionResult: d.discussion_result || '',
     resultType: d.result_type || '',
     additionalNotes: d.additional_notes || '',
+    clauses: getDecisionRowClauses(props.decisions, d.id).map(clause => ({
+      id: clause.id,
+      order: clause.clause_order || 1,
+      text: clause.description || clause.title,
+      responsibleUnitName: clause.responsible_party_type === 'external'
+        ? (clause.external_responsible_organization_snapshot || 'خارج سازمان')
+        : clause.responsible_unit_name_snapshot,
+      dueDate: clause.due_date || '',
+    })),
   }));
 
   const approvals: DocApproval[] = props.approvals.map(a => ({
