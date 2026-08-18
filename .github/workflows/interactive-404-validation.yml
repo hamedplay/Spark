@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - work/interactive-404-20260818
+    paths-ignore:
+      - '.interactive-404-validation-status.txt'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: interactive-404-validation
@@ -25,7 +27,7 @@ jobs:
         run: |
           echo '--- pathname references ---'
           grep -RInE "location\.pathname|window\.location\.pathname|/admin|conference" src \
-            --include='*.ts' --include='*.tsx' || true
+            --include='*.ts' --include='*.tsx' | tee /tmp/path-references.txt || true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -45,8 +47,9 @@ jobs:
         run: |
           if [ -f tests/app/rootPath404.test.ts ]; then
             node --import tsx --test tests/app/rootPath404.test.ts
+            echo 'targeted_test=passed' > /tmp/targeted-test.txt
           else
-            echo 'Targeted 404 test not added yet.'
+            echo 'targeted_test=not_added_yet' > /tmp/targeted-test.txt
           fi
 
       - name: Verify no unintended database changes
@@ -56,3 +59,20 @@ jobs:
             echo 'Unexpected Supabase/database change in 404 scope.' >&2
             exit 1
           fi
+
+      - name: Record successful validation
+        shell: bash
+        run: |
+          {
+            echo "validated_sha=${GITHUB_SHA}"
+            echo 'build=passed'
+            cat /tmp/targeted-test.txt
+            echo 'database_scope=clean'
+            echo '--- path references ---'
+            cat /tmp/path-references.txt
+          } > .interactive-404-validation-status.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .interactive-404-validation-status.txt
+          git commit -m 'chore: record temporary interactive 404 validation [skip ci]'
+          git push
