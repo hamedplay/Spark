@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - scripts/refactor-large-core-files.mjs
+      - scripts/refactor-large-core-trigger.txt
 
 permissions:
   contents: write
