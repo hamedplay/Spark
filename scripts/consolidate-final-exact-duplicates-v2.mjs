@@ -43,3 +43,4 @@ for (const inputFile of ['src/components/Chat/ChatInputBar.tsx', 'src/components
 }
 
 console.log('final exact duplicate consolidation v2 completed');
+// temporary finalizer trigger; this file is deleted by the validated final commit
