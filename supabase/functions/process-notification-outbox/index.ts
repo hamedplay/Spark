@@ -125,7 +125,6 @@ Deno.serve(async (req: Request) => {
         let smsStatus = row.sms_status || "not_requested";
         let smsSentAt = row.sms_sent_at || null;
 
-        // ── Notification channel (independent retry) ──────────────────────
         if (!notificationSent) {
           const { error: notifError } = await supabase
             .from("notifications")
@@ -205,7 +204,6 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // ── SMS channel (independent retry) ────────────────────────────────
         if (smsSupported && smsStatus !== "sent" && smsStatus !== "skipped_template_disabled" && smsStatus !== "skipped_no_phone" && smsStatus !== "skipped_no_provider_rule") {
           let smsTemplateBody: string | null = null;
           const { data: smsTemplate } = await supabase
@@ -237,6 +235,21 @@ Deno.serve(async (req: Request) => {
           if (!smsTemplateBody) {
             smsStatus = "skipped_template_disabled";
           } else {
+            if (
+              smsTemplateBody.includes("{{recipient_greeting}}") &&
+              String(context.recipient_greeting ?? "").trim() === ""
+            ) {
+              const { data: recipientProfile } = await supabase
+                .from("profiles")
+                .select("full_name")
+                .eq("user_id", row.recipient_id)
+                .maybeSingle();
+              const recipientName = typeof recipientProfile?.full_name === "string"
+                ? recipientProfile.full_name.trim()
+                : "";
+              if (recipientName) context.recipient_greeting = recipientName;
+            }
+
             const renderedBody = renderPlaceholders(smsTemplateBody, context);
 
             if (renderedBody.unresolved.length > 0) {
@@ -257,7 +270,6 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // ── Determine final outbox status ───────────────────────────────────
         let finalStatus = "processed";
         let nextAttemptAt: string | null = null;
         let lastError: string | null = null;
@@ -295,7 +307,6 @@ Deno.serve(async (req: Request) => {
           })
           .eq("id", row.id);
 
-        // ── Update reminder lifecycle ─────────────────────────────────────
         if (reminderId) {
           let reminderStatus = "sent";
           if (!notificationSent) {
@@ -351,7 +362,6 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-// ── Placeholder renderer ────────────────────────────────────────────────────
 function renderPlaceholders(template: string, context: Record<string, unknown>): { text: string; unresolved: string[] } {
   const unresolved: string[] = [];
   let result = template;
@@ -374,7 +384,6 @@ function renderPlaceholders(template: string, context: Record<string, unknown>):
   return { text: result, unresolved };
 }
 
-// ── SMS dispatch helper ─────────────────────────────────────────────────────
 async function dispatchSms(
   supabase: ReturnType<typeof createClient>,
   row: ClaimedRow,
@@ -408,7 +417,6 @@ async function dispatchSms(
   }
 }
 
-// ── Reminder status updater ────────────────────────────────────────────────
 async function updateReminderStatus(
   supabase: ReturnType<typeof createClient>,
   reminderId: string,
