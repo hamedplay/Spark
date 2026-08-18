@@ -1,0 +1,256 @@
+VALIDATION_FAILED
+transform_rc=0
+build_rc=0
+test_rc=1
+deno_rc=99
+
+✖ audit rpc: limit before aggregate in CTE (0.198667ms)
+  AssertionError [ERR_ASSERTION]: must use page_plus_one CTE
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:414:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurity.test.ts:1:20591
+✖ audit rpc: array does not contain limit+1 row (0.170035ms)
+  AssertionError [ERR_ASSERTION]: must use visible_page CTE
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:420:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurity.test.ts:1:20951
+✖ audit rpc: cursor from last visible row (0.165178ms)
+  AssertionError [ERR_ASSERTION]: must extract last created_at
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:426:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurity.test.ts:1:21378
+✖ audit rpc: empty page cursor is null (0.159709ms)
+  AssertionError [ERR_ASSERTION]: must check v_count > 0 before setting cursor
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:433:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurity.test.ts:1:21759
+✖ audit rpc: nullable states use CASE WHEN IS NULL (0.168612ms)
+  AssertionError [ERR_ASSERTION]: must handle nullable metadata
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:439:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:6864
+✖ cte scope: filtered_users not referenced after WITH statement in management RPC (4.517626ms)
+  AssertionError [ERR_ASSERTION]: must extract management RPC body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:135:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:7465
+✖ cte scope: page_plus_one not referenced after WITH statement in management RPC (0.6407ms)
+  AssertionError [ERR_ASSERTION]: must extract management RPC body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:150:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:7952
+✖ cte scope: management RPC computes users, has_more, total_matches in one statement (0.310105ms)
+  AssertionError [ERR_ASSERTION]: must extract management RPC body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:161:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:8582
+✖ cte scope: page_plus_one not referenced independently in audit RPC (0.906488ms)
+  AssertionError [ERR_ASSERTION]: must extract audit RPC body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:175:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:9153
+✖ cte scope: audit RPC computes events and has_more in one statement (0.258127ms)
+  AssertionError [ERR_ASSERTION]: must extract audit RPC body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:190:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:9679
+✖ target alias: live function does not contain p.target_user_id (0.291467ms)
+  AssertionError [ERR_ASSERTION]: must extract audit RPC body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:205:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:10014
+✖ target alias: live function contains e.target_user_id = p_target_user_id (0.196704ms)
+  AssertionError [ERR_ASSERTION]: must extract audit RPC body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:214:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:10339
+✖ setter: fast authorization check before global lock (0.190205ms)
+  AssertionError [ERR_ASSERTION]: must extract setter body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:223:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/phase3/phase3cSecurityService.test.ts:1:11061
+✖ setter: authorization check also after global lock (0.404085ms)
+  AssertionError [ERR_ASSERTION]: must extract setter body
+      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:237:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
