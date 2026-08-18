@@ -141,7 +141,7 @@ for (const [file, importPath] of [
 
 // Consolidate repeated delegate/user row callbacks inside their components by reusing the exact first JSX body.
 for (const config of [
-  { file: 'src/components/MeetingInboxButton.tsx', param: 'user', marker: 'handleConfirmDelegate(delegateForEntry, user.user_id)', helper: 'renderDelegateOption', type: '(typeof filteredDelegates)[number]', before: '  return (' },
+  { file: 'src/components/MeetingInboxButton.tsx', param: 'u', marker: 'handleDelegate(delegateForEntry, u.user_id)', helper: 'renderDelegateOption', type: '(typeof filteredDelegates)[number]', before: '  return (' },
   { file: 'src/features/meetings/components/MeetingCard/UserSelectorModal.tsx', param: 'u', marker: 'sending={sendingToUserId === u.user_id}', helper: 'renderUserRow', type: 'OrgUserProfile', before: '  return (' },
 ]) {
   let source = read(config.file); const sf = parse(config.file, source); const callbacks = [];
