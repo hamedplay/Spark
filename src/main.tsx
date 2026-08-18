@@ -18,6 +18,7 @@ import './auth-reference-login-fixes.css';
 import './auth-login-unified-tabs.css';
 import './auth-login-theme-guard.css';
 import './auth-login-performance.css';
+import './auth-login-lunara-button.css';
 import './auth-login-unified-tabs.ts';
 import './auth-pointer-glow.ts';
 
