@@ -1,10 +1,8 @@
-import './auth-modern.css';
 import { lazy, Suspense, useState, useEffect } from 'react';
-import { AuthPage } from './components/AuthPage';
 import { RestrictedAccessPage } from './components/RestrictedAccessPage';
 import { SparkLoader } from './components/ui/SparkLoader';
 import { supabase } from './lib/supabase';
-import toast, { Toaster } from 'react-hot-toast';
+import { Toaster } from 'react-hot-toast';
 import { Wrench } from 'lucide-react';
 import { useUserPreferences, UserPreferencesProvider } from './features/user-preferences';
 import { useAuthSession } from './features/auth';
@@ -162,7 +160,6 @@ export default function AuthenticatedApp() {
 
 function AuthenticatedAppContent() {
   const authSession = useAuthSession();
-  const [authPageKey, setAuthPageKey] = useState(0);
   const {
     loading,
     hasSession,
@@ -177,30 +174,11 @@ function AuthenticatedAppContent() {
     return <SparkLoader message="در حال بررسی نشست و دسترسی‌ها..." />;
   }
 
+  // Root App.tsx is the single owner of public-vs-authenticated routing.
+  // Rendering a second AuthPage here after signOut caused two auth trees to race
+  // while the root listener was switching back to PublicAuthRoot.
   if (!hasSession) {
-    return (
-      <>
-        <AppToaster />
-        <div className="spark-auth-flow min-h-screen">
-          <AuthPage
-            key={authPageKey}
-            onSuccess={() => {
-              void (async () => {
-                const { data: { session } } = await supabase.auth.getSession();
-
-                if (session) {
-                  await refreshAccessState();
-                  return;
-                }
-
-                setAuthPageKey(value => value + 1);
-                toast.success('خوش آمدید! ثبت‌نام شما با موفقیت انجام شد. اکنون با نام کاربری، ایمیل یا شماره موبایل و رمز عبور خود وارد شوید.');
-              })();
-            }}
-          />
-        </div>
-      </>
-    );
+    return <SparkLoader message="در حال خروج..." />;
   }
 
   const authenticatedContent = !isFullyAuthorized ? (
