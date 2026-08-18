@@ -1,4 +1,4 @@
-# retry: tighten direct UserRow callback matcher
+# retry: use AST-aware direct callback matchers
 name: Cleanup deterministic duplicates
 
 on:
@@ -53,7 +53,44 @@ jobs:
           new = "if (text.trim().startsWith('u => (') && text.includes('<UserRow') && text.includes('sendingToUserId')) arrows.push(node.arguments[0]);"
           if text.count(old) != 1:
               raise SystemExit(f'expected one UserRow matcher, found {text.count(old)}')
-          p.write_text(text.replace(old, new))
+          text = text.replace(old, new)
+
+          start_marker = '// ── VideoArea promotion callback defined once'
+          end_marker = "console.log('deterministic duplicate cleanup completed');"
+          start = text.find(start_marker)
+          end = text.find(end_marker)
+          if start < 0 or end < 0 or start >= end:
+              raise SystemExit('VideoArea transform section markers not found')
+          replacement = r'''// ── VideoArea promotion callback defined once ────────────────────────────────
+{
+  const file = 'src/components/VideoConference/Room/VideoArea.tsx';
+  let source = read(file);
+  const sf = parse(file, source);
+  const targets = [];
+  const visit = (node) => {
+    if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && ['onPromoteThumbnail', 'onPromoteSidebar'].includes(node.name.text)) {
+      const expr = node.initializer && ts.isJsxExpression(node.initializer) ? node.initializer.expression : null;
+      if (expr && ts.isArrowFunction(expr)) targets.push(expr);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  if (targets.length !== 2) throw new Error(`VideoArea promote callbacks expected 2, found ${targets.length}`);
+  const normalizedBodies = targets.map(fn => fn.body.getText(sf).replace(/\s+/g, ''));
+  if (normalizedBodies[0] !== normalizedBodies[1]) throw new Error('VideoArea promote callback bodies differ');
+  targets.sort((a,b)=>b.getStart(sf)-a.getStart(sf));
+  for (const fn of targets) source = source.slice(0,fn.getStart(sf)) + 'promoteTile' + source.slice(fn.getEnd());
+  const marker = '  // ── Gallery';
+  const at = source.indexOf(marker);
+  if (at < 0) throw new Error('VideoArea gallery marker not found');
+  const helper = `  const promoteTile = (peerId: string) => setTileOrder(prev => {\n    const ids = orderedTiles.map(tile => tile.peerId);\n    const index = ids.indexOf(peerId);\n    if (index <= 0) return prev;\n    const next = [...ids];\n    next.splice(index, 1);\n    next.unshift(peerId);\n    return next;\n  });\n\n`;
+  source = source.slice(0,at) + helper + source.slice(at);
+  write(file, source);
+}
+
+'''
+          text = text[:start] + replacement + text[end:]
+          p.write_text(text)
           PY
           node scripts/cleanup-deterministic-duplicates.mjs >> /tmp/deterministic-duplicates.log 2>&1
           transform_rc=$?
