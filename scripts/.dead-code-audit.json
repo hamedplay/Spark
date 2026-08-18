@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-18T16:55:59.756Z",
+  "generated_at": "2026-08-18T16:56:57.380Z",
   "code_files": 650,
   "production_entries": [
     "src/main.tsx",
@@ -92,26 +92,53 @@
     "src/shared/repositories/publicProfileRepository.ts",
     "src/vite-env.d.ts"
   ],
-  "strong_dead_file_candidates": [
-    "src/app/hooks/useMaintenanceMode.ts",
-    "src/app/hooks/useSparkVisibility.ts",
-    "src/components/Minutes/Form/JalaliDateField.tsx",
-    "src/components/PortalConfig/AuditLists.tsx",
-    "src/components/PortalConfig/BaleOtpConfigCard.tsx",
-    "src/components/PortalConfig/PhoneSyncCard.tsx",
-    "src/components/TelegramWebhookSetup.tsx",
-    "src/components/ThemeToggle.tsx",
-    "src/components/VideoConference/Room/SidePanelHeader.tsx",
-    "src/features/auth/services/recoveryService.ts",
-    "src/features/meetings/components/MeetingCard/MeetingEditForm.tsx",
-    "src/shared/repositories/publicProfileRepository.ts",
-    "src/vite-env.d.ts"
-  ],
+  "strong_dead_file_candidates": [],
   "unreachable_with_references": [
+    {
+      "file": "src/app/hooks/useMaintenanceMode.ts",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/app/hooks/useSparkVisibility.ts",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/components/Minutes/Form/JalaliDateField.tsx",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/components/PortalConfig/AuditLists.tsx",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/components/PortalConfig/BaleOtpConfigCard.tsx",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
     {
       "file": "src/components/PortalConfig/MfaPanel.tsx",
       "incoming": [],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
         "tests/phase3/phase3bSecurity.test.ts",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
@@ -121,6 +148,8 @@
       "file": "src/components/PortalConfig/PasswordRecoveryCard.tsx",
       "incoming": [],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/auth/authSecurityConfig.test.ts"
       ]
     },
@@ -128,7 +157,41 @@
       "file": "src/components/PortalConfig/PhoneLoginToggleCard.tsx",
       "incoming": [],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/auth/authSecurityConfig.test.ts"
+      ]
+    },
+    {
+      "file": "src/components/PortalConfig/PhoneSyncCard.tsx",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/components/TelegramWebhookSetup.tsx",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/components/ThemeToggle.tsx",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/components/VideoConference/Room/SidePanelHeader.tsx",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
       ]
     },
     {
@@ -136,7 +199,18 @@
       "incoming": [
         "src/features/security-administration/components/HealthCheckPanel.tsx"
       ],
-      "textual_references": []
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/features/auth/services/recoveryService.ts",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
     },
     {
       "file": "src/features/auth/types/healthCheck.ts",
@@ -145,6 +219,8 @@
         "src/features/security-administration/components/HealthCheckPanel.tsx"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase8FinalAuthClosure.test.ts",
         "tests/phase8SecurityVerification.test.ts"
       ]
@@ -156,6 +232,8 @@
       ],
       "textual_references": [
         "public/sw.js",
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/auth/authSecurityConfig.test.ts",
         "tests/auth/phoneRecoveryConfigRegression.test.ts",
         "tests/phase3/phase3bSecurity.test.ts",
@@ -171,11 +249,21 @@
       ]
     },
     {
+      "file": "src/features/meetings/components/MeetingCard/MeetingEditForm.tsx",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
       "file": "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
       "incoming": [
         "src/features/security-administration/components/AccountLifecycleManagement.tsx"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase4/phase4Lifecycle.test.ts"
       ]
     },
@@ -184,7 +272,10 @@
       "incoming": [
         "src/features/security-administration/components/AccountLifecycleManagement.tsx"
       ],
-      "textual_references": []
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
     },
     {
       "file": "src/features/security-administration/components/AccountLifecycleManagement.tsx",
@@ -192,6 +283,8 @@
         "src/features/security-administration/components/SecurityControlCenter.tsx"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase4/phase4Lifecycle.test.ts"
       ]
     },
@@ -200,14 +293,20 @@
       "incoming": [
         "src/features/security-administration/components/SecurityControlCenter.tsx"
       ],
-      "textual_references": []
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
     },
     {
       "file": "src/features/security-administration/components/SecurityAdminHistory.tsx",
       "incoming": [
         "src/features/security-administration/components/SecurityAdminManagement.tsx"
       ],
-      "textual_references": []
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
     },
     {
       "file": "src/features/security-administration/components/SecurityAdminManagement.tsx",
@@ -216,6 +315,8 @@
         "src/features/security-administration/index.ts"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
       ]
@@ -226,6 +327,8 @@
         "src/features/security-administration/components/SecurityAdminManagement.tsx"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
       ]
@@ -237,6 +340,8 @@
         "src/features/security-administration/index.ts"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts",
         "tests/phase4/phase4Lifecycle.test.ts"
@@ -248,6 +353,8 @@
         "src/features/security-administration/components/SecurityAuditConsole.tsx"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
       ]
@@ -258,6 +365,8 @@
         "src/features/security-administration/index.ts"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3bSecurity.test.ts",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts",
@@ -269,7 +378,10 @@
       "incoming": [
         "src/components/PortalConfig/MfaPanel.tsx"
       ],
-      "textual_references": []
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
     },
     {
       "file": "src/features/security-administration/services/accountLifecycleService.ts",
@@ -278,7 +390,10 @@
         "src/features/security-administration/components/AccountLifecycleHistory.tsx",
         "src/features/security-administration/components/AccountLifecycleManagement.tsx"
       ],
-      "textual_references": []
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
     },
     {
       "file": "src/features/security-administration/services/securityAdministrationService.ts",
@@ -288,6 +403,8 @@
         "src/features/security-administration/components/SecurityControlCenter.tsx"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
       ]
@@ -300,7 +417,10 @@
         "src/features/security-administration/components/AccountLifecycleManagement.tsx",
         "src/features/security-administration/services/accountLifecycleService.ts"
       ],
-      "textual_references": []
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
     },
     {
       "file": "src/features/security-administration/types/securityAdministration.ts",
@@ -316,6 +436,8 @@
         "src/features/security-administration/utils/securityAdministrationValidation.ts"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
       ]
@@ -328,6 +450,8 @@
         "src/features/security-administration/services/securityAdministrationService.ts"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
       ]
@@ -339,6 +463,8 @@
         "src/features/security-administration/components/SecurityAuditDetails.tsx"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
       ]
@@ -349,8 +475,25 @@
         "src/features/security-administration/components/SecurityAuditConsole.tsx"
       ],
       "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/shared/repositories/publicProfileRepository.ts",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json",
+        "scripts/.jscpd-audit.json"
+      ]
+    },
+    {
+      "file": "src/vite-env.d.ts",
+      "incoming": [],
+      "textual_references": [
+        "scripts/.dead-code-audit.json"
       ]
     }
   ],
