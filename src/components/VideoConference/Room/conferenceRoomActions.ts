@@ -2,23 +2,21 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import toast from 'react-hot-toast';
 import { stopAllDiagnostics } from '../../../lib/webrtcDiagnostics';
 import type { PeerConnection } from '../types';
+import type { ConferenceSupabaseClient } from '../conferenceClient';
 import type { RoleType } from './roleConstants';
 import { ROLE_LABELS } from './roleConstants';
-import type { useConferenceClient } from '../conferenceClient';
-
-type ConferenceClient = ReturnType<typeof useConferenceClient>;
 
 type SignalSender = (peerId: string | null, type: string, data: object) => void;
 
 interface ConferenceRoomActionsContext {
-  supabase: ConferenceClient;
+  supabase: ConferenceSupabaseClient;
   roomId: string;
   roomCode: string;
   currentUserId: string;
   currentUserName: string;
   peersRef: MutableRefObject<Map<string, PeerConnection>>;
   screenStreamRef: MutableRefObject<MediaStream | null>;
-  channelRef: MutableRefObject<ReturnType<ConferenceClient['channel']> | null>;
+  channelRef: MutableRefObject<ReturnType<ConferenceSupabaseClient['channel']> | null>;
   sendSignal: SignalSender;
   sendSignalRef: MutableRefObject<SignalSender>;
   setPeers: Dispatch<SetStateAction<Map<string, PeerConnection>>>;
