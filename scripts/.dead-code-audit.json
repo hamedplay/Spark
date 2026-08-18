@@ -1,0 +1,906 @@
+{
+  "generated_at": "2026-08-18T16:55:59.756Z",
+  "code_files": 650,
+  "production_entries": [
+    "src/main.tsx",
+    "supabase/functions/admin-delete-user/index.ts",
+    "supabase/functions/admin-retire-user/index.ts",
+    "supabase/functions/admin-user-lifecycle/index.ts",
+    "supabase/functions/admin-users/index.ts",
+    "supabase/functions/auth-health-check/index.ts",
+    "supabase/functions/auth-send-sms-hook/index.ts",
+    "supabase/functions/avatar-upload/index.ts",
+    "supabase/functions/backup-data/index.ts",
+    "supabase/functions/bale-link-generate/index.ts",
+    "supabase/functions/bale-webhook/index.ts",
+    "supabase/functions/bulk-sync-profile-phones/index.ts",
+    "supabase/functions/change-user-phone/index.ts",
+    "supabase/functions/check-auth-env-secrets/index.ts",
+    "supabase/functions/check-phone-password-reset-runtime/index.ts",
+    "supabase/functions/complete-phone-password-reset/index.ts",
+    "supabase/functions/csp-report/index.ts",
+    "supabase/functions/custom-mfa/index.ts",
+    "supabase/functions/delegate-meeting/index.ts",
+    "supabase/functions/messenger-proxy/index.ts",
+    "supabase/functions/minutes-attachment-cleanup/index.ts",
+    "supabase/functions/minutes-attachment-upload/index.ts",
+    "supabase/functions/password-login/index.ts",
+    "supabase/functions/phone-orphan-repair/index.ts",
+    "supabase/functions/process-decision-due-overdue/index.ts",
+    "supabase/functions/process-minutes-reminders/index.ts",
+    "supabase/functions/process-notification-outbox/index.ts",
+    "supabase/functions/rahyab-sms/index.ts",
+    "supabase/functions/request-phone-login-otp-v2/index.ts",
+    "supabase/functions/request-phone-login-otp/index.ts",
+    "supabase/functions/request-phone-password-reset-otp/index.ts",
+    "supabase/functions/request-public-registration-otp/index.ts",
+    "supabase/functions/restore-backup/index.ts",
+    "supabase/functions/scheduler-dispatch/index.ts",
+    "supabase/functions/send-bale-message/index.ts",
+    "supabase/functions/send-daily-meetings/index.ts",
+    "supabase/functions/send-sms/index.ts",
+    "supabase/functions/session-management/index.ts",
+    "supabase/functions/spark-ai/index.ts",
+    "supabase/functions/sync-profile-phone-to-auth/index.ts",
+    "supabase/functions/telegram-link-generate/index.ts",
+    "supabase/functions/telegram-send-photo/index.ts",
+    "supabase/functions/telegram-webhook/index.ts",
+    "supabase/functions/unified-recovery/index.ts",
+    "supabase/functions/username-login/index.ts",
+    "supabase/functions/verify-phone-login-otp-v2/index.ts",
+    "supabase/functions/verify-phone-login-otp/index.ts",
+    "supabase/functions/verify-phone-password-reset-otp/index.ts",
+    "supabase/functions/verify-public-registration-otp/index.ts"
+  ],
+  "production_reachable": 613,
+  "production_unreachable": [
+    "src/app/hooks/useMaintenanceMode.ts",
+    "src/app/hooks/useSparkVisibility.ts",
+    "src/components/Minutes/Form/JalaliDateField.tsx",
+    "src/components/PortalConfig/AuditLists.tsx",
+    "src/components/PortalConfig/BaleOtpConfigCard.tsx",
+    "src/components/PortalConfig/MfaPanel.tsx",
+    "src/components/PortalConfig/PasswordRecoveryCard.tsx",
+    "src/components/PortalConfig/PhoneLoginToggleCard.tsx",
+    "src/components/PortalConfig/PhoneSyncCard.tsx",
+    "src/components/TelegramWebhookSetup.tsx",
+    "src/components/ThemeToggle.tsx",
+    "src/components/VideoConference/Room/SidePanelHeader.tsx",
+    "src/features/auth/services/healthCheckService.ts",
+    "src/features/auth/services/recoveryService.ts",
+    "src/features/auth/types/healthCheck.ts",
+    "src/features/auth/types/recovery.ts",
+    "src/features/meetings/components/MeetingCard/MeetingEditForm.tsx",
+    "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
+    "src/features/security-administration/components/AccountLifecycleHistory.tsx",
+    "src/features/security-administration/components/AccountLifecycleManagement.tsx",
+    "src/features/security-administration/components/HealthCheckPanel.tsx",
+    "src/features/security-administration/components/SecurityAdminHistory.tsx",
+    "src/features/security-administration/components/SecurityAdminManagement.tsx",
+    "src/features/security-administration/components/SecurityAdminRoleDialog.tsx",
+    "src/features/security-administration/components/SecurityAuditConsole.tsx",
+    "src/features/security-administration/components/SecurityAuditDetails.tsx",
+    "src/features/security-administration/components/SecurityControlCenter.tsx",
+    "src/features/security-administration/index.ts",
+    "src/features/security-administration/services/accountLifecycleService.ts",
+    "src/features/security-administration/services/securityAdministrationService.ts",
+    "src/features/security-administration/types/accountLifecycle.ts",
+    "src/features/security-administration/types/securityAdministration.ts",
+    "src/features/security-administration/utils/securityAdministrationValidation.ts",
+    "src/features/security-administration/utils/securityAuditLabels.ts",
+    "src/features/security-administration/utils/tehranDateRange.ts",
+    "src/shared/repositories/publicProfileRepository.ts",
+    "src/vite-env.d.ts"
+  ],
+  "strong_dead_file_candidates": [
+    "src/app/hooks/useMaintenanceMode.ts",
+    "src/app/hooks/useSparkVisibility.ts",
+    "src/components/Minutes/Form/JalaliDateField.tsx",
+    "src/components/PortalConfig/AuditLists.tsx",
+    "src/components/PortalConfig/BaleOtpConfigCard.tsx",
+    "src/components/PortalConfig/PhoneSyncCard.tsx",
+    "src/components/TelegramWebhookSetup.tsx",
+    "src/components/ThemeToggle.tsx",
+    "src/components/VideoConference/Room/SidePanelHeader.tsx",
+    "src/features/auth/services/recoveryService.ts",
+    "src/features/meetings/components/MeetingCard/MeetingEditForm.tsx",
+    "src/shared/repositories/publicProfileRepository.ts",
+    "src/vite-env.d.ts"
+  ],
+  "unreachable_with_references": [
+    {
+      "file": "src/components/PortalConfig/MfaPanel.tsx",
+      "incoming": [],
+      "textual_references": [
+        "tests/phase3/phase3bSecurity.test.ts",
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/components/PortalConfig/PasswordRecoveryCard.tsx",
+      "incoming": [],
+      "textual_references": [
+        "tests/auth/authSecurityConfig.test.ts"
+      ]
+    },
+    {
+      "file": "src/components/PortalConfig/PhoneLoginToggleCard.tsx",
+      "incoming": [],
+      "textual_references": [
+        "tests/auth/authSecurityConfig.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/auth/services/healthCheckService.ts",
+      "incoming": [
+        "src/features/security-administration/components/HealthCheckPanel.tsx"
+      ],
+      "textual_references": []
+    },
+    {
+      "file": "src/features/auth/types/healthCheck.ts",
+      "incoming": [
+        "src/features/auth/services/healthCheckService.ts",
+        "src/features/security-administration/components/HealthCheckPanel.tsx"
+      ],
+      "textual_references": [
+        "tests/phase8FinalAuthClosure.test.ts",
+        "tests/phase8SecurityVerification.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/auth/types/recovery.ts",
+      "incoming": [
+        "src/features/auth/services/recoveryService.ts"
+      ],
+      "textual_references": [
+        "public/sw.js",
+        "tests/auth/authSecurityConfig.test.ts",
+        "tests/auth/phoneRecoveryConfigRegression.test.ts",
+        "tests/phase3/phase3bSecurity.test.ts",
+        "tests/phase5/phase5PhoneOtpLoginUi.test.ts",
+        "tests/phase5/phase5PhoneOtpRequestEdge.test.ts",
+        "tests/phase6Closure.test.ts",
+        "tests/phase6CustomMfa.test.ts",
+        "tests/phase7RecoveryLockSession.test.ts",
+        "tests/phase8/phase8RemainingReadyGates.test.mjs",
+        "tests/phase8/phase8RuntimeP0Closure.test.mjs",
+        "tests/phase8FinalAuthClosure.test.ts",
+        "tests/phase8SecurityVerification.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
+      "incoming": [
+        "src/features/security-administration/components/AccountLifecycleManagement.tsx"
+      ],
+      "textual_references": [
+        "tests/phase4/phase4Lifecycle.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/components/AccountLifecycleHistory.tsx",
+      "incoming": [
+        "src/features/security-administration/components/AccountLifecycleManagement.tsx"
+      ],
+      "textual_references": []
+    },
+    {
+      "file": "src/features/security-administration/components/AccountLifecycleManagement.tsx",
+      "incoming": [
+        "src/features/security-administration/components/SecurityControlCenter.tsx"
+      ],
+      "textual_references": [
+        "tests/phase4/phase4Lifecycle.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/components/HealthCheckPanel.tsx",
+      "incoming": [
+        "src/features/security-administration/components/SecurityControlCenter.tsx"
+      ],
+      "textual_references": []
+    },
+    {
+      "file": "src/features/security-administration/components/SecurityAdminHistory.tsx",
+      "incoming": [
+        "src/features/security-administration/components/SecurityAdminManagement.tsx"
+      ],
+      "textual_references": []
+    },
+    {
+      "file": "src/features/security-administration/components/SecurityAdminManagement.tsx",
+      "incoming": [
+        "src/features/security-administration/components/SecurityControlCenter.tsx",
+        "src/features/security-administration/index.ts"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/components/SecurityAdminRoleDialog.tsx",
+      "incoming": [
+        "src/features/security-administration/components/SecurityAdminManagement.tsx"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/components/SecurityAuditConsole.tsx",
+      "incoming": [
+        "src/features/security-administration/components/SecurityControlCenter.tsx",
+        "src/features/security-administration/index.ts"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts",
+        "tests/phase4/phase4Lifecycle.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/components/SecurityAuditDetails.tsx",
+      "incoming": [
+        "src/features/security-administration/components/SecurityAuditConsole.tsx"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/components/SecurityControlCenter.tsx",
+      "incoming": [
+        "src/features/security-administration/index.ts"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3bSecurity.test.ts",
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts",
+        "tests/phase4/phase4Lifecycle.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/index.ts",
+      "incoming": [
+        "src/components/PortalConfig/MfaPanel.tsx"
+      ],
+      "textual_references": []
+    },
+    {
+      "file": "src/features/security-administration/services/accountLifecycleService.ts",
+      "incoming": [
+        "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
+        "src/features/security-administration/components/AccountLifecycleHistory.tsx",
+        "src/features/security-administration/components/AccountLifecycleManagement.tsx"
+      ],
+      "textual_references": []
+    },
+    {
+      "file": "src/features/security-administration/services/securityAdministrationService.ts",
+      "incoming": [
+        "src/features/security-administration/components/SecurityAdminManagement.tsx",
+        "src/features/security-administration/components/SecurityAuditConsole.tsx",
+        "src/features/security-administration/components/SecurityControlCenter.tsx"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/types/accountLifecycle.ts",
+      "incoming": [
+        "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
+        "src/features/security-administration/components/AccountLifecycleHistory.tsx",
+        "src/features/security-administration/components/AccountLifecycleManagement.tsx",
+        "src/features/security-administration/services/accountLifecycleService.ts"
+      ],
+      "textual_references": []
+    },
+    {
+      "file": "src/features/security-administration/types/securityAdministration.ts",
+      "incoming": [
+        "src/features/security-administration/components/SecurityAdminHistory.tsx",
+        "src/features/security-administration/components/SecurityAdminManagement.tsx",
+        "src/features/security-administration/components/SecurityAdminRoleDialog.tsx",
+        "src/features/security-administration/components/SecurityAuditConsole.tsx",
+        "src/features/security-administration/components/SecurityAuditDetails.tsx",
+        "src/features/security-administration/components/SecurityControlCenter.tsx",
+        "src/features/security-administration/index.ts",
+        "src/features/security-administration/services/securityAdministrationService.ts",
+        "src/features/security-administration/utils/securityAdministrationValidation.ts"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/utils/securityAdministrationValidation.ts",
+      "incoming": [
+        "src/features/security-administration/components/SecurityAdminManagement.tsx",
+        "src/features/security-administration/components/SecurityControlCenter.tsx",
+        "src/features/security-administration/services/securityAdministrationService.ts"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/utils/securityAuditLabels.ts",
+      "incoming": [
+        "src/features/security-administration/components/SecurityAuditConsole.tsx",
+        "src/features/security-administration/components/SecurityAuditDetails.tsx"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    },
+    {
+      "file": "src/features/security-administration/utils/tehranDateRange.ts",
+      "incoming": [
+        "src/features/security-administration/components/SecurityAuditConsole.tsx"
+      ],
+      "textual_references": [
+        "tests/phase3/phase3cSecurity.test.ts",
+        "tests/phase3/phase3cSecurityService.test.ts"
+      ]
+    }
+  ],
+  "duplicate_files": [
+    [
+      "supabase/functions/request-phone-login-otp/index.ts",
+      "supabase/functions/verify-phone-login-otp/index.ts"
+    ]
+  ],
+  "exact_duplicate_functions": [
+    {
+      "hash": "648a831975be5cb08755e4ea672de149f69e8d1aad51c00e18e9bd8d26d113da",
+      "items": [
+        {
+          "file": "supabase/functions/request-phone-login-otp/index.ts",
+          "line": 30,
+          "name": "(anonymous)",
+          "lines": 30
+        },
+        {
+          "file": "supabase/functions/verify-phone-login-otp/index.ts",
+          "line": 30,
+          "name": "(anonymous)",
+          "lines": 30
+        }
+      ]
+    },
+    {
+      "hash": "65968921ddd88a88ff13742d08dfb6284dba84e6fb9b743aadae11ae1466df71",
+      "items": [
+        {
+          "file": "supabase/functions/admin-delete-user/index.ts",
+          "line": 32,
+          "name": "responseHeaders",
+          "lines": 10
+        },
+        {
+          "file": "supabase/functions/admin-retire-user/index.ts",
+          "line": 32,
+          "name": "responseHeaders",
+          "lines": 10
+        },
+        {
+          "file": "supabase/functions/admin-user-lifecycle/index.ts",
+          "line": 32,
+          "name": "responseHeaders",
+          "lines": 10
+        },
+        {
+          "file": "supabase/functions/auth-health-check/index.ts",
+          "line": 19,
+          "name": "responseHeaders",
+          "lines": 10
+        },
+        {
+          "file": "supabase/functions/bulk-sync-profile-phones/index.ts",
+          "line": 28,
+          "name": "responseHeaders",
+          "lines": 10
+        }
+      ]
+    },
+    {
+      "hash": "7c376510c8ed791e4d110cfdc161ba6d0db99e4071de57c289839518849ac28e",
+      "items": [
+        {
+          "file": "src/components/CalendarMeetingForm/MultiSelectField.tsx",
+          "line": 56,
+          "name": "(anonymous)",
+          "lines": 20
+        },
+        {
+          "file": "src/features/meetings/components/CreateMeetingForm/MultiSelectField.tsx",
+          "line": 57,
+          "name": "(anonymous)",
+          "lines": 20
+        }
+      ]
+    },
+    {
+      "hash": "7469c8120cc93a590bc99109a65d5efcb699bc48795d5f5108439eb422071687",
+      "items": [
+        {
+          "file": "supabase/functions/_shared/registration-security.ts",
+          "line": 99,
+          "name": "normalizeIranPhone",
+          "lines": 8
+        },
+        {
+          "file": "supabase/functions/admin-users/index.ts",
+          "line": 11,
+          "name": "normalizeIranPhone",
+          "lines": 8
+        },
+        {
+          "file": "supabase/functions/bulk-sync-profile-phones/index.ts",
+          "line": 47,
+          "name": "normalizeIranPhone",
+          "lines": 8
+        },
+        {
+          "file": "supabase/functions/change-user-phone/index.ts",
+          "line": 11,
+          "name": "normalizeIranPhone",
+          "lines": 8
+        },
+        {
+          "file": "supabase/functions/sync-profile-phone-to-auth/index.ts",
+          "line": 11,
+          "name": "normalizeIranPhone",
+          "lines": 8
+        }
+      ]
+    },
+    {
+      "hash": "f5fbc20953fb4fa27d7456cee7be188b4f521ad67afc4113a3adb4643f0c1195",
+      "items": [
+        {
+          "file": "supabase/functions/admin-delete-user/index.ts",
+          "line": 18,
+          "name": "getAllowedOrigins",
+          "lines": 13
+        },
+        {
+          "file": "supabase/functions/admin-retire-user/index.ts",
+          "line": 18,
+          "name": "getAllowedOrigins",
+          "lines": 13
+        },
+        {
+          "file": "supabase/functions/admin-user-lifecycle/index.ts",
+          "line": 18,
+          "name": "getAllowedOrigins",
+          "lines": 13
+        }
+      ]
+    },
+    {
+      "hash": "222a99d200f4bb96ed069b7c8025fcef8d7a94d76edb48af02e16855b50b96bd",
+      "items": [
+        {
+          "file": "src/components/MeetingInboxButton.tsx",
+          "line": 458,
+          "name": "(anonymous)",
+          "lines": 18
+        },
+        {
+          "file": "src/components/MeetingInboxButton.tsx",
+          "line": 493,
+          "name": "(anonymous)",
+          "lines": 18
+        }
+      ]
+    },
+    {
+      "hash": "7716e1be0f7b549eb3fb4fa34fc01926f7e8e38769de4b07d75ca7b2a8dbcf7a",
+      "items": [
+        {
+          "file": "src/components/Channels/ChannelActionsPanel.tsx",
+          "line": 258,
+          "name": "(anonymous)",
+          "lines": 15
+        },
+        {
+          "file": "src/components/Chat/ChatActionsPanel.tsx",
+          "line": 292,
+          "name": "(anonymous)",
+          "lines": 15
+        }
+      ]
+    },
+    {
+      "hash": "dfacf22759e0164c2d891c603354fcb741584ccf53d6226fae378cf5b24a18f2",
+      "items": [
+        {
+          "file": "src/components/SmsConfig/TemplatesTab.tsx",
+          "line": 81,
+          "name": "(anonymous)",
+          "lines": 14
+        },
+        {
+          "file": "src/components/SmsConfig/TemplatesTab.tsx",
+          "line": 311,
+          "name": "(anonymous)",
+          "lines": 14
+        }
+      ]
+    },
+    {
+      "hash": "df3463df908ee1a00459707c61abc44a71dd8aaa1bff369b1f0f12c63ccf3151",
+      "items": [
+        {
+          "file": "supabase/functions/process-decision-due-overdue/index.ts",
+          "line": 9,
+          "name": "timingSafeCompare",
+          "lines": 9
+        },
+        {
+          "file": "supabase/functions/process-minutes-reminders/index.ts",
+          "line": 9,
+          "name": "timingSafeCompare",
+          "lines": 9
+        },
+        {
+          "file": "supabase/functions/process-notification-outbox/index.ts",
+          "line": 35,
+          "name": "timingSafeCompare",
+          "lines": 9
+        }
+      ]
+    },
+    {
+      "hash": "196c4fc68f86b2666af21a72f78dfbf2a355a15847f75684dbe8cbe20a1539e3",
+      "items": [
+        {
+          "file": "src/app/layout/components/UserSettingsModal.tsx",
+          "line": 319,
+          "name": "(anonymous)",
+          "lines": 13
+        },
+        {
+          "file": "src/app/layout/components/UserSettingsModal.tsx",
+          "line": 355,
+          "name": "(anonymous)",
+          "lines": 13
+        }
+      ]
+    },
+    {
+      "hash": "17292350cb20d101b172085eca9412a8f551c2e92d663468731854cafd8e03cd",
+      "items": [
+        {
+          "file": "supabase/functions/request-phone-login-otp/index.ts",
+          "line": 16,
+          "name": "getConfig",
+          "lines": 13
+        },
+        {
+          "file": "supabase/functions/verify-phone-login-otp/index.ts",
+          "line": 16,
+          "name": "getConfig",
+          "lines": 13
+        }
+      ]
+    },
+    {
+      "hash": "7d8b16575278695f88007463ddbaf9ad5f5303f25bba32fc6a479fc0acc06e59",
+      "items": [
+        {
+          "file": "src/components/OrgStructure/OrgPermissionsPanel.tsx",
+          "line": 136,
+          "name": "(anonymous)",
+          "lines": 12
+        },
+        {
+          "file": "src/components/OrgStructure/OrgPermissionsPanel.tsx",
+          "line": 156,
+          "name": "(anonymous)",
+          "lines": 12
+        }
+      ]
+    },
+    {
+      "hash": "0fc072b1b80eb01ba639c328950c076519e3df9d1c7abad9c3eee74fc11ecdfc",
+      "items": [
+        {
+          "file": "supabase/functions/_shared/phoneOtpLoginV2.ts",
+          "line": 20,
+          "name": "hmacSha256Hex",
+          "lines": 12
+        },
+        {
+          "file": "supabase/functions/password-login/index.ts",
+          "line": 54,
+          "name": "hmacSha256Hex",
+          "lines": 12
+        }
+      ]
+    },
+    {
+      "hash": "c0e5fec2b58b413a300fd124c9631a4ca4433e4d5a38637abc7e555d6a2a10fd",
+      "items": [
+        {
+          "file": "src/components/Channels/ChannelInputBar.tsx",
+          "line": 577,
+          "name": "(anonymous)",
+          "lines": 11
+        },
+        {
+          "file": "src/components/Chat/ChatInputBar.tsx",
+          "line": 819,
+          "name": "(anonymous)",
+          "lines": 12
+        }
+      ]
+    },
+    {
+      "hash": "5aa6242faeb95b316e651c0c796cc527e32b9e5d7236e99afdba8248e1b0b2fa",
+      "items": [
+        {
+          "file": "src/components/Channels/ChannelInputBar.tsx",
+          "line": 100,
+          "name": "(anonymous)",
+          "lines": 11
+        },
+        {
+          "file": "src/components/Chat/ChatInputBar.tsx",
+          "line": 113,
+          "name": "(anonymous)",
+          "lines": 11
+        }
+      ]
+    },
+    {
+      "hash": "e7c0a31fd6964e7abce0f1105c449cea79f3de6f62a87473c2e41750dc75e1c9",
+      "items": [
+        {
+          "file": "src/features/meetings/components/MeetingCard/UserSelectorModal.tsx",
+          "line": 192,
+          "name": "(anonymous)",
+          "lines": 11
+        },
+        {
+          "file": "src/features/meetings/components/MeetingCard/UserSelectorModal.tsx",
+          "line": 232,
+          "name": "(anonymous)",
+          "lines": 11
+        }
+      ]
+    },
+    {
+      "hash": "7bf0a25444f7959488b874c6c494eb1efd372fa8e08a45af7023c2bd9b4ca2c2",
+      "items": [
+        {
+          "file": "src/components/CalendarMeetingForm.tsx",
+          "line": 105,
+          "name": "(anonymous)",
+          "lines": 10
+        },
+        {
+          "file": "src/features/meetings/components/CreateMeetingForm.tsx",
+          "line": 88,
+          "name": "(anonymous)",
+          "lines": 10
+        }
+      ]
+    },
+    {
+      "hash": "bda34699597e8580ab185dda5b294f41a6e749d04e1c4da5e6dc6da85d64d752",
+      "items": [
+        {
+          "file": "src/components/OrgStructure/Spinner.tsx",
+          "line": 1,
+          "name": "Spinner",
+          "lines": 10
+        },
+        {
+          "file": "src/components/SparkConfig/constants.tsx",
+          "line": 78,
+          "name": "Spinner",
+          "lines": 10
+        }
+      ]
+    },
+    {
+      "hash": "1ff3d935355d43be8384796a2c9d7a6e6bad5a8b2539d07b29946c8f3cc2da15",
+      "items": [
+        {
+          "file": "supabase/functions/admin-delete-user/index.ts",
+          "line": 43,
+          "name": "tokenClaims",
+          "lines": 10
+        },
+        {
+          "file": "supabase/functions/admin-user-lifecycle/index.ts",
+          "line": 43,
+          "name": "tokenClaims",
+          "lines": 10
+        }
+      ]
+    },
+    {
+      "hash": "10a01c886c2d4e83ee443d002d825d4e984e194d898a124e951505aeb02fe5de",
+      "items": [
+        {
+          "file": "supabase/functions/request-phone-login-otp-v2/index.ts",
+          "line": 23,
+          "name": "getPhoneAuthConfig",
+          "lines": 10
+        },
+        {
+          "file": "supabase/functions/verify-phone-login-otp-v2/index.ts",
+          "line": 28,
+          "name": "getPhoneAuthConfig",
+          "lines": 10
+        }
+      ]
+    },
+    {
+      "hash": "42e31492a834e71646621fecd7748e7d539424e4afc7a2197b3dfcd398605230",
+      "items": [
+        {
+          "file": "src/components/Channels/ChannelActionsPanel.tsx",
+          "line": 234,
+          "name": "(anonymous)",
+          "lines": 9
+        },
+        {
+          "file": "src/components/Chat/ChatActionsPanel.tsx",
+          "line": 268,
+          "name": "(anonymous)",
+          "lines": 9
+        }
+      ]
+    },
+    {
+      "hash": "e0c052822524896746cb81aa9351dc36c189cac479421a075e4ab9972a558093",
+      "items": [
+        {
+          "file": "src/components/VideoConference/Room/VideoArea.tsx",
+          "line": 117,
+          "name": "(anonymous)",
+          "lines": 9
+        },
+        {
+          "file": "src/components/VideoConference/Room/VideoArea.tsx",
+          "line": 137,
+          "name": "(anonymous)",
+          "lines": 9
+        }
+      ]
+    },
+    {
+      "hash": "25d987f7f3cb9764d5e9692af048c06704c18c88903a8304eccabfdee456b796",
+      "items": [
+        {
+          "file": "src/components/VideoConference/Room/VideoArea.tsx",
+          "line": 117,
+          "name": "(anonymous)",
+          "lines": 9
+        },
+        {
+          "file": "src/components/VideoConference/Room/VideoArea.tsx",
+          "line": 137,
+          "name": "(anonymous)",
+          "lines": 9
+        }
+      ]
+    },
+    {
+      "hash": "22fd16ed7de71663a73ac7605e3408d180ef1e1b170aa3d8f146cbb25ddcf64d",
+      "items": [
+        {
+          "file": "src/lib/meetingEditDiff.ts",
+          "line": 132,
+          "name": "computeParticipantDiff",
+          "lines": 9
+        },
+        {
+          "file": "src/lib/meetingEditDiff.ts",
+          "line": 142,
+          "name": "computeObserverDiff",
+          "lines": 9
+        }
+      ]
+    },
+    {
+      "hash": "15e434afe14928860a1f5ff8b442333beb509e23094e988eea4979cbfedf7cd2",
+      "items": [
+        {
+          "file": "src/lib/phoneNormalize.ts",
+          "line": 12,
+          "name": "normalizeIranPhone",
+          "lines": 10
+        },
+        {
+          "file": "supabase/functions/auth-send-sms-hook/index.ts",
+          "line": 13,
+          "name": "normalizeIranPhone",
+          "lines": 8
+        }
+      ]
+    },
+    {
+      "hash": "089b2f448bcd2289e860426d616ddb6ff51130d13b23f61ea08942b18675b14a",
+      "items": [
+        {
+          "file": "src/components/Minutes/Form/JalaliDateField.tsx",
+          "line": 34,
+          "name": "(anonymous)",
+          "lines": 8
+        },
+        {
+          "file": "src/components/Minutes/Form/JalaliDatePicker.tsx",
+          "line": 64,
+          "name": "(anonymous)",
+          "lines": 8
+        }
+      ]
+    },
+    {
+      "hash": "6657fc6f0fd43a4cc18f3bea83e10abb632adc3abd42e3f16e5c0c549ce9c19c",
+      "items": [
+        {
+          "file": "src/components/NotificationsConfig/Toggle.tsx",
+          "line": 1,
+          "name": "Toggle",
+          "lines": 8
+        },
+        {
+          "file": "src/components/SmsConfig/Toggle.tsx",
+          "line": 1,
+          "name": "Toggle",
+          "lines": 8
+        }
+      ]
+    },
+    {
+      "hash": "f005fcba1e776c942d842bd3f77be77a2597ffea83b1810f2bff5151f1992e05",
+      "items": [
+        {
+          "file": "src/components/PortalConfig/PasswordRecoveryCard.tsx",
+          "line": 171,
+          "name": "(anonymous)",
+          "lines": 8
+        },
+        {
+          "file": "src/components/PortalConfig/PhoneLoginToggleCard.tsx",
+          "line": 186,
+          "name": "(anonymous)",
+          "lines": 8
+        }
+      ]
+    },
+    {
+      "hash": "472d86c1038dbf6c3fb03d47308dc32b30117be0ee84c7859652abc523c94b23",
+      "items": [
+        {
+          "file": "src/components/UserGroupsPanel.tsx",
+          "line": 34,
+          "name": "(anonymous)",
+          "lines": 8
+        },
+        {
+          "file": "src/components/UserManagementPanel.tsx",
+          "line": 44,
+          "name": "(anonymous)",
+          "lines": 8
+        }
+      ]
+    }
+  ]
+}
