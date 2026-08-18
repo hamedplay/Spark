@@ -74,6 +74,21 @@ export async function requireFullAuthAccess(
 }
 
 /**
+ * Evaluates one application permission in the caller's own JWT context.
+ * The database helper includes the existing admin shortcut and FULL-session gate.
+ */
+export async function hasCurrentPermission(
+  auth: FullAuthResult,
+  permissionKey: string,
+): Promise<boolean> {
+  if (!auth.ok || !auth.userClient) return false;
+  const { data, error } = await auth.userClient.rpc("has_current_permission_v1", {
+    p_key: permissionKey,
+  });
+  return !error && data === true;
+}
+
+/**
  * Returns a JSON 403 response with a generic error code.
  */
 export function deniedResponse(): Response {
