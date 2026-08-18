@@ -182,7 +182,7 @@ for (const config of [
 {
   const file = 'src/app/layout/components/UserSettingsModal.tsx';
   let source = read(file); const sf = parse(file, source); const matches = [];
-  const visit = (node) => { if (ts.isCallExpression(node) && node.getText(sf).includes('Array.from({ length: 48 }') && node.getText(sf).includes('<option')) matches.push(node); ts.forEachChild(node, visit); };
+  const visit = (node) => { const text = node.getText(sf); if (ts.isCallExpression(node) && text.includes('Array.from(') && text.includes('length: 48') && text.includes('<option')) matches.push(node); ts.forEachChild(node, visit); };
   visit(sf);
   const unique = matches.filter((m) => !matches.some((other) => other !== m && other.pos <= m.pos && other.end >= m.end));
   if (unique.length !== 2) throw new Error(`UserSettings half-hour call count=${unique.length}`);
