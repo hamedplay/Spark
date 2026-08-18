@@ -1,0 +1,10 @@
+result=FAILED
+run_id=32192328064
+repair=skipped
+transform=skipped
+install=skipped
+config_test=skipped
+nav_test=skipped
+build=skipped
+diff=skipped
+commit=skipped
