@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
+REPO_API="https://api.github.com/repos/hamedplay/Spark"
 TARGET="/usr/local/lib/spark-manager"
 CLI_PATH="/usr/local/bin/spark"
 
@@ -14,6 +14,28 @@ command -v curl >/dev/null 2>&1 || {
   echo "curl is required. Install curl first." >&2
   exit 1
 }
+
+resolve_main_sha() {
+  local response sha
+  response="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+    -H 'Cache-Control: no-cache' \
+    "${REPO_API}/commits/main?nocache=$(date +%s)")" || {
+      echo "Unable to resolve current Spark main commit from GitHub API." >&2
+      return 1
+    }
+  sha="$(printf '%s' "$response" \
+    | grep -m1 -Eo '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' \
+    | grep -Eo '[0-9a-f]{40}' || true)"
+  if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "GitHub API returned an invalid main commit SHA." >&2
+    return 1
+  fi
+  printf '%s\n' "$sha"
+}
+
+MAIN_SHA="$(resolve_main_sha)"
+RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/${MAIN_SHA}/deploy/spark-cli"
+printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -31,7 +53,7 @@ files=(
 )
 for file in "${files[@]}"; do
   echo "Downloading ${file}..."
-  curl -fsSL "${RAW_BASE}/${file}" -o "${tmp}/${file}"
+  curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/${file}" -o "${tmp}/${file}"
 done
 
 bash -n "$tmp/spark"
@@ -63,4 +85,4 @@ if ! "$CLI_PATH" --version >/dev/null 2>&1; then
 fi
 
 rm -rf "$backup"
-echo "Spark Server Manager installed. Run: spark"
+printf 'Spark Server Manager installed from %s. Run: spark\n' "${MAIN_SHA:0:12}"
