@@ -1,4 +1,4 @@
-// one-time execution trigger
+// one-time execution trigger 2
 import fs from 'node:fs';
 import ts from 'typescript';
 
@@ -148,6 +148,7 @@ function augmentSharedImport(file) {
   const additions = [
     'PHONE_OTP_MAX_BODY_BYTES as MAX_BODY_BYTES',
     'PHONE_OTP_MAX_RAW_PHONE_LEN as MAX_RAW_PHONE_LEN',
+    'type PhoneAuthConfig',
     'getPhoneAuthConfig',
   ];
   const replacement = `import {\n  ${[...existing, ...additions].join(',\n  ')},\n} from "../_shared/phoneOtpLoginV2.ts";`;
