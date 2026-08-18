@@ -6,11 +6,11 @@ const heroPath = 'src/auth-reference-login-hero.css';
 const mainPath = 'src/main.tsx';
 
 const css = fs.readFileSync(cssPath, 'utf8');
-const marker = '\n.spark-reference-hero {\n';
+const marker = '\n.spark-reference-hero {\n  display: flex;\n  flex-direction: column;\n';
 const splitAt = css.indexOf(marker);
 
 if (splitAt < 0) {
-  throw new Error('auth reference hero split marker not found');
+  throw new Error('auth reference main hero split marker not found');
 }
 
 const foundation = css.slice(0, splitAt).replace(/\s+$/, '') + '\n';
