@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_WRAPPER_VERSION="1.3.2"
+SPARK_MANAGER_WRAPPER_VERSION="1.3.3"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
@@ -40,10 +40,44 @@ fi
 unset base_rc
 
 SPARK_MANAGER_VERSION="$SPARK_MANAGER_WRAPPER_VERSION"
+SPARK_TUI_DIAG_LOG="${LOG_DIR}/tui-runtime.log"
+SPARK_TUI_DEBUG="${SPARK_TUI_DEBUG:-0}"
+
+spark_tui_diag() {
+  local message="$*"
+  printf '[%s] %s\n' "$(date -Is)" "$message" >>"$SPARK_TUI_DIAG_LOG" 2>/dev/null || true
+}
+
+spark_tui_diag_environment() {
+  local tty_name term_size
+  tty_name="$(tty 2>/dev/null || printf 'not-a-tty')"
+  term_size="$(stty size 2>/dev/null || printf 'unknown')"
+  spark_tui_diag "session version=${SPARK_MANAGER_VERSION} pid=$$ TERM=${TERM:-unset} COLORTERM=${COLORTERM:-unset} tty=${tty_name} size=${term_size}"
+}
+
+# terminal-menus.sh expects the conventional shell IFS (space/tab/newline)
+# while Spark intentionally uses newline/tab globally. Keep the compatibility
+# boundary inside widget calls so operational functions retain Spark's IFS.
+spark_tui_pick() {
+  local title_text="$1" message="$2" default_index="$3"
+  shift 3
+  local result rc saved_ifs="$IFS"
+
+  IFS=$' \t\n'
+  set +e +u
+  result="$(TUI_MODE="fullscreen" menu "$title_text" "$message" "$default_index" "$@")"
+  rc=$?
+  set -Eeuo pipefail
+  IFS="$saved_ifs"
+
+  (( rc == 0 )) || return "$rc"
+  printf '%s' "$result"
+}
 
 spark_tui_dispatch_command() {
   local command="${1:-}"
   [[ -n "$command" ]] || return 0
+  spark_tui_diag "dispatch command=$(printf '%q' "$command")"
 
   case "$command" in
     "spark_tui_open install") spark_tui_open install ;;
@@ -76,20 +110,26 @@ spark_tui_dispatch_command() {
 }
 
 main_menu() {
-  spark_tui_init || return 1
+  local saved_ifs="$IFS" config command rc
+
+  IFS=$' \t\n'
+  spark_tui_init || { rc=$?; IFS="$saved_ifs"; spark_tui_diag "main init failed rc=${rc}"; return "$rc"; }
   spark_tui_extra_keys
+  IFS="$saved_ifs"
+
+  spark_tui_diag_environment
 
   BACKTITLE="⚡ SPARK SERVER MANAGER · v${SPARK_MANAGER_VERSION} · $(hostname -s 2>/dev/null || hostname)"
   export BACKTITLE
   TUI_PERSISTENT_FILTERS=true
   export TUI_PERSISTENT_FILTERS
 
-  local config command rc
   while true; do
     spark_tui_write_main_data
     config="$(spark_tui_main_config)"
     TUI_RESULT=""
 
+    IFS=$' \t\n'
     set +e +u
     TUI_MODE="fullscreen" mainmenu \
       "SPARK CONTROL CENTER" \
@@ -98,7 +138,9 @@ main_menu() {
     rc=$?
     command="${TUI_RESULT:-}"
     set -Eeuo pipefail
+    IFS="$saved_ifs"
 
+    spark_tui_diag "mainmenu rc=${rc} result=$(printf '%q' "$command")"
     (( rc == 0 )) || return 0
     [[ -n "$command" ]] || continue
     spark_tui_dispatch_command "$command" || true
@@ -106,20 +148,24 @@ main_menu() {
 }
 
 install_menu() {
-  spark_tui_init || return 1
+  local saved_ifs="$IFS" config command rc
+
+  IFS=$' \t\n'
+  spark_tui_init || { rc=$?; IFS="$saved_ifs"; spark_tui_diag "install init failed rc=${rc}"; return "$rc"; }
   spark_tui_extra_keys
+  IFS="$saved_ifs"
 
   BACKTITLE="⚡ SPARK · INSTALLATION · $(hostname -s 2>/dev/null || hostname)"
   export BACKTITLE
   TUI_PERSISTENT_FILTERS=true
   export TUI_PERSISTENT_FILTERS
 
-  local config command rc
   while true; do
     spark_tui_write_install_data
     config="$(spark_tui_install_config)"
     TUI_RESULT=""
 
+    IFS=$' \t\n'
     set +e +u
     TUI_MODE="fullscreen" mainmenu \
       "SPARK INSTALLATION" \
@@ -128,7 +174,9 @@ install_menu() {
     rc=$?
     command="${TUI_RESULT:-}"
     set -Eeuo pipefail
+    IFS="$saved_ifs"
 
+    spark_tui_diag "install-mainmenu rc=${rc} result=$(printf '%q' "$command")"
     (( rc == 0 )) || return 0
     [[ -n "$command" ]] || continue
     spark_tui_dispatch_command "$command" || true
@@ -225,7 +273,7 @@ case "${1:-}" in
     exit 0
     ;;
   --help|-h)
-    cat <<EOF
+    cat <<EOF_HELP
 Usage: spark [option]
 
 Run without an option to open the interactive full-screen control center.
@@ -234,7 +282,9 @@ Run without an option to open the interactive full-screen control center.
   --test          Run full validation
   --update        Update Spark application
   --resources     Show server resource usage
-EOF
+  --debug-tui     Run the TUI and record diagnostic metadata
+  --tui-log       Show the latest TUI diagnostic log
+EOF_HELP
     exit 0
     ;;
   --test)
@@ -247,6 +297,18 @@ EOF
     ;;
   --resources)
     resource_status
+    ;;
+  --debug-tui)
+    SPARK_TUI_DEBUG=1
+    spark_tui_diag "debug-tui requested"
+    main_menu
+    ;;
+  --tui-log)
+    if [[ -f "$SPARK_TUI_DIAG_LOG" ]]; then
+      tail -n 250 "$SPARK_TUI_DIAG_LOG"
+    else
+      printf 'No Spark TUI diagnostic log exists yet: %s\n' "$SPARK_TUI_DIAG_LOG"
+    fi
     ;;
   "")
     main_menu
