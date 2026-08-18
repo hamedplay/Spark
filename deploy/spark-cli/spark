@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="1.1.0"
+SPARK_MANAGER_VERSION="1.2.0"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
 SPARK_ROOT="/opt/spark"
@@ -71,93 +71,171 @@ confirm_word() {
   [[ "$answer" == "$word" ]]
 }
 
-menu_rule() {
-  printf '%s%s%s\n' "$C_GREEN" "────────────────────────────────────────────────────────────────────────" "$C_RESET"
+ui_refresh_dimensions() {
+  local cols
+  cols="$(tput cols 2>/dev/null || printf '80')"
+  [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
+  UI_WIDTH="$cols"
+  (( UI_WIDTH > 95 )) && UI_WIDTH=95
+  (( UI_WIDTH < 41 )) && UI_WIDTH=41
+  (( UI_WIDTH % 2 == 0 )) && ((UI_WIDTH--))
+  UI_INNER=$((UI_WIDTH - 4))
+  UI_LABEL_WIDTH=$(( (UI_WIDTH - 17) / 2 ))
+  (( UI_LABEL_WIDTH < 8 )) && UI_LABEL_WIDTH=8
+  return 0
+}
+
+ui_repeat() {
+  local char="$1" count="$2" out
+  printf -v out '%*s' "$count" ''
+  out="${out// /$char}"
+  printf '%s' "$out"
+}
+
+ui_top() {
+  printf '%s┌' "$C_GREEN"
+  ui_repeat '─' $((UI_WIDTH - 2))
+  printf '┐%s\n' "$C_RESET"
+}
+
+ui_rule() {
+  printf '%s├' "$C_GREEN"
+  ui_repeat '─' $((UI_WIDTH - 2))
+  printf '┤%s\n' "$C_RESET"
+}
+
+ui_bottom() {
+  printf '%s└' "$C_GREEN"
+  ui_repeat '─' $((UI_WIDTH - 2))
+  printf '┘%s\n' "$C_RESET"
+}
+
+ui_row() {
+  local text="$1" style="${2:-}" max pad
+  max="$UI_INNER"
+  (( ${#text} > max )) && text="${text:0:max}"
+  pad=$((max - ${#text}))
+  printf '%s│%s %s%s%s%*s %s│%s\n' \
+    "$C_GREEN" "$C_RESET" "$style" "$text" "$C_RESET" "$pad" '' "$C_GREEN" "$C_RESET"
+}
+
+ui_center() {
+  local text="$1" style="${2:-}" max left right
+  max="$UI_INNER"
+  (( ${#text} > max )) && text="${text:0:max}"
+  left=$(( (max - ${#text}) / 2 ))
+  right=$((max - ${#text} - left))
+  printf '%s│%s %*s%s%s%s%*s %s│%s\n' \
+    "$C_GREEN" "$C_RESET" "$left" '' "$style" "$text" "$C_RESET" "$right" '' "$C_GREEN" "$C_RESET"
+}
+
+ui_pair() {
+  local key1="$1" label1="$2" key2="${3:-}" label2="${4:-}"
+  local width="$UI_LABEL_WIDTH"
+  label1="${label1:0:width}"
+  label2="${label2:0:width}"
+  if [[ -n "$key2" ]]; then
+    printf '%s│%s %s[%2s]%s %s%-*s%s %s│%s %s[%2s]%s %s%-*s%s %s│%s\n' \
+      "$C_GREEN" "$C_RESET" "$C_CYAN" "$key1" "$C_RESET" "$C_BOLD" "$width" "$label1" "$C_RESET" \
+      "$C_GREEN" "$C_RESET" "$C_CYAN" "$key2" "$C_RESET" "$C_BOLD" "$width" "$label2" "$C_RESET" \
+      "$C_GREEN" "$C_RESET"
+  else
+    printf '%s│%s %s[%2s]%s %s%-*s%s %s│%s %*s %s│%s\n' \
+      "$C_GREEN" "$C_RESET" "$C_CYAN" "$key1" "$C_RESET" "$C_BOLD" "$width" "$label1" "$C_RESET" \
+      "$C_GREEN" "$C_RESET" $((width + 5)) '' "$C_GREEN" "$C_RESET"
+  fi
+}
+
+ui_step_pair() {
+  local step1="$1" label1="$2" step2="$3" label2="$4"
+  local width=$((UI_LABEL_WIDTH - 2)) icon1='·' icon2='·' style1="$C_DIM" style2="$C_DIM"
+  [[ -f "${STEP_DIR}/${step1}.ok" ]] && { icon1='✓'; style1="$C_GREEN"; }
+  [[ -f "${STEP_DIR}/${step2}.ok" ]] && { icon2='✓'; style2="$C_GREEN"; }
+  (( width < 6 )) && width=6
+  label1="${label1:0:width}"
+  label2="${label2:0:width}"
+  printf '%s│%s %s[%2s]%s %s%s%s %s%-*s%s %s│%s %s[%2s]%s %s%s%s %s%-*s%s %s│%s\n' \
+    "$C_GREEN" "$C_RESET" "$C_CYAN" "$step1" "$C_RESET" "$style1" "$icon1" "$C_RESET" "$C_BOLD" "$width" "$label1" "$C_RESET" \
+    "$C_GREEN" "$C_RESET" "$C_CYAN" "$step2" "$C_RESET" "$style2" "$icon2" "$C_RESET" "$C_BOLD" "$width" "$label2" "$C_RESET" \
+    "$C_GREEN" "$C_RESET"
+}
+
+ui_screen_start() {
+  local heading="$1" subtitle="${2:-}"
+  ui_refresh_dimensions
+  clear_screen
+  ui_top
+  ui_center "$heading" "$C_BOLD$C_CYAN"
+  [[ -n "$subtitle" ]] && ui_center "$subtitle" "$C_DIM"
+  ui_rule
+}
+
+ui_read_choice() {
+  local __var="$1" hint="${2:-Select an option}"
+  local answer
+  ui_rule
+  ui_row "$hint" "$C_DIM"
+  ui_row "Select:"
+  ui_bottom
+  if [[ -t 0 && -t 1 ]]; then
+    printf '\033[2A\033[10C'
+    read -r answer
+  else
+    read -r -p 'Select: ' answer
+  fi
+  printf -v "$__var" '%s' "$answer"
 }
 
 menu_section() {
-  printf '\n%s%s▸ %s%s\n' "$C_BOLD" "$C_GREEN" "$1" "$C_RESET"
+  ui_row "▸ $1" "$C_BOLD$C_GREEN"
 }
 
 menu_option() {
-  local key="$1" label="$2" detail="${3:-}"
-  printf '  %s[%2s]%s  %s%-30s%s %s%s%s\n' \
-    "$C_CYAN" "$key" "$C_RESET" "$C_BOLD" "$label" "$C_RESET" "$C_DIM" "$detail" "$C_RESET"
+  ui_pair "$1" "$2"
 }
 
 menu_option_status() {
   local key="$1" badge="$2" label="$3"
-  printf '  %s[%2s]%s  %s %-44s\n' "$C_CYAN" "$key" "$C_RESET" "$badge" "$label"
+  ui_row "[$key] $badge $label"
 }
 
 menu_hint() {
-  printf '\n  %s%s%s\n\n' "$C_DIM" "$1" "$C_RESET"
+  ui_row "$1" "$C_DIM"
 }
 
 title() {
-  clear_screen
   local host
   host="$(hostname -s 2>/dev/null || hostname)"
-  printf '%s%s SPARK SERVER MANAGER%s  %s· Production Infrastructure Control%s\n' \
-    "$C_BOLD" "$C_GREEN" "$C_RESET" "$C_DIM" "$C_RESET"
-  menu_rule
-  printf '%sHost:%s %-24s  %sVersion:%s %s\n' \
-    "$C_DIM" "$C_RESET" "$host" "$C_DIM" "$C_RESET" "$SPARK_MANAGER_VERSION"
+  ui_screen_start "SPARK SERVER MANAGER" "Host: ${host}  |  Version: ${SPARK_MANAGER_VERSION}"
+  ui_bottom
 }
 
 welcome_screen() {
+  ui_refresh_dimensions
   clear_screen
-  printf '%s%s' "$C_GREEN" "$C_BOLD"
-  cat <<'ART'
-   ███████╗██████╗  █████╗ ██████╗ ██╗  ██╗
-   ██╔════╝██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝
-   ███████╗██████╔╝███████║██████╔╝█████╔╝
-   ╚════██║██╔═══╝ ██╔══██║██╔══██╗██╔═██╗
-   ███████║██║     ██║  ██║██║  ██║██║  ██╗
-   ╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
-ART
-  printf '%s\n' "$C_RESET"
-  printf '%s%sWelcome to Spark Server Manager%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
-  printf '%sProduction deployment, operations and infrastructure control for Spark.%s\n' "$C_DIM" "$C_RESET"
-  printf '%sValidation-first workflows · production-aware defaults · detailed logs%s\n\n' "$C_DIM" "$C_RESET"
-  printf '%sManager:%s v%s   %sHost:%s %s\n' \
-    "$C_DIM" "$C_RESET" "$SPARK_MANAGER_VERSION" "$C_DIM" "$C_RESET" "$(hostname -s 2>/dev/null || hostname)"
-  printf '%sRepository:%s github.com/hamedplay/Spark\n\n' "$C_DIM" "$C_RESET"
-  read -r -p "Press Enter to open the control center..." _
+  ui_top
+  ui_center '  ____  ____   _    ____  _  __' "$C_BOLD$C_GREEN"
+  ui_center ' / ___||  _ \ / \  |  _ \| |/ /' "$C_BOLD$C_GREEN"
+  ui_center ' \___ \| |_) / _ \ | |_) |   < ' "$C_BOLD$C_GREEN"
+  ui_center '  ___) |  __/ ___ \|  _ <| |\ \' "$C_BOLD$C_GREEN"
+  ui_center ' |____/|_| /_/   \_\_| \_\_| \_\' "$C_BOLD$C_GREEN"
+  ui_center 'Welcome to Spark Server Manager' "$C_BOLD$C_CYAN"
+  ui_rule
 }
 
 main_menu() {
-  welcome_screen
   while true; do
-    title
-
-    menu_section "DEPLOYMENT"
-    menu_option "1" "Install / Configure Spark" "Guided 20-step single-host deployment"
-    menu_option "2" "Health Checks & Logs" "Validate services and inspect runtime logs"
-    menu_option "3" "Update Spark Application" "GitHub, migrations, functions and frontend"
-
-    menu_section "SYSTEM"
-    menu_option "4" "Update Linux Packages" "APT packages and reboot status"
-    menu_option "5" "Node.js / npm / Audit" "Dependencies, audit and maintenance"
-    menu_option "8" "Resource Monitor" "CPU, memory, disk, processes and containers"
-
-    menu_section "SECURITY & ACCESS"
-    menu_option "6" "Open Supabase Admin Access" "TLS 8443 restricted to ADMIN_CIDR"
-    menu_option "7" "Close Supabase Admin Access" "Remove the temporary admin gateway"
-    menu_option "11" "TLS Certificate Management" "Inspect and renew certificates"
-
-    menu_section "OPERATIONS"
-    menu_option "9" "Backup Management" "Database and configuration backups"
-    menu_option "10" "Service Management" "Status, restart and reload operations"
-    menu_option "12" "Version & Security Info" "Runtime and deployment version details"
-    menu_option "13" "Update Spark Manager" "Refresh this management console"
-
-    printf '\n'
-    menu_option "0" "Exit" "Close Spark Server Manager"
-    menu_hint "Select an option and press Enter."
-    read -r -p "  Select: " choice
+    welcome_screen
+    ui_pair "1" "Install / Configure" "2" "Health Checks & Logs"
+    ui_pair "3" "Update Spark" "4" "Update Linux Packages"
+    ui_pair "5" "Node / npm / Audit" "6" "Open Supabase Admin"
+    ui_pair "7" "Close Supabase Admin" "8" "Resource Monitor"
+    ui_pair "9" "Backup Management" "10" "Service Management"
+    ui_pair "11" "TLS Certificates" "12" "Version & Security"
+    ui_pair "13" "Update Spark Manager" "0" "Exit"
+    ui_read_choice choice "Production infrastructure control | v${SPARK_MANAGER_VERSION}"
     case "$choice" in
-      0) exit 0 ;;
+      0) clear_screen; exit 0 ;;
       1) install_menu ;;
       2) test_menu ;;
       3) update_spark || true; pause ;;
@@ -178,34 +256,19 @@ main_menu() {
 
 install_menu() {
   while true; do
-    title
-    menu_section "SINGLE-HOST INSTALLATION"
-    menu_hint "Workflow source: deploy/manual-production/single-host.md"
-    menu_option_status "1"  "$(step_badge 1)"  "DNS verification"
-    menu_option_status "2"  "$(step_badge 2)"  "Installation values & configuration"
-    menu_option_status "3"  "$(step_badge 3)"  "Base packages + Docker + Node.js 24"
-    menu_option_status "4"  "$(step_badge 4)"  "Clone / update Spark repository"
-    menu_option_status "5"  "$(step_badge 5)"  "Fetch pinned Supabase source"
-    menu_option_status "6"  "$(step_badge 6)"  "Generate Supabase secrets"
-    menu_option_status "7"  "$(step_badge 7)"  "Configure Supabase environment"
-    menu_option_status "8"  "$(step_badge 8)"  "Sync Edge Functions + main router"
-    menu_option_status "9"  "$(step_badge 9)"  "Provider / worker environment"
-    menu_option_status "10" "$(step_badge 10)" "Docker Compose hardening & configuration"
-    menu_option_status "11" "$(step_badge 11)" "Validate and start Supabase"
-    menu_option_status "12" "$(step_badge 12)" "Apply Spark database migrations"
-    menu_option_status "13" "$(step_badge 13)" "Build and deploy frontend"
-    menu_option_status "14" "$(step_badge 14)" "Bootstrap Nginx"
-    menu_option_status "15" "$(step_badge 15)" "Issue TLS certificates"
-    menu_option_status "16" "$(step_badge 16)" "Configure production Nginx"
-    menu_option_status "17" "$(step_badge 17)" "Configure local schedulers"
-    menu_option_status "18" "$(step_badge 18)" "Configure TURN / Coturn"
-    menu_option_status "19" "$(step_badge 19)" "Configure Certbot renewal hook"
-    menu_option_status "20" "$(step_badge 20)" "Configure production firewall"
-    printf '\n'
-    menu_option "21" "Run All Installation Steps" "Execute steps 1 → 20 in order"
-    menu_option "0" "Back" "Return to the main control center"
-    menu_hint "Completed steps are marked with a green check."
-    read -r -p "  Select: " choice
+    ui_screen_start "SINGLE-HOST INSTALLATION" "Completed steps are marked with green checks"
+    ui_step_pair "1" "DNS verification" "2" "Install configuration"
+    ui_step_pair "3" "Packages / Docker / Node" "4" "Spark repository"
+    ui_step_pair "5" "Pinned Supabase source" "6" "Supabase secrets"
+    ui_step_pair "7" "Supabase environment" "8" "Edge Functions sync"
+    ui_step_pair "9" "Provider / worker env" "10" "Compose hardening"
+    ui_step_pair "11" "Start Supabase" "12" "Database migrations"
+    ui_step_pair "13" "Frontend deployment" "14" "Nginx bootstrap"
+    ui_step_pair "15" "TLS certificates" "16" "Production Nginx"
+    ui_step_pair "17" "Local schedulers" "18" "TURN / Coturn"
+    ui_step_pair "19" "Certbot renewal hook" "20" "Production firewall"
+    ui_pair "21" "Run all steps 1-20" "0" "Back"
+    ui_read_choice choice "Workflow: deploy/manual-production/single-host.md"
     case "$choice" in
       0) return ;;
       [1-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;
@@ -222,44 +285,44 @@ docker_logs_menu() {
     pause
     return
   fi
-  local services service
+  local services choice service i left right
   mapfile -t services < <(compose config --services)
-  title
-  menu_section "DOCKER SERVICE LOGS"
-  printf '\n'
-  printf '  %s\n' "${services[@]}"
-  printf '\n'
-  read -r -p "Service name for the last 200 log lines (Enter=Back): " service
-  [[ -z "$service" ]] && return
-  if ! printf '%s\n' "${services[@]}" | grep -Fxq "$service"; then
-    fail "Invalid service."
+  while true; do
+    ui_screen_start "DOCKER SERVICE LOGS" "Select a service to display its last 200 log lines"
+    for ((i=0; i<${#services[@]}; i+=2)); do
+      left=$((i + 1))
+      right=$((i + 2))
+      if (( i + 1 < ${#services[@]} )); then
+        ui_pair "$left" "${services[i]}" "$right" "${services[i+1]}"
+      else
+        ui_pair "$left" "${services[i]}" "0" "Back"
+      fi
+    done
+    if (( ${#services[@]} % 2 == 0 )); then
+      ui_pair "0" "Back"
+    fi
+    ui_read_choice choice "Choose a service number"
+    [[ "$choice" == "0" ]] && return
+    [[ "$choice" =~ ^[0-9]+$ ]] || { fail "Invalid option"; sleep 1; continue; }
+    (( choice >= 1 && choice <= ${#services[@]} )) || { fail "Invalid option"; sleep 1; continue; }
+    service="${services[choice-1]}"
+    run_report "Logs: ${service}" compose logs --tail=200 --timestamps "$service"
     pause
     return
-  fi
-  run_report "Logs: ${service}" compose logs --tail=200 --timestamps "$service"
-  pause
+  done
 }
 
 test_menu() {
   while true; do
-    title
-    menu_section "HEALTH CHECKS & LOGS"
-    menu_option "1" "Full Validation" "End-to-end platform validation"
-    menu_option "2" "Frontend" "HTTPS and application response"
-    menu_option "3" "API / Auth / Functions" "Public API and function routing"
-    menu_option "4" "Docker Status" "Container and service state"
-    menu_option "5" "Docker Service Logs" "Inspect logs for a selected service"
-    menu_option "6" "Nginx Status & Logs" "Web gateway service diagnostics"
-    menu_option "7" "Scheduler Status & Logs" "Timers and scheduled function runs"
-    menu_option "8" "TURN Status & Logs" "Coturn and STUN validation"
-    menu_option "9" "DB / API Exposure Check" "Detect unintended public bindings"
-    menu_option "10" "DNS & TLS" "DNS records and certificate validation"
-    menu_option "11" "Listening Ports & UFW" "Network listeners and firewall state"
-    menu_option "12" "Migration Dry Run" "Preview pending database migrations"
-    printf '\n'
-    menu_option "0" "Back" "Return to the main control center"
-    menu_hint "Detailed command output is stored under /var/log/spark-manager/."
-    read -r -p "  Select: " choice
+    ui_screen_start "HEALTH CHECKS & LOGS" "Validation, diagnostics and runtime visibility"
+    ui_pair "1" "Full Validation" "2" "Frontend"
+    ui_pair "3" "API / Auth / Functions" "4" "Docker Status"
+    ui_pair "5" "Docker Service Logs" "6" "Nginx Status & Logs"
+    ui_pair "7" "Scheduler Status & Logs" "8" "TURN Status & Logs"
+    ui_pair "9" "DB / API Exposure" "10" "DNS & TLS"
+    ui_pair "11" "Listening Ports & UFW" "12" "Migration Dry Run"
+    ui_pair "0" "Back"
+    ui_read_choice choice "Logs: /var/log/spark-manager/"
     case "$choice" in
       0) return ;;
       1) new_log "test-full"; run_visible "Full validation" test_full_validation || true; pause ;;
@@ -293,13 +356,10 @@ test_menu() {
 
 backup_menu() {
   while true; do
-    title
-    menu_section "BACKUP MANAGEMENT"
-    menu_option "1" "Create Manual Backup" "PostgreSQL database + runtime configuration"
-    menu_option "2" "List Backups" "Show recent backup directories"
-    printf '\n'
-    menu_option "0" "Back" "Return to the main control center"
-    read -r -p "  Select: " c
+    ui_screen_start "BACKUP MANAGEMENT" "Database and production configuration backups"
+    ui_pair "1" "Create Manual Backup" "2" "List Backups"
+    ui_pair "0" "Back"
+    ui_read_choice c "Backups are stored under ${BACKUP_DIR}"
     case "$c" in
       0) return ;;
       1)
@@ -314,18 +374,12 @@ backup_menu() {
 
 npm_menu() {
   while true; do
-    title
-    menu_section "NODE.JS / NPM / AUDIT"
-    menu_option "1" "Show Versions" "Node.js and npm versions"
-    menu_option "2" "Update npm" "Update global npm within major version 11"
-    menu_option "3" "Install Dependencies" "Run npm ci in the Spark repository"
-    menu_option "4" "Full npm Audit" "Audit production and development dependencies"
-    menu_option "5" "Production npm Audit" "Audit with --omit=dev"
-    menu_option "6" "Outdated Packages" "Show available dependency updates"
-    menu_option "7" "Audit Fix Dry Run" "Preview fixes without modifying files"
-    printf '\n'
-    menu_option "0" "Back" "Return to the main control center"
-    read -r -p "  Select: " c
+    ui_screen_start "NODE.JS / NPM / AUDIT" "Dependency maintenance without automatic source mutation"
+    ui_pair "1" "Show Versions" "2" "Update npm"
+    ui_pair "3" "Install Dependencies" "4" "Full npm Audit"
+    ui_pair "5" "Production npm Audit" "6" "Outdated Packages"
+    ui_pair "7" "Audit Fix Dry Run" "0" "Back"
+    ui_read_choice c "npm audit fix remains dry-run only"
     new_log "npm-maintenance"
     case "$c" in
       0) return ;;
@@ -343,17 +397,12 @@ npm_menu() {
 
 service_menu() {
   while true; do
-    title
-    menu_section "SERVICE MANAGEMENT"
-    menu_option "1" "Show Service Status" "Nginx, Coturn, Docker and Spark timers"
-    menu_option "2" "Restart Functions + Worker" "Recreate Edge Functions and avatar worker"
-    menu_option "3" "Reload Nginx" "Validate configuration before reload"
-    menu_option "4" "Restart Coturn" "Restart TURN service"
-    menu_option "5" "Restart Supabase Stack" "Controlled recreate of all Supabase services"
-    menu_option "6" "Restart Scheduler Timers" "Restart all Spark systemd timers"
-    printf '\n'
-    menu_option "0" "Back" "Return to the main control center"
-    read -r -p "  Select: " c
+    ui_screen_start "SERVICE MANAGEMENT" "Controlled service status, restart and reload operations"
+    ui_pair "1" "Show Service Status" "2" "Restart Functions + Worker"
+    ui_pair "3" "Reload Nginx" "4" "Restart Coturn"
+    ui_pair "5" "Restart Supabase Stack" "6" "Restart Scheduler Timers"
+    ui_pair "0" "Back"
+    ui_read_choice c "Potentially disruptive actions still require confirmation"
     new_log "service-management"
     case "$c" in
       0) return ;;
@@ -381,14 +430,10 @@ service_menu() {
 
 certificate_menu() {
   while true; do
-    title
-    menu_section "TLS CERTIFICATE MANAGEMENT"
-    menu_option "1" "Show Certificates" "Display Certbot-managed certificates"
-    menu_option "2" "Renewal Dry Run" "Validate the renewal workflow"
-    menu_option "3" "Run Certbot Renew" "Execute certificate renewal"
-    printf '\n'
-    menu_option "0" "Back" "Return to the main control center"
-    read -r -p "  Select: " c
+    ui_screen_start "TLS CERTIFICATE MANAGEMENT" "Certbot certificate inspection and renewal"
+    ui_pair "1" "Show Certificates" "2" "Renewal Dry Run"
+    ui_pair "3" "Run Certbot Renew" "0" "Back"
+    ui_read_choice c "Certificate operations use the existing production configuration"
     new_log "certificate-management"
     case "$c" in
       0) return ;;
