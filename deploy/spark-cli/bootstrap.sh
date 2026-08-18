@@ -50,6 +50,17 @@ if ! mv "$stage" "$TARGET"; then
   exit 1
 fi
 ln -sfn "$TARGET/spark" "$CLI_PATH"
-rm -rf "$backup"
 
+if ! "$CLI_PATH" --version >/dev/null 2>&1; then
+  echo "Spark Server Manager smoke test failed; rolling back installation." >&2
+  rm -f "$CLI_PATH"
+  rm -rf "$TARGET"
+  if [[ -d "$backup" ]]; then
+    mv "$backup" "$TARGET"
+    ln -sfn "$TARGET/spark" "$CLI_PATH"
+  fi
+  exit 1
+fi
+
+rm -rf "$backup"
 echo "Spark Server Manager installed. Run: spark"
