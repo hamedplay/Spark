@@ -1,4 +1,4 @@
-// one-time execution trigger 2
+// one-time execution trigger 3
 import fs from 'node:fs';
 import childProcess from 'node:child_process';
 
@@ -24,6 +24,7 @@ const ignoredEvidence = new Set([
   'scripts/.knip-audit.stderr.txt',
   'scripts/.jscpd-audit.stderr.txt',
   'scripts/.dead-code-tool-status.txt',
+  'scripts/.dead-file-cleanup-status.txt',
   'scripts/remove-confirmed-dead-files.mjs',
   '.github/workflows/remove-confirmed-dead-files.yml',
 ]);
