@@ -17,10 +17,7 @@ import type { Meeting } from './types';
 import type { PageRendererProps } from './app/navigation/pageRendererTypes';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthenticatedThemeSync } from './context/AuthenticatedThemeSync';
-
-const PortalConfigPage = lazy(() =>
-  import('./components/PortalConfigPage').then((m) => ({ default: m.PortalConfigPage })),
-);
+import { canOpenPortalConfig } from './features/permissions/configPermissions';
 
 const toasterProps = {
   position: 'top-center' as const,
@@ -42,7 +39,8 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
   const { meetings, pendingMeetingsCount, fetchMeetings, fetchPendingMeetingsCount } =
     useMeetingsData(meetingsDataEnabled, currentUserId);
 
-  useAdminPathGuard(true, isAdmin, navigate);
+  const canOpenConfig = canOpenPortalConfig(isAdmin, userPermissions);
+  useAdminPathGuard(true, canOpenConfig, navigate);
 
   const [showSplash, setShowSplash] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
@@ -70,16 +68,6 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
     isAuthenticated: canQueryMinutesFollowup,
     userId: currentUserId,
   });
-
-  if (activePage === 'admin' && isAdmin) {
-    return currentUserId ? (
-      <Suspense fallback={<SparkLoader message="در حال آماده‌سازی پیکربندی..." />}>
-        <div className="spark-modern-page min-h-screen">
-          <PortalConfigPage currentUserId={currentUserId} />
-        </div>
-      </Suspense>
-    ) : null;
-  }
 
   if (maintenanceMode && !isAdmin) {
     return (

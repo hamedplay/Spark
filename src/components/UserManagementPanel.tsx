@@ -21,8 +21,12 @@ import { handleImportFile } from './UserManagement/importHandler';
 import { AdminUserDeleteAction } from './AdminUserDeleteAction';
 import { AdminOverviewCards } from './UserManagement/AdminOverviewCards';
 import { useDismissOnOutsideClick } from '../shared/ui/useDismissOnOutsideClick';
+import { usePermissions } from '../context/PermissionsContext';
+import { AccessDenied } from '../features/permissions';
 
 export function UserManagementPanel({ currentUserId }: Props) {
+  const { hasPermission } = usePermissions();
+  const canManageAccess = hasPermission('config_users.users_list.permissions');
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);
   const [panel, setPanel] = useState<Panel>('list');
   const [selectedUser, setSelectedUser] = useState<AdminProfile | null>(null);
@@ -206,7 +210,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
   }
   if (panel === 'password' && selectedUser) return <PasswordPanel user={selectedUser} onBack={goBack} />;
   if (panel === 'deactivate' && selectedUser) return <DeactivatePanel user={selectedUser} onBack={goBack} onDone={() => { load(); goBack(); }} />;
-  if (panel === 'access' && selectedUser) return <AccessPanel user={selectedUser} onBack={goBack} />;
+  if (panel === 'access' && selectedUser) return canManageAccess ? <AccessPanel user={selectedUser} onBack={goBack} /> : <AccessDenied onReturn={goBack} />;
   if (panel === 'roles' && selectedUser) return <RoleManagementPanel user={selectedUser} currentUserId={currentUserId} onBack={goBack} onDone={async () => { await load(); goBack(); }} />;
   if (panel === 'relations' && selectedUser) return <UserRelationsPanel user={selectedUser} onBack={goBack} allProfiles={profiles} />;
   if (panel === 'phonesync' && selectedUser) return <PhoneSyncPanel user={selectedUser} onBack={goBack} />;
@@ -349,7 +353,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
                           <div
                             className="absolute left-0 top-full mt-1 w-52 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden py-1"
                             onClick={e => e.stopPropagation()}>
-                            {menuItems(p).map(({ icon: Icon, label, panel: target, color }) => (
+                            {menuItems(p).filter(item => item.panel !== 'access' || canManageAccess).map(({ icon: Icon, label, panel: target, color }) => (
                               <button key={target} onClick={() => openPanel(target, p)}
                                 className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-right">
                                 <Icon className={`w-4 h-4 flex-shrink-0 ${color}`} />

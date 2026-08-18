@@ -13,8 +13,11 @@ import { HrSsoConfigPanel } from './OrgStructure/HrSsoConfigPanel';
 import { HierarchicalPositionList } from './OrgStructure/HierarchicalPositionList';
 import { OrgPermissionsPanel } from './OrgStructure/OrgPermissionsPanel';
 import { OrgFormModal, type OrgFormState } from './OrgStructure/OrgFormModal';
+import { usePermissions } from '../context/PermissionsContext';
 
 export function OrgStructurePage() {
+  const { hasPermission } = usePermissions();
+  const canManagePermissions = hasPermission('config_users.org_structure.permissions');
   const [org, setOrg] = useState<OrgOrganization | null>(null);
   const [orgLoading, setOrgLoading] = useState(true);
   const [showOrgForm, setShowOrgForm] = useState(false);
@@ -287,7 +290,7 @@ export function OrgStructurePage() {
           { key: 'units', label: 'واحدها', icon: Building2 },
           { key: 'permissions', label: 'دسترسی‌ها', icon: Shield },
           { key: 'settings', label: 'تنظیمات', icon: Settings },
-        ].map(tab => (
+        ].filter(tab => tab.key !== 'permissions' || canManagePermissions).map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
@@ -407,7 +410,7 @@ export function OrgStructurePage() {
       )}
 
       {/* ── Permissions Tab ────────────────────────────────────────────────── */}
-      {activeTab === 'permissions' && (
+      {activeTab === 'permissions' && canManagePermissions && (
         <OrgPermissionsPanel positions={positions} levelDefs={levelDefs} />
       )}
 

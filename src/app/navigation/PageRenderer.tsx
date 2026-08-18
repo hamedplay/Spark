@@ -2,6 +2,7 @@ import { lazy } from 'react';
 import type { ReactNode } from 'react';
 import type { PageId } from '../navigation/useNavigation';
 import { PAGE_PERMISSION_KEY, checkPermission, AccessDenied } from '../../features/permissions';
+import { canOpenPortalConfig } from '../../features/permissions/configPermissions';
 import type { PageRendererProps } from './pageRendererTypes';
 
 const ManagementDashboardPage = lazy(() => import('../../components/ManagementDashboardPage').then((m) => ({ default: m.ManagementDashboardPage })));
@@ -146,7 +147,9 @@ export function renderContent(props: PageRendererProps): ReactNode {
     case 'video-conference':
       return <VideoConferencePage />;
     case 'portal-config':
-      return isAdmin && currentUserId ? modernPage(<PortalConfigPage currentUserId={currentUserId} />) : null;
+      return currentUserId && canOpenPortalConfig(isAdmin, userPermissions)
+        ? modernPage(<PortalConfigPage currentUserId={currentUserId} />)
+        : <AccessDenied onReturn={() => navigate('profile')} />;
     case 'tasks':
       return <TasksPage
         prefillDescription={taskPrefillDescription || undefined}
