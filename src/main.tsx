@@ -13,6 +13,7 @@ import './corporate-theme.css';
 // part is that its position in the entry cascade is stable.
 import './auth-modern.css';
 import './auth-reference-login.css';
+import './auth-reference-login-hero.css';
 import './auth-reference-login-fixes.css';
 import './auth-login-unified-tabs.css';
 import './auth-login-theme-guard.css';
