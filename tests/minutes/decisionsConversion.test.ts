@@ -18,7 +18,7 @@ function agendaToDecision(agenda: DraftAgendaItem): DraftDecision {
 
 function validInfo() {
   return {
-    ...defaultInfo(),
+    ...defaultInfo,
     meetingId: 'meeting-1',
     meetingTitle: 'جلسه آزمون',
     meetingDate: '2026-08-19',
