@@ -126,4 +126,4 @@ jobs:
           git rebase origin/main
           git push origin HEAD:main
 
-# explicit rerun after workflow creation
+# stable-head retrigger after Spark CLI workflow cleanup
