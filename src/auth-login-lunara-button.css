@@ -1,0 +1,248 @@
+/* Login-only submit treatment inspired by Lunara's door interaction.
+   This layer is intentionally visual: React's real disabled/loading state remains
+   the single source of truth for when the door sequence runs. */
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit {
+  min-height: 60px;
+  padding: 0 78px 0 24px;
+  border-color: rgb(var(--spark-neon-soft) / .92);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 34px 50%, rgb(235 255 250 / .20) 0 12px, rgb(var(--spark-neon) / .12) 13px 28px, transparent 50px),
+    linear-gradient(105deg, rgb(6 123 109) 0%, rgb(18 211 177) 44%, rgb(35 244 207) 60%, rgb(8 145 126) 100%);
+  background-size: 100% 100%, 180% 100%;
+  background-position: 0 0, 0 50%;
+  color: #f8fffd;
+  box-shadow:
+    0 16px 34px rgb(3 93 81 / .36),
+    0 0 32px rgb(var(--spark-neon) / .24),
+    inset 0 1px 0 rgb(255 255 255 / .40),
+    inset 0 -1px 0 rgb(1 63 56 / .36);
+  text-shadow: 0 1px 10px rgb(0 0 0 / .20);
+  transform: translateZ(0);
+  animation: none !important;
+  transition:
+    transform .2s cubic-bezier(.22,.72,.16,1),
+    box-shadow .22s ease,
+    filter .22s ease,
+    background-position .35s ease,
+    border-color .22s ease;
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit > span {
+  position: relative;
+  z-index: 4;
+  letter-spacing: .01em;
+  transition: opacity .22s ease, transform .22s ease;
+}
+
+/* The normal arrow is replaced by the doorway scene. Keep the real loading
+   spinner visible when React swaps the button content during authentication. */
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit > svg:not(.spark-spin) {
+  display: none;
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit > svg.spark-spin {
+  position: relative;
+  z-index: 4;
+  width: 22px;
+  height: 22px;
+  color: #f3fffc;
+  filter: drop-shadow(0 0 8px rgb(var(--spark-neon-soft) / .42));
+}
+
+/* Stick figure: one lightweight pseudo-element assembled entirely from CSS
+   gradients so the auth component needs no extra markup or dependencies. */
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit::before {
+  content: '';
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 57px;
+  width: 20px;
+  height: 34px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 13%, rgb(1 31 28) 0 3.2px, transparent 3.6px),
+    linear-gradient(rgb(1 31 28), rgb(1 31 28)) 50% 42% / 2.4px 13px no-repeat,
+    linear-gradient(58deg, transparent 42%, rgb(1 31 28) 43% 57%, transparent 58%) 24% 54% / 10px 13px no-repeat,
+    linear-gradient(-58deg, transparent 42%, rgb(1 31 28) 43% 57%, transparent 58%) 76% 54% / 10px 13px no-repeat,
+    linear-gradient(28deg, transparent 43%, rgb(1 31 28) 44% 57%, transparent 58%) 31% 84% / 10px 14px no-repeat,
+    linear-gradient(-28deg, transparent 43%, rgb(1 31 28) 44% 57%, transparent 58%) 69% 84% / 10px 14px no-repeat;
+  opacity: .96;
+  transform: translate3d(0, -50%, 0);
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 0 5px rgb(255 255 255 / .16));
+  pointer-events: none;
+  animation: none !important;
+  transition: transform .28s cubic-bezier(.22,.72,.16,1), opacity .2s ease;
+}
+
+/* Door panel. A warm core behind the teal panel makes the opening read clearly
+   against Spark's dark login background. */
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 17px;
+  width: 29px;
+  height: 37px;
+  border: 1px solid rgb(231 255 249 / .48);
+  border-radius: 6px;
+  background:
+    radial-gradient(circle at 72% 52%, rgb(255 255 255 / .92) 0 1.2px, transparent 1.7px),
+    linear-gradient(180deg, rgb(86 255 225), rgb(18 192 163) 52%, rgb(5 106 94));
+  box-shadow:
+    0 0 0 2px rgb(1 47 43 / .52),
+    0 0 15px rgb(var(--spark-neon-soft) / .27),
+    inset 0 1px 0 rgb(255 255 255 / .52),
+    inset -7px 0 12px rgb(0 55 49 / .30);
+  transform: translate3d(0, -50%, 0) perspective(240px) rotateY(0deg);
+  transform-origin: left center;
+  backface-visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform .32s cubic-bezier(.22,.72,.16,1),
+    box-shadow .25s ease,
+    filter .25s ease;
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.006);
+  filter: brightness(1.07) saturate(1.06);
+  background-position: 0 0, 100% 50%;
+  border-color: rgb(235 255 250 / .98);
+  box-shadow:
+    0 19px 40px rgb(3 93 81 / .44),
+    0 0 42px rgb(var(--spark-neon) / .36),
+    inset 0 1px 0 rgb(255 255 255 / .46),
+    inset 0 -1px 0 rgb(1 63 56 / .30);
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:hover:not(:disabled)::after {
+  transform: translate3d(0, -50%, 0) perspective(240px) rotateY(-13deg);
+  box-shadow:
+    0 0 0 2px rgb(1 47 43 / .52),
+    0 0 22px rgb(var(--spark-neon-soft) / .38),
+    inset 0 1px 0 rgb(255 255 255 / .56),
+    inset -7px 0 12px rgb(0 55 49 / .28);
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:hover:not(:disabled)::before {
+  transform: translate3d(-2px, -50%, 0) rotate(-2deg);
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:active:not(:disabled) {
+  transform: translateY(0) scale(.996);
+  box-shadow:
+    0 10px 24px rgb(3 93 81 / .34),
+    0 0 25px rgb(var(--spark-neon) / .24),
+    inset 0 1px 0 rgb(255 255 255 / .35);
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:focus-visible {
+  outline: 0;
+  box-shadow:
+    0 0 0 3px rgb(1 10 11),
+    0 0 0 5px rgb(var(--spark-neon-soft) / .82),
+    0 18px 38px rgb(3 93 81 / .40),
+    0 0 36px rgb(var(--spark-neon) / .32);
+}
+
+/* React disables this button only while the real password-login request is in
+   flight. That state drives the one-shot Lunara-style doorway sequence. */
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:disabled {
+  opacity: 1;
+  cursor: wait;
+  filter: saturate(.95) brightness(.98);
+  background-position: 0 0, 100% 50%;
+  border-color: rgb(var(--spark-neon-soft) / .72);
+  box-shadow:
+    0 14px 32px rgb(3 93 81 / .34),
+    0 0 36px rgb(var(--spark-neon) / .32),
+    inset 0 1px 0 rgb(255 255 255 / .34);
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:disabled::after {
+  animation: spark-lunara-login-door 1.12s cubic-bezier(.22,.72,.16,1) 1 both !important;
+}
+
+.spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:disabled::before {
+  animation: spark-lunara-login-person 1.02s cubic-bezier(.22,.72,.16,1) 1 both !important;
+}
+
+@keyframes spark-lunara-login-door {
+  0% {
+    transform: translate3d(0, -50%, 0) perspective(240px) rotateY(0deg);
+    filter: brightness(1);
+  }
+  24%, 68% {
+    transform: translate3d(0, -50%, 0) perspective(240px) rotateY(-72deg);
+    filter: brightness(1.18) drop-shadow(0 0 8px rgb(var(--spark-neon-soft) / .38));
+  }
+  100% {
+    transform: translate3d(0, -50%, 0) perspective(240px) rotateY(0deg);
+    filter: brightness(1.04);
+  }
+}
+
+@keyframes spark-lunara-login-person {
+  0% {
+    opacity: .96;
+    transform: translate3d(0, -50%, 0) rotate(0deg) scale(1);
+  }
+  18% {
+    opacity: 1;
+    transform: translate3d(-6px, -54%, 0) rotate(-8deg) scale(.98);
+  }
+  36% {
+    transform: translate3d(-13px, -47%, 0) rotate(7deg) scale(.94);
+  }
+  54% {
+    transform: translate3d(-20px, -54%, 0) rotate(-7deg) scale(.88);
+  }
+  72% {
+    opacity: .86;
+    transform: translate3d(-28px, -48%, 0) rotate(5deg) scale(.80);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-36px, -50%, 0) rotate(0deg) scale(.66);
+  }
+}
+
+@media (max-width: 520px) {
+  .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit {
+    min-height: 57px;
+    padding-left: 70px;
+  }
+
+  .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit::after {
+    left: 15px;
+    width: 27px;
+    height: 35px;
+  }
+
+  .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit::before {
+    left: 51px;
+    transform: translate3d(0, -50%, 0) scale(.94);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit,
+  .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit::before,
+  .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit::after {
+    animation: none !important;
+    transition-duration: .01ms !important;
+  }
+
+  .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:disabled::before {
+    opacity: 0;
+  }
+
+  .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit:disabled::after {
+    transform: translate3d(0, -50%, 0) perspective(240px) rotateY(-18deg);
+  }
+}
