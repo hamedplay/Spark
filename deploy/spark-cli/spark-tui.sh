@@ -96,7 +96,7 @@ main_menu() {
     command="$(TUI_MODE="fullscreen" mainmenu \
       "SPARK CONTROL CENTER" \
       "Production deployment · operations · security · observability" \
-      "$config" 1)"
+      "$config" 1 1)"
     rc=$?
     set -Eeuo pipefail
 
@@ -124,7 +124,7 @@ install_menu() {
     command="$(TUI_MODE="fullscreen" mainmenu \
       "SPARK INSTALLATION" \
       "Guided single-host deployment · completed steps are tracked automatically" \
-      "$config" 1)"
+      "$config" 1 1)"
     rc=$?
     set -Eeuo pipefail
 
