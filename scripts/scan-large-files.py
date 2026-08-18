@@ -3,6 +3,7 @@ from __future__ import annotations
 import pathlib
 import subprocess
 
+# One-time exhaustive scan of tracked, non-binary repository files.
 THRESHOLD = 1000
 NEAR_THRESHOLD = 800
 REPORT = pathlib.Path("scripts/.large-files-scan.txt")
@@ -33,7 +34,6 @@ for rel in paths:
         binary_files += 1
         continue
 
-    # Count physical lines without decoding so UTF-8/Persian/SQL/CSS are handled uniformly.
     lines = data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
     text_files.append((lines, rel))
 
