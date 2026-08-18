@@ -176,7 +176,7 @@ dist/assets/minutesWordExport-DLtmCJ7z.js         380.61 kB │ gzip: 107.51 kB
 dist/assets/index-CenAasKg.js                     411.01 kB │ gzip: 117.99 kB
 dist/assets/exceljs.min-BsF42dRL.js               929.58 kB │ gzip: 256.39 kB
 
-[32m✓ built in 3.00s[39m
+[32m✓ built in 3.24s[39m
 [33m[plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
