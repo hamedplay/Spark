@@ -1,0 +1,32 @@
+name: Scan large tracked files
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/scan-large-files.py
+      - .github/workflows/scan-large-files.yml
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan tracked non-binary files
+        run: python3 scripts/scan-large-files.py
+
+      - name: Record scan report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/.large-files-scan.txt
+          git commit -m "chore: record comprehensive large file scan"
+          git push origin HEAD:main
