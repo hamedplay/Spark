@@ -1,0 +1,156 @@
+name: One-time exact duplicate consolidation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/consolidate-final-exact-duplicates.mjs
+      - .github/workflows/consolidate-final-exact-duplicates.yml
+
+permissions:
+  contents: write
+
+jobs:
+  consolidate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Guarded transform and validation
+        id: guarded
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/final-duplicates.log
+          mapfile -t TEST_FILES < <(find tests -type f \( -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.test.mjs' -o -name '*.test.js' \) | sort)
+          NO_COLOR=1 node --import tsx --test "${TEST_FILES[@]}" > /tmp/tests-before.log 2>&1
+          NO_COLOR=1 deno check --node-modules-dir=auto supabase/functions/send-daily-meetings/index.ts > /tmp/deno-before.log 2>&1
+
+          mkdir -p src/shared/ui src/shared/chat
+          node scripts/consolidate-final-exact-duplicates.mjs >> /tmp/final-duplicates.log 2>&1
+          transform_rc=$?
+          build_rc=99; test_rc=99; deno_rc=99; audit_rc=99
+
+          if [ "$transform_rc" -eq 0 ]; then
+            npm run build >> /tmp/final-duplicates.log 2>&1
+            build_rc=$?
+          fi
+
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ]; then
+            NO_COLOR=1 node --import tsx --test "${TEST_FILES[@]}" > /tmp/tests-after.log 2>&1
+            python3 - <<'PY' >> /tmp/final-duplicates.log 2>&1
+          import collections,re
+          from pathlib import Path
+          def names(path, failed=False):
+              out=[]
+              for line in Path(path).read_text(errors='replace').splitlines():
+                  s=line.strip()
+                  if failed:
+                      if not s.startswith('✖ '): continue
+                  elif not (s.startswith('✔ ') or s.startswith('✖ ')): continue
+                  out.append(re.sub(r'\s+\([^)]*ms\)$','',s[2:]))
+              return collections.Counter(out)
+          before_all=names('/tmp/tests-before.log'); after_all=names('/tmp/tests-after.log')
+          before_fail=names('/tmp/tests-before.log',True); after_fail=names('/tmp/tests-after.log',True)
+          print('tests before=',sum(before_all.values()),'after=',sum(after_all.values()))
+          print('failures before=',sum(before_fail.values()),'after=',sum(after_fail.values()))
+          if before_all != after_all:
+              print('TEST_SET_CHANGED')
+              print('removed=',list((before_all-after_all).elements()))
+              print('added=',list((after_all-before_all).elements()))
+              raise SystemExit(1)
+          new_failures=after_fail-before_fail
+          if new_failures:
+              print('NEW_TEST_FAILURES',list(new_failures.elements()))
+              raise SystemExit(1)
+          PY
+            test_rc=$?
+          fi
+
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$test_rc" -eq 0 ]; then
+            NO_COLOR=1 deno check --node-modules-dir=auto supabase/functions/send-daily-meetings/index.ts > /tmp/deno-after.log 2>&1
+            python3 - <<'PY' >> /tmp/final-duplicates.log 2>&1
+          import collections,re
+          from pathlib import Path
+          def diags(path):
+              text=Path(path).read_text(errors='replace')
+              pattern=re.compile(r'TS(\d+) \[ERROR\]: ([^\n]+).*?at (?:file://)?[^\n]*?/(supabase/functions/[^:\n]+):\d+:\d+',re.S)
+              return collections.Counter((f,c,re.sub(r'\s+',' ',m).strip()) for c,m,f in pattern.findall(text))
+          new=diags('/tmp/deno-after.log')-diags('/tmp/deno-before.log')
+          if new:
+              print('NEW_DENO_DIAGNOSTICS')
+              for item,count in sorted(new.items()): print(count,item)
+              raise SystemExit(1)
+          PY
+            deno_rc=$?
+          fi
+
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$test_rc" -eq 0 ] && [ "$deno_rc" -eq 0 ]; then
+            node scripts/final-dead-code-audit.mjs >> /tmp/final-duplicates.log 2>&1
+            python3 - <<'PY' >> /tmp/final-duplicates.log 2>&1
+          import json
+          from pathlib import Path
+          report=json.loads(Path('scripts/.final-dead-code-audit.json').read_text())
+          print('production_unreachable=',report['production_unreachable'])
+          print('exact_duplicate_groups=',len(report['exact_duplicate_function_groups']))
+          if report['production_unreachable'] != ['src/vite-env.d.ts']:
+              raise SystemExit(1)
+          if report['exact_duplicate_function_groups']:
+              for group in report['exact_duplicate_function_groups']:
+                  print(group)
+              raise SystemExit(1)
+          PY
+            audit_rc=$?
+          fi
+
+          if [ "$transform_rc" -ne 0 ] || [ "$build_rc" -ne 0 ] || [ "$test_rc" -ne 0 ] || [ "$deno_rc" -ne 0 ] || [ "$audit_rc" -ne 0 ]; then
+            git reset --hard HEAD
+            {
+              echo VALIDATION_FAILED
+              echo transform_rc=$transform_rc
+              echo build_rc=$build_rc
+              echo test_rc=$test_rc
+              echo deno_rc=$deno_rc
+              echo audit_rc=$audit_rc
+              echo
+              tail -n 500 /tmp/final-duplicates.log
+            } > scripts/.final-duplicate-consolidation-status.txt
+            echo success=false >> "$GITHUB_OUTPUT"
+          else
+            rm -f scripts/.final-duplicate-consolidation-status.txt
+            echo success=true >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit validated source changes
+        if: steps.guarded.outputs.success == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src supabase/functions/send-daily-meetings
+          git commit -m "cleanup: consolidate final exact duplicate logic"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+
+      - name: Commit failure evidence
+        if: steps.guarded.outputs.success != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/.final-duplicate-consolidation-status.txt
+          git commit -m "chore: record final duplicate consolidation failure" || exit 0
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
