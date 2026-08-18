@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MinutesDocumentData } from './MinutesDocumentData';
 import { DASH, orDash, chunkArray, formatConfidentiality, APPROVAL_STATUS_LABELS, faDateTime } from './MinutesDocumentData';
 import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
+import { formatClauseLabel } from './decisionHierarchy';
 import './minutes-print.css';
 
 const FONT_SIZE_PX: Record<string, string> = {
@@ -42,20 +43,17 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
   const showAgenda = cfg?.showAgenda ?? true;
   const fontSize = cfg?.fontSize ?? 'medium';
 
-  // ── Attendance lists ───────────────────────────────────────────────────────
   const presentNames: string[] = [];
   const absentNames: string[] = [];
 
   for (const p of internalParts) {
     const status = p.attendance_status;
     if (status && PRESENT_STATUSES.has(status)) {
-      // For delegate_attended use delegate_name when available
       const name = p.delegate_name || p.name_snapshot;
       presentNames.push(name);
     } else if (status === 'absent') {
       absentNames.push(p.name_snapshot);
     }
-    // invited/pending/null — not assigned to either list without explicit product decision
   }
   for (const p of externalParts) {
     const status = p.attendance_status;
@@ -66,7 +64,6 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
     }
   }
 
-  // ── Signatories (all participants) ─────────────────────────────────────────
   const allSigners = [
     ...internalParts.map(p => ({
       id: p.id,
@@ -93,7 +90,6 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
       )}
 
       <div className="mp-doc">
-        {/* ── Header ────────────────────────────────────────────────────────── */}
         <div className="mp-header">
           {showLogo && (
             <div className="mp-header-logo">
@@ -120,15 +116,12 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           </div>
         </div>
 
-        {/* ── Meeting details ────────────────────────────────────────────────── */}
         <div className="mp-section mp-no-break">
           <h2 className="mp-section-title">مشخصات جلسه</h2>
-          {/* Row 1: Meeting title full width */}
           <div className="mp-info-row-full">
             <span className="mp-label">عنوان جلسه:</span>
             <span className="mp-value">{orDash(minute.meeting_title_snapshot)}</span>
           </div>
-          {/* Row 2: Attendees / Absentees */}
           {showAbsentees ? (
             <div className="mp-info-row-two">
               <div className="mp-field">
@@ -146,7 +139,6 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
               <span className="mp-value">{presentNames.length > 0 ? presentNames.join('، ') : DASH}</span>
             </div>
           )}
-          {/* Row 3: Location / Secretary / Chair */}
           <div className="mp-info-row-three">
             <div className="mp-field">
               <span className="mp-label">محل جلسه:</span>
@@ -169,56 +161,75 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           )}
         </div>
 
-        {/* ── Agenda items ───────────────────────────────────────────────────── */}
         {showAgenda && (
-        <div className="mp-section">
-          <h2 className="mp-section-title">دستور جلسات</h2>
-          {agendaItems.length === 0 ? (
-            <p className="mp-item-row">{DASH}</p>
-          ) : (
-            <ol className="mp-agenda-list">
-              {agendaItems.map(item => (
-                <li key={item.id} className="mp-agenda-list-item">
-                  {toPersianDigits(String(item.order))}. {item.title}
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
+          <div className="mp-section">
+            <h2 className="mp-section-title">دستور جلسات</h2>
+            {agendaItems.length === 0 ? (
+              <p className="mp-item-row">{DASH}</p>
+            ) : (
+              <ol className="mp-agenda-list">
+                {agendaItems.map(item => (
+                  <li key={item.id} className="mp-agenda-list-item">
+                    {toPersianDigits(String(item.order))}. {item.title}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         )}
 
-        {/* ── Decisions ─────────────────────────────────────────────────────── */}
         {showDecisions && (
-        <div className="mp-section">
-          <h2 className="mp-section-title">مصوبات</h2>
-          {decisions.length === 0 ? (
-            <p className="mp-item-row">{DASH}</p>
-          ) : (
-            decisions.map((d, i) => {
-              const mainText = d.description || d.title || DASH;
-              return (
-                <div key={d.id} className="mp-decision-item">
-                  <div className="mp-item-title">
-                    مصوبه {toPersianDigits(String(i + 1))} ـ {mainText}
-                  </div>
-                  <div className="mp-decision-meta">
-                    <div className="mp-decision-field">
-                      <span className="mp-item-label">واحد مسئول: </span>
-                      <span>{orDash(d.responsibleUnitName)}</span>
+          <div className="mp-section">
+            <h2 className="mp-section-title">مصوبات</h2>
+            {decisions.length === 0 ? (
+              <p className="mp-item-row">{DASH}</p>
+            ) : (
+              decisions.map((d, i) => {
+                const mainText = d.description || d.title || DASH;
+                return (
+                  <div key={d.id} className="mp-decision-item">
+                    <div className="mp-item-title">
+                      مصوبه {toPersianDigits(String(i + 1))} ـ {mainText}
                     </div>
-                    <div className="mp-decision-field">
-                      <span className="mp-item-label">مهلت انجام: </span>
-                      <span>{d.dueDate ? jalaliDateDisplay(d.dueDate) : DASH}</span>
-                    </div>
+                    {d.clauses.length === 0 ? (
+                      <div className="mp-decision-meta">
+                        <div className="mp-decision-field">
+                          <span className="mp-item-label">واحد مسئول: </span>
+                          <span>{orDash(d.responsibleUnitName)}</span>
+                        </div>
+                        <div className="mp-decision-field">
+                          <span className="mp-item-label">مهلت انجام: </span>
+                          <span>{d.dueDate ? jalaliDateDisplay(d.dueDate) : DASH}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: '10px', paddingRight: '14px' }}>
+                        {d.clauses.map(clause => (
+                          <div key={clause.id} className="mp-decision-item mp-no-break" style={{ marginBottom: '8px' }}>
+                            <div className="mp-item-title">
+                              {formatClauseLabel(clause.order)} ـ {clause.text || DASH}
+                            </div>
+                            <div className="mp-decision-meta">
+                              <div className="mp-decision-field">
+                                <span className="mp-item-label">واحد مسئول: </span>
+                                <span>{orDash(clause.responsibleUnitName)}</span>
+                              </div>
+                              <div className="mp-decision-field">
+                                <span className="mp-item-label">مهلت انجام: </span>
+                                <span>{clause.dueDate ? jalaliDateDisplay(clause.dueDate) : DASH}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
         )}
 
-        {/* ── Signatures ────────────────────────────────────────────────────── */}
         {showParticipants && allSigners.length > 0 && (
           <div className="mp-section">
             <h2 className="mp-section-title">شرکت‌کنندگان و محل امضا</h2>
@@ -236,7 +247,6 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           </div>
         )}
 
-        {/* ── System approvers ────────────────────────────────────────────────── */}
         {showApprovers && data.approvals.length > 0 && (
           <div className="mp-section mp-no-break">
             <h2 className="mp-section-title">تأییدکنندگان سیستمی</h2>
