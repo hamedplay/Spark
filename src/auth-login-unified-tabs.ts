@@ -48,6 +48,15 @@ function syncIdentifierPresentation(root: HTMLElement): void {
   if (input.placeholder !== IDENTIFIER_LABEL) input.placeholder = IDENTIFIER_LABEL;
   input.setAttribute('aria-label', IDENTIFIER_LABEL);
 
+  // This field accepts username, email, or mobile. React's native credential
+  // tabs may leave it as type="email" until submit, which makes the browser
+  // reject username/mobile before our submit handler can infer the real method.
+  // Disable native constraint validation for this unified form and present the
+  // identifier as plain text; server-side/password-login remains authoritative.
+  const form = input.closest<HTMLFormElement>('form.spark-reference-form');
+  if (form) form.noValidate = true;
+  if (input.type !== 'text') input.type = 'text';
+
   const field = input.closest('.spark-reference-field');
   const label = field?.querySelector<HTMLElement>(':scope > span');
   if (label && label.textContent !== IDENTIFIER_LABEL) label.textContent = IDENTIFIER_LABEL;
