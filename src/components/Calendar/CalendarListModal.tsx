@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { X, Search, Share2, Trash2, CreditCard as Edit2 } from 'lucide-react';
 import { CalendarEntry, MeetingData } from './types';
 import type { OrgUserProfile } from '../../lib/useOrgUsers';
@@ -25,8 +26,8 @@ export function CalendarListModal({
     ? allCals.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
     : allCals;
 
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 bg-black/40 z-[200]" onClick={onClose}>
       <div
         className="absolute inset-y-0 left-0 w-full max-w-2xl bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInLeft"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
@@ -104,6 +105,7 @@ export function CalendarListModal({
           </table>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
