@@ -25,6 +25,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { normalizeIranPhone } from '../lib/phoneNormalize';
 import { invokeEdgeFunctionWithTimeout } from '../lib/invokeEdgeFunction';
+import OtpCodeInput from '../features/auth/components/OtpCodeInput';
 
 type AuthMode = 'login' | 'register' | 'reset';
 type LoginTab = 'password' | 'phone_otp';
@@ -115,6 +116,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [phoneOtpStep, setPhoneOtpStep] = useState<PhoneOtpStep>('phone');
   const [phoneOtpPhone, setPhoneOtpPhone] = useState('');
   const [phoneOtpCode, setPhoneOtpCode] = useState('');
+  const [phoneOtpError, setPhoneOtpError] = useState('');
   const [phoneOtpChallengeId, setPhoneOtpChallengeId] = useState<string | null>(null);
   const [phoneOtpResendSeconds, setPhoneOtpResendSeconds] = useState(0);
   const [phoneOtpExpiresSeconds, setPhoneOtpExpiresSeconds] = useState(0);
@@ -125,6 +127,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [recoveryStep, setRecoveryStep] = useState<PasswordRecoveryStep>('phone');
   const [recoveryPhone, setRecoveryPhone] = useState('');
   const [recoveryOtp, setRecoveryOtp] = useState('');
+  const [recoveryOtpError, setRecoveryOtpError] = useState('');
   const [recoveryPassword, setRecoveryPassword] = useState('');
   const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState('');
   const [recoveryShowPassword, setRecoveryShowPassword] = useState(false);
@@ -136,6 +139,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [registrationStep, setRegistrationStep] = useState<RegistrationStep>('details');
   const [registrationForm, setRegistrationForm] = useState<RegistrationForm>(EMPTY_REGISTRATION);
   const [registrationOtp, setRegistrationOtp] = useState('');
+  const [registrationOtpError, setRegistrationOtpError] = useState('');
   const [registrationChallengeId, setRegistrationChallengeId] = useState<string | null>(null);
   const [registrationCountdown, setRegistrationCountdown] = useState(0);
   const [registrationLoading, setRegistrationLoading] = useState(false);
@@ -323,6 +327,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     setPhoneOtpResendSeconds(result.retry_after_seconds);
     setPhoneOtpExpiresSeconds(result.expires_in_seconds);
     setPhoneOtpCode('');
+    setPhoneOtpError('');
     setPhoneOtpStep('otp');
     toast.success('کد تأیید ارسال شد.');
   };
@@ -349,9 +354,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const handlePhoneOtpVerify = async () => {
     if (phoneOtpVerifyRef.current) return;
     if (!/^\d{6}$/.test(phoneOtpCode) || !phoneOtpChallengeId) {
-      toast.error('کد تأیید باید دقیقاً ۶ رقم باشد');
+      const message = 'کد تأیید باید دقیقاً ۶ رقم باشد';
+      setPhoneOtpError(message);
+      toast.error(message);
       return;
     }
+    setPhoneOtpError('');
     phoneOtpVerifyRef.current = true;
     setPhoneOtpLoading(true);
     try {
@@ -368,7 +376,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         }),
       });
       const result = await response.json().catch(() => ({}));
-      if (response.status === 401) { toast.error('کد اشتباه یا منقضی شده است'); return; }
+      if (response.status === 401) { const message = 'کد اشتباه یا منقضی شده است'; setPhoneOtpError(message); toast.error(message); return; }
       if (response.status === 429) { toast.error('تعداد تلاش‌ها بیش از حد مجاز است. کمی بعد دوباره تلاش کنید.'); return; }
       if (!response.ok || !isNonEmptyString(result.access_token) || !isNonEmptyString(result.refresh_token)) {
         toast.error('ورود پیامکی در دسترس نیست');
@@ -421,6 +429,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       if (result.ok !== true || !isValidUuid(result.challenge_id)) throw new Error('INVALID_RECOVERY_RESPONSE');
       setRecoveryChallengeId(result.challenge_id);
       setRecoveryOtp('');
+      setRecoveryOtpError('');
       setRecoveryStep('otp');
       setRecoveryCountdown(60);
       toast.success('اگر شماره واردشده متعلق به یک حساب فعال باشد، کد بازیابی ارسال می‌شود.');
@@ -433,9 +442,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
   const handleRecoveryVerify = async () => {
     if (!/^\d{6}$/.test(recoveryOtp) || !recoveryChallengeId) {
-      toast.error('کد تأیید باید دقیقاً ۶ رقم باشد');
+      const message = 'کد تأیید باید دقیقاً ۶ رقم باشد';
+      setRecoveryOtpError(message);
+      toast.error(message);
       return;
     }
+    setRecoveryOtpError('');
     setRecoveryLoading(true);
     try {
       const result = await invokeEdgeFunctionWithTimeout<{ ok?: boolean; reset_token?: unknown }>(
@@ -443,13 +455,17 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         { challenge_id: recoveryChallengeId, otp: recoveryOtp },
       );
       if (result.ok !== true || !isNonEmptyString(result.reset_token)) {
-        toast.error('کد نامعتبر است یا منقضی شده است.');
+        const message = 'کد نامعتبر است یا منقضی شده است.';
+        setRecoveryOtpError(message);
+        toast.error(message);
         return;
       }
       setRecoveryResetToken(result.reset_token);
       setRecoveryStep('new_password');
     } catch {
-      toast.error('خطا در تأیید کد');
+      const message = 'خطا در تأیید کد';
+      setRecoveryOtpError(message);
+      toast.error(message);
     } finally {
       setRecoveryLoading(false);
     }
@@ -490,8 +506,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     }
   };
 
-  const handleRegistrationRequest = async (event: FormEvent) => {
-    event.preventDefault();
+  const handleRegistrationRequest = async (event?: FormEvent) => {
+    event?.preventDefault();
     if (registrationRequestRef.current) return;
     if (!registrationForm.firstName.trim() || !registrationForm.lastName.trim()) { toast.error('نام و نام خانوادگی را وارد کنید'); return; }
     if (!/^[a-zA-Z][a-zA-Z0-9._]{2,}$/.test(registrationForm.username.trim())) { toast.error('نام کاربری معتبر وارد کنید'); return; }
@@ -525,6 +541,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       }
       setRegistrationChallengeId(result.challenge_id);
       setRegistrationOtp('');
+      setRegistrationOtpError('');
       setRegistrationStep('otp');
       setRegistrationCountdown(authConfig?.registration_otp_resend_seconds ?? 60);
       toast.success('اگر اطلاعات قابل ثبت باشد، کد تأیید ارسال شده است.');
@@ -538,11 +555,13 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
   const handleRegistrationVerify = async () => {
     if (!/^\d{6}$/.test(registrationOtp) || !registrationChallengeId) {
-      toast.error('کد تأیید باید دقیقاً ۶ رقم باشد');
+      const message = 'کد تأیید باید دقیقاً ۶ رقم باشد';
+      setRegistrationOtpError(message);
+      toast.error(message);
       return;
     }
+    setRegistrationOtpError('');
     setRegistrationLoading(true);
-    setRegistrationStep('submitting');
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-public-registration-otp`, {
         method: 'POST',
@@ -563,7 +582,9 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result.error) {
-        toast.error(result.error || 'کد نامعتبر است یا امکان تکمیل ثبت‌نام وجود ندارد.');
+        const message = result.error || 'کد نامعتبر است یا امکان تکمیل ثبت‌نام وجود ندارد.';
+        setRegistrationOtpError(message);
+        toast.error(message);
         setRegistrationStep('otp');
         return;
       }
@@ -578,7 +599,9 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       setRegistrationChallengeId(null);
       onSuccess();
     } catch {
-      toast.error('خطا در تأیید کد');
+      const message = 'خطا در تأیید کد';
+      setRegistrationOtpError(message);
+      toast.error(message);
       setRegistrationStep('otp');
     } finally {
       setRegistrationLoading(false);
@@ -727,12 +750,15 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                     ) : (
                       <div className="spark-reference-form">
                         <p className="spark-reference-helper">کد تأیید برای <b dir="ltr">{maskPhone(phoneOtpPhone)}</b> ارسال شد.</p>
-                        <label className="spark-reference-field">
-                          <span>کد تأیید</span>
-                          <div className="spark-reference-input-wrap spark-reference-otp-wrap">
-                            <input type="text" inputMode="numeric" maxLength={6} dir="ltr" value={phoneOtpCode} onChange={event => setPhoneOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••" />
-                          </div>
-                        </label>
+                        <OtpCodeInput
+                          value={phoneOtpCode}
+                          onChange={nextValue => { setPhoneOtpCode(nextValue); if (phoneOtpError) setPhoneOtpError(''); }}
+                          status={phoneOtpLoading ? 'checking' : phoneOtpError ? 'error' : 'idle'}
+                          errorMessage={phoneOtpError}
+                          hint="کد ۶ رقمی ارسال‌شده به شماره موبایل را وارد کنید"
+                          autoFocusKey={phoneOtpChallengeId ?? 'phone-login'}
+                          disabled={phoneOtpLoading}
+                        />
                         <p className="spark-reference-timer">زمان باقی‌مانده: {Math.floor(phoneOtpExpiresSeconds / 60)}:{String(phoneOtpExpiresSeconds % 60).padStart(2, '0')}</p>
                         <button type="button" className="spark-reference-submit" disabled={phoneOtpLoading || phoneOtpCode.length !== 6} onClick={handlePhoneOtpVerify}>
                           {phoneOtpLoading ? <LoaderCircle className="spark-spin" /> : <><span>تأیید و ورود</span><ArrowLeft /></>}
@@ -763,7 +789,15 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                   </>
                 ) : recoveryStep === 'otp' ? (
                   <>
-                    <label className="spark-reference-field"><span>کد تأیید</span><div className="spark-reference-input-wrap spark-reference-otp-wrap"><input type="text" inputMode="numeric" maxLength={6} dir="ltr" value={recoveryOtp} onChange={event => setRecoveryOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••" /></div></label>
+                    <OtpCodeInput
+                      value={recoveryOtp}
+                      onChange={nextValue => { setRecoveryOtp(nextValue); if (recoveryOtpError) setRecoveryOtpError(''); }}
+                      status={recoveryLoading ? 'checking' : recoveryOtpError ? 'error' : 'idle'}
+                      errorMessage={recoveryOtpError}
+                      hint="کد ۶ رقمی بازیابی را وارد کنید"
+                      autoFocusKey={recoveryChallengeId ?? 'password-recovery'}
+                      disabled={recoveryLoading}
+                    />
                     <button type="button" className="spark-reference-submit" disabled={recoveryLoading || recoveryOtp.length !== 6} onClick={() => void handleRecoveryVerify()}>{recoveryLoading ? <LoaderCircle className="spark-spin" /> : <><span>تأیید کد</span><ArrowLeft /></>}</button>
                     <button type="button" className="spark-reference-link spark-reference-center-link" disabled={recoveryCountdown > 0} onClick={() => void handleRecoveryRequest()}>{recoveryCountdown > 0 ? `ارسال مجدد پس از ${recoveryCountdown} ثانیه` : 'ارسال مجدد کد'}</button>
                   </>
@@ -802,9 +836,17 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                 ) : registrationStep === 'otp' ? (
                   <div className="spark-reference-form">
                     <p className="spark-reference-helper">کد تأیید ارسال‌شده را وارد کنید.</p>
-                    <label className="spark-reference-field"><span>کد تأیید</span><div className="spark-reference-input-wrap spark-reference-otp-wrap"><input type="text" inputMode="numeric" maxLength={6} dir="ltr" value={registrationOtp} onChange={event => setRegistrationOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••" /></div></label>
+                    <OtpCodeInput
+                      value={registrationOtp}
+                      onChange={nextValue => { setRegistrationOtp(nextValue); if (registrationOtpError) setRegistrationOtpError(''); }}
+                      status={registrationLoading ? 'checking' : registrationOtpError ? 'error' : 'idle'}
+                      errorMessage={registrationOtpError}
+                      hint="کد ۶ رقمی ثبت‌نام را وارد کنید"
+                      autoFocusKey={registrationChallengeId ?? 'registration'}
+                      disabled={registrationLoading}
+                    />
                     <button type="button" className="spark-reference-submit" disabled={registrationLoading || registrationOtp.length !== 6} onClick={() => void handleRegistrationVerify()}><span>تأیید و ثبت‌نام</span><ArrowLeft /></button>
-                    <p className="spark-reference-timer">ارسال مجدد پس از {registrationCountdown} ثانیه</p>
+                    <button type="button" className="spark-reference-link spark-reference-center-link" disabled={registrationLoading || registrationCountdown > 0} onClick={() => void handleRegistrationRequest()}>{registrationCountdown > 0 ? `ارسال مجدد پس از ${registrationCountdown} ثانیه` : 'ارسال مجدد کد'}</button>
                   </div>
                 ) : (
                   <div className="spark-reference-inline-state"><LoaderCircle className="spark-spin" /> در حال تکمیل ثبت‌نام...</div>
