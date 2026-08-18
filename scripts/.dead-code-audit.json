@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-18T16:56:57.380Z",
-  "code_files": 650,
+  "generated_at": "2026-08-18T17:04:53.700Z",
+  "code_files": 638,
   "production_entries": [
     "src/main.tsx",
     "supabase/functions/admin-delete-user/index.ts",
@@ -54,23 +54,12 @@
   ],
   "production_reachable": 613,
   "production_unreachable": [
-    "src/app/hooks/useMaintenanceMode.ts",
-    "src/app/hooks/useSparkVisibility.ts",
-    "src/components/Minutes/Form/JalaliDateField.tsx",
-    "src/components/PortalConfig/AuditLists.tsx",
-    "src/components/PortalConfig/BaleOtpConfigCard.tsx",
     "src/components/PortalConfig/MfaPanel.tsx",
     "src/components/PortalConfig/PasswordRecoveryCard.tsx",
     "src/components/PortalConfig/PhoneLoginToggleCard.tsx",
-    "src/components/PortalConfig/PhoneSyncCard.tsx",
-    "src/components/TelegramWebhookSetup.tsx",
-    "src/components/ThemeToggle.tsx",
-    "src/components/VideoConference/Room/SidePanelHeader.tsx",
     "src/features/auth/services/healthCheckService.ts",
-    "src/features/auth/services/recoveryService.ts",
     "src/features/auth/types/healthCheck.ts",
     "src/features/auth/types/recovery.ts",
-    "src/features/meetings/components/MeetingCard/MeetingEditForm.tsx",
     "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
     "src/features/security-administration/components/AccountLifecycleHistory.tsx",
     "src/features/security-administration/components/AccountLifecycleManagement.tsx",
@@ -89,51 +78,10 @@
     "src/features/security-administration/utils/securityAdministrationValidation.ts",
     "src/features/security-administration/utils/securityAuditLabels.ts",
     "src/features/security-administration/utils/tehranDateRange.ts",
-    "src/shared/repositories/publicProfileRepository.ts",
     "src/vite-env.d.ts"
   ],
   "strong_dead_file_candidates": [],
   "unreachable_with_references": [
-    {
-      "file": "src/app/hooks/useMaintenanceMode.ts",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/app/hooks/useSparkVisibility.ts",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/components/Minutes/Form/JalaliDateField.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/components/PortalConfig/AuditLists.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/components/PortalConfig/BaleOtpConfigCard.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
     {
       "file": "src/components/PortalConfig/MfaPanel.tsx",
       "incoming": [],
@@ -163,50 +111,10 @@
       ]
     },
     {
-      "file": "src/components/PortalConfig/PhoneSyncCard.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/components/TelegramWebhookSetup.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/components/ThemeToggle.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/components/VideoConference/Room/SidePanelHeader.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
       "file": "src/features/auth/services/healthCheckService.ts",
       "incoming": [
         "src/features/security-administration/components/HealthCheckPanel.tsx"
       ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/features/auth/services/recoveryService.ts",
-      "incoming": [],
       "textual_references": [
         "scripts/.dead-code-audit.json",
         "scripts/.jscpd-audit.json"
@@ -227,13 +135,12 @@
     },
     {
       "file": "src/features/auth/types/recovery.ts",
-      "incoming": [
-        "src/features/auth/services/recoveryService.ts"
-      ],
+      "incoming": [],
       "textual_references": [
         "public/sw.js",
         "scripts/.dead-code-audit.json",
         "scripts/.jscpd-audit.json",
+        "scripts/remove-confirmed-dead-files.mjs",
         "tests/auth/authSecurityConfig.test.ts",
         "tests/auth/phoneRecoveryConfigRegression.test.ts",
         "tests/phase3/phase3bSecurity.test.ts",
@@ -246,14 +153,6 @@
         "tests/phase8/phase8RuntimeP0Closure.test.mjs",
         "tests/phase8FinalAuthClosure.test.ts",
         "tests/phase8SecurityVerification.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/meetings/components/MeetingCard/MeetingEditForm.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
       ]
     },
     {
@@ -479,14 +378,6 @@
         "scripts/.jscpd-audit.json",
         "tests/phase3/phase3cSecurity.test.ts",
         "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/shared/repositories/publicProfileRepository.ts",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
       ]
     },
     {
@@ -973,23 +864,6 @@
           "file": "supabase/functions/auth-send-sms-hook/index.ts",
           "line": 13,
           "name": "normalizeIranPhone",
-          "lines": 8
-        }
-      ]
-    },
-    {
-      "hash": "089b2f448bcd2289e860426d616ddb6ff51130d13b23f61ea08942b18675b14a",
-      "items": [
-        {
-          "file": "src/components/Minutes/Form/JalaliDateField.tsx",
-          "line": 34,
-          "name": "(anonymous)",
-          "lines": 8
-        },
-        {
-          "file": "src/components/Minutes/Form/JalaliDatePicker.tsx",
-          "line": 64,
-          "name": "(anonymous)",
           "lines": 8
         }
       ]
