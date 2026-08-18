@@ -10,6 +10,11 @@ const mustFind = (text, marker, label = marker) => {
   if (i < 0) fail(`marker not found: ${label}`);
   return i;
 };
+const replaceExactlyOnce = (text, from, to, label) => {
+  const occurrences = text.split(from).length - 1;
+  if (occurrences !== 1) fail(`expected exactly one ${label}, found ${occurrences}`);
+  return text.replace(from, to);
+};
 
 function refactorDailyReport() {
   const indexPath = 'supabase/functions/send-daily-meetings/index.ts';
@@ -108,8 +113,22 @@ function refactorSendSms() {
   const imports = sf2.statements.filter(ts.isImportDeclaration);
   if (!imports.length) fail('send-sms imports not found after transform');
   const insertAt = imports[imports.length - 1].getEnd();
-  const addedImports = `\nimport { normalizePhone } from "./phone.ts";\nimport { handleDispatchMode, handleExternalMode } from "./requestModes.ts";`;
+  const addedImports = `\nimport { isValidPhone, normalizePhone } from "./phone.ts";\nimport { handleDispatchMode, handleExternalMode } from "./requestModes.ts";`;
   next = next.slice(0, insertAt) + addedImports + next.slice(insertAt);
+
+  // The original catch block reads isAuthOtp, so its binding must live outside the try block.
+  next = replaceExactlyOnce(
+    next,
+    '  try {\n    const supabase = adminClient();',
+    '  let isAuthOtp = false;\n\n  try {\n    const supabase = adminClient();',
+    'send-sms handler try marker',
+  );
+  next = replaceExactlyOnce(
+    next,
+    "    const isAuthOtp = mode === 'auth_otp';",
+    "    isAuthOtp = mode === 'auth_otp';",
+    'send-sms isAuthOtp declaration',
+  );
 
   write(phonePath, phone);
   write(modesPath, modes);
