@@ -1,6 +1,5 @@
 import { supabase } from '../../lib/supabase';
-import type { MinutesLayoutConfig } from '../MinutesDocumentData';
-import type { MinutesDocumentData } from '../MinutesDocumentData';
+import type { MinutesLayoutConfig, MinutesDocumentData } from './MinutesDocumentData';
 import { toDocData } from './minutesToDocData';
 import { fetchMinutesConfig } from './fetchMinutesConfig';
 import type { DecisionRow } from './types';
@@ -47,7 +46,6 @@ export async function loadDocumentSnapshot(
 ): Promise<MinutesDocumentSnapshot> {
   const { minuteId } = params;
 
-  // 1. Config + logo (reuse cached if available)
   let config: MinutesLayoutConfig;
   let logoUrl: string | null;
   if (params.cachedConfig) {
@@ -59,7 +57,6 @@ export async function loadDocumentSnapshot(
     logoUrl = fetched.logoUrl;
   }
 
-  // 2. Minute row
   const { data: minData, error: minErr } = await supabase
     .from('minutes')
     .select('id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_name_snapshot, secretary_name_snapshot, chair_name_snapshot, secretary_user_id, chair_user_id, created_by_user_id, notes, confidentiality, status, approval_mode, revision_number, submitted_at, secretary_confirmed_at, chair_confirmed_at, published_at, created_at, updated_at')
@@ -69,7 +66,6 @@ export async function loadDocumentSnapshot(
   if (!minData) throw new Error('MINUTE_NOT_FOUND');
   const minute = minData as MinuteDetail;
 
-  // 3. All sub-queries in parallel
   const [partsRes, extRes, agendaRes, approvalsRes, commentsRes, decisionsRes] = await Promise.all([
     supabase
       .from('minutes_participants')
@@ -101,7 +97,6 @@ export async function loadDocumentSnapshot(
     supabase.rpc('get_minutes_decisions_for_view', { p_minute_id: minuteId }),
   ]);
 
-  // Every query must succeed
   if (partsRes.error) throw new Error(partsRes.error.message);
   if (extRes.error) throw new Error(extRes.error.message);
   if (agendaRes.error) throw new Error(agendaRes.error.message);
@@ -113,7 +108,6 @@ export async function loadDocumentSnapshot(
   const externalParts = (extRes.data || []) as ExternalParticipantRow[];
   const agendaResults = (agendaRes.data || []) as AgendaResultRow[];
 
-  // 4. Fetch approver names
   const approvalRows = (approvalsRes.data || []) as Array<{
     id: string; approver_user_id: string; status: ApprovalStatus;
     approved_at: string | null; changes_requested_at: string | null;
@@ -123,65 +117,64 @@ export async function loadDocumentSnapshot(
   let approvals: ApprovalRow[] = [];
   if (approvalRows.length > 0) {
     const userIds = new Set<string>();
-    for (const a of approvalRows) {
-      userIds.add(a.approver_user_id);
-      if (a.delegate_user_id) userIds.add(a.delegate_user_id);
-      if (a.acted_by_user_id) userIds.add(a.acted_by_user_id);
+    for (const approval of approvalRows) {
+      userIds.add(approval.approver_user_id);
+      if (approval.delegate_user_id) userIds.add(approval.delegate_user_id);
+      if (approval.acted_by_user_id) userIds.add(approval.acted_by_user_id);
     }
     const { data: profiles, error: profErr } = await supabase
       .from('profiles_public')
       .select('user_id, full_name')
       .in('user_id', [...userIds]);
     if (profErr) throw new Error(profErr.message);
-    const nameMap = new Map((profiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
-    approvals = approvalRows.map(a => ({
-      id: a.id,
-      approver_user_id: a.approver_user_id,
-      status: a.status,
-      approved_at: a.approved_at,
-      changes_requested_at: a.changes_requested_at,
-      approver_name: nameMap.get(a.approver_user_id) || 'کاربر',
-      delegate_user_id: a.delegate_user_id,
-      delegate_name: a.delegate_user_id ? (nameMap.get(a.delegate_user_id) || 'کاربر') : null,
-      delegated_by_user_id: a.delegated_by_user_id,
-      delegated_at: a.delegated_at,
-      acted_by_user_id: a.acted_by_user_id,
-      acted_by_name: a.acted_by_user_id ? (nameMap.get(a.acted_by_user_id) || 'کاربر') : null,
+    const nameMap = new Map((profiles || []).map((profile: { user_id: string; full_name: string }) => [profile.user_id, profile.full_name || 'کاربر']));
+    approvals = approvalRows.map(approval => ({
+      id: approval.id,
+      approver_user_id: approval.approver_user_id,
+      status: approval.status,
+      approved_at: approval.approved_at,
+      changes_requested_at: approval.changes_requested_at,
+      approver_name: nameMap.get(approval.approver_user_id) || 'کاربر',
+      delegate_user_id: approval.delegate_user_id,
+      delegate_name: approval.delegate_user_id ? (nameMap.get(approval.delegate_user_id) || 'کاربر') : null,
+      delegated_by_user_id: approval.delegated_by_user_id,
+      delegated_at: approval.delegated_at,
+      acted_by_user_id: approval.acted_by_user_id,
+      acted_by_name: approval.acted_by_user_id ? (nameMap.get(approval.acted_by_user_id) || 'کاربر') : null,
     }));
   }
 
-  // 5. Fetch approval comment creator names
   let approvalComments: ApprovalCommentRow[] = [];
   const commentsData = (commentsRes.data || []) as Array<{
     id: string; agenda_result_id: string | null; reason: string;
     suggested_correction: string | null; created_by_user_id: string; created_at: string;
   }>;
   if (commentsData.length > 0) {
-    const creatorIds = [...new Set(commentsData.map(c => c.created_by_user_id))];
+    const creatorIds = [...new Set(commentsData.map(comment => comment.created_by_user_id))];
     const { data: creatorProfiles, error: creatorErr } = await supabase
       .from('profiles_public')
       .select('user_id, full_name')
       .in('user_id', creatorIds);
     if (creatorErr) throw new Error(creatorErr.message);
-    const creatorNameMap = new Map((creatorProfiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name || 'کاربر']));
-    approvalComments = commentsData.map(c => ({
-      id: c.id,
-      agenda_result_id: c.agenda_result_id,
-      reason: c.reason,
-      suggested_correction: c.suggested_correction,
-      created_by_user_id: c.created_by_user_id,
-      created_by_name: creatorNameMap.get(c.created_by_user_id) || 'کاربر',
-      created_at: c.created_at,
+    const creatorNameMap = new Map((creatorProfiles || []).map((profile: { user_id: string; full_name: string }) => [profile.user_id, profile.full_name || 'کاربر']));
+    approvalComments = commentsData.map(comment => ({
+      id: comment.id,
+      agenda_result_id: comment.agenda_result_id,
+      reason: comment.reason,
+      suggested_correction: comment.suggested_correction,
+      created_by_user_id: comment.created_by_user_id,
+      created_by_name: creatorNameMap.get(comment.created_by_user_id) || 'کاربر',
+      created_at: comment.created_at,
     }));
   }
 
-  // 6. Map decisions RPC result
   const viewRows = (decisionsRes.data || []) as Array<{
-    id: string; title: string; description: string | null;
+    id: string; parent_decision_id: string | null; clause_order: number | null;
+    title: string; description: string | null;
     priority: DecisionRow['priority']; status: DecisionRow['status'];
     progress_percent: number; start_date: string | null; due_date: string | null;
     responsible_unit_name_snapshot: string | null;
-    primary_owner_user_id: string; owner_name: string | null;
+    primary_owner_user_id: string | null; owner_name: string | null;
     requires_followup: boolean; latest_update: string | null;
     agenda_result_id: string | null; agenda_title: string | null;
     responsible_party_type: string | null;
@@ -190,29 +183,42 @@ export async function loadDocumentSnapshot(
     external_responsible_organization_snapshot: string | null;
     external_responsible_position_snapshot: string | null;
   }>;
-  const decRows: DecisionRow[] = viewRows.map(r => ({
-    id: r.id, minute_id: minuteId, agenda_result_id: r.agenda_result_id,
-    title: r.title, description: r.description,
-    primary_owner_user_id: r.primary_owner_user_id,
+  const decisionRows: DecisionRow[] = viewRows.map(row => ({
+    id: row.id,
+    minute_id: minuteId,
+    agenda_result_id: row.agenda_result_id,
+    parent_decision_id: row.parent_decision_id,
+    clause_order: row.clause_order,
+    title: row.title,
+    description: row.description,
+    primary_owner_user_id: row.primary_owner_user_id,
     responsible_unit_id: null,
-    responsible_unit_name_snapshot: r.responsible_unit_name_snapshot,
-    priority: r.priority, status: r.status, progress_percent: r.progress_percent,
-    start_date: r.start_date, due_date: r.due_date, completed_at: null,
-    requires_followup: r.requires_followup, latest_update: r.latest_update,
-    created_by_user_id: r.primary_owner_user_id, created_at: '', updated_at: '',
-    discussion_result: null, result_type: null, additional_notes: null,
-    responsible_party_type: (r.responsible_party_type || 'internal') as 'internal' | 'external',
-    external_responsible_participant_id: r.external_responsible_participant_id,
-    external_responsible_name_snapshot: r.external_responsible_name_snapshot,
-    external_responsible_organization_snapshot: r.external_responsible_organization_snapshot,
-    external_responsible_position_snapshot: r.external_responsible_position_snapshot,
+    responsible_unit_name_snapshot: row.responsible_unit_name_snapshot,
+    priority: row.priority,
+    status: row.status,
+    progress_percent: row.progress_percent,
+    start_date: row.start_date,
+    due_date: row.due_date,
+    completed_at: null,
+    requires_followup: row.requires_followup,
+    latest_update: row.latest_update,
+    created_by_user_id: row.primary_owner_user_id || '',
+    created_at: '',
+    updated_at: '',
+    discussion_result: null,
+    result_type: null,
+    additional_notes: null,
+    responsible_party_type: (row.responsible_party_type || 'internal') as 'internal' | 'external',
+    external_responsible_participant_id: row.external_responsible_participant_id,
+    external_responsible_name_snapshot: row.external_responsible_name_snapshot,
+    external_responsible_organization_snapshot: row.external_responsible_organization_snapshot,
+    external_responsible_position_snapshot: row.external_responsible_position_snapshot,
   }));
   const ownerNames: Record<string, string> = {};
-  for (const r of viewRows) {
-    if (r.owner_name) ownerNames[r.primary_owner_user_id] = r.owner_name;
+  for (const row of viewRows) {
+    if (row.owner_name && row.primary_owner_user_id) ownerNames[row.primary_owner_user_id] = row.owner_name;
   }
 
-  // 7. Build atomic snapshot
   const docData = toDocData({
     minute: {
       id: minute.id,
@@ -239,7 +245,7 @@ export async function loadDocumentSnapshot(
     agendaResults,
     approvals,
     approvalComments,
-    decisions: decRows,
+    decisions: decisionRows,
     ownerNames,
     logoUrl,
     config,
