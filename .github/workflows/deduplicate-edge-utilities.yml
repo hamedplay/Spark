@@ -37,6 +37,24 @@ jobs:
         run: |
           set +e
           : > /tmp/edge-dedup.log
+
+          EDGE_FILES=(
+            supabase/functions/admin-users/index.ts
+            supabase/functions/bulk-sync-profile-phones/index.ts
+            supabase/functions/change-user-phone/index.ts
+            supabase/functions/sync-profile-phone-to-auth/index.ts
+            supabase/functions/auth-send-sms-hook/index.ts
+            supabase/functions/password-login/index.ts
+            supabase/functions/process-decision-due-overdue/index.ts
+            supabase/functions/process-minutes-reminders/index.ts
+            supabase/functions/process-notification-outbox/index.ts
+            supabase/functions/_shared/registration-security.ts
+            supabase/functions/_shared/phoneOtpLoginV2.ts
+          )
+
+          NO_COLOR=1 deno check --node-modules-dir=auto "${EDGE_FILES[@]}" > /tmp/deno-baseline.log 2>&1
+          baseline_deno_rc=$?
+
           node scripts/deduplicate-edge-utilities.mjs >> /tmp/edge-dedup.log 2>&1
           transform_rc=$?
           build_rc=99
@@ -49,21 +67,41 @@ jobs:
           fi
 
           if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ]; then
-            deno check --node-modules-dir=auto \
-              supabase/functions/admin-users/index.ts \
-              supabase/functions/bulk-sync-profile-phones/index.ts \
-              supabase/functions/change-user-phone/index.ts \
-              supabase/functions/sync-profile-phone-to-auth/index.ts \
-              supabase/functions/auth-send-sms-hook/index.ts \
-              supabase/functions/password-login/index.ts \
-              supabase/functions/process-decision-due-overdue/index.ts \
-              supabase/functions/process-minutes-reminders/index.ts \
-              supabase/functions/process-notification-outbox/index.ts \
-              supabase/functions/_shared/registration-security.ts \
-              supabase/functions/_shared/phoneOtpLoginV2.ts \
+            NO_COLOR=1 deno check --node-modules-dir=auto \
+              "${EDGE_FILES[@]}" \
               supabase/functions/_shared/phone.ts \
-              supabase/functions/_shared/crypto.ts >> /tmp/edge-dedup.log 2>&1
+              supabase/functions/_shared/crypto.ts > /tmp/deno-after.log 2>&1
+            after_deno_rc=$?
+
+            python3 - <<'PY' >> /tmp/edge-dedup.log 2>&1
+          import collections
+          import re
+          from pathlib import Path
+
+          def diagnostics(path):
+              text = Path(path).read_text(errors='replace')
+              out = []
+              pattern = re.compile(
+                  r'TS(\d+) \[ERROR\]: ([^\n]+).*?at (?:file://)?[^\n]*?/(supabase/functions/[^:\n]+):\d+:\d+',
+                  re.S,
+              )
+              for code, message, file in pattern.findall(text):
+                  out.append((file, code, re.sub(r'\s+', ' ', message).strip()))
+              return collections.Counter(out)
+
+          before = diagnostics('/tmp/deno-baseline.log')
+          after = diagnostics('/tmp/deno-after.log')
+          new_errors = after - before
+          print(f'deno baseline diagnostics={sum(before.values())}')
+          print(f'deno after diagnostics={sum(after.values())}')
+          if new_errors:
+              print('NEW_DENO_DIAGNOSTICS')
+              for diag, count in sorted(new_errors.items()):
+                  print(count, diag)
+              raise SystemExit(1)
+          PY
             deno_rc=$?
+            echo "baseline_deno_rc=$baseline_deno_rc after_deno_rc=$after_deno_rc comparison_rc=$deno_rc" >> /tmp/edge-dedup.log
           fi
 
           if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$deno_rc" -eq 0 ]; then
