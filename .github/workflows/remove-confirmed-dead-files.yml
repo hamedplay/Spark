@@ -1,0 +1,65 @@
+name: Remove confirmed dead files
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/remove-confirmed-dead-files.mjs
+      - .github/workflows/remove-confirmed-dead-files.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Remove guarded dead files
+        run: node scripts/remove-confirmed-dead-files.mjs
+
+      - name: Production build gate
+        run: npm run build
+
+      - name: Re-run reachability audit
+        run: node scripts/audit-dead-code.mjs
+
+      - name: Verify removed files stay absent
+        shell: bash
+        run: |
+          for f in \
+            src/app/hooks/useMaintenanceMode.ts \
+            src/app/hooks/useSparkVisibility.ts \
+            src/components/Minutes/Form/JalaliDateField.tsx \
+            src/components/PortalConfig/AuditLists.tsx \
+            src/components/PortalConfig/BaleOtpConfigCard.tsx \
+            src/components/PortalConfig/PhoneSyncCard.tsx \
+            src/components/TelegramWebhookSetup.tsx \
+            src/components/ThemeToggle.tsx \
+            src/components/VideoConference/Room/SidePanelHeader.tsx \
+            src/features/auth/services/recoveryService.ts \
+            src/features/meetings/components/MeetingCard/MeetingEditForm.tsx \
+            src/shared/repositories/publicProfileRepository.ts
+          do
+            test ! -e "$f"
+          done
+
+      - name: Commit validated cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u src
+          git commit -m "cleanup: remove confirmed dead application files"
+          git push origin HEAD:main
