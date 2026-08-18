@@ -1,4 +1,4 @@
-# retry: use AST-aware direct callback matchers
+# rerun on current main after concurrent changes
 name: Cleanup deterministic duplicates
 
 on:
