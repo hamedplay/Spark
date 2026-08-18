@@ -266,6 +266,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
           setDecisions(rows.length > 0 ? rows.map(row => ({
             id: uid(),
             decisionId: (row.id as string) || null,
+            parentDecisionId: (row.parent_decision_id as string) || null,
+            clauseOrder: row.clause_order != null ? Number(row.clause_order) : null,
             agendaResultId: (row.agenda_result_id as string) || null,
             meetingAgendaItemId: (row.agenda_result_id as string)
               ? (agendaResultMap.get(row.agenda_result_id as string) || '')
