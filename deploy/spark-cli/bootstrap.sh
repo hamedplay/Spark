@@ -19,6 +19,10 @@ command -v curl >/dev/null 2>&1 || {
   echo "curl is required. Install curl first." >&2
   exit 1
 }
+command -v python3 >/dev/null 2>&1 || {
+  echo "python3 is required to prepare the Spark terminal UI runtime." >&2
+  exit 1
+}
 
 resolve_main_sha() {
   local response sha
@@ -72,6 +76,24 @@ curl -fsSL -H 'Cache-Control: no-cache' \
   "${TUI_VENDOR_RAW}/LICENSE.md" \
   -o "${tmp}/vendor/terminal-menus.LICENSE.md"
 
+# Spark uses keyboard-first navigation. Keep mouse clicks but disable drag/all-motion
+# reporting so moving the mouse does not trigger continuous redraws over SSH.
+python3 - "${tmp}/vendor/terminal-menus.sh" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+needle = r'\e[?1000h\e[?1002h\e[?1003h\e[?1006h'
+replacement = r'\e[?1000h\e[?1006h'
+count = text.count(needle)
+if count < 1:
+    raise SystemExit("Expected terminal-menus mouse tracking sequence was not found")
+text = text.replace(needle, replacement)
+text += "\n# SPARK_PATCH_CLICK_ONLY_MOUSE=1\n"
+path.write_text(text, encoding="utf-8")
+PY
+
 bash -n "$tmp/spark"
 bash -n "$tmp/spark-tui.sh"
 for file in "$tmp"/lib/*.sh; do bash -n "$file"; done
@@ -80,6 +102,14 @@ grep -q '^mainmenu()' "$tmp/vendor/terminal-menus.sh" || {
   echo "Pinned terminal UI library is missing mainmenu()." >&2
   exit 1
 }
+grep -q '^# SPARK_PATCH_CLICK_ONLY_MOUSE=1$' "$tmp/vendor/terminal-menus.sh" || {
+  echo "Spark click-only mouse patch was not applied to the terminal UI runtime." >&2
+  exit 1
+}
+if grep -Fq '\e[?1000h\e[?1002h\e[?1003h\e[?1006h' "$tmp/vendor/terminal-menus.sh"; then
+  echo "Spark terminal UI still contains all-motion mouse tracking." >&2
+  exit 1
+fi
 
 grep -q 'SPARK_MANAGER_WRAPPER_VERSION="1.3.3"' "$tmp/spark-tui.sh" || {
   echo "Spark TUI wrapper version validation failed." >&2
