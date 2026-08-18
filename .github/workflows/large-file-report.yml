@@ -1,0 +1,23 @@
+name: Large source file audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/large-file-report.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report source line counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          find src supabase tests scripts -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' -o -name '*.css' \) -print0 \
+            | xargs -0 wc -l \
+            | sort -nr \
+            | head -120
