@@ -1,0 +1,77 @@
+name: One-time Spark TUI runtime diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-tui-runtime-diagnostic-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install expect
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y expect
+
+      - name: Install Spark Manager from checked-out revision
+        shell: bash
+        run: |
+          sudo bash deploy/spark-cli/bootstrap.sh
+          spark --version
+
+      - name: Reproduce first-action navigation in a PTY
+        shell: bash
+        run: |
+          cat > /tmp/spark-tui.exp <<'EOF'
+          log_user 1
+          log_file -noappend /tmp/spark-tui-session.log
+          set timeout 15
+          spawn sudo env TERM=xterm-256color COLORTERM=truecolor spark
+          after 1500
+          send "\r"
+          after 1500
+          send "q"
+          after 1000
+          send "q"
+          expect {
+            eof {}
+            timeout {
+              puts "\nEXPECT_TIMEOUT"
+              exit 124
+            }
+          }
+          catch wait result
+          puts "\nWAIT_RESULT=$result"
+          EOF
+          set +e
+          expect /tmp/spark-tui.exp
+          rc=$?
+          set -e
+          echo "EXPECT_RC=$rc"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('/tmp/spark-tui-session.log')
+          raw = p.read_text(errors='replace') if p.exists() else ''
+          clean = re.sub(r'\x1b(?:[@-_]|\[[0-?]*[ -/]*[@-~])', '', raw)
+          Path('/tmp/spark-tui-session.clean.log').write_text(clean)
+          print(clean[-12000:])
+          PY
+          exit "$rc"
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spark-tui-runtime-diagnostic
+          path: |
+            /tmp/spark-tui-session.log
+            /tmp/spark-tui-session.clean.log
+          if-no-files-found: warn
