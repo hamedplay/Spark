@@ -1,4 +1,4 @@
-# retry: create shared UI directory before transformation
+# retry: tighten direct UserRow callback matcher
 name: Cleanup deterministic duplicates
 
 on:
@@ -45,6 +45,16 @@ jobs:
           baseline_deno_rc=$?
 
           mkdir -p src/shared/ui
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/cleanup-deterministic-duplicates.mjs')
+          text = p.read_text()
+          old = "if (text.includes('<UserRow') && text.includes('sendingToUserId')) arrows.push(node.arguments[0]);"
+          new = "if (text.trim().startsWith('u => (') && text.includes('<UserRow') && text.includes('sendingToUserId')) arrows.push(node.arguments[0]);"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one UserRow matcher, found {text.count(old)}')
+          p.write_text(text.replace(old, new))
+          PY
           node scripts/cleanup-deterministic-duplicates.mjs >> /tmp/deterministic-duplicates.log 2>&1
           transform_rc=$?
           build_rc=99
