@@ -1,3 +1,4 @@
+// one-time execution trigger
 import fs from 'node:fs';
 import path from 'node:path';
 import childProcess from 'node:child_process';
@@ -163,7 +164,6 @@ for (const file of trackedTests) {
     }
   }
 
-  // Propagate through top-level helpers/constants that depend on a dead binding.
   let changed = true;
   while (changed) {
     changed = false;
@@ -198,7 +198,6 @@ for (const file of trackedTests) {
   }
 }
 
-// No test may still depend on a deleted implementation path.
 for (const file of trackedTests) {
   const text = fs.readFileSync(file, 'utf8');
   if (containsDeadPath(text)) throw new Error(`test still references dead source path: ${file}`);
