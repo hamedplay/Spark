@@ -48,6 +48,7 @@ mkdir -p "$tmp/lib" "$tmp/vendor"
 
 files=(
   spark
+  spark-tui.sh
   lib/core.sh
   lib/install-base.sh
   lib/install-platform-a.sh
@@ -72,10 +73,20 @@ curl -fsSL -H 'Cache-Control: no-cache' \
   -o "${tmp}/vendor/terminal-menus.LICENSE.md"
 
 bash -n "$tmp/spark"
+bash -n "$tmp/spark-tui.sh"
 for file in "$tmp"/lib/*.sh; do bash -n "$file"; done
 bash -n "$tmp/vendor/terminal-menus.sh"
 grep -q '^mainmenu()' "$tmp/vendor/terminal-menus.sh" || {
   echo "Pinned terminal UI library is missing mainmenu()." >&2
+  exit 1
+}
+
+grep -q 'SPARK_MANAGER_WRAPPER_VERSION="1.3.1"' "$tmp/spark-tui.sh" || {
+  echo "Spark TUI wrapper version validation failed." >&2
+  exit 1
+}
+grep -q '^spark_tui_dispatch_command()' "$tmp/spark-tui.sh" || {
+  echo "Spark TUI wrapper is missing command dispatch." >&2
   exit 1
 }
 
@@ -88,7 +99,8 @@ chmod 0644 "$TUI_VENDOR_REF_FILE"
 stage="$(mktemp -d /usr/local/lib/spark-manager.new.XXXXXX)"
 backup="/usr/local/lib/spark-manager.previous.$$"
 install -d -m 0755 "$stage/lib"
-install -m 0755 "$tmp/spark" "$stage/spark"
+install -m 0755 "$tmp/spark" "$stage/spark-base"
+install -m 0755 "$tmp/spark-tui.sh" "$stage/spark"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
 done
@@ -101,8 +113,18 @@ if ! mv "$stage" "$TARGET"; then
 fi
 ln -sfn "$TARGET/spark" "$CLI_PATH"
 
-if ! "$CLI_PATH" --version >/dev/null 2>&1; then
+if ! version_output="$($CLI_PATH --version 2>/dev/null)"; then
   echo "Spark Server Manager smoke test failed; rolling back installation." >&2
+  rm -f "$CLI_PATH"
+  rm -rf "$TARGET"
+  if [[ -d "$backup" ]]; then
+    mv "$backup" "$TARGET"
+    ln -sfn "$TARGET/spark" "$CLI_PATH"
+  fi
+  exit 1
+fi
+if [[ "$version_output" != "Spark Server Manager 1.3.1" ]]; then
+  echo "Unexpected Spark Server Manager version: ${version_output}" >&2
   rm -f "$CLI_PATH"
   rm -rf "$TARGET"
   if [[ -d "$backup" ]]; then
@@ -113,4 +135,4 @@ if ! "$CLI_PATH" --version >/dev/null 2>&1; then
 fi
 
 rm -rf "$backup"
-printf 'Spark Server Manager installed from %s. Run: spark\n' "${MAIN_SHA:0:12}"
+printf 'Spark Server Manager %s installed from %s. Run: spark\n' "1.3.1" "${MAIN_SHA:0:12}"
