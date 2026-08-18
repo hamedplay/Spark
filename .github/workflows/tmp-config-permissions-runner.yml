@@ -36,6 +36,28 @@ jobs:
         id: transform
         run: node scripts/tmp-config-permissions-fix.mjs
 
+      - name: Align monitoring relation with current Shahr schema
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const monitorPath = 'src/components/SystemMonitoring/TasksMonitor.tsx';
+          let monitor = fs.readFileSync(monitorPath, 'utf8');
+          const monitorNeedle = "from('task_workflow')";
+          const monitorCount = monitor.split(monitorNeedle).length - 1;
+          if (monitorCount !== 2) throw new Error(`Expected 2 legacy task_workflow references, found ${monitorCount}`);
+          monitor = monitor.split(monitorNeedle).join("from('task_workflow_steps')");
+          fs.writeFileSync(monitorPath, monitor);
+
+          const migrationPath = 'supabase/migrations/20260819024500_delegate_config_backend_operations.sql';
+          let migration = fs.readFileSync(migrationPath, 'utf8');
+          const policyNeedle = 'config_monitoring_task_workflow_select ON public.task_workflow';
+          const policyCount = migration.split(policyNeedle).length - 1;
+          if (policyCount !== 2) throw new Error(`Expected 2 task workflow policy references, found ${policyCount}`);
+          migration = migration.split(policyNeedle).join('config_monitoring_task_workflow_steps_select ON public.task_workflow_steps');
+          fs.writeFileSync(migrationPath, migration);
+          NODE
+
       - name: Repair generated test harness
         run: |
           cat > tests/app/configBackendPermissions.test.ts <<'EOF'
@@ -52,6 +74,15 @@ jobs:
             assert.ok(read('supabase/functions/messenger-proxy/index.ts').includes('config_notifications.social_notifications'));
             assert.ok(read('supabase/functions/check-phone-password-reset-runtime/index.ts').includes('config_access.security'));
             assert.ok(read('supabase/functions/send-sms/index.ts').includes('config_notifications.sms'));
+          });
+
+          test('monitoring uses the actual workflow relation and remains read-policy scoped', () => {
+            const monitor = read('src/components/SystemMonitoring/TasksMonitor.tsx');
+            const migration = read('supabase/migrations/20260819024500_delegate_config_backend_operations.sql');
+            assert.ok(monitor.includes("from('task_workflow_steps')"));
+            assert.ok(!monitor.includes("from('task_workflow')"));
+            assert.ok(migration.includes('ON public.task_workflow_steps'));
+            assert.ok(migration.includes("config_modules.monitoring"));
           });
 
           test('special identity-repair gate remains untouched', () => {
@@ -117,6 +148,7 @@ jobs:
             supabase/functions/send-sms/index.ts \
             src/components/UserManagementPanel.tsx \
             src/components/UserGroupsPanel.tsx \
+            src/components/SystemMonitoring/TasksMonitor.tsx \
             supabase/migrations/20260819024500_delegate_config_backend_operations.sql \
             tests/app/configBackendPermissions.test.ts
           git diff --cached --check
