@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="1.0.1"
+SPARK_MANAGER_VERSION="1.1.0"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
 SPARK_ROOT="/opt/spark"
@@ -22,7 +22,9 @@ C_RED=$'\033[31m'
 C_YELLOW=$'\033[33m'
 C_BLUE=$'\033[34m'
 C_CYAN=$'\033[36m'
+C_WHITE=$'\033[37m'
 C_BOLD=$'\033[1m'
+C_DIM=$'\033[2m'
 
 CURRENT_LOG=""
 
@@ -52,29 +54,108 @@ for module in core install-base install-platform-a install-platform-b install-pl
     printf 'Spark Manager module missing: %s\n' "$module_path" >&2
     exit 1
   fi
-  # shellcheck source=/dev/null
   source "$module_path"
 done
 unset module module_path
 
+# Presentation layer only. Operational modules remain unchanged.
+pause() {
+  printf '\n'
+  read -r -p "Press Enter to continue..." _
+}
+
+confirm_word() {
+  local message="$1" word="$2" answer
+  printf '%s\n' "$message"
+  read -r -p "Type ${word} to confirm: " answer
+  [[ "$answer" == "$word" ]]
+}
+
+menu_rule() {
+  printf '%s%s%s\n' "$C_GREEN" "────────────────────────────────────────────────────────────────────────" "$C_RESET"
+}
+
+menu_section() {
+  printf '\n%s%s▸ %s%s\n' "$C_BOLD" "$C_GREEN" "$1" "$C_RESET"
+}
+
+menu_option() {
+  local key="$1" label="$2" detail="${3:-}"
+  printf '  %s[%2s]%s  %s%-30s%s %s%s%s\n' \
+    "$C_CYAN" "$key" "$C_RESET" "$C_BOLD" "$label" "$C_RESET" "$C_DIM" "$detail" "$C_RESET"
+}
+
+menu_option_status() {
+  local key="$1" badge="$2" label="$3"
+  printf '  %s[%2s]%s  %s %-44s\n' "$C_CYAN" "$key" "$C_RESET" "$badge" "$label"
+}
+
+menu_hint() {
+  printf '\n  %s%s%s\n\n' "$C_DIM" "$1" "$C_RESET"
+}
+
+title() {
+  clear_screen
+  local host
+  host="$(hostname -s 2>/dev/null || hostname)"
+  printf '%s%s SPARK SERVER MANAGER%s  %s· Production Infrastructure Control%s\n' \
+    "$C_BOLD" "$C_GREEN" "$C_RESET" "$C_DIM" "$C_RESET"
+  menu_rule
+  printf '%sHost:%s %-24s  %sVersion:%s %s\n' \
+    "$C_DIM" "$C_RESET" "$host" "$C_DIM" "$C_RESET" "$SPARK_MANAGER_VERSION"
+}
+
+welcome_screen() {
+  clear_screen
+  printf '%s%s' "$C_GREEN" "$C_BOLD"
+  cat <<'ART'
+   ███████╗██████╗  █████╗ ██████╗ ██╗  ██╗
+   ██╔════╝██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝
+   ███████╗██████╔╝███████║██████╔╝█████╔╝
+   ╚════██║██╔═══╝ ██╔══██║██╔══██╗██╔═██╗
+   ███████║██║     ██║  ██║██║  ██║██║  ██╗
+   ╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
+ART
+  printf '%s\n' "$C_RESET"
+  printf '%s%sWelcome to Spark Server Manager%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+  printf '%sProduction deployment, operations and infrastructure control for Spark.%s\n' "$C_DIM" "$C_RESET"
+  printf '%sValidation-first workflows · production-aware defaults · detailed logs%s\n\n' "$C_DIM" "$C_RESET"
+  printf '%sManager:%s v%s   %sHost:%s %s\n' \
+    "$C_DIM" "$C_RESET" "$SPARK_MANAGER_VERSION" "$C_DIM" "$C_RESET" "$(hostname -s 2>/dev/null || hostname)"
+  printf '%sRepository:%s github.com/hamedplay/Spark\n\n' "$C_DIM" "$C_RESET"
+  read -r -p "Press Enter to open the control center..." _
+}
+
 main_menu() {
+  welcome_screen
   while true; do
     title
-    printf ' 0) خروج\n'
-    printf ' 1) نصب مرحله‌ای سامانه\n'
-    printf ' 2) تست، Health Check و Logs\n'
-    printf ' 3) Update برنامه از GitHub + Migration + Functions + Frontend\n'
-    printf ' 4) Update ابزارهای Linux\n'
-    printf ' 5) Node / npm / Audit\n'
-    printf ' 6) باز کردن دسترسی مدیریتی Supabase (TLS 8443 / ADMIN_CIDR)\n'
-    printf ' 7) بستن دسترسی مدیریتی Supabase\n'
-    printf ' 8) نمایش وضعیت منابع سرور\n'
-    printf ' 9) Backup Management\n'
-    printf '10) Service Management\n'
-    printf '11) Certificate Management\n'
-    printf '12) Version / Security Info\n'
-    printf '13) Update خود Spark Manager\n\n'
-    read -r -p "انتخاب: " choice
+
+    menu_section "DEPLOYMENT"
+    menu_option "1" "Install / Configure Spark" "Guided 20-step single-host deployment"
+    menu_option "2" "Health Checks & Logs" "Validate services and inspect runtime logs"
+    menu_option "3" "Update Spark Application" "GitHub, migrations, functions and frontend"
+
+    menu_section "SYSTEM"
+    menu_option "4" "Update Linux Packages" "APT packages and reboot status"
+    menu_option "5" "Node.js / npm / Audit" "Dependencies, audit and maintenance"
+    menu_option "8" "Resource Monitor" "CPU, memory, disk, processes and containers"
+
+    menu_section "SECURITY & ACCESS"
+    menu_option "6" "Open Supabase Admin Access" "TLS 8443 restricted to ADMIN_CIDR"
+    menu_option "7" "Close Supabase Admin Access" "Remove the temporary admin gateway"
+    menu_option "11" "TLS Certificate Management" "Inspect and renew certificates"
+
+    menu_section "OPERATIONS"
+    menu_option "9" "Backup Management" "Database and configuration backups"
+    menu_option "10" "Service Management" "Status, restart and reload operations"
+    menu_option "12" "Version & Security Info" "Runtime and deployment version details"
+    menu_option "13" "Update Spark Manager" "Refresh this management console"
+
+    printf '\n'
+    menu_option "0" "Exit" "Close Spark Server Manager"
+    menu_hint "Select an option and press Enter."
+    read -r -p "  Select: " choice
     case "$choice" in
       0) exit 0 ;;
       1) install_menu ;;
@@ -90,7 +171,231 @@ main_menu() {
       11) certificate_menu ;;
       12) version_info; pause ;;
       13) self_update || true; pause ;;
-      *) fail "گزینه نامعتبر"; sleep 1 ;;
+      *) fail "Invalid option"; sleep 1 ;;
+    esac
+  done
+}
+
+install_menu() {
+  while true; do
+    title
+    menu_section "SINGLE-HOST INSTALLATION"
+    menu_hint "Workflow source: deploy/manual-production/single-host.md"
+    menu_option_status "1"  "$(step_badge 1)"  "DNS verification"
+    menu_option_status "2"  "$(step_badge 2)"  "Installation values & configuration"
+    menu_option_status "3"  "$(step_badge 3)"  "Base packages + Docker + Node.js 24"
+    menu_option_status "4"  "$(step_badge 4)"  "Clone / update Spark repository"
+    menu_option_status "5"  "$(step_badge 5)"  "Fetch pinned Supabase source"
+    menu_option_status "6"  "$(step_badge 6)"  "Generate Supabase secrets"
+    menu_option_status "7"  "$(step_badge 7)"  "Configure Supabase environment"
+    menu_option_status "8"  "$(step_badge 8)"  "Sync Edge Functions + main router"
+    menu_option_status "9"  "$(step_badge 9)"  "Provider / worker environment"
+    menu_option_status "10" "$(step_badge 10)" "Docker Compose hardening & configuration"
+    menu_option_status "11" "$(step_badge 11)" "Validate and start Supabase"
+    menu_option_status "12" "$(step_badge 12)" "Apply Spark database migrations"
+    menu_option_status "13" "$(step_badge 13)" "Build and deploy frontend"
+    menu_option_status "14" "$(step_badge 14)" "Bootstrap Nginx"
+    menu_option_status "15" "$(step_badge 15)" "Issue TLS certificates"
+    menu_option_status "16" "$(step_badge 16)" "Configure production Nginx"
+    menu_option_status "17" "$(step_badge 17)" "Configure local schedulers"
+    menu_option_status "18" "$(step_badge 18)" "Configure TURN / Coturn"
+    menu_option_status "19" "$(step_badge 19)" "Configure Certbot renewal hook"
+    menu_option_status "20" "$(step_badge 20)" "Configure production firewall"
+    printf '\n'
+    menu_option "21" "Run All Installation Steps" "Execute steps 1 → 20 in order"
+    menu_option "0" "Back" "Return to the main control center"
+    menu_hint "Completed steps are marked with a green check."
+    read -r -p "  Select: " choice
+    case "$choice" in
+      0) return ;;
+      [1-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;
+      21) run_all_install || true; pause ;;
+      *) fail "Invalid option"; sleep 1 ;;
+    esac
+  done
+}
+
+docker_logs_menu() {
+  new_log "logs-docker"
+  if [[ ! -f "${SUPABASE_ROOT}/docker-compose.yml" ]]; then
+    fail "Supabase compose file was not found."
+    pause
+    return
+  fi
+  local services service
+  mapfile -t services < <(compose config --services)
+  title
+  menu_section "DOCKER SERVICE LOGS"
+  printf '\n'
+  printf '  %s\n' "${services[@]}"
+  printf '\n'
+  read -r -p "Service name for the last 200 log lines (Enter=Back): " service
+  [[ -z "$service" ]] && return
+  if ! printf '%s\n' "${services[@]}" | grep -Fxq "$service"; then
+    fail "Invalid service."
+    pause
+    return
+  fi
+  run_report "Logs: ${service}" compose logs --tail=200 --timestamps "$service"
+  pause
+}
+
+test_menu() {
+  while true; do
+    title
+    menu_section "HEALTH CHECKS & LOGS"
+    menu_option "1" "Full Validation" "End-to-end platform validation"
+    menu_option "2" "Frontend" "HTTPS and application response"
+    menu_option "3" "API / Auth / Functions" "Public API and function routing"
+    menu_option "4" "Docker Status" "Container and service state"
+    menu_option "5" "Docker Service Logs" "Inspect logs for a selected service"
+    menu_option "6" "Nginx Status & Logs" "Web gateway service diagnostics"
+    menu_option "7" "Scheduler Status & Logs" "Timers and scheduled function runs"
+    menu_option "8" "TURN Status & Logs" "Coturn and STUN validation"
+    menu_option "9" "DB / API Exposure Check" "Detect unintended public bindings"
+    menu_option "10" "DNS & TLS" "DNS records and certificate validation"
+    menu_option "11" "Listening Ports & UFW" "Network listeners and firewall state"
+    menu_option "12" "Migration Dry Run" "Preview pending database migrations"
+    printf '\n'
+    menu_option "0" "Back" "Return to the main control center"
+    menu_hint "Detailed command output is stored under /var/log/spark-manager/."
+    read -r -p "  Select: " choice
+    case "$choice" in
+      0) return ;;
+      1) new_log "test-full"; run_visible "Full validation" test_full_validation || true; pause ;;
+      2) new_log "test-frontend"; run_visible "Frontend" test_frontend || true; pause ;;
+      3) new_log "test-api"; run_visible "API" test_api || true; pause ;;
+      4) new_log "test-docker"; run_visible "Docker status" compose ps || true; pause ;;
+      5) docker_logs_menu ;;
+      6)
+        new_log "test-nginx"
+        run_report "Nginx status" systemctl status nginx --no-pager
+        journalctl -u nginx -n 120 --no-pager 2>&1 | tee -a "$CURRENT_LOG" || true
+        pause ;;
+      7) new_log "test-schedulers"; run_report "Scheduler status" test_schedulers; scheduler_logs; pause ;;
+      8)
+        new_log "test-turn"
+        run_report "TURN test" test_turn
+        journalctl -u coturn -n 120 --no-pager 2>&1 | tee -a "$CURRENT_LOG" || true
+        pause ;;
+      9) new_log "test-exposure"; run_visible "Public exposure check" test_db_exposure || true; pause ;;
+      10) new_log "test-dns-ssl"; run_visible "DNS/TLS" test_ssl_dns || true; pause ;;
+      11)
+        new_log "test-ports-firewall"
+        run_report "Listening ports" ss -lntup
+        run_report "UFW" ufw status verbose
+        pause ;;
+      12) new_log "test-migration-dryrun"; run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" || true; pause ;;
+      *) fail "Invalid option"; sleep 1 ;;
+    esac
+  done
+}
+
+backup_menu() {
+  while true; do
+    title
+    menu_section "BACKUP MANAGEMENT"
+    menu_option "1" "Create Manual Backup" "PostgreSQL database + runtime configuration"
+    menu_option "2" "List Backups" "Show recent backup directories"
+    printf '\n'
+    menu_option "0" "Back" "Return to the main control center"
+    read -r -p "  Select: " c
+    case "$c" in
+      0) return ;;
+      1)
+        new_log "backup-manual"
+        if run_visible "Create backup" create_backup manual; then ok "Backup created successfully."; fi
+        pause ;;
+      2) new_log "backup-list"; run_report "Backups" list_backups; pause ;;
+      *) fail "Invalid option"; sleep 1 ;;
+    esac
+  done
+}
+
+npm_menu() {
+  while true; do
+    title
+    menu_section "NODE.JS / NPM / AUDIT"
+    menu_option "1" "Show Versions" "Node.js and npm versions"
+    menu_option "2" "Update npm" "Update global npm within major version 11"
+    menu_option "3" "Install Dependencies" "Run npm ci in the Spark repository"
+    menu_option "4" "Full npm Audit" "Audit production and development dependencies"
+    menu_option "5" "Production npm Audit" "Audit with --omit=dev"
+    menu_option "6" "Outdated Packages" "Show available dependency updates"
+    menu_option "7" "Audit Fix Dry Run" "Preview fixes without modifying files"
+    printf '\n'
+    menu_option "0" "Back" "Return to the main control center"
+    read -r -p "  Select: " c
+    new_log "npm-maintenance"
+    case "$c" in
+      0) return ;;
+      1) run_report "Versions" bash -c 'node --version; npm --version'; pause ;;
+      2) run_visible "Update npm" npm install -g 'npm@^11.6.2' || true; pause ;;
+      3) run_visible "npm ci" bash -c "cd '$SPARK_ROOT' && npm ci" || true; pause ;;
+      4) run_report "npm audit" bash -c "cd '$SPARK_ROOT' && npm audit"; pause ;;
+      5) run_report "npm audit production" bash -c "cd '$SPARK_ROOT' && npm audit --omit=dev"; pause ;;
+      6) run_report "npm outdated" bash -c "cd '$SPARK_ROOT' && npm outdated"; pause ;;
+      7) run_report "npm audit fix dry-run" bash -c "cd '$SPARK_ROOT' && npm audit fix --dry-run"; pause ;;
+      *) fail "Invalid option"; sleep 1 ;;
+    esac
+  done
+}
+
+service_menu() {
+  while true; do
+    title
+    menu_section "SERVICE MANAGEMENT"
+    menu_option "1" "Show Service Status" "Nginx, Coturn, Docker and Spark timers"
+    menu_option "2" "Restart Functions + Worker" "Recreate Edge Functions and avatar worker"
+    menu_option "3" "Reload Nginx" "Validate configuration before reload"
+    menu_option "4" "Restart Coturn" "Restart TURN service"
+    menu_option "5" "Restart Supabase Stack" "Controlled recreate of all Supabase services"
+    menu_option "6" "Restart Scheduler Timers" "Restart all Spark systemd timers"
+    printf '\n'
+    menu_option "0" "Back" "Return to the main control center"
+    read -r -p "  Select: " c
+    new_log "service-management"
+    case "$c" in
+      0) return ;;
+      1)
+        run_report "Nginx" systemctl status nginx --no-pager
+        run_report "Coturn" systemctl status coturn --no-pager
+        run_report "Docker" compose ps
+        run_report "Timers" systemctl list-timers 'spark-*' --no-pager
+        pause ;;
+      2) run_visible "Restart Functions + Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate functions avatar-worker" || true; pause ;;
+      3) run_visible "Nginx test/reload" bash -c 'nginx -t && systemctl reload nginx' || true; pause ;;
+      4) run_visible "Restart Coturn" systemctl restart coturn || true; pause ;;
+      5)
+        if confirm_word "The entire Supabase stack will be recreated and may cause a brief service interruption." "RESTART"; then
+          run_visible "Restart Supabase stack" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate" || true
+        fi
+        pause ;;
+      6)
+        run_visible "Restart timers" bash -c 'systemctl restart spark-daily-report.timer spark-minutes-reminder.timer spark-decision-due.timer spark-notification-outbox.timer' || true
+        pause ;;
+      *) fail "Invalid option"; sleep 1 ;;
+    esac
+  done
+}
+
+certificate_menu() {
+  while true; do
+    title
+    menu_section "TLS CERTIFICATE MANAGEMENT"
+    menu_option "1" "Show Certificates" "Display Certbot-managed certificates"
+    menu_option "2" "Renewal Dry Run" "Validate the renewal workflow"
+    menu_option "3" "Run Certbot Renew" "Execute certificate renewal"
+    printf '\n'
+    menu_option "0" "Back" "Return to the main control center"
+    read -r -p "  Select: " c
+    new_log "certificate-management"
+    case "$c" in
+      0) return ;;
+      1) run_report "Certificates" certbot certificates; pause ;;
+      2) run_visible "Renewal dry-run" certbot renew --dry-run || true; pause ;;
+      3) run_visible "Certbot renew" certbot renew || true; pause ;;
+      *) fail "Invalid option"; sleep 1 ;;
     esac
   done
 }
@@ -104,19 +409,19 @@ case "${1:-}" in
     cat <<EOF
 Usage: spark [option]
 
-بدون option منوی تعاملی باز می‌شود.
+Run without an option to open the interactive control center.
 
-  --version       نمایش نسخه
-  --test          اجرای Validation کامل
-  --update        اجرای Update برنامه
-  --resources     نمایش وضعیت منابع
+  --version       Show Spark Manager version
+  --test          Run full validation
+  --update        Update Spark application
+  --resources     Show server resource usage
 EOF
     exit 0
     ;;
   --test)
     title
     new_log "cli-test"
-    run_visible "Validation کامل" test_full_validation
+    run_visible "Full validation" test_full_validation
     ;;
   --update)
     update_spark
@@ -128,7 +433,7 @@ EOF
     main_menu
     ;;
   *)
-    fail "Option ناشناخته: $1"
+    fail "Unknown option: $1"
     exit 2
     ;;
 esac
