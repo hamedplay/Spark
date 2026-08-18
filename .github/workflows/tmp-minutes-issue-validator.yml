@@ -1,0 +1,101 @@
+name: Temporary minutes issue validator
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  validate:
+    if: github.event.issue.title == 'tmp: validate minutes multi-clause'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v6
+        with:
+          ref: work/minutes-multi-clause-20260819
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Transform, build and test
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set +e
+          python3 scripts/tmp_apply_minutes_multi_clause.py > /tmp/transform.log 2>&1
+          TRANSFORM=$?
+          if [ "$TRANSFORM" -eq 0 ]; then
+            git diff --check >> /tmp/transform.log 2>&1
+            TRANSFORM=$?
+          fi
+
+          BUILD=99
+          TEST=99
+          if [ "$TRANSFORM" -eq 0 ]; then
+            npm run build > /tmp/build.log 2>&1
+            BUILD=$?
+          fi
+          if [ "$TRANSFORM" -eq 0 ] && [ "$BUILD" -eq 0 ]; then
+            npm test > /tmp/test.log 2>&1
+            TEST=$?
+          fi
+
+          if [ "$TRANSFORM" -ne 0 ] || [ "$BUILD" -ne 0 ] || [ "$TEST" -ne 0 ]; then
+            {
+              echo 'VALIDATION_FAILED'
+              echo
+              echo "transform=$TRANSFORM build=$BUILD test=$TEST"
+              echo
+              echo '```text'
+              tail -n 35 /tmp/transform.log
+              test -f /tmp/build.log && tail -n 55 /tmp/build.log
+              test -f /tmp/test.log && tail -n 55 /tmp/test.log
+              echo '```'
+            } > /tmp/issue-comment.md
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/issue-comment.md
+            exit 1
+          fi
+
+          git checkout origin/main -- .github/workflows/ci.yml
+          rm -f .github/workflows/tmp-minutes-multi-clause-validate.yml
+          rm -f scripts/tmp_apply_minutes_multi_clause.py
+          rm -f scripts/.tmp-minutes-multi-clause-trigger
+          rm -f scripts/.tmp-minutes-multi-clause-trigger-2
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(minutes): support multi-clause resolutions'
+          git push origin HEAD:work/minutes-multi-clause-20260819
+          FEATURE_SHA=$(git rev-parse HEAD)
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "VALIDATION_SUCCESS feature_sha=$FEATURE_SHA transform=0 build=0 test=0"
+
+      - name: Remove temporary validator from main
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          git fetch origin main
+          git checkout -B tmp-validator-cleanup origin/main
+          git rm -f .github/workflows/tmp-minutes-issue-validator.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(minutes): remove temporary validation workflow'
+          git push origin HEAD:main
+          gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --reason completed
