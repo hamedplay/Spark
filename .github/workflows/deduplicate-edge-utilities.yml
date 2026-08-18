@@ -1,0 +1,107 @@
+name: Deduplicate Edge utilities
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/deduplicate-edge-utilities.mjs
+      - .github/workflows/deduplicate-edge-utilities.yml
+
+permissions:
+  contents: write
+
+jobs:
+  deduplicate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Guarded transform and validation
+        id: guarded
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/edge-dedup.log
+          node scripts/deduplicate-edge-utilities.mjs >> /tmp/edge-dedup.log 2>&1
+          transform_rc=$?
+          build_rc=99
+          deno_rc=99
+          audit_rc=99
+
+          if [ "$transform_rc" -eq 0 ]; then
+            npm run build >> /tmp/edge-dedup.log 2>&1
+            build_rc=$?
+          fi
+
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ]; then
+            deno check --node-modules-dir=auto \
+              supabase/functions/admin-users/index.ts \
+              supabase/functions/bulk-sync-profile-phones/index.ts \
+              supabase/functions/change-user-phone/index.ts \
+              supabase/functions/sync-profile-phone-to-auth/index.ts \
+              supabase/functions/auth-send-sms-hook/index.ts \
+              supabase/functions/password-login/index.ts \
+              supabase/functions/process-decision-due-overdue/index.ts \
+              supabase/functions/process-minutes-reminders/index.ts \
+              supabase/functions/process-notification-outbox/index.ts \
+              supabase/functions/_shared/registration-security.ts \
+              supabase/functions/_shared/phoneOtpLoginV2.ts \
+              supabase/functions/_shared/phone.ts \
+              supabase/functions/_shared/crypto.ts >> /tmp/edge-dedup.log 2>&1
+            deno_rc=$?
+          fi
+
+          if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$deno_rc" -eq 0 ]; then
+            node scripts/audit-dead-code.mjs >> /tmp/edge-dedup.log 2>&1
+            audit_rc=$?
+          fi
+
+          if [ "$transform_rc" -ne 0 ] || [ "$build_rc" -ne 0 ] || [ "$deno_rc" -ne 0 ] || [ "$audit_rc" -ne 0 ]; then
+            git reset --hard HEAD
+            {
+              echo "VALIDATION_FAILED"
+              echo "transform_rc=$transform_rc"
+              echo "build_rc=$build_rc"
+              echo "deno_rc=$deno_rc"
+              echo "audit_rc=$audit_rc"
+              echo
+              tail -n 300 /tmp/edge-dedup.log
+            } > scripts/.edge-dedup-status.txt
+            echo "success=false" >> "$GITHUB_OUTPUT"
+          else
+            rm -f scripts/.edge-dedup-status.txt
+            echo "success=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit validated source changes
+        if: steps.guarded.outputs.success == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/functions
+          git commit -m "cleanup: centralize duplicated Edge utilities"
+          git push origin HEAD:main
+
+      - name: Commit failure evidence
+        if: steps.guarded.outputs.success != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/.edge-dedup-status.txt
+          git commit -m "chore: record Edge dedup validation failure" || exit 0
+          git push origin HEAD:main
