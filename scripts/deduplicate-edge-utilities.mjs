@@ -1,3 +1,4 @@
+// one-time execution trigger
 import fs from 'node:fs';
 import ts from 'typescript';
 
@@ -84,7 +85,6 @@ const registration = 'supabase/functions/_shared/registration-security.ts';
 removeTopLevelFunction(registration, 'normalizeIranPhone');
 addNamedImport(registration, './phone.ts', ['normalizeIranPhone'], { reexport: ['normalizeIranPhone'] });
 
-// Centralize HMAC while preserving public exports of shared modules.
 removeTopLevelFunction(registration, 'hmacSha256Hex');
 addNamedImport(registration, './crypto.ts', ['hmacSha256Hex'], { reexport: ['hmacSha256Hex'] });
 
@@ -105,7 +105,6 @@ for (const file of [
   addNamedImport(file, '../_shared/crypto.ts', ['timingSafeCompare']);
 }
 
-// Strong postconditions: duplicate declarations must be gone from consumers.
 for (const file of phoneConsumers) {
   if (/function\s+normalizeIranPhone\b/.test(read(file))) throw new Error(`local phone normalizer survived: ${file}`);
 }
