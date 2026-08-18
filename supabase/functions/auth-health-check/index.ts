@@ -1,10 +1,13 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
+import { createServiceRoleClient as adminClient, createJsonResponseHeaders } from "../_shared/runtimeHttp.ts";
 
 const baseCorsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
+
+const responseHeaders = createJsonResponseHeaders(baseCorsHeaders);
 
 function allowedOrigin(req: Request): string | null {
   const origin = req.headers.get("Origin");
@@ -16,25 +19,8 @@ function allowedOrigin(req: Request): string | null {
   return allowed.includes(origin) ? origin : null;
 }
 
-function responseHeaders(origin: string | null) {
-  return {
-    ...baseCorsHeaders,
-    ...(origin ? { "Access-Control-Allow-Origin": origin } : {}),
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
-    "Pragma": "no-cache",
-    "Vary": "Origin",
-  };
-}
-
 const json = (body: unknown, status = 200, origin: string | null = null) =>
   new Response(JSON.stringify(body), { status, headers: responseHeaders(origin) });
-
-function adminClient() {
-  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 interface HealthPrincipal { userId: string; sessionId: string }
 

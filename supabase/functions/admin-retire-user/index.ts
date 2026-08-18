@@ -1,44 +1,9 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
+import { postJsonCorsBaseHeaders as baseCorsHeaders, createServiceRoleClient as adminClient, getPhoneAuthAllowedOrigins as getAllowedOrigins, createJsonResponseHeaders } from "../_shared/runtimeHttp.ts";
 
-const baseCorsHeaders = {
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function adminClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-}
-
-async function getAllowedOrigins(): Promise<string[]> {
-  const supabase = adminClient();
-  const { data, error } = await supabase.rpc("get_phone_auth_config");
-  if (error || !data) return [];
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row || !Array.isArray(row.allowed_origins)) return [];
-  return Array.from(new Set(
-    row.allowed_origins
-      .filter((value: unknown): value is string => typeof value === "string")
-      .map((value: string) => value.trim())
-      .filter(Boolean),
-  ));
-}
-
-function responseHeaders(origin: string | null): Record<string, string> {
-  return {
-    ...baseCorsHeaders,
-    ...(origin ? { "Access-Control-Allow-Origin": origin } : {}),
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
-    "Pragma": "no-cache",
-    "Vary": "Origin",
-  };
-}
+const responseHeaders = createJsonResponseHeaders(baseCorsHeaders);
 
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
