@@ -1,0 +1,67 @@
+.spark-reference-login .spark-auth-pointer-glow {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9;
+  width: clamp(300px, 34vw, 520px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(50vw, 50vh, 0) translate3d(-50%, -50%, 0);
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgb(240 255 251 / .20) 0%,
+      rgb(var(--spark-neon-soft, 78 255 225) / .16) 8%,
+      rgb(var(--spark-neon, 25 240 204) / .10) 22%,
+      rgb(var(--spark-neon, 25 240 204) / .045) 42%,
+      transparent 70%);
+  box-shadow:
+    0 0 42px rgb(var(--spark-neon-soft, 78 255 225) / .035),
+    0 0 110px rgb(var(--spark-neon, 25 240 204) / .05);
+  mix-blend-mode: screen;
+  filter: blur(.4px);
+  will-change: transform, opacity;
+  transition: opacity .18s ease;
+}
+
+.spark-reference-login .spark-auth-pointer-glow::before,
+.spark-reference-login .spark-auth-pointer-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.spark-reference-login .spark-auth-pointer-glow::before {
+  inset: 17%;
+  background: radial-gradient(circle,
+    rgb(255 255 255 / .10) 0%,
+    rgb(var(--spark-neon-soft, 78 255 225) / .075) 28%,
+    transparent 68%);
+  box-shadow: inset 0 0 30px rgb(255 255 255 / .025);
+}
+
+.spark-reference-login .spark-auth-pointer-glow::after {
+  inset: 35%;
+  border: 1px solid rgb(var(--spark-neon-soft, 78 255 225) / .055);
+  box-shadow: 0 0 22px rgb(var(--spark-neon, 25 240 204) / .04);
+  opacity: .75;
+}
+
+.spark-reference-login .spark-auth-pointer-glow.is-visible {
+  opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .spark-reference-login .spark-auth-pointer-glow {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark-reference-login .spark-auth-pointer-glow {
+    display: none;
+  }
+}
