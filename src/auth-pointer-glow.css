@@ -3,65 +3,47 @@
   top: 0;
   left: 0;
   z-index: 9;
-  width: clamp(300px, 34vw, 520px);
-  aspect-ratio: 1;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   pointer-events: none;
   opacity: 0;
   transform: translate3d(50vw, 50vh, 0) translate3d(-50%, -50%, 0);
-  background:
-    radial-gradient(circle at 50% 50%,
-      rgb(240 255 251 / .20) 0%,
-      rgb(var(--spark-neon-soft, 78 255 225) / .16) 8%,
-      rgb(var(--spark-neon, 25 240 204) / .10) 22%,
-      rgb(var(--spark-neon, 25 240 204) / .045) 42%,
-      transparent 70%);
+  background: radial-gradient(circle,
+    rgb(255 255 255 / .24) 0%,
+    rgb(var(--spark-neon-soft, 111 255 226) / .18) 24%,
+    rgb(var(--spark-neon, 35 232 196) / .09) 48%,
+    transparent 74%);
   box-shadow:
-    0 0 42px rgb(var(--spark-neon-soft, 78 255 225) / .035),
-    0 0 110px rgb(var(--spark-neon, 25 240 204) / .05);
+    0 0 12px rgb(var(--spark-neon-soft, 111 255 226) / .08),
+    0 0 24px rgb(var(--spark-neon, 35 232 196) / .07);
   mix-blend-mode: screen;
-  filter: blur(.4px);
+  filter: blur(.5px);
   will-change: transform, opacity;
-  transition: opacity .18s ease;
-}
-
-.spark-reference-login .spark-auth-pointer-glow::before,
-.spark-reference-login .spark-auth-pointer-glow::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
+  transition: opacity .12s ease;
 }
 
 .spark-reference-login .spark-auth-pointer-glow::before {
-  inset: 17%;
-  background: radial-gradient(circle,
-    rgb(255 255 255 / .10) 0%,
-    rgb(var(--spark-neon-soft, 78 255 225) / .075) 28%,
-    transparent 68%);
-  box-shadow: inset 0 0 30px rgb(255 255 255 / .025);
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 255 255 / .18), transparent 72%);
+  pointer-events: none;
 }
 
 .spark-reference-login .spark-auth-pointer-glow::after {
-  inset: 35%;
-  border: 1px solid rgb(var(--spark-neon-soft, 78 255 225) / .055);
-  box-shadow: 0 0 22px rgb(var(--spark-neon, 25 240 204) / .04);
-  opacity: .75;
+  content: none;
 }
 
 .spark-reference-login .spark-auth-pointer-glow.is-visible {
-  opacity: 1;
+  opacity: .9;
 }
 
 @media (hover: none), (pointer: coarse) {
-  .spark-reference-login .spark-auth-pointer-glow {
-    display: none;
-  }
+  .spark-reference-login .spark-auth-pointer-glow { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spark-reference-login .spark-auth-pointer-glow {
-    display: none;
-  }
+  .spark-reference-login .spark-auth-pointer-glow { display: none; }
 }
