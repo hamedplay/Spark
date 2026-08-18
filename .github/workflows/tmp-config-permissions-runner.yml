@@ -1,0 +1,85 @@
+name: One-time config permissions validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-config-permissions-runner.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout isolated fix branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/config-permissions-dashboard-20260819-v2
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          package-manager-cache: false
+
+      - name: Repair known transformer boundary
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p = 'scripts/tmp-config-permissions-fix.mjs';
+          let source = fs.readFileSync(p, 'utf8');
+          const before = "write(file, value.slice(0, start) + block + value.slice(end));";
+          const after = "write(file, value.slice(0, start) + block + value.slice(end + \"  },\\n\".length));";
+          if (!source.includes(before)) throw new Error('transformer boundary not found');
+          fs.writeFileSync(p, source.replace(before, after));
+          NODE
+
+      - name: Transform source in working tree
+        run: node scripts/tmp-config-permissions-fix.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test granular configuration permissions
+        run: node --import tsx --test tests/app/configPermissions.test.ts
+
+      - name: Test existing navigation contract
+        run: npm run test:layout-navigation
+
+      - name: Production build
+        run: npm run build
+
+      - name: Inspect transformed diff
+        run: |
+          git status --short
+          git diff --check
+          git diff --stat
+
+      - name: Commit validated production changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/features/permissions/configPermissions.ts \
+            src/features/permissions/permissionRegistry.ts \
+            src/app/layout/components/LayoutTopBar.tsx \
+            src/app/navigation/PageRenderer.tsx \
+            src/app/navigation/useNavigation.ts \
+            src/AuthenticatedApp.tsx \
+            src/components/PortalConfigPage.tsx \
+            src/components/UserManagementPanel.tsx \
+            src/components/UserGroupsPanel.tsx \
+            src/components/OrgStructurePage.tsx \
+            src/components/UserManagement/AccessPanel.tsx \
+            src/components/ManagementDashboardPage.tsx \
+            supabase/functions/management-dashboard/index.ts \
+            supabase/migrations/20260819013500_granular_config_permissions_and_dashboard.sql \
+            tests/app/configPermissions.test.ts
+          git diff --cached --check
+          git commit -m "fix: enforce granular config permissions and dashboard access"
+          git push origin HEAD:fix/config-permissions-dashboard-20260819-v2
