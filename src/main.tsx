@@ -19,6 +19,7 @@ import './auth-login-unified-tabs.css';
 import './auth-login-theme-guard.css';
 import './auth-login-performance.css';
 import './auth-login-unified-tabs.ts';
+import './auth-pointer-glow.ts';
 
 // Apply the persisted/system theme before React mounts so the branded loading
 // screen never flashes in the wrong color scheme while ThemeProvider is lazy-loaded.
