@@ -10,26 +10,11 @@ import {
   corsHeaders,
   checkOrigin,
   jsonResponse,
+  PHONE_OTP_MAX_BODY_BYTES as MAX_BODY_BYTES,
+  PHONE_OTP_MAX_RAW_PHONE_LEN as MAX_RAW_PHONE_LEN,
+  type PhoneAuthConfig,
+  getPhoneAuthConfig,
 } from "../_shared/phoneOtpLoginV2.ts";
-
-const MAX_BODY_BYTES = 2048;
-const MAX_RAW_PHONE_LEN = 32;
-
-interface PhoneAuthConfig {
-  origins: string[];
-  pepper: string;
-}
-
-async function getPhoneAuthConfig(): Promise<PhoneAuthConfig> {
-  const admin = adminClient();
-  const { data, error } = await admin.rpc("get_phone_auth_config");
-  if (error || !data) throw new Error("CONFIG_UNAVAILABLE");
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row) throw new Error("CONFIG_UNAVAILABLE");
-  const allowedOrigins: string[] = Array.isArray(row?.allowed_origins) ? row.allowed_origins : [];
-  const pepper: string = typeof row?.pepper === "string" ? row.pepper : "";
-  return { origins: allowedOrigins, pepper };
-}
 
 interface SystemConfig {
   backendReady: boolean;

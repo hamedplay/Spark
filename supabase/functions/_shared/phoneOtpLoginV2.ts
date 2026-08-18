@@ -82,3 +82,22 @@ export function jsonResponse(
     headers: { ...corsHeaders(allowedOrigin), "Content-Type": "application/json" },
   });
 }
+
+export const PHONE_OTP_MAX_BODY_BYTES = 2048;
+export const PHONE_OTP_MAX_RAW_PHONE_LEN = 32;
+
+export interface PhoneAuthConfig {
+  origins: string[];
+  pepper: string;
+}
+
+export async function getPhoneAuthConfig(): Promise<PhoneAuthConfig> {
+  const admin = adminClient();
+  const { data, error } = await admin.rpc("get_phone_auth_config");
+  if (error || !data) throw new Error("CONFIG_UNAVAILABLE");
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("CONFIG_UNAVAILABLE");
+  const allowedOrigins: string[] = Array.isArray(row?.allowed_origins) ? row.allowed_origins : [];
+  const pepper: string = typeof row?.pepper === "string" ? row.pepper : "";
+  return { origins: allowedOrigins, pepper };
+}
