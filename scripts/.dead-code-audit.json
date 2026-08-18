@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-18T17:04:53.700Z",
-  "code_files": 638,
+  "generated_at": "2026-08-18T17:31:00.839Z",
+  "code_files": 618,
   "production_entries": [
     "src/main.tsx",
     "supabase/functions/admin-delete-user/index.ts",
@@ -52,338 +52,21 @@
     "supabase/functions/verify-phone-password-reset-otp/index.ts",
     "supabase/functions/verify-public-registration-otp/index.ts"
   ],
-  "production_reachable": 613,
+  "production_reachable": 617,
   "production_unreachable": [
-    "src/components/PortalConfig/MfaPanel.tsx",
-    "src/components/PortalConfig/PasswordRecoveryCard.tsx",
-    "src/components/PortalConfig/PhoneLoginToggleCard.tsx",
-    "src/features/auth/services/healthCheckService.ts",
-    "src/features/auth/types/healthCheck.ts",
-    "src/features/auth/types/recovery.ts",
-    "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
-    "src/features/security-administration/components/AccountLifecycleHistory.tsx",
-    "src/features/security-administration/components/AccountLifecycleManagement.tsx",
-    "src/features/security-administration/components/HealthCheckPanel.tsx",
-    "src/features/security-administration/components/SecurityAdminHistory.tsx",
-    "src/features/security-administration/components/SecurityAdminManagement.tsx",
-    "src/features/security-administration/components/SecurityAdminRoleDialog.tsx",
-    "src/features/security-administration/components/SecurityAuditConsole.tsx",
-    "src/features/security-administration/components/SecurityAuditDetails.tsx",
-    "src/features/security-administration/components/SecurityControlCenter.tsx",
-    "src/features/security-administration/index.ts",
-    "src/features/security-administration/services/accountLifecycleService.ts",
-    "src/features/security-administration/services/securityAdministrationService.ts",
-    "src/features/security-administration/types/accountLifecycle.ts",
-    "src/features/security-administration/types/securityAdministration.ts",
-    "src/features/security-administration/utils/securityAdministrationValidation.ts",
-    "src/features/security-administration/utils/securityAuditLabels.ts",
-    "src/features/security-administration/utils/tehranDateRange.ts",
     "src/vite-env.d.ts"
   ],
   "strong_dead_file_candidates": [],
   "unreachable_with_references": [
     {
-      "file": "src/components/PortalConfig/MfaPanel.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "tests/phase3/phase3bSecurity.test.ts",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/components/PortalConfig/PasswordRecoveryCard.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/auth/authSecurityConfig.test.ts"
-      ]
-    },
-    {
-      "file": "src/components/PortalConfig/PhoneLoginToggleCard.tsx",
-      "incoming": [],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/auth/authSecurityConfig.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/auth/services/healthCheckService.ts",
-      "incoming": [
-        "src/features/security-administration/components/HealthCheckPanel.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/features/auth/types/healthCheck.ts",
-      "incoming": [
-        "src/features/auth/services/healthCheckService.ts",
-        "src/features/security-administration/components/HealthCheckPanel.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase8FinalAuthClosure.test.ts",
-        "tests/phase8SecurityVerification.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/auth/types/recovery.ts",
-      "incoming": [],
-      "textual_references": [
-        "public/sw.js",
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "scripts/remove-confirmed-dead-files.mjs",
-        "tests/auth/authSecurityConfig.test.ts",
-        "tests/auth/phoneRecoveryConfigRegression.test.ts",
-        "tests/phase3/phase3bSecurity.test.ts",
-        "tests/phase5/phase5PhoneOtpLoginUi.test.ts",
-        "tests/phase5/phase5PhoneOtpRequestEdge.test.ts",
-        "tests/phase6Closure.test.ts",
-        "tests/phase6CustomMfa.test.ts",
-        "tests/phase7RecoveryLockSession.test.ts",
-        "tests/phase8/phase8RemainingReadyGates.test.mjs",
-        "tests/phase8/phase8RuntimeP0Closure.test.mjs",
-        "tests/phase8FinalAuthClosure.test.ts",
-        "tests/phase8SecurityVerification.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
-      "incoming": [
-        "src/features/security-administration/components/AccountLifecycleManagement.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase4/phase4Lifecycle.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/AccountLifecycleHistory.tsx",
-      "incoming": [
-        "src/features/security-administration/components/AccountLifecycleManagement.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/AccountLifecycleManagement.tsx",
-      "incoming": [
-        "src/features/security-administration/components/SecurityControlCenter.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase4/phase4Lifecycle.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/HealthCheckPanel.tsx",
-      "incoming": [
-        "src/features/security-administration/components/SecurityControlCenter.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/SecurityAdminHistory.tsx",
-      "incoming": [
-        "src/features/security-administration/components/SecurityAdminManagement.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/SecurityAdminManagement.tsx",
-      "incoming": [
-        "src/features/security-administration/components/SecurityControlCenter.tsx",
-        "src/features/security-administration/index.ts"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/SecurityAdminRoleDialog.tsx",
-      "incoming": [
-        "src/features/security-administration/components/SecurityAdminManagement.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/SecurityAuditConsole.tsx",
-      "incoming": [
-        "src/features/security-administration/components/SecurityControlCenter.tsx",
-        "src/features/security-administration/index.ts"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts",
-        "tests/phase4/phase4Lifecycle.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/SecurityAuditDetails.tsx",
-      "incoming": [
-        "src/features/security-administration/components/SecurityAuditConsole.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/components/SecurityControlCenter.tsx",
-      "incoming": [
-        "src/features/security-administration/index.ts"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3bSecurity.test.ts",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts",
-        "tests/phase4/phase4Lifecycle.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/index.ts",
-      "incoming": [
-        "src/components/PortalConfig/MfaPanel.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/services/accountLifecycleService.ts",
-      "incoming": [
-        "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
-        "src/features/security-administration/components/AccountLifecycleHistory.tsx",
-        "src/features/security-administration/components/AccountLifecycleManagement.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/services/securityAdministrationService.ts",
-      "incoming": [
-        "src/features/security-administration/components/SecurityAdminManagement.tsx",
-        "src/features/security-administration/components/SecurityAuditConsole.tsx",
-        "src/features/security-administration/components/SecurityControlCenter.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/types/accountLifecycle.ts",
-      "incoming": [
-        "src/features/security-administration/components/AccountLifecycleActionDialog.tsx",
-        "src/features/security-administration/components/AccountLifecycleHistory.tsx",
-        "src/features/security-administration/components/AccountLifecycleManagement.tsx",
-        "src/features/security-administration/services/accountLifecycleService.ts"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/types/securityAdministration.ts",
-      "incoming": [
-        "src/features/security-administration/components/SecurityAdminHistory.tsx",
-        "src/features/security-administration/components/SecurityAdminManagement.tsx",
-        "src/features/security-administration/components/SecurityAdminRoleDialog.tsx",
-        "src/features/security-administration/components/SecurityAuditConsole.tsx",
-        "src/features/security-administration/components/SecurityAuditDetails.tsx",
-        "src/features/security-administration/components/SecurityControlCenter.tsx",
-        "src/features/security-administration/index.ts",
-        "src/features/security-administration/services/securityAdministrationService.ts",
-        "src/features/security-administration/utils/securityAdministrationValidation.ts"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/utils/securityAdministrationValidation.ts",
-      "incoming": [
-        "src/features/security-administration/components/SecurityAdminManagement.tsx",
-        "src/features/security-administration/components/SecurityControlCenter.tsx",
-        "src/features/security-administration/services/securityAdministrationService.ts"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/utils/securityAuditLabels.ts",
-      "incoming": [
-        "src/features/security-administration/components/SecurityAuditConsole.tsx",
-        "src/features/security-administration/components/SecurityAuditDetails.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
-      "file": "src/features/security-administration/utils/tehranDateRange.ts",
-      "incoming": [
-        "src/features/security-administration/components/SecurityAuditConsole.tsx"
-      ],
-      "textual_references": [
-        "scripts/.dead-code-audit.json",
-        "scripts/.jscpd-audit.json",
-        "tests/phase3/phase3cSecurity.test.ts",
-        "tests/phase3/phase3cSecurityService.test.ts"
-      ]
-    },
-    {
       "file": "src/vite-env.d.ts",
       "incoming": [],
       "textual_references": [
+        ".github/workflows/deduplicate-edge-runtime-http.yml",
+        ".github/workflows/deduplicate-edge-security-primitives.yml",
+        ".github/workflows/deduplicate-frontend-primitives.yml",
+        ".github/workflows/deduplicate-phone-login-routes.yml",
+        ".github/workflows/remove-dead-security-island.yml",
         "scripts/.dead-code-audit.json"
       ]
     }
@@ -395,58 +78,6 @@
     ]
   ],
   "exact_duplicate_functions": [
-    {
-      "hash": "648a831975be5cb08755e4ea672de149f69e8d1aad51c00e18e9bd8d26d113da",
-      "items": [
-        {
-          "file": "supabase/functions/request-phone-login-otp/index.ts",
-          "line": 30,
-          "name": "(anonymous)",
-          "lines": 30
-        },
-        {
-          "file": "supabase/functions/verify-phone-login-otp/index.ts",
-          "line": 30,
-          "name": "(anonymous)",
-          "lines": 30
-        }
-      ]
-    },
-    {
-      "hash": "65968921ddd88a88ff13742d08dfb6284dba84e6fb9b743aadae11ae1466df71",
-      "items": [
-        {
-          "file": "supabase/functions/admin-delete-user/index.ts",
-          "line": 32,
-          "name": "responseHeaders",
-          "lines": 10
-        },
-        {
-          "file": "supabase/functions/admin-retire-user/index.ts",
-          "line": 32,
-          "name": "responseHeaders",
-          "lines": 10
-        },
-        {
-          "file": "supabase/functions/admin-user-lifecycle/index.ts",
-          "line": 32,
-          "name": "responseHeaders",
-          "lines": 10
-        },
-        {
-          "file": "supabase/functions/auth-health-check/index.ts",
-          "line": 19,
-          "name": "responseHeaders",
-          "lines": 10
-        },
-        {
-          "file": "supabase/functions/bulk-sync-profile-phones/index.ts",
-          "line": 28,
-          "name": "responseHeaders",
-          "lines": 10
-        }
-      ]
-    },
     {
       "hash": "7c376510c8ed791e4d110cfdc161ba6d0db99e4071de57c289839518849ac28e",
       "items": [
@@ -461,64 +92,6 @@
           "line": 57,
           "name": "(anonymous)",
           "lines": 20
-        }
-      ]
-    },
-    {
-      "hash": "7469c8120cc93a590bc99109a65d5efcb699bc48795d5f5108439eb422071687",
-      "items": [
-        {
-          "file": "supabase/functions/_shared/registration-security.ts",
-          "line": 99,
-          "name": "normalizeIranPhone",
-          "lines": 8
-        },
-        {
-          "file": "supabase/functions/admin-users/index.ts",
-          "line": 11,
-          "name": "normalizeIranPhone",
-          "lines": 8
-        },
-        {
-          "file": "supabase/functions/bulk-sync-profile-phones/index.ts",
-          "line": 47,
-          "name": "normalizeIranPhone",
-          "lines": 8
-        },
-        {
-          "file": "supabase/functions/change-user-phone/index.ts",
-          "line": 11,
-          "name": "normalizeIranPhone",
-          "lines": 8
-        },
-        {
-          "file": "supabase/functions/sync-profile-phone-to-auth/index.ts",
-          "line": 11,
-          "name": "normalizeIranPhone",
-          "lines": 8
-        }
-      ]
-    },
-    {
-      "hash": "f5fbc20953fb4fa27d7456cee7be188b4f521ad67afc4113a3adb4643f0c1195",
-      "items": [
-        {
-          "file": "supabase/functions/admin-delete-user/index.ts",
-          "line": 18,
-          "name": "getAllowedOrigins",
-          "lines": 13
-        },
-        {
-          "file": "supabase/functions/admin-retire-user/index.ts",
-          "line": 18,
-          "name": "getAllowedOrigins",
-          "lines": 13
-        },
-        {
-          "file": "supabase/functions/admin-user-lifecycle/index.ts",
-          "line": 18,
-          "name": "getAllowedOrigins",
-          "lines": 13
         }
       ]
     },
@@ -574,29 +147,6 @@
       ]
     },
     {
-      "hash": "df3463df908ee1a00459707c61abc44a71dd8aaa1bff369b1f0f12c63ccf3151",
-      "items": [
-        {
-          "file": "supabase/functions/process-decision-due-overdue/index.ts",
-          "line": 9,
-          "name": "timingSafeCompare",
-          "lines": 9
-        },
-        {
-          "file": "supabase/functions/process-minutes-reminders/index.ts",
-          "line": 9,
-          "name": "timingSafeCompare",
-          "lines": 9
-        },
-        {
-          "file": "supabase/functions/process-notification-outbox/index.ts",
-          "line": 35,
-          "name": "timingSafeCompare",
-          "lines": 9
-        }
-      ]
-    },
-    {
       "hash": "196c4fc68f86b2666af21a72f78dfbf2a355a15847f75684dbe8cbe20a1539e3",
       "items": [
         {
@@ -614,23 +164,6 @@
       ]
     },
     {
-      "hash": "17292350cb20d101b172085eca9412a8f551c2e92d663468731854cafd8e03cd",
-      "items": [
-        {
-          "file": "supabase/functions/request-phone-login-otp/index.ts",
-          "line": 16,
-          "name": "getConfig",
-          "lines": 13
-        },
-        {
-          "file": "supabase/functions/verify-phone-login-otp/index.ts",
-          "line": 16,
-          "name": "getConfig",
-          "lines": 13
-        }
-      ]
-    },
-    {
       "hash": "7d8b16575278695f88007463ddbaf9ad5f5303f25bba32fc6a479fc0acc06e59",
       "items": [
         {
@@ -643,23 +176,6 @@
           "file": "src/components/OrgStructure/OrgPermissionsPanel.tsx",
           "line": 156,
           "name": "(anonymous)",
-          "lines": 12
-        }
-      ]
-    },
-    {
-      "hash": "0fc072b1b80eb01ba639c328950c076519e3df9d1c7abad9c3eee74fc11ecdfc",
-      "items": [
-        {
-          "file": "supabase/functions/_shared/phoneOtpLoginV2.ts",
-          "line": 20,
-          "name": "hmacSha256Hex",
-          "lines": 12
-        },
-        {
-          "file": "supabase/functions/password-login/index.ts",
-          "line": 54,
-          "name": "hmacSha256Hex",
           "lines": 12
         }
       ]
@@ -733,57 +249,6 @@
       ]
     },
     {
-      "hash": "bda34699597e8580ab185dda5b294f41a6e749d04e1c4da5e6dc6da85d64d752",
-      "items": [
-        {
-          "file": "src/components/OrgStructure/Spinner.tsx",
-          "line": 1,
-          "name": "Spinner",
-          "lines": 10
-        },
-        {
-          "file": "src/components/SparkConfig/constants.tsx",
-          "line": 78,
-          "name": "Spinner",
-          "lines": 10
-        }
-      ]
-    },
-    {
-      "hash": "1ff3d935355d43be8384796a2c9d7a6e6bad5a8b2539d07b29946c8f3cc2da15",
-      "items": [
-        {
-          "file": "supabase/functions/admin-delete-user/index.ts",
-          "line": 43,
-          "name": "tokenClaims",
-          "lines": 10
-        },
-        {
-          "file": "supabase/functions/admin-user-lifecycle/index.ts",
-          "line": 43,
-          "name": "tokenClaims",
-          "lines": 10
-        }
-      ]
-    },
-    {
-      "hash": "10a01c886c2d4e83ee443d002d825d4e984e194d898a124e951505aeb02fe5de",
-      "items": [
-        {
-          "file": "supabase/functions/request-phone-login-otp-v2/index.ts",
-          "line": 23,
-          "name": "getPhoneAuthConfig",
-          "lines": 10
-        },
-        {
-          "file": "supabase/functions/verify-phone-login-otp-v2/index.ts",
-          "line": 28,
-          "name": "getPhoneAuthConfig",
-          "lines": 10
-        }
-      ]
-    },
-    {
       "hash": "42e31492a834e71646621fecd7748e7d539424e4afc7a2197b3dfcd398605230",
       "items": [
         {
@@ -852,53 +317,19 @@
       ]
     },
     {
-      "hash": "15e434afe14928860a1f5ff8b442333beb509e23094e988eea4979cbfedf7cd2",
+      "hash": "829e79de5053725318a3c0b49346304ef8e16f47234369505d7bbb733353ca1c",
       "items": [
         {
-          "file": "src/lib/phoneNormalize.ts",
-          "line": 12,
-          "name": "normalizeIranPhone",
-          "lines": 10
+          "file": "supabase/functions/_shared/crypto.ts",
+          "line": 14,
+          "name": "timingSafeCompare",
+          "lines": 9
         },
         {
-          "file": "supabase/functions/auth-send-sms-hook/index.ts",
-          "line": 13,
-          "name": "normalizeIranPhone",
-          "lines": 8
-        }
-      ]
-    },
-    {
-      "hash": "6657fc6f0fd43a4cc18f3bea83e10abb632adc3abd42e3f16e5c0c549ce9c19c",
-      "items": [
-        {
-          "file": "src/components/NotificationsConfig/Toggle.tsx",
-          "line": 1,
-          "name": "Toggle",
-          "lines": 8
-        },
-        {
-          "file": "src/components/SmsConfig/Toggle.tsx",
-          "line": 1,
-          "name": "Toggle",
-          "lines": 8
-        }
-      ]
-    },
-    {
-      "hash": "f005fcba1e776c942d842bd3f77be77a2597ffea83b1810f2bff5151f1992e05",
-      "items": [
-        {
-          "file": "src/components/PortalConfig/PasswordRecoveryCard.tsx",
-          "line": 171,
-          "name": "(anonymous)",
-          "lines": 8
-        },
-        {
-          "file": "src/components/PortalConfig/PhoneLoginToggleCard.tsx",
-          "line": 186,
-          "name": "(anonymous)",
-          "lines": 8
+          "file": "supabase/functions/send-daily-meetings/dailyReportSupport.ts",
+          "line": 191,
+          "name": "timingSafeCompare",
+          "lines": 9
         }
       ]
     },
