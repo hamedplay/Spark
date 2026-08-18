@@ -1,256 +1,215 @@
 VALIDATION_FAILED
 transform_rc=0
 build_rc=0
-test_rc=1
-deno_rc=99
+test_rc=0
+deno_rc=1
 
-✖ audit rpc: limit before aggregate in CTE (0.128394ms)
-  AssertionError [ERR_ASSERTION]: must use page_plus_one CTE
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:414:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
+790	supabase/functions/send-daily-meetings/index.ts
+347	supabase/functions/send-daily-meetings/dailyReportSupport.ts
+998	supabase/functions/send-sms/index.ts
+251	supabase/functions/send-sms/requestModes.ts
+15	supabase/functions/send-sms/phone.ts
+699	tests/phase3/phase3cSecurity.test.ts
+421	tests/phase3/phase3cSecurityService.test.ts
 
-test at tests/phase3/phase3cSecurity.test.ts:1:20591
-✖ audit rpc: array does not contain limit+1 row (0.131608ms)
-  AssertionError [ERR_ASSERTION]: must use visible_page CTE
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:420:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
+> meeting-manager@0.0.0 build
+> node node_modules/typescript/bin/tsc && node node_modules/vite/bin/vite.js build
 
-test at tests/phase3/phase3cSecurity.test.ts:1:20951
-✖ audit rpc: cursor from last visible row (0.129806ms)
-  AssertionError [ERR_ASSERTION]: must extract last created_at
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:426:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
+[36mvite v8.2.1 [32mbuilding client environment for production...[36m[39m
+[2Ktransforming...✓ 2408 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     4.43 kB │ gzip:   1.64 kB
+dist/assets/fetchMinutesConfig-DHm8p3qk.css         7.66 kB │ gzip:   1.82 kB
+dist/assets/index-BcX9pjm1.css                    302.83 kB │ gzip:  45.11 kB
+dist/assets/notifications-D9ZXeh-J.js               0.04 kB │ gzip:   0.06 kB
+dist/assets/chevron-up-BKIdn7_A.js                  0.12 kB │ gzip:   0.13 kB
+dist/assets/chevron-left-BQ-EYmY9.js                0.12 kB │ gzip:   0.14 kB
+dist/assets/circle-Dlf62wD3.js                      0.12 kB │ gzip:   0.12 kB
+dist/assets/loader-circle-Ba3twYZ3.js               0.14 kB │ gzip:   0.15 kB
+dist/assets/square-D2oB4fGA.js                      0.14 kB │ gzip:   0.14 kB
+dist/assets/navigation-rUUbRGFD.js                  0.14 kB │ gzip:   0.14 kB
+dist/assets/plus-CYKsJiZM.js                        0.14 kB │ gzip:   0.14 kB
+dist/assets/terminal-ByV-nRA8.js                    0.15 kB │ gzip:   0.15 kB
+dist/assets/clock-3-B0RUMhNS.js                     0.16 kB │ gzip:   0.16 kB
+dist/assets/search-BYwR580f.js                      0.17 kB │ gzip:   0.16 kB
+dist/assets/gauge-ESByyyir.js                       0.17 kB │ gzip:   0.16 kB
+dist/assets/user-round-WUzMMOLh.js                  0.17 kB │ gzip:   0.17 kB
+dist/assets/play-gZxDkIsA.js                        0.18 kB │ gzip:   0.17 kB
+dist/assets/list-filter-C7Tmr5e7.js                 0.19 kB │ gzip:   0.16 kB
+dist/assets/user-DuDwifEJ.js                        0.19 kB │ gzip:   0.17 kB
+dist/assets/at-sign-C_CPedPN.js                     0.19 kB │ gzip:   0.18 kB
+dist/assets/circle-stop-iJo1oQFB.js                 0.19 kB │ gzip:   0.17 kB
+dist/assets/rotate-ccw-BildE0IT.js                  0.19 kB │ gzip:   0.18 kB
+dist/assets/text-align-justify-BYRhGv2q.js          0.19 kB │ gzip:   0.16 kB
+dist/assets/info-B24P087C.js                        0.20 kB │ gzip:   0.17 kB
+dist/assets/lock-BsPH306y.js                        0.20 kB │ gzip:   0.18 kB
+dist/assets/credit-card-D564ktIK.js                 0.20 kB │ gzip:   0.18 kB
+dist/assets/mail-C6D1TTRf.js                        0.20 kB │ gzip:   0.19 kB
+dist/assets/briefcase-LeZMB4aK.js                   0.21 kB │ gzip:   0.19 kB
+dist/assets/target-DhPLGO6E.js                      0.22 kB │ gzip:   0.16 kB
+dist/assets/upload-o9TKdGA6.js                      0.22 kB │ gzip:   0.18 kB
+dist/assets/log-in-BkoNbazx.js                      0.22 kB │ gzip:   0.18 kB
+dist/assets/message-square-Baogf8Yo.js              0.22 kB │ gzip:   0.19 kB
+dist/assets/paperclip-BeqB5ej9.js                   0.22 kB │ gzip:   0.19 kB
+dist/assets/activity-2PR2GfeE.js                    0.23 kB │ gzip:   0.19 kB
+dist/assets/ellipsis-vertical-DOCIaMNp.js           0.23 kB │ gzip:   0.16 kB
+dist/assets/maximize-2-CcS4qdVG.js                  0.23 kB │ gzip:   0.18 kB
+dist/assets/globe-D8K4xLXx.js                       0.23 kB │ gzip:   0.18 kB
+dist/assets/link-2-DOjAoAsz.js                      0.23 kB │ gzip:   0.20 kB
+dist/assets/database-BBRrjfE6.js                    0.23 kB │ gzip:   0.19 kB
+dist/assets/user-check-4S7Ykf0n.js                  0.23 kB │ gzip:   0.19 kB
+dist/assets/rotate-ccw-clock-BDyuzl2e.js            0.24 kB │ gzip:   0.20 kB
+dist/assets/chart-column-CafQ7w_R.js                0.24 kB │ gzip:   0.19 kB
+dist/assets/archive-KhqO1_h_.js                     0.24 kB │ gzip:   0.20 kB
+dist/assets/lock-keyhole-BMc3QfN0.js                0.25 kB │ gzip:   0.21 kB
+dist/assets/link-BgVFrm59.js                        0.25 kB │ gzip:   0.19 kB
+dist/assets/user-minus-BfI2r8zD.js                  0.25 kB │ gzip:   0.21 kB
+dist/assets/map-pin-DB_urdrA.js                     0.25 kB │ gzip:   0.22 kB
+dist/assets/circle-user-DCg7jynX.js                 0.25 kB │ gzip:   0.19 kB
+dist/assets/triangle-alert-B_Q5aYTB.js              0.26 kB │ gzip:   0.21 kB
+dist/assets/image-DujlhzZr.js                       0.26 kB │ gzip:   0.21 kB
+dist/assets/file-CgxWO3pw.js                        0.26 kB │ gzip:   0.20 kB
+dist/assets/zap-BTWJMRWj.js                         0.26 kB │ gzip:   0.21 kB
+dist/assets/pencil-CuX8He7y.js                      0.27 kB │ gzip:   0.22 kB
+dist/assets/list-checks-BomjxD1x.js                 0.27 kB │ gzip:   0.18 kB
+dist/assets/wifi-CCVTmd0o.js                        0.27 kB │ gzip:   0.20 kB
+dist/assets/bell-8nF4ub8z.js                        0.28 kB │ gzip:   0.23 kB
+dist/assets/send-BpsFK-U5.js                        0.28 kB │ gzip:   0.22 kB
+dist/assets/hash-DvUT-eKv.js                        0.29 kB │ gzip:   0.18 kB
+dist/assets/list-todo-C_9oYKa4.js                   0.29 kB │ gzip:   0.21 kB
+dist/assets/user-x-CC13KA2d.js                      0.30 kB │ gzip:   0.22 kB
+dist/assets/user-plus-DnGg1Ocd.js                   0.30 kB │ gzip:   0.23 kB
+dist/assets/printer-X61BR-Ee.js                     0.31 kB │ gzip:   0.23 kB
+dist/assets/save-6v9RBSzS.js                        0.32 kB │ gzip:   0.22 kB
+dist/assets/trash-2-DuLnkrJM.js                     0.32 kB │ gzip:   0.21 kB
+dist/assets/git-fork-B-45UfvJ.js                    0.32 kB │ gzip:   0.22 kB
+dist/assets/file-down-Dl7jOQJ_.js                   0.35 kB │ gzip:   0.24 kB
+dist/assets/share-2-CwL1PCRC.js                     0.35 kB │ gzip:   0.23 kB
+dist/assets/crown-CVlVg2yA.js                       0.35 kB │ gzip:   0.25 kB
+dist/assets/bell-off-D7M9eHNx.js                    0.36 kB │ gzip:   0.26 kB
+dist/assets/radio-C1DFHaon.js                       0.37 kB │ gzip:   0.24 kB
+dist/assets/building-2-DC1wYNzU.js                  0.37 kB │ gzip:   0.23 kB
+dist/assets/group-C7r5ZokJ.js                       0.42 kB │ gzip:   0.27 kB
+dist/assets/sliders-horizontal-DulPnmLm.js          0.42 kB │ gzip:   0.23 kB
+dist/assets/circle-plus-BYOj0dza.js                 0.44 kB │ gzip:   0.28 kB
+dist/assets/tag-CHel_1y9.js                         0.44 kB │ gzip:   0.30 kB
+dist/assets/timer-TjKhwd0q.js                       0.45 kB │ gzip:   0.30 kB
+dist/assets/wifi-off-Dlm7zmMV.js                    0.45 kB │ gzip:   0.26 kB
+dist/assets/unlink-CW7ATV7i.js                      0.52 kB │ gzip:   0.29 kB
+dist/assets/reply-CyNIZu5m.js                       0.53 kB │ gzip:   0.29 kB
+dist/assets/pin-BNfNBwQs.js                         0.56 kB │ gzip:   0.33 kB
+dist/assets/repeat-Cg2gRg2K.js                      0.57 kB │ gzip:   0.31 kB
+dist/assets/brain-Djqtg6gC.js                       0.57 kB │ gzip:   0.30 kB
+dist/assets/MinutesBackButton-bUEHl6nz.js           0.71 kB │ gzip:   0.43 kB
+dist/assets/camera-SSuR7flp.js                      0.84 kB │ gzip:   0.41 kB
+dist/assets/authenticatedRtcConfig-GiHC64Py.js      0.90 kB │ gzip:   0.52 kB
+dist/assets/invokeEdgeFunction-DadLoj_r.js          0.92 kB │ gzip:   0.54 kB
+dist/assets/rolldown-runtime-Dd_uD5pT.js            1.10 kB │ gzip:   0.62 kB
+dist/assets/ContactFormFields-LXMH8c4m.js           1.28 kB │ gzip:   0.61 kB
+dist/assets/minutesMeetingAccess-B9HSNLbf.js        1.68 kB │ gzip:   0.66 kB
+dist/assets/users-round-C3sZmusW.js                 1.81 kB │ gzip:   0.84 kB
+dist/assets/webrtcDiagnostics-B4eaIs6H.js           1.82 kB │ gzip:   0.90 kB
+dist/assets/CreateMeetingPage-CoAcCiz-.js           1.86 kB │ gzip:   0.87 kB
+dist/assets/xlsxCompat-B9AIkfiH.js                  1.90 kB │ gzip:   0.97 kB
+dist/assets/screen-share-qLdwBgwC.js                1.96 kB │ gzip:   0.79 kB
+dist/assets/useOrgUsers-DKw83jEI.js                 2.25 kB │ gzip:   1.12 kB
+dist/assets/sparkDateUtils-C0vQjTkV.js              2.53 kB │ gzip:   1.07 kB
+dist/assets/mfaOperations-DXY-33mx.js               2.60 kB │ gzip:   1.07 kB
+dist/assets/minutesDate-D8SYjoa1.js                 3.37 kB │ gzip:   1.18 kB
+dist/assets/SearchableSelect-BtAj93W-.js            3.60 kB │ gzip:   1.48 kB
+dist/assets/jalaliDateFilter-CBw3hn6A.js            3.98 kB │ gzip:   1.66 kB
+dist/assets/JalaliDatePicker-aJ9jr9sR.js            4.70 kB │ gzip:   2.04 kB
+dist/assets/fetchMinutesConfig-BdRgDqdd.js         10.36 kB │ gzip:   3.22 kB
+dist/assets/ContactsEmailPage-C1tgU9b0.js          10.63 kB │ gzip:   3.29 kB
+dist/assets/MinutesMeetingReportPage-DUKoldsc.js   10.77 kB │ gzip:   2.94 kB
+dist/assets/ThemeContext-C17uxLFw.js               10.81 kB │ gzip:   4.41 kB
+dist/assets/IceTesterPanel-tzuS1Vnw.js             11.97 kB │ gzip:   3.29 kB
+dist/assets/es-BtQ7BWGC.js                         12.61 kB │ gzip:   5.04 kB
+dist/assets/auth-DJGrpOS3.js                       13.36 kB │ gzip:   3.75 kB
+dist/assets/shield-check-CeO5lHj3.js               13.77 kB │ gzip:   5.63 kB
+dist/assets/MinutesApprovalsPage-CezbcJsU.js       14.12 kB │ gzip:   4.06 kB
+dist/assets/GuestApplication-Cru7hssQ.js           14.61 kB │ gzip:   5.08 kB
+dist/assets/MinutesHubPage-avn6Wwuc.js             15.16 kB │ gzip:   4.32 kB
+dist/assets/MyDecisionsPage-DtX2HCCk.js            15.62 kB │ gzip:   4.23 kB
+dist/assets/FullScreenPreview-8RroVThc.js          15.72 kB │ gzip:   5.44 kB
+dist/assets/MinutesListPage-BUwv5gJb.js            16.54 kB │ gzip:   5.00 kB
+dist/assets/MinutesConfigPanel-irHLsunX.js         16.79 kB │ gzip:   4.95 kB
+dist/assets/MinutesShared-Cmoj3AOp.js              17.04 kB │ gzip:   4.54 kB
+dist/assets/MinutesReportsPage-qVnsNwAa.js         18.34 kB │ gzip:   4.66 kB
+dist/assets/DecisionsFollowupPage-Dcp3K5sL.js      18.39 kB │ gzip:   4.68 kB
+dist/assets/CalendarOccasionsPanel-C16kARF6.js     19.45 kB │ gzip:   4.81 kB
+dist/assets/ChatSettingsPage-t53LfhIB.js           20.77 kB │ gzip:   7.44 kB
+dist/assets/AuditLogPage-B-2HHqJz.js               21.23 kB │ gzip:   5.22 kB
+dist/assets/SparkPage-ueEV-LaD.js                  22.28 kB │ gzip:   5.81 kB
+dist/assets/DailyReportConfigPanel-DMk1Z71z.js     24.80 kB │ gzip:   6.16 kB
+dist/assets/ReportsPage-CalphS4H.js                24.84 kB │ gzip:   6.32 kB
+dist/assets/ManagementDashboardPage-B3BLKHMd.js    25.01 kB │ gzip:   7.12 kB
+dist/assets/templateCatalog-atus-i_d.js            25.20 kB │ gzip:   4.04 kB
+dist/assets/GroupsPage-CARqTGzR.js                 25.22 kB │ gzip:   5.88 kB
+dist/assets/MinutesDashboardPage-BPZKdAwZ.js       25.78 kB │ gzip:   6.74 kB
+dist/assets/ContactsPage-SVWYstBR.js               26.50 kB │ gzip:   6.32 kB
+dist/assets/PublicAuthRoot-CCTb1B57.js             31.60 kB │ gzip:   6.94 kB
+dist/assets/BackupPanel-BI7MrfTh.js                35.20 kB │ gzip:   8.60 kB
+dist/assets/NotesPage-BXwkYl4w.js                  35.52 kB │ gzip:   9.60 kB
+dist/assets/UserGroupsPanel-BplS3vcp.js            35.84 kB │ gzip:   7.96 kB
+dist/assets/VideoConferencePage-BCUuIPxY.js        36.63 kB │ gzip:   9.72 kB
+dist/assets/SocialNotificationsPanel-CMdWJnts.js   37.71 kB │ gzip:   9.75 kB
+dist/assets/SparkAssistant-D8haQnVr.js             38.54 kB │ gzip:  11.85 kB
+dist/assets/SparkConfigPanel-F0PFcKLC.js           43.19 kB │ gzip:   9.78 kB
+dist/assets/DecisionFilters-M1zDsY7j.js            47.01 kB │ gzip:  10.22 kB
+dist/assets/CreateMeetingForm-CSbFZVU6.js          54.09 kB │ gzip:  12.16 kB
+dist/assets/NotificationsConfigPanel-WjOrNQIA.js   54.10 kB │ gzip:  11.26 kB
+dist/assets/TasksPage-CnGFSjzT.js                  54.30 kB │ gzip:  12.16 kB
+dist/assets/ProfilePage-D4EGgrDA.js                55.56 kB │ gzip:  12.29 kB
+dist/assets/PortalConfigPage-CHwzIYPb.js           61.58 kB │ gzip:  16.35 kB
+dist/assets/MeetingsPage-ChEhno8n.js               66.54 kB │ gzip:  16.00 kB
+dist/assets/MinutesDetailPage-BZhGOYjF.js          68.13 kB │ gzip:  15.31 kB
+dist/assets/SystemMonitoringPage-DYDAyTQT.js       71.35 kB │ gzip:  12.24 kB
+dist/assets/OrgStructurePage-CZIeoVcn.js           76.91 kB │ gzip:  15.51 kB
+dist/assets/moment-jalaali-D7ipNpsB.js             79.14 kB │ gzip:  25.06 kB
+dist/assets/Tutorial-DVqqST5C.js                   81.00 kB │ gzip:  19.89 kB
+dist/assets/MinutesFormPage-wqXzK2Eo.js            94.88 kB │ gzip:  20.77 kB
+dist/assets/UserManagementPanel-DxluqQ8g.js       100.78 kB │ gzip:  23.05 kB
+dist/assets/SmsConfigPanel-BqcYSvUi.js            130.62 kB │ gzip:  24.04 kB
+dist/assets/DeviceSelector-CCqlWrsW.js            147.54 kB │ gzip:  39.45 kB
+dist/assets/ChannelsPage-BVm6U0Fk.js              151.42 kB │ gzip:  34.34 kB
+dist/assets/AuthenticatedRoot-CLHe9khQ.js         184.07 kB │ gzip:  47.10 kB
+dist/assets/CalendarPage-B70i3LXl.js              272.39 kB │ gzip:  63.26 kB
+dist/assets/ChatPage-WSgXUlHc.js                  277.77 kB │ gzip:  70.44 kB
+dist/assets/minutesWordExport-DooYA5tX.js         380.61 kB │ gzip: 107.51 kB
+dist/assets/index-BeNA4CAl.js                     411.01 kB │ gzip: 118.00 kB
+dist/assets/exceljs.min-BsF42dRL.js               929.58 kB │ gzip: 256.39 kB
 
-test at tests/phase3/phase3cSecurity.test.ts:1:21378
-✖ audit rpc: empty page cursor is null (0.147012ms)
-  AssertionError [ERR_ASSERTION]: must check v_count > 0 before setting cursor
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:433:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurity.test.ts:1:21759
-✖ audit rpc: nullable states use CASE WHEN IS NULL (0.132981ms)
-  AssertionError [ERR_ASSERTION]: must handle nullable metadata
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurity.test.ts:439:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:6864
-✖ cte scope: filtered_users not referenced after WITH statement in management RPC (5.305248ms)
-  AssertionError [ERR_ASSERTION]: must extract management RPC body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:135:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:7465
-✖ cte scope: page_plus_one not referenced after WITH statement in management RPC (0.56297ms)
-  AssertionError [ERR_ASSERTION]: must extract management RPC body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:150:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:7952
-✖ cte scope: management RPC computes users, has_more, total_matches in one statement (0.375677ms)
-  AssertionError [ERR_ASSERTION]: must extract management RPC body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:161:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:8582
-✖ cte scope: page_plus_one not referenced independently in audit RPC (0.519734ms)
-  AssertionError [ERR_ASSERTION]: must extract audit RPC body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:175:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:9153
-✖ cte scope: audit RPC computes events and has_more in one statement (0.250197ms)
-  AssertionError [ERR_ASSERTION]: must extract audit RPC body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:190:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:9679
-✖ target alias: live function does not contain p.target_user_id (0.236246ms)
-  AssertionError [ERR_ASSERTION]: must extract audit RPC body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:205:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:10014
-✖ target alias: live function contains e.target_user_id = p_target_user_id (0.254555ms)
-  AssertionError [ERR_ASSERTION]: must extract audit RPC body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:214:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:10339
-✖ setter: fast authorization check before global lock (0.229437ms)
-  AssertionError [ERR_ASSERTION]: must extract setter body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:223:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
-
-test at tests/phase3/phase3cSecurityService.test.ts:1:11061
-✖ setter: authorization check also after global lock (0.241053ms)
-  AssertionError [ERR_ASSERTION]: must extract setter body
-      at TestContext.<anonymous> (/home/runner/work/Spark/Spark/tests/phase3/phase3cSecurityService.test.ts:237:10)
-      at Test.runInAsyncScope (node:async_hooks:227:14)
-      at Test.run (node:internal/test_runner/test:1325:25)
-      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
-      at Test.postRun (node:internal/test_runner/test:1465:19)
-      at Test.run (node:internal/test_runner/test:1390:12)
-      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
-    generatedMessage: false,
-    code: 'ERR_ASSERTION',
-    actual: false,
-    expected: true,
-    operator: '==',
-    diff: 'simple'
-  }
+[32m✓ built in 3.46s[39m
+[33m[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+phase3c baseline tests=218 failures=139
+phase3c after tests=218 failures=139
+baseline_test_rc=1 after_test_rc=1 comparison_rc=0
+[0m[32mDownload[0m https://jsr.io/@supabase/functions-js/meta.json
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/meta.json
+[0m[32mDownload[0m https://jsr.io/@supabase/functions-js/2.111.0_meta.json
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0_meta.json
+[0m[32mDownload[0m https://jsr.io/@supabase/functions-js/2.111.0/src/edge-runtime.d.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/index.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/SupabaseClient.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/types.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/constants.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/fetch.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/helpers.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/SupabaseAuthClient.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/rest/types/common/rpc.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/rest/types/common/common.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/lib/version.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/_internal/tracing/index.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/_internal/tracing/types.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/_internal/tracing/extract.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/_internal/tracing/parse.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/_internal/tracing/validate.ts
+[0m[32mDownload[0m https://jsr.io/@supabase/supabase-js/2.111.0/src/_internal/tracing/defaults.ts
+[0m[1m[31merror[0m: Failed resolving types. Could not find a matching package for 'npm:openai@^4.52.5' in the node_modules directory. Ensure you have all your JSR and npm dependencies listed in your deno.json or package.json, then run `deno install`. Alternatively, turn on auto-install by specifying `"nodeModulesDir": "auto"` in your deno.json file.
+    at [0m[36mhttps://jsr.io/@supabase/functions-js/2.111.0/src/edge-runtime.d.ts[0m:[0m[33m192[0m:[0m[33m25[0m
