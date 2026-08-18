@@ -1,0 +1,37 @@
+name: Temporary Spark CLI UI scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-ui-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan Persian UI strings
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          pattern = re.compile(r'[\u0600-\u06ff]')
+          count = 0
+          for path in sorted(Path('deploy/spark-cli').rglob('*')):
+              if not path.is_file() or path.suffix not in {'.sh', ''}:
+                  continue
+              try:
+                  lines = path.read_text(encoding='utf-8').splitlines()
+              except UnicodeDecodeError:
+                  continue
+              for i, line in enumerate(lines, 1):
+                  if pattern.search(line):
+                      count += 1
+                      print(f'{path}:{i}: {line}')
+          print(f'PERSIAN_UI_LINES={count}')
+          PY
