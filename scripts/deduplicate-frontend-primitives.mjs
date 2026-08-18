@@ -1,3 +1,4 @@
+// one-time execution trigger
 import fs from 'node:fs';
 import path from 'node:path';
 import childProcess from 'node:child_process';
@@ -118,7 +119,6 @@ for (const file of trackedSrc) {
 if (notifImporters === 0) throw new Error('no Notifications Toggle importers found');
 if (smsImporters === 0) throw new Error('no SMS Toggle importers found');
 
-// Preserve the public Spinner export from SparkConfig/constants while removing its duplicate implementation.
 const sparkConstants = 'src/components/SparkConfig/constants.tsx';
 {
   let source = read(sparkConstants);
