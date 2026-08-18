@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  if (!supabaseUrl || !serviceRoleKey) return json({ error: "server_misconfigured" }, 500);
+  if (!supabaseUrl || !serviceRoleKey || !anonKey) return json({ error: "server_misconfigured" }, 500);
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -98,12 +98,16 @@ Deno.serve(async (req: Request) => {
   // back to the same Vault-backed secret that authenticated this dispatcher.
   const targetSecret = Deno.env.get(config.secretEnv) || providedSecret;
 
+  // Use the same legacy anon credential in both gateway headers. Mixing a
+  // publishable apikey with a different Authorization API key is rejected by
+  // the current Supabase gateway as conflicting credentials. Authorization of
+  // the scheduled operation itself remains the Vault-backed X-Cron-Secret.
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-Cron-Secret": targetSecret,
-    "Authorization": `Bearer ${serviceRoleKey}`,
+    "apikey": anonKey,
+    "Authorization": `Bearer ${anonKey}`,
   };
-  if (anonKey) headers.apikey = anonKey;
 
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/${config.slug}`, {
