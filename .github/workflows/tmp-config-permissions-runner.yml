@@ -114,13 +114,13 @@ jobs:
       - name: Check changed Edge Functions
         id: deno_check
         run: |
-          deno check supabase/functions/backup-data/index.ts
-          deno check supabase/functions/restore-backup/index.ts
-          deno check supabase/functions/send-daily-meetings/index.ts
-          deno check supabase/functions/messenger-proxy/index.ts
-          deno check supabase/functions/check-phone-password-reset-runtime/index.ts
-          deno check supabase/functions/send-sms/index.ts
-          deno check supabase/functions/management-dashboard/index.ts
+          deno check --node-modules-dir=auto supabase/functions/backup-data/index.ts
+          deno check --node-modules-dir=auto supabase/functions/restore-backup/index.ts
+          deno check --node-modules-dir=auto supabase/functions/send-daily-meetings/index.ts
+          deno check --node-modules-dir=auto supabase/functions/messenger-proxy/index.ts
+          deno check --node-modules-dir=auto supabase/functions/check-phone-password-reset-runtime/index.ts
+          deno check --node-modules-dir=auto supabase/functions/send-sms/index.ts
+          deno check --node-modules-dir=auto supabase/functions/management-dashboard/index.ts
 
       - name: Production build
         id: build
