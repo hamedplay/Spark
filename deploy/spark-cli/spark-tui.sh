@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_WRAPPER_VERSION="1.3.1"
+SPARK_MANAGER_WRAPPER_VERSION="1.3.2"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
@@ -91,13 +91,15 @@ main_menu() {
   while true; do
     spark_tui_write_main_data
     config="$(spark_tui_main_config)"
+    TUI_RESULT=""
 
     set +e +u
-    command="$(TUI_MODE="fullscreen" mainmenu \
+    TUI_MODE="fullscreen" mainmenu \
       "SPARK CONTROL CENTER" \
       "Production deployment · operations · security · observability" \
-      "$config" 1 1)"
+      "$config" 1 1
     rc=$?
+    command="${TUI_RESULT:-}"
     set -Eeuo pipefail
 
     (( rc == 0 )) || return 0
@@ -119,13 +121,15 @@ install_menu() {
   while true; do
     spark_tui_write_install_data
     config="$(spark_tui_install_config)"
+    TUI_RESULT=""
 
     set +e +u
-    command="$(TUI_MODE="fullscreen" mainmenu \
+    TUI_MODE="fullscreen" mainmenu \
       "SPARK INSTALLATION" \
       "Guided single-host deployment · completed steps are tracked automatically" \
-      "$config" 1 1)"
+      "$config" 1 1
     rc=$?
+    command="${TUI_RESULT:-}"
     set -Eeuo pipefail
 
     (( rc == 0 )) || return 0
