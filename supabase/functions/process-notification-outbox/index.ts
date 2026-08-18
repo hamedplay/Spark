@@ -32,6 +32,16 @@ interface ClaimedRow {
   sms_sent_at: string | null;
 }
 
+function timingSafeCompare(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ba = enc.encode(a);
+  const bb = enc.encode(b);
+  if (ba.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ba.length; i++) diff |= ba[i] ^ bb[i];
+  return diff === 0;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -44,15 +54,6 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const cronSecret = Deno.env.get("NOTIFICATION_OUTBOX_CRON_SECRET");
-  if (!cronSecret) {
-    console.error("[outbox-worker] NOTIFICATION_OUTBOX_CRON_SECRET not configured");
-    return new Response(
-      JSON.stringify({ error: "server_misconfigured" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-
   const providedSecret = req.headers.get("X-Cron-Secret");
   if (!providedSecret) {
     return new Response(
@@ -61,18 +62,24 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const enc = new TextEncoder();
-  const a = enc.encode(providedSecret);
-  const b = enc.encode(cronSecret);
-  if (a.length !== b.length) {
-    return new Response(
-      JSON.stringify({ error: "unauthorized" }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  let authorized = false;
+  const legacyCronSecret = Deno.env.get("NOTIFICATION_OUTBOX_CRON_SECRET") ?? "";
+  if (legacyCronSecret) {
+    authorized = timingSafeCompare(providedSecret, legacyCronSecret);
   }
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  if (diff !== 0) {
+
+  if (!authorized) {
+    const { data, error } = await supabase.rpc("verify_cron_secret", { candidate: providedSecret });
+    authorized = !error && data === true;
+  }
+
+  if (!authorized) {
     return new Response(
       JSON.stringify({ error: "unauthorized" }),
       { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -80,12 +87,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
-
     const { data: claimedRows, error: claimError } = await supabase
       .rpc("claim_notification_outbox_rows", { p_limit: 50 });
 
@@ -261,28 +262,22 @@ Deno.serve(async (req: Request) => {
         let nextAttemptAt: string | null = null;
         let lastError: string | null = null;
 
-        // Check notification failure
         if (!notificationSent) {
-          // Should not reach here (handled above), but be safe
           finalStatus = "failed";
           lastError = "NOTIFICATION_NOT_SENT";
         } else if (smsStatus === "failed" && smsAttemptCount < MAX_SMS_ATTEMPTS) {
-          // SMS retryable
           finalStatus = "partial";
           const backoffIdx = Math.min(smsAttemptCount - 1, SMS_BACKOFF_MS.length - 1);
           nextAttemptAt = new Date(Date.now() + SMS_BACKOFF_MS[backoffIdx]).toISOString();
           lastError = `SMS_FAILED (attempt ${smsAttemptCount})`;
         } else if (smsStatus === "failed" && smsAttemptCount >= MAX_SMS_ATTEMPTS) {
-          // SMS final failure
           finalStatus = "failed";
           nextAttemptAt = null;
           lastError = "SMS_MAX_ATTEMPTS_REACHED";
         } else if (smsStatus === "skipped_no_phone" || smsStatus === "skipped_no_provider_rule") {
-          // Terminal warning — outbox processing complete
           finalStatus = "processed";
           lastError = `SMS_SKIPPED: ${smsStatus}`;
         }
-        // skipped_template_disabled, not_requested, sent → processed
 
         await supabase
           .from("notification_outbox")
