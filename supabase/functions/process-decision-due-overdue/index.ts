@@ -6,6 +6,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Cron-Secret",
 };
 
+function timingSafeCompare(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ba = enc.encode(a);
+  const bb = enc.encode(b);
+  if (ba.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ba.length; i++) diff |= ba[i] ^ bb[i];
+  return diff === 0;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -18,15 +28,6 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const cronSecret = Deno.env.get("DECISION_DUE_CRON_SECRET");
-  if (!cronSecret) {
-    console.error("[due-overdue] DECISION_DUE_CRON_SECRET not configured");
-    return new Response(
-      JSON.stringify({ error: "server_misconfigured" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-
   const providedSecret = req.headers.get("X-Cron-Secret");
   if (!providedSecret) {
     return new Response(
@@ -35,18 +36,24 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const enc = new TextEncoder();
-  const a = enc.encode(providedSecret);
-  const b = enc.encode(cronSecret);
-  if (a.length !== b.length) {
-    return new Response(
-      JSON.stringify({ error: "unauthorized" }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  let authorized = false;
+  const legacyCronSecret = Deno.env.get("DECISION_DUE_CRON_SECRET") ?? "";
+  if (legacyCronSecret) {
+    authorized = timingSafeCompare(providedSecret, legacyCronSecret);
   }
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  if (diff !== 0) {
+
+  if (!authorized) {
+    const { data, error } = await supabase.rpc("verify_cron_secret", { candidate: providedSecret });
+    authorized = !error && data === true;
+  }
+
+  if (!authorized) {
     return new Response(
       JSON.stringify({ error: "unauthorized" }),
       { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -54,12 +61,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
-
     const { error } = await supabase.rpc("claim_due_overdue_decisions", { p_lead_days: 1 });
 
     if (error) {
