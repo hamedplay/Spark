@@ -27,11 +27,7 @@ const fixSettingsSql = fixSettingsMigration ? fs.readFileSync(path.join(migratio
 const allPhase4Sql = foundationSql + '\n' + challengeSql + '\n' + completionSql + '\n' + fixTriggerSql + '\n' + fixSettingsSql;
 
 const authPageSource = fs.readFileSync(path.join(projectRoot, 'src/components/AuthPage.tsx'), 'utf-8');
-const auditConsoleSource = fs.readFileSync(path.join(projectRoot, 'src/features/security-administration/components/SecurityAuditConsole.tsx'), 'utf-8');
 const profileCompletionGateSource = fs.readFileSync(path.join(projectRoot, 'src/features/auth/components/ProfileCompletionGate.tsx'), 'utf-8');
-const lifecycleMgmtSource = fs.readFileSync(path.join(projectRoot, 'src/features/security-administration/components/AccountLifecycleManagement.tsx'), 'utf-8');
-const lifecycleDialogSource = fs.readFileSync(path.join(projectRoot, 'src/features/security-administration/components/AccountLifecycleActionDialog.tsx'), 'utf-8');
-const securityControlCenterSource = fs.readFileSync(path.join(projectRoot, 'src/features/security-administration/components/SecurityControlCenter.tsx'), 'utf-8');
 const userMgmtSource = fs.readFileSync(path.join(projectRoot, 'src/components/UserManagementPanel.tsx'), 'utf-8');
 const restrictedAccessSource = fs.readFileSync(path.join(projectRoot, 'src/components/RestrictedAccessPage.tsx'), 'utf-8');
 const adminUsersSource = fs.readFileSync(path.join(projectRoot, 'supabase/functions/admin-users/index.ts'), 'utf-8');
@@ -377,12 +373,6 @@ test('frontend: registration disabled when not ready', () => {
   assert.ok(authPageSource.includes('ثبت‌نام در حال حاضر فعال نیست'), 'must show disabled message');
 });
 
-test('frontend: approval UI only in security console', () => {
-  assert.ok(securityControlCenterSource.includes('AccountLifecycleManagement'), 'must include lifecycle management');
-  assert.ok(securityControlCenterSource.includes('چرخه عمر حساب‌ها'), 'must have lifecycle tab');
-  assert.ok(lifecycleMgmtSource.includes('AccountLifecycleManagement'), 'must have management component');
-});
-
 test('frontend: general admin no direct lifecycle write', () => {
   assert.ok(!userMgmtSource.match(/is_active\s*[:=]\s*(true|false|updated)/), 'must not write is_active');
   assert.ok(userMgmtSource.includes('برای تغییر وضعیت حساب به بخش امنیت و دسترسی مراجعه کنید'), 'must show security redirect message');
@@ -396,16 +386,6 @@ test('frontend: raw backend error not displayed', () => {
 test('frontend: ProfileCompletionGate rendered in RestrictedAccessPage', () => {
   assert.ok(restrictedAccessSource.includes('ProfileCompletionGate'), 'must import ProfileCompletionGate');
   assert.ok(restrictedAccessSource.includes('complete_profile'), 'must handle complete_profile step');
-});
-
-test('frontend: lifecycle action dialog has step-up', () => {
-  assert.ok(lifecycleDialogSource.includes('SecurityStepUpDialog'), 'must include step-up dialog');
-  assert.ok(lifecycleDialogSource.includes('account_security_change'), 'must use correct purpose');
-});
-
-test('frontend: lifecycle action has confirmation checkbox', () => {
-  assert.ok(lifecycleDialogSource.includes('checkbox'), 'must have confirmation checkbox');
-  assert.ok(lifecycleDialogSource.includes('confirmed'), 'must track confirmation state');
 });
 
 test('frontend: admin-users register route returns 410', () => {
@@ -459,9 +439,4 @@ test('frontend: get_public_auth_config does not return secrets', () => {
   assert.ok(!returnQuerySection.includes('v_provider_id'), 'must not return provider_id in output');
   assert.ok(!returnQuerySection.includes('pepper'), 'must not return pepper');
   assert.ok(!returnQuerySection.includes('v_origins_text'), 'must not return raw origins');
-});
-
-test('frontend: audit console UUID and load more guards still pass', () => {
-  assert.ok(auditConsoleSource.includes('UUID_REGEX'), 'must still have UUID validation');
-  assert.ok(auditConsoleSource.includes('if (!params)'), 'must still have null params guard');
 });

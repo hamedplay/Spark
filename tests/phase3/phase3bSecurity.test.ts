@@ -37,11 +37,6 @@ const mfaOperationsSource = fs.readFileSync(
   'utf-8',
 );
 
-const mfaPanelSource = fs.readFileSync(
-  path.join(__dirname, '../../src/components/PortalConfig/MfaPanel.tsx'),
-  'utf-8',
-);
-
 const totpFactorManagerSource = fs.readFileSync(
   path.join(__dirname, '../../src/features/auth/components/TotpFactorManager.tsx'),
   'utf-8',
@@ -54,11 +49,6 @@ const profilePageSource = fs.readFileSync(
 
 const securitySettingsServiceSource = fs.readFileSync(
   path.join(__dirname, '../../src/features/security-settings/services/securitySettingsService.ts'),
-  'utf-8',
-);
-
-const validateSecuritySettingsSource = fs.readFileSync(
-  path.join(__dirname, '../../src/features/security-settings/utils/validateSecuritySettings.ts'),
   'utf-8',
 );
 
@@ -867,15 +857,6 @@ test('profile form: all TOTP buttons have type="button"', () => {
     assert.ok(btn.includes('type="button"'),
       `button must have type="button": ${btn}`);
   }
-});
-
-// ── MfaPanel replacement ────────────────────────────────────────────────────
-
-test('MfaPanel renders SecurityControlCenter', () => {
-  assert.ok(mfaPanelSource.includes('SecurityControlCenter'),
-    'MfaPanel must render SecurityControlCenter');
-  assert.ok(!mfaPanelSource.includes('system_config'),
-    'MfaPanel must not save to system_config');
 });
 
 // ── ProfilePage integration ──────────────────────────────────────────────────

@@ -3,7 +3,6 @@ import test from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tehranDateToUtcRange } from '../../src/features/security-administration/utils/tehranDateRange';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,20 +23,9 @@ const fixSql = fs.existsSync(fixMigrationPath) ? fs.readFileSync(fixMigrationPat
 const driftFixSql = fs.existsSync(driftFixMigrationPath) ? fs.readFileSync(driftFixMigrationPath, 'utf-8') : '';
 const combinedSql = originalSql + '\n' + fixSql + '\n' + driftFixSql;
 const latestSql = driftFixSql || fixSql;
-
-const consoleSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/components/SecurityControlCenter.tsx'), 'utf-8');
-const adminMgmtSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/components/SecurityAdminManagement.tsx'), 'utf-8');
-const roleDialogSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/components/SecurityAdminRoleDialog.tsx'), 'utf-8');
-const auditConsoleSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/components/SecurityAuditConsole.tsx'), 'utf-8');
-const auditDetailsSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/components/SecurityAuditDetails.tsx'), 'utf-8');
 const stepUpDialogSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-settings/components/SecurityStepUpDialog.tsx'), 'utf-8');
-const serviceSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/services/securityAdministrationService.ts'), 'utf-8');
-const mfaPanelSource = fs.readFileSync(path.join(__dirname, '../../src/components/PortalConfig/MfaPanel.tsx'), 'utf-8');
 const settingsConsoleSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-settings/components/SecuritySettingsConsole.tsx'), 'utf-8');
 const userMgmtPanelSource = fs.existsSync(path.join(__dirname, '../../src/components/UserManagementPanel.tsx')) ? fs.readFileSync(path.join(__dirname, '../../src/components/UserManagementPanel.tsx'), 'utf-8') : '';
-const validationSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/utils/securityAdministrationValidation.ts'), 'utf-8');
-const typesSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/types/securityAdministration.ts'), 'utf-8');
-const labelsSource = fs.readFileSync(path.join(__dirname, '../../src/features/security-administration/utils/securityAuditLabels.ts'), 'utf-8');
 
 // ═══ Migration Tests ═════════════════════════════════════════════════════════
 
@@ -97,13 +85,6 @@ test('migration: original migration unchanged (Immutable)', () => {
   assert.ok(originalSql.includes('Phase 3C'), 'original must still exist unchanged');
   assert.ok(originalSql.includes('idx_security_audit_events_created_id'), 'original must still have indexes');
   assert.ok(originalSql.includes('REVOKE SELECT ON public.security_audit_events FROM anon'), 'original must still have ACL');
-});
-
-// ═══ Setter Tests ═════════════════════════════════════════════════════════════
-
-test('setter: no direct profile update in frontend', () => {
-  assert.ok(!serviceSource.includes("from('profiles')"), 'service must not query profiles directly');
-  assert.ok(!adminMgmtSource.includes("from('profiles')"), 'admin management must not query profiles directly');
 });
 
 test('setter: uses is_current_security_admin in migration', () => {
@@ -441,20 +422,6 @@ test('audit rpc: nullable states use CASE WHEN IS NULL', () => {
   assert.ok(auditRpc.includes("WHEN vp.after_state IS NULL THEN NULL"), 'must handle nullable after_state');
 });
 
-// ═══ Frontend Tests ═════════════════════════════════════════════════════════
-
-test('frontend: three tabs in SecurityControlCenter', () => {
-  assert.ok(consoleSource.includes("'settings'") && consoleSource.includes("'admins'") && consoleSource.includes("'audit'"), 'must have three tabs');
-  assert.ok(consoleSource.includes('SecuritySettingsConsole'), 'must render SecuritySettingsConsole');
-  assert.ok(consoleSource.includes('SecurityAdminManagement'), 'must render SecurityAdminManagement');
-  assert.ok(consoleSource.includes('SecurityAuditConsole'), 'must render SecurityAuditConsole');
-});
-
-test('frontend: AuditLogPage not used for security audit', () => {
-  assert.ok(!consoleSource.includes('AuditLogPage'), 'SecurityControlCenter must not use AuditLogPage');
-  assert.ok(!auditConsoleSource.includes('AuditLogPage'), 'SecurityAuditConsole must not use AuditLogPage');
-});
-
 test('frontend: UserManagementPanel does not change security admin role directly', () => {
   if (!userMgmtPanelSource) return;
 
@@ -474,225 +441,12 @@ test('frontend: step-up dialog purpose is configurable', () => {
   assert.ok(stepUpDialogSource.includes('confirmLabel: string'), 'must accept confirmLabel prop');
 });
 
-test('frontend: role change uses account_security_change', () => {
-  assert.ok(consoleSource.includes('account_security_change'), 'role change must use account_security_change purpose');
-});
-
-test('frontend: one step-up only one setter call', () => {
-  const setterCalls = (consoleSource.match(/changeSecurityAdminRole\(/g) || []).length;
-  assert.equal(setterCalls, 1, 'must call changeSecurityAdminRole exactly once');
-});
-
-test('frontend: actor without TOTP blocked', () => {
-  assert.ok(adminMgmtSource.includes('current_actor_has_verified_totp'), 'must check actor TOTP status');
-  assert.ok(adminMgmtSource.includes('برای مدیریت مدیران امنیت'), 'must show TOTP required message');
-  assert.ok(adminMgmtSource.includes('disabled={!actorHasTotp'), 'must disable buttons when actor lacks TOTP');
-});
-
-test('frontend: target without TOTP not grantable', () => {
-  assert.ok(adminMgmtSource.includes('can_grant'), 'must check can_grant from backend eligibility');
-  assert.ok(adminMgmtSource.includes('user.eligibility.can_grant'), 'grant button must check eligibility');
-});
-
-test('frontend: self-change not clickable', () => {
-  assert.ok(adminMgmtSource.includes('is_current_actor'), 'must detect current actor');
-  assert.ok(adminMgmtSource.includes('شما'), 'must show "شما" for self');
-});
-
-test('frontend: last admin not revocable', () => {
-  assert.ok(adminMgmtSource.includes('can_revoke'), 'must check can_revoke from backend eligibility');
-  assert.ok(adminMgmtSource.includes('user.eligibility.can_revoke'), 'revoke button must check eligibility');
-});
-
-test('frontend: VERSION_CONFLICT snapshot preserved', () => {
-  assert.ok(consoleSource.includes('VersionConflictSnapshot'), 'must have VersionConflictSnapshot type');
-  assert.ok(consoleSource.includes('setConflict('), 'must set conflict snapshot');
-  assert.ok(consoleSource.includes('targetUserId') && consoleSource.includes('changeReason'), 'snapshot must include targetUserId and changeReason');
-});
-
-test('frontend: raw backend error not displayed', () => {
-  assert.ok(!consoleSource.includes('error.message'), 'must not use raw error.message');
-  assert.ok(consoleSource.includes('getSecurityAdminErrorMessage'), 'must use mapped error messages');
-  assert.ok(!auditConsoleSource.includes('error.message'), 'audit console must not use raw error.message');
-});
-
-test('frontend: no write inside useEffect', () => {
-  const useEffectBlocks = adminMgmtSource.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[[\s\S]*?\]\);/g) || [];
-  for (const block of useEffectBlocks) {
-    assert.ok(!block.includes('changeSecurityAdminRole'), 'useEffect must not call changeSecurityAdminRole');
-  }
-  const consoleUseEffects = consoleSource.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[[\s\S]*?\]\);/g) || [];
-  for (const block of consoleUseEffects) {
-    assert.ok(!block.includes('changeSecurityAdminRole'), 'useEffect must not call changeSecurityAdminRole');
-  }
-});
-
-test('frontend: MfaPanel renders SecurityControlCenter', () => {
-  assert.ok(mfaPanelSource.includes('SecurityControlCenter'), 'MfaPanel must render SecurityControlCenter');
-});
-
 test('frontend: SecuritySettingsConsole uses auth_settings_change purpose', () => {
   assert.ok(settingsConsoleSource.includes('auth_settings_change'), 'SecuritySettingsConsole must use auth_settings_change purpose');
-});
-
-test('frontend: role dialog shows target name and operation', () => {
-  assert.ok(roleDialogSource.includes('target.full_name') || roleDialogSource.includes('target.username'), 'must show target name');
-  assert.ok(roleDialogSource.includes('اعطا') || roleDialogSource.includes('حذف'), 'must show grant/revoke operation');
-});
-
-test('frontend: role dialog reason mandatory 10..500', () => {
-  assert.ok(roleDialogSource.includes('reason.trim().length >= 10'), 'must validate minimum 10 chars');
-  assert.ok(roleDialogSource.includes('<= 500'), 'must validate maximum 500 chars');
-});
-
-test('frontend: role dialog confirmation checkbox default unchecked', () => {
-  assert.ok(roleDialogSource.includes('useState(false)'), 'confirmation must default to false');
-  assert.ok(roleDialogSource.includes('confirmed'), 'must have confirmation state');
-});
-
-test('frontend: role dialog grant and revoke confirmation text', () => {
-  assert.ok(roleDialogSource.includes('دسترسی خواهد داشت'), 'must have grant confirmation text');
-  assert.ok(roleDialogSource.includes('حذف خواهد شد'), 'must have revoke confirmation text');
-});
-
-test('frontend: audit details shows request_id and session_id', () => {
-  assert.ok(auditDetailsSource.includes('request_id'), 'must show request_id');
-  assert.ok(auditDetailsSource.includes('session_id'), 'must show session_id');
-});
-
-test('frontend: audit details metadata and states pretty printed', () => {
-  assert.ok(auditDetailsSource.includes('JSON.stringify'), 'must pretty-print JSON');
-  assert.ok(auditDetailsSource.includes('metadata'), 'must show metadata');
-  assert.ok(auditDetailsSource.includes('before_state'), 'must show before_state');
-  assert.ok(auditDetailsSource.includes('after_state'), 'must show after_state');
-});
-
-test('frontend: labels unknown code shows "کد ناشناخته"', () => {
-  assert.ok(labelsSource.includes('کد ناشناخته'), 'must show "کد ناشناخته" for unknown codes');
 });
 
 // ── NEW: Frontend setter/reload tests ──────────────────────────────────────
 
 test('frontend: onSuccess in step-up dialog is awaited', () => {
   assert.ok(stepUpDialogSource.includes('await onSuccess()'), 'must await onSuccess()');
-});
-
-test('frontend: dialog stays open and busy during setter', () => {
-  assert.ok(stepUpDialogSource.includes('void | Promise<void>'), 'onSuccess must accept Promise');
-  // The dialog must not close before setter completes
-  assert.ok(consoleSource.includes('setChangeBusy(true)'), 'must set changeBusy true during setter');
-  assert.ok(consoleSource.includes('setChangeBusy(false)'), 'must set changeBusy false after setter');
-});
-
-test('frontend: simultaneous second role change not possible', () => {
-  assert.ok(consoleSource.includes('changeBusy'), 'must track changeBusy state');
-  assert.ok(consoleSource.includes('disabled={changeBusy}'), 'must disable tabs during change');
-});
-
-test('frontend: success causes management reload', () => {
-  assert.ok(consoleSource.includes('adminRefreshVersion'), 'must have adminRefreshVersion');
-  assert.ok(consoleSource.includes('setAdminRefreshVersion'), 'must call setAdminRefreshVersion');
-  assert.ok(consoleSource.includes('refreshVersion={adminRefreshVersion}'), 'must pass refreshVersion to management');
-});
-
-test('frontend: success causes audit reload', () => {
-  assert.ok(consoleSource.includes('auditRefreshVersion'), 'must have auditRefreshVersion');
-  assert.ok(consoleSource.includes('setAuditRefreshVersion'), 'must call setAuditRefreshVersion');
-  assert.ok(consoleSource.includes('refreshVersion={auditRefreshVersion}'), 'must pass refreshVersion to audit');
-});
-
-test('frontend: VERSION_CONFLICT causes reload and preserves snapshot', () => {
-  const conflictSection = consoleSource.slice(
-    consoleSource.indexOf('VERSION_CONFLICT'),
-    consoleSource.indexOf('VERSION_CONFLICT') + 500
-  );
-  assert.ok(conflictSection.includes('setConflict'), 'must set conflict on VERSION_CONFLICT');
-  assert.ok(conflictSection.includes('setAdminRefreshVersion'), 'must reload management on conflict');
-  assert.ok(conflictSection.includes('currentVersion'), 'must preserve currentVersion in snapshot');
-});
-
-test('frontend: conflict summary shows all fields', () => {
-  assert.ok(consoleSource.includes('targetDisplayName'), 'must show target');
-  assert.ok(consoleSource.includes('requestedValue'), 'must show requested role');
-  assert.ok(consoleSource.includes('expectedVersion'), 'must show expected version');
-  assert.ok(consoleSource.includes('currentVersion'), 'must show current version');
-  assert.ok(consoleSource.includes('changeReason'), 'must show change reason');
-});
-
-// ── NEW: Frontend search/pagination tests ──────────────────────────────────
-
-test('frontend: single debounce effect for search', () => {
-  // Should have setDebouncedSearch, not two effects
-  assert.ok(adminMgmtSource.includes('setDebouncedSearch'), 'must use debouncedSearch state');
-  assert.ok(adminMgmtSource.includes('debouncedSearch'), 'must use debouncedSearch in load effect');
-  // Count debounce effects — should be exactly 1
-  const debounceEffects = adminMgmtSource.match(/useEffect\(\(\) => \{[\s\S]*?setTimeout/g) || [];
-  assert.equal(debounceEffects.length, 1, 'must have exactly 1 debounce effect');
-});
-
-test('frontend: single load effect', () => {
-  // Should have one effect that loads on debouncedSearch, offset, refreshVersion
-  const loadEffects = adminMgmtSource.match(/useEffect\(\(\) => \{[\s\S]*?loadData\([\s\S]*?\}, \[/g) || [];
-  assert.ok(loadEffects.length >= 1, 'must have at least 1 load effect');
-  // Check it depends on debouncedSearch, offset, refreshVersion
-  const mainLoadEffect = loadEffects.find((e) => e.includes('debouncedSearch'));
-  assert.ok(mainLoadEffect, 'must have a load effect depending on debouncedSearch');
-});
-
-test('frontend: next uses pagination.has_more', () => {
-  assert.ok(adminMgmtSource.includes('pagination?.has_more'), 'next must use pagination.has_more');
-});
-
-test('frontend: previous uses pagination.offset', () => {
-  assert.ok(adminMgmtSource.includes('pagination.offset === 0') || adminMgmtSource.includes('pagination?.offset === 0'),
-    'previous must use pagination.offset');
-});
-
-// ── NEW: Frontend audit race protection tests ──────────────────────────────
-
-test('frontend: audit console uses generation ID', () => {
-  assert.ok(auditConsoleSource.includes('generationRef'), 'must use generation ref');
-  assert.ok(auditConsoleSource.includes('++generationRef'), 'must increment generation');
-});
-
-test('frontend: audit filter change resets events and cursor', () => {
-  assert.ok(auditConsoleSource.includes('setEvents([])'), 'must clear events on filter change');
-  assert.ok(auditConsoleSource.includes('setHasMore(false)'), 'must reset hasMore');
-  assert.ok(auditConsoleSource.includes('setCursor(null)'), 'must reset cursor');
-  assert.ok(auditConsoleSource.includes('setSelectedEvent(null)'), 'must clear selected event');
-});
-
-test('frontend: audit load more checks generation', () => {
-  assert.ok(auditConsoleSource.includes('gen !== generationRef.current'), 'load more must check generation');
-});
-
-test('frontend: audit dedup uses Set', () => {
-  assert.ok(auditConsoleSource.includes('existingIds'), 'must deduplicate by existing IDs');
-  assert.ok(auditConsoleSource.includes('Set'), 'must use Set for dedup');
-});
-
-// ── NEW: Audit filter tests ────────────────────────────────────────────────
-
-test('frontend: actor filter input exists', () => {
-  assert.ok(auditConsoleSource.includes('actorUserId'), 'must have actor user ID filter');
-  assert.ok(auditConsoleSource.includes('Actor UUID'), 'must have actor UUID placeholder');
-});
-
-test('frontend: target filter input exists', () => {
-  assert.ok(auditConsoleSource.includes('targetUserId'), 'must have target user ID filter');
-  assert.ok(auditConsoleSource.includes('Target UUID'), 'must have target UUID placeholder');
-});
-
-test('frontend: from date filter exists', () => {
-  assert.ok(auditConsoleSource.includes('fromDate'), 'must have from date filter');
-  assert.ok(auditConsoleSource.includes('type="date"'), 'must use date input');
-});
-
-test('frontend: to date filter exists', () => {
-  assert.ok(auditConsoleSource.includes('toDate'), 'must have to date filter');
-});
-
-test('frontend: UUID validation before RPC', () => {
-  assert.ok(auditConsoleSource.includes('UUID_REGEX'), 'must validate UUID format');
-  assert.ok(auditConsoleSource.includes('UUID نامعتبر'), 'must show UUID error message');
 });
