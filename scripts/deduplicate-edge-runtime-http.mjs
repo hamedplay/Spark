@@ -1,3 +1,4 @@
+// one-time execution trigger
 import fs from 'node:fs';
 import ts from 'typescript';
 
@@ -83,11 +84,22 @@ function addRuntimeImport(file, imported) {
   source = source.slice(0, insertAt) + `\n${line}` + source.slice(insertAt);
   write(file, source);
 }
-function addResponseFactory(file) {
+function addResponseFactory(file, afterDeclarationName = null) {
   let source = read(file);
   const sf = parse(file, source);
-  const imports = sf.statements.filter(ts.isImportDeclaration);
-  const insertAt = imports.length ? imports[imports.length - 1].getEnd() : 0;
+  let insertAt;
+  if (afterDeclarationName) {
+    const declaration = sf.statements.find((stmt) =>
+      ts.isVariableStatement(stmt) && stmt.declarationList.declarations.some(
+        (d) => ts.isIdentifier(d.name) && d.name.text === afterDeclarationName,
+      )
+    );
+    if (!declaration) throw new Error(`${file}: declaration ${afterDeclarationName} not found`);
+    insertAt = declaration.getEnd();
+  } else {
+    const imports = sf.statements.filter(ts.isImportDeclaration);
+    insertAt = imports.length ? imports[imports.length - 1].getEnd() : 0;
+  }
   source = source.slice(0, insertAt) + `\n\nconst responseHeaders = createJsonResponseHeaders(baseCorsHeaders);` + source.slice(insertAt);
   write(file, source);
 }
@@ -122,7 +134,7 @@ for (const file of [
   const file = 'supabase/functions/auth-health-check/index.ts';
   removeDeclarations(file, ['adminClient', 'responseHeaders']);
   addRuntimeImport(file, ['createServiceRoleClient as adminClient', 'createJsonResponseHeaders']);
-  addResponseFactory(file);
+  addResponseFactory(file, 'baseCorsHeaders');
 }
 
 for (const file of [
