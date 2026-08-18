@@ -14,6 +14,12 @@
 
 - `single-host.md`
 
+## ابزار اختیاری مدیریت Single Host
+
+برای اجرای تعاملی مراحل `single-host.md`، Health Check، log، Update و مدیریت
+زیرساخت Single Host می‌توانید از `deploy/spark-cli/` استفاده کنید. مستند Manual
+همچنان مرجع اصلی معماری و روش دستی است.
+
 ## Network Contract
 
 ```text
