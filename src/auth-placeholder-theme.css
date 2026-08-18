@@ -1,6 +1,6 @@
 /* Public-auth browser paint guard.
-   Keep placeholders green and prevent browser autofill/native input painting
-   from replacing Spark's dark teal field surface across all public auth flows. */
+   Keep placeholders green and prevent the legacy auth bridge/browser autofill
+   from replacing Spark's dark teal field surface across public auth flows. */
 
 .spark-reference-login input::placeholder,
 .spark-reference-login textarea::placeholder {
@@ -22,9 +22,10 @@
   opacity: 1 !important;
 }
 
-/* Paint the input itself, not only its wrapper. This prevents the browser's
-   light native/autofill surface from covering the dark Spark field. */
-.spark-reference-login .spark-reference-input-wrap > input {
+/* auth-modern.css still owns legacy .spark-auth-flow controls and paints them
+   white with !important. Match that outer scope and exceed its specificity so
+   the rebuilt public login remains dark before, during and after mode changes. */
+.spark-auth-flow .spark-reference-login .spark-reference-input-wrap > input:not([type='checkbox']):not([type='radio']) {
   color-scheme: dark !important;
   background: rgb(8 26 27) !important;
   background-color: rgb(8 26 27) !important;
@@ -32,20 +33,21 @@
   color: #effff9 !important;
   -webkit-text-fill-color: #effff9 !important;
   caret-color: rgb(var(--spark-neon-soft, 111 255 226)) !important;
+  box-shadow: none !important;
 }
 
-.spark-reference-login .spark-reference-input-wrap:focus-within > input {
+.spark-auth-flow .spark-reference-login .spark-reference-input-wrap:focus-within > input:not([type='checkbox']):not([type='radio']) {
   background: rgb(7 31 31) !important;
   background-color: rgb(7 31 31) !important;
   background-image: none !important;
 }
 
 /* Standards-based autofill plus Chromium/WebKit. */
-.spark-reference-login .spark-reference-input-wrap > input:autofill,
-.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill,
-.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:hover,
-.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:focus,
-.spark-reference-login .spark-reference-input-wrap > input:-webkit-autofill:active {
+.spark-auth-flow .spark-reference-login .spark-reference-input-wrap > input:not([type='checkbox']):not([type='radio']):autofill,
+.spark-auth-flow .spark-reference-login .spark-reference-input-wrap > input:not([type='checkbox']):not([type='radio']):-webkit-autofill,
+.spark-auth-flow .spark-reference-login .spark-reference-input-wrap > input:not([type='checkbox']):not([type='radio']):-webkit-autofill:hover,
+.spark-auth-flow .spark-reference-login .spark-reference-input-wrap > input:not([type='checkbox']):not([type='radio']):-webkit-autofill:focus,
+.spark-auth-flow .spark-reference-login .spark-reference-input-wrap > input:not([type='checkbox']):not([type='radio']):-webkit-autofill:active {
   background: rgb(8 26 27) !important;
   background-color: rgb(8 26 27) !important;
   background-image: none !important;
@@ -59,7 +61,7 @@
 
 /* Firefox applies a native autofill filter/surface. Neutralize both. */
 @supports selector(input:-moz-autofill) {
-  .spark-reference-login .spark-reference-input-wrap > input:-moz-autofill {
+  .spark-auth-flow .spark-reference-login .spark-reference-input-wrap > input:not([type='checkbox']):not([type='radio']):-moz-autofill {
     background: rgb(8 26 27) !important;
     background-color: rgb(8 26 27) !important;
     background-image: none !important;
