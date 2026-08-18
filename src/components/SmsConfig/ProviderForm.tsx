@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { SmsProvider } from './types';
 import { inp, PROVIDER_TYPES } from './types';
-import { Toggle } from './Toggle';
+import { SmsToggle as Toggle } from '../ConfigToggle';
 
 export function ProviderForm({ provider, onSave, onCancel }: {
   provider: Partial<SmsProvider> | null;

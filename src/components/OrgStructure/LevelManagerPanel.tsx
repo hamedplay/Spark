@@ -3,7 +3,7 @@ import { Plus, Trash2, CreditCard as Edit2, Crown, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { LevelDef } from './types';
-import { Spinner } from './Spinner';
+import { Spinner } from '../Spinner';
 
 function LevelManagerPanel({ levelDefs, onRefresh }: { levelDefs: LevelDef[]; onRefresh: () => void }) {
   const [editing, setEditing] = useState<LevelDef | null>(null);

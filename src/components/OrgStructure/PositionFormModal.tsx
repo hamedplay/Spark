@@ -3,7 +3,7 @@ import { Briefcase, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { OrgPosition, OrgUnit, LevelDef } from './types';
 import { getLevelInfo } from './utils';
-import { Spinner } from './Spinner';
+import { Spinner } from '../Spinner';
 
 function PositionFormModal({
   initial, units, allPositions, levelDefs, onSave, onClose,

@@ -14,7 +14,7 @@ import {
 } from '../../config/templateCatalog';
 import type { SmsTemplate } from './types';
 import { CATEGORY_COLORS, inp, SAMPLE_VALUES } from './types';
-import { Toggle } from './Toggle';
+import { SmsToggle as Toggle } from '../ConfigToggle';
 
 function fillPreview(body: string, customVars: Record<string, string>): string {
   const vars = { ...SAMPLE_VALUES, ...customVars };

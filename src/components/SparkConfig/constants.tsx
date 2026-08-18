@@ -75,13 +75,4 @@ export const colorMap: Record<string, {
   sky:     { bg: 'bg-sky-500',     text: 'text-sky-600 dark:text-sky-400',     border: 'border-sky-200 dark:border-sky-700',     light: 'bg-sky-50 dark:bg-sky-900/30',     badgeBg: 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300',     btnActive: 'bg-sky-600 hover:bg-sky-700' },
 };
 
-export function Spinner({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-      <path d="M21 3v5h-5" />
-      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-      <path d="M8 16H3v5" />
-    </svg>
-  );
-}
+export { Spinner } from '../Spinner';

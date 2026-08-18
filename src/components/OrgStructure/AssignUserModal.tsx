@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { OrgPosition, Profile, PositionMember, LevelDef } from './types';
 import { getLevelInfo } from './utils';
-import { Spinner } from './Spinner';
+import { Spinner } from '../Spinner';
 
 function AssignUserModal({
   position, allProfiles, currentMembers, levelDefs, onAssign, onRemove, onClose, onRefreshProfiles,

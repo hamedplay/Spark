@@ -7,7 +7,7 @@ import {
 } from '../../config/templateCatalog';
 import type { SmsProvider, UserGroup } from './types';
 import { CATEGORY_COLORS, inp } from './types';
-import { Toggle } from './Toggle';
+import { SmsToggle as Toggle } from '../ConfigToggle';
 
 function GroupSelector({ groups, selected, onSelect }: { groups: UserGroup[]; selected: string | null; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false);

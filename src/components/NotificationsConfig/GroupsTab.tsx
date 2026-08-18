@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 import { GroupSelector } from './GroupSelector';
-import { Toggle } from './Toggle';
+import { NotificationToggle as Toggle } from '../ConfigToggle';
 import type { UserGroup } from './types';
 import { NOTIFICATION_TYPES, N_CATEGORIES } from './constants';
 

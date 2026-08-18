@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Building2, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { OrgUnit } from './types';
-import { Spinner } from './Spinner';
+import { Spinner } from '../Spinner';
 
 function UnitFormModal({ initial, allUnits, onSave, onClose }: {
   initial: Partial<OrgUnit> | null;

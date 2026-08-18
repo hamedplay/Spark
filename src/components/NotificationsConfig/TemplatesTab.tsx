@@ -14,7 +14,7 @@ import {
   validateTemplateForEvent,
 } from '../../config/templateCatalog';
 
-import { Toggle } from './Toggle';
+import { NotificationToggle as Toggle } from '../ConfigToggle';
 import { TemplateGuide } from './TemplateGuide';
 import type { NotificationTemplate } from './types';
 import { COLORS, COLOR_BADGE, inp, audienceLabel, eventLabel, AUDIENCE_COLORS, NOTIF_SAMPLE_VALUES } from './constants';

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Database, Shield, Wifi, WifiOff, Key, Check, RefreshCw as RefreshIcon, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { HrSsoConfig } from './types';
-import { Spinner } from './Spinner';
+import { Spinner } from '../Spinner';
 
 function HrSsoConfigPanel({ configs, onSave }: {
   configs: HrSsoConfig[];
