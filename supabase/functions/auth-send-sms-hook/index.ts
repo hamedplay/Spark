@@ -2,21 +2,14 @@ import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import { sendBaleAuthCode } from "../_shared/send-bale-auth-code.ts";
+import { normalizeIranPhone } from "../_shared/phone.ts";
+
 
 const HOOK_DEADLINE_MS = 4500;
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length <= 4) return "***";
   return phone.slice(0, 3) + "****" + phone.slice(-4);
-}
-
-function normalizeIranPhone(value?: string | null): string {
-  const digits = String(value || '').replace(/\D/g, '');
-  if (/^00989\d{9}$/.test(digits)) return digits.slice(2);
-  if (/^989\d{9}$/.test(digits)) return digits;
-  if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
-  if (/^9\d{9}$/.test(digits)) return `98${digits}`;
-  return '';
 }
 
 function remainingMs(deadlineAt: number): number {

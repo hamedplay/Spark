@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
+import { hmacSha256Hex } from "./crypto.ts";
+export { hmacSha256Hex };
+
 
 export function adminClient() {
   return createClient(
@@ -15,19 +18,6 @@ export function canonicalizeIranPhone(input: string): string | null {
   if (/^09\d{9}$/.test(s)) return "98" + s.slice(1);
   if (/^00989\d{9}$/.test(s)) return s.slice(2);
   return null;
-}
-
-export async function hmacSha256Hex(key: string, message: string): Promise<string> {
-  const enc = new TextEncoder();
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(message));
-  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export function generateSixDigitOtp(): string {

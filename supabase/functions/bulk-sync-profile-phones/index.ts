@@ -1,6 +1,8 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
+import { normalizeIranPhone } from "../_shared/phone.ts";
+
 
 const baseCorsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -42,15 +44,6 @@ function tokenClaims(token: string): { session_id?: string; aal?: string } | nul
     if (!encoded) return null;
     return JSON.parse(atob(encoded.padEnd(encoded.length + ((4 - encoded.length % 4) % 4), "=")));
   } catch { return null; }
-}
-
-function normalizeIranPhone(value?: string | null): string {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (/^00989\d{9}$/.test(digits)) return digits.slice(2);
-  if (/^989\d{9}$/.test(digits)) return digits;
-  if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
-  if (/^9\d{9}$/.test(digits)) return `98${digits}`;
-  return "";
 }
 
 function maskPhone(phone: string): string {

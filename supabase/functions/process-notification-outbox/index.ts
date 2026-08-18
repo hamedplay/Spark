@@ -1,4 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.2";
+import { timingSafeCompare } from "../_shared/crypto.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,16 +32,6 @@ interface ClaimedRow {
   notification_status: string;
   sms_status: string;
   sms_sent_at: string | null;
-}
-
-function timingSafeCompare(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ba = enc.encode(a);
-  const bb = enc.encode(b);
-  if (ba.length !== bb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ba.length; i++) diff |= ba[i] ^ bb[i];
-  return diff === 0;
 }
 
 Deno.serve(async (req: Request) => {

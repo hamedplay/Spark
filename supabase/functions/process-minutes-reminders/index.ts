@@ -1,20 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.2";
+import { timingSafeCompare } from "../_shared/crypto.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Cron-Secret",
 };
-
-function timingSafeCompare(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ba = enc.encode(a);
-  const bb = enc.encode(b);
-  if (ba.length !== bb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ba.length; i++) diff |= ba[i] ^ bb[i];
-  return diff === 0;
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {

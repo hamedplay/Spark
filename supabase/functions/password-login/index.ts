@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
+import { hmacSha256Hex } from "../_shared/crypto.ts";
+
 
 const MAX_BODY_BYTES = 4096;
 const MAX_IDENTIFIER_LEN = 256;
@@ -49,19 +51,6 @@ async function getConfig(): Promise<{ origins: string[]; pepper: string }> {
 function checkOrigin(origin: string | null, allowedOrigins: string[]): string | null {
   if (!origin) return null;
   return allowedOrigins.includes(origin) ? origin : null;
-}
-
-async function hmacSha256Hex(key: string, message: string): Promise<string> {
-  const enc = new TextEncoder();
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(message));
-  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function canonicalizePhone(input: string): string | null {

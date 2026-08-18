@@ -1,21 +1,14 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
+import { normalizeIranPhone } from "../_shared/phone.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
-
-function normalizeIranPhone(value?: string | null): string {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (/^00989\d{9}$/.test(digits)) return digits.slice(2);
-  if (/^989\d{9}$/.test(digits)) return digits;
-  if (/^09\d{9}$/.test(digits)) return `98${digits.slice(1)}`;
-  if (/^9\d{9}$/.test(digits)) return `98${digits}`;
-  return "";
-}
 
 function maskPhone(phone: string): string {
   if (phone.length >= 9) {
