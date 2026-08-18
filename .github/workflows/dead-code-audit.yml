@@ -30,31 +30,10 @@ jobs:
       - name: Static reachability audit
         run: node scripts/audit-dead-code.mjs
 
-      - name: Knip corroboration
-        shell: bash
-        run: |
-          set +e
-          npx --yes knip@5.62.0 --reporter json > scripts/.knip-audit.json 2> scripts/.knip-audit.stderr.txt
-          echo "knip_rc=$?" > scripts/.dead-code-tool-status.txt
-
-      - name: Duplicate-code corroboration
-        shell: bash
-        run: |
-          set +e
-          npx --yes jscpd@4.0.5 src supabase/functions --min-lines 8 --min-tokens 80 --reporters json --output /tmp/jscpd-audit >/tmp/jscpd.stdout 2>/tmp/jscpd.stderr
-          rc=$?
-          echo "jscpd_rc=$rc" >> scripts/.dead-code-tool-status.txt
-          if [ -f /tmp/jscpd-audit/jscpd-report.json ]; then
-            cp /tmp/jscpd-audit/jscpd-report.json scripts/.jscpd-audit.json
-          else
-            printf '{"error":"jscpd report unavailable"}\n' > scripts/.jscpd-audit.json
-          fi
-          tail -n 100 /tmp/jscpd.stderr > scripts/.jscpd-audit.stderr.txt || true
-
       - name: Commit audit evidence
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/.dead-code-audit.json scripts/.knip-audit.json scripts/.knip-audit.stderr.txt scripts/.jscpd-audit.json scripts/.jscpd-audit.stderr.txt scripts/.dead-code-tool-status.txt
+          git add scripts/.dead-code-audit.json
           git commit -m "chore: record one-time dead code audit" || exit 0
           git push origin HEAD:main
