@@ -1,128 +1,62 @@
-name: One-time dead-code finalizer
+name: CI
 
 on:
   push:
     branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  finalize:
+  quality:
+    name: Build, test and audit
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24.18.1'
+          node-version-file: .nvmrc
           cache: npm
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+          package-manager-cache: false
+
       - name: Install dependencies
         run: npm ci
-      - name: Baseline tests and Deno diagnostics
-        shell: bash
+
+      - name: Verify Edge dependency pins
+        run: node scripts/check-edge-import-pins.mjs
+
+      - name: Validate production deployment scripts
         run: |
-          set +e
-          mapfile -t TEST_FILES < <(find tests -type f \( -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.test.mjs' -o -name '*.test.js' \) | sort)
-          NO_COLOR=1 node --import tsx --test "${TEST_FILES[@]}" > /tmp/tests-before.log 2>&1
-          NO_COLOR=1 deno check --node-modules-dir=auto supabase/functions/send-daily-meetings/index.ts > /tmp/deno-before.log 2>&1
-          exit 0
-      - name: Consolidate all exact duplicate logic
-        run: |
-          mkdir -p src/shared/ui src/shared/chat
-          node scripts/consolidate-final-exact-duplicates-v2.mjs
-      - name: Build gate
+          bash -n deploy/production/server-1-web-gateway.sh
+          bash -n deploy/production/server-2-supabase-core.sh
+          bash -n deploy/production/server-3-edge-integration.sh
+          bash -n deploy/production/server-4-turn.sh
+          bash -n deploy/production/single-host.sh
+
+      - name: Build
         run: npm run build
-      - name: Test regression gate
-        shell: bash
-        run: |
-          set +e
-          mapfile -t TEST_FILES < <(find tests -type f \( -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.test.mjs' -o -name '*.test.js' \) | sort)
-          NO_COLOR=1 node --import tsx --test "${TEST_FILES[@]}" > /tmp/tests-after.log 2>&1
-          python3 - <<'PY'
-          import collections,re
-          from pathlib import Path
-          def names(path, failed=False):
-              out=[]
-              for line in Path(path).read_text(errors='replace').splitlines():
-                  s=line.strip()
-                  if failed:
-                      if not s.startswith('✖ '): continue
-                  elif not (s.startswith('✔ ') or s.startswith('✖ ')): continue
-                  out.append(re.sub(r'\s+\([^)]*ms\)$','',s[2:]))
-              return collections.Counter(out)
-          before_all=names('/tmp/tests-before.log'); after_all=names('/tmp/tests-after.log')
-          before_fail=names('/tmp/tests-before.log',True); after_fail=names('/tmp/tests-after.log',True)
-          print('tests before=',sum(before_all.values()),'after=',sum(after_all.values()))
-          print('failures before=',sum(before_fail.values()),'after=',sum(after_fail.values()))
-          if before_all != after_all:
-              raise SystemExit('TEST_SET_CHANGED')
-          new_failures=after_fail-before_fail
-          if new_failures:
-              raise SystemExit(f'NEW_TEST_FAILURES: {list(new_failures.elements())}')
-          PY
-      - name: Deno regression gate
-        shell: bash
-        run: |
-          set +e
-          NO_COLOR=1 deno check --node-modules-dir=auto supabase/functions/send-daily-meetings/index.ts > /tmp/deno-after.log 2>&1
-          python3 - <<'PY'
-          import collections,re
-          from pathlib import Path
-          def diags(path):
-              text=Path(path).read_text(errors='replace')
-              pattern=re.compile(r'TS(\d+) \[ERROR\]: ([^\n]+).*?at (?:file://)?[^\n]*?/(supabase/functions/[^:\n]+):\d+:\d+',re.S)
-              return collections.Counter((f,c,re.sub(r'\s+',' ',m).strip()) for c,m,f in pattern.findall(text))
-          new=diags('/tmp/deno-after.log')-diags('/tmp/deno-before.log')
-          if new:
-              raise SystemExit(f'NEW_DENO_DIAGNOSTICS: {list(new.elements())}')
-          PY
-      - name: Final dead-code and duplicate audit
-        run: |
-          node scripts/final-dead-code-audit.mjs
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          r=json.loads(Path('scripts/.final-dead-code-audit.json').read_text())
-          print('code_files=',r['code_files'])
-          print('reachable_files=',r['reachable_files'])
-          print('production_unreachable=',r['production_unreachable'])
-          print('exact_duplicate_groups=',len(r['exact_duplicate_function_groups']))
-          assert r['production_unreachable'] == ['src/vite-env.d.ts'], r['production_unreachable']
-          assert len(r['exact_duplicate_function_groups']) == 0, r['exact_duplicate_function_groups']
-          PY
-      - name: Restore permanent CI and remove one-time tooling
-        run: |
-          git show HEAD^:.github/workflows/ci.yml > .github/workflows/ci.yml
-          rm -f \
-            .github/workflows/commit-validated-duplicate-stage1.yml \
-            .github/workflows/consolidate-final-exact-duplicates-v2.yml \
-            .github/workflows/consolidate-final-exact-duplicates.yml \
-            .github/workflows/final-dead-code-audit.yml \
-            .github/workflows/patch-final-duplicate-consolidator.yml \
-            .github/workflows/rerun-final-duplicate-consolidation.yml \
-            scripts/consolidate-final-exact-duplicates-v2.mjs \
-            scripts/consolidate-final-exact-duplicates.mjs \
-            scripts/final-dead-code-audit.mjs \
-            scripts/patch-final-duplicate-consolidator.mjs \
-            scripts/.final-dead-code-audit.json \
-            scripts/.final-duplicate-consolidation-status.txt \
-            scripts/.final-duplicate-v2-status.txt
-      - name: Commit validated final state
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A src supabase/functions/send-daily-meetings .github/workflows scripts
-          git commit -m "cleanup: finalize dead-code and duplicate consolidation" -m "Validated: build passed; test set preserved with no new failures; no new Deno diagnostics; production unreachable only src/vite-env.d.ts; exact duplicate function groups = 0; one-time tooling removed; permanent CI restored."
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+
+      - name: Test
+        run: npm test
+
+      - name: Dependency audit (high/critical)
+        run: npm audit --audit-level=high
+
+      # The repository currently has a large pre-existing lint baseline across
+      # legacy UI, tests and Edge Functions. Keep the full ruleset enabled and
+      # surface the report on every run without letting unrelated legacy debt
+      # bypass the production build/test/security gates above.
+      - name: Full lint report (legacy baseline)
+        continue-on-error: true
+        run: npm run lint
