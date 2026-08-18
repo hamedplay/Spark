@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/tmp-config-permissions-runner.yml'
+      - '.tmp-config-permissions-trigger'
 
 permissions:
   contents: write
