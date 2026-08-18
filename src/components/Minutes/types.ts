@@ -192,9 +192,11 @@ export interface DecisionRow {
   id: string;
   minute_id: string;
   agenda_result_id: string | null;
+  parent_decision_id: string | null;
+  clause_order: number | null;
   title: string;
   description: string | null;
-  primary_owner_user_id: string;
+  primary_owner_user_id: string | null;
   responsible_unit_id: string | null;
   responsible_unit_name_snapshot: string | null;
   priority: DecisionPriority;
@@ -254,9 +256,11 @@ export interface DecisionDraftPayload {
   id?: string | null;
   agenda_result_id?: string | null;
   meeting_agenda_item_id?: string | null;
+  parent_decision_id?: string | null;
+  clause_order?: number | null;
   title: string;
   description?: string | null;
-  primary_owner_user_id: string;
+  primary_owner_user_id: string | null;
   responsible_unit_id?: string | null;
   responsible_unit_name_snapshot?: string | null;
   priority: DecisionPriority;
@@ -267,6 +271,11 @@ export interface DecisionDraftPayload {
   discussion_result?: string | null;
   result_type?: AgendaResultType | null;
   additional_notes?: string | null;
+  responsible_party_type?: 'internal' | 'external';
+  external_responsible_participant_id?: string | null;
+  external_responsible_name_snapshot?: string | null;
+  external_responsible_organization_snapshot?: string | null;
+  external_responsible_position_snapshot?: string | null;
 }
 
 // Result of update_my_minutes_decision / manage_minutes_decision RPC

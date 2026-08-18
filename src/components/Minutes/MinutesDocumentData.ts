@@ -50,6 +50,14 @@ export interface DocAgendaItem {
   allocatedTime: string | null;
 }
 
+export interface DocDecisionClause {
+  id: string;
+  order: number;
+  text: string;
+  responsibleUnitName: string | null;
+  dueDate: string;
+}
+
 export interface DocDecision {
   id: string;
   title: string;
@@ -65,6 +73,7 @@ export interface DocDecision {
   discussionResult: string;
   resultType: string;
   additionalNotes: string;
+  clauses: DocDecisionClause[];
 }
 
 export interface DocApproval {
@@ -121,8 +130,6 @@ export function orDash(v: string | null | undefined): string {
 
 export function faDate(iso: string | null): string {
   if (!iso) return DASH;
-  // Date-only values: try Jalali conversion first (no timezone shift),
-  // then fall back to locale formatting for legacy timestamp inputs.
   const jalali = gregorianToJalaliDate(iso);
   if (jalali) return toPersianDigits(jalali);
   try { return new Date(iso).toLocaleDateString('fa-IR'); }
@@ -203,13 +210,10 @@ export function formatMeetingType(value: string | null | undefined): string {
 }
 
 export const SYSTEM_TITLE = 'سامانه مدیریت جلسات';
-
 export const FALLBACK_LOGO = '/logo_spark.png';
 
 export function chunkArray<T>(arr: T[], size: number): T[][] {
   const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
   return chunks;
 }

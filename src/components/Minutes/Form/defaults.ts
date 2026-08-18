@@ -73,7 +73,9 @@ export const defaultAgendaItem = (order: number): DraftAgendaItem => ({
 
 export const defaultDecision = (): DraftDecision => ({
   id: uid(),
-  decisionId: null,
+  decisionId: crypto.randomUUID(),
+  parentDecisionId: null,
+  clauseOrder: null,
   agendaResultId: null,
   meetingAgendaItemId: null,
   title: '',

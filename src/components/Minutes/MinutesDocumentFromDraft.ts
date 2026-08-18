@@ -4,6 +4,7 @@ import type {
   DraftAgendaItem, DraftDecision, ProfileOption, OrgUnitOption,
 } from './Form/types';
 import type { DecisionPriority, DecisionStatus } from './types';
+import { getDraftDecisionClauses, getParentDraftDecisions } from './decisionHierarchy';
 
 export function buildDocumentDataFromDraft(
   info: DraftMeetingInfo,
@@ -26,22 +27,38 @@ export function buildDocumentDataFromDraft(
     return u?.name || null;
   };
 
-  const docDecisions: DocDecision[] = decisions.map(d => ({
-    id: d.id,
-    title: d.title,
-    description: d.description,
-    primaryOwnerName: profileLabel(d.primaryOwnerUserId),
-    responsibleUnitName: d.responsibleUnitNameSnapshot || unitLabel(d.responsibleUnitId),
-    priority: d.priority as DecisionPriority,
-    startDate: d.startDate,
-    dueDate: d.dueDate,
-    status: 'not_started' as DecisionStatus,
-    progressPercent: 0,
-    latestUpdate: d.latestUpdate,
-    discussionResult: d.discussionResult,
-    resultType: d.resultType,
-    additionalNotes: d.additionalNotes,
-  }));
+  const docDecisions: DocDecision[] = getParentDraftDecisions(decisions).map(parent => {
+    const clauses = getDraftDecisionClauses(decisions, parent.decisionId);
+    return {
+      id: parent.id,
+      title: parent.title,
+      description: parent.description,
+      primaryOwnerName: parent.responsiblePartyType === 'external'
+        ? parent.externalResponsibleNameSnapshot
+        : profileLabel(parent.primaryOwnerUserId),
+      responsibleUnitName: parent.responsiblePartyType === 'external'
+        ? (parent.externalResponsibleOrganizationSnapshot || null)
+        : (parent.responsibleUnitNameSnapshot || unitLabel(parent.responsibleUnitId)),
+      priority: parent.priority as DecisionPriority,
+      startDate: parent.startDate,
+      dueDate: parent.dueDate,
+      status: 'not_started' as DecisionStatus,
+      progressPercent: 0,
+      latestUpdate: parent.latestUpdate,
+      discussionResult: parent.discussionResult,
+      resultType: parent.resultType,
+      additionalNotes: parent.additionalNotes,
+      clauses: clauses.map(clause => ({
+        id: clause.id,
+        order: clause.clauseOrder || 1,
+        text: clause.description || clause.title,
+        responsibleUnitName: clause.responsiblePartyType === 'external'
+          ? (clause.externalResponsibleOrganizationSnapshot || null)
+          : (clause.responsibleUnitNameSnapshot || unitLabel(clause.responsibleUnitId)),
+        dueDate: clause.dueDate,
+      })),
+    };
+  });
 
   return {
     minute: {
