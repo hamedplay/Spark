@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - scripts/refactor-large-core-files.mjs
+      - scripts/run-large-core-refactor.mjs
       - scripts/refactor-large-core-trigger.txt
 
 permissions:
@@ -33,7 +34,7 @@ jobs:
       - name: Refactor large cores
         id: refactor
         continue-on-error: true
-        run: node scripts/refactor-large-core-files.mjs > /tmp/refactor.log 2>&1
+        run: node scripts/run-large-core-refactor.mjs > /tmp/refactor.log 2>&1
 
       - name: Build
         id: build
@@ -50,6 +51,7 @@ jobs:
           git add src/components/CalendarPageCore.tsx \
                   src/components/Calendar/CalendarPageView.tsx \
                   src/components/Calendar/useCalendarDataActions.ts \
+                  src/components/Calendar/useCalendarNavigation.ts \
                   src/components/VideoConference/ConferenceRoomCore.tsx \
                   src/components/VideoConference/Room/useConferenceWebRTC.ts \
                   src/components/VideoConference/Room/useConferenceMediaControls.ts \
