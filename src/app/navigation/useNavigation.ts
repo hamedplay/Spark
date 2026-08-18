@@ -155,18 +155,18 @@ export function useNavigation(
  */
 export function useAdminPathGuard(
   isAuthenticated: boolean,
-  isAdmin: boolean,
+  hasConfigAccess: boolean,
   navigate: (page: PageId) => void,
 ) {
   useEffect(() => {
     const checkAdminPath = () => {
       const path = window.location.pathname;
       if (path.includes('/admin')) {
-        if (isAuthenticated && isAdmin) {
-          navigate('admin');
-        } else if (isAuthenticated && !isAdmin) {
+        if (isAuthenticated && hasConfigAccess) {
+          navigate('portal-config');
+        } else if (isAuthenticated && !hasConfigAccess) {
           window.history.pushState({}, '', '/');
-          toast.error('شما دسترسی به پنل ادمین ندارید');
+          toast.error('شما دسترسی به پیکربندی ندارید');
         }
       }
     };
@@ -176,5 +176,5 @@ export function useAdminPathGuard(
     return () => {
       window.removeEventListener('popstate', checkAdminPath);
     };
-  }, [isAuthenticated, isAdmin, navigate]);
+  }, [isAuthenticated, hasConfigAccess, navigate]);
 }

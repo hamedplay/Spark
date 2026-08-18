@@ -391,9 +391,9 @@ export function ManagementDashboardPage() {
     if (silent) setRefreshing(true);
     else setLoading(true);
     try {
-      const { data: rpcData, error } = await supabase.rpc('get_management_dashboard_v1');
+      const { data: functionData, error } = await supabase.functions.invoke('management-dashboard');
       if (error) throw error;
-      const normalized = normalizeDashboardData(rpcData);
+      const normalized = normalizeDashboardData(functionData?.data);
       if (!normalized) throw new Error('INVALID_MANAGEMENT_DASHBOARD_RESPONSE');
       setData(normalized);
     } catch (error) {

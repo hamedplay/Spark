@@ -15,6 +15,8 @@ import type {
   LayoutUserProfile,
 } from '../types/layoutUser';
 import { ProfileDropdown } from './ProfileDropdown';
+import { usePermissions } from '../../../context/PermissionsContext';
+import { canOpenPortalConfig } from '../../../features/permissions/configPermissions';
 
 function PortalButton({
   activePage,
@@ -103,6 +105,9 @@ export function LayoutTopBar({
   installPrompt,
   onPromptInstall,
 }: LayoutTopBarProps) {
+  const { userPermissions } = usePermissions();
+  const showPortalConfig = canOpenPortalConfig(isAdmin, userPermissions);
+
   return (
     <div
       className="flex-shrink-0 bg-white dark:bg-gray-800"
@@ -138,7 +143,7 @@ export function LayoutTopBar({
             </button>
           )}
           <NotificationBell onNavigate={onPageChange} />
-          {isAdmin && (
+          {showPortalConfig && (
             <PortalButton
               activePage={activePage}
               onPageChange={onPageChange}

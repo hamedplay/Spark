@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { AdminProfile, GroupMembership } from './types';
 import { DetailPanel } from './DetailPanel';
+import { loadResolvedUserPermissions } from '../../features/permissions';
 import {
   PERMISSION_REGISTRY,
   ALL_PERMISSION_ITEMS,
@@ -35,6 +36,7 @@ function AccessPanel({ user, onBack, onNavigateToGroup }: { user: AdminProfile; 
   const [loading, setLoading] = useState(true);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [resolvedPermissions, setResolvedPermissions] = useState<Record<string, boolean> | null | undefined>(undefined);
 
   const loadGroups = useCallback(async () => {
     setLoading(true);
@@ -61,6 +63,13 @@ function AccessPanel({ user, onBack, onNavigateToGroup }: { user: AdminProfile; 
   }, [user.user_id]);
 
   useEffect(() => { loadGroups(); }, [loadGroups, reloadKey]);
+  useEffect(() => {
+    let alive = true;
+    void loadResolvedUserPermissions(user.user_id).then((permissions) => {
+      if (alive) setResolvedPermissions(permissions);
+    });
+    return () => { alive = false; };
+  }, [user.user_id, reloadKey]);
 
   useEffect(() => {
     (async () => {
@@ -74,7 +83,8 @@ function AccessPanel({ user, onBack, onNavigateToGroup }: { user: AdminProfile; 
 
   const mergedPerms = (key: string): { has: boolean; source: string; denySource?: string } => {
     if (user.is_active === false) return { has: false, source: 'کاربر غیرفعال' };
-    if (user.is_admin) return { has: true, source: 'ادمین' };
+    if (user.is_admin || resolvedPermissions === null) return { has: true, source: user.is_admin ? 'ادمین' : 'دسترسی کامل' };
+    if (resolvedPermissions?.[key] === true) return { has: true, source: 'دسترسی مؤثر' };
 
     const grantingGroups = groups.filter(g => g.permissions[key] === true);
     const denyingGroups = groups.filter(g => g.permissions[key] === false);

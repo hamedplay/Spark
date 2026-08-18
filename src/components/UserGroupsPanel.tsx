@@ -9,10 +9,14 @@ import { AccessPanel } from './UserGroups/AccessPanel';
 import { GroupEventsPanel } from './UserGroups/GroupEventsPanel';
 import type { UserGroup, Panel, Props } from './UserGroups/types';
 import { useDismissOnOutsideClick } from '../shared/ui/useDismissOnOutsideClick';
+import { usePermissions } from '../context/PermissionsContext';
+import { AccessDenied } from '../features/permissions';
 
 export { GroupEventsPanel };
 
 export function UserGroupsPanel({}: Props) {
+  const { hasPermission } = usePermissions();
+  const canManageAccess = hasPermission('config_users.user_groups.permissions');
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [panel, setPanel] = useState<Panel>('list');
   const [selected, setSelected] = useState<UserGroup | null>(null);
@@ -50,7 +54,7 @@ export function UserGroupsPanel({}: Props) {
   const menuItems = (g: UserGroup) => [
     { icon: Edit2, label: 'ویرایش گروه', panel: 'edit' as Panel, color: 'text-blue-500' },
     { icon: Users, label: 'مدیریت اعضا', panel: 'members' as Panel, color: 'text-teal-500' },
-    { icon: ShieldCheck, label: 'حقوق دسترسی', panel: 'access' as Panel, color: 'text-green-500' },
+    ...(canManageAccess ? [{ icon: ShieldCheck, label: 'حقوق دسترسی', panel: 'access' as Panel, color: 'text-green-500' }] : []),
     { icon: Trash2, label: 'حذف گروه', panel: 'delete' as Panel, color: g.is_system ? 'text-gray-300' : 'text-red-500' },
   ];
 
@@ -59,7 +63,7 @@ export function UserGroupsPanel({}: Props) {
   if (panel === 'edit' && selected) return <GroupForm group={selected} onBack={goBack} onDone={doneAndBack} />;
   if (panel === 'delete' && selected) return <DeletePanel group={selected} onBack={goBack} onDone={doneAndBack} />;
   if (panel === 'members' && selected) return <MembersPanel group={selected} onBack={goBack} />;
-  if (panel === 'access' && selected) return <AccessPanel group={selected} onBack={goBack} />;
+  if (panel === 'access' && selected) return canManageAccess ? <AccessPanel group={selected} onBack={goBack} /> : <AccessDenied onReturn={goBack} />;
 
   // ── List ───────────────────────────────────────────────────────────────────
   return (

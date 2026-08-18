@@ -25,13 +25,23 @@ import { SectionCard } from './PortalConfig/SectionCard';
 import { PhoneAuthCard } from './PortalConfig/PhoneAuthCard';
 import { IdentityRepairCard } from './PortalConfig/IdentityRepairCard';
 import type { ConfigEntry, Profile, Props } from './PortalConfig/types';
+import { usePermissions } from '../context/PermissionsContext';
+import { canAccessConfigSection, getFirstVisibleConfigSection, getVisibleConfigNavigationItems } from '../features/permissions/configPermissions';
 
 export function PortalConfigPage({ currentUserId }: Props) {
+  const { isAdmin, userPermissions } = usePermissions();
   const [activeSection, setActiveSection] = useState('general');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [configs, setConfigs] = useState<ConfigEntry[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Profile[]>([]);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const visibleNavItems = getVisibleConfigNavigationItems(NAV_ITEMS, isAdmin, userPermissions);
+  const firstVisibleSection = getFirstVisibleConfigSection(visibleNavItems);
+  const canAccessActiveSection = canAccessConfigSection(activeSection, isAdmin, userPermissions);
+
+  useEffect(() => {
+    if (!canAccessActiveSection && firstVisibleSection) setActiveSection(firstVisibleSection);
+  }, [activeSection, canAccessActiveSection, firstVisibleSection]);
 
   // Load configs
   const loadConfigs = useCallback(async () => {
@@ -100,6 +110,9 @@ export function PortalConfigPage({ currentUserId }: Props) {
 
   // ── Render content ──────────────────────────────────────────────────────────
   const renderContent = () => {
+    if (!canAccessActiveSection) {
+      return <div className="py-20 text-center text-sm text-gray-500 dark:text-gray-400">برای این بخش مجوز دسترسی ندارید.</div>;
+    }
     switch (activeSection) {
       // ── General ──────────────────────────────────────────────────────────
       case 'general':
@@ -435,7 +448,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
 
   // ── Breadcrumb ──────────────────────────────────────────────────────────────
   const breadcrumb = (() => {
-    for (const group of NAV_ITEMS) {
+    for (const group of visibleNavItems) {
       const sub = group.sub.find(s => s.key === activeSection);
       if (sub) return `${group.label} / ${sub.label}`;
     }
@@ -446,7 +459,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
 
   const SidebarNav = ({ onSelect }: { onSelect?: () => void }) => (
     <nav className="flex-1 p-2 space-y-0.5">
-      {NAV_ITEMS.map(group => {
+      {visibleNavItems.map(group => {
         const Icon = group.icon;
         const isOpen = expandedGroups.has(group.key);
         return (
