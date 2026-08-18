@@ -7,6 +7,11 @@ import './management-dashboard-theme.css';
 import './notes-theme.css';
 import './spark-loader.css';
 import './corporate-theme.css';
+// Load the shared auth foundation up front so the public login page has the
+// same cascade before the first login and after a logout. AuthenticatedApp also
+// references this stylesheet, but Vite de-duplicates the module; the important
+// part is that its position in the entry cascade is stable.
+import './auth-modern.css';
 import './auth-reference-login.css';
 import './auth-reference-login-fixes.css';
 import './auth-login-unified-tabs.css';
