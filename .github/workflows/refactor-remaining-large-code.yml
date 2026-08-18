@@ -39,6 +39,9 @@ jobs:
           set +e
           : > /tmp/refactor-validation.log
 
+          NO_COLOR=1 npm run test:phase3c-security > /tmp/phase3c-baseline.log 2>&1
+          baseline_test_rc=$?
+
           node scripts/refactor-remaining-large-code.mjs >> /tmp/refactor-validation.log 2>&1
           transform_rc=$?
 
@@ -49,10 +52,59 @@ jobs:
             npm run build >> /tmp/refactor-validation.log 2>&1
             build_rc=$?
           fi
+
           if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ]; then
-            npm run test:phase3c-security >> /tmp/refactor-validation.log 2>&1
+            NO_COLOR=1 npm run test:phase3c-security > /tmp/phase3c-after.log 2>&1
+            after_test_rc=$?
+            python3 - <<'PY' >> /tmp/refactor-validation.log 2>&1
+          import re
+          from pathlib import Path
+
+          def test_names(path):
+              text = Path(path).read_text(errors='replace')
+              names = []
+              for line in text.splitlines():
+                  line = line.strip()
+                  if line.startswith('✔ ') or line.startswith('✖ '):
+                      name = line[2:]
+                      name = re.sub(r'\s+\([^)]*ms\)$', '', name)
+                      names.append(name)
+              return sorted(names)
+
+          def failed_names(path):
+              text = Path(path).read_text(errors='replace')
+              names = []
+              for line in text.splitlines():
+                  line = line.strip()
+                  if line.startswith('✖ '):
+                      name = line[2:]
+                      name = re.sub(r'\s+\([^)]*ms\)$', '', name)
+                      names.append(name)
+              return sorted(names)
+
+          before_all = test_names('/tmp/phase3c-baseline.log')
+          after_all = test_names('/tmp/phase3c-after.log')
+          before_fail = failed_names('/tmp/phase3c-baseline.log')
+          after_fail = failed_names('/tmp/phase3c-after.log')
+
+          print(f'phase3c baseline tests={len(before_all)} failures={len(before_fail)}')
+          print(f'phase3c after tests={len(after_all)} failures={len(after_fail)}')
+
+          if before_all != after_all:
+              print('TEST_SET_CHANGED')
+              print('missing_after=', sorted(set(before_all) - set(after_all)))
+              print('new_after=', sorted(set(after_all) - set(before_all)))
+              raise SystemExit(1)
+          if before_fail != after_fail:
+              print('FAILURE_SET_CHANGED')
+              print('baseline_failures=', before_fail)
+              print('after_failures=', after_fail)
+              raise SystemExit(1)
+          PY
             test_rc=$?
+            echo "baseline_test_rc=$baseline_test_rc after_test_rc=$after_test_rc comparison_rc=$test_rc" >> /tmp/refactor-validation.log
           fi
+
           if [ "$transform_rc" -eq 0 ] && [ "$build_rc" -eq 0 ] && [ "$test_rc" -eq 0 ]; then
             deno check supabase/functions/send-sms/index.ts supabase/functions/send-daily-meetings/index.ts >> /tmp/refactor-validation.log 2>&1
             deno_rc=$?
