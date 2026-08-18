@@ -25,6 +25,7 @@ const ignoredEvidence = new Set([
   'scripts/.jscpd-audit.stderr.txt',
   'scripts/.dead-code-tool-status.txt',
   'scripts/remove-confirmed-dead-files.mjs',
+  '.github/workflows/remove-confirmed-dead-files.yml',
 ]);
 
 const tracked = childProcess.execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
