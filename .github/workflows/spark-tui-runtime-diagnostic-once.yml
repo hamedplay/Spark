@@ -7,13 +7,15 @@ on:
       - '.github/workflows/spark-tui-runtime-diagnostic-once.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install expect
         run: |
@@ -24,7 +26,7 @@ jobs:
         shell: bash
         run: |
           sudo bash deploy/spark-cli/bootstrap.sh
-          spark --version
+          spark --version | tee /tmp/spark-version.txt
 
       - name: Reproduce first-action navigation in a PTY
         shell: bash
@@ -54,7 +56,7 @@ jobs:
           expect /tmp/spark-tui.exp
           rc=$?
           set -e
-          echo "EXPECT_RC=$rc"
+          printf '%s\n' "$rc" > /tmp/spark-tui.rc
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -64,14 +66,31 @@ jobs:
           Path('/tmp/spark-tui-session.clean.log').write_text(clean)
           print(clean[-12000:])
           PY
-          exit "$rc"
 
-      - name: Upload diagnostic logs
+      - name: Persist diagnostic and self-clean
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: spark-tui-runtime-diagnostic
-          path: |
-            /tmp/spark-tui-session.log
-            /tmp/spark-tui-session.clean.log
-          if-no-files-found: warn
+        shell: bash
+        run: |
+          {
+            echo '# Spark TUI runtime diagnostic'
+            echo
+            echo "Commit: $(git rev-parse HEAD)"
+            echo "Runner: $(uname -a)"
+            echo "TERM used: xterm-256color"
+            echo "Version: $(cat /tmp/spark-version.txt 2>/dev/null || echo unavailable)"
+            echo "Expect RC: $(cat /tmp/spark-tui.rc 2>/dev/null || echo unavailable)"
+            echo
+            echo '## Sanitized PTY output'
+            echo '```text'
+            tail -n 300 /tmp/spark-tui-session.clean.log 2>/dev/null || true
+            echo '```'
+          } > .spark-tui-runtime-diagnostic.md
+
+          rm -f .github/workflows/spark-tui-runtime-diagnostic-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .spark-tui-runtime-diagnostic.md .github/workflows/spark-tui-runtime-diagnostic-once.yml
+          git diff --cached --check
+          git commit -m 'chore: record Spark TUI runtime diagnostic'
+          git pull --rebase origin main
+          git push origin HEAD:main
