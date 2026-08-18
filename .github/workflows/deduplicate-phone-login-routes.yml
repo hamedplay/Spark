@@ -1,3 +1,4 @@
+# accept identical API alias stubs after implementation centralization
 name: Deduplicate phone login routes
 
 on:
@@ -95,10 +96,18 @@ jobs:
           if r['production_unreachable'] != ['src/vite-env.d.ts']:
               print('unexpected unreachable=',r['production_unreachable'])
               raise SystemExit(1)
-          legacy={'supabase/functions/request-phone-login-otp/index.ts','supabase/functions/verify-phone-login-otp/index.ts'}
-          if any(legacy.issubset(set(group)) for group in r['duplicate_files']):
-              print('legacy full-file duplicate still present')
-              raise SystemExit(1)
+          for p in [
+              Path('supabase/functions/request-phone-login-otp/index.ts'),
+              Path('supabase/functions/verify-phone-login-otp/index.ts'),
+          ]:
+              text=p.read_text()
+              meaningful=[line for line in text.splitlines() if line.strip()]
+              if len(meaningful) != 3:
+                  print('legacy alias entrypoint contains local logic:',p,meaningful)
+                  raise SystemExit(1)
+              if 'retiredPhoneLoginRoute' not in text or 'Deno.serve(retiredPhoneLoginRoute)' not in text:
+                  print('legacy alias does not delegate to shared handler:',p)
+                  raise SystemExit(1)
           PY
             audit_assert_rc=$?
             if [ "$audit_exec_rc" -eq 0 ] && [ "$audit_assert_rc" -eq 0 ]; then audit_rc=0; else audit_rc=1; fi
