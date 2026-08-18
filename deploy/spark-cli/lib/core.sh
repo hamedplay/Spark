@@ -333,7 +333,7 @@ install_manager_from_dir() {
   local source_dir="$1"
   local stage backup module
   [[ -f "${source_dir}/spark" ]] || { fail "Spark Manager entrypoint پیدا نشد: ${source_dir}/spark"; return 1; }
-  for module in core install-base install-platform tests-backup update admin; do
+  for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin; do
     [[ -f "${source_dir}/lib/${module}.sh" ]] || { fail "Spark Manager module پیدا نشد: ${module}.sh"; return 1; }
   done
   bash -n "${source_dir}/spark" || return 1

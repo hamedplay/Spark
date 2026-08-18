@@ -35,7 +35,7 @@ chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
 
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-for module in core install-base install-platform tests-backup update admin; do
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin; do
   module_path="${SCRIPT_DIR}/lib/${module}.sh"
   if [[ ! -r "$module_path" ]]; then
     printf 'Spark Manager module missing: %s\n' "$module_path" >&2

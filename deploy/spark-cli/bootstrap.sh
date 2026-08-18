@@ -22,7 +22,9 @@ files=(
   spark
   lib/core.sh
   lib/install-base.sh
-  lib/install-platform.sh
+  lib/install-platform-a.sh
+  lib/install-platform-b.sh
+  lib/install-platform-c.sh
   lib/tests-backup.sh
   lib/update.sh
   lib/admin.sh
