@@ -66,7 +66,6 @@ jobs:
           }
 '''
 
-          # Add the allowlisted dispatcher immediately before main_menu().
           if 'spark_tui_dispatch_command() {' not in text:
               marker = '\nmain_menu() {'
               if marker not in text:
@@ -130,7 +129,6 @@ jobs:
           }'''
 
           def replace_function(src: str, name: str, replacement: str) -> str:
-              # Functions in this entrypoint are top-level and terminate with a column-0 }.
               pattern = re.compile(rf'(?ms)^{re.escape(name)}\(\) \{{\n.*?^\}}\n')
               out, count = pattern.subn(replacement.rstrip() + '\n', src, count=1)
               if count != 1:
@@ -152,7 +150,7 @@ jobs:
               'allowlisted dispatcher': 'spark_tui_dispatch_command() {',
               'main captures mainmenu output': 'command="$(TUI_MODE="fullscreen" mainmenu',
               'dispatches selected command': 'spark_tui_dispatch_command "$command"',
-              'install step allowlist': 'spark_plain_install_step\\ *)',
+              'install step allowlist': 'spark_plain_install_step\ *)',
           }
           for label, needle in checks.items():
               if needle not in text:
