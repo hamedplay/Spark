@@ -1,17 +1,19 @@
 refactor=failure
 build=skipped
 --- refactor log ---
-src/components/CalendarPageCore.tsx: 1059 lines
-file:///home/runner/work/Spark/Spark/scripts/refactor-large-core-files.mjs:258
+src/components/CalendarPageCore.tsx: 993 lines
+src/components/VideoConference/ConferenceRoomCore.tsx: 690 lines
+src/components/Chat/E2EECall/useE2EECallCore.ts: 1175 lines
+file:///home/runner/work/Spark/Spark/scripts/.refactor-large-core-runtime.mjs?run=1787068092128:258
   if (n > max) throw new Error(`${file} still exceeds ${max} lines (${n})`);
                      ^
 
-Error: src/components/CalendarPageCore.tsx still exceeds 1000 lines (1059)
-    at assertLines (file:///home/runner/work/Spark/Spark/scripts/refactor-large-core-files.mjs:258:22)
-    at file:///home/runner/work/Spark/Spark/scripts/refactor-large-core-files.mjs:299:4
+Error: src/components/Chat/E2EECall/useE2EECallCore.ts still exceeds 1000 lines (1175)
+    at assertLines (file:///home/runner/work/Spark/Spark/scripts/.refactor-large-core-runtime.mjs?run=1787068092128:258:22)
+    at file:///home/runner/work/Spark/Spark/scripts/.refactor-large-core-runtime.mjs?run=1787068092128:300:4
     at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
     at async node:internal/modules/esm/loader:643:26
-    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+    at async file:///home/runner/work/Spark/Spark/scripts/run-large-core-refactor.mjs:18:3
 
 Node.js v24.18.1
 --- build log ---
