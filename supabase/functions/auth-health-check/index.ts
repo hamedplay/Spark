@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { createServiceRoleClient as adminClient, createJsonResponseHeaders } from "../_shared/runtimeHttp.ts";
+import { decodeJwtClaims as tokenClaims } from "../_shared/securityPrimitives.ts";
 
 const baseCorsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -23,14 +24,6 @@ const json = (body: unknown, status = 200, origin: string | null = null) =>
   new Response(JSON.stringify(body), { status, headers: responseHeaders(origin) });
 
 interface HealthPrincipal { userId: string; sessionId: string }
-
-function tokenClaims(token: string): { session_id?: string; aal?: string } | null {
-  try {
-    const encoded = token.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
-    if (!encoded) return null;
-    return JSON.parse(atob(encoded.padEnd(encoded.length + ((4 - encoded.length % 4) % 4), "=")));
-  } catch { return null; }
-}
 
 async function authenticate(req: Request): Promise<HealthPrincipal | null> {
   const header = req.headers.get("Authorization");

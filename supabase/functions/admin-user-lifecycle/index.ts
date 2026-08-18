@@ -2,23 +2,9 @@ import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
 import { postJsonCorsBaseHeaders as baseCorsHeaders, createServiceRoleClient as adminClient, getPhoneAuthAllowedOrigins as getAllowedOrigins, createJsonResponseHeaders } from "../_shared/runtimeHttp.ts";
+import { decodeJwtClaims as tokenClaims, isUuid } from "../_shared/securityPrimitives.ts";
 
 const responseHeaders = createJsonResponseHeaders(baseCorsHeaders);
-
-function tokenClaims(token: string): { session_id?: string } | null {
-  try {
-    const encoded = token.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
-    if (!encoded) return null;
-    const padded = encoded.padEnd(encoded.length + ((4 - encoded.length % 4) % 4), "=");
-    return JSON.parse(atob(padded));
-  } catch {
-    return null;
-  }
-}
-
-function isUuid(value: unknown): value is string {
-  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-}
 
 Deno.serve(async (req: Request) => {
   const allowedOrigins = await getAllowedOrigins();

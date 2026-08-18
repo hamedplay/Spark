@@ -2,12 +2,9 @@ import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
 import { postJsonCorsBaseHeaders as baseCorsHeaders, createServiceRoleClient as adminClient, getPhoneAuthAllowedOrigins as getAllowedOrigins, createJsonResponseHeaders } from "../_shared/runtimeHttp.ts";
+import { isUuid } from "../_shared/securityPrimitives.ts";
 
 const responseHeaders = createJsonResponseHeaders(baseCorsHeaders);
-
-function isUuid(value: unknown): value is string {
-  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-}
 
 function statusForError(code: string | undefined): number {
   switch (code) {

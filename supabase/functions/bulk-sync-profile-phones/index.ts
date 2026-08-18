@@ -3,16 +3,9 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
 import { normalizeIranPhone } from "../_shared/phone.ts";
 import { postJsonCorsBaseHeaders as baseCorsHeaders, getPhoneAuthAllowedOrigins as getAllowedOrigins, createJsonResponseHeaders } from "../_shared/runtimeHttp.ts";
+import { decodeJwtClaims as tokenClaims } from "../_shared/securityPrimitives.ts";
 
 const responseHeaders = createJsonResponseHeaders(baseCorsHeaders);
-
-function tokenClaims(token: string): { session_id?: string; aal?: string } | null {
-  try {
-    const encoded = token.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
-    if (!encoded) return null;
-    return JSON.parse(atob(encoded.padEnd(encoded.length + ((4 - encoded.length % 4) % 4), "=")));
-  } catch { return null; }
-}
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length <= 4) return "***";
