@@ -23,7 +23,7 @@ export interface ActionCreatePayload {
   dueDate: Date | null;
   projectId: string;
   personalProjectId: string;
-  reminderAt: string;
+  reminderAt: Date | null;
   parentTaskId: string;
   dependencyIds: string[];
   checklist: string[];
@@ -45,9 +45,10 @@ export function ActionCreateDrawer({
   onCreate: (payload: ActionCreatePayload) => void;
   onManagePersonalProjects: () => void;
 }) {
-  const [form, setForm] = useState({ title: '', description: initialDescription, priority: 'medium' as Task['priority'], status: 'pending' as Task['status'], assigneeId: '', assigneeName: '', estimatedHours: '', tagsText: '', projectId: '', personalProjectId: '', reminderAt: '', parentTaskId: '' });
+  const [form, setForm] = useState({ title: '', description: initialDescription, priority: 'medium' as Task['priority'], status: 'pending' as Task['status'], assigneeId: '', assigneeName: '', estimatedHours: '', tagsText: '', projectId: '', personalProjectId: '', parentTaskId: '' });
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [dueDate, setDueDate] = useState<Date | null>(sourceFromChat ? new Date() : null);
+  const [reminderAt, setReminderAt] = useState<Date | null>(null);
   const [dependencyIds, setDependencyIds] = useState<string[]>([]);
   const [checklist, setChecklist] = useState<string[]>([]);
   const [checkText, setCheckText] = useState('');
@@ -56,7 +57,7 @@ export function ActionCreateDrawer({
   const availableDependencies = useMemo(() => tasks.filter(t => t.id !== form.parentTaskId && !t.archived), [tasks, form.parentTaskId]);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    onCreate({ ...form, startDate, dueDate, dependencyIds, checklist, files });
+    onCreate({ ...form, startDate, dueDate, reminderAt, dependencyIds, checklist, files });
   };
   const addChecklist = () => { if (checkText.trim()) { setChecklist(v => [...v, checkText.trim()]); setCheckText(''); } };
   const toggleDependency = (id: string) => setDependencyIds(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]);
@@ -98,7 +99,7 @@ export function ActionCreateDrawer({
 
           <div className="grid grid-cols-2 gap-3"><div><label className="field-label">تاریخ شروع</label><JalaliDateInput value={startDate} onChange={setStartDate}/></div><div><label className="field-label">سررسید *</label><JalaliDateInput value={dueDate} onChange={setDueDate}/></div></div>
           <div><label className="field-label">زمان تخمینی (ساعت)</label><input type="number" min="0" step="0.5" value={form.estimatedHours} onChange={e=>setForm(v=>({...v,estimatedHours:e.target.value}))} placeholder="مثلاً 2" className="action-input" /></div>
-          <div><label className="field-label flex items-center gap-2"><Bell className="w-4 h-4"/> یادآور</label><input type="datetime-local" value={form.reminderAt} onChange={e=>setForm(v=>({...v,reminderAt:e.target.value}))} className="action-input" /></div>
+          <div><label className="field-label flex items-center gap-2"><Bell className="w-4 h-4"/> یادآور</label><JalaliDateInput value={reminderAt} onChange={setReminderAt}/></div>
           <div><label className="field-label">برچسب‌ها</label><input value={form.tagsText} onChange={e=>setForm(v=>({...v,tagsText:e.target.value}))} placeholder="فوری، طراحی، پیگیری" className="action-input" /></div>
 
           <div><label className="field-label flex items-center gap-2"><CalendarDays className="w-4 h-4"/> اقدام والد</label><select value={form.parentTaskId} onChange={e=>setForm(v=>({...v,parentTaskId:e.target.value}))} className="action-input"><option value="">بدون اقدام والد</option>{tasks.filter(t=>!t.archived).map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></div>

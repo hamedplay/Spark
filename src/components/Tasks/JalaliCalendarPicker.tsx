@@ -7,6 +7,8 @@ const JALALI_MONTHS = [
   'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند',
 ];
 const WEEKDAYS = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
+const toPersianDigits = (value: string | number) =>
+  String(value).replace(/\d/g, digit => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)]);
 
 function JalaliCalendarPicker({ value, onChange, onClose }: {
   value: Date | null;
@@ -22,7 +24,7 @@ function JalaliCalendarPicker({ value, onChange, onClose }: {
   const prevMonth = () => { if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); } else setViewMonth(m => m - 1); };
   const nextMonth = () => { if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1); };
 
-  const daysInMonth = viewMonth < 6 ? 31 : viewMonth < 11 ? 30 : 29;
+  const daysInMonth = moment.jDaysInMonth(viewYear, viewMonth);
   const firstDay = moment(`${viewYear}/${viewMonth + 1}/01`, 'jYYYY/jMM/jDD').day();
   const offset = (firstDay + 1) % 7;
 
@@ -47,11 +49,11 @@ function JalaliCalendarPicker({ value, onChange, onClose }: {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-600 p-4 w-72" dir="rtl">
       <div className="flex items-center justify-between mb-3">
-        <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+        <button type="button" onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
           <ChevronRight className="w-4 h-4" />
         </button>
-        <span className="font-bold text-sm dark:text-white">{JALALI_MONTHS[viewMonth]} {viewYear}</span>
-        <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+        <span className="font-bold text-sm dark:text-white">{JALALI_MONTHS[viewMonth]} {toPersianDigits(viewYear)}</span>
+        <button type="button" onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
           <ChevronLeft className="w-4 h-4" />
         </button>
       </div>
@@ -70,12 +72,12 @@ function JalaliCalendarPicker({ value, onChange, onClose }: {
             Number(moment().format('jMM')) - 1 === viewMonth &&
             Number(moment().format('jDD')) === day;
           return (
-            <button key={day} onClick={() => handleDayClick(day)}
+            <button type="button" key={day} onClick={() => handleDayClick(day)}
               className={`h-8 w-full rounded-lg text-sm transition-colors
                 ${isSelected ? 'bg-teal-500 text-white font-bold' :
                   isToday ? 'border border-teal-400 text-teal-600 dark:text-teal-400' :
                   'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
-              {day}
+              {toPersianDigits(day)}
             </button>
           );
         })}
@@ -85,16 +87,16 @@ function JalaliCalendarPicker({ value, onChange, onClose }: {
         <span className="text-xs text-gray-500 dark:text-gray-400">ساعت:</span>
         <select value={hour} onChange={e => setHour(Number(e.target.value))}
           className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 dark:bg-gray-700 dark:text-white">
-          {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}
+          {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{toPersianDigits(String(i).padStart(2, '0'))}</option>)}
         </select>
         <span className="text-gray-400">:</span>
         <select value={minute} onChange={e => setMinute(Number(e.target.value))}
           className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 dark:bg-gray-700 dark:text-white">
-          {[0, 15, 30, 45].map(m => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
+          {[0, 15, 30, 45].map(m => <option key={m} value={m}>{toPersianDigits(String(m).padStart(2, '0'))}</option>)}
         </select>
       </div>
 
-      <button onClick={handleConfirm}
+      <button type="button" onClick={handleConfirm}
         className="mt-3 w-full bg-teal-500 hover:bg-teal-600 text-white py-2 rounded-xl text-sm font-medium transition-colors">
         تایید
       </button>

@@ -233,7 +233,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
           tags,
           project_id: payload.projectId || null,
           personal_project_id: payload.personalProjectId || null,
-          reminder_at: payload.reminderAt ? new Date(payload.reminderAt).toISOString() : null,
+          reminder_at: payload.reminderAt?.toISOString() || null,
           parent_task_id: payload.parentTaskId || null,
           status: payload.status,
           archived: payload.status === 'completed',
