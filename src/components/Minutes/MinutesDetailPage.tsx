@@ -448,7 +448,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               <button
                 key={t.id}
                 onClick={() => { setActiveTab(t.id as MinutesDetailTab); setMinutesTabInUrl(t.id as MinutesDetailTab); }}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                className={`flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                   activeTab === t.id
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
