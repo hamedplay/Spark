@@ -365,7 +365,7 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
 
   return (
     <div
-      className="relative overflow-hidden rounded-[28px] border border-slate-800/80 bg-[#06101f] p-3 text-slate-100 shadow-[0_28px_80px_rgba(2,6,23,0.35)] sm:p-5"
+      className="relative overflow-hidden rounded-[28px] border border-slate-800/80 bg-[#06101f] dark:bg-[#101b2d] p-3 text-slate-100 shadow-[0_28px_80px_rgba(2,6,23,0.35)] sm:p-5"
       dir="rtl"
     >
       <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-violet-600/10 blur-3xl" />
@@ -379,19 +379,19 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
                 <Sparkles className="h-3.5 w-3.5" /> مرکز عملیات جلسات
               </span>
               {!loading && !fetchError && (
-                <span className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] text-slate-500">
+                <span className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[10px] text-slate-400">
                   آمار به‌روز
                 </span>
               )}
             </div>
             <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">صورت‌جلسات و مصوبات</h1>
-            <p className="mt-1 text-xs text-slate-500 sm:text-sm">مدیریت صورت‌جلسات، مصوبات و اقدامات در یک نمای یکپارچه</p>
+            <p className="mt-1 text-xs text-slate-400 sm:text-sm">مدیریت صورت‌جلسات، مصوبات و اقدامات در یک نمای یکپارچه</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
             {lastUpdated && (
               <div className="hidden rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-left sm:block">
-                <p className="text-[9px] text-slate-600">آخرین بروزرسانی</p>
+                <p className="text-[9px] text-slate-500">آخرین بروزرسانی</p>
                 <p className="mt-0.5 text-[11px] text-slate-400">{timeFormatter.format(lastUpdated)}</p>
               </div>
             )}
@@ -468,9 +468,9 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
         <div className="flex items-end justify-between gap-3 pt-1">
           <div>
             <h2 className="text-sm font-bold text-slate-100 sm:text-base">بخش‌های صورت‌جلسات و مصوبات</h2>
-            <p className="mt-0.5 text-[10px] text-slate-500 sm:text-[11px]">وضعیت هر بخش و موارد جدید در یک نگاه</p>
+            <p className="mt-0.5 text-[10px] text-slate-400 sm:text-[11px]">وضعیت هر بخش و موارد جدید در یک نگاه</p>
           </div>
-          <span className="hidden text-[10px] text-slate-600 sm:block">{nf.format(cards.length)} بخش</span>
+          <span className="hidden text-[10px] text-slate-500 sm:block">{nf.format(cards.length)} بخش</span>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -514,12 +514,12 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
                         </div>
                         <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-400 sm:text-xs">{card.description}</p>
                       </div>
-                      <ChevronLeft className={`mt-1 h-5 w-5 flex-shrink-0 text-slate-600 transition-transform group-hover:-translate-x-1 ${hasNew ? 'text-rose-300' : ''}`} />
+                      <ChevronLeft className={`mt-1 h-5 w-5 flex-shrink-0 text-slate-500 transition-transform group-hover:-translate-x-1 ${hasNew ? 'text-rose-300' : ''}`} />
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                       {loading ? (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500">
+                        <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
                           <Loader2 className="h-3.5 w-3.5 animate-spin" /> در حال دریافت آمار
                         </span>
                       ) : (

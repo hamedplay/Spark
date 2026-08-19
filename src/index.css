@@ -626,22 +626,22 @@ span.absolute.-top-2.z-10.pointer-events-none:has(> svg.lucide-at-sign) {
   color: #e2e8f0;
   background:
     radial-gradient(circle at 10% 0%, rgba(99, 102, 241, 0.11), transparent 28rem),
-    linear-gradient(135deg, #020617, #07101e 55%, #0f172a);
+    linear-gradient(135deg, #0b1424, #111d30 55%, #18253b);
 }
 
 .dark .spark-modern-page .bg-white,
 .dark .spark-modern-page .bg-gray-50 {
-  background-color: rgba(15, 23, 42, 0.94) !important;
+  background-color: rgba(30, 42, 64, 0.94) !important;
 }
 
 .dark .spark-modern-page .bg-gray-100,
 .dark .spark-modern-page .bg-gray-700,
 .dark .spark-modern-page .bg-gray-800 {
-  background-color: #172033 !important;
+  background-color: #26344b !important;
 }
 
 .dark .spark-modern-page .bg-gray-900 {
-  background-color: #020617 !important;
+  background-color: #0b1424 !important;
 }
 
 .dark .spark-modern-page .border-gray-100,
@@ -650,7 +650,7 @@ span.absolute.-top-2.z-10.pointer-events-none:has(> svg.lucide-at-sign) {
 .dark .spark-modern-page .border-gray-600,
 .dark .spark-modern-page .border-gray-700,
 .dark .spark-modern-page .border-gray-800 {
-  border-color: #263348 !important;
+  border-color: #3a4961 !important;
 }
 
 .dark .spark-modern-page .text-gray-900,
@@ -665,7 +665,7 @@ span.absolute.-top-2.z-10.pointer-events-none:has(> svg.lucide-at-sign) {
 }
 
 .dark .spark-modern-page .text-gray-400 {
-  color: #64748b !important;
+  color: #94a3b8 !important;
 }
 
 .dark .spark-modern-page :is(input, select, textarea):not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']) {
