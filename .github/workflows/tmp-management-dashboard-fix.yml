@@ -1,4 +1,5 @@
 name: Temporary management dashboard fix
+# Retry after a concurrent main update; the stale run failed closed before source transformation.
 
 on:
   push:
