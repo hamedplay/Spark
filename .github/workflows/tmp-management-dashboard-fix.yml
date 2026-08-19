@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: tmp-management-dashboard-fix
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate-and-commit:
@@ -30,6 +30,52 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           echo "VALIDATION_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Tighten temporary navigation-test matcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/tmp-management-dashboard-fix.py')
+          text = path.read_text(encoding='utf-8')
+          start = text.index('# Update focused navigation tests to prove Admin/null no longer bypass the dedicated dashboard gate.')
+          end = text.index('# 2) Management dashboard drill-down wiring.')
+          replacement = r'''# Update focused navigation tests to prove Admin/null no longer bypass the dedicated dashboard gate.
+          replace(
+              "tests/app/layoutNavigation.test.ts",
+              """    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: null,\n    minutesFollowupAllowed: true,\n""",
+              """    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: null,\n    managementDashboardAllowed: true,\n    minutesFollowupAllowed: true,\n""",
+          )
+          replace(
+              "tests/app/layoutNavigation.test.ts",
+              """    isAdmin: true,\n    sparkVisible: false,\n    userPermissions: null,\n    minutesFollowupAllowed: true,\n""",
+              """    isAdmin: true,\n    sparkVisible: false,\n    userPermissions: null,\n    managementDashboardAllowed: true,\n    minutesFollowupAllowed: true,\n""",
+          )
+          replace(
+              "tests/app/layoutNavigation.test.ts",
+              """    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: { spark: true },\n    minutesFollowupAllowed: false,\n""",
+              """    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: { spark: true },\n    managementDashboardAllowed: false,\n    minutesFollowupAllowed: false,\n""",
+          )
+          replace(
+              "tests/app/layoutNavigation.test.ts",
+              """test('shows management dashboard only when its dedicated permission is granted', () => {\n  const allowed = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: { management_dashboard: true },\n  });\n  const denied = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: { management_dashboard: false, meetings: true },\n  });\n\n  assert.ok(allowed.some(i => i.id === 'management-dashboard'));\n  assert.ok(!denied.some(i => i.id === 'management-dashboard'));\n});\n\ntest('allows administrators to see all non-Spark-hidden items', () => {\n  const items = getVisiblePrimaryNavigationItems({\n    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: undefined,\n    minutesFollowupAllowed: true,\n    minutesFollowupAccessLoading: false,\n  });\n\n  assert.equal(items.length, 12);\n});\n\ntest('treats null permissions as full access', () => {\n  const items = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: null,\n    minutesFollowupAllowed: true,\n    minutesFollowupAccessLoading: false,\n  });\n\n  assert.equal(items.length, 12);\n});\n""",
+              """test('shows management dashboard only when its dedicated access result is granted', () => {\n  const allowed = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: {},\n    managementDashboardAllowed: true,\n  });\n  const denied = getVisiblePrimaryNavigationItems({\n    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: null,\n    managementDashboardAllowed: false,\n  });\n\n  assert.ok(allowed.some(i => i.id === 'management-dashboard'));\n  assert.ok(!denied.some(i => i.id === 'management-dashboard'));\n});\n\ntest('administrator access does not bypass the dedicated management dashboard gate', () => {\n  const items = getVisiblePrimaryNavigationItems({\n    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: undefined,\n    managementDashboardAllowed: false,\n  });\n\n  assert.equal(items.length, 11);\n  assert.ok(!items.some(i => i.id === 'management-dashboard'));\n});\n\ntest('null permissions remain full access except for the dedicated management dashboard gate', () => {\n  const items = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: null,\n    managementDashboardAllowed: false,\n  });\n\n  assert.equal(items.length, 11);\n  assert.ok(!items.some(i => i.id === 'management-dashboard'));\n});\n""",
+          )
+          replace(
+              "tests/app/layoutNavigation.test.ts",
+              """    userPermissions: undefined,\n    minutesFollowupAllowed: false,\n    minutesFollowupAccessLoading: true,\n""",
+              """    userPermissions: undefined,\n    managementDashboardAllowed: false,\n    minutesFollowupAllowed: false,\n    minutesFollowupAccessLoading: true,\n""",
+          )
+          replace(
+              "tests/app/layoutNavigation.test.ts",
+              """      reports: true,\n    },\n    minutesFollowupAllowed: false,\n""",
+              """      reports: true,\n    },\n    managementDashboardAllowed: true,\n    minutesFollowupAllowed: false,\n""",
+          )
+
+          '''
+          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          PY
 
       - name: Apply scoped transformation
         run: python3 scripts/tmp-management-dashboard-fix.py
