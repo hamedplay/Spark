@@ -1,0 +1,148 @@
+name: tmp-jalali-action-create
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-jalali-action-create.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Apply scoped Jalali calendar fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Create drawer: use Date for the reminder and the same Jalali picker as start/due dates.
+          path = 'src/components/Tasks/ActionCreateDrawer.tsx'
+          replace_once(path, '  reminderAt: string;\n', '  reminderAt: Date | null;\n')
+          replace_once(path,
+              "  const [form, setForm] = useState({ title: '', description: initialDescription, priority: 'medium' as Task['priority'], status: 'pending' as Task['status'], assigneeId: '', assigneeName: '', estimatedHours: '', tagsText: '', projectId: '', personalProjectId: '', reminderAt: '', parentTaskId: '' });",
+              "  const [form, setForm] = useState({ title: '', description: initialDescription, priority: 'medium' as Task['priority'], status: 'pending' as Task['status'], assigneeId: '', assigneeName: '', estimatedHours: '', tagsText: '', projectId: '', personalProjectId: '', parentTaskId: '' });")
+          replace_once(path,
+              "  const [dueDate, setDueDate] = useState<Date | null>(sourceFromChat ? new Date() : null);\n  const [dependencyIds, setDependencyIds] = useState<string[]>([]);",
+              "  const [dueDate, setDueDate] = useState<Date | null>(sourceFromChat ? new Date() : null);\n  const [reminderAt, setReminderAt] = useState<Date | null>(null);\n  const [dependencyIds, setDependencyIds] = useState<string[]>([]);")
+          replace_once(path,
+              "    onCreate({ ...form, startDate, dueDate, dependencyIds, checklist, files });",
+              "    onCreate({ ...form, startDate, dueDate, reminderAt, dependencyIds, checklist, files });")
+          replace_once(path,
+              '<div><label className="field-label flex items-center gap-2"><Bell className="w-4 h-4"/> یادآور</label><input type="datetime-local" value={form.reminderAt} onChange={e=>setForm(v=>({...v,reminderAt:e.target.value}))} className="action-input" /></div>',
+              '<div><label className="field-label flex items-center gap-2"><Bell className="w-4 h-4"/> یادآور</label><JalaliDateInput value={reminderAt} onChange={setReminderAt}/></div>')
+
+          # Persistence remains ISO/UTC; only the UI calendar changes to Jalali.
+          path = 'src/components/TasksPage.tsx'
+          replace_once(path,
+              '          reminder_at: payload.reminderAt ? new Date(payload.reminderAt).toISOString() : null,',
+              '          reminder_at: payload.reminderAt?.toISOString() || null,')
+
+          # Jalali input: render the selected Jalali date/time using Persian digits.
+          path = 'src/components/Tasks/JalaliDateInput.tsx'
+          replace_once(path,
+              "import { JalaliCalendarPicker } from './JalaliCalendarPicker';\nimport { toJalali } from './utils';",
+              "import { JalaliCalendarPicker } from './JalaliCalendarPicker';\nimport moment from 'moment-jalaali';\n\nconst toPersianDigits = (value: string | number) =>\n  String(value).replace(/\\d/g, digit => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)]);")
+          replace_once(path,
+              "        <input readOnly value={value ? toJalali(value.toISOString()) : ''}\n          onClick={() => setOpen(v => !v)}\n          placeholder=\"انتخاب تاریخ و ساعت\"",
+              "        <input readOnly value={value ? toPersianDigits(moment(value).format('jYYYY/jMM/jDD HH:mm')) : ''}\n          onClick={() => setOpen(v => !v)}\n          placeholder=\"انتخاب تاریخ و ساعت شمسی\"")
+
+          # Calendar: correct Jalali month length, Persian digits, and prevent form submission from picker controls.
+          path = 'src/components/Tasks/JalaliCalendarPicker.tsx'
+          replace_once(path,
+              "const WEEKDAYS = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];\n",
+              "const WEEKDAYS = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];\nconst toPersianDigits = (value: string | number) =>\n  String(value).replace(/\\d/g, digit => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)]);\n")
+          replace_once(path,
+              "  const daysInMonth = viewMonth < 6 ? 31 : viewMonth < 11 ? 30 : 29;",
+              "  const daysInMonth = moment.jDaysInMonth(viewYear, viewMonth);")
+          replace_once(path,
+              '<button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">',
+              '<button type="button" onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">')
+          replace_once(path,
+              '<span className="font-bold text-sm dark:text-white">{JALALI_MONTHS[viewMonth]} {viewYear}</span>',
+              '<span className="font-bold text-sm dark:text-white">{JALALI_MONTHS[viewMonth]} {toPersianDigits(viewYear)}</span>')
+          replace_once(path,
+              '<button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">',
+              '<button type="button" onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">')
+          replace_once(path,
+              '<button key={day} onClick={() => handleDayClick(day)}',
+              '<button type="button" key={day} onClick={() => handleDayClick(day)}')
+          replace_once(path,
+              '              {day}\n',
+              '              {toPersianDigits(day)}\n')
+          replace_once(path,
+              "          {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}</option>)}",
+              "          {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{toPersianDigits(String(i).padStart(2, '0'))}</option>)}")
+          replace_once(path,
+              "          {[0, 15, 30, 45].map(m => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}",
+              "          {[0, 15, 30, 45].map(m => <option key={m} value={m}>{toPersianDigits(String(m).padStart(2, '0'))}</option>)}")
+          replace_once(path,
+              '      <button onClick={handleConfirm}\n',
+              '      <button type="button" onClick={handleConfirm}\n')
+          PY
+
+          git diff --check
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Jalali month contract
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import moment from 'moment-jalaali';
+          if (typeof moment.jDaysInMonth !== 'function') throw new Error('moment.jDaysInMonth is unavailable');
+          if (moment.jDaysInMonth(1404, 0) !== 31) throw new Error('Farvardin must have 31 days');
+          if (moment.jDaysInMonth(1404, 6) !== 30) throw new Error('Mehr must have 30 days');
+          const esfand = moment.jDaysInMonth(1404, 11);
+          if (esfand !== 29 && esfand !== 30) throw new Error(`Invalid Esfand length: ${esfand}`);
+          console.log('Jalali month contract OK', { esfand });
+          NODE
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/tmp-jalali-action-create.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/Tasks/ActionCreateDrawer.tsx src/components/Tasks/JalaliDateInput.tsx src/components/Tasks/JalaliCalendarPicker.tsx src/components/TasksPage.tsx .github/workflows/tmp-jalali-action-create.yml
+          git diff --cached --check
+          git commit -m 'fix(tasks): make action creation calendar fully Jalali [skip ci]'
+          git push origin HEAD:main
+
+      - name: Cleanup temporary workflow if validation fails
+        if: failure()
+        shell: bash
+        run: |
+          git reset --hard HEAD || true
+          rm -f .github/workflows/tmp-jalali-action-create.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: cleanup tmp Jalali workflow [skip ci]' || true
+          git push origin HEAD:main || true
