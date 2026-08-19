@@ -26,7 +26,6 @@ Deno.serve(async (req: Request) => {
 
   const callerUserId = authResult.userId!;
 
-  // ── Parse body ──────────────────────────────────────────────────────────────
   let body: { userId?: string; text?: string };
   try {
     body = await req.json();
@@ -42,7 +41,6 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(supabaseUrl, serviceKey);
 
-  // ── Authorization: caller must be admin OR in the same organization ─────────
   const { data: callerProfile, error: callerErr } = await admin
     .from("profiles")
     .select("is_admin, is_active, organization")
@@ -57,7 +55,6 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!callerProfile.is_admin) {
-    // Non-admin: target must be in the same organization and be active
     const { data: targetProfile, error: targetErr } = await admin
       .from("profiles")
       .select("is_active, organization")
@@ -73,14 +70,11 @@ Deno.serve(async (req: Request) => {
 
     const callerOrg = (callerProfile.organization ?? "").trim();
     const targetOrg = (targetProfile.organization ?? "").trim();
-
-    // Reject cross-organization messaging
     if (!callerOrg || !targetOrg || callerOrg !== targetOrg) {
       return json({ ok: false, error: "دسترسی غیرمجاز: کاربران باید در یک سازمان باشند" }, 403);
     }
   }
 
-  // ── Check bot config ────────────────────────────────────────────────────────
   const { data: cfg, error: cfgErr } = await admin
     .from("social_channel_configs")
     .select("bot_token, is_active")
@@ -101,28 +95,27 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, skipped: true, reason: "توکن بات تنظیم نشده" });
   }
 
-  // ── Look up target user's Bale chat ID ──────────────────────────────────────
-  const { data: mapping, error: mapErr } = await admin
-    .from("user_bale_mapping")
-    .select("bale_chat_id")
-    .eq("user_id", userId)
-    .maybeSingle();
+  // Resolve both legacy plaintext mappings and new encrypted-only mappings
+  // through a service-role-only database function.
+  const { data: baleChatId, error: mapErr } = await admin.rpc(
+    "get_bale_chat_id_service",
+    { p_user_id: userId },
+  );
 
   if (mapErr) {
     console.error("[send-bale-message] mapping lookup error:", mapErr.message);
     return json({ ok: false, error: "خطا در خواندن مپینگ بله" }, 500);
   }
 
-  if (!mapping?.bale_chat_id) {
+  if (!baleChatId) {
     return json({ ok: true, skipped: true, reason: "کاربر به بله متصل نیست" });
   }
 
-  // ── Send message via Bale API ───────────────────────────────────────────────
   try {
     const res = await fetch(`https://tapi.bale.ai/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: mapping.bale_chat_id, text }),
+      body: JSON.stringify({ chat_id: baleChatId, text }),
     });
 
     if (!res.ok) {
