@@ -140,7 +140,7 @@ jobs:
             if git ls-files --error-unmatch .tmp-management-dashboard-status.txt >/dev/null 2>&1; then
               git rm .tmp-management-dashboard-status.txt
             fi
-            git rm scripts/tmp-management-dashboard-fix.py .github/workflows/tmp-management-dashboard-fix.yml
+            git rm -f scripts/tmp-management-dashboard-fix.py .github/workflows/tmp-management-dashboard-fix.yml
             git add src tests supabase/migrations/20260819171500_harden_management_dashboard_access.sql
             git diff --cached --check
             git commit -m "fix: secure management dashboard drill-down [skip ci]"
