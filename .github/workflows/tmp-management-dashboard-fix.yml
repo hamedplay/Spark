@@ -33,6 +33,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          LOG_FILE=/tmp/management-dashboard-validator.log
+          exec > >(tee "$LOG_FILE") 2>&1
+
+          report_failure() {
+            code=$?
+            if [ "$code" -eq 0 ]; then
+              return
+            fi
+            set +e
+            echo "Validator failed with exit code $code; recording diagnostic status"
+            git fetch origin main
+            git reset --hard origin/main
+            rm -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
+            {
+              echo "exit_code=$code"
+              echo "base=$(git rev-parse HEAD)"
+              echo "--- last validator log ---"
+              tail -n 140 "$LOG_FILE"
+            } > .tmp-management-dashboard-status.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .tmp-management-dashboard-status.txt
+            git commit -m "chore: record dashboard validator failure [skip ci]" || true
+            git push origin HEAD:main || true
+            exit "$code"
+          }
+          trap report_failure EXIT
 
           for attempt in 1 2 3 4 5; do
             echo "Attempt $attempt: validating latest main"
@@ -42,7 +69,6 @@ jobs:
             base_sha="$(git rev-parse HEAD)"
 
             # Fix only the overly-broad matcher in the temporary runner itself.
-            # Product source is still untouched until the runner executes.
             python3 - <<'PY'
           from pathlib import Path
 
@@ -80,7 +106,6 @@ jobs:
             grep -q "focusMeetingId" src/features/meetings/pages/MeetingsPage.tsx
             grep -q "focusDecisionId" src/components/Minutes/Detail/TabDecisions.tsx
 
-            # Verify only the intended product/test/migration files plus our temp runner changed.
             python3 - <<'PY'
           import subprocess
 
@@ -109,6 +134,9 @@ jobs:
 
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            if git ls-files --error-unmatch .tmp-management-dashboard-status.txt >/dev/null 2>&1; then
+              git rm .tmp-management-dashboard-status.txt
+            fi
             git rm scripts/tmp-management-dashboard-fix.py .github/workflows/tmp-management-dashboard-fix.yml
             git add src tests supabase/migrations/20260819171500_harden_management_dashboard_access.sql
             git diff --cached --check
@@ -140,6 +168,7 @@ jobs:
             fi
 
             if git push origin HEAD:main; then
+              trap - EXIT
               echo "Validated dashboard fix committed; temporary dashboard tooling removed"
               exit 0
             fi
