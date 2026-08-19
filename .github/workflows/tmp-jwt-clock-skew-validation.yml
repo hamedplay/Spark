@@ -6,7 +6,7 @@ on:
       - '.github/workflows/tmp-jwt-clock-skew-validation.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -33,3 +33,13 @@ jobs:
             echo 'Unexpected JWT validation/signing behavior in frontend hook'
             exit 1
           fi
+      - name: Record success
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'status=success\nbuild=success\nguard=success\nvalidated_commit=%s\n' "$GITHUB_SHA" > .tmp-jwt-clock-skew-validation-status.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .tmp-jwt-clock-skew-validation-status.txt
+          git commit -m 'chore: record JWT clock-skew validation [skip ci]'
+          git push
