@@ -1,0 +1,116 @@
+name: Temporary meeting user selector fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-fix-meeting-user-selector.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-fix-meeting-user-selector
+  cancel-in-progress: false
+
+jobs:
+  fix-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply minimal scoped fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/features/meetings/components/MeetingCard/UserSelectorModal.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          anchor = """  const visibleGroups: OrgUnitGroup[] = (selectedUnitId === 'all'\n    ? groups\n    : groups.filter(g => (g.unit_id || '__no_unit__') === selectedUnitId)\n  );\n\n  return (\n"""
+          helper = """  const visibleGroups: OrgUnitGroup[] = (selectedUnitId === 'all'\n    ? groups\n    : groups.filter(g => (g.unit_id || '__no_unit__') === selectedUnitId)\n  );\n\n  const renderUserRow = (u: OrgUserProfile) => (\n    <UserRow\n      key={u.user_id}\n      userId={u.user_id}\n      name={u.full_name || ''}\n      assignments={u.assignments}\n      sending={sendingToUserId === u.user_id}\n      disabled={loading}\n      onSend={handleSendToUser}\n    />\n  );\n\n  return (\n"""
+
+          misplaced = """  const hasAssignments = assignments.length > 0;\n  const renderUserRow = (u: OrgUserProfile) => (\n                <UserRow\n                  key={u.user_id}\n                  userId={u.user_id}\n                  name={u.full_name || ''}\n                  assignments={u.assignments}\n                  sending={sendingToUserId === u.user_id}\n                  disabled={loading}\n                  onSend={handleSendToUser}\n                />\n              );\n\n  return (\n"""
+          corrected = """  const hasAssignments = assignments.length > 0;\n\n  return (\n"""
+
+          if text.count(anchor) != 1:
+              raise SystemExit(f'Expected parent insertion anchor exactly once, found {text.count(anchor)}')
+          if text.count(misplaced) != 1:
+              raise SystemExit(f'Expected misplaced helper exactly once, found {text.count(misplaced)}')
+
+          text = text.replace(anchor, helper, 1)
+          text = text.replace(misplaced, corrected, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Verify scoped source transformation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/features/meetings/components/MeetingCard/UserSelectorModal.tsx')
+          text = path.read_text(encoding='utf-8')
+          parent, child = text.split('\nfunction UserRow({', 1)
+
+          required_parent_refs = [
+              'const renderUserRow = (u: OrgUserProfile) => (',
+              'sending={sendingToUserId === u.user_id}',
+              'disabled={loading}',
+              'onSend={handleSendToUser}',
+          ]
+          for token in required_parent_refs:
+              if token not in parent:
+                  raise SystemExit(f'Missing expected parent-scope token: {token}')
+
+          forbidden_child_refs = ['renderUserRow', 'sendingToUserId', 'handleSendToUser']
+          for token in forbidden_child_refs:
+              if token in child:
+                  raise SystemExit(f'Outer-scope token still present inside UserRow: {token}')
+          PY
+
+          changed="$(git diff --name-only)"
+          test "$changed" = "src/features/meetings/components/MeetingCard/UserSelectorModal.tsx"
+          git diff --check
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.1'
+          cache: npm
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Production build
+        run: npm run build
+
+      - name: Ensure main did not move during validation
+        shell: bash
+        run: |
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+
+      - name: Commit validated fix and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/tmp-fix-meeting-user-selector.yml
+          git add src/features/meetings/components/MeetingCard/UserSelectorModal.tsx .github/workflows/tmp-fix-meeting-user-selector.yml
+          git diff --cached --check
+
+          changed="$(git diff --cached --name-only | sort)"
+          expected="$(printf '%s\n%s\n' '.github/workflows/tmp-fix-meeting-user-selector.yml' 'src/features/meetings/components/MeetingCard/UserSelectorModal.tsx' | sort)"
+          test "$changed" = "$expected"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: prevent meeting user selector crash'
+          git push origin HEAD:main
