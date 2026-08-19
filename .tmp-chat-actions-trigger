@@ -1,1 +1,2 @@
 chat-actions-white-screen-fix validation trigger
+retry: concurrency-safe
