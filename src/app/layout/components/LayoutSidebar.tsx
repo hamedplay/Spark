@@ -27,9 +27,7 @@ import type {
 } from '../types';
 import {
   getVisiblePrimaryNavigationItems,
-  getVisibleMinutesNavigationItems,
   isMinutesPage,
-  resolveActiveMinutesPage,
 } from '../navigationMenu';
 import { preloadPage } from '../../navigation/preloadPage';
 
@@ -87,22 +85,13 @@ export function LayoutSidebar({
   sparkVisible,
   userPermissions,
   managementDashboardAllowed,
-  minutesFollowupAllowed,
-  minutesFollowupAccessLoading,
   isCollapsed,
   onCollapsedChange,
   isMobileMenuOpen,
   onMobileMenuOpenChange,
   accentColor,
 }: LayoutSidebarProps) {
-  const [isMinutesMenuOpen, setIsMinutesMenuOpen] =
-    useState(() => isMinutesPage(activePage));
   const [useMobileNavigation, setUseMobileNavigation] = useState(detectMobileNavigation);
-
-  useEffect(() => {
-    if (isMinutesPage(activePage))
-      setIsMinutesMenuOpen(true);
-  }, [activePage]);
 
   useEffect(() => {
     const syncLayoutMode = () => setUseMobileNavigation(detectMobileNavigation());
@@ -123,18 +112,6 @@ export function LayoutSidebar({
     ...item,
     icon: ICON_MAP[item.id] ?? LayoutDashboard,
   }));
-
-  const visibleMinutesSubItems =
-    getVisibleMinutesNavigationItems({
-      isAdmin,
-      sparkVisible: !!sparkVisible,
-      userPermissions,
-      minutesFollowupAllowed,
-      minutesFollowupAccessLoading,
-    }).map((item) => ({
-      ...item,
-      icon: ICON_MAP[item.id] ?? LayoutDashboard,
-    }));
 
   // A mobile drawer is always expanded; the persisted desktop collapsed state
   // must never remove labels from a touch-device drawer.
@@ -252,44 +229,6 @@ export function LayoutSidebar({
               </button>
             );
           })}
-
-          {/* ── صورت‌جلسات و مصوبات submenu ── */}
-          {isMinutesPage(activePage) && showExpandedLabels && visibleMinutesSubItems.length > 0 && (
-            <div
-              className="overflow-hidden transition-all duration-200"
-              style={{ maxHeight: isMinutesMenuOpen ? `${visibleMinutesSubItems.length * 44}px` : '0px' }}
-            >
-              <div className="pt-0.5 space-y-0.5">
-                {visibleMinutesSubItems.map((sub) => {
-                  const SubIcon = sub.icon;
-                  const mappedActive = resolveActiveMinutesPage(activePage);
-                  const isSubActive = mappedActive === sub.id;
-                  const warm = () => preloadPage(sub.id);
-                  return (
-                    <button
-                      key={sub.id}
-                      onMouseEnter={warm}
-                      onFocus={warm}
-                      onTouchStart={warm}
-                      onClick={() => {
-                        onNavigate(sub.id);
-                        if (useMobileNavigation) onMobileMenuOpenChange(false);
-                      }}
-                      className={`w-full flex items-center gap-2.5 py-2 pr-7 pl-2.5 rounded-xl transition-all text-sm font-medium ${
-                        isSubActive
-                          ? 'shadow-sm'
-                          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60 hover:text-gray-800 dark:hover:text-gray-200'
-                      }`}
-                      style={isSubActive ? { backgroundColor: accentColor + '18', color: accentColor } : {}}
-                    >
-                      <SubIcon className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate">{sub.title}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </nav>
       </div>
     </>
