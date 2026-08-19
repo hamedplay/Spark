@@ -77,7 +77,7 @@ export function WeekView(p: CalendarViewProps) {
                 return (
                   <div
                     key={d.weekday}
-                    className={`group/allday min-h-[24px] cursor-pointer select-none space-y-0.5 border-r border-slate-100 px-0.5 py-0.5 transition-colors dark:border-slate-800 ${isDragHighlight ? 'bg-violet-50 dark:bg-violet-500/10' : ''}`}
+                    className={`group/allday min-h-[24px] min-w-0 cursor-pointer select-none space-y-0.5 overflow-hidden border-r border-slate-100 px-0.5 py-0.5 transition-colors dark:border-slate-800 ${isDragHighlight ? 'bg-violet-50 dark:bg-violet-500/10' : ''}`}
                     onMouseDown={e => { e.preventDefault(); setAllDayDragStart({ jy: d.jy, jm: d.jm, jd: d.jd }); setAllDayDragEnd({ jy: d.jy, jm: d.jm, jd: d.jd }); setAllDayDragging(true); }}
                     onMouseEnter={() => { if (allDayDragging) setAllDayDragEnd({ jy: d.jy, jm: d.jm, jd: d.jd }); }}
                     onMouseUp={() => {
@@ -93,11 +93,11 @@ export function WeekView(p: CalendarViewProps) {
                     }}
                   >
                     {occ.map((o: any) => (
-                      <div key={o.id} title={o.title} className={`truncate rounded px-1 py-0.5 text-[9px] leading-tight ${o.is_holiday
-                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                      <div key={o.id} title={o.title} className={`block w-full min-w-0 max-w-full truncate px-0.5 py-0.5 text-[9px] leading-tight ${o.is_holiday
+                        ? 'text-rose-700 dark:text-rose-300'
                         : o.is_celebration
-                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
-                          : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>{o.title}</div>
+                          ? 'text-amber-700 dark:text-amber-300'
+                          : 'text-slate-600 dark:text-slate-400'}`}>{o.title}</div>
                     ))}
                     {dayEvs.map((ev: any) => (
                       <div key={ev.id} className={`flex items-center gap-0.5 truncate rounded px-1 py-0.5 text-[9px] leading-tight ${ev.type === 'leave'
