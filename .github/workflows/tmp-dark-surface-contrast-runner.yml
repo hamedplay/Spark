@@ -1,0 +1,122 @@
+name: Temporary dark surface contrast fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/tmp-dark-surface-contrast-runner.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-validate-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Apply scoped dark-surface contrast fix
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              return text.replace(old, new, 1)
+
+          css_path = Path('src/index.css')
+          css = css_path.read_text(encoding='utf-8')
+          css = replace_once(
+              css,
+              'linear-gradient(135deg, #020617, #07101e 55%, #0f172a);',
+              'linear-gradient(135deg, #0b1424, #111d30 55%, #18253b);',
+              'modern page dark gradient',
+          )
+          css = replace_once(
+              css,
+              'background-color: rgba(15, 23, 42, 0.94) !important;',
+              'background-color: rgba(30, 42, 64, 0.94) !important;',
+              'modern page dark card surface',
+          )
+          css = replace_once(
+              css,
+              'background-color: #172033 !important;',
+              'background-color: #26344b !important;',
+              'modern page secondary surface',
+          )
+          css = replace_once(
+              css,
+              'background-color: #020617 !important;',
+              'background-color: #0b1424 !important;',
+              'modern page deepest surface',
+          )
+          css = replace_once(
+              css,
+              'border-color: #263348 !important;',
+              'border-color: #3a4961 !important;',
+              'modern page dark borders',
+          )
+          css = replace_once(
+              css,
+              '.dark .spark-modern-page .text-gray-400 {\n  color: #64748b !important;\n}',
+              '.dark .spark-modern-page .text-gray-400 {\n  color: #94a3b8 !important;\n}',
+              'modern page muted text',
+          )
+          css_path.write_text(css, encoding='utf-8')
+
+          hub_path = Path('src/components/Minutes/MinutesHubPage.tsx')
+          hub = hub_path.read_text(encoding='utf-8')
+          hub = replace_once(
+              hub,
+              'border border-slate-800/80 bg-[#06101f] p-3',
+              'border border-slate-800/80 bg-[#06101f] dark:bg-[#101b2d] p-3',
+              'minutes hub dark background',
+          )
+
+          if 'text-slate-500' not in hub:
+              raise SystemExit('minutes hub muted text: no text-slate-500 classes found')
+          if 'text-slate-600' not in hub:
+              raise SystemExit('minutes hub low-contrast text: no text-slate-600 classes found')
+          hub = hub.replace('text-slate-500', 'text-slate-400')
+          hub = hub.replace('text-slate-600', 'text-slate-500')
+          hub_path.write_text(hub, encoding='utf-8')
+
+          print('Scoped dark-mode visual replacements applied successfully.')
+          PY
+
+      - name: Verify scoped diff
+        shell: bash
+        run: |
+          git diff --check
+          git diff -- src/index.css src/components/Minutes/MinutesHubPage.tsx
+          test -z "$(git diff --name-only -- . ':(exclude)src/index.css' ':(exclude)src/components/Minutes/MinutesHubPage.tsx')"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit validated source changes to main
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/index.css src/components/Minutes/MinutesHubPage.tsx
+          git diff --cached --check
+          git commit -m 'fix: improve dark mode surface contrast'
+          git push origin HEAD:main
