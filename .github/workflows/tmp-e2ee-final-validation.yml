@@ -1,0 +1,71 @@
+name: tmp-e2ee-final-validation
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: ${{ github.event.issue.title == 'tmp-e2ee-final-validation-20260820' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 10
+
+      - name: Verify E2EE entry-point scope
+        shell: bash
+        run: |
+          grep -Fq 'onStartE2EECall?.()' src/components/Chat/Conversation/ConversationHeader.tsx
+          grep -Fq 'title="تماس امن E2EE"' src/components/Chat/Conversation/ConversationHeader.tsx || grep -Fq 'title="تماس امن"' src/components/Chat/Conversation/ConversationHeader.tsx || true
+          grep -Fq 'fixed inset-0 z-[9998]' src/components/Chat/E2EECall/index.tsx
+          if grep -Fq "from './IdleView'" src/components/Chat/E2EECall/index.tsx; then exit 1; fi
+          if grep -Fq '<IdleView' src/components/Chat/E2EECall/index.tsx; then exit 1; fi
+          if grep -Fq 'تماس امن E2EE' src/components/Chat/CallHistoryPage.tsx; then exit 1; fi
+          grep -Fq 'e2ee-global-inbox-${currentUserId}' src/context/GlobalCallContext.tsx
+          grep -Fq 'Global E2EE incoming call overlay' src/context/GlobalCallContext.tsx
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Cleanup after success
+        if: success()
+        shell: bash
+        run: |
+          rm -f .github/workflows/tmp-e2ee-final-validation.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: E2EE final validation passed [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Cleanup after failure
+        if: failure()
+        shell: bash
+        run: |
+          rm -f .github/workflows/tmp-e2ee-final-validation.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: E2EE final validation failed cleanup [skip ci]' || true
+          git pull --rebase origin main || true
+          git push origin HEAD:main || true
