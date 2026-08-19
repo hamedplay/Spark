@@ -1,2 +1,2 @@
 chat-actions-white-screen-fix validation trigger
-runner: existing-ci
+phase: post-fix-build
