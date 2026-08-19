@@ -1,9 +1,39 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Plus, UserCheck, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../lib/supabase';
 import { EmptyState, ApprovalStatusBadge } from '../MinutesShared';
+import { formatClauseLabel, getDecisionRowClauses, getParentDecisionRows } from '../decisionHierarchy';
 import type { MinuteDetail, AgendaResultRow, ApprovalRow, ApprovalCommentRow, InternalParticipantRow } from './types';
+
+interface ChangeTargetDecision {
+  id: string;
+  parent_decision_id: string | null;
+  clause_order: number | null;
+  title: string;
+  description: string | null;
+}
+
+async function fetchChangeTargetDecisions(minuteId: string): Promise<ChangeTargetDecision[]> {
+  const { data, error } = await supabase.rpc('get_minutes_decisions_for_view', { p_minute_id: minuteId });
+  if (error) throw error;
+  return ((data || []) as unknown as ChangeTargetDecision[]);
+}
+
+function decisionTargetLabel(decisions: ChangeTargetDecision[], decisionId: string | null): string | null {
+  if (!decisionId) return null;
+  const target = decisions.find(decision => decision.id === decisionId);
+  if (!target) return null;
+
+  const parents = getParentDecisionRows(decisions);
+  if (!target.parent_decision_id) {
+    const parentIndex = parents.findIndex(parent => parent.id === target.id);
+    return `${parentIndex >= 0 ? `مصوبه ${(parentIndex + 1).toLocaleString('fa-IR')}` : 'مصوبه'}: ${target.description || target.title}`;
+  }
+
+  const parentIndex = parents.findIndex(parent => parent.id === target.parent_decision_id);
+  return `${parentIndex >= 0 ? `مصوبه ${(parentIndex + 1).toLocaleString('fa-IR')} ـ ` : ''}${formatClauseLabel(target.clause_order)}: ${target.description || target.title}`;
+}
 
 export interface TabApprovalsProps {
   approvals: ApprovalRow[];
@@ -16,6 +46,40 @@ export interface TabApprovalsProps {
 export function TabApprovals({ approvals, comments, agendaItems, minute, internalParticipants }: TabApprovalsProps) {
   const approvedCount = approvals.filter(a => a.status === 'approved').length;
   const totalCount = approvals.length;
+  const [decisionTargets, setDecisionTargets] = useState<ChangeTargetDecision[]>([]);
+  const [commentDecisionIds, setCommentDecisionIds] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    if (comments.length === 0) {
+      setCommentDecisionIds({});
+      setDecisionTargets([]);
+      return;
+    }
+
+    let cancelled = false;
+    void Promise.all([
+      fetchChangeTargetDecisions(minute.id),
+      supabase
+        .from('minutes_approval_comments')
+        .select('id, decision_id')
+        .eq('minute_id', minute.id)
+        .eq('revision_number', minute.revision_number),
+    ]).then(([decisions, commentResult]) => {
+      if (cancelled) return;
+      setDecisionTargets(decisions);
+      if (commentResult.error) return;
+      setCommentDecisionIds(Object.fromEntries(
+        (commentResult.data || []).map((row: { id: string; decision_id: string | null }) => [row.id, row.decision_id]),
+      ));
+    }).catch(() => {
+      if (!cancelled) {
+        setDecisionTargets([]);
+        setCommentDecisionIds({});
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [comments.length, minute.id, minute.revision_number]);
 
   return (
     <div className="space-y-5">
@@ -137,6 +201,7 @@ export function TabApprovals({ approvals, comments, agendaItems, minute, interna
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">درخواست‌های اصلاح</h3>
           {comments.map(c => {
+            const decisionLabel = decisionTargetLabel(decisionTargets, commentDecisionIds[c.id] || null);
             const agenda = c.agenda_result_id ? agendaItems.find(ag => ag.id === c.agenda_result_id) : null;
             return (
               <div key={c.id} className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-900/40 rounded-xl p-4 space-y-1">
@@ -146,7 +211,7 @@ export function TabApprovals({ approvals, comments, agendaItems, minute, interna
                   <span>{new Date(c.created_at).toLocaleDateString('fa-IR')}</span>
                 </div>
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                  {agenda ? `بند: ${agenda.agenda_title_snapshot}` : 'اعتراض کلی'}
+                  {decisionLabel || (agenda ? `بند: ${agenda.agenda_title_snapshot}` : 'اعتراض کلی')}
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400"><span className="font-medium">علت:</span> {c.reason}</p>
                 {c.suggested_correction && (
@@ -173,29 +238,53 @@ export interface RequestChangesModalProps {
 }
 
 interface ChangeItem {
-  agenda_result_id: string | null;
+  decision_id: string | null;
   reason: string;
   suggested_correction: string;
 }
 
-export function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted }: RequestChangesModalProps) {
-  const [items, setItems] = useState<ChangeItem[]>([{ agenda_result_id: null, reason: '', suggested_correction: '' }]);
+export function RequestChangesModal({ minute, onClose, onSubmitted }: RequestChangesModalProps) {
+  const [items, setItems] = useState<ChangeItem[]>([{ decision_id: null, reason: '', suggested_correction: '' }]);
   const [submitting, setSubmitting] = useState(false);
+  const [decisions, setDecisions] = useState<ChangeTargetDecision[]>([]);
+  const [targetsLoading, setTargetsLoading] = useState(true);
+  const [targetsError, setTargetsError] = useState(false);
 
-  const addItem = () => setItems(prev => [...prev, { agenda_result_id: null, reason: '', suggested_correction: '' }]);
+  const parentDecisions = useMemo(() => getParentDecisionRows(decisions), [decisions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTargetsLoading(true);
+    setTargetsError(false);
+    void fetchChangeTargetDecisions(minute.id)
+      .then(rows => {
+        if (!cancelled) setDecisions(rows);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDecisions([]);
+          setTargetsError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTargetsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [minute.id]);
+
+  const addItem = () => setItems(prev => [...prev, { decision_id: null, reason: '', suggested_correction: '' }]);
   const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
   const updateItem = (idx: number, field: keyof ChangeItem, value: string | null) =>
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
 
   const handleSubmit = async () => {
     if (submitting) return;
-    // Validate
     for (const item of items) {
       if (!item.reason.trim()) {
         toast.error('علت برای هر مورد اجباری است.');
         return;
       }
-      if (!item.agenda_result_id && !item.suggested_correction.trim()) {
+      if (!item.decision_id && !item.suggested_correction.trim()) {
         toast.error('برای اعتراض کلی، پیشنهاد اصلاح اجباری است.');
         return;
       }
@@ -206,7 +295,8 @@ export function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted 
         p_minute_id: minute.id,
         p_revision_number: minute.revision_number,
         p_items: items.map(it => ({
-          agenda_result_id: it.agenda_result_id || null,
+          decision_id: it.decision_id || null,
+          agenda_result_id: null,
           reason: it.reason,
           suggested_correction: it.suggested_correction || null,
         })),
@@ -221,6 +311,8 @@ export function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted 
           APPROVAL_NOT_SYSTEM_MODE: 'این صورت‌جلسه از نوع سیستمی نیست.',
           NO_CHANGE_ITEMS: 'حداقل یک مورد لازم است.',
           REASON_REQUIRED: 'علت اجباری است.',
+          DECISION_MISMATCH: 'مصوبه یا بند انتخاب‌شده متعلق به این صورت‌جلسه نیست.',
+          CHANGE_TARGET_AMBIGUOUS: 'برای هر مورد فقط یک مصوبه یا بند قابل انتخاب است.',
           AGENDA_RESULT_MISMATCH: 'بند انتخاب‌شده متعلق به این صورت‌جلسه نیست.',
           GENERAL_OBJECTION_NEEDS_CORRECTION: 'برای اعتراض کلی پیشنهاد اصلاح اجباری است.',
         };
@@ -242,7 +334,7 @@ export function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted 
           </button>
         </div>
         <div className="p-4 space-y-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">بند یا بندهای مورد اعتراض و علت اصلاح را وارد کنید.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">مصوبه یا بند مورد اعتراض و علت اصلاح را وارد کنید.</p>
           {items.map((item, idx) => (
             <div key={idx} className="space-y-2 border border-gray-100 dark:border-gray-700 rounded-xl p-3">
               <div className="flex items-center justify-between">
@@ -252,14 +344,28 @@ export function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted 
                 )}
               </div>
               <select
-                value={item.agenda_result_id || ''}
-                onChange={e => updateItem(idx, 'agenda_result_id', e.target.value || null)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white"
+                value={item.decision_id || ''}
+                onChange={e => updateItem(idx, 'decision_id', e.target.value || null)}
+                disabled={targetsLoading || targetsError}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white disabled:opacity-60"
               >
-                <option value="">اعتراض کلی (بدون بند خاص)</option>
-                {agendaItems.map(ag => (
-                  <option key={ag.id} value={ag.id}>{ag.agenda_title_snapshot}</option>
-                ))}
+                <option value="">
+                  {targetsLoading ? 'در حال بارگذاری مصوبات...' : targetsError ? 'بارگذاری مصوبات ناموفق بود' : 'اعتراض کلی (بدون مصوبه/بند خاص)'}
+                </option>
+                {!targetsLoading && !targetsError && parentDecisions.map((parent, parentIndex) => {
+                  const clauses = getDecisionRowClauses(decisions, parent.id);
+                  const parentLabel = parent.description || parent.title;
+                  return (
+                    <optgroup key={parent.id} label={`مصوبه ${(parentIndex + 1).toLocaleString('fa-IR')} ـ ${parentLabel}`}>
+                      <option value={parent.id}>{`کل مصوبه ${(parentIndex + 1).toLocaleString('fa-IR')}: ${parentLabel}`}</option>
+                      {clauses.map(clause => (
+                        <option key={clause.id} value={clause.id}>
+                          {`${formatClauseLabel(clause.clause_order)}: ${clause.description || clause.title}`}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
               <textarea
                 value={item.reason}
@@ -285,7 +391,7 @@ export function RequestChangesModal({ minute, agendaItems, onClose, onSubmitted 
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200">انصراف</button>
           <button
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || targetsLoading || targetsError}
             className="px-4 py-2 rounded-xl text-sm bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50"
           >
             {submitting ? 'در حال ارسال...' : 'ثبت درخواست اصلاح'}
