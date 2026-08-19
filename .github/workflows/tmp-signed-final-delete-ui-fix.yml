@@ -98,3 +98,5 @@ jobs:
           git commit -m "fix: restrict signed final delete UI to secretary [skip ci]"
           git pull --rebase origin main
           git push origin HEAD:main
+
+# retrigger
