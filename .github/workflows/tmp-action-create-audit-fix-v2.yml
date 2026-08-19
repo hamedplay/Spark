@@ -1,0 +1,143 @@
+name: tmp-action-create-audit-fix-v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-action-create-audit-fix-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Patch, validate, commit or report
+        shell: bash
+        run: |
+          set +e
+          REPORT=/tmp/action-create-report.txt
+          : > "$REPORT"
+
+          python3 - <<'PY' > /tmp/patch.log 2>&1
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          # User selector fallback when org RPC/grouping is unavailable.
+          path = 'src/components/Tasks/UserSelector.tsx'
+          replace_once(path,
+              "  const allUsers: (UserProfile | OrgUserProfile)[] = groups\n    ? groups.flatMap(g => g.users)\n    : users;",
+              "  const groupedUsers = groups?.flatMap(g => g.users) ?? [];\n  const allUsers: (UserProfile | OrgUserProfile)[] = groupedUsers.length > 0 ? groupedUsers : users;")
+          replace_once(path, "            {isSearching || !groups ? (", "            {isSearching || !groups?.length ? (")
+
+          # Create drawer safety and mobile layout.
+          path = 'src/components/Tasks/ActionCreateDrawer.tsx'
+          replace_once(path, "    e.preventDefault();\n    onCreate({ ...form, startDate, dueDate, reminderAt, dependencyIds, checklist, files });",
+              "    e.preventDefault();\n    if (busy) return;\n    onCreate({ ...form, startDate, dueDate, reminderAt, dependencyIds, checklist, files });")
+          replace_once(path,
+              "  const toggleDependency = (id: string) => setDependencyIds(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]);",
+              "  const toggleDependency = (id: string) => setDependencyIds(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]);\n  const handleParentTaskChange = (parentTaskId: string) => {\n    setForm(v => ({ ...v, parentTaskId }));\n    if (parentTaskId) setDependencyIds(v => v.filter(id => id !== parentTaskId));\n  };")
+          replace_once(path, "if (e.target === e.currentTarget) onClose();", "if (!busy && e.target === e.currentTarget) onClose();")
+          replace_once(path,
+              '<button type="button" onClick={onClose} className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">',
+              '<button type="button" disabled={busy} onClick={onClose} className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed">')
+          replace_once(path, '<Plus className="w-4 h-4" /> ایجاد اقدام</button>', '<Plus className="w-4 h-4" /> {busy ? \'در حال ایجاد...\' : \'ایجاد اقدام\'}</button>')
+          date_prefix = '<div className="grid grid-cols-2 gap-3"><div><label className="field-label">تاریخ شروع</label>'
+          replace_once(path, date_prefix, '<div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="field-label">تاریخ شروع</label>')
+          replace_once(path,
+              '<select value={form.parentTaskId} onChange={e=>setForm(v=>({...v,parentTaskId:e.target.value}))} className="action-input">',
+              '<select value={form.parentTaskId} onChange={e=>handleParentTaskChange(e.target.value)} className="action-input">')
+
+          # Defensive validation before any database write.
+          path = 'src/components/TasksPage.tsx'
+          replace_once(path,
+              "    if (!payload.assigneeId) { toast.error('اقدام کننده را انتخاب کنید'); return; }\n    if (!payload.title.trim()) { toast.error('عنوان را وارد کنید'); return; }",
+              "    if (!payload.assigneeId) { toast.error('اقدام کننده را انتخاب کنید'); return; }\n    if (!payload.title.trim()) { toast.error('عنوان را وارد کنید'); return; }\n    if (!payload.description.trim()) { toast.error('توضیحات را وارد کنید'); return; }\n    if (payload.startDate && payload.startDate.getTime() > payload.dueDate.getTime()) {\n      toast.error('تاریخ شروع نمی‌تواند بعد از تاریخ سررسید باشد');\n      return;\n    }\n    if (payload.parentTaskId && payload.dependencyIds.includes(payload.parentTaskId)) {\n      toast.error('اقدام والد نمی‌تواند همزمان وابستگی همان اقدام باشد');\n      return;\n    }")
+          PY
+          PATCH_STATUS=$?
+
+          if [ $PATCH_STATUS -eq 0 ]; then
+            git diff --check > /tmp/diff.log 2>&1
+            DIFF_STATUS=$?
+          else
+            DIFF_STATUS=99
+          fi
+
+          if [ $PATCH_STATUS -eq 0 ] && [ $DIFF_STATUS -eq 0 ]; then
+            npm ci > /tmp/npm-ci.log 2>&1
+            NPM_STATUS=$?
+          else
+            NPM_STATUS=99
+          fi
+
+          if [ $NPM_STATUS -eq 0 ]; then
+            cat > /tmp/action-create-selector.test.tsx <<'TEST'
+          import React from 'react';
+          import { renderToStaticMarkup } from 'react-dom/server';
+          import { UserSelector } from './src/components/Tasks/UserSelector.tsx';
+
+          const users = [{ user_id: 'u1', full_name: 'کاربر تست', email: null, avatar_url: null, position: null, unit_name: null }];
+          const html = renderToStaticMarkup(<UserSelector users={users} groups={[]} value="u1" onChange={() => {}} />);
+          if (!html.includes('کاربر تست')) throw new Error('empty groups did not fall back to users');
+          console.log('UserSelector fallback OK');
+          TEST
+            cp /tmp/action-create-selector.test.tsx ./tmp-action-create-selector.test.tsx
+            node --import tsx ./tmp-action-create-selector.test.tsx > /tmp/test.log 2>&1
+            TEST_STATUS=$?
+            rm -f ./tmp-action-create-selector.test.tsx
+          else
+            TEST_STATUS=99
+          fi
+
+          if [ $TEST_STATUS -eq 0 ]; then
+            npm run build > /tmp/build.log 2>&1
+            BUILD_STATUS=$?
+          else
+            BUILD_STATUS=99
+          fi
+
+          if [ $PATCH_STATUS -eq 0 ] && [ $DIFF_STATUS -eq 0 ] && [ $NPM_STATUS -eq 0 ] && [ $TEST_STATUS -eq 0 ] && [ $BUILD_STATUS -eq 0 ]; then
+            rm -f .github/workflows/tmp-action-create-audit-fix-v2.yml
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add src/components/Tasks/ActionCreateDrawer.tsx src/components/Tasks/UserSelector.tsx src/components/TasksPage.tsx .github/workflows/tmp-action-create-audit-fix-v2.yml
+            git diff --cached --check
+            git commit -m 'fix(tasks): harden action creation form [skip ci]'
+            git push origin HEAD:main
+            exit $?
+          fi
+
+          echo "patch=$PATCH_STATUS diff=$DIFF_STATUS npm=$NPM_STATUS test=$TEST_STATUS build=$BUILD_STATUS" >> "$REPORT"
+          for f in /tmp/patch.log /tmp/diff.log /tmp/npm-ci.log /tmp/test.log /tmp/build.log; do
+            if [ -f "$f" ]; then
+              echo "===== $f =====" >> "$REPORT"
+              tail -n 80 "$f" >> "$REPORT"
+            fi
+          done
+
+          git reset --hard HEAD
+          rm -f .github/workflows/tmp-action-create-audit-fix-v2.yml
+          cp "$REPORT" .tmp-action-create-audit-v2.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .tmp-action-create-audit-v2.txt .github/workflows/tmp-action-create-audit-fix-v2.yml
+          git commit -m 'tmp: action-create validation report [skip ci]'
+          git push origin HEAD:main
+          exit 0
