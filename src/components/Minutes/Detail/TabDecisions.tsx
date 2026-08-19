@@ -47,6 +47,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserI
   const [error, setError] = useState<string | null>(null);
   const [progressDecision, setProgressDecision] = useState<DecisionRow | null>(null);
   const [progressHistory, setProgressHistory] = useState<DecisionUpdateRow[]>([]);
+  const [focusDecisionId] = useState<string | null>(() => new URL(window.location.href).searchParams.get('decision'));
 
   const parentDecisions = useMemo(() => getParentDecisionRows(decisions), [decisions]);
   const canUpdateStatus = minuteStatus === 'approved' || minuteStatus === 'published';
@@ -101,6 +102,17 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserI
     void fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minuteId]);
+
+  useEffect(() => {
+    if (loading || !focusDecisionId) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`decision-${focusDecisionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const url = new URL(window.location.href);
+      url.searchParams.delete('decision');
+      window.history.replaceState({}, '', url.toString());
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, focusDecisionId, decisions]);
 
   const openProgressModal = async (dec: ViewDecisionRow) => {
     let updatedAt = '';
@@ -209,7 +221,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserI
       {parentDecisions.map((parent, index) => {
         const clauses = getDecisionRowClauses(decisions, parent.id);
         return (
-          <div key={parent.id} className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <div id={`decision-${parent.id}`} key={parent.id} className={`space-y-3 rounded-2xl border bg-white p-4 transition dark:bg-gray-800 ${focusDecisionId === parent.id ? 'border-violet-400 ring-2 ring-violet-400/50 dark:border-violet-500' : 'border-gray-100 dark:border-gray-700'}`}>
             <div className="flex items-start justify-between gap-3">
               <p className="font-semibold text-gray-900 dark:text-white"><span className="ml-1 text-sm text-gray-400">مصوبه {index + 1} ـ</span>{parent.description || parent.title}</p>
               {clauses.length === 0 ? (
@@ -220,7 +232,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserI
             </div>
             {clauses.length === 0 ? renderExecution(parent) : (
               <div className="space-y-2.5 border-r-2 border-blue-100 pr-3 dark:border-blue-900/50">
-                {clauses.map(clause => <div key={clause.id}>{renderExecution(clause, true)}</div>)}
+                {clauses.map(clause => <div id={`decision-${clause.id}`} key={clause.id} className={focusDecisionId === clause.id ? 'rounded-xl ring-2 ring-violet-400/50' : ''}>{renderExecution(clause, true)}</div>)}
               </div>
             )}
           </div>

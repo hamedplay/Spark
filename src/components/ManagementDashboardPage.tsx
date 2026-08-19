@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import type { PageId } from '../app/navigation/useNavigation';
 
 interface DashboardStats {
   total_tasks: number;
@@ -88,6 +89,7 @@ interface DeadlineAlertItem {
   due_date: string;
   days_remaining: number;
   priority: string;
+  minute_id?: string | null;
 }
 
 interface ManagementDashboardData {
@@ -244,16 +246,18 @@ function KpiCard({
   sub,
   icon: Icon,
   tone,
+  onClick,
 }: {
   title: string;
   value: number | string;
   sub: string;
   icon: React.ElementType;
   tone: Tone;
+  onClick?: () => void;
 }) {
   const styles = toneClasses[tone];
-  return (
-    <div className={`min-w-0 rounded-2xl border p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] ${styles.card}`}>
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-[11px] font-medium text-slate-400">{title}</p>
@@ -264,7 +268,21 @@ function KpiCard({
         </div>
       </div>
       <p className={`mt-2 truncate text-[10px] ${styles.accent}`}>{sub}</p>
-    </div>
+    </>
+  );
+
+  if (!onClick) {
+    return <div className={`min-w-0 rounded-2xl border p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] ${styles.card}`}>{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-w-0 rounded-2xl border p-3.5 text-right shadow-[0_12px_40px_rgba(0,0,0,0.12)] transition hover:-translate-y-0.5 hover:border-slate-500/50 focus:outline-none focus:ring-2 focus:ring-violet-400/50 ${styles.card}`}
+    >
+      {content}
+    </button>
   );
 }
 
@@ -382,7 +400,7 @@ function EmptyState({ text }: { text: string }) {
   return <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed border-slate-700/60 text-xs text-slate-500">{text}</div>;
 }
 
-export function ManagementDashboardPage() {
+export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const [data, setData] = useState<ManagementDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -408,6 +426,38 @@ export function ManagementDashboardPage() {
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  const navigateWithParams = useCallback((page: PageId, params: Record<string, string>) => {
+    const url = new URL(window.location.href);
+    ['task', 'taskView', 'meetingFocus', 'meetingView', 'decision'].forEach((key) => url.searchParams.delete(key));
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    window.history.replaceState({}, '', url.toString());
+    onNavigate(page);
+  }, [onNavigate]);
+
+  const openTask = useCallback((taskId: string) => {
+    navigateWithParams('tasks', { task: taskId });
+  }, [navigateWithParams]);
+
+  const openTaskView = useCallback((view: string) => {
+    navigateWithParams('tasks', { taskView: view });
+  }, [navigateWithParams]);
+
+  const openMeeting = useCallback((meetingId: string) => {
+    navigateWithParams('meetings', { meetingFocus: meetingId });
+  }, [navigateWithParams]);
+
+  const openDecision = useCallback((alert: DeadlineAlertItem) => {
+    if (!alert.minute_id) {
+      toast.error('صورت‌جلسه مرتبط با این مصوبه مشخص نیست');
+      return;
+    }
+    navigateWithParams('minutes-detail', {
+      minute: alert.minute_id,
+      mtab: 'decisions',
+      decision: alert.id,
+    });
+  }, [navigateWithParams]);
 
   const insights = useMemo(() => {
     if (!data) return [] as string[];
@@ -453,13 +503,13 @@ export function ManagementDashboardPage() {
 
   const stats = data.stats;
   const kpis = [
-    { title: 'کل تسک‌ها', value: stats.total_tasks, sub: 'همه تسک‌های غیرآرشیوی', icon: ListTodo, tone: 'blue' as Tone },
-    { title: 'تسک‌های امروز', value: stats.today_tasks, sub: 'سررسید امروز', icon: CalendarDays, tone: 'violet' as Tone },
-    { title: 'در حال انجام', value: stats.in_progress_tasks, sub: 'نیازمند ادامه کار', icon: Activity, tone: 'cyan' as Tone },
-    { title: 'تکمیل‌شده', value: stats.completed_tasks, sub: 'تسک‌های بسته‌شده', icon: CheckCircle2, tone: 'green' as Tone },
-    { title: 'عقب‌مانده', value: stats.overdue_tasks, sub: 'عبور کرده از مهلت', icon: Clock3, tone: 'rose' as Tone },
-    { title: 'تسک‌های فوری', value: stats.urgent_tasks, sub: 'اولویت بالا و باز', icon: Zap, tone: 'amber' as Tone },
-    { title: 'جلسات فعال', value: stats.active_meetings, sub: `از ${nf.format(stats.total_meetings)} جلسه ثبت‌شده`, icon: BriefcaseBusiness, tone: 'teal' as Tone },
+    { title: 'کل تسک‌ها', value: stats.total_tasks, sub: 'همه تسک‌های غیرآرشیوی', icon: ListTodo, tone: 'blue' as Tone, onClick: () => openTaskView('all') },
+    { title: 'تسک‌های امروز', value: stats.today_tasks, sub: 'سررسید امروز', icon: CalendarDays, tone: 'violet' as Tone, onClick: () => openTaskView('today') },
+    { title: 'در حال انجام', value: stats.in_progress_tasks, sub: 'نیازمند ادامه کار', icon: Activity, tone: 'cyan' as Tone, onClick: () => openTaskView('in_progress') },
+    { title: 'تکمیل‌شده', value: stats.completed_tasks, sub: 'تسک‌های بسته‌شده', icon: CheckCircle2, tone: 'green' as Tone, onClick: () => openTaskView('completed') },
+    { title: 'عقب‌مانده', value: stats.overdue_tasks, sub: 'عبور کرده از مهلت', icon: Clock3, tone: 'rose' as Tone, onClick: () => openTaskView('overdue') },
+    { title: 'تسک‌های فوری', value: stats.urgent_tasks, sub: 'اولویت بالا و باز', icon: Zap, tone: 'amber' as Tone, onClick: () => openTaskView('urgent') },
+    { title: 'جلسات فعال', value: stats.active_meetings, sub: `از ${nf.format(stats.total_meetings)} جلسه ثبت‌شده`, icon: BriefcaseBusiness, tone: 'teal' as Tone, onClick: () => navigateWithParams('meetings', { meetingView: 'open' }) },
   ];
 
   return (
@@ -535,7 +585,7 @@ export function ManagementDashboardPage() {
             {data.recent_meetings.length ? (
               <div className="space-y-2">
                 {data.recent_meetings.map((meeting) => (
-                  <div key={meeting.id} className="rounded-xl border border-slate-800/80 bg-slate-900/35 p-3">
+                  <button type="button" onClick={() => openMeeting(meeting.id)} key={meeting.id} className="w-full rounded-xl border border-slate-800/80 bg-slate-900/35 p-3 text-right transition hover:border-cyan-500/30 hover:bg-slate-900/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/40">
                     <div className="flex items-start justify-between gap-3">
                       <p className="line-clamp-2 text-xs font-medium leading-5 text-slate-200">{meeting.subject}</p>
                       <span className={`flex-shrink-0 rounded-md px-2 py-0.5 text-[9px] ${meeting.status === 'open' ? 'bg-cyan-500/10 text-cyan-300' : 'bg-slate-700/40 text-slate-400'}`}>
@@ -546,7 +596,7 @@ export function ManagementDashboardPage() {
                       <span>{formatDate(meeting.meeting_date)}</span>
                       <span>{formatTime(meeting.start_time)}</span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : <EmptyState text="جلسه‌ای ثبت نشده است" />}
@@ -558,7 +608,7 @@ export function ManagementDashboardPage() {
                 {data.important_tasks.map((task) => {
                   const isOverdue = task.dashboard_status === 'overdue';
                   return (
-                    <div key={task.id} className="rounded-xl border border-slate-800/80 bg-slate-900/35 px-3 py-2.5">
+                    <button type="button" onClick={() => openTask(task.id)} key={task.id} className="w-full rounded-xl border border-slate-800/80 bg-slate-900/35 px-3 py-2.5 text-right transition hover:border-violet-500/30 hover:bg-slate-900/60 focus:outline-none focus:ring-2 focus:ring-violet-400/40">
                       <div className="flex items-start justify-between gap-2">
                         <p className="line-clamp-2 text-xs leading-5 text-slate-200">{task.title}</p>
                         <span className={`flex-shrink-0 rounded-md px-2 py-0.5 text-[9px] ${isOverdue ? 'bg-rose-500/10 text-rose-300' : task.priority === 'high' ? 'bg-amber-500/10 text-amber-300' : 'bg-slate-700/40 text-slate-400'}`}>
@@ -569,7 +619,7 @@ export function ManagementDashboardPage() {
                         <span className="truncate">{task.assignee || 'بدون مسئول'}</span>
                         <span className="flex-shrink-0">{formatDate(task.due_local_date)}</span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -580,7 +630,7 @@ export function ManagementDashboardPage() {
             {data.today_schedule.length ? (
               <div className="relative space-y-0 pr-4 before:absolute before:bottom-2 before:right-[5px] before:top-2 before:w-px before:bg-slate-700/80">
                 {data.today_schedule.map((item, index) => (
-                  <div key={item.id} className="relative pb-4 last:pb-0">
+                  <button type="button" onClick={() => openMeeting(item.id)} key={item.id} className="relative block w-full pb-4 text-right last:pb-0 focus:outline-none">
                     <span className={`absolute -right-4 top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-[#071426] ${index % 4 === 0 ? 'bg-blue-400' : index % 4 === 1 ? 'bg-emerald-400' : index % 4 === 2 ? 'bg-violet-400' : 'bg-amber-400'}`} />
                     <div className="flex gap-3">
                       <span className="w-11 flex-shrink-0 text-xs font-semibold text-slate-400">{formatTime(item.start_time)}</span>
@@ -589,7 +639,7 @@ export function ManagementDashboardPage() {
                         <p className="mt-1 truncate text-[9px] text-slate-600">{item.is_online ? 'آنلاین' : item.location || 'محل تعیین نشده'}</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : <EmptyState text="برای امروز جلسه‌ای در تقویم نیست" />}
@@ -603,7 +653,7 @@ export function ManagementDashboardPage() {
                   const today = alert.days_remaining === 0;
                   const badge = overdue ? `${nf.format(Math.abs(alert.days_remaining))} روز گذشته` : today ? 'امروز' : `${nf.format(alert.days_remaining)} روز`;
                   return (
-                    <div key={`${alert.source}-${alert.id}`} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${overdue ? 'border-rose-500/20 bg-rose-500/[0.06]' : 'border-slate-800/80 bg-slate-900/35'}`}>
+                    <button type="button" onClick={() => alert.source === 'decision' ? openDecision(alert) : openTask(alert.id)} key={`${alert.source}-${alert.id}`} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-right transition hover:border-violet-500/30 focus:outline-none focus:ring-2 focus:ring-violet-400/40 ${overdue ? 'border-rose-500/20 bg-rose-500/[0.06]' : 'border-slate-800/80 bg-slate-900/35'}`}>
                       <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${overdue ? 'bg-rose-500/10 text-rose-300' : alert.source === 'decision' ? 'bg-violet-500/10 text-violet-300' : 'bg-amber-500/10 text-amber-300'}`}>
                         {alert.source === 'decision' ? <Target className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                       </div>
@@ -612,7 +662,7 @@ export function ManagementDashboardPage() {
                         <p className="mt-0.5 text-[9px] text-slate-600">{alert.source === 'decision' ? 'مصوبه' : 'تسک'} · {formatDate(alert.due_date)}</p>
                       </div>
                       <span className={`flex-shrink-0 rounded-md px-2 py-1 text-[9px] ${overdue ? 'bg-rose-500/10 text-rose-300' : today ? 'bg-amber-500/10 text-amber-300' : 'bg-blue-500/10 text-blue-300'}`}>{badge}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -641,21 +691,21 @@ export function ManagementDashboardPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:col-span-4 xl:grid-cols-3">
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3 text-center">
+            <button type="button" onClick={() => onNavigate('minutes-hub')} className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3 text-center transition hover:border-emerald-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40">
               <UsersRound className="mx-auto h-5 w-5 text-emerald-300" />
               <p className="mt-2 text-xl font-black text-white">{nf.format(stats.total_decisions)}</p>
               <p className="mt-1 text-[9px] text-slate-500">کل مصوبات</p>
-            </div>
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-3 text-center">
+            </button>
+            <button type="button" onClick={() => openTaskView('completed')} className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-3 text-center transition hover:border-amber-400/40 focus:outline-none focus:ring-2 focus:ring-amber-400/40">
               <Gauge className="mx-auto h-5 w-5 text-amber-300" />
               <p className="mt-2 text-xl font-black text-white">{nf.format(stats.completion_rate)}٪</p>
               <p className="mt-1 text-[9px] text-slate-500">تکمیل به‌موقع</p>
-            </div>
-            <div className="col-span-2 rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] p-3 text-center sm:col-span-1">
+            </button>
+            <button type="button" onClick={() => navigateWithParams('meetings', { meetingView: 'open' })} className="col-span-2 rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] p-3 text-center transition hover:border-blue-400/40 focus:outline-none focus:ring-2 focus:ring-blue-400/40 sm:col-span-1">
               <TrendingUp className="mx-auto h-5 w-5 text-blue-300" />
               <p className="mt-2 text-xl font-black text-white">{nf.format(stats.active_meetings)}</p>
               <p className="mt-1 text-[9px] text-slate-500">جلسات فعال</p>
-            </div>
+            </button>
           </div>
         </div>
       </div>

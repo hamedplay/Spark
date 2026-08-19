@@ -13,6 +13,7 @@ test('preserves the primary navigation order', () => {
     isAdmin: true,
     sparkVisible: true,
     userPermissions: null,
+    managementDashboardAllowed: true,
     minutesFollowupAllowed: true,
     minutesFollowupAccessLoading: false,
   });
@@ -41,6 +42,7 @@ test('hides Spark when the Spark visibility flag is false', () => {
     isAdmin: true,
     sparkVisible: false,
     userPermissions: null,
+    managementDashboardAllowed: true,
     minutesFollowupAllowed: true,
     minutesFollowupAccessLoading: false,
   });
@@ -55,6 +57,7 @@ test('shows Spark when visible and permitted', () => {
     isAdmin: false,
     sparkVisible: true,
     userPermissions: { spark: true },
+    managementDashboardAllowed: false,
     minutesFollowupAllowed: false,
     minutesFollowupAccessLoading: false,
   });
@@ -64,44 +67,46 @@ test('shows Spark when visible and permitted', () => {
   );
 });
 
-test('shows management dashboard only when its dedicated permission is granted', () => {
+test('shows management dashboard only when its dedicated access result is granted', () => {
   const allowed = getVisiblePrimaryNavigationItems({
     isAdmin: false,
     sparkVisible: true,
-    userPermissions: { management_dashboard: true },
+    userPermissions: {},
+    managementDashboardAllowed: true,
   });
   const denied = getVisiblePrimaryNavigationItems({
-    isAdmin: false,
+    isAdmin: true,
     sparkVisible: true,
-    userPermissions: { management_dashboard: false, meetings: true },
+    userPermissions: null,
+    managementDashboardAllowed: false,
   });
 
   assert.ok(allowed.some(i => i.id === 'management-dashboard'));
   assert.ok(!denied.some(i => i.id === 'management-dashboard'));
 });
 
-test('allows administrators to see all non-Spark-hidden items', () => {
+test('administrator access does not bypass the dedicated management dashboard gate', () => {
   const items = getVisiblePrimaryNavigationItems({
     isAdmin: true,
     sparkVisible: true,
     userPermissions: undefined,
-    minutesFollowupAllowed: true,
-    minutesFollowupAccessLoading: false,
+    managementDashboardAllowed: false,
   });
 
-  assert.equal(items.length, 12);
+  assert.equal(items.length, 11);
+  assert.ok(!items.some(i => i.id === 'management-dashboard'));
 });
 
-test('treats null permissions as full access', () => {
+test('null permissions remain full access except for the dedicated management dashboard gate', () => {
   const items = getVisiblePrimaryNavigationItems({
     isAdmin: false,
     sparkVisible: true,
     userPermissions: null,
-    minutesFollowupAllowed: true,
-    minutesFollowupAccessLoading: false,
+    managementDashboardAllowed: false,
   });
 
-  assert.equal(items.length, 12);
+  assert.equal(items.length, 11);
+  assert.ok(!items.some(i => i.id === 'management-dashboard'));
 });
 
 test('hides permissioned primary items while permissions are loading', () => {
@@ -109,6 +114,7 @@ test('hides permissioned primary items while permissions are loading', () => {
     isAdmin: false,
     sparkVisible: true,
     userPermissions: undefined,
+    managementDashboardAllowed: false,
     minutesFollowupAllowed: false,
     minutesFollowupAccessLoading: true,
   });
@@ -126,6 +132,7 @@ test('preserves partial-permission filtering without sorting', () => {
       tasks: true,
       reports: true,
     },
+    managementDashboardAllowed: true,
     minutesFollowupAllowed: false,
     minutesFollowupAccessLoading: false,
   });

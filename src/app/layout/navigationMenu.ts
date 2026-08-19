@@ -65,10 +65,11 @@ export interface NavigationVisibilityContext {
 }
 
 export function getVisiblePrimaryNavigationItems(
-  context: Pick<NavigationVisibilityContext, 'isAdmin' | 'sparkVisible' | 'userPermissions'>
+  context: Pick<NavigationVisibilityContext, 'isAdmin' | 'sparkVisible' | 'userPermissions'> & { managementDashboardAllowed: boolean }
 ): LayoutNavigationItem[] {
   return PRIMARY_NAVIGATION_ITEMS.filter(item => {
     if (item.requiresSparkVisible && !context.sparkVisible) return false;
+    if (item.id === 'management-dashboard') return context.managementDashboardAllowed;
     if (context.isAdmin) return true;
     if (!item.permissionKey) return true;
     if (context.userPermissions === null) return true;

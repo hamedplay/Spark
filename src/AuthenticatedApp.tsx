@@ -42,6 +42,28 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
   const canOpenConfig = canOpenPortalConfig(isAdmin, userPermissions);
   useAdminPathGuard(true, canOpenConfig, navigate);
 
+  const [managementDashboardAllowed, setManagementDashboardAllowed] = useState(false);
+  const [managementDashboardAccessLoading, setManagementDashboardAccessLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentUserId) {
+      setManagementDashboardAllowed(false);
+      setManagementDashboardAccessLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    setManagementDashboardAccessLoading(true);
+    void (async () => {
+      const { data, error } = await supabase.rpc('has_management_dashboard_access_v1');
+      if (cancelled) return;
+      setManagementDashboardAllowed(!error && data === true);
+      setManagementDashboardAccessLoading(false);
+    })();
+
+    return () => { cancelled = true; };
+  }, [currentUserId]);
+
   const [showSplash, setShowSplash] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
   useEffect(() => { setSplashDone(true); }, []);
@@ -108,6 +130,8 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
     sparkCalendarMeetingPrefill, setSparkCalendarMeetingPrefill,
     chatInitUserId, setChatInitUserId,
     sparkVisible,
+    managementDashboardAllowed,
+    managementDashboardAccessLoading,
     minutesFollowupAllowed: minutesFollowupAccess.allowed,
     minutesFollowupAccessLoading: minutesFollowupAccess.loading,
   };

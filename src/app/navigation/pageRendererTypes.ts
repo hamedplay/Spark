@@ -42,6 +42,8 @@ export interface PageRendererProps {
   chatInitUserId: string | null;
   setChatInitUserId: (v: string | null) => void;
   sparkVisible: boolean;
+  managementDashboardAllowed: boolean;
+  managementDashboardAccessLoading: boolean;
   minutesFollowupAllowed: boolean;
   minutesFollowupAccessLoading: boolean;
 }

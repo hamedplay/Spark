@@ -30,6 +30,21 @@ import { ReferModal } from './Tasks/ReferModal';
 import { TaskCard } from './Tasks/TaskCard';
 import { DeleteTaskModal } from './Tasks/DeleteTaskModal';
 
+type DashboardTaskView = 'all' | 'today' | 'in_progress' | 'completed' | 'overdue' | 'urgent';
+const DASHBOARD_TASK_VIEWS = new Set<DashboardTaskView>(['all', 'today', 'in_progress', 'completed', 'overdue', 'urgent']);
+const tehranDayFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Tehran', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+function tehranDayKey(date: Date): string | null {
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = tehranDayFormatter.formatToParts(date);
+  const year = parts.find(p => p.type === 'year')?.value;
+  const month = parts.find(p => p.type === 'month')?.value;
+  const day = parts.find(p => p.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
 export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefillConsumed, currentUserId: propUserId }: TasksPageProps) {
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('tasks_create');
@@ -40,6 +55,11 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'archived'>('all');
   const [taskTab, setTaskTab] = useState<'assigned_to_me' | 'created_by_me' | 'all'>('assigned_to_me');
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(() => new URL(window.location.href).searchParams.get('task'));
+  const [dashboardTaskView, setDashboardTaskView] = useState<DashboardTaskView | null>(() => {
+    const value = new URL(window.location.href).searchParams.get('taskView') as DashboardTaskView | null;
+    return value && DASHBOARD_TASK_VIEWS.has(value) ? value : null;
+  });
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
@@ -81,6 +101,19 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  useEffect(() => {
+    if (!focusTaskId && !dashboardTaskView) return;
+    setTaskTab('all');
+    setSearchTerm('');
+    setStatusFilter('all');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('task');
+    url.searchParams.delete('taskView');
+    window.history.replaceState({}, '', url.toString());
+    // The focus/filter stays in component state until the user explicitly clears it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -305,7 +338,23 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     toast.success('فایل اکسل دانلود شد');
   };
 
+  const dashboardTodayKey = tehranDayKey(new Date());
   const filteredTasks = tasks.filter(task => {
+    if (focusTaskId) return task.id === focusTaskId;
+
+    if (dashboardTaskView) {
+      if (task.archived) return false;
+      const dueKey = task.due_date ? tehranDayKey(new Date(task.due_date)) : null;
+      switch (dashboardTaskView) {
+        case 'all': return true;
+        case 'today': return dueKey !== null && dueKey === dashboardTodayKey;
+        case 'in_progress': return task.status === 'in_progress';
+        case 'completed': return task.status === 'completed';
+        case 'overdue': return task.status !== 'completed' && dueKey !== null && dashboardTodayKey !== null && dueKey < dashboardTodayKey;
+        case 'urgent': return task.priority === 'high' && task.status !== 'completed';
+      }
+    }
+
     const matchesSearch =
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -501,6 +550,13 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
                 </button>
               </div>
             </form>
+          )}
+
+          {(focusTaskId || dashboardTaskView) && (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-2 text-[10px] text-violet-700 dark:border-violet-500/25 dark:bg-violet-500/10 dark:text-violet-300 sm:text-xs">
+              <span>{focusTaskId ? 'اقدام انتخاب‌شده از داشبورد مدیریتی نمایش داده شده است.' : 'فیلتر داشبورد مدیریتی روی اقدامات فعال است.'}</span>
+              <button type="button" onClick={() => { setFocusTaskId(null); setDashboardTaskView(null); }} className="flex-shrink-0 rounded-lg border border-violet-200 bg-white px-2.5 py-1 font-bold transition hover:bg-violet-100 dark:border-violet-500/25 dark:bg-slate-900/50 dark:hover:bg-violet-500/10">نمایش همه اقدامات</button>
+            </div>
           )}
 
           <section className="mb-3 rounded-xl border border-slate-200/80 bg-white/85 p-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/70 sm:p-3">

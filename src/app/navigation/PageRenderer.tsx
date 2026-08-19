@@ -53,6 +53,8 @@ export function renderContent(props: PageRendererProps): ReactNode {
     sparkCalendarMeetingPrefill, setSparkCalendarMeetingPrefill,
     chatInitUserId, setChatInitUserId,
     sparkVisible,
+    managementDashboardAllowed,
+    managementDashboardAccessLoading,
     minutesFollowupAllowed,
     minutesFollowupAccessLoading,
   } = props;
@@ -79,14 +81,28 @@ export function renderContent(props: PageRendererProps): ReactNode {
     }
   }
 
-  const permKey = PAGE_PERMISSION_KEY[activePage];
+  if (activePage === 'management-dashboard') {
+    if (managementDashboardAccessLoading) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-500" />
+          <span className="mr-3 text-sm text-slate-500 dark:text-slate-400">در حال بررسی دسترسی...</span>
+        </div>
+      );
+    }
+    if (!managementDashboardAllowed) {
+      return <AccessDenied onReturn={() => navigate('profile')} />;
+    }
+  }
+
+  const permKey = activePage === 'management-dashboard' ? undefined : PAGE_PERMISSION_KEY[activePage];
   if (permKey && !checkPermission(permKey, isAdmin, userPermissions)) {
     return <AccessDenied onReturn={() => navigate('profile')} />;
   }
 
   switch (activePage) {
     case 'management-dashboard':
-      return <ManagementDashboardPage />;
+      return <ManagementDashboardPage onNavigate={navigate} />;
     case 'calendar':
       return <CalendarPage
         currentUserId={currentUserId}

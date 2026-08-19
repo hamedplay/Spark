@@ -60,6 +60,7 @@ export interface LayoutSidebarProps {
   isAdmin: boolean;
   sparkVisible: boolean;
   userPermissions: LayoutUserPermissions;
+  managementDashboardAllowed: boolean;
   minutesFollowupAllowed: boolean;
   minutesFollowupAccessLoading: boolean;
   isCollapsed: boolean;
@@ -85,6 +86,7 @@ export function LayoutSidebar({
   isAdmin,
   sparkVisible,
   userPermissions,
+  managementDashboardAllowed,
   minutesFollowupAllowed,
   minutesFollowupAccessLoading,
   isCollapsed,
@@ -116,6 +118,7 @@ export function LayoutSidebar({
     isAdmin,
     sparkVisible: !!sparkVisible,
     userPermissions,
+    managementDashboardAllowed,
   }).map((item) => ({
     ...item,
     icon: ICON_MAP[item.id] ?? LayoutDashboard,

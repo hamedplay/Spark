@@ -21,6 +21,7 @@ export interface LayoutProps {
   isAdmin?: boolean;
   sparkVisible?: boolean;
   userPermissions?: LayoutUserPermissions;
+  managementDashboardAllowed?: boolean;
   minutesFollowupAllowed?: boolean;
   minutesFollowupAccessLoading?: boolean;
 }
@@ -32,6 +33,7 @@ export function Layout({
   onPageChange,
   isAdmin = false,
   userPermissions,
+  managementDashboardAllowed = false,
   sparkVisible = false,
   minutesFollowupAllowed = false,
   minutesFollowupAccessLoading = false,
@@ -131,6 +133,7 @@ export function Layout({
         isAdmin={isAdmin}
         sparkVisible={!!sparkVisible}
         userPermissions={userPermissions ?? null}
+        managementDashboardAllowed={managementDashboardAllowed}
         minutesFollowupAllowed={minutesFollowupAllowed}
         minutesFollowupAccessLoading={minutesFollowupAccessLoading}
         isCollapsed={isCollapsed}

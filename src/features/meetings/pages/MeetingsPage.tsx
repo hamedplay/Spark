@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Bell, ChevronDown, SlidersHorizontal, CalendarDays, Sparkles } from 'lucide-react';
 import { MeetingsDashboard } from '../components/MeetingsDashboard';
 import { MeetingCard } from '../components/MeetingCard';
@@ -16,8 +16,23 @@ export function MeetingsPage(props: MeetingsPageProps) {
     isAdmin, userPermissions,
   } = props;
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [focusMeetingId, setFocusMeetingId] = useState<string | null>(() => new URL(window.location.href).searchParams.get('meetingFocus'));
+  const [dashboardMeetingView] = useState<string | null>(() => new URL(window.location.href).searchParams.get('meetingView'));
+
+  useEffect(() => {
+    if (!focusMeetingId && dashboardMeetingView !== 'open') return;
+    setSearchTerm('');
+    setPriorityFilter('all');
+    setStatusFilter(focusMeetingId ? 'all' : 'open');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('meetingFocus');
+    url.searchParams.delete('meetingView');
+    window.history.replaceState({}, '', url.toString());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredMeetings = meetings.filter(meeting => {
+    if (focusMeetingId) return meeting.id === focusMeetingId;
     const matchesSearch = meeting.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          meeting.representative.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || meeting.status === statusFilter;
@@ -99,6 +114,13 @@ export function MeetingsPage(props: MeetingsPageProps) {
           </header>
 
           <MeetingsDashboard {...stats} />
+
+          {focusMeetingId && (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-cyan-200 bg-cyan-50/80 px-3 py-2 text-[10px] text-cyan-700 dark:border-cyan-500/25 dark:bg-cyan-500/10 dark:text-cyan-300 sm:text-xs">
+              <span>جلسه انتخاب‌شده از داشبورد مدیریتی نمایش داده شده است.</span>
+              <button type="button" onClick={() => setFocusMeetingId(null)} className="flex-shrink-0 rounded-lg border border-cyan-200 bg-white px-2.5 py-1 font-bold transition hover:bg-cyan-100 dark:border-cyan-500/25 dark:bg-slate-900/50 dark:hover:bg-cyan-500/10">نمایش همه جلسات</button>
+            </div>
+          )}
 
           <section className="mb-3 rounded-xl border border-slate-200/80 bg-white/85 p-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/70 sm:p-3">
             <div className="flex items-center gap-2 sm:hidden">

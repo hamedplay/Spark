@@ -106,6 +106,7 @@ export function AppShell(props: AppShellProps) {
           onPageChange={(p) => navigate(p as PageId)}
           isAdmin={isAdmin}
           userPermissions={userPermissions}
+          managementDashboardAllowed={rendererProps.managementDashboardAllowed}
           sparkVisible={sparkVisible}
           minutesFollowupAllowed={minutesFollowupAllowed}
           minutesFollowupAccessLoading={minutesFollowupAccessLoading}
