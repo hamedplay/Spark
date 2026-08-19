@@ -1,5 +1,6 @@
 import { MeetingsSection } from './MeetingsSection';
 import { CalendarSection } from './CalendarSection';
+import { MinutesSection } from './MinutesSection';
 import { ChatSection } from './ChatSection';
 import { ChannelsSection } from './ChannelsSection';
 import { TasksSection } from './TasksSection';
@@ -14,6 +15,7 @@ import type { GuideSection } from './types';
 export const SECTIONS: GuideSection[] = [
   MeetingsSection,
   CalendarSection,
+  MinutesSection,
   ChatSection,
   ChannelsSection,
   TasksSection,
