@@ -16,7 +16,7 @@ concurrency:
 jobs:
   fix-and-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
 
     steps:
       - name: Checkout current main
@@ -30,12 +30,10 @@ jobs:
         run: echo "VALIDATION_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Apply minimal scoped fix
-        id: transform
-        continue-on-error: true
         shell: bash
         run: |
-          set +e
-          python - <<'PY' > /tmp/request-calendar-transform.log 2>&1
+          set -euo pipefail
+          python - <<'PY'
           from pathlib import Path
           import subprocess
 
@@ -61,6 +59,7 @@ jobs:
         return;
 """,
           )
+
           replace_exact(
               'src/components/CalendarMeetingForm/commitEdit.ts',
               """      if (diff.added_participant_ids.length) {
@@ -75,6 +74,7 @@ jobs:
         for (const recipientId of participantInviteIds) {
 """,
           )
+
           replace_exact(
               'src/components/CalendarMeetingForm/commitEdit.ts',
               """      const removedObserverIds = [...previousNotifyForMeeting].filter(id => !observerIds.includes(id));
@@ -91,6 +91,7 @@ jobs:
         for (const recipientId of observerInviteIds) {
 """,
           )
+
           replace_exact(
               'src/components/CalendarMeetingForm/commitEdit.ts',
               """        const externalDiff = computeExternalDiff(previousExternal, selectedExternal);
@@ -109,6 +110,7 @@ jobs:
             externalInviteTargets,
 """,
           )
+
           replace_exact(
               'src/app/layout/components/LayoutTopBar.tsx',
               """  const { userPermissions } = usePermissions();
@@ -139,15 +141,18 @@ jobs:
           failed = [name for name, ok in checks.items() if not ok]
           if failed:
               raise SystemExit('contract checks failed: ' + ', '.join(failed))
+
           changed = {line[3:] for line in subprocess.check_output(['git', 'status', '--porcelain'], text=True).splitlines() if line.strip()}
-          expected = {'src/components/CalendarMeetingForm.tsx', 'src/components/CalendarMeetingForm/commitEdit.ts', 'src/app/layout/components/LayoutTopBar.tsx'}
+          expected = {
+              'src/components/CalendarMeetingForm.tsx',
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              'src/app/layout/components/LayoutTopBar.tsx',
+          }
           if changed != expected:
-              raise SystemExit(f'unexpected source changes: {sorted(changed)}')
+              raise SystemExit(f'unexpected working tree changes: {sorted(changed)}')
           PY
-          rc=$?
-          cat /tmp/request-calendar-transform.log
-          git diff --check || rc=$?
-          exit "$rc"
+          git diff --check
+          git diff > /tmp/request-calendar.patch
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -156,84 +161,72 @@ jobs:
           cache: npm
           package-manager-cache: false
 
-      - name: Validate transformed source
-        id: validate
-        if: steps.transform.outcome == 'success'
-        continue-on-error: true
+      - name: Validate patch
         shell: bash
         run: |
-          set +e
-          {
-            npm ci &&
-            npm run build &&
-            npm run test:meeting-prefill &&
-            npm run test:layout-navigation &&
-            npm run test:notification-producer
-          } > /tmp/request-calendar-validate.log 2>&1
-          rc=$?
-          cat /tmp/request-calendar-validate.log
-          exit "$rc"
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm run test:meeting-prefill
+          npm run test:layout-navigation
+          npm run test:notification-producer
 
-      - name: Publish validated fix or diagnostic
-        if: always()
+      - name: Reapply validated patch to latest compatible main and commit
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-          if [ "${{ steps.transform.outcome }}" != "success" ] || [ "${{ steps.validate.outcome }}" != "success" ]; then
-            git fetch origin main
-            git reset --hard origin/main
-            {
-              echo "transform=${{ steps.transform.outcome }}"
-              echo "validate=${{ steps.validate.outcome }}"
-              echo
-              echo '--- transform log ---'
-              tail -n 120 /tmp/request-calendar-transform.log 2>/dev/null || true
-              echo
-              echo '--- validation log ---'
-              tail -n 160 /tmp/request-calendar-validate.log 2>/dev/null || true
-            } > .tmp-request-calendar-status.txt
-            git add .tmp-request-calendar-status.txt
-            git commit -m 'chore: record request-calendar validation failure [skip ci]'
-            for attempt in 1 2 3 4 5; do
-              if git push origin HEAD:main; then exit 1; fi
-              git pull --rebase origin main
-            done
-            exit 1
-          fi
+          sensitive_paths=(
+            src/components/CalendarMeetingForm.tsx
+            src/components/CalendarMeetingForm/commitEdit.ts
+            src/app/layout/components/LayoutTopBar.tsx
+            src/components/CalendarMeetingForm/types.ts
+            src/components/CalendarMeetingForm/services.ts
+            src/lib/meetingEditDiff.ts
+            src/lib/notifications.ts
+            src/config/templateCatalog.ts
+            package.json
+            package-lock.json
+            tsconfig.json
+            tsconfig.app.json
+            vite.config.ts
+          )
 
-          rm .github/workflows/tmp-fix-request-calendar-flow.yml
-          rm -f .tmp-request-calendar-status.txt
-          git add src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/app/layout/components/LayoutTopBar.tsx
-          git add -u .github/workflows/tmp-fix-request-calendar-flow.yml
-          git add -u .tmp-request-calendar-status.txt 2>/dev/null || true
-          git diff --cached --check
-          git commit -m 'fix: separate request scheduling from calendar edits [skip ci]'
-
-          validated_base="$VALIDATION_BASE"
-          for attempt in 1 2 3 4 5; do
+          for attempt in 1 2 3 4 5 6 7 8; do
             git fetch origin main
             remote_sha="$(git rev-parse origin/main)"
-            if [ "$(git rev-parse HEAD^)" != "$remote_sha" ]; then
-              overlap="$(git diff --name-only "$validated_base"..origin/main -- src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/app/layout/components/LayoutTopBar.tsx)"
-              if [ -n "$overlap" ]; then
-                echo 'Scoped files changed concurrently; refusing unvalidated integration:'
-                echo "$overlap"
-                exit 1
-              fi
-              git rebase origin/main
-              npm ci
-              npm run build
-              npm run test:meeting-prefill
-              npm run test:layout-navigation
-              npm run test:notification-producer
-              validated_base="$remote_sha"
+            overlap="$(git diff --name-only "$VALIDATION_BASE"..origin/main -- "${sensitive_paths[@]}")"
+            if [ -n "$overlap" ]; then
+              echo 'Validation-sensitive files changed after validation base; refusing unvalidated integration:'
+              echo "$overlap"
+              exit 1
             fi
+
+            git reset --hard origin/main
+            git apply --check /tmp/request-calendar.patch
+            git apply /tmp/request-calendar.patch
+            git diff --check
+
+            rm .github/workflows/tmp-fix-request-calendar-flow.yml
+            rm -f .tmp-request-calendar-status.txt
+            git add src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/app/layout/components/LayoutTopBar.tsx
+            git add -u .github/workflows/tmp-fix-request-calendar-flow.yml
+            git add -u .tmp-request-calendar-status.txt 2>/dev/null || true
+
+            changed="$(git diff --cached --name-only | sort)"
+            expected="$(printf '%s\n%s\n%s\n%s\n' '.github/workflows/tmp-fix-request-calendar-flow.yml' 'src/app/layout/components/LayoutTopBar.tsx' 'src/components/CalendarMeetingForm.tsx' 'src/components/CalendarMeetingForm/commitEdit.ts' | sort)"
+            test "$changed" = "$expected"
+            git diff --cached --check
+            git commit -m 'fix: separate request scheduling from calendar edits [skip ci]'
+
             if git push origin HEAD:main; then
               exit 0
             fi
+
+            echo "Fast-forward race on attempt $attempt; retrying against newer compatible main"
           done
-          echo 'Unable to obtain a stable fast-forward after validated retries'
+
+          echo 'Could not obtain a stable fast-forward after 8 attempts'
           exit 1
