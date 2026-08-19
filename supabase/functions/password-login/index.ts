@@ -2,7 +2,6 @@ import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { hmacSha256Hex } from "../_shared/crypto.ts";
 
-
 const MAX_BODY_BYTES = 4096;
 const MAX_IDENTIFIER_LEN = 256;
 const MAX_PASSWORD_LEN = 1024;
@@ -18,6 +17,19 @@ const baseHeaders: Record<string, string> = {
 
 type LoginMethod = "username" | "email" | "phone";
 type PasswordCredential = { email: string; password: string } | { phone: string; password: string };
+
+function adminApiKey(): string {
+  const rawSecretKeys = Deno.env.get("SUPABASE_SECRET_KEYS");
+  if (rawSecretKeys) {
+    try {
+      const keys = JSON.parse(rawSecretKeys) as Record<string, unknown>;
+      if (typeof keys.default === "string" && keys.default.length > 0) return keys.default;
+    } catch {
+      // Fall through to the legacy hosted secret for backward compatibility.
+    }
+  }
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+}
 
 function corsHeaders(allowedOrigin: string | null): Record<string, string> {
   const h: Record<string, string> = { ...baseHeaders };
@@ -35,7 +47,7 @@ function json(data: unknown, status: number, allowedOrigin: string | null): Resp
 async function getConfig(): Promise<{ origins: string[]; pepper: string }> {
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    adminApiKey(),
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
   const { data, error } = await admin.rpc("get_phone_auth_config");
@@ -120,10 +132,6 @@ function chooseConfirmedCredential(authUser: any, password: string): PasswordCre
   const email = confirmedEmail(authUser);
   const phone = confirmedPhone(authUser);
 
-  // Public identifiers (username/email/mobile) are aliases used only to resolve
-  // the account. Prefer a confirmed Auth email as the actual password credential
-  // for every alias. This keeps mobile password login working even when GoTrue's
-  // native phone provider is disabled and does not require another phone OTP.
   if (email) return { email, password };
   if (phone) return { phone, password };
   return null;
@@ -190,7 +198,7 @@ Deno.serve(async (req: Request) => {
   try {
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      adminApiKey(),
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
