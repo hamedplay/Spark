@@ -155,7 +155,7 @@ export function summarizeChange(row: AuditLogRow): string {
   const action = AUDIT_ACTION_LABELS[row.action] || row.action;
   const entity = ENTITY_LABELS[row.entity_type] || row.entity_type;
   const parts: string[] = [action];
-  if (row.entity_type === 'decision' && row.entity_title) parts.push(`مصوبه: ${row.entity_title}`);
+  if (row.entity_type === 'decision' && row.entity_title) parts.push(`${entity}: ${row.entity_title}`);
   const hasRevisionInRow = row.revision_number != null;
   if (hasRevisionInRow) parts.push(`نسخه ${toPersianDigits(String(row.revision_number))}`);
   if (row.new_values) {
