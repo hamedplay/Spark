@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Eye, Check, CircleAlert as AlertCircle, Loader as Loader2, UserCheck, Users, X } from 'lucide-react';
+import { Eye, Check, CircleAlert as AlertCircle, Loader as Loader2, UserCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageHeader, ApprovalStatusBadge, ApprovalModeBadge, EmptyState, TableSkeleton } from './MinutesShared';
 import { MinutesBackButton } from './MinutesBackButton';
@@ -25,11 +25,6 @@ interface ApprovalInboxRow {
   updated_at: string;
 }
 
-interface DelegateCandidate {
-  user_id: string;
-  full_name: string;
-}
-
 interface Props {
   onNavigate: (page: string) => void;
   currentUserId?: string;
@@ -40,11 +35,6 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
-  const [delegateModalApprovalId, setDelegateModalApprovalId] = useState<string | null>(null);
-  const [delegateCandidates, setDelegateCandidates] = useState<DelegateCandidate[]>([]);
-  const [delegateLoading, setDelegateLoading] = useState(false);
-  const [selectedDelegateId, setSelectedDelegateId] = useState<string | null>(null);
-  const [delegatingApproval, setDelegatingApproval] = useState<string | null>(null);
 
   const fetchInbox = useCallback(async () => {
     if (!currentUserId) { setIsLoading(false); return; }
@@ -154,86 +144,6 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
     } finally { setActingId(null); }
   };
 
-  const openDelegateModal = async (approvalId: string, minuteId: string, revisionNumber: number) => {
-    setDelegateModalApprovalId(approvalId);
-    setSelectedDelegateId(null);
-    setDelegateLoading(true);
-    try {
-      const { data: existingApprovers } = await supabase
-        .from('minutes_approvals')
-        .select('approver_user_id')
-        .eq('minute_id', minuteId)
-        .eq('revision_number', revisionNumber);
-
-      const approverIds = new Set((existingApprovers || []).map(a => a.approver_user_id));
-      approverIds.add(currentUserId || '');
-
-      const { data: profiles, error } = await supabase
-        .from('profiles_public')
-        .select('user_id, full_name')
-        .eq('is_active', true)
-        .neq('is_hidden', true)
-        .order('full_name', { ascending: true });
-
-      if (error) throw error;
-
-      const candidates = (profiles || [])
-        .filter((p: { user_id: string; full_name: string }) => !approverIds.has(p.user_id))
-        .map((p: { user_id: string; full_name: string }) => ({ user_id: p.user_id, full_name: p.full_name || 'کاربر' }));
-
-      setDelegateCandidates(candidates);
-    } catch {
-      toast.error('بارگذاری کاربران ناموفق بود.');
-      setDelegateModalApprovalId(null);
-    } finally {
-      setDelegateLoading(false);
-    }
-  };
-
-  const handleAssignDelegate = async (approvalId: string) => {
-    if (!selectedDelegateId) { toast.error('یک جانشین انتخاب کنید.'); return; }
-    setDelegatingApproval(approvalId);
-    try {
-      const { data: approvalRow } = await supabase
-        .from('minutes_approvals')
-        .select('updated_at')
-        .eq('id', approvalId)
-        .maybeSingle();
-
-      if (!approvalRow) { toast.error('رکورد تأیید یافت نشد.'); return; }
-
-      const { data, error: rpcError } = await supabase.rpc('assign_minutes_approval_delegate', {
-        p_approval_id: approvalId,
-        p_delegate_user_id: selectedDelegateId,
-        p_expected_updated_at: approvalRow.updated_at,
-      });
-
-      if (rpcError) { toast.error('انتخاب جانشین ناموفق بود.'); return; }
-      if (data?.success === false) {
-        const msgs: Record<string, string> = {
-          NOT_AN_APPROVER: 'شما تأییدکننده این صورت‌جلسه نیستید.',
-          CANNOT_DELEGATE_TO_SELF: 'نمی‌توانید خودتان را به‌عنوان جانشین انتخاب کنید.',
-          DELEGATE_ALREADY_ASSIGNED: 'برای این تأیید قبلاً جانشین انتخاب شده است.',
-          APPROVAL_NOT_PENDING: 'این تأیید دیگر در وضعیت انتظار نیست.',
-          MINUTE_NOT_PENDING: 'صورت‌جلسه در وضعیت تأیید نیست.',
-          REVISION_NOT_CURRENT: 'این نسخه دیگر معتبر نیست.',
-          APPROVAL_VERSION_CONFLICT: 'اطلاعات تغییر کرده است. صفحه را تازه‌سازی کنید.',
-          DELEGATE_ALREADY_APPROVER: 'این کاربر از قبل تأییدکننده این صورت‌جلسه است.',
-          DELEGATE_PROFILE_INVALID: 'پروفایل جانشین معتبر نیست یا فعال نیست.',
-          DELEGATE_DIFFERENT_ORG: 'جانشین باید از همان سازمان باشد.',
-        };
-        toast.error(msgs[data.error_code] || data.message || 'انتخاب جانشین ناموفق بود.');
-        return;
-      }
-      toast.success(data.message || 'جانشین با موفقیت انتخاب شد.');
-      setDelegateModalApprovalId(null);
-      setSelectedDelegateId(null);
-      await fetchInbox();
-    } finally {
-      setDelegatingApproval(null);
-    }
-  };
-
   return (
     <div dir="rtl" className="space-y-5">
       <MinutesBackButton onNavigate={onNavigate} target="minutes-hub" label="بازگشت به هاب" />
@@ -302,15 +212,6 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
                           >
                             {actingId === row.approval_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                           </button>
-                          {!row.is_delegate && !row.delegate_user_id && (
-                            <button
-                              onClick={() => openDelegateModal(row.approval_id, row.minute_id, row.revision_number)}
-                              title="انتخاب جانشین"
-                              className="p-1.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 text-purple-500 transition-colors"
-                            >
-                              <Users className="w-4 h-4" />
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -362,14 +263,6 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
                     >
                       {actingId === row.approval_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} تأیید سریع
                     </button>
-                    {!row.is_delegate && !row.delegate_user_id && (
-                      <button
-                        onClick={() => openDelegateModal(row.approval_id, row.minute_id, row.revision_number)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 text-sm font-medium transition-colors"
-                      >
-                        <Users className="w-4 h-4" /> جانشین
-                      </button>
-                    )}
                   </div>
                 </div>
               ))}
@@ -377,52 +270,6 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
           </>
         )}
       </div>
-
-      {/* Delegate selection modal */}
-      {delegateModalApprovalId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDelegateModalApprovalId(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">انتخاب جانشین تأییدکننده</h3>
-              <button onClick={() => setDelegateModalApprovalId(null)} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              جانشین می‌تواند به‌جای شما صورت‌جلسه را تأیید یا درخواست اصلاح کند. مسئول اصلی تأیید همچنان شما خواهید بود.
-            </p>
-            {delegateLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-              </div>
-            ) : delegateCandidates.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">هیچ کاربر فعالی برای جانشینی یافت نشد.</p>
-            ) : (
-              <>
-                <select
-                  value={selectedDelegateId || ''}
-                  onChange={e => setSelectedDelegateId(e.target.value || null)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">انتخاب کنید...</option>
-                  {delegateCandidates.map(c => (
-                    <option key={c.user_id} value={c.user_id}>{c.full_name}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => handleAssignDelegate(delegateModalApprovalId)}
-                  disabled={!selectedDelegateId || delegatingApproval === delegateModalApprovalId}
-                  className="w-full px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  {delegatingApproval === delegateModalApprovalId ? (
-                    <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> در حال ثبت...</span>
-                  ) : 'تأیید انتخاب جانشین'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Keep ApprovalStatusBadge import used */}
       <span className="hidden"><ApprovalStatusBadge status="pending" /></span>

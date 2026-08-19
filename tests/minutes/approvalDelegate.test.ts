@@ -343,27 +343,31 @@ test('MinutesApprovalsPage shows delegate label for delegated approvals', () => 
   assert.ok(source.includes('original_approver_name'), 'should show original approver name');
 });
 
-test('MinutesApprovalsPage shows delegate selection button only for approver', () => {
+test('MinutesApprovalsPage does not expose approval-time delegate selection', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '../../src/components/Minutes/MinutesApprovalsPage.tsx'),
     'utf-8',
   );
-  assert.ok(source.includes('!row.is_delegate'), 'should hide delegate button for delegates');
-  assert.ok(source.includes('!row.delegate_user_id'), 'should hide delegate button if already delegated');
-  assert.ok(source.includes('assign_minutes_approval_delegate'), 'should call delegate RPC');
+  assert.ok(!source.includes('assign_minutes_approval_delegate'), 'cartable must not call delegate assignment RPC');
+  assert.ok(!source.includes('openDelegateModal'), 'cartable must not expose delegate selection modal');
+  assert.ok(!source.includes('انتخاب جانشین تأییدکننده'), 'cartable must not render delegate selector UI');
 });
 
-test('MinutesApprovalsPage handles delegate RPC error codes', () => {
+test('MinutesDetailPage treats a delegate as the pending approver', () => {
   const source = fs.readFileSync(
-    path.join(__dirname, '../../src/components/Minutes/MinutesApprovalsPage.tsx'),
+    path.join(__dirname, '../../src/components/Minutes/MinutesDetailPage.tsx'),
     'utf-8',
   );
-  assert.ok(source.includes('CANNOT_DELEGATE_TO_SELF'), 'should handle self-delegation error');
-  assert.ok(source.includes('DELEGATE_ALREADY_ASSIGNED'), 'should handle already-assigned error');
-  assert.ok(source.includes('DELEGATE_ALREADY_APPROVER'), 'should handle already-approver error');
-  assert.ok(source.includes('DELEGATE_PROFILE_INVALID'), 'should handle invalid profile error');
-  assert.ok(source.includes('DELEGATE_DIFFERENT_ORG'), 'should handle different org error');
-  assert.ok(source.includes('APPROVAL_VERSION_CONFLICT'), 'should handle version conflict error');
+  assert.ok(source.includes('a.approver_user_id === currentUserId || a.delegate_user_id === currentUserId'));
+});
+
+test('delegate cartable access migration lets delegate read the parent minute', () => {
+  const migrationSource = fs.readFileSync(
+    path.join(__dirname, '../../supabase/migrations/20260819180000_fix_minutes_delegate_cartable_access.sql'),
+    'utf-8',
+  );
+  assert.ok(migrationSource.includes('private._user_can_view_minute'));
+  assert.ok(migrationSource.includes('ma.delegate_user_id = auth.uid()'));
 });
 
 test('TabApprovals shows delegate, actor, and delegation time columns', () => {

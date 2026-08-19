@@ -217,7 +217,10 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   const isChair = !!(currentUserId && minute?.chair_user_id === currentUserId);
   const isCreator = !!(currentUserId && minute?.created_by_user_id === currentUserId);
   const canManage = isAdmin || isSecretary || isCreator;
-  const myApproval = approvals.find(a => a.approver_user_id === currentUserId && a.status === 'pending');
+  const myApproval = approvals.find(a =>
+  (a.approver_user_id === currentUserId || a.delegate_user_id === currentUserId)
+  && a.status === 'pending'
+);
   const allApprovalsApproved = approvals.length > 0 && approvals.every(a => a.status === 'approved');
 
   const refresh = useCallback(() => {
