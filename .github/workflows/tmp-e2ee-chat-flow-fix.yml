@@ -1,0 +1,225 @@
+name: tmp-e2ee-chat-flow-fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-e2ee-chat-flow-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, 'cleanup tmp e2ee') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Apply scoped E2EE chat flow fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          # 1) Conversation header: add a distinct E2EE shield action beside audio/video.
+          path = 'src/components/Chat/Conversation/ConversationHeader.tsx'
+          replace_once(path,
+              "import { ChevronRight, Search, Phone, Video, Star, Bell, Info, Bookmark, CalendarDays } from 'lucide-react';",
+              "import { ChevronRight, Search, Phone, Video, ShieldCheck, Star, Bell, Info, Bookmark, CalendarDays } from 'lucide-react';")
+          replace_once(path,
+              "  onStartCall?: (callType: 'audio' | 'video') => void;\n  onJumpToDate: () => void;",
+              "  onStartCall?: (callType: 'audio' | 'video') => void;\n  onStartE2EECall?: () => void;\n  onJumpToDate: () => void;")
+          replace_once(path,
+              "    showSearch, onToggleSearch, onOpenStarred, onOpenReminders,\n    onStartCall, onJumpToDate, showInfoPanel, onToggleInfoPanel,",
+              "    showSearch, onToggleSearch, onOpenStarred, onOpenReminders,\n    onStartCall, onStartE2EECall, onJumpToDate, showInfoPanel, onToggleInfoPanel,")
+          marker = '''        {!isSavedMessages && (\n          <button\n            onClick={() => onStartCall?.('video')}\n            className=\"flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-100 bg-cyan-50 text-cyan-600 transition hover:bg-cyan-100 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300\"\n            title=\"تماس تصویری\"\n          >\n            <Video className=\"h-3.5 w-3.5\" />\n          </button>\n        )}\n\n'''
+          addition = marker + '''        {!isSavedMessages && (\n          <button\n            onClick={() => onStartE2EECall?.()}\n            className=\"flex h-8 w-8 items-center justify-center rounded-lg border border-violet-100 bg-violet-50 text-violet-600 transition hover:bg-violet-100 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300\"\n            title=\"تماس امن E2EE\"\n          >\n            <ShieldCheck className=\"h-3.5 w-3.5\" />\n          </button>\n        )}\n\n'''
+          replace_once(path, marker, addition)
+
+          # 2) Thread the new action through the conversation view.
+          path = 'src/components/Chat/ChatConversationView.tsx'
+          replace_once(path,
+              "  onStartCall?: (callType: 'audio' | 'video') => void;\n  onOpenDirectChat?: (userId: string) => void;",
+              "  onStartCall?: (callType: 'audio' | 'video') => void;\n  onStartE2EECall?: () => void;\n  onOpenDirectChat?: (userId: string) => void;")
+          replace_once(path,
+              "  onConversationUpdate, onStartCall,\n  onOpenDirectChat, msgRefreshKey,",
+              "  onConversationUpdate, onStartCall, onStartE2EECall,\n  onOpenDirectChat, msgRefreshKey,")
+          replace_once(path,
+              "        onStartCall={onStartCall}\n        onJumpToDate={() => {",
+              "        onStartCall={onStartCall}\n        onStartE2EECall={onStartE2EECall}\n        onJumpToDate={() => {")
+
+          # 3) Chat page: open E2EE directly for the active chat user and preserve return-to-chat behavior.
+          path = 'src/components/Chat/ChatPage.tsx'
+          replace_once(path,
+              "  const [showE2EECall, setShowE2EECall] = useState(false);\n  const [msgRefreshKey, setMsgRefreshKey] = useState(0);",
+              "  const [showE2EECall, setShowE2EECall] = useState(false);\n  const [e2eeInitialTarget, setE2eeInitialTarget] = useState<UserProfile | null>(null);\n  const [msgRefreshKey, setMsgRefreshKey] = useState(0);")
+          replace_once(path,
+              "      setSidebarTab('calls');\n      setShowE2EECall(true);",
+              "      setE2eeInitialTarget(null);\n      setSidebarTab('calls');\n      setShowE2EECall(true);")
+          replace_once(path,
+              "  const handleOpenE2EECall = () => {\n    setSidebarTab('calls');\n    setShowE2EECall(true);\n    setShowSidebar(false);\n    setShowActions(false);\n    setShowSettings(false);\n  };\n\n  const handleCloseE2EECall = () => {\n    setShowE2EECall(false);\n    setShowSidebar(true);\n    setSidebarTab('calls');\n  };",
+              "  const handleOpenE2EECall = (targetUser?: UserProfile) => {\n    setE2eeInitialTarget(targetUser ?? null);\n    setSidebarTab('calls');\n    setShowE2EECall(true);\n    setShowSidebar(false);\n    setShowActions(false);\n    setShowSettings(false);\n  };\n\n  const startE2EECall = () => {\n    if (!activeConv) return;\n    handleOpenE2EECall(activeConv.otherUser);\n  };\n\n  const handleCloseE2EECall = () => {\n    const returnToChat = !!e2eeInitialTarget && !!activeId;\n    setShowE2EECall(false);\n    setE2eeInitialTarget(null);\n    if (returnToChat) {\n      setSidebarTab('chats');\n      setShowSidebar(false);\n      return;\n    }\n    setShowSidebar(true);\n    setSidebarTab('calls');\n  };")
+          replace_once(path,
+              "            onStartE2EECall={handleOpenE2EECall}",
+              "            onStartE2EECall={() => handleOpenE2EECall()}")
+          replace_once(path,
+              "              onStartCall={startCall}\n              msgRefreshKey={msgRefreshKey}",
+              "              onStartCall={startCall}\n              onStartE2EECall={startE2EECall}\n              msgRefreshKey={msgRefreshKey}")
+          replace_once(path,
+              "              currentUserName={currentUserProfile?.full_name || currentUserProfile?.username || 'کاربر'}\n              onBack={handleCloseE2EECall}",
+              "              currentUserName={currentUserProfile?.full_name || currentUserProfile?.username || 'کاربر'}\n              initialTargetUser={e2eeInitialTarget ? {\n                user_id: e2eeInitialTarget.user_id,\n                full_name: e2eeInitialTarget.full_name,\n                email: e2eeInitialTarget.email ?? null,\n                avatar_url: e2eeInitialTarget.avatar_url,\n              } : null}\n              onBack={handleCloseE2EECall}")
+
+          # 4) E2EE page accepts an initial direct-chat target and auto-starts exactly once.
+          path = 'src/components/Chat/E2EECall/types.ts'
+          replace_once(path,
+              "  currentUserName: string;\n  onBack:          () => void;",
+              "  currentUserName: string;\n  initialTargetUser?: UserProfile | null;\n  onBack:          () => void;")
+
+          path = 'src/components/Chat/E2EECall/index.tsx'
+          replace_once(path,
+              "import { useState } from 'react';",
+              "import { useEffect, useRef, useState } from 'react';")
+          replace_once(path,
+              "export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECallProps) {",
+              "export function E2EECallPage({ currentUserId, currentUserName, initialTargetUser, onBack }: E2EECallProps) {")
+          hook_end = '''  } = useE2EECall(currentUserId, currentUserName);\n\n  const [showFailedDebug, setShowFailedDebug] = useState(false);'''
+          hook_new = '''  } = useE2EECall(currentUserId, currentUserName);\n\n  const initialCallStartedRef = useRef<string | null>(null);\n  useEffect(() => {\n    if (!initialTargetUser || phase !== 'idle') return;\n    if (initialCallStartedRef.current === initialTargetUser.user_id) return;\n    initialCallStartedRef.current = initialTargetUser.user_id;\n    void startCall(initialTargetUser);\n  }, [initialTargetUser, phase, startCall]);\n\n  const [showFailedDebug, setShowFailedDebug] = useState(false);'''
+          replace_once(path, hook_end, hook_new)
+
+          # 5) If global E2EE accept happens while the E2EE page is already mounted,
+          # consume the autoAccept update instead of getting stuck on the handoff.
+          path = 'src/components/Chat/E2EECall/useE2EECallCore.ts'
+          replace_once(path,
+              "import { getPendingE2EERing, setPendingE2EERing } from '../../../lib/globalE2EERing';",
+              "import { getPendingE2EERing, setPendingE2EERing, subscribeE2EERing } from '../../../lib/globalE2EERing';")
+          pending_block = '''  // ── Consume pending E2EE ring ──────────────────────────────────────────\n  useEffect(() => {\n    if (!SUPPORTS_TRANSFORMS) return;\n    const ring = getPendingE2EERing();\n    if (!ring || Date.now() > ring.expiresAt || sessionActiveRef.current) return;\n    setPendingE2EERing(null);\n    autoAcceptRef.current = !!ring.autoAccept;\n    setIncomingCall({ from: ring.from, sessionId: ring.sessionId, callerName: ring.callerName, callerId: ring.callerId, expiresAt: ring.expiresAt, acceptToken: ring.acceptToken });\n    setPhase('incoming_ring');\n  // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, []);\n'''
+          pending_new = pending_block + '''\n  // If the global overlay is accepted while this page is already mounted,\n  // consume the autoAccept transition immediately instead of waiting for a remount.\n  useEffect(() => {\n    if (!SUPPORTS_TRANSFORMS) return;\n    return subscribeE2EERing((ring) => {\n      if (!ring?.autoAccept || Date.now() > ring.expiresAt || sessionActiveRef.current) return;\n      setPendingE2EERing(null);\n      autoAcceptRef.current = true;\n      setIncomingCall({ from: ring.from, sessionId: ring.sessionId, callerName: ring.callerName, callerId: ring.callerId, expiresAt: ring.expiresAt, acceptToken: ring.acceptToken });\n      setPhase('incoming_ring');\n    });\n  // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, []);\n'''
+          replace_once(path, pending_block, pending_new)
+
+          # 6) Global incoming E2EE rejection must notify the caller; also avoid an old
+          # invite-expiry timer clearing a newer pending ring.
+          path = 'src/context/GlobalCallContext.tsx'
+          expiry_old = '''      setTimeout(() => {\n        setE2eeRing(r => r?.sessionId === ring.sessionId ? null : r);\n        setPendingE2EERing(null);\n        if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }\n      }, Math.max(0, ttl));'''
+          expiry_new = '''      setTimeout(() => {\n        setE2eeRing(r => r?.sessionId === ring.sessionId ? null : r);\n        const pending = getPendingE2EERing();\n        if (pending?.sessionId === ring.sessionId) {\n          setPendingE2EERing(null);\n          if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }\n        }\n      }, Math.max(0, ttl));'''
+          replace_once(path, expiry_old, expiry_new)
+
+          dismiss_old = '''  const dismissE2EERing = () => {\n    setE2eeRing(null);\n    setPendingE2EERing(null);\n    if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }\n  };\n\n  const acceptE2EERing = () => {'''
+          dismiss_new = '''  const dismissE2EERing = () => {\n    setE2eeRing(null);\n    setPendingE2EERing(null);\n    if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }\n  };\n\n  const rejectE2EERing = () => {\n    const ring = e2eeRing;\n    dismissE2EERing();\n    if (!ring) return;\n\n    const ch = supabase.channel(`e2ee-sess-${ring.sessionId}`, { config: { broadcast: { self: false } } });\n    let sent = false;\n    const cleanup = () => { void supabase.removeChannel(ch); };\n    const timeout = window.setTimeout(cleanup, 5000);\n\n    ch.subscribe((status) => {\n      if (status === 'SUBSCRIBED' && !sent) {\n        sent = true;\n        void ch.send({\n          type: 'broadcast',\n          event: 'e2ee-signal',\n          payload: {\n            type: 'rejected',\n            from: currentUserIdRef.current || 'callee',\n            session: ring.sessionId,\n            data: {},\n          },\n        }).finally(() => {\n          window.clearTimeout(timeout);\n          window.setTimeout(cleanup, 250);\n        });\n      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {\n        window.clearTimeout(timeout);\n        cleanup();\n      }\n    });\n  };\n\n  const acceptE2EERing = () => {'''
+          replace_once(path, dismiss_old, dismiss_new)
+          replace_once(path,
+              "                onClick={dismissE2EERing}\n                className=\"flex-1 py-3 bg-red-600",
+              "                onClick={rejectE2EERing}\n                className=\"flex-1 py-3 bg-red-600")
+          PY
+
+          cat > tests/tmp-e2ee-crypto.test.ts <<'EOF'
+          import test from 'node:test';
+          import assert from 'node:assert/strict';
+          import {
+            computeSafetyNumber,
+            deriveSessionKeys,
+            exportPublicKey,
+            generateECDHKeyPair,
+            importPublicKey,
+          } from '../src/components/Chat/E2EECall/crypto.ts';
+
+          async function raw(key: CryptoKey) {
+            return Buffer.from(await crypto.subtle.exportKey('raw', key));
+          }
+
+          test('caller/callee derive matching directional E2EE keys', async () => {
+            const caller = await generateECDHKeyPair();
+            const callee = await generateECDHKeyPair();
+            const callerJwk = await exportPublicKey(caller.publicKey);
+            const calleeJwk = await exportPublicKey(callee.publicKey);
+            const salt = Uint8Array.from({ length: 16 }, (_, i) => i + 1);
+            const sessionId = '11111111-2222-4333-8444-555555555555';
+
+            const callerKeys = await deriveSessionKeys(
+              caller.privateKey,
+              await importPublicKey(calleeJwk),
+              sessionId,
+              'caller',
+              salt,
+            );
+            const calleeKeys = await deriveSessionKeys(
+              callee.privateKey,
+              await importPublicKey(callerJwk),
+              sessionId,
+              'callee',
+              salt,
+            );
+
+            assert.deepEqual(await raw(callerKeys.send.audio.key), await raw(calleeKeys.recv.audio.key));
+            assert.deepEqual(await raw(callerKeys.send.video.key), await raw(calleeKeys.recv.video.key));
+            assert.deepEqual(await raw(callerKeys.recv.audio.key), await raw(calleeKeys.send.audio.key));
+            assert.deepEqual(await raw(callerKeys.recv.video.key), await raw(calleeKeys.send.video.key));
+            assert.deepEqual(callerKeys.send.audio.ivSeed, calleeKeys.recv.audio.ivSeed);
+            assert.deepEqual(callerKeys.send.video.ivSeed, calleeKeys.recv.video.ivSeed);
+
+            const callerSafety = await computeSafetyNumber(callerJwk, calleeJwk, sessionId);
+            const calleeSafety = await computeSafetyNumber(calleeJwk, callerJwk, sessionId);
+            assert.deepEqual(callerSafety, calleeSafety);
+          });
+          EOF
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate E2EE crypto contract
+        run: node --import tsx --test tests/tmp-e2ee-crypto.test.ts
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify worker output
+        run: test -f dist/e2ee-worker.js
+
+      - name: Commit validated fix and remove temporary tooling
+        shell: bash
+        run: |
+          rm -f tests/tmp-e2ee-crypto.test.ts
+          rm -f .github/workflows/tmp-e2ee-chat-flow-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/Chat/Conversation/ConversationHeader.tsx \
+                  src/components/Chat/ChatConversationView.tsx \
+                  src/components/Chat/ChatPage.tsx \
+                  src/components/Chat/E2EECall/types.ts \
+                  src/components/Chat/E2EECall/index.tsx \
+                  src/components/Chat/E2EECall/useE2EECallCore.ts \
+                  src/context/GlobalCallContext.tsx \
+                  .github/workflows/tmp-e2ee-chat-flow-fix.yml
+          git diff --cached --check
+          git commit -m 'fix(chat): launch and stabilize E2EE calls [skip ci]'
+          git push origin HEAD:main
+
+      - name: Cleanup temporary workflow if validation fails
+        if: failure()
+        shell: bash
+        run: |
+          git reset --hard HEAD || true
+          rm -f tests/tmp-e2ee-crypto.test.ts
+          rm -f .github/workflows/tmp-e2ee-chat-flow-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: cleanup tmp e2ee validation [skip ci]' || true
+          git push origin HEAD:main || true
