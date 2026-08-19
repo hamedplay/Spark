@@ -1,0 +1,147 @@
+name: Temporary prejoin responsive fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-prejoin-responsive.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-prejoin-responsive-main
+  cancel-in-progress: true
+
+jobs:
+  fix-build-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sync latest main
+        run: git pull --ff-only origin main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply scoped responsive fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              return text.replace(old, new, 1)
+
+          guest_path = Path('src/components/VideoConference/GuestJoinPage.tsx')
+          guest = guest_path.read_text()
+          guest = replace_once(
+              guest,
+              'className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"',
+              'className="min-h-[100dvh] flex items-center justify-center p-3 sm:p-4 relative overflow-y-auto lg:h-[100dvh] lg:overflow-hidden"',
+              'guest viewport',
+          )
+          guest = replace_once(
+              guest,
+              'className="relative z-10 w-full max-w-md space-y-4"',
+              'className="relative z-10 w-full max-w-md space-y-2 lg:max-w-5xl"',
+              'guest width',
+          )
+          guest = replace_once(guest, 'className="text-center mb-2"', 'className="text-center mb-1"', 'guest header spacing')
+          guest = replace_once(guest, 'className="inline-flex items-center gap-2 mb-3"', 'className="inline-flex items-center gap-2 mb-1.5"', 'guest title spacing')
+          guest = replace_once(guest, 'className="text-2xl font-bold text-white"', 'className="text-xl sm:text-2xl font-bold text-white"', 'guest title size')
+          guest = replace_once(guest, 'className="bg-gray-800 rounded-xl px-4 py-2 inline-block"', 'className="bg-gray-800 rounded-xl px-3 py-1.5 inline-block"', 'room badge spacing')
+          guest = replace_once(
+              guest,
+              '        <DeviceSelector\n          onConfirm={(stream) => {',
+              '        <DeviceSelector\n          compactViewport\n          onConfirm={(stream) => {',
+              'compact prop',
+          )
+          guest = guest.replace(
+              'className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"',
+              'className="w-full px-4 py-2.5 lg:py-2 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"',
+          )
+          if guest.count('lg:py-2 bg-gray-800') != 2:
+              raise SystemExit('guest inputs: expected 2 compact input replacements')
+          guest_path.write_text(guest)
+
+          device_path = Path('src/components/VideoConference/DeviceSelector.tsx')
+          device = device_path.read_text()
+          device = replace_once(
+              device,
+              '  submitDisabled?: boolean;\n}',
+              '  submitDisabled?: boolean;\n  compactViewport?: boolean;\n}',
+              'device prop type',
+          )
+          device = replace_once(
+              device,
+              "export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children, submitDisabled }: Props) {",
+              "export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children, submitDisabled, compactViewport = false }: Props) {",
+              'device prop destructure',
+          )
+          device = replace_once(
+              device,
+              '    <div className="space-y-4" dir="rtl">',
+              '    <div className={compactViewport ? "grid gap-3 lg:grid-cols-[minmax(0,1.12fr)_minmax(340px,0.88fr)] lg:items-center lg:gap-4" : "space-y-4"} dir="rtl">',
+              'device root layout',
+          )
+          device = replace_once(
+              device,
+              '      <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-video w-full shadow-xl">',
+              '      <div className={`relative bg-gray-900 rounded-2xl overflow-hidden aspect-video w-full shadow-xl ${compactViewport ? "lg:self-center" : ""}`}>',
+              'video preview layout',
+          )
+          device = replace_once(
+              device,
+              '      {permError && (',
+              '      <div className={compactViewport ? "min-w-0 space-y-2.5 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:pr-0.5" : "space-y-4"}>\n      {permError && (',
+              'right column start',
+          )
+          device = replace_once(
+              device,
+              '      <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 space-y-4">',
+              '      <div className={`bg-gray-900 rounded-2xl border border-gray-800 ${compactViewport ? "p-3 space-y-2.5" : "p-4 space-y-4"}`}>',
+              'device card compact spacing',
+          )
+          device = replace_once(
+              device,
+              '        className="w-full py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl font-semibold text-base transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"',
+              '        className={`w-full bg-teal-500 hover:bg-teal-600 text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg ${compactViewport ? "py-2 lg:py-2 text-sm" : "py-3 text-base"}`}',
+              'submit compact spacing',
+          )
+          device = replace_once(
+              device,
+              '      </button>\n    </div>\n  );\n}',
+              '      </button>\n      </div>\n    </div>\n  );\n}',
+              'right column end',
+          )
+          device_path.write_text(device)
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Validate diff
+        run: |
+          git diff --check
+          git diff -- src/components/VideoConference/GuestJoinPage.tsx src/components/VideoConference/DeviceSelector.tsx
+
+      - name: Commit scoped fix and remove temporary workflow
+        run: |
+          rm .github/workflows/tmp-prejoin-responsive.yml
+          git config user.name "hamedplay"
+          git config user.email "hamedkhaleghi493@gmail.com"
+          git add src/components/VideoConference/GuestJoinPage.tsx src/components/VideoConference/DeviceSelector.tsx .github/workflows/tmp-prejoin-responsive.yml
+          git commit -m "fix: fit conference prejoin within desktop viewport"
+          git push origin main
