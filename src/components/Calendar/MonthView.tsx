@@ -40,7 +40,7 @@ export function MonthView(p: CalendarViewProps) {
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   setMonthDayPopup({ jy: currentJy, jm: currentJm, jd: day, x: rect.left, y: rect.bottom });
                 }}
-                className={`group relative min-h-[64px] cursor-pointer border-b border-r border-slate-100 p-1 transition-colors dark:border-slate-800/80 sm:min-h-[82px] sm:p-1.5 ${isSel
+                className={`group relative min-h-[64px] min-w-0 cursor-pointer overflow-hidden border-b border-r border-slate-100 p-1 transition-colors dark:border-slate-800/80 sm:min-h-[82px] sm:p-1.5 ${isSel
                   ? 'bg-indigo-50/80 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-500/10 dark:ring-indigo-500/20'
                   : hasHoliday
                     ? 'bg-rose-50/35 hover:bg-rose-50/65 dark:bg-rose-500/5 dark:hover:bg-rose-500/10'
@@ -80,16 +80,16 @@ export function MonthView(p: CalendarViewProps) {
                 </div>
 
                 {dayOcc.length > 0 && (
-                  <div className="mt-0.5 space-y-0.5">
+                  <div className="mt-0.5 min-w-0 space-y-0.5 overflow-hidden">
                     {dayOcc.slice(0, 1).map((o: any) => (
                       <div
                         key={o.id}
                         title={o.title}
-                        className={`truncate rounded px-1 py-0.5 text-[8px] leading-tight sm:text-[9px] ${o.is_holiday
-                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                        className={`block w-full min-w-0 max-w-full truncate px-0.5 py-0.5 text-[8px] leading-tight sm:text-[9px] ${o.is_holiday
+                          ? 'text-rose-700 dark:text-rose-300'
                           : o.is_celebration
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
-                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
+                            ? 'text-amber-700 dark:text-amber-300'
+                            : 'text-slate-500 dark:text-slate-400'}`}
                       >
                         {o.title}
                       </div>
