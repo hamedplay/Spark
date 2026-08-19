@@ -137,6 +137,18 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
     : groups.filter(g => (g.unit_id || '__no_unit__') === selectedUnitId)
   );
 
+  const renderUserRow = (u: OrgUserProfile) => (
+    <UserRow
+      key={u.user_id}
+      userId={u.user_id}
+      name={u.full_name || ''}
+      assignments={u.assignments}
+      sending={sendingToUserId === u.user_id}
+      disabled={loading}
+      onSend={handleSendToUser}
+    />
+  );
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[88vh]">
@@ -244,17 +256,6 @@ function UserRow({
   onSend: (userId: string, name: string) => void;
 }) {
   const hasAssignments = assignments.length > 0;
-  const renderUserRow = (u: OrgUserProfile) => (
-                <UserRow
-                  key={u.user_id}
-                  userId={u.user_id}
-                  name={u.full_name || ''}
-                  assignments={u.assignments}
-                  sending={sendingToUserId === u.user_id}
-                  disabled={loading}
-                  onSend={handleSendToUser}
-                />
-              );
 
   return (
     <div className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
