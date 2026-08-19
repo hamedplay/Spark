@@ -1,0 +1,100 @@
+name: Temporary signed final delete UI fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-signed-final-delete-ui-fix.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-signed-final-delete-ui-fix
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Sync latest main
+        run: git pull --rebase origin main
+
+      - name: Apply scoped UI permission fix
+        shell: python
+        run: |
+          from pathlib import Path
+
+          final_path = Path('src/components/Minutes/Detail/TabFinalVersion.tsx')
+          text = final_path.read_text(encoding='utf-8')
+
+          old = "  canManage: boolean;\n  docData: MinutesDocumentData | null;"
+          new = "  canManage: boolean;\n  canDeleteSignedFinal: boolean;\n  docData: MinutesDocumentData | null;"
+          if text.count(old) != 1:
+              raise SystemExit(f'Props anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = "export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData,"
+          new = "export function TabFinalVersion({ minuteId, revisionNumber, canManage, canDeleteSignedFinal, docData,"
+          if text.count(old) != 1:
+              raise SystemExit(f'Signature anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = "  const handleDelete = async () => {\n    if (!deleteTarget) return;"
+          new = "  const handleDelete = async () => {\n    if (!deleteTarget || !canDeleteSignedFinal) return;"
+          if text.count(old) != 1:
+              raise SystemExit(f'Delete guard anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = """                        {canManage && (
+                          <button
+                            onClick={() => setDeleteTarget(a.id)}
+                            className=\"p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 transition-colors\"
+                            title=\"حذف\""""
+          new = """                        {canDeleteSignedFinal && (
+                          <button
+                            onClick={() => setDeleteTarget(a.id)}
+                            className=\"p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 transition-colors\"
+                            title=\"حذف\""""
+          if text.count(old) != 1:
+              raise SystemExit(f'Delete button anchor count != 1: {text.count(old)}')
+          text = text.replace(old, new, 1)
+          final_path.write_text(text, encoding='utf-8')
+
+          detail_path = Path('src/components/Minutes/MinutesDetailPage.tsx')
+          detail = detail_path.read_text(encoding='utf-8')
+          old = """              canManage={canManage}
+              docData={finalDocData}"""
+          new = """              canManage={canManage}
+              canDeleteSignedFinal={isSecretary}
+              docData={finalDocData}"""
+          if detail.count(old) != 1:
+              raise SystemExit(f'Parent prop anchor count != 1: {detail.count(old)}')
+          detail = detail.replace(old, new, 1)
+          detail_path.write_text(detail, encoding='utf-8')
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          rm .github/workflows/tmp-signed-final-delete-ui-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Minutes/Detail/TabFinalVersion.tsx src/components/Minutes/MinutesDetailPage.tsx .github/workflows/tmp-signed-final-delete-ui-fix.yml
+          git diff --cached --check
+          git commit -m "fix: restrict signed final delete UI to secretary [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
