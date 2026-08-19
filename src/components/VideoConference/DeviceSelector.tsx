@@ -25,9 +25,10 @@ interface Props {
   submitLabel?: string;
   children?: React.ReactNode;
   submitDisabled?: boolean;
+  compactViewport?: boolean;
 }
 
-export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children, submitDisabled }: Props) {
+export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children, submitDisabled, compactViewport = false }: Props) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioInput, setSelectedAudioInput] = useState('');
   const [selectedAudioOutput, setSelectedAudioOutput] = useState('');
@@ -304,12 +305,12 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
   const bars = 16;
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className={compactViewport ? "grid gap-3 lg:grid-cols-[minmax(0,1.12fr)_minmax(340px,0.88fr)] lg:items-center lg:gap-4" : "space-y-4"} dir="rtl">
       {/* Hidden audio element for speaker routing */}
       <audio ref={speakerTestRef} className="hidden" />
 
       {/* Video preview */}
-      <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-video w-full shadow-xl">
+      <div className={`relative bg-gray-900 rounded-2xl overflow-hidden aspect-video w-full shadow-xl ${compactViewport ? "lg:self-center" : ""}`}>
         {stream ? (
           <video
             ref={videoRef}
@@ -355,6 +356,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
         </div>
       </div>
 
+      <div className={compactViewport ? "min-w-0 space-y-2.5 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:pr-0.5" : "space-y-4"}>
       {permError && (
         <div className="px-3 py-2.5 bg-red-900/30 border border-red-700/50 rounded-xl text-red-300 text-sm">
           {permError}
@@ -362,7 +364,7 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
       )}
 
       {/* Device settings card */}
-      <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 space-y-4">
+      <div className={`bg-gray-900 rounded-2xl border border-gray-800 ${compactViewport ? "p-3 space-y-2.5" : "p-4 space-y-4"}`}>
 
         {/* Microphone */}
         <div className="space-y-1.5">
@@ -480,13 +482,14 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
       <button
         onClick={handleConfirm}
         disabled={!stream || acquiring || !!submitDisabled}
-        className="w-full py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl font-semibold text-base transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"
+        className={`w-full bg-teal-500 hover:bg-teal-600 text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg ${compactViewport ? "py-2 lg:py-2 text-sm" : "py-3 text-base"}`}
       >
         {acquiring
           ? <><Loader2 className="w-5 h-5 animate-spin" /> در حال دریافت دستگاه...</>
           : submitLabel
         }
       </button>
+      </div>
     </div>
   );
 }

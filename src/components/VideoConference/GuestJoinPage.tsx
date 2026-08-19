@@ -482,7 +482,7 @@ export function GuestJoinPage({ code }: Props) {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+      className="min-h-[100dvh] flex items-center justify-center p-3 sm:p-4 relative overflow-y-auto lg:h-[100dvh] lg:overflow-hidden"
       dir="rtl"
       style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}
     >
@@ -493,12 +493,12 @@ export function GuestJoinPage({ code }: Props) {
         aria-hidden="true"
       />
       <div className="absolute inset-0 bg-gradient-to-b from-gray-950/60 via-gray-950/40 to-gray-950/80" aria-hidden="true" />
-      <div className="relative z-10 w-full max-w-md space-y-4">
+      <div className="relative z-10 w-full max-w-md space-y-2 lg:max-w-5xl">
         {/* Header */}
-        <div className="text-center mb-2">
-          <div className="inline-flex items-center gap-2 mb-3">
+        <div className="text-center mb-1">
+          <div className="inline-flex items-center gap-2 mb-1.5">
             <Video className="w-7 h-7 text-teal-500" />
-            <span className="text-2xl font-bold text-white">ورود به جلسه</span>
+            <span className="text-xl sm:text-2xl font-bold text-white">ورود به جلسه</span>
           </div>
           {roomLoading ? (
             <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
@@ -506,7 +506,7 @@ export function GuestJoinPage({ code }: Props) {
               در حال بارگذاری اتاق...
             </div>
           ) : room ? (
-            <div className="bg-gray-800 rounded-xl px-4 py-2 inline-block">
+            <div className="bg-gray-800 rounded-xl px-3 py-1.5 inline-block">
               <p className="text-teal-400 font-medium">{room.name || 'جلسه ویدیویی'}</p>
               <div className="flex items-center justify-center gap-3 mt-1">
                 {room.is_locked && <span className="flex items-center gap-1 text-xs text-amber-400"><Lock className="w-3 h-3" /> قفل شده</span>}
@@ -521,6 +521,7 @@ export function GuestJoinPage({ code }: Props) {
 
         {/* DeviceSelector with extra fields embedded */}
         <DeviceSelector
+          compactViewport
           onConfirm={(stream) => {
             handleJoin(stream);
           }}
@@ -599,7 +600,7 @@ export function GuestJoinPage({ code }: Props) {
               placeholder="نام و نام خانوادگی"
               autoFocus
               maxLength={60}
-              className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+              className="w-full px-4 py-2.5 lg:py-2 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
             />
           </div>
 
@@ -617,7 +618,7 @@ export function GuestJoinPage({ code }: Props) {
                   }
                 }}
                 placeholder="رمز عبور"
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                className="w-full px-4 py-2.5 lg:py-2 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
               />
             </div>
           )}
