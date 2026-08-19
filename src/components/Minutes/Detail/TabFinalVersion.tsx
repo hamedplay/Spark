@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Upload, Download, Trash2, Signature as FileSignature, Loader as Loader2, Maximize2, RefreshCw, FileDown, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../../../lib/supabase';
 import {
   listMinuteAttachments, uploadMinuteAttachment, deleteMinuteAttachment,
   getAttachmentDownloadUrl, formatBytes,
@@ -37,6 +38,7 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [canDeleteSignedFinal, setCanDeleteSignedFinal] = useState(false);
   const [showFullPreview, setShowFullPreview] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -51,6 +53,27 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
         if (!cancelled) setError(e instanceof Error ? e.message : 'خطا در بارگذاری');
       } finally {
         if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [minuteId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCanDeleteSignedFinal(false);
+    (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user.id;
+      if (!userId || cancelled) return;
+
+      const { data, error: roleError } = await supabase
+        .from('minutes')
+        .select('secretary_user_id')
+        .eq('id', minuteId)
+        .maybeSingle();
+
+      if (!cancelled) {
+        setCanDeleteSignedFinal(!roleError && data?.secretary_user_id === userId);
       }
     })();
     return () => { cancelled = true; };
@@ -101,7 +124,7 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !canDeleteSignedFinal) return;
     setDeletingId(deleteTarget);
     try {
       await deleteMinuteAttachment(deleteTarget);
@@ -278,7 +301,7 @@ export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, 
                         >
                           {downloadingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                         </button>
-                        {canManage && (
+                        {canDeleteSignedFinal && (
                           <button
                             onClick={() => setDeleteTarget(a.id)}
                             className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 transition-colors"
