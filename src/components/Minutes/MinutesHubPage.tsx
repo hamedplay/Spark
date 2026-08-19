@@ -200,6 +200,15 @@ const EMPTY_COUNTS: HubCounts = {
   reports_closed: 0,
 };
 
+const MINUTES_SCOPE_PARAM = 'minutes_scope';
+
+function setMinutesListScope(scope: 'open' | null) {
+  const url = new URL(window.location.href);
+  if (scope) url.searchParams.set(MINUTES_SCOPE_PARAM, scope);
+  else url.searchParams.delete(MINUTES_SCOPE_PARAM);
+  window.history.replaceState(null, '', url.toString());
+}
+
 const nf = new Intl.NumberFormat('fa-IR');
 const timeFormatter = new Intl.DateTimeFormat('fa-IR', {
   hour: '2-digit',
@@ -431,7 +440,10 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => onNavigate(item.id)}
+                  onClick={() => {
+                    setMinutesListScope(item.id === 'minutes' ? 'open' : null);
+                    onNavigate(item.id);
+                  }}
                   className={`relative min-w-0 overflow-hidden rounded-2xl border p-3.5 text-right shadow-[0_12px_40px_rgba(0,0,0,0.12)] transition hover:-translate-y-0.5 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-violet-500/30 ${styles.card} ${hasAttention ? 'ring-1 ring-rose-400/50' : ''}`}
                 >
                   {hasAttention && <span className="absolute inset-y-0 right-0 w-1 bg-rose-400" />}
@@ -474,7 +486,10 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
               <button
                 key={card.id}
                 type="button"
-                onClick={() => onNavigate(card.id)}
+                onClick={() => {
+                  setMinutesListScope(null);
+                  onNavigate(card.id);
+                }}
                 className={`group relative min-w-0 overflow-hidden rounded-2xl border p-4 text-right shadow-[0_14px_42px_rgba(0,0,0,0.14)] transition hover:-translate-y-0.5 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-violet-500/30 sm:p-5 ${styles.card} ${hasNew ? 'ring-1 ring-rose-400/50 shadow-[0_14px_42px_rgba(244,63,94,0.10)]' : ''}`}
                 aria-label={`${card.title}؛ ${card.description}`}
               >
