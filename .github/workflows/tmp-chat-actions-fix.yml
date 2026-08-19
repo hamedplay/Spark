@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: tmp-chat-actions-fix
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   fix-and-build:
