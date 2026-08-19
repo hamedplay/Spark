@@ -1,0 +1,153 @@
+name: Temporary Minutes Hub Scope Fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-minutes-hub-scope.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Apply scoped replacements
+        shell: python
+        run: |
+          from pathlib import Path
+
+          hub_path = Path('src/components/Minutes/MinutesHubPage.tsx')
+          hub = hub_path.read_text(encoding='utf-8')
+
+          anchor = "const nf = new Intl.NumberFormat('fa-IR');\n"
+          helper = """const MINUTES_SCOPE_PARAM = 'minutes_scope';
+
+function setMinutesListScope(scope: 'open' | null) {
+  const url = new URL(window.location.href);
+  if (scope) url.searchParams.set(MINUTES_SCOPE_PARAM, scope);
+  else url.searchParams.delete(MINUTES_SCOPE_PARAM);
+  window.history.replaceState(null, '', url.toString());
+}
+
+"""
+          if hub.count(anchor) != 1:
+              raise SystemExit(f'Hub helper anchor count != 1: {hub.count(anchor)}')
+          hub = hub.replace(anchor, helper + anchor, 1)
+
+          old_kpi = "onClick={() => onNavigate(item.id)}"
+          new_kpi = """onClick={() => {
+                    setMinutesListScope(item.id === 'minutes' ? 'open' : null);
+                    onNavigate(item.id);
+                  }}"""
+          if hub.count(old_kpi) != 1:
+              raise SystemExit(f'Hub KPI click count != 1: {hub.count(old_kpi)}')
+          hub = hub.replace(old_kpi, new_kpi, 1)
+
+          old_card = "onClick={() => onNavigate(card.id)}"
+          new_card = """onClick={() => {
+                  setMinutesListScope(null);
+                  onNavigate(card.id);
+                }}"""
+          if hub.count(old_card) != 1:
+              raise SystemExit(f'Hub card click count != 1: {hub.count(old_card)}')
+          hub = hub.replace(old_card, new_card, 1)
+          hub_path.write_text(hub, encoding='utf-8')
+
+          list_path = Path('src/components/Minutes/MinutesListPage.tsx')
+          text = list_path.read_text(encoding='utf-8')
+
+          props_anchor = """interface Props {
+  onNavigate: (page: string) => void;
+}
+
+"""
+          props_insert = """interface Props {
+  onNavigate: (page: string) => void;
+}
+
+type MinutesStatusFilter = MinutesStatus | 'all' | 'open';
+const MINUTES_SCOPE_PARAM = 'minutes_scope';
+
+function getInitialStatusFilter(): MinutesStatusFilter {
+  return new URLSearchParams(window.location.search).get(MINUTES_SCOPE_PARAM) === 'open' ? 'open' : 'all';
+}
+
+"""
+          if text.count(props_anchor) != 1:
+              raise SystemExit(f'List props anchor count != 1: {text.count(props_anchor)}')
+          text = text.replace(props_anchor, props_insert, 1)
+
+          old_state = "const [statusFilter, setStatusFilter] = useState<MinutesStatus | 'all'>('all');"
+          new_state = "const [statusFilter, setStatusFilter] = useState<MinutesStatusFilter>(getInitialStatusFilter);"
+          if text.count(old_state) != 1:
+              raise SystemExit(f'List state count != 1: {text.count(old_state)}')
+          text = text.replace(old_state, new_state, 1)
+
+          effect_anchor = "  useEffect(() => { fetchMinutes(); }, [fetchMinutes]);\n\n"
+          effect_insert = """  useEffect(() => { fetchMinutes(); }, [fetchMinutes]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(MINUTES_SCOPE_PARAM)) return;
+    url.searchParams.delete(MINUTES_SCOPE_PARAM);
+    window.history.replaceState(null, '', url.toString());
+  }, []);
+
+"""
+          if text.count(effect_anchor) != 1:
+              raise SystemExit(f'List effect anchor count != 1: {text.count(effect_anchor)}')
+          text = text.replace(effect_anchor, effect_insert, 1)
+
+          old_match = "const matchStatus = statusFilter === 'all' || m.status === statusFilter;"
+          new_match = """const matchStatus = statusFilter === 'all'
+      ? true
+      : statusFilter === 'open'
+        ? m.status !== 'published'
+        : m.status === statusFilter;"""
+          if text.count(old_match) != 1:
+              raise SystemExit(f'List status match count != 1: {text.count(old_match)}')
+          text = text.replace(old_match, new_match, 1)
+
+          old_cast = "onChange={e => setStatusFilter(e.target.value as MinutesStatus | 'all')}"
+          new_cast = "onChange={e => setStatusFilter(e.target.value as MinutesStatusFilter)}"
+          if text.count(old_cast) != 1:
+              raise SystemExit(f'List cast count != 1: {text.count(old_cast)}')
+          text = text.replace(old_cast, new_cast, 1)
+
+          option_anchor = "              <option value=\"all\">همه وضعیت‌ها</option>\n"
+          option_insert = """              <option value="all">همه وضعیت‌ها</option>
+              <option value="open">باز (منتشرنشده)</option>
+"""
+          if text.count(option_anchor) != 1:
+              raise SystemExit(f'List option anchor count != 1: {text.count(option_anchor)}')
+          text = text.replace(option_anchor, option_insert, 1)
+          list_path.write_text(text, encoding='utf-8')
+
+          print('Scoped replacements applied successfully.')
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          rm .github/workflows/fix-minutes-hub-scope.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Minutes/MinutesHubPage.tsx src/components/Minutes/MinutesListPage.tsx .github/workflows/fix-minutes-hub-scope.yml
+          git diff --cached --check
+          git commit -m "fix: scope open minutes dashboard navigation [skip ci]"
+          git push origin HEAD:main
