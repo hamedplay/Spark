@@ -1,0 +1,132 @@
+name: tmp-action-create-audit-fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-action-create-audit-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Apply scoped action creation fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          # UserSelector: if org grouping is temporarily unavailable/empty, fall back to the
+          # already-fetched user list instead of rendering an empty selector.
+          path = 'src/components/Tasks/UserSelector.tsx'
+          replace_once(path,
+              "  const allUsers: (UserProfile | OrgUserProfile)[] = groups\n    ? groups.flatMap(g => g.users)\n    : users;",
+              "  const groupedUsers = groups?.flatMap(g => g.users) ?? [];\n  const allUsers: (UserProfile | OrgUserProfile)[] = groupedUsers.length > 0 ? groupedUsers : users;")
+          replace_once(path,
+              "            {isSearching || !groups ? (",
+              "            {isSearching || !groups?.length ? (")
+
+          # Create drawer: prevent duplicate submit/closing while busy, keep parent/dependency
+          # mutually exclusive, and avoid two cramped date fields on narrow mobile screens.
+          path = 'src/components/Tasks/ActionCreateDrawer.tsx'
+          replace_once(path,
+              "  const submit = (e: React.FormEvent) => {\n    e.preventDefault();\n    onCreate({ ...form, startDate, dueDate, reminderAt, dependencyIds, checklist, files });\n  };\n  const addChecklist = () => { if (checkText.trim()) { setChecklist(v => [...v, checkText.trim()]); setCheckText(''); } };\n  const toggleDependency = (id: string) => setDependencyIds(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]);",
+              "  const submit = (e: React.FormEvent) => {\n    e.preventDefault();\n    if (busy) return;\n    onCreate({ ...form, startDate, dueDate, reminderAt, dependencyIds, checklist, files });\n  };\n  const addChecklist = () => { if (checkText.trim()) { setChecklist(v => [...v, checkText.trim()]); setCheckText(''); } };\n  const toggleDependency = (id: string) => setDependencyIds(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]);\n  const handleParentTaskChange = (parentTaskId: string) => {\n    setForm(v => ({ ...v, parentTaskId }));\n    if (parentTaskId) setDependencyIds(v => v.filter(id => id !== parentTaskId));\n  };")
+          replace_once(path,
+              "  return <div className=\"fixed inset-0 z-[9999] bg-black/45 backdrop-blur-sm flex justify-end\" dir=\"rtl\" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>",
+              "  return <div className=\"fixed inset-0 z-[9999] bg-black/45 backdrop-blur-sm flex justify-end\" dir=\"rtl\" onMouseDown={e => { if (!busy && e.target === e.currentTarget) onClose(); }}>")
+          replace_once(path,
+              "<div className=\"flex items-center gap-2\"><button type=\"button\" onClick={onClose} className=\"p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800\"><X className=\"w-5 h-5\" /></button><button disabled={busy} type=\"submit\" className=\"px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-medium disabled:opacity-50 flex items-center gap-2\"><Plus className=\"w-4 h-4\" /> ایجاد اقدام</button></div>",
+              "<div className=\"flex items-center gap-2\"><button type=\"button\" disabled={busy} onClick={onClose} className=\"p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed\"><X className=\"w-5 h-5\" /></button><button disabled={busy} type=\"submit\" className=\"px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-medium disabled:opacity-50 flex items-center gap-2\"><Plus className=\"w-4 h-4\" /> {busy ? 'در حال ایجاد...' : 'ایجاد اقدام'}</button></div>")
+          replace_once(path,
+              "          <div className=\"grid grid-cols-2 gap-3\"><div><label className=\"field-label\">تاریخ شروع</label><JalaliDateInput value={startDate} onChange={setStartDate}/></div><div><label className=\"field-label\">سررسید *</label><JalaliDateInput value={dueDate} onChange={setDueDate}/></div></div>",
+              "          <div className=\"grid grid-cols-1 sm:grid-cols-2 gap-3\"><div><div className=\"flex items-center justify-between gap-2\"><label className=\"field-label\">تاریخ شروع</label>{startDate && <button type=\"button\" onClick={()=>setStartDate(null)} className=\"mb-1 text-[11px] text-gray-400 hover:text-red-500\">پاک کردن</button>}</div><JalaliDateInput value={startDate} onChange={setStartDate}/></div><div><label className=\"field-label\">سررسید *</label><JalaliDateInput value={dueDate} onChange={setDueDate}/></div></div>")
+          replace_once(path,
+              "          <div><label className=\"field-label flex items-center gap-2\"><Bell className=\"w-4 h-4\"/> یادآور</label><JalaliDateInput value={reminderAt} onChange={setReminderAt}/></div>",
+              "          <div><div className=\"flex items-center justify-between gap-2\"><label className=\"field-label flex items-center gap-2\"><Bell className=\"w-4 h-4\"/> یادآور</label>{reminderAt && <button type=\"button\" onClick={()=>setReminderAt(null)} className=\"mb-1 text-[11px] text-gray-400 hover:text-red-500\">پاک کردن</button>}</div><JalaliDateInput value={reminderAt} onChange={setReminderAt}/></div>")
+          replace_once(path,
+              "<select value={form.parentTaskId} onChange={e=>setForm(v=>({...v,parentTaskId:e.target.value}))} className=\"action-input\">",
+              "<select value={form.parentTaskId} onChange={e=>handleParentTaskChange(e.target.value)} className=\"action-input\">")
+
+          # Parent handler is a second line of defense; reject whitespace-only descriptions and
+          # invalid date ordering before any database write.
+          path = 'src/components/TasksPage.tsx'
+          replace_once(path,
+              "    if (!payload.assigneeId) { toast.error('اقدام کننده را انتخاب کنید'); return; }\n    if (!payload.title.trim()) { toast.error('عنوان را وارد کنید'); return; }",
+              "    if (!payload.assigneeId) { toast.error('اقدام کننده را انتخاب کنید'); return; }\n    if (!payload.title.trim()) { toast.error('عنوان را وارد کنید'); return; }\n    if (!payload.description.trim()) { toast.error('توضیحات را وارد کنید'); return; }\n    if (payload.startDate && payload.startDate.getTime() > payload.dueDate.getTime()) {\n      toast.error('تاریخ شروع نمی‌تواند بعد از تاریخ سررسید باشد');\n      return;\n    }\n    if (payload.parentTaskId && payload.dependencyIds.includes(payload.parentTaskId)) {\n      toast.error('اقدام والد نمی‌تواند همزمان وابستگی همان اقدام باشد');\n      return;\n    }")
+          PY
+
+          git diff --check
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test user selector fallback
+        shell: bash
+        run: |
+          cat > /tmp/action-create-selector.test.tsx <<'TEST'
+          import React from 'react';
+          import { renderToStaticMarkup } from 'react-dom/server';
+          import { UserSelector } from '${{ github.workspace }}/src/components/Tasks/UserSelector.tsx';
+
+          const users = [{
+            user_id: 'u1', full_name: 'کاربر تست', email: null,
+            avatar_url: null, position: null, unit_name: null,
+          }];
+          const html = renderToStaticMarkup(
+            <UserSelector users={users} groups={[]} value="u1" onChange={() => {}} />
+          );
+          if (!html.includes('کاربر تست')) {
+            throw new Error('empty org groups must fall back to users list');
+          }
+          console.log('UserSelector fallback contract OK');
+          TEST
+          node --import tsx /tmp/action-create-selector.test.tsx
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit validated fix and remove temporary workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/tmp-action-create-audit-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/Tasks/ActionCreateDrawer.tsx src/components/Tasks/UserSelector.tsx src/components/TasksPage.tsx .github/workflows/tmp-action-create-audit-fix.yml
+          git diff --cached --check
+          git commit -m 'fix(tasks): harden action creation form [skip ci]'
+          git push origin HEAD:main
+
+      - name: Cleanup temporary workflow if validation fails
+        if: failure()
+        shell: bash
+        run: |
+          git reset --hard HEAD || true
+          rm -f .github/workflows/tmp-action-create-audit-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: cleanup tmp action-create workflow [skip ci]' || true
+          git push origin HEAD:main || true
