@@ -1,0 +1,71 @@
+name: tmp-e2ee-call-validation
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  validate:
+    if: ${{ github.event.issue.title == 'tmp-e2ee-call-validation-20260820' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 5
+
+      - name: Verify requested E2EE entry behavior
+        shell: bash
+        run: |
+          grep -Fq 'onStartE2EECall?.()' src/components/Chat/Conversation/ConversationHeader.tsx
+          grep -Fq 'title="تماس امن E2EE"' src/components/Chat/Conversation/ConversationHeader.tsx
+          grep -Fq 'fixed inset-0 z-[9998]' src/components/Chat/E2EECall/index.tsx
+          if grep -Fq "from './IdleView'" src/components/Chat/E2EECall/index.tsx; then
+            echo 'standalone E2EE IdleView is still imported' >&2
+            exit 1
+          fi
+          if grep -Fq '<IdleView' src/components/Chat/E2EECall/index.tsx; then
+            echo 'standalone E2EE user selector is still rendered' >&2
+            exit 1
+          fi
+          if grep -Fq 'تماس امن E2EE' src/components/Chat/CallHistoryPage.tsx; then
+            echo 'call history still exposes an E2EE launch button' >&2
+            exit 1
+          fi
+          grep -Fq 'e2ee-global-inbox-${currentUserId}' src/context/GlobalCallContext.tsx
+          grep -Fq 'Global E2EE incoming call overlay' src/context/GlobalCallContext.tsx
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Cleanup temporary tooling
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          rm -f .github/workflows/tmp-e2ee-call-validation.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: remove E2EE call validator [skip ci]' || true
+          git push origin HEAD:main || true
+          gh issue close "${{ github.event.issue.number }}" --repo "${{ github.repository }}" --reason completed || true
