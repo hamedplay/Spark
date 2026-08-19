@@ -45,6 +45,7 @@ jobs:
             echo "Validator failed with exit code $code; recording diagnostic status"
             git fetch origin main
             git reset --hard origin/main
+            rm -rf dist
             rm -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
             {
               echo "exit_code=$code"
@@ -65,6 +66,7 @@ jobs:
             echo "Attempt $attempt: validating latest main"
             git fetch origin main
             git reset --hard origin/main
+            rm -rf dist
             rm -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
             base_sha="$(git rev-parse HEAD)"
 
@@ -96,6 +98,7 @@ jobs:
             npm run test:layout-navigation
             npm run test:minutes-integration
             npm run build
+            rm -rf dist
 
             git diff --check
             test -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
