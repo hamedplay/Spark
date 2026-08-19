@@ -317,8 +317,8 @@
 }
 
 @keyframes spark-motion-feature-icon {
-  0%,100% { transform: translate3d(0,0,0); }
-  50% { transform: translate3d(0,-4px,0); }
+  0%,100% { transform: translateY(-50%) translate3d(0,0,0); }
+  50% { transform: translateY(-50%) translate3d(0,-4px,0); }
 }
 
 @keyframes spark-motion-feature-svg {
@@ -327,42 +327,44 @@
 }
 
 @keyframes spark-motion-hologram-breathe {
-  0%,100% { transform: scale(.985); opacity: .78; }
-  50% { transform: scale(1.015); opacity: 1; }
+  0%,100% { transform: translateX(-50%) scale(.985); opacity: .78; }
+  50% { transform: translateX(-50%) scale(1.015); opacity: 1; }
 }
 
 @keyframes spark-motion-data-rain {
-  0% { transform: translate3d(0,-10px,0); opacity: .14; }
+  0% { transform: translate3d(-50%,-10px,0) perspective(500px) rotateX(62deg); opacity: .14; }
   45% { opacity: .42; }
-  100% { transform: translate3d(0,16px,0); opacity: .12; }
+  100% { transform: translate3d(-50%,16px,0) perspective(500px) rotateX(62deg); opacity: .12; }
 }
 
 @keyframes spark-motion-orbit-cw {
-  to { transform: rotate(360deg); }
+  from { rotate: 0deg; }
+  to { rotate: 360deg; }
 }
 
 @keyframes spark-motion-orbit-ccw {
-  to { transform: rotate(-360deg); }
+  from { rotate: 0deg; }
+  to { rotate: -360deg; }
 }
 
 @keyframes spark-motion-layer-one {
-  0%,100% { transform: translate3d(0,0,0) scale(1); }
-  50% { transform: translate3d(0,-2px,0) scale(1.015); }
+  0%,100% { transform: translate3d(-50%,0,0) perspective(460px) rotateX(63deg) scale(1); }
+  50% { transform: translate3d(-50%,-2px,0) perspective(460px) rotateX(63deg) scale(1.015); }
 }
 
 @keyframes spark-motion-layer-two {
-  0%,100% { transform: translate3d(0,0,0) scale(1); }
-  50% { transform: translate3d(0,-3px,0) scale(1.02); }
+  0%,100% { transform: translate3d(-50%,0,0) perspective(460px) rotateX(63deg) scale(1); }
+  50% { transform: translate3d(-50%,-3px,0) perspective(460px) rotateX(63deg) scale(1.02); }
 }
 
 @keyframes spark-motion-layer-three {
-  0%,100% { transform: translate3d(0,0,0) scale(1); }
-  50% { transform: translate3d(0,-4px,0) scale(1.025); }
+  0%,100% { transform: translate3d(-50%,0,0) perspective(460px) rotateX(63deg) scale(1); }
+  50% { transform: translate3d(-50%,-4px,0) perspective(460px) rotateX(63deg) scale(1.025); }
 }
 
 @keyframes spark-motion-core-float {
-  0%,100% { transform: translate3d(0,0,0); }
-  50% { transform: translate3d(0,-7px,0); }
+  0%,100% { transform: translate3d(-50%,0,0); }
+  50% { transform: translate3d(-50%,-7px,0); }
 }
 
 @keyframes spark-motion-core-logo {
