@@ -90,6 +90,7 @@ export function Layout({
     activePage === 'channels' ||
     activePage === 'video-conference' ||
     activePage === 'portal-config';
+  const isScrollableFullHeightPage = activePage === 'video-conference';
 
   return (
     <div
@@ -159,7 +160,11 @@ export function Layout({
         />
 
         {isFullHeightPage ? (
-          <div className="app-responsive-content flex-1 overflow-hidden min-h-0 min-w-0 max-w-full">
+          <div
+            className={`app-responsive-content flex-1 min-h-0 min-w-0 max-w-full ${
+              isScrollableFullHeightPage ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
+            }`}
+          >
             {children}
           </div>
         ) : (
