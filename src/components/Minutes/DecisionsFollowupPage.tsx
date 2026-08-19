@@ -67,6 +67,7 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
   // Modals
   const [actionDecision, setActionDecision] = useState<FollowupRow | null>(null);
   const [actionType, setActionType]         = useState<ActionType>('progress');
+  const [obstacleUpdateId, setObstacleUpdateId] = useState<string | null>(null);
   const [detailDecision, setDetailDecision] = useState<FollowupRow | null>(null);
 
   const updateFilters = (patch: Partial<DecisionFilterState>) => setFilters(f => ({ ...f, ...patch }));
@@ -161,13 +162,41 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
   useEffect(() => { fetchFilterOptions(); }, [fetchFilterOptions]);
 
-  const openAction = (dec: FollowupRow, type: ActionType) => {
+  const openAction = async (dec: FollowupRow, type: ActionType) => {
+    if (type === 'obstacle_resolved') {
+      const { data: obstacle, error: obstacleErr } = await supabase
+        .from('minutes_decision_updates')
+        .select('id')
+        .eq('decision_id', dec.id)
+        .eq('event_type', 'obstacle')
+        .eq('is_blocking', true)
+        .is('resolved_at', null)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (obstacleErr) {
+        toast.error('خطا در دریافت مانع باز.');
+        return;
+      }
+      if (!obstacle?.id) {
+        toast.error('مانع بازی برای رفع یافت نشد.');
+        fetchData(offset);
+        fetchSummary();
+        return;
+      }
+      setObstacleUpdateId(obstacle.id);
+    } else {
+      setObstacleUpdateId(null);
+    }
+
     setActionDecision(dec);
     setActionType(type);
   };
 
   const handleActionSuccess = (updatedAt?: string) => {
     setActionDecision(null);
+    setObstacleUpdateId(null);
     fetchData(offset);
     fetchSummary();
     fetchFilterOptions();
@@ -300,8 +329,12 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
         <DecisionActionModal
           decision={actionDecision}
           action={actionType}
+          obstacleUpdateId={obstacleUpdateId}
           isManager={true}
-          onClose={() => setActionDecision(null)}
+          onClose={() => {
+            setActionDecision(null);
+            setObstacleUpdateId(null);
+          }}
           onSuccess={handleActionSuccess}
         />
       )}
@@ -389,6 +422,11 @@ function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }
             className="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700">
             <SquareArrowUpRight className="h-4 w-4" />
           </button>
+          {isManager && dec.open_obstacle_count > 0 && (
+            <button title="رفع مانع" onClick={() => onAction('obstacle_resolved')} className="rounded-lg p-1.5 text-green-600 transition-colors hover:bg-green-50 dark:hover:bg-green-900/20">
+              <CheckCircle2 className="h-4 w-4" />
+            </button>
+          )}
           <button title="ثبت پیگیری" onClick={() => onAction('followup')} className="rounded-lg p-1.5 text-blue-500 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/20">
             <Clock className="h-4 w-4" />
           </button>
@@ -467,6 +505,12 @@ function TrackingMobileCard({ dec, isManager, onViewDetail, onAction, onNavigate
       {/* All desktop actions remain reachable on touch devices. The row scrolls
           horizontally on very narrow devices instead of silently dropping actions. */}
       <div className="mobile-scroll-actions border-t border-gray-100 pt-2 dark:border-gray-700">
+        {isManager && dec.open_obstacle_count > 0 && (
+          <button onClick={() => onAction('obstacle_resolved')} title="رفع مانع"
+            className="inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl border border-green-200 px-3 text-xs font-medium text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20">
+            <CheckCircle2 className="h-4 w-4" /> رفع مانع
+          </button>
+        )}
         <button onClick={() => onAction('followup')} title="ثبت پیگیری"
           className="inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700">
           <Clock className="h-4 w-4" /> پیگیری
