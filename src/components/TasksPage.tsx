@@ -217,7 +217,6 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
         toast.error('زمان تخمینی معتبر نیست');
         return;
       }
-
       const { data: inserted, error } = await supabase
         .from('tasks')
         .insert({
@@ -537,6 +536,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
         completed={counters.completed}
         onAssignedToMe={() => { clearExternalFilter(); setTaskTab('assigned_to_me'); setStatusFilter('all'); }}
         onInProgress={() => { clearExternalFilter(); setTaskTab('all'); setStatusFilter('in_progress'); }}
+        onOverdue={() => { setFocusTaskId(null); setDashboardTaskView('overdue'); setTaskTab('all'); setStatusFilter('all'); }}
         onCompleted={() => { setFocusTaskId(null); setDashboardTaskView('completed'); setTaskTab('all'); setStatusFilter('all'); }}
       />
 
