@@ -1,5 +1,4 @@
 name: Temporary management dashboard fix
-# Retry after a concurrent main update; the stale run failed closed before source transformation.
 
 on:
   push:
@@ -19,19 +18,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout exact trigger commit
+      - name: Checkout trigger revision
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Guard against concurrent main changes
+      - name: Sync latest main before transformation
         shell: bash
         run: |
+          set -euo pipefail
           git fetch origin main
-          test "$(git rev-parse origin/main)" = "$GITHUB_SHA" || {
-            echo "main advanced after this run was triggered; refusing to transform stale source"
-            exit 1
-          }
+          git reset --hard origin/main
+          echo "VALIDATION_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Apply scoped transformation
         run: python3 scripts/tmp-management-dashboard-fix.py
@@ -57,6 +55,7 @@ jobs:
       - name: Validate final diff
         shell: bash
         run: |
+          set -euo pipefail
           git diff --check
           test -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
           grep -q "has_management_dashboard_access_v1" src/AuthenticatedApp.tsx
@@ -66,13 +65,39 @@ jobs:
           grep -q "focusMeetingId" src/features/meetings/pages/MeetingsPage.tsx
           grep -q "focusDecisionId" src/components/Minutes/Detail/TabDecisions.tsx
 
-      - name: Commit validated source and remove temporary tooling
+      - name: Commit validated source and safely integrate latest main
         shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm scripts/tmp-management-dashboard-fix.py .github/workflows/tmp-management-dashboard-fix.yml
           git add src tests supabase/migrations/20260819171500_harden_management_dashboard_access.sql
           git diff --cached --check
           git commit -m "fix: secure management dashboard drill-down"
+
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$VALIDATION_BASE" ]; then
+            overlap="$(git diff --name-only "$VALIDATION_BASE"..origin/main -- \
+              src/AuthenticatedApp.tsx \
+              src/app/navigation/pageRendererTypes.ts \
+              src/app/navigation/PageRenderer.tsx \
+              src/app/layout/AppShell.tsx \
+              src/components/Layout.tsx \
+              src/app/layout/components/LayoutSidebar.tsx \
+              src/app/layout/navigationMenu.ts \
+              tests/app/layoutNavigation.test.ts \
+              src/components/ManagementDashboardPage.tsx \
+              src/components/TasksPage.tsx \
+              src/features/meetings/pages/MeetingsPage.tsx \
+              src/components/Minutes/Detail/TabDecisions.tsx \
+              supabase/migrations/20260819171500_harden_management_dashboard_access.sql)"
+            if [ -n "$overlap" ]; then
+              echo "Scoped files changed during validation; refusing an unvalidated merge:"
+              echo "$overlap"
+              exit 1
+            fi
+            git rebase origin/main
+          fi
+
           git push origin HEAD:main
