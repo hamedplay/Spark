@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Video, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Search, User, X, ShieldCheck, ChevronLeft } from 'lucide-react';
+import { Phone, Video, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Search, User, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import type { UserProfile } from './types';
@@ -16,7 +16,7 @@ interface Props {
   onClose?: () => void;
 }
 
-export function CallHistoryPage({ currentUserId, onStartCall, onStartE2EECall, onClose }: Props) {
+export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) {
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -91,7 +91,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onStartE2EECall, o
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-base font-bold text-gray-900 dark:text-white">تماس‌ها</h2>
-            <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">تماس‌های سازمانی و تماس امن سرتاسری</p>
+            <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">تاریخچه تماس‌های سازمانی</p>
           </div>
           {onClose && (
             <button
@@ -103,21 +103,6 @@ export function CallHistoryPage({ currentUserId, onStartCall, onStartE2EECall, o
             </button>
           )}
         </div>
-
-        <button
-          type="button"
-          onClick={onStartE2EECall}
-          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-right transition-colors hover:bg-emerald-100/70 dark:border-emerald-800/70 dark:bg-emerald-950/25 dark:hover:bg-emerald-950/40"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm">
-            <ShieldCheck className="h-4 w-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-bold text-emerald-900 dark:text-emerald-200">تماس امن E2EE</span>
-            <span className="mt-0.5 block text-[11px] text-emerald-700/80 dark:text-emerald-400">تماس صوتی یا تصویری با رمزنگاری سرتاسری</span>
-          </span>
-          <ChevronLeft className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-        </button>
 
         {/* Search */}
         <div className="relative mb-3">
