@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ci-chat-actions-temporary
+  group: ci-chat-actions-postfix-validation
   cancel-in-progress: true
 
 jobs:
@@ -23,31 +23,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Sync latest main and verify scoped baseline
+      - name: Sync latest main and verify fixed source
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main
           git checkout -B main origin/main
           actual="$(git rev-parse HEAD:src/components/Chat/ChatActionsPanel.tsx)"
-          test "$actual" = "921cc0dbf9e3b7977d2ad7022786f5de6666154f"
-
-      - name: Apply minimal fix in workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const path = 'src/components/Chat/ChatActionsPanel.tsx';
-          const before = "import { Search, SlidersHorizontal, X, ChevronDown, Clock, Star } from 'lucide-react';";
-          const after = "import { Search, SlidersHorizontal, X, ChevronDown, Clock, Star, Check } from 'lucide-react';";
-          const source = fs.readFileSync(path, 'utf8');
-          if (!source.includes(before)) throw new Error('Expected lucide import baseline not found');
-          if ((source.match(/<Check\b/g) || []).length < 1) throw new Error('No local Check JSX usage found');
-          fs.writeFileSync(path, source.replace(before, after));
-          NODE
-          git diff --check
-          test "$(git diff --name-only)" = "src/components/Chat/ChatActionsPanel.tsx"
+          test "$actual" = "8254d864cc262639700142e00bf0f1f8948140bd"
+          grep -Fq "import { Search, SlidersHorizontal, X, ChevronDown, Clock, Star, Check } from 'lucide-react';" src/components/Chat/ChatActionsPanel.tsx
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -62,26 +46,26 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Write validated minimal fix to main
+      - name: Record successful build
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const path = 'src/components/Chat/ChatActionsPanel.tsx';
-            const before = "import { Search, SlidersHorizontal, X, ChevronDown, Clock, Star } from 'lucide-react';";
-            const after = "import { Search, SlidersHorizontal, X, ChevronDown, Clock, Star, Check } from 'lucide-react';";
+            const path = '.tmp-chat-actions-build-ok';
             const { owner, repo } = context.repo;
-            const response = await github.rest.repos.getContent({ owner, repo, path, ref: 'main' });
-            if (Array.isArray(response.data) || !('content' in response.data)) throw new Error('Expected file response');
-            const current = Buffer.from(response.data.content, 'base64').toString('utf8');
-            if (current.includes(after)) return;
-            if (!current.includes(before)) throw new Error('Current main no longer matches scoped import baseline');
+            let sha;
+            try {
+              const existing = await github.rest.repos.getContent({ owner, repo, path, ref: 'main' });
+              if (!Array.isArray(existing.data) && 'sha' in existing.data) sha = existing.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
             await github.rest.repos.createOrUpdateFileContents({
               owner,
               repo,
               path,
               branch: 'main',
-              sha: response.data.sha,
-              message: 'fix(chat): import Check in actions panel [skip ci]',
-              content: Buffer.from(current.replace(before, after), 'utf8').toString('base64'),
+              sha,
+              message: 'chore: record chat actions build success [skip ci]',
+              content: Buffer.from(`source=8254d864cc262639700142e00bf0f1f8948140bd\nrun=${context.runId}\n`, 'utf8').toString('base64'),
             });
