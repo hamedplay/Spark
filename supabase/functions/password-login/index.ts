@@ -1,11 +1,11 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
+import postgres from "npm:postgres@3.4.7";
 import { hmacSha256Hex } from "../_shared/crypto.ts";
 
 const MAX_BODY_BYTES = 4096;
 const MAX_IDENTIFIER_LEN = 256;
 const MAX_PASSWORD_LEN = 1024;
-const INTERNAL_AUTH_DOMAIN = "auth.spark.invalid";
 
 const baseHeaders: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -17,24 +17,35 @@ const baseHeaders: Record<string, string> = {
 
 type LoginMethod = "username" | "email" | "phone";
 type PasswordCredential = { email: string; password: string } | { phone: string; password: string };
+type JsonObject = Record<string, unknown>;
 
-function adminApiKey(): string {
-  const rawSecretKeys = Deno.env.get("SUPABASE_SECRET_KEYS");
-  if (rawSecretKeys) {
+const databaseUrl = Deno.env.get("SUPABASE_DB_URL") ?? "";
+const db = databaseUrl
+  ? postgres(databaseUrl, {
+      max: 1,
+      prepare: false,
+      connect_timeout: 5,
+      idle_timeout: 20,
+    })
+  : null;
+
+function publicApiKey(): string {
+  const rawPublishableKeys = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
+  if (rawPublishableKeys) {
     try {
-      const keys = JSON.parse(rawSecretKeys) as Record<string, unknown>;
+      const keys = JSON.parse(rawPublishableKeys) as Record<string, unknown>;
       if (typeof keys.default === "string" && keys.default.length > 0) return keys.default;
     } catch {
-      // Fall through to the legacy hosted secret for backward compatibility.
+      // Fall through to the legacy public key for backward compatibility.
     }
   }
-  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  return Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 }
 
 function corsHeaders(allowedOrigin: string | null): Record<string, string> {
-  const h: Record<string, string> = { ...baseHeaders };
-  if (allowedOrigin) h["Access-Control-Allow-Origin"] = allowedOrigin;
-  return h;
+  const headers: Record<string, string> = { ...baseHeaders };
+  if (allowedOrigin) headers["Access-Control-Allow-Origin"] = allowedOrigin;
+  return headers;
 }
 
 function json(data: unknown, status: number, allowedOrigin: string | null): Response {
@@ -44,18 +55,17 @@ function json(data: unknown, status: number, allowedOrigin: string | null): Resp
   });
 }
 
+function resultObject(value: unknown): JsonObject | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : null;
+}
+
 async function getConfig(): Promise<{ origins: string[]; pepper: string }> {
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    adminApiKey(),
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-  const { data, error } = await admin.rpc("get_phone_auth_config");
-  if (error || !data) throw new Error("CONFIG_UNAVAILABLE");
-  const row = Array.isArray(data) ? data[0] : data;
+  if (!db) throw new Error("DB_UNAVAILABLE");
+  const rows = await db`select allowed_origins, pepper from public.get_phone_auth_config()`;
+  const row = rows[0];
   if (!row) throw new Error("CONFIG_UNAVAILABLE");
   return {
-    origins: Array.isArray(row.allowed_origins) ? row.allowed_origins : [],
+    origins: Array.isArray(row.allowed_origins) ? row.allowed_origins.filter((value): value is string => typeof value === "string") : [],
     pepper: typeof row.pepper === "string" ? row.pepper : "",
   };
 }
@@ -66,11 +76,11 @@ function checkOrigin(origin: string | null, allowedOrigins: string[]): string | 
 }
 
 function canonicalizePhone(input: string): string | null {
-  const s = input.trim().replace(/[\s\-()]/g, "");
-  if (/^\+989\d{9}$/.test(s)) return s.slice(1);
-  if (/^989\d{9}$/.test(s)) return s;
-  if (/^09\d{9}$/.test(s)) return `98${s.slice(1)}`;
-  if (/^00989\d{9}$/.test(s)) return s.slice(2);
+  const value = input.trim().replace(/[\s\-()]/g, "");
+  if (/^\+989\d{9}$/.test(value)) return value.slice(1);
+  if (/^989\d{9}$/.test(value)) return value;
+  if (/^09\d{9}$/.test(value)) return `98${value.slice(1)}`;
+  if (/^00989\d{9}$/.test(value)) return value.slice(2);
   return null;
 }
 
@@ -79,10 +89,10 @@ function randomDelay(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function base64UrlDecode(str: string): string {
-  const normalized = str.replace(/-/g, "+").replace(/_/g, "/");
-  const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-  return atob(normalized + pad);
+function base64UrlDecode(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+  return atob(normalized + padding);
 }
 
 function isValidUuid(value: unknown): value is string {
@@ -90,7 +100,30 @@ function isValidUuid(value: unknown): value is string {
 }
 
 function hasPasswordAmr(amr: unknown): boolean {
-  return Array.isArray(amr) && amr.some((item: any) => item?.method === "password");
+  return Array.isArray(amr) && amr.some((item: unknown) => {
+    const record = resultObject(item);
+    return record?.method === "password";
+  });
+}
+
+function confirmedEmail(user: JsonObject): string | null {
+  return typeof user.email === "string" && user.email.length > 0 && user.email_confirmed_at
+    ? user.email
+    : null;
+}
+
+function confirmedPhone(user: JsonObject): string | null {
+  if (typeof user.phone !== "string" || user.phone.length === 0 || !user.phone_confirmed_at) return null;
+  const canonical = canonicalizePhone(user.phone);
+  return canonical ? `+${canonical}` : null;
+}
+
+function chooseConfirmedCredential(authUser: JsonObject, password: string): PasswordCredential | null {
+  const email = confirmedEmail(authUser);
+  if (email) return { email, password };
+  const phone = confirmedPhone(authUser);
+  if (phone) return { phone, password };
+  return null;
 }
 
 async function localLogout(accessToken: string): Promise<void> {
@@ -99,42 +132,64 @@ async function localLogout(accessToken: string): Promise<void> {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
-        "apikey": Deno.env.get("SUPABASE_ANON_KEY")!,
+        "apikey": publicApiKey(),
         "Content-Type": "application/json",
       },
     });
   } catch {
-    // The gateway allowlist makes an un-authorized session unusable even if logout fails.
+    // Gateway authorization still makes an un-authorized session unusable if logout fails.
   }
 }
 
-function confirmedEmail(user: any): string | null {
-  return typeof user?.email === "string" && user.email.length > 0 && user.email_confirmed_at
-    ? user.email
-    : null;
+async function recordAuthFailure(userId: string, identifierHash: string, ipHash: string): Promise<void> {
+  if (!db) return;
+  try {
+    await db`select public.record_auth_failure(${userId}::uuid, ${identifierHash}, ${ipHash})`;
+  } catch {
+    // Never block the generic credential response on bookkeeping failure.
+  }
 }
 
-function confirmedPhone(user: any): string | null {
-  if (typeof user?.phone !== "string" || user.phone.length === 0 || !user.phone_confirmed_at) return null;
-  const canonical = canonicalizePhone(user.phone);
-  return canonical ? `+${canonical}` : null;
+async function resolveTargetUserId(method: LoginMethod, canonicalIdentifier: string): Promise<string | null> {
+  if (!db) throw new Error("DB_UNAVAILABLE");
+
+  if (method === "username") {
+    const rows = await db`
+      select user_id
+      from public.profiles
+      where normalized_username = ${canonicalIdentifier}
+      limit 2
+    `;
+    if (rows.length > 1) throw new Error("AMBIGUOUS_IDENTIFIER");
+    return isValidUuid(rows[0]?.user_id) ? rows[0].user_id : null;
+  }
+
+  if (method === "phone") {
+    const rows = await db`select user_id from public.resolve_phone_password_login_v1(${canonicalIdentifier})`;
+    if (rows.length > 1) throw new Error("AMBIGUOUS_IDENTIFIER");
+    return isValidUuid(rows[0]?.user_id) ? rows[0].user_id : null;
+  }
+
+  const rows = await db`
+    select user_id
+    from public.profiles
+    where normalized_email = ${canonicalIdentifier}
+    limit 2
+  `;
+  if (rows.length > 1) throw new Error("AMBIGUOUS_IDENTIFIER");
+  return isValidUuid(rows[0]?.user_id) ? rows[0].user_id : null;
 }
 
-function isPublicPhoneRegistration(user: any): boolean {
-  return user?.app_metadata?.registration_flow === "public_phone_v1";
-}
-
-function internalCredentialEmail(userId: string): string {
-  return `reg-${userId}@${INTERNAL_AUTH_DOMAIN}`;
-}
-
-function chooseConfirmedCredential(authUser: any, password: string): PasswordCredential | null {
-  const email = confirmedEmail(authUser);
-  const phone = confirmedPhone(authUser);
-
-  if (email) return { email, password };
-  if (phone) return { phone, password };
-  return null;
+async function getAuthUserForCredential(userId: string): Promise<JsonObject | null> {
+  if (!db) throw new Error("DB_UNAVAILABLE");
+  const rows = await db`
+    select id, email, phone, email_confirmed_at, phone_confirmed_at, raw_app_meta_data
+    from auth.users
+    where id = ${userId}::uuid
+      and deleted_at is null
+    limit 1
+  `;
+  return rows[0] ? rows[0] as JsonObject : null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -187,28 +242,24 @@ Deno.serve(async (req: Request) => {
   const method = body.method as LoginMethod;
   const identifier = body.identifier;
   const password = body.password;
+
   if (!identifier || identifier.length > MAX_IDENTIFIER_LEN) {
     return json({ error: "INVALID_IDENTIFIER" }, 400, allowedOrigin);
   }
   if (!password || password.length > MAX_PASSWORD_LEN) {
     return json({ error: "INVALID_PASSWORD" }, 400, allowedOrigin);
   }
-  if (pepper.length < 32) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+  if (pepper.length < 32 || !db) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
 
   try {
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      adminApiKey(),
-      { auth: { autoRefreshToken: false, persistSession: false } },
-    );
+    const methodsRows = await db`select * from public.get_public_login_methods()`;
+    const methods = methodsRows[0];
+    if (!methods) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
 
-    const { data: methodsData, error: methodsErr } = await admin.rpc("get_public_login_methods");
-    if (methodsErr || !methodsData) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-    const methodsRow = Array.isArray(methodsData) ? methodsData[0] : methodsData;
     const methodEnabled =
-      (method === "username" && methodsRow?.username_login === true) ||
-      (method === "email" && methodsRow?.email_login === true) ||
-      (method === "phone" && methodsRow?.phone_login === true);
+      (method === "username" && methods.username_login === true) ||
+      (method === "email" && methods.email_login === true) ||
+      (method === "phone" && methods.phone_login === true);
     if (!methodEnabled) return json({ error: "LOGIN_METHOD_DISABLED" }, 403, allowedOrigin);
 
     let canonicalIdentifier = "";
@@ -233,122 +284,47 @@ Deno.serve(async (req: Request) => {
     );
     const ipHash = await hmacSha256Hex(pepper, `password-login|ip|${clientIp}`);
 
-    const { data: rlData, error: rlErr } = await admin.rpc("consume_password_login_rate_limit_v1", {
-      p_method: method,
-      p_identifier_hash: identifierHash,
-      p_ip_hash: ipHash,
-      p_pair_limit: 10,
-      p_ip_limit: 50,
-      p_window_seconds: 900,
-    });
-    if (rlErr) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-    const rlRow = Array.isArray(rlData) ? rlData[0] : rlData;
-    if (!rlRow || rlRow.allowed !== true) {
-      const retryAfter = typeof rlRow?.retry_after_seconds === "number" ? rlRow.retry_after_seconds : 900;
+    const rateRows = await db`
+      select public.consume_password_login_rate_limit_v1(
+        ${method},
+        ${identifierHash},
+        ${ipHash},
+        ${10},
+        ${50},
+        ${900}
+      ) as result
+    `;
+    const rateResult = resultObject(rateRows[0]?.result);
+    if (!rateResult) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    if (rateResult.allowed !== true) {
+      const retryAfter = typeof rateResult.retry_after_seconds === "number" ? rateResult.retry_after_seconds : 900;
       return json({ error: "RATE_LIMITED", retry_after_seconds: retryAfter }, 429, allowedOrigin);
     }
 
-    let targetUserId: string | null = null;
-
-    if (method === "username") {
-      const { data: profile, error } = await admin
-        .from("profiles")
-        .select("user_id")
-        .eq("normalized_username", canonicalIdentifier)
-        .maybeSingle();
-      if (error) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-      targetUserId = isValidUuid(profile?.user_id) ? profile.user_id : null;
-    } else if (method === "phone") {
-      const { data: resolveData, error: resolveErr } = await admin.rpc(
-        "resolve_phone_password_login_v1",
-        { p_normalized_phone: canonicalIdentifier },
-      );
-      if (resolveErr) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-      const resolveRow = Array.isArray(resolveData) ? resolveData[0] : resolveData;
-      targetUserId = isValidUuid(resolveRow?.user_id) ? resolveRow.user_id : null;
-    } else {
-      const { data: profile, error } = await admin
-        .from("profiles")
-        .select("user_id")
-        .eq("normalized_email", canonicalIdentifier)
-        .maybeSingle();
-      if (error) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-      targetUserId = isValidUuid(profile?.user_id) ? profile.user_id : null;
-    }
-
+    const targetUserId = await resolveTargetUserId(method, canonicalIdentifier);
     let credential: PasswordCredential = {
       email: `invalid-${crypto.randomUUID()}@example.invalid`,
       password,
     };
 
     if (targetUserId) {
-      const { data: targetData, error: targetErr } = await admin.auth.admin.getUserById(targetUserId);
-      if (targetErr || !targetData?.user) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-
-      let authUser = targetData.user;
-
-      if (isPublicPhoneRegistration(authUser) && !confirmedEmail(authUser) && confirmedPhone(authUser)) {
-        const { data: passwordMatches, error: passwordVerifyErr } = await admin.rpc(
-          "verify_public_registration_password_service",
-          { p_user_id: targetUserId, p_password: password },
-        );
-
-        if (passwordVerifyErr) {
-          return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-        }
-
-        if (passwordMatches !== true) {
-          try {
-            await admin.rpc("record_auth_failure", {
-              p_user_id: targetUserId,
-              p_identifier_hash: identifierHash,
-              p_ip_hash: ipHash,
-            });
-          } catch {
-            // Never block the generic credential response on bookkeeping failure.
-          }
-          await randomDelay();
-          return json({ error: "INVALID_CREDENTIALS" }, 401, allowedOrigin);
-        }
-
-        const { data: migratedData, error: migrateErr } = await admin.auth.admin.updateUserById(
-          targetUserId,
-          {
-            email: internalCredentialEmail(targetUserId),
-            email_confirm: true,
-          },
-        );
-        if (migrateErr || !migratedData?.user) {
-          return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-        }
-        authUser = migratedData.user;
-      }
-
+      const authUser = await getAuthUserForCredential(targetUserId);
+      if (!authUser) return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
       const selected = chooseConfirmedCredential(authUser, password);
       if (selected) credential = selected;
     } else if (method === "email") {
       credential = { email: canonicalIdentifier, password };
     }
 
-    const anon = createClient(
+    const authClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
+      publicApiKey(),
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    const signInResult = await anon.auth.signInWithPassword(credential);
+    const signInResult = await authClient.auth.signInWithPassword(credential);
     if (signInResult.error || !signInResult.data.session || !signInResult.data.user) {
-      try {
-        if (targetUserId) {
-          await admin.rpc("record_auth_failure", {
-            p_user_id: targetUserId,
-            p_identifier_hash: identifierHash,
-            p_ip_hash: ipHash,
-          });
-        }
-      } catch {
-        // Never block login response on audit/lockout bookkeeping failure.
-      }
+      if (targetUserId) await recordAuthFailure(targetUserId, identifierHash, ipHash);
       await randomDelay();
       return json({ error: "INVALID_CREDENTIALS" }, 401, allowedOrigin);
     }
@@ -380,49 +356,54 @@ Deno.serve(async (req: Request) => {
       return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
     }
 
-    const { data: verifiedUser, error: userErr } = await admin.auth.getUser(accessToken);
-    if (userErr || !verifiedUser?.user || verifiedUser.user.id !== userId) {
+    const { data: verifiedUser, error: userError } = await authClient.auth.getUser(accessToken);
+    if (userError || !verifiedUser?.user || verifiedUser.user.id !== userId) {
       await localLogout(accessToken);
       return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
     }
 
-    const { data: authData, error: authErr } = await admin.rpc("authorize_password_gateway_session_v1", {
-      p_session_id: sessionId,
-      p_user_id: userId,
-      p_login_method: method,
-      p_identifier_hash: identifierHash,
-      p_ip_hash: ipHash,
-    });
-    if (authErr || !authData) {
-      await localLogout(accessToken);
-      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-    }
-    const authRow = Array.isArray(authData) ? authData[0] : authData;
-    if (!authRow || authRow.authorized !== true) {
-      await localLogout(accessToken);
-      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
-    }
-
-    const { data: settingsData, error: settingsErr } = await admin
-      .from("auth_security_settings")
-      .select("session_management_enabled, session_idle_timeout_minutes, session_absolute_lifetime_minutes")
-      .eq("id", 1)
-      .maybeSingle();
-    if (settingsErr) {
+    const authorizationRows = await db`
+      select public.authorize_password_gateway_session_v1(
+        ${sessionId}::uuid,
+        ${userId}::uuid,
+        ${method},
+        ${identifierHash},
+        ${ipHash}
+      ) as result
+    `;
+    const authorization = resultObject(authorizationRows[0]?.result);
+    if (!authorization || authorization.authorized !== true) {
       await localLogout(accessToken);
       return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
     }
 
-    if (settingsData?.session_management_enabled) {
-      const { data: regData, error: regErr } = await admin.rpc("register_session_security_state_v2", {
-        p_session_id: sessionId,
-        p_user_id: userId,
-        p_idle_timeout_minutes: settingsData.session_idle_timeout_minutes ?? 480,
-        p_absolute_lifetime_minutes: settingsData.session_absolute_lifetime_minutes ?? 1440,
-        p_device_summary: req.headers.get("user-agent")?.slice(0, 200) ?? "unknown",
-        p_ip_hash: ipHash,
-      });
-      if (regErr || !regData?.ok) {
+    const settingsRows = await db`
+      select session_management_enabled, session_idle_timeout_minutes, session_absolute_lifetime_minutes
+      from public.auth_security_settings
+      where id = 1
+      limit 1
+    `;
+    const settings = settingsRows[0];
+    if (!settings) {
+      await localLogout(accessToken);
+      return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+    }
+
+    if (settings.session_management_enabled === true) {
+      const idleMinutes = typeof settings.session_idle_timeout_minutes === "number" ? settings.session_idle_timeout_minutes : 480;
+      const absoluteMinutes = typeof settings.session_absolute_lifetime_minutes === "number" ? settings.session_absolute_lifetime_minutes : 1440;
+      const registrationRows = await db`
+        select public.register_session_security_state_v2(
+          ${sessionId}::uuid,
+          ${userId}::uuid,
+          ${idleMinutes},
+          ${absoluteMinutes},
+          ${req.headers.get("user-agent")?.slice(0, 200) ?? "unknown"},
+          ${ipHash}
+        ) as result
+      `;
+      const registration = resultObject(registrationRows[0]?.result);
+      if (!registration || registration.ok !== true) {
         await localLogout(accessToken);
         return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
       }
