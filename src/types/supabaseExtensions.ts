@@ -3,10 +3,11 @@ import type { Database as BaseDatabase } from './supabase';
 type PublicSchema = BaseDatabase['public'];
 type ProfileTable = PublicSchema['Tables']['profiles'];
 type UserPreferencesTable = PublicSchema['Tables']['user_preferences'];
+type MinutesApprovalCommentsTable = PublicSchema['Tables']['minutes_approval_comments'];
 
 export type Database = Omit<BaseDatabase, 'public'> & {
   public: Omit<PublicSchema, 'Tables' | 'Functions'> & {
-    Tables: Omit<PublicSchema['Tables'], 'profiles' | 'user_preferences'> & {
+    Tables: Omit<PublicSchema['Tables'], 'profiles' | 'user_preferences' | 'minutes_approval_comments'> & {
       profiles: {
         Row: ProfileTable['Row'] & {
           is_security_admin: boolean;
@@ -48,6 +49,18 @@ export type Database = Omit<BaseDatabase, 'public'> & {
           onboarding_skipped_at?: string | null;
         };
         Relationships: UserPreferencesTable['Relationships'];
+      };
+      minutes_approval_comments: {
+        Row: MinutesApprovalCommentsTable['Row'] & {
+          decision_id: string | null;
+        };
+        Insert: MinutesApprovalCommentsTable['Insert'] & {
+          decision_id?: string | null;
+        };
+        Update: MinutesApprovalCommentsTable['Update'] & {
+          decision_id?: string | null;
+        };
+        Relationships: MinutesApprovalCommentsTable['Relationships'];
       };
     };
     Functions: PublicSchema['Functions'] & {
