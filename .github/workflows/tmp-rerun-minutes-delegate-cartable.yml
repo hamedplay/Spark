@@ -1,0 +1,30 @@
+name: Temporary rerun minutes delegate validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-rerun-minutes-delegate-cartable.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Re-run latest delegate cartable validator
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id="$(gh run list \
+            --repo '${{ github.repository }}' \
+            --workflow 'tmp-fix-minutes-delegate-cartable-retry.yml' \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')"
+          test -n "$run_id"
+          gh run rerun "$run_id" --repo '${{ github.repository }}'
