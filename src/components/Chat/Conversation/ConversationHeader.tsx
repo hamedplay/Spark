@@ -1,4 +1,4 @@
-import { ChevronRight, Search, Phone, Video, Star, Bell, Info, Bookmark, CalendarDays } from 'lucide-react';
+import { ChevronRight, Search, Phone, Video, ShieldCheck, Star, Bell, Info, Bookmark, CalendarDays } from 'lucide-react';
 import { UserAvatar } from '../ChatConversationItem';
 import type { ConversationWithProfile } from '../types';
 
@@ -17,6 +17,7 @@ export function ConversationHeader(props: {
   onOpenStarred: () => void;
   onOpenReminders: () => void;
   onStartCall?: (callType: 'audio' | 'video') => void;
+  onStartE2EECall?: () => void;
   onJumpToDate: () => void;
   showInfoPanel: boolean;
   onToggleInfoPanel: () => void;
@@ -25,7 +26,7 @@ export function ConversationHeader(props: {
     onBack, isSavedMessages, otherName, conversation, otherUserPresence,
     isUserOnline, getLastSeenText, localStarredCount, remindersCount,
     showSearch, onToggleSearch, onOpenStarred, onOpenReminders,
-    onStartCall, onJumpToDate, showInfoPanel, onToggleInfoPanel,
+    onStartCall, onStartE2EECall, onJumpToDate, showInfoPanel, onToggleInfoPanel,
   } = props;
 
   const online = !isSavedMessages && isUserOnline(otherUserPresence?.last_seen);
@@ -116,6 +117,16 @@ export function ConversationHeader(props: {
             title="تماس تصویری"
           >
             <Video className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {!isSavedMessages && (
+          <button
+            onClick={() => onStartE2EECall?.()}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-100 bg-violet-50 text-violet-600 transition hover:bg-violet-100 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300"
+            title="تماس امن E2EE"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
           </button>
         )}
 

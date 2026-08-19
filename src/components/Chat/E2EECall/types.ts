@@ -84,5 +84,6 @@ export interface IncomingCall {
 export interface E2EECallProps {
   currentUserId:   string;
   currentUserName: string;
+  initialTargetUser?: UserProfile | null;
   onBack:          () => void;
 }

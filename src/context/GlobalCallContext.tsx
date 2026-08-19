@@ -308,8 +308,11 @@ export function GlobalCallProvider({
       const ttl = (p.expiresAt as number) - Date.now();
       setTimeout(() => {
         setE2eeRing(r => r?.sessionId === ring.sessionId ? null : r);
-        setPendingE2EERing(null);
-        if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }
+        const pending = getPendingE2EERing();
+        if (pending?.sessionId === ring.sessionId) {
+          setPendingE2EERing(null);
+          if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }
+        }
       }, Math.max(0, ttl));
     });
 
@@ -326,6 +329,39 @@ export function GlobalCallProvider({
     setE2eeRing(null);
     setPendingE2EERing(null);
     if (e2eeRingAudioRef.current) { clearInterval(e2eeRingAudioRef.current); e2eeRingAudioRef.current = null; }
+  };
+
+  const rejectE2EERing = () => {
+    const ring = e2eeRing;
+    dismissE2EERing();
+    if (!ring) return;
+
+    const ch = supabase.channel(`e2ee-sess-${ring.sessionId}`, { config: { broadcast: { self: false } } });
+    let sent = false;
+    const cleanup = () => { void supabase.removeChannel(ch); };
+    const timeout = window.setTimeout(cleanup, 5000);
+
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED' && !sent) {
+        sent = true;
+        void ch.send({
+          type: 'broadcast',
+          event: 'e2ee-signal',
+          payload: {
+            type: 'rejected',
+            from: currentUserIdRef.current || 'callee',
+            session: ring.sessionId,
+            data: {},
+          },
+        }).finally(() => {
+          window.clearTimeout(timeout);
+          window.setTimeout(cleanup, 250);
+        });
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        window.clearTimeout(timeout);
+        cleanup();
+      }
+    });
   };
 
   const acceptE2EERing = () => {
@@ -609,7 +645,7 @@ export function GlobalCallProvider({
             <div className="px-6 py-4 flex gap-3">
               <button
                 type="button"
-                onClick={dismissE2EERing}
+                onClick={rejectE2EERing}
                 className="flex-1 py-3 bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-2xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
               >
                 <PhoneOff className="w-4 h-4" /> رد کردن

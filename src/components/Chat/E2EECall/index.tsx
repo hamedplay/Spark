@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ShieldCheck, ShieldAlert, PhoneOff, RefreshCw, Bug } from 'lucide-react';
 import { SUPPORTS_TRANSFORMS } from './types';
 import { isCallDebugEnabled } from './callDebugStore';
@@ -10,7 +10,7 @@ import { IdleView } from './IdleView';
 import { CallDebugCenter } from './CallDebugCenter';
 import type { E2EECallProps } from './types';
 
-export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECallProps) {
+export function E2EECallPage({ currentUserId, currentUserName, initialTargetUser, onBack }: E2EECallProps) {
   const {
     phase, e2eeStatus, isMuted, isVideoOff, isRemoteMuted, isScreenSharing,
     isSwitchingCamera, isStartingScreenShare,
@@ -23,6 +23,14 @@ export function E2EECallPage({ currentUserId, currentUserName, onBack }: E2EECal
     onRemoteElementMount,
     setUserSearch, setShowSafety, setIsRemoteMuted, setPhase, setFailReason,
   } = useE2EECall(currentUserId, currentUserName);
+
+  const initialCallStartedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialTargetUser || phase !== 'idle') return;
+    if (initialCallStartedRef.current === initialTargetUser.user_id) return;
+    initialCallStartedRef.current = initialTargetUser.user_id;
+    void startCall(initialTargetUser);
+  }, [initialTargetUser, phase, startCall]);
 
   const [showFailedDebug, setShowFailedDebug] = useState(false);
 

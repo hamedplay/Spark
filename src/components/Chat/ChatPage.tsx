@@ -34,6 +34,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
   const [showSettings, setShowSettings] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chats');
   const [showE2EECall, setShowE2EECall] = useState(false);
+  const [e2eeInitialTarget, setE2eeInitialTarget] = useState<UserProfile | null>(null);
   const [msgRefreshKey, setMsgRefreshKey] = useState(0);
 
   // Navigation from actions panel
@@ -217,6 +218,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
   useEffect(() => {
     const openAcceptedE2EECall = (ring = getPendingE2EERing()) => {
       if (!ring?.autoAccept) return;
+      setE2eeInitialTarget(null);
       setSidebarTab('calls');
       setShowE2EECall(true);
       setShowSidebar(false);
@@ -305,7 +307,8 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
     await globalStartCall(callType, activeConv.otherUser, activeConv.id);
   };
 
-  const handleOpenE2EECall = () => {
+  const handleOpenE2EECall = (targetUser?: UserProfile) => {
+    setE2eeInitialTarget(targetUser ?? null);
     setSidebarTab('calls');
     setShowE2EECall(true);
     setShowSidebar(false);
@@ -313,8 +316,20 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
     setShowSettings(false);
   };
 
+  const startE2EECall = () => {
+    if (!activeConv) return;
+    handleOpenE2EECall(activeConv.otherUser);
+  };
+
   const handleCloseE2EECall = () => {
+    const returnToChat = !!e2eeInitialTarget && !!activeId;
     setShowE2EECall(false);
+    setE2eeInitialTarget(null);
+    if (returnToChat) {
+      setSidebarTab('chats');
+      setShowSidebar(false);
+      return;
+    }
     setShowSidebar(true);
     setSidebarTab('calls');
   };
@@ -389,7 +404,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
           <CallHistoryPage
             currentUserId={currentUserId}
             onStartCall={handleStartCallFromHistory}
-            onStartE2EECall={handleOpenE2EECall}
+            onStartE2EECall={() => handleOpenE2EECall()}
             onClose={() => { setShowE2EECall(false); setSidebarTab('chats'); }}
           />
         ) : (
@@ -436,6 +451,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
               initialScrollToMessageId={navToConvId === activeConv.id ? navToMsgId : null}
               onScrollToMessageConsumed={() => { setNavToConvId(null); setNavToMsgId(null); }}
               onStartCall={startCall}
+              onStartE2EECall={startE2EECall}
               msgRefreshKey={msgRefreshKey}
               onOpenDirectChat={async (userId) => {
                 const { data: convId, error } = await supabase.rpc('find_or_create_direct_conversation', {
@@ -474,6 +490,12 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
             <E2EECallPage
               currentUserId={currentUserId}
               currentUserName={currentUserProfile?.full_name || currentUserProfile?.username || 'کاربر'}
+              initialTargetUser={e2eeInitialTarget ? {
+                user_id: e2eeInitialTarget.user_id,
+                full_name: e2eeInitialTarget.full_name,
+                email: e2eeInitialTarget.email ?? null,
+                avatar_url: e2eeInitialTarget.avatar_url,
+              } : null}
               onBack={handleCloseE2EECall}
             />
           </div>

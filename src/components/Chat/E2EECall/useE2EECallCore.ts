@@ -6,7 +6,7 @@ import { startDiagnostics, stopDiagnostics } from '../../../lib/webrtcDiagnostic
 import type { PeerDiagnostics } from '../../../lib/webrtcDiagnostics';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
-import { getPendingE2EERing, setPendingE2EERing } from '../../../lib/globalE2EERing';
+import { getPendingE2EERing, setPendingE2EERing, subscribeE2EERing } from '../../../lib/globalE2EERing';
 import { SUPPORTS_TRANSFORMS, E2EE_DEBUG, log, logWarn, logError } from './types';
 import type { CallPhase, E2EEStatus, FailReason, UserProfile, DerivedKeys, IncomingCall } from './types';
 import { importPublicKey, deriveSessionKeys, computeSafetyNumber, bytesToHex } from './crypto';
@@ -430,6 +430,20 @@ export function useE2EECall(
     autoAcceptRef.current = !!ring.autoAccept;
     setIncomingCall({ from: ring.from, sessionId: ring.sessionId, callerName: ring.callerName, callerId: ring.callerId, expiresAt: ring.expiresAt, acceptToken: ring.acceptToken });
     setPhase('incoming_ring');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // If the global overlay is accepted while this page is already mounted,
+  // consume the autoAccept transition immediately instead of waiting for a remount.
+  useEffect(() => {
+    if (!SUPPORTS_TRANSFORMS) return;
+    return subscribeE2EERing((ring) => {
+      if (!ring?.autoAccept || Date.now() > ring.expiresAt || sessionActiveRef.current) return;
+      setPendingE2EERing(null);
+      autoAcceptRef.current = true;
+      setIncomingCall({ from: ring.from, sessionId: ring.sessionId, callerName: ring.callerName, callerId: ring.callerId, expiresAt: ring.expiresAt, acceptToken: ring.acceptToken });
+      setPhase('incoming_ring');
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
