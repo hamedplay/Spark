@@ -256,3 +256,25 @@ details > summary {
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
 }
+
+/* --------------------------------------------------------------------------
+   Video conference lobby: mobile scroll ownership and room priority
+   --------------------------------------------------------------------------
+   Layout owns the vertical scroll for the video-conference full-height page.
+   The lobby root previously owned a second full-height overflow scroller,
+   which could trap touch scrolling inside the fixed-height application shell.
+   Keep only the outer Layout scroller and let the lobby participate in normal
+   document flow. On phone/tablet widths, show available rooms before secondary
+   join/create/media controls so an active room is immediately reachable.
+   -------------------------------------------------------------------------- */
+.app-responsive-content > .h-full.min-h-0.space-y-5.overflow-y-auto.pb-5[dir='rtl'] {
+  height: auto !important;
+  min-height: 100%;
+  overflow: visible !important;
+}
+
+@media (max-width: 1279px) {
+  .app-responsive-content > .h-full.min-h-0.space-y-5.overflow-y-auto.pb-5[dir='rtl'] > .grid.grid-cols-1.gap-5 > main {
+    order: -1;
+  }
+}
