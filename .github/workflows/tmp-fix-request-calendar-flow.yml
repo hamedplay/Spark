@@ -25,11 +25,15 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 2
 
-      - name: Verify expected parent revision
+      - name: Guard against concurrent main changes
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "3d6d0423ee6ced7a5d14041a59348a0ada602d35"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA" || {
+            echo "main advanced after this run was triggered; refusing to transform stale source"
+            exit 1
+          }
 
       - name: Apply minimal scoped transformation
         shell: bash
@@ -207,6 +211,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA" || {
+            echo "main advanced during validation; refusing stale commit"
+            exit 1
+          }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm .github/workflows/tmp-fix-request-calendar-flow.yml
