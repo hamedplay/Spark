@@ -31,17 +31,21 @@ jobs:
           cache: npm
           package-manager-cache: false
 
-      - name: Transform latest main, validate, and commit atomically
+      - name: Transform, validate, and safely integrate latest main
         shell: bash
         run: |
           set -euo pipefail
 
-          for attempt in 1 2 3 4 5; do
-            echo "Attempt $attempt: validating latest main"
-            git fetch origin main
-            git reset --hard origin/main
-            base_sha="$(git rev-parse HEAD)"
+          validate_current_tree() {
+            git diff --check
+            npm ci
+            npm run build
+            npm run test:meeting-prefill
+            npm run test:layout-navigation
+            npm run test:notification-producer
+          }
 
+          apply_transform() {
             python - <<'PY'
           from pathlib import Path
 
@@ -175,25 +179,23 @@ jobs:
               'src/components/Layout.tsx',
           }
           if changed != expected:
-              raise SystemExit(f'unexpected source changes before validation: {sorted(changed)}')
+              raise SystemExit(f'unexpected source changes: {sorted(changed)}')
           print('Scoped transformation contracts verified')
           PY
+          }
 
-            git diff --check
-            npm ci
-            npm run build
-            npm run test:meeting-prefill
-            npm run test:layout-navigation
-            npm run test:notification-producer
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          for transform_attempt in 1 2 3 4 5; do
+            echo "Transform attempt $transform_attempt"
             git fetch origin main
-            if [ "$(git rev-parse origin/main)" != "$base_sha" ]; then
-              echo "main advanced during validation; retrying against the newer revision"
-              continue
-            fi
+            git reset --hard origin/main
+            validation_base="$(git rev-parse HEAD)"
 
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            apply_transform
+            validate_current_tree
+
             rm .github/workflows/tmp-fix-request-calendar-flow.yml
             git add src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/components/Layout.tsx
             git add -u .github/workflows/tmp-fix-request-calendar-flow.yml
@@ -213,13 +215,42 @@ jobs:
 
             git diff --cached --check
             git commit -m "fix: separate request scheduling from calendar edits [skip ci]"
-            if git push origin HEAD:main; then
-              echo "Validated fix committed to main and temporary workflow removed"
-              exit 0
-            fi
 
-            echo "push raced with another main update; retrying"
+            restart_transform=false
+            for integration_attempt in 1 2 3 4 5; do
+              git fetch origin main
+              remote_sha="$(git rev-parse origin/main)"
+
+              if [ "$remote_sha" != "$validation_base" ]; then
+                overlap="$(git diff --name-only "$validation_base"..origin/main -- \
+                  src/components/CalendarMeetingForm.tsx \
+                  src/components/CalendarMeetingForm/commitEdit.ts \
+                  src/components/Layout.tsx)"
+                if [ -n "$overlap" ]; then
+                  echo "Scoped source changed during validation; re-transforming latest source:"
+                  echo "$overlap"
+                  restart_transform=true
+                  break
+                fi
+
+                git rebase origin/main
+                validation_base="$remote_sha"
+                validate_current_tree
+              fi
+
+              if git push origin HEAD:main; then
+                echo "Validated fix committed to main; temporary workflow removed"
+                exit 0
+              fi
+
+              echo "Push raced with another unrelated main update; re-validating integrated result"
+            done
+
+            if [ "$restart_transform" = false ]; then
+              echo "Could not push after 5 safe integration attempts"
+              exit 1
+            fi
           done
 
-          echo "Could not obtain a stable main revision after 5 validated attempts"
+          echo "Scoped files kept changing; no unvalidated source was committed"
           exit 1
