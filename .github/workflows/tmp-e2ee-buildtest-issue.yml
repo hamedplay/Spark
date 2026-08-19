@@ -1,0 +1,58 @@
+name: tmp-e2ee-buildtest-issue
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  validate:
+    if: ${{ github.event.issue.title == 'tmp-e2ee-buildtest-final-20260820' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 20
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - id: install
+        name: Install dependencies
+        continue-on-error: true
+        run: npm ci
+
+      - id: build
+        name: Build
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+
+      - id: test
+        name: Test
+        if: steps.install.outcome == 'success' && steps.build.outcome == 'success'
+        continue-on-error: true
+        run: npm test
+
+      - name: Record outcome, cleanup, and close trigger
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          rm -f .github/workflows/tmp-e2ee-buildtest-issue.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "chore: E2EE build-test install-${{ steps.install.outcome }} build-${{ steps.build.outcome }} test-${{ steps.test.outcome }} [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          gh issue close "${{ github.event.issue.number }}" --repo "${{ github.repository }}" --reason completed
