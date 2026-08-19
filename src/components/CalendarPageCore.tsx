@@ -188,10 +188,10 @@ export function CalendarPage({
     if (showSearch && searchInputRef.current) searchInputRef.current.focus();
   }, [showSearch]);
 
-  // Apply user's default calendar view preference (once)
+  // Apply user's default calendar view preference (once, after preferences finish loading)
   const prefViewApplied = useRef(false);
   useEffect(() => {
-    if (prefViewApplied.current) return;
+    if (prefsLoading || prefViewApplied.current) return;
     if (!prefs.default_calendar_view) return;
     prefViewApplied.current = true;
     const map: Record<string, ViewMode> = { month: 'month', week: 'week', day: 'day', list: 'list-month' };
@@ -200,7 +200,7 @@ export function CalendarPage({
       setViewMode(mapped);
       localStorage.setItem('user_prefs_calendar_view', mapped);
     }
-  }, [prefs.default_calendar_view]);
+  }, [prefsLoading, prefs.default_calendar_view]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
