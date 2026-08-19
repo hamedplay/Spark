@@ -3,8 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '.tmp-e2ee-buildtest-trigger'
   pull_request:
   workflow_dispatch:
 
