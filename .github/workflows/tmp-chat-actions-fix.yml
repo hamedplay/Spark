@@ -16,16 +16,18 @@ concurrency:
 jobs:
   fix-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Verify scoped source baseline
+      - name: Sync latest main and verify scoped baseline
         shell: bash
         run: |
           set -euo pipefail
+          git fetch origin main
+          git checkout -B main origin/main
           actual="$(git rev-parse HEAD:src/components/Chat/ChatActionsPanel.tsx)"
           test "$actual" = "921cc0dbf9e3b7977d2ad7022786f5de6666154f"
 
@@ -71,4 +73,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/components/Chat/ChatActionsPanel.tsx
           git commit -m "fix(chat): import Check in actions panel [skip ci]"
+
+          git fetch origin main
+          if [ "$(git rev-parse HEAD^)" != "$(git rev-parse origin/main)" ]; then
+            git rebase origin/main
+            npm ci
+            npm run build
+          fi
+
           git push origin HEAD:main
