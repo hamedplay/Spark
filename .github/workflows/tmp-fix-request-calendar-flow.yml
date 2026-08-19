@@ -1,0 +1,231 @@
+name: Temporary request-calendar fix validator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-fix-request-calendar-flow.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-fix-request-calendar-flow
+  cancel-in-progress: false
+
+jobs:
+  fix-validate-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout triggering revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+
+      - name: Verify expected parent revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "3d6d0423ee6ced7a5d14041a59348a0ada602d35"
+
+      - name: Apply minimal scoped transformation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_exact(
+              'src/components/CalendarMeetingForm.tsx',
+              """        setEditDecision({ changeSet, snapshot });
+        return;
+""",
+              """        if (isFirstSchedule) {
+          await commitEdit(snapshot, true);
+          return;
+        }
+
+        setEditDecision({ changeSet, snapshot });
+        return;
+""",
+          )
+
+          replace_exact(
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              """      if (diff.added_participant_ids.length) {
+        const eventType = getMeetingTemplateKey('participant', 'invite');
+        for (const recipientId of diff.added_participant_ids) {
+""",
+              """      const participantInviteIds = isFirstSchedule
+        ? [...new Set([...diff.retained_participant_ids, ...diff.added_participant_ids])]
+        : diff.added_participant_ids;
+      if (participantInviteIds.length) {
+        const eventType = getMeetingTemplateKey('participant', 'invite');
+        for (const recipientId of participantInviteIds) {
+""",
+          )
+
+          replace_exact(
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              """      const removedObserverIds = [...previousNotifyForMeeting].filter(id => !observerIds.includes(id));
+
+      if (addedObserverIds.length) {
+        const eventType = getMeetingTemplateKey('observer', 'invite');
+        for (const recipientId of addedObserverIds) {
+""",
+              """      const removedObserverIds = [...previousNotifyForMeeting].filter(id => !observerIds.includes(id));
+      const observerInviteIds = isFirstSchedule ? observerIds : addedObserverIds;
+
+      if (observerInviteIds.length) {
+        const eventType = getMeetingTemplateKey('observer', 'invite');
+        for (const recipientId of observerInviteIds) {
+""",
+          )
+
+          replace_exact(
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              """        const externalDiff = computeExternalDiff(previousExternal, selectedExternal);
+        const inviteFallback = `دعوت به جلسه: «${meetingSubject}» | تاریخ: ${jalaliDate || meetingDateStr} | ساعت: ${currentTime}${currentPlaceholders.location_part}`;
+        if (externalDiff.added.length > 0) {
+          externalSmsResults.push(await sendSmsToExternals(
+            externalDiff.added,
+""",
+              """        const externalDiff = computeExternalDiff(previousExternal, selectedExternal);
+        const externalInviteTargets = isFirstSchedule
+          ? [...new Set([...externalDiff.retained, ...externalDiff.added])]
+          : externalDiff.added;
+        const inviteFallback = `دعوت به جلسه: «${meetingSubject}» | تاریخ: ${jalaliDate || meetingDateStr} | ساعت: ${currentTime}${currentPlaceholders.location_part}`;
+        if (externalInviteTargets.length > 0) {
+          externalSmsResults.push(await sendSmsToExternals(
+            externalInviteTargets,
+""",
+          )
+
+          replace_exact(
+              'src/components/Layout.tsx',
+              """        <LayoutTopBar
+          userProfile={userProfile}
+          onPageChange={handlePageChange}
+          onLogout={handleLogout}
+          isAdmin={isAdmin}
+          activePage={activePage}
+          accentColor={accentColor}
+          installPrompt={installPrompt}
+          onPromptInstall={promptInstall}
+        />
+""",
+              """        {activePage !== 'calendar' && (
+          <LayoutTopBar
+            userProfile={userProfile}
+            onPageChange={handlePageChange}
+            onLogout={handleLogout}
+            isAdmin={isAdmin}
+            activePage={activePage}
+            accentColor={accentColor}
+            installPrompt={installPrompt}
+            onPromptInstall={promptInstall}
+          />
+        )}
+""",
+          )
+          PY
+
+      - name: Verify transformed contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          form = Path('src/components/CalendarMeetingForm.tsx').read_text(encoding='utf-8')
+          commit = Path('src/components/CalendarMeetingForm/commitEdit.ts').read_text(encoding='utf-8')
+          layout = Path('src/components/Layout.tsx').read_text(encoding='utf-8')
+
+          checks = {
+              'first schedule bypasses edit-decision modal': "if (isFirstSchedule) {\n          await commitEdit(snapshot, true);" in form,
+              'normal edits still open edit-decision modal': 'setEditDecision({ changeSet, snapshot });' in form,
+              'first schedule invites retained participants': 'const participantInviteIds = isFirstSchedule' in commit and 'diff.retained_participant_ids' in commit,
+              'first schedule invites retained observers': 'const observerInviteIds = isFirstSchedule ? observerIds : addedObserverIds;' in commit,
+              'first schedule invites retained externals': 'const externalInviteTargets = isFirstSchedule' in commit and 'externalDiff.retained' in commit,
+              'calendar suppresses global top bar': "{activePage !== 'calendar' && (\n          <LayoutTopBar" in layout,
+          }
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit('contract checks failed: ' + ', '.join(failed))
+          print('\n'.join(f'OK: {name}' for name in checks))
+          PY
+          git diff --check
+          git diff -- src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/components/Layout.tsx
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.1'
+          cache: npm
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Verify only scoped source files changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+
+          output = subprocess.check_output(['git', 'status', '--porcelain'], text=True)
+          changed = {line[3:] for line in output.splitlines() if line.strip()}
+          expected = {
+              'src/components/CalendarMeetingForm.tsx',
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              'src/components/Layout.tsx',
+          }
+          if changed != expected:
+              raise SystemExit(f'unexpected working tree changes: {sorted(changed)}')
+          print('Scoped working tree verified:', ', '.join(sorted(changed)))
+          PY
+
+      - name: Commit validated source and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/tmp-fix-request-calendar-flow.yml
+          git add src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/components/Layout.tsx
+          git add -u .github/workflows/tmp-fix-request-calendar-flow.yml
+          python - <<'PY'
+          import subprocess
+
+          output = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True)
+          changed = set(filter(None, output.splitlines()))
+          expected = {
+              '.github/workflows/tmp-fix-request-calendar-flow.yml',
+              'src/components/CalendarMeetingForm.tsx',
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              'src/components/Layout.tsx',
+          }
+          if changed != expected:
+              raise SystemExit(f'unexpected staged changes: {sorted(changed)}')
+          PY
+          git diff --cached --check
+          git commit -m "fix: separate request scheduling from calendar edits [skip ci]"
+          git push origin HEAD:main
