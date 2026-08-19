@@ -16,70 +16,12 @@ concurrency:
 jobs:
   validate-and-commit:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
-      - name: Checkout trigger revision
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Sync latest main before transformation
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          git reset --hard origin/main
-          echo "VALIDATION_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-
-      - name: Tighten temporary navigation-test matcher
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('scripts/tmp-management-dashboard-fix.py')
-          text = path.read_text(encoding='utf-8')
-          start = text.index('# Update focused navigation tests to prove Admin/null no longer bypass the dedicated dashboard gate.')
-          end = text.index('# 2) Management dashboard drill-down wiring.')
-          replacement = r'''# Update focused navigation tests to prove Admin/null no longer bypass the dedicated dashboard gate.
-          replace(
-              "tests/app/layoutNavigation.test.ts",
-              """    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: null,\n    minutesFollowupAllowed: true,\n""",
-              """    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: null,\n    managementDashboardAllowed: true,\n    minutesFollowupAllowed: true,\n""",
-          )
-          replace(
-              "tests/app/layoutNavigation.test.ts",
-              """    isAdmin: true,\n    sparkVisible: false,\n    userPermissions: null,\n    minutesFollowupAllowed: true,\n""",
-              """    isAdmin: true,\n    sparkVisible: false,\n    userPermissions: null,\n    managementDashboardAllowed: true,\n    minutesFollowupAllowed: true,\n""",
-          )
-          replace(
-              "tests/app/layoutNavigation.test.ts",
-              """    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: { spark: true },\n    minutesFollowupAllowed: false,\n""",
-              """    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: { spark: true },\n    managementDashboardAllowed: false,\n    minutesFollowupAllowed: false,\n""",
-          )
-          replace(
-              "tests/app/layoutNavigation.test.ts",
-              """test('shows management dashboard only when its dedicated permission is granted', () => {\n  const allowed = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: { management_dashboard: true },\n  });\n  const denied = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: { management_dashboard: false, meetings: true },\n  });\n\n  assert.ok(allowed.some(i => i.id === 'management-dashboard'));\n  assert.ok(!denied.some(i => i.id === 'management-dashboard'));\n});\n\ntest('allows administrators to see all non-Spark-hidden items', () => {\n  const items = getVisiblePrimaryNavigationItems({\n    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: undefined,\n    minutesFollowupAllowed: true,\n    minutesFollowupAccessLoading: false,\n  });\n\n  assert.equal(items.length, 12);\n});\n\ntest('treats null permissions as full access', () => {\n  const items = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: null,\n    minutesFollowupAllowed: true,\n    minutesFollowupAccessLoading: false,\n  });\n\n  assert.equal(items.length, 12);\n});\n""",
-              """test('shows management dashboard only when its dedicated access result is granted', () => {\n  const allowed = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: {},\n    managementDashboardAllowed: true,\n  });\n  const denied = getVisiblePrimaryNavigationItems({\n    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: null,\n    managementDashboardAllowed: false,\n  });\n\n  assert.ok(allowed.some(i => i.id === 'management-dashboard'));\n  assert.ok(!denied.some(i => i.id === 'management-dashboard'));\n});\n\ntest('administrator access does not bypass the dedicated management dashboard gate', () => {\n  const items = getVisiblePrimaryNavigationItems({\n    isAdmin: true,\n    sparkVisible: true,\n    userPermissions: undefined,\n    managementDashboardAllowed: false,\n  });\n\n  assert.equal(items.length, 11);\n  assert.ok(!items.some(i => i.id === 'management-dashboard'));\n});\n\ntest('null permissions remain full access except for the dedicated management dashboard gate', () => {\n  const items = getVisiblePrimaryNavigationItems({\n    isAdmin: false,\n    sparkVisible: true,\n    userPermissions: null,\n    managementDashboardAllowed: false,\n  });\n\n  assert.equal(items.length, 11);\n  assert.ok(!items.some(i => i.id === 'management-dashboard'));\n});\n""",
-          )
-          replace(
-              "tests/app/layoutNavigation.test.ts",
-              """    userPermissions: undefined,\n    minutesFollowupAllowed: false,\n    minutesFollowupAccessLoading: true,\n""",
-              """    userPermissions: undefined,\n    managementDashboardAllowed: false,\n    minutesFollowupAllowed: false,\n    minutesFollowupAccessLoading: true,\n""",
-          )
-          replace(
-              "tests/app/layoutNavigation.test.ts",
-              """      reports: true,\n    },\n    minutesFollowupAllowed: false,\n""",
-              """      reports: true,\n    },\n    managementDashboardAllowed: true,\n    minutesFollowupAllowed: false,\n""",
-          )
-
-          '''
-          replacement = replacement.replace('\n          ', '\n')
-          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
-          PY
-
-      - name: Apply scoped transformation
-        run: python3 scripts/tmp-management-dashboard-fix.py
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -87,64 +29,122 @@ jobs:
           node-version: '24.18.1'
           cache: npm
 
-      - name: Install locked dependencies
-        run: npm ci
-
-      - name: Validate navigation authorization
-        run: npm run test:layout-navigation
-
-      - name: Validate minutes integration contracts
-        run: npm run test:minutes-integration
-
-      - name: Production build
-        run: npm run build
-
-      - name: Validate final diff
+      - name: Transform latest main, validate, and commit atomically
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check
-          test -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
-          grep -q "has_management_dashboard_access_v1" src/AuthenticatedApp.tsx
-          grep -q "managementDashboardAllowed" src/app/layout/navigationMenu.ts
-          grep -q "openDecision(alert)" src/components/ManagementDashboardPage.tsx
-          grep -q "focusTaskId" src/components/TasksPage.tsx
-          grep -q "focusMeetingId" src/features/meetings/pages/MeetingsPage.tsx
-          grep -q "focusDecisionId" src/components/Minutes/Detail/TabDecisions.tsx
 
-      - name: Commit validated source and safely integrate latest main
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm scripts/tmp-management-dashboard-fix.py .github/workflows/tmp-management-dashboard-fix.yml
-          git add src tests supabase/migrations/20260819171500_harden_management_dashboard_access.sql
-          git diff --cached --check
-          git commit -m "fix: secure management dashboard drill-down"
+          for attempt in 1 2 3 4 5; do
+            echo "Attempt $attempt: validating latest main"
+            git fetch origin main
+            git reset --hard origin/main
+            base_sha="$(git rev-parse HEAD)"
 
-          git fetch origin main
-          if [ "$(git rev-parse origin/main)" != "$VALIDATION_BASE" ]; then
-            overlap="$(git diff --name-only "$VALIDATION_BASE"..origin/main -- \
-              src/AuthenticatedApp.tsx \
-              src/app/navigation/pageRendererTypes.ts \
-              src/app/navigation/PageRenderer.tsx \
-              src/app/layout/AppShell.tsx \
-              src/components/Layout.tsx \
-              src/app/layout/components/LayoutSidebar.tsx \
-              src/app/layout/navigationMenu.ts \
-              tests/app/layoutNavigation.test.ts \
-              src/components/ManagementDashboardPage.tsx \
-              src/components/TasksPage.tsx \
-              src/features/meetings/pages/MeetingsPage.tsx \
-              src/components/Minutes/Detail/TabDecisions.tsx \
-              supabase/migrations/20260819171500_harden_management_dashboard_access.sql)"
-            if [ -n "$overlap" ]; then
-              echo "Scoped files changed during validation; refusing an unvalidated merge:"
-              echo "$overlap"
-              exit 1
+            # Fix only the overly-broad matcher in the temporary runner itself.
+            # Product source is still untouched until the runner executes.
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/tmp-management-dashboard-fix.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''replace(
+              "tests/app/layoutNavigation.test.ts",
+              """    userPermissions: null,\\n    minutesFollowupAllowed: true,\\n""",
+              """    userPermissions: null,\\n    managementDashboardAllowed: true,\\n    minutesFollowupAllowed: true,\\n""",
+              expected=1,
+          )'''
+          new = '''replace(
+              "tests/app/layoutNavigation.test.ts",
+              """    isAdmin: true,\\n    sparkVisible: true,\\n    userPermissions: null,\\n    minutesFollowupAllowed: true,\\n""",
+              """    isAdmin: true,\\n    sparkVisible: true,\\n    userPermissions: null,\\n    managementDashboardAllowed: true,\\n    minutesFollowupAllowed: true,\\n""",
+          )'''
+          if text.count(old) != 1:
+              raise SystemExit('temporary runner matcher shape changed')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+            python3 scripts/tmp-management-dashboard-fix.py
+
+            npm ci
+            npm run test:layout-navigation
+            npm run test:minutes-integration
+            npm run build
+
+            git diff --check
+            test -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
+            grep -q "has_management_dashboard_access_v1" src/AuthenticatedApp.tsx
+            grep -q "managementDashboardAllowed" src/app/layout/navigationMenu.ts
+            grep -q "openDecision(alert)" src/components/ManagementDashboardPage.tsx
+            grep -q "focusTaskId" src/components/TasksPage.tsx
+            grep -q "focusMeetingId" src/features/meetings/pages/MeetingsPage.tsx
+            grep -q "focusDecisionId" src/components/Minutes/Detail/TabDecisions.tsx
+
+            # Verify only the intended product/test/migration files plus our temp runner changed.
+            python3 - <<'PY'
+          import subprocess
+
+          status = subprocess.check_output(['git', 'status', '--porcelain'], text=True)
+          changed = {line[3:] for line in status.splitlines() if line.strip()}
+          expected = {
+              'scripts/tmp-management-dashboard-fix.py',
+              'src/AuthenticatedApp.tsx',
+              'src/app/navigation/pageRendererTypes.ts',
+              'src/app/navigation/PageRenderer.tsx',
+              'src/app/layout/AppShell.tsx',
+              'src/components/Layout.tsx',
+              'src/app/layout/components/LayoutSidebar.tsx',
+              'src/app/layout/navigationMenu.ts',
+              'tests/app/layoutNavigation.test.ts',
+              'src/components/ManagementDashboardPage.tsx',
+              'src/components/TasksPage.tsx',
+              'src/features/meetings/pages/MeetingsPage.tsx',
+              'src/components/Minutes/Detail/TabDecisions.tsx',
+              'supabase/migrations/20260819171500_harden_management_dashboard_access.sql',
+          }
+          if changed != expected:
+              raise SystemExit(f'unexpected working tree changes: {sorted(changed)}')
+          print('Scoped working tree verified')
+          PY
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git rm scripts/tmp-management-dashboard-fix.py .github/workflows/tmp-management-dashboard-fix.yml
+            git add src tests supabase/migrations/20260819171500_harden_management_dashboard_access.sql
+            git diff --cached --check
+            git commit -m "fix: secure management dashboard drill-down [skip ci]"
+
+            git fetch origin main
+            latest_sha="$(git rev-parse origin/main)"
+            if [ "$latest_sha" != "$base_sha" ]; then
+              overlap="$(git diff --name-only "$base_sha"..origin/main -- \
+                src/AuthenticatedApp.tsx \
+                src/app/navigation/pageRendererTypes.ts \
+                src/app/navigation/PageRenderer.tsx \
+                src/app/layout/AppShell.tsx \
+                src/components/Layout.tsx \
+                src/app/layout/components/LayoutSidebar.tsx \
+                src/app/layout/navigationMenu.ts \
+                tests/app/layoutNavigation.test.ts \
+                src/components/ManagementDashboardPage.tsx \
+                src/components/TasksPage.tsx \
+                src/features/meetings/pages/MeetingsPage.tsx \
+                src/components/Minutes/Detail/TabDecisions.tsx \
+                supabase/migrations/20260819171500_harden_management_dashboard_access.sql)"
+              if [ -n "$overlap" ]; then
+                echo "Scoped files changed during validation; retrying latest main:"
+                echo "$overlap"
+                continue
+              fi
+              git rebase origin/main
             fi
-            git rebase origin/main
-          fi
 
-          git push origin HEAD:main
+            if git push origin HEAD:main; then
+              echo "Validated dashboard fix committed; temporary dashboard tooling removed"
+              exit 0
+            fi
+
+            echo "Push raced with another main update; retrying"
+          done
+
+          echo "Could not obtain a safely validated main revision after 5 attempts"
+          exit 1
