@@ -134,14 +134,30 @@ export async function listMinuteAudit(
       .filter(Boolean) as string[],
   ));
   if (decisionIds.length) {
+    const titleMap: Record<string, string> = {};
     const { data: decisions } = await supabase
       .from('minutes_decisions')
       .select('id,title')
       .in('id', decisionIds);
-    const titleMap: Record<string, string> = {};
     for (const decision of (decisions || []) as unknown as { id: string; title: string }[]) {
       titleMap[decision.id] = decision.title;
     }
+
+    const missingDecisionIds = decisionIds.filter(id => !titleMap[id]);
+    if (missingDecisionIds.length) {
+      const { data: auditTitles } = await supabase
+        .from('minutes_audit_log')
+        .select('entity_id,old_values,new_values')
+        .eq('minute_id', minuteId)
+        .eq('entity_type', 'decision')
+        .in('entity_id', missingDecisionIds);
+      for (const auditRow of (auditTitles || []) as unknown as Pick<AuditLogRow, 'entity_id' | 'old_values' | 'new_values'>[]) {
+        if (!auditRow.entity_id || titleMap[auditRow.entity_id]) continue;
+        const title = auditValueTitle(auditRow.new_values) || auditValueTitle(auditRow.old_values);
+        if (title) titleMap[auditRow.entity_id] = title;
+      }
+    }
+
     for (const r of trimmed) {
       if (r.entity_type !== 'decision') continue;
       r.entity_title = titleMap[r.entity_id || ''] || auditValueTitle(r.new_values) || auditValueTitle(r.old_values);
