@@ -17,9 +17,16 @@ interface Props {
   onNavigate: (page: string) => void;
 }
 
+type MinutesStatusFilter = MinutesStatus | 'all' | 'open';
+const MINUTES_SCOPE_PARAM = 'minutes_scope';
+
+function getInitialStatusFilter(): MinutesStatusFilter {
+  return new URLSearchParams(window.location.search).get(MINUTES_SCOPE_PARAM) === 'open' ? 'open' : 'all';
+}
+
 export function MinutesListPage({ onNavigate }: Props) {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<MinutesStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<MinutesStatusFilter>(getInitialStatusFilter);
   const [confidentialityFilter, setConfidentialityFilter] = useState<ConfidentialityLevel | 'all'>('all');
   const [orgUnitFilter, setOrgUnitFilter] = useState('');
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -130,9 +137,20 @@ export function MinutesListPage({ onNavigate }: Props) {
 
   useEffect(() => { fetchMinutes(); }, [fetchMinutes]);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(MINUTES_SCOPE_PARAM)) return;
+    url.searchParams.delete(MINUTES_SCOPE_PARAM);
+    window.history.replaceState(null, '', url.toString());
+  }, []);
+
   const filtered = minutes.filter(m => {
     const matchSearch = !search || m.meetingTitle.includes(search) || m.secretary.includes(search) || m.chair.includes(search);
-    const matchStatus = statusFilter === 'all' || m.status === statusFilter;
+    const matchStatus = statusFilter === 'all'
+      ? true
+      : statusFilter === 'open'
+        ? m.status !== 'published'
+        : m.status === statusFilter;
     const matchConf = confidentialityFilter === 'all' || m.confidentiality === confidentialityFilter;
     const matchUnit = !orgUnitFilter || (m.orgUnit || '').includes(orgUnitFilter);
     return matchSearch && matchStatus && matchConf && matchUnit;
@@ -247,10 +265,11 @@ export function MinutesListPage({ onNavigate }: Props) {
             {/* Status */}
             <select
               value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as MinutesStatus | 'all')}
+              onChange={e => setStatusFilter(e.target.value as MinutesStatusFilter)}
               className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
               <option value="all">همه وضعیت‌ها</option>
+              <option value="open">باز (منتشرنشده)</option>
               <option value="draft">پیش‌نویس</option>
               <option value="pending_approval">در انتظار تأیید</option>
               <option value="approved">تأییدشده</option>
