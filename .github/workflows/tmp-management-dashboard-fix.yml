@@ -74,6 +74,7 @@ jobs:
           )
 
           '''
+          replacement = replacement.replace('\n          ', '\n')
           path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
           PY
 
