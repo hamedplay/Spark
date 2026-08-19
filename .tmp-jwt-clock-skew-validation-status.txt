@@ -1,4 +1,0 @@
-status=success
-build=success
-guard=success
-validated_commit=4e6630107d0680f14654f85e41c487d945027c8e
