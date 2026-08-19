@@ -53,6 +53,13 @@ interface TaskMetricCardsProps {
 }
 
 export function TaskMetricCards(props: TaskMetricCardsProps) {
+  const openOverdue = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('task');
+    url.searchParams.set('taskView', 'overdue');
+    window.location.assign(url.toString());
+  };
+
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       <button onClick={props.onAssignedToMe} className="text-right rounded-2xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/10 p-4">
@@ -63,10 +70,10 @@ export function TaskMetricCards(props: TaskMetricCardsProps) {
         <div className="flex items-center justify-between"><span className="text-sm text-gray-500">در حال انجام</span><Columns3 className="w-4 h-4 text-blue-500" /></div>
         <div className="text-2xl font-bold mt-2 dark:text-white">{props.inProgress}</div>
       </button>
-      <div className="rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50/40 dark:bg-red-950/10 p-4">
+      <button onClick={openOverdue} className="text-right rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50/40 dark:bg-red-950/10 p-4">
         <div className="flex items-center justify-between"><span className="text-sm text-gray-500">سررسید گذشته</span><AlertTriangle className="w-4 h-4 text-red-500" /></div>
         <div className="text-2xl font-bold mt-2 dark:text-white">{props.overdue}</div>
-      </div>
+      </button>
       <button onClick={props.onCompleted} className="text-right rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/10 p-4">
         <div className="flex items-center justify-between"><span className="text-sm text-gray-500">تکمیل شده</span><CheckCircle2 className="w-4 h-4 text-emerald-500" /></div>
         <div className="text-2xl font-bold mt-2 dark:text-white">{props.completed}</div>
