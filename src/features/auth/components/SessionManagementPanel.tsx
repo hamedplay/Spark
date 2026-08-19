@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LogOut, MonitorSmartphone, ShieldX } from 'lucide-react';
+import { LogOut, MonitorSmartphone, ShieldX, Trash2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
 interface SessionInfo {
@@ -70,6 +70,23 @@ export function SessionManagementPanel() {
     }
   };
 
+  const cleanupHistory = async () => {
+    setRevoking('cleanup');
+    setError(null);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('session-management', {
+        method: 'POST',
+        body: { mode: 'cleanup_history' },
+      });
+      if (fnError || !data?.ok) throw new Error(data?.error ?? 'CLEANUP_FAILED');
+      await loadSessions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'CLEANUP_FAILED');
+    } finally {
+      setRevoking(null);
+    }
+  };
+
   const revokeOthers = async () => {
     setRevoking('others');
     try {
@@ -102,6 +119,8 @@ export function SessionManagementPanel() {
     }
   };
 
+  const hasHistoricalSessions = sessions.some((session) => session.session_id !== currentSessionId && session.status !== 'active');
+
   if (loading) return <div className="py-4 text-center text-sm text-gray-500">در حال بارگذاری...</div>;
   if (error) return <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">{error}</div>;
 
@@ -110,6 +129,16 @@ export function SessionManagementPanel() {
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">مدیریت نشست‌ها</h3>
         <div className="mobile-scroll-actions flex-shrink-0 sm:overflow-visible">
+          <button
+            type="button"
+            onClick={cleanupHistory}
+            disabled={revoking !== null || !hasHistoricalSessions}
+            title="پاک کردن نشست‌های لغوشده و منقضی"
+            className="inline-flex h-10 flex-shrink-0 items-center gap-1.5 rounded-xl border border-gray-300 px-2.5 text-xs text-gray-600 transition hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800 sm:px-3 sm:text-sm"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="hidden min-[390px]:inline">پاکسازی</span>
+          </button>
           <button
             type="button"
             onClick={revokeOthers}

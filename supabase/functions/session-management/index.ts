@@ -85,6 +85,33 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
+    // ── MODE: cleanup_history ───────────────────────────────────────────────
+    if (body.mode === "cleanup_history") {
+      const { data: stateData, error: stateError } = await admin.rpc("get_user_session_security_state", { p_user_id: userId });
+      if (stateError || !stateData?.ok) return json({ ok: false, error: "SESSION_STATE_UNAVAILABLE" }, 500);
+
+      const historicalSessionIds = (Array.isArray(stateData.sessions) ? stateData.sessions : [])
+        .filter((session: { session_id?: string; status?: string }) =>
+          typeof session.session_id === "string" &&
+          session.session_id !== sessionId &&
+          session.status !== "active"
+        )
+        .map((session: { session_id: string }) => session.session_id);
+
+      if (historicalSessionIds.length === 0) return json({ ok: true, deleted_count: 0 });
+
+      const { data: deletedRows, error: deleteError } = await admin
+        .from("session_security_state")
+        .delete()
+        .eq("user_id", userId)
+        .in("session_id", historicalSessionIds)
+        .neq("session_id", sessionId)
+        .select("session_id");
+
+      if (deleteError) return json({ ok: false, error: "CLEANUP_FAILED" }, 500);
+      return json({ ok: true, deleted_count: deletedRows?.length ?? 0 });
+    }
+
     // ── MODE: revoke_others ────────────────────────────────────────────────
     if (body.mode === "revoke_others") {
       const { data, error } = await admin.rpc("revoke_other_sessions", {
