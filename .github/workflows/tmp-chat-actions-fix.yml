@@ -44,9 +44,7 @@ jobs:
           if (!source.includes(before)) throw new Error('Expected lucide import baseline not found');
           const checkUsages = (source.match(/<Check\b/g) || []).length;
           if (checkUsages < 1) throw new Error('No local Check JSX usage found');
-          const updated = source.replace(before, after);
-          if (updated === source) throw new Error('No source change produced');
-          fs.writeFileSync(path, updated);
+          fs.writeFileSync(path, source.replace(before, after));
           NODE
           git diff --check
           changed="$(git diff --name-only)"
@@ -65,20 +63,30 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Commit validated fix to main
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/Chat/ChatActionsPanel.tsx
-          git commit -m "fix(chat): import Check in actions panel [skip ci]"
-
-          git fetch origin main
-          if [ "$(git rev-parse HEAD^)" != "$(git rev-parse origin/main)" ]; then
-            git rebase origin/main
-            npm ci
-            npm run build
-          fi
-
-          git push origin HEAD:main
+      - name: Write validated minimal fix to current main
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const path = 'src/components/Chat/ChatActionsPanel.tsx';
+            const before = "import { Search, SlidersHorizontal, X, ChevronDown, Clock, Star } from 'lucide-react';";
+            const after = "import { Search, SlidersHorizontal, X, ChevronDown, Clock, Star, Check } from 'lucide-react';";
+            const { owner, repo } = context.repo;
+            const response = await github.rest.repos.getContent({ owner, repo, path, ref: 'main' });
+            if (Array.isArray(response.data) || !('content' in response.data)) core.setFailed('Expected a file response');
+            const current = Buffer.from(response.data.content, 'base64').toString('utf8');
+            if (current.includes(after)) {
+              core.info('Fix already present on main');
+              return;
+            }
+            if (!current.includes(before)) core.setFailed('Current main no longer matches scoped import baseline');
+            const updated = current.replace(before, after);
+            await github.rest.repos.createOrUpdateFileContents({
+              owner,
+              repo,
+              path,
+              branch: 'main',
+              sha: response.data.sha,
+              message: 'fix(chat): import Check in actions panel [skip ci]',
+              content: Buffer.from(updated, 'utf8').toString('base64'),
+            });
