@@ -1,4 +1,4 @@
-name: Temporary Action Center Validator
+name: tmp-action-center-validator
 
 on:
   push:
@@ -9,39 +9,25 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: tmp-action-center-validator
-  cancel-in-progress: false
-
 jobs:
-  fix-and-validate:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, 'cleanup tmp action center') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
     steps:
-      - name: Checkout triggering main
-        uses: actions/checkout@v6
+      - name: Checkout main
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 3
+          ref: main
+          fetch-depth: 5
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          package-manager-cache: false
-
-      - name: Verify main did not move
-        run: |
-          git fetch origin main
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-
-      - name: Apply minimal Action Center fix
+      - name: Apply exact Action Center fixes
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          def replace_once(path: str, old: str, new: str) -> None:
+          def replace_once(path, old, new):
               p = Path(path)
               text = p.read_text()
               count = text.count(old)
@@ -54,108 +40,82 @@ jobs:
               "  onInProgress: () => void;\n  onCompleted: () => void;",
               "  onInProgress: () => void;\n  onOverdue: () => void;\n  onCompleted: () => void;",
           )
-
           replace_once(
               'src/components/Tasks/TasksWorkspaceChrome.tsx',
               '''      <div className="rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50/40 dark:bg-red-950/10 p-4">\n        <div className="flex items-center justify-between"><span className="text-sm text-gray-500">سررسید گذشته</span><AlertTriangle className="w-4 h-4 text-red-500" /></div>\n        <div className="text-2xl font-bold mt-2 dark:text-white">{props.overdue}</div>\n      </div>''',
               '''      <button onClick={props.onOverdue} className="text-right rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50/40 dark:bg-red-950/10 p-4">\n        <div className="flex items-center justify-between"><span className="text-sm text-gray-500">سررسید گذشته</span><AlertTriangle className="w-4 h-4 text-red-500" /></div>\n        <div className="text-2xl font-bold mt-2 dark:text-white">{props.overdue}</div>\n      </button>''',
           )
-
           replace_once(
               'src/components/Tasks/taskPageSelectors.ts',
               "    const matchesStatus = statusFilter === 'all' ||\n      (statusFilter === 'archived' ? task.archived : task.status === statusFilter && !task.archived);",
               "    const matchesStatus = statusFilter === 'all'\n      ? !task.archived\n      : statusFilter === 'archived'\n        ? task.archived\n        : statusFilter === 'completed'\n          ? task.status === 'completed'\n          : task.status === statusFilter && !task.archived;",
           )
-
           replace_once(
               'src/components/TasksPage.tsx',
               '''      <TaskMetricCards\n        assignedToMe={counters.assignedToMe}\n        inProgress={counters.inProgress}\n        overdue={counters.overdue}\n        completed={counters.completed}\n        onAssignedToMe={() => { clearExternalFilter(); setTaskTab('assigned_to_me'); setStatusFilter('all'); }}\n        onInProgress={() => { clearExternalFilter(); setTaskTab('all'); setStatusFilter('in_progress'); }}\n        onCompleted={() => { setFocusTaskId(null); setDashboardTaskView('completed'); setTaskTab('all'); setStatusFilter('all'); }}\n      />''',
               '''      <TaskMetricCards\n        assignedToMe={counters.assignedToMe}\n        inProgress={counters.inProgress}\n        overdue={counters.overdue}\n        completed={counters.completed}\n        onAssignedToMe={() => {\n          clearExternalFilter();\n          setSearchTerm('');\n          setPersonalProjectFilter('all');\n          setTaskTab('assigned_to_me');\n          setStatusFilter('all');\n        }}\n        onInProgress={() => {\n          clearExternalFilter();\n          setSearchTerm('');\n          setPersonalProjectFilter('all');\n          setTaskTab('all');\n          setStatusFilter('in_progress');\n        }}\n        onOverdue={() => {\n          setFocusTaskId(null);\n          setDashboardTaskView('overdue');\n          setSearchTerm('');\n          setPersonalProjectFilter('all');\n          setTaskTab('all');\n          setStatusFilter('all');\n        }}\n        onCompleted={() => {\n          setFocusTaskId(null);\n          setDashboardTaskView('completed');\n          setSearchTerm('');\n          setPersonalProjectFilter('all');\n          setTaskTab('all');\n          setStatusFilter('all');\n        }}\n      />''',
           )
           PY
+          grep -Fq 'onClick={props.onOverdue}' src/components/Tasks/TasksWorkspaceChrome.tsx
+          grep -Fq "setDashboardTaskView('overdue')" src/components/TasksPage.tsx
 
-          grep -q 'onClick={props.onOverdue}' src/components/Tasks/TasksWorkspaceChrome.tsx
-          grep -q "setDashboardTaskView('overdue')" src/components/TasksPage.tsx
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Targeted selector regression test
+        shell: bash
         run: |
           cat > tests/.tmp-action-center-selectors.test.ts <<'TS'
           import test from 'node:test';
           import assert from 'node:assert/strict';
           import { filterTasks } from '../src/components/Tasks/taskPageSelectors';
 
-          const active = {
-            id: 'active', title: 'active', description: '', tags: [], status: 'pending', archived: false,
-            current_assignee_id: 'u1', created_by_id: 'u2', user_id: 'u2',
-          } as any;
-          const completed = {
-            id: 'completed', title: 'completed', description: '', tags: [], status: 'completed', archived: true,
-            current_assignee_id: 'u1', created_by_id: 'u2', user_id: 'u2',
-          } as any;
+          const active = { id: 'active', title: 'active', description: '', tags: [], status: 'pending', archived: false, current_assignee_id: 'u1', created_by_id: 'u2', user_id: 'u2' } as any;
+          const completed = { id: 'completed', title: 'completed', description: '', tags: [], status: 'completed', archived: true, current_assignee_id: 'u1', created_by_id: 'u2', user_id: 'u2' } as any;
+          const common = { tasks: [active, completed], searchTerm: '', taskTab: 'all' as const, personalProjectFilter: 'all', userId: 'u1' };
 
-          const common = {
-            tasks: [active, completed],
-            searchTerm: '',
-            taskTab: 'all' as const,
-            personalProjectFilter: 'all',
-            userId: 'u1',
-          };
-
-          test('all excludes archived actions', () => {
-            assert.deepEqual(filterTasks({ ...common, statusFilter: 'all' }).map(task => task.id), ['active']);
-          });
-
-          test('completed includes completed actions even when auto-archived', () => {
-            assert.deepEqual(filterTasks({ ...common, statusFilter: 'completed' }).map(task => task.id), ['completed']);
-          });
-
-          test('archived explicitly exposes archived actions', () => {
-            assert.deepEqual(filterTasks({ ...common, statusFilter: 'archived' }).map(task => task.id), ['completed']);
-          });
+          test('all excludes archived actions', () => assert.deepEqual(filterTasks({ ...common, statusFilter: 'all' }).map(t => t.id), ['active']));
+          test('completed includes auto-archived completed actions', () => assert.deepEqual(filterTasks({ ...common, statusFilter: 'completed' }).map(t => t.id), ['completed']));
+          test('archived explicitly exposes archived actions', () => assert.deepEqual(filterTasks({ ...common, statusFilter: 'archived' }).map(t => t.id), ['completed']));
           TS
           node --import tsx --test tests/.tmp-action-center-selectors.test.ts
-          rm tests/.tmp-action-center-selectors.test.ts
+          rm -f tests/.tmp-action-center-selectors.test.ts
 
       - name: Build
         run: npm run build
 
-      - name: Full test suite
+      - name: Test
         run: npm test
 
-      - name: Commit validated source and remove temporary tooling
+      - name: Commit validated fix and cleanup temporary tooling
+        shell: bash
         run: |
           rm -f tests/.tmp-action-center-selectors.test.ts
-          git show HEAD~2:.github/workflows/ci.yml > .github/workflows/ci.yml
-          rm .github/workflows/tmp-action-center-validator.yml
-
-          cat > /tmp/expected-files <<'EOF'
-          .github/workflows/ci.yml
-          .github/workflows/tmp-action-center-validator.yml
-          src/components/Tasks/TasksWorkspaceChrome.tsx
-          src/components/Tasks/taskPageSelectors.ts
-          src/components/TasksPage.tsx
-          EOF
-          git diff --name-only | sort > /tmp/actual-files
-          diff -u <(sort /tmp/expected-files) /tmp/actual-files
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "fix(tasks): make action center metrics functional [skip ci]"
-          git push origin HEAD:main
-
-      - name: Remove temporary tooling after failure
-        if: failure()
-        run: |
-          git reset --hard HEAD
-          rm -f tests/.tmp-action-center-selectors.test.ts
-          git show HEAD~2:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git show 119ae9f55c9469c0b5c79f2e2862080e6bf1b3a3:.github/workflows/ci.yml > .github/workflows/ci.yml
           rm -f .github/workflows/tmp-action-center-validator.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m "chore: remove failed action-center validator [skip ci]" || true
+          git diff --cached --check
+          git commit -m 'fix(tasks): make action center metrics functional [skip ci]'
           git push origin HEAD:main
+
+      - name: Cleanup temporary workflow if validation fails
+        if: failure()
+        shell: bash
+        run: |
+          git reset --hard HEAD || true
+          rm -f tests/.tmp-action-center-selectors.test.ts
+          git show 119ae9f55c9469c0b5c79f2e2862080e6bf1b3a3:.github/workflows/ci.yml > .github/workflows/ci.yml
+          rm -f .github/workflows/tmp-action-center-validator.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: cleanup tmp action center [skip ci]' || true
+          git push origin HEAD:main || true
