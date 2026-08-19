@@ -1,0 +1,77 @@
+name: Temporary management dashboard fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-management-dashboard-fix.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-management-dashboard-fix
+  cancel-in-progress: false
+
+jobs:
+  validate-and-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact trigger commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guard against concurrent main changes
+        shell: bash
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA" || {
+            echo "main advanced after this run was triggered; refusing to transform stale source"
+            exit 1
+          }
+
+      - name: Apply scoped transformation
+        run: python3 scripts/tmp-management-dashboard-fix.py
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate navigation authorization
+        run: npm run test:layout-navigation
+
+      - name: Validate minutes integration contracts
+        run: npm run test:minutes-integration
+
+      - name: Production build
+        run: npm run build
+
+      - name: Validate final diff
+        shell: bash
+        run: |
+          git diff --check
+          test -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
+          grep -q "has_management_dashboard_access_v1" src/AuthenticatedApp.tsx
+          grep -q "managementDashboardAllowed" src/app/layout/navigationMenu.ts
+          grep -q "openDecision(alert)" src/components/ManagementDashboardPage.tsx
+          grep -q "focusTaskId" src/components/TasksPage.tsx
+          grep -q "focusMeetingId" src/features/meetings/pages/MeetingsPage.tsx
+          grep -q "focusDecisionId" src/components/Minutes/Detail/TabDecisions.tsx
+
+      - name: Commit validated source and remove temporary tooling
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/tmp-management-dashboard-fix.py .github/workflows/tmp-management-dashboard-fix.yml
+          git add src tests supabase/migrations/20260819171500_harden_management_dashboard_access.sql
+          git diff --cached --check
+          git commit -m "fix: secure management dashboard drill-down"
+          git push origin HEAD:main
