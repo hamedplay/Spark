@@ -16,7 +16,7 @@ concurrency:
 jobs:
   fix-and-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout current main
@@ -138,19 +138,17 @@ jobs:
           form = Path('src/components/CalendarMeetingForm.tsx').read_text(encoding='utf-8')
           commit = Path('src/components/CalendarMeetingForm/commitEdit.ts').read_text(encoding='utf-8')
           topbar = Path('src/app/layout/components/LayoutTopBar.tsx').read_text(encoding='utf-8')
-
           checks = {
               'first schedule bypasses change modal': "if (isFirstSchedule) {\n          await commitEdit(snapshot, true);" in form,
               'normal edits keep change modal': 'setEditDecision({ changeSet, snapshot });' in form,
-              'retained participants receive first invite': 'const participantInviteIds = isFirstSchedule' in commit,
+              'retained participants receive first invite': 'const participantInviteIds = isFirstSchedule' in commit and 'diff.retained_participant_ids' in commit,
               'retained observers receive first invite': 'const observerInviteIds = isFirstSchedule ? observerIds : addedObserverIds;' in commit,
-              'retained externals receive first invite': 'const externalInviteTargets = isFirstSchedule' in commit,
+              'retained externals receive first invite': 'const externalInviteTargets = isFirstSchedule' in commit and 'externalDiff.retained' in commit,
               'calendar hides global top bar': "if (activePage === 'calendar') return null;" in topbar,
           }
           failed = [name for name, ok in checks.items() if not ok]
           if failed:
               raise SystemExit('contract checks failed: ' + ', '.join(failed))
-
           changed = {line[3:] for line in subprocess.check_output(['git', 'status', '--porcelain'], text=True).splitlines() if line.strip()}
           expected = {
               'src/components/CalendarMeetingForm.tsx',
@@ -172,29 +170,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Production build
-        run: npm run build
-
-      - name: Targeted meeting prefill tests
-        run: npm run test:meeting-prefill
-
-      - name: Targeted layout navigation tests
-        run: npm run test:layout-navigation
-
-      - name: Targeted notification producer tests
-        run: npm run test:notification-producer
-
-      - name: Ensure validated source is still current
+      - name: Validate transformed source
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin main
-          test "$(git rev-parse origin/main)" = "$VALIDATION_BASE" || {
-            echo 'main changed during validation; refusing to commit stale source'
-            exit 1
-          }
+          npm run build
+          npm run test:meeting-prefill
+          npm run test:layout-navigation
+          npm run test:notification-producer
 
-      - name: Commit validated fix and remove temporary workflow
+      - name: Commit validated source locally
         shell: bash
         run: |
           set -euo pipefail
@@ -202,12 +187,41 @@ jobs:
           git add src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/app/layout/components/LayoutTopBar.tsx
           git add -u .github/workflows/tmp-fix-request-calendar-flow.yml
           git diff --cached --check
-
           changed="$(git diff --cached --name-only | sort)"
           expected="$(printf '%s\n%s\n%s\n%s\n' '.github/workflows/tmp-fix-request-calendar-flow.yml' 'src/app/layout/components/LayoutTopBar.tsx' 'src/components/CalendarMeetingForm.tsx' 'src/components/CalendarMeetingForm/commitEdit.ts' | sort)"
           test "$changed" = "$expected"
-
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix: separate request scheduling from calendar edits [skip ci]'
+
+      - name: Integrate unrelated concurrent main changes safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          remote_sha="$(git rev-parse origin/main)"
+          if [ "$remote_sha" != "$VALIDATION_BASE" ]; then
+            overlap="$(git diff --name-only "$VALIDATION_BASE"..origin/main -- src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/app/layout/components/LayoutTopBar.tsx)"
+            if [ -n "$overlap" ]; then
+              echo 'Scoped files changed during validation; refusing unvalidated integration:'
+              echo "$overlap"
+              exit 1
+            fi
+            git rebase origin/main
+            npm ci
+            npm run build
+            npm run test:meeting-prefill
+            npm run test:layout-navigation
+            npm run test:notification-producer
+          fi
+
+      - name: Push validated fix to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD^)" = "$(git rev-parse origin/main)" || {
+            echo 'main moved again after final validation; refusing stale push'
+            exit 1
+          }
           git push origin HEAD:main
