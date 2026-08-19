@@ -1,4 +1,4 @@
-name: Temporary request-calendar fix validator
+name: Temporary request-calendar fix
 
 on:
   push:
@@ -14,39 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  fix-validate-commit:
+  fix-and-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
-      - name: Checkout
+      - name: Checkout current main
         uses: actions/checkout@v6
         with:
+          ref: main
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24.18.1'
-          cache: npm
-          package-manager-cache: false
+      - name: Capture validation base
+        shell: bash
+        run: echo "VALIDATION_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - name: Transform, validate, and safely integrate latest main
+      - name: Apply minimal scoped fix
         shell: bash
         run: |
           set -euo pipefail
-
-          validate_current_tree() {
-            git diff --check
-            npm ci
-            npm run build
-            npm run test:meeting-prefill
-            npm run test:layout-navigation
-            npm run test:notification-producer
-          }
-
-          apply_transform() {
-            python - <<'PY'
+          python - <<'PY'
           from pathlib import Path
 
           def replace_exact(path: str, old: str, new: str) -> None:
@@ -140,105 +127,87 @@ jobs:
           )
           PY
 
-            python - <<'PY'
+      - name: Verify scoped transformation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
           from pathlib import Path
           import subprocess
 
           form = Path('src/components/CalendarMeetingForm.tsx').read_text(encoding='utf-8')
           commit = Path('src/components/CalendarMeetingForm/commitEdit.ts').read_text(encoding='utf-8')
           topbar = Path('src/app/layout/components/LayoutTopBar.tsx').read_text(encoding='utf-8')
+
           checks = {
-              'first schedule bypass': "if (isFirstSchedule) {\n          await commitEdit(snapshot, true);" in form,
-              'normal edit modal preserved': 'setEditDecision({ changeSet, snapshot });' in form,
-              'retained participants invited': 'const participantInviteIds = isFirstSchedule' in commit and 'diff.retained_participant_ids' in commit,
-              'retained observers invited': 'const observerInviteIds = isFirstSchedule ? observerIds : addedObserverIds;' in commit,
-              'retained externals invited': 'const externalInviteTargets = isFirstSchedule' in commit and 'externalDiff.retained' in commit,
-              'calendar top bar hidden': "if (activePage === 'calendar') return null;" in topbar,
+              'first schedule bypasses change modal': "if (isFirstSchedule) {\n          await commitEdit(snapshot, true);" in form,
+              'normal edits keep change modal': 'setEditDecision({ changeSet, snapshot });' in form,
+              'retained participants receive first invite': 'const participantInviteIds = isFirstSchedule' in commit,
+              'retained observers receive first invite': 'const observerInviteIds = isFirstSchedule ? observerIds : addedObserverIds;' in commit,
+              'retained externals receive first invite': 'const externalInviteTargets = isFirstSchedule' in commit,
+              'calendar hides global top bar': "if (activePage === 'calendar') return null;" in topbar,
           }
           failed = [name for name, ok in checks.items() if not ok]
           if failed:
               raise SystemExit('contract checks failed: ' + ', '.join(failed))
 
-          status = subprocess.check_output(['git', 'status', '--porcelain'], text=True)
-          changed = {line[3:] for line in status.splitlines() if line.strip()}
+          changed = {line[3:] for line in subprocess.check_output(['git', 'status', '--porcelain'], text=True).splitlines() if line.strip()}
           expected = {
               'src/components/CalendarMeetingForm.tsx',
               'src/components/CalendarMeetingForm/commitEdit.ts',
               'src/app/layout/components/LayoutTopBar.tsx',
           }
           if changed != expected:
-              raise SystemExit(f'unexpected source changes: {sorted(changed)}')
-          print('Scoped transformation contracts verified')
+              raise SystemExit(f'unexpected working tree changes: {sorted(changed)}')
           PY
+          git diff --check
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.1'
+          cache: npm
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Production build
+        run: npm run build
+
+      - name: Targeted meeting prefill tests
+        run: npm run test:meeting-prefill
+
+      - name: Targeted layout navigation tests
+        run: npm run test:layout-navigation
+
+      - name: Targeted notification producer tests
+        run: npm run test:notification-producer
+
+      - name: Ensure validated source is still current
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$VALIDATION_BASE" || {
+            echo 'main changed during validation; refusing to commit stale source'
+            exit 1
           }
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Commit validated fix and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/tmp-fix-request-calendar-flow.yml
+          git add src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/app/layout/components/LayoutTopBar.tsx
+          git add -u .github/workflows/tmp-fix-request-calendar-flow.yml
+          git diff --cached --check
 
-          for transform_attempt in 1 2 3 4 5; do
-            echo "Transform attempt $transform_attempt"
-            git fetch origin main
-            git reset --hard origin/main
-            validation_base="$(git rev-parse HEAD)"
+          changed="$(git diff --cached --name-only | sort)"
+          expected="$(printf '%s\n%s\n%s\n%s\n' '.github/workflows/tmp-fix-request-calendar-flow.yml' 'src/app/layout/components/LayoutTopBar.tsx' 'src/components/CalendarMeetingForm.tsx' 'src/components/CalendarMeetingForm/commitEdit.ts' | sort)"
+          test "$changed" = "$expected"
 
-            apply_transform
-            validate_current_tree
-
-            rm .github/workflows/tmp-fix-request-calendar-flow.yml
-            git add src/components/CalendarMeetingForm.tsx src/components/CalendarMeetingForm/commitEdit.ts src/app/layout/components/LayoutTopBar.tsx
-            git add -u .github/workflows/tmp-fix-request-calendar-flow.yml
-
-            python - <<'PY'
-          import subprocess
-          staged = set(filter(None, subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()))
-          expected = {
-              '.github/workflows/tmp-fix-request-calendar-flow.yml',
-              'src/components/CalendarMeetingForm.tsx',
-              'src/components/CalendarMeetingForm/commitEdit.ts',
-              'src/app/layout/components/LayoutTopBar.tsx',
-          }
-          if staged != expected:
-              raise SystemExit(f'unexpected staged changes: {sorted(staged)}')
-          PY
-
-            git diff --cached --check
-            git commit -m "fix: separate request scheduling from calendar edits [skip ci]"
-
-            restart_transform=false
-            for integration_attempt in 1 2 3 4 5; do
-              git fetch origin main
-              remote_sha="$(git rev-parse origin/main)"
-
-              if [ "$remote_sha" != "$validation_base" ]; then
-                overlap="$(git diff --name-only "$validation_base"..origin/main -- \
-                  src/components/CalendarMeetingForm.tsx \
-                  src/components/CalendarMeetingForm/commitEdit.ts \
-                  src/app/layout/components/LayoutTopBar.tsx)"
-                if [ -n "$overlap" ]; then
-                  echo "Scoped source changed during validation; re-transforming latest source:"
-                  echo "$overlap"
-                  restart_transform=true
-                  break
-                fi
-
-                git rebase origin/main
-                validation_base="$remote_sha"
-                validate_current_tree
-              fi
-
-              if git push origin HEAD:main; then
-                echo "Validated fix committed to main; temporary workflow removed"
-                exit 0
-              fi
-
-              echo "Push raced with another unrelated main update; re-validating integrated result"
-            done
-
-            if [ "$restart_transform" = false ]; then
-              echo "Could not push after 5 safe integration attempts"
-              exit 1
-            fi
-          done
-
-          echo "Scoped files kept changing; no unvalidated source was committed"
-          exit 1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: separate request scheduling from calendar edits [skip ci]'
+          git push origin HEAD:main
