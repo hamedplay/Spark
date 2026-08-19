@@ -65,6 +65,7 @@ export interface AuditLogRow {
   metadata: Record<string, unknown> | null;
   created_at: string;
   actor_name?: string | null;
+  entity_title?: string | null;
 }
 
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
@@ -93,6 +94,11 @@ export const ENTITY_LABELS: Record<string, string> = {
   approval: 'تأیید',
 };
 
+function auditValueTitle(values: Record<string, unknown> | null): string | null {
+  const title = values?.title;
+  return typeof title === 'string' && title.trim() ? title : null;
+}
+
 export async function listMinuteAudit(
   minuteId: string,
   limit = 20,
@@ -120,6 +126,28 @@ export async function listMinuteAudit(
     }
     for (const r of trimmed) r.actor_name = map[r.actor_user_id || ''] || null;
   }
+
+  const decisionIds = Array.from(new Set(
+    trimmed
+      .filter(r => r.entity_type === 'decision')
+      .map(r => r.entity_id)
+      .filter(Boolean) as string[],
+  ));
+  if (decisionIds.length) {
+    const { data: decisions } = await supabase
+      .from('minutes_decisions')
+      .select('id,title')
+      .in('id', decisionIds);
+    const titleMap: Record<string, string> = {};
+    for (const decision of (decisions || []) as unknown as { id: string; title: string }[]) {
+      titleMap[decision.id] = decision.title;
+    }
+    for (const r of trimmed) {
+      if (r.entity_type !== 'decision') continue;
+      r.entity_title = titleMap[r.entity_id || ''] || auditValueTitle(r.new_values) || auditValueTitle(r.old_values);
+    }
+  }
+
   return { rows: trimmed, hasMore };
 }
 
@@ -127,6 +155,7 @@ export function summarizeChange(row: AuditLogRow): string {
   const action = AUDIT_ACTION_LABELS[row.action] || row.action;
   const entity = ENTITY_LABELS[row.entity_type] || row.entity_type;
   const parts: string[] = [action];
+  if (row.entity_type === 'decision' && row.entity_title) parts.push(`مصوبه: ${row.entity_title}`);
   const hasRevisionInRow = row.revision_number != null;
   if (hasRevisionInRow) parts.push(`نسخه ${toPersianDigits(String(row.revision_number))}`);
   if (row.new_values) {
