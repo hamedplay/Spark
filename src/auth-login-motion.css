@@ -1,0 +1,405 @@
+/* Spark public-auth motion layer — performance-safe edition.
+   Motion is intentionally limited to transform/opacity so the login keeps its
+   animated character without reintroducing paint-heavy Lighthouse regressions.
+   Layout, colors, typography and authentication behavior are unchanged. */
+
+/* Ambient depth */
+.spark-reference-login .spark-reference-aurora-a {
+  animation: spark-motion-aurora-a 16s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+
+.spark-reference-login .spark-reference-aurora-b {
+  animation: spark-motion-aurora-b 19s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+
+/* Surfaces enter with transform only; the LCP heading stays immediately visible. */
+.spark-reference-login .spark-reference-form-panel {
+  animation: spark-motion-panel-in .62s cubic-bezier(.16,.8,.24,1) both;
+}
+
+.spark-reference-login .spark-reference-hero {
+  animation: spark-motion-hero-in .68s cubic-bezier(.16,.8,.24,1) both;
+}
+
+/* Brand motion */
+.spark-reference-login .spark-reference-brand-mark {
+  animation: spark-motion-brand-float 4.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.spark-reference-login .spark-reference-brand-mark img {
+  animation: spark-motion-logo-breathe 3.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.spark-reference-login .spark-reference-brand-halo {
+  animation: spark-motion-halo 3.2s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.spark-reference-login .spark-reference-wordmark {
+  animation: spark-motion-wordmark-float 5s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-brand h1,
+.spark-reference-login .spark-reference-brand p {
+  animation: spark-motion-copy-in .42s ease-out both;
+}
+
+.spark-reference-login .spark-reference-brand h1 { animation-delay: .04s; }
+.spark-reference-login .spark-reference-brand p { animation-delay: .08s; }
+
+/* Connection/status micro-motion */
+.spark-reference-login .spark-reference-connection-connected {
+  animation: spark-motion-status-breathe 2.6s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-connection-checking svg {
+  animation: spark-motion-status-spin 1.4s linear infinite;
+}
+
+/* Form transitions */
+.spark-reference-login .spark-reference-form,
+.spark-reference-login .spark-reference-compact-flow {
+  animation: spark-motion-flow-in .34s cubic-bezier(.18,.72,.22,1) both;
+}
+
+.spark-reference-login .spark-login-unified-tabs,
+.spark-reference-login .spark-reference-two-col,
+.spark-reference-login .spark-reference-options,
+.spark-reference-login .spark-reference-secondary-actions,
+.spark-reference-login .spark-reference-back,
+.spark-reference-login .spark-reference-secure-note {
+  animation: spark-motion-control-in .36s ease-out both;
+}
+
+.spark-reference-login .spark-reference-input-wrap:focus-within .spark-reference-input-icon {
+  animation: spark-motion-input-icon 1.4s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-eye:hover svg,
+.spark-reference-login .spark-reference-link:hover svg,
+.spark-reference-login .spark-reference-back:hover svg,
+.spark-reference-login .spark-reference-secondary-actions button:hover svg {
+  animation: spark-motion-icon-nudge .42s ease-in-out;
+}
+
+.spark-reference-login .spark-reference-check input:checked + .spark-reference-checkbox {
+  animation: spark-motion-check-pop .32s cubic-bezier(.18,.8,.28,1.35);
+}
+
+.spark-reference-login .spark-reference-secure-note svg {
+  animation: spark-motion-secure 3s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-otp-code {
+  animation: spark-motion-otp-in .34s cubic-bezier(.18,.72,.22,1) both;
+}
+
+/* Hero scan line: transform/opacity only. */
+.spark-reference-login .spark-reference-hero-scan {
+  animation: spark-motion-hero-scan 8.5s linear infinite;
+  will-change: transform, opacity;
+}
+
+/* Keep the main LCP heading static/visible; animate only supporting content. */
+.spark-reference-login .spark-reference-hero-header p {
+  animation: spark-motion-copy-in .42s ease-out both;
+}
+
+/* Feature cards remain visible from first paint and subtly settle into place. */
+.spark-reference-login .spark-reference-feature {
+  animation: spark-motion-feature-settle .48s ease-out both;
+}
+
+.spark-reference-login .spark-reference-feature:nth-child(1) { animation-delay: .04s; }
+.spark-reference-login .spark-reference-feature:nth-child(2) { animation-delay: .08s; }
+.spark-reference-login .spark-reference-feature:nth-child(3) { animation-delay: .12s; }
+.spark-reference-login .spark-reference-feature:nth-child(4) { animation-delay: .16s; }
+
+.spark-reference-login .spark-reference-feature::before {
+  animation: spark-motion-feature-sheen 8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.spark-reference-login .spark-reference-feature:nth-child(2)::before { animation-delay: -2s; }
+.spark-reference-login .spark-reference-feature:nth-child(3)::before { animation-delay: -4s; }
+.spark-reference-login .spark-reference-feature:nth-child(4)::before { animation-delay: -6s; }
+
+.spark-reference-login .spark-reference-feature-icon {
+  animation: spark-motion-feature-icon 4.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.spark-reference-login .spark-reference-feature:nth-child(2) .spark-reference-feature-icon { animation-delay: -.9s; }
+.spark-reference-login .spark-reference-feature:nth-child(3) .spark-reference-feature-icon { animation-delay: -1.8s; }
+.spark-reference-login .spark-reference-feature:nth-child(4) .spark-reference-feature-icon { animation-delay: -2.7s; }
+
+.spark-reference-login .spark-reference-feature-icon svg {
+  animation: spark-motion-feature-svg 5.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Hologram / orbital motion */
+.spark-reference-login .spark-reference-hologram::before {
+  animation: spark-motion-hologram-breathe 4.6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.spark-reference-login .spark-reference-data-rain {
+  animation: spark-motion-data-rain 5.8s linear infinite;
+  will-change: transform, opacity;
+}
+
+.spark-reference-login .spark-reference-orbit-one {
+  animation: spark-motion-orbit-cw 14s linear infinite;
+}
+
+.spark-reference-login .spark-reference-orbit-two {
+  animation: spark-motion-orbit-ccw 10.5s linear infinite;
+}
+
+.spark-reference-login .spark-reference-orbit-three {
+  animation: spark-motion-orbit-cw 7.5s linear infinite reverse;
+}
+
+.spark-reference-login .spark-reference-platform .layer-one {
+  animation: spark-motion-layer-one 4.8s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-platform .layer-two {
+  animation: spark-motion-layer-two 4.8s .38s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-platform .layer-three {
+  animation: spark-motion-layer-three 4.8s .76s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-core {
+  animation: spark-motion-core-float 3.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.spark-reference-login .spark-reference-core img {
+  animation: spark-motion-core-logo 3.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.spark-reference-login .spark-reference-node-users {
+  animation: spark-motion-node-users 5.8s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-node-chart {
+  animation: spark-motion-node-chart 6.4s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-node-monitor {
+  animation: spark-motion-node-monitor 6.1s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-node-shield {
+  animation: spark-motion-node-shield 5.5s ease-in-out infinite;
+}
+
+.spark-reference-login .spark-reference-node svg {
+  animation: spark-motion-node-icon 4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes spark-motion-aurora-a {
+  from { transform: translate3d(-2%,2%,0) scale(.96); opacity: .16; }
+  to { transform: translate3d(10%,-8%,0) scale(1.08); opacity: .28; }
+}
+
+@keyframes spark-motion-aurora-b {
+  from { transform: translate3d(4%,-4%,0) scale(1.04); opacity: .14; }
+  to { transform: translate3d(-10%,9%,0) scale(.94); opacity: .25; }
+}
+
+@keyframes spark-motion-panel-in {
+  from { transform: translate3d(-14px,8px,0) scale(.99); }
+  to { transform: translate3d(0,0,0) scale(1); }
+}
+
+@keyframes spark-motion-hero-in {
+  from { transform: translate3d(14px,8px,0) scale(.99); }
+  to { transform: translate3d(0,0,0) scale(1); }
+}
+
+@keyframes spark-motion-brand-float {
+  0%,100% { transform: translate3d(0,0,0); }
+  50% { transform: translate3d(0,-4px,0); }
+}
+
+@keyframes spark-motion-logo-breathe {
+  0%,100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}
+
+@keyframes spark-motion-halo {
+  0%,100% { transform: scale(.9); opacity: .42; }
+  50% { transform: scale(1.1); opacity: .86; }
+}
+
+@keyframes spark-motion-wordmark-float {
+  0%,100% { transform: translate3d(0,0,0); opacity: .94; }
+  50% { transform: translate3d(0,-2px,0); opacity: 1; }
+}
+
+@keyframes spark-motion-copy-in {
+  from { opacity: .72; transform: translate3d(0,5px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+
+@keyframes spark-motion-status-breathe {
+  0%,100% { transform: scale(1); opacity: .82; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes spark-motion-status-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spark-motion-flow-in {
+  from { opacity: .78; transform: translate3d(0,7px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+
+@keyframes spark-motion-control-in {
+  from { opacity: .82; transform: translate3d(0,5px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+
+@keyframes spark-motion-input-icon {
+  0%,100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes spark-motion-icon-nudge {
+  0%,100% { transform: translateX(0); }
+  50% { transform: translateX(-3px); }
+}
+
+@keyframes spark-motion-check-pop {
+  0% { transform: scale(.84); }
+  70% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@keyframes spark-motion-secure {
+  0%,100% { transform: scale(1); opacity: .72; }
+  50% { transform: scale(1.07); opacity: 1; }
+}
+
+@keyframes spark-motion-otp-in {
+  from { opacity: .78; transform: translate3d(0,8px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+
+@keyframes spark-motion-hero-scan {
+  0%,12% { transform: translate3d(0,-100%,0); opacity: 0; }
+  18% { opacity: .25; }
+  62% { opacity: .18; }
+  72%,100% { transform: translate3d(0,100%,0); opacity: 0; }
+}
+
+@keyframes spark-motion-feature-settle {
+  from { transform: translate3d(0,7px,0); }
+  to { transform: translate3d(0,0,0); }
+}
+
+@keyframes spark-motion-feature-sheen {
+  0%,60%,100% { transform: translate3d(-46%,0,0) rotate(5deg); opacity: 0; }
+  72% { opacity: .68; }
+  88% { transform: translate3d(46%,0,0) rotate(5deg); opacity: 0; }
+}
+
+@keyframes spark-motion-feature-icon {
+  0%,100% { transform: translate3d(0,0,0); }
+  50% { transform: translate3d(0,-4px,0); }
+}
+
+@keyframes spark-motion-feature-svg {
+  0%,100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(3deg) scale(1.04); }
+}
+
+@keyframes spark-motion-hologram-breathe {
+  0%,100% { transform: scale(.985); opacity: .78; }
+  50% { transform: scale(1.015); opacity: 1; }
+}
+
+@keyframes spark-motion-data-rain {
+  0% { transform: translate3d(0,-10px,0); opacity: .14; }
+  45% { opacity: .42; }
+  100% { transform: translate3d(0,16px,0); opacity: .12; }
+}
+
+@keyframes spark-motion-orbit-cw {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spark-motion-orbit-ccw {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes spark-motion-layer-one {
+  0%,100% { transform: translate3d(0,0,0) scale(1); }
+  50% { transform: translate3d(0,-2px,0) scale(1.015); }
+}
+
+@keyframes spark-motion-layer-two {
+  0%,100% { transform: translate3d(0,0,0) scale(1); }
+  50% { transform: translate3d(0,-3px,0) scale(1.02); }
+}
+
+@keyframes spark-motion-layer-three {
+  0%,100% { transform: translate3d(0,0,0) scale(1); }
+  50% { transform: translate3d(0,-4px,0) scale(1.025); }
+}
+
+@keyframes spark-motion-core-float {
+  0%,100% { transform: translate3d(0,0,0); }
+  50% { transform: translate3d(0,-7px,0); }
+}
+
+@keyframes spark-motion-core-logo {
+  0%,100% { transform: scale(1); }
+  50% { transform: scale(1.055); }
+}
+
+@keyframes spark-motion-node-users {
+  0%,100% { transform: translate3d(0,0,0); }
+  50% { transform: translate3d(-5px,-6px,0); }
+}
+
+@keyframes spark-motion-node-chart {
+  0%,100% { transform: translate3d(0,0,0); }
+  50% { transform: translate3d(6px,-4px,0); }
+}
+
+@keyframes spark-motion-node-monitor {
+  0%,100% { transform: translate3d(0,0,0); }
+  50% { transform: translate3d(-4px,6px,0); }
+}
+
+@keyframes spark-motion-node-shield {
+  0%,100% { transform: translate3d(0,0,0); }
+  50% { transform: translate3d(5px,5px,0); }
+}
+
+@keyframes spark-motion-node-icon {
+  0%,100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(-4deg) scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark-reference-login *,
+  .spark-reference-login *::before,
+  .spark-reference-login *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
