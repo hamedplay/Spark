@@ -1,0 +1,90 @@
+name: tmp-e2ee-report-validation
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: ${{ github.event.issue.title == 'tmp-e2ee-report-validation-20260820' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Run validation without lint and capture result
+        shell: bash
+        run: |
+          set +e
+          validated_sha="$(git rev-parse HEAD)"
+          static_status=0
+          grep -Fq 'onStartE2EECall?.()' src/components/Chat/Conversation/ConversationHeader.tsx || static_status=1
+          grep -Fq 'title="تماس امن E2EE"' src/components/Chat/Conversation/ConversationHeader.tsx || static_status=1
+          grep -Fq 'fixed inset-0 z-[9998]' src/components/Chat/E2EECall/index.tsx || static_status=1
+          grep -Fq "from './IdleView'" src/components/Chat/E2EECall/index.tsx && static_status=1
+          grep -Fq '<IdleView' src/components/Chat/E2EECall/index.tsx && static_status=1
+          grep -Fq 'تماس امن E2EE' src/components/Chat/CallHistoryPage.tsx && static_status=1
+          grep -Fq 'e2ee-global-inbox-${currentUserId}' src/context/GlobalCallContext.tsx || static_status=1
+          grep -Fq 'Global E2EE incoming call overlay' src/context/GlobalCallContext.tsx || static_status=1
+
+          npm ci > /tmp/e2ee-npm-ci.log 2>&1
+          ci_status=$?
+
+          if [ "$ci_status" -eq 0 ]; then
+            npm run build > /tmp/e2ee-build.log 2>&1
+            build_status=$?
+          else
+            build_status=99
+            echo 'BUILD SKIPPED: npm ci failed' > /tmp/e2ee-build.log
+          fi
+
+          if [ "$ci_status" -eq 0 ] && [ "$build_status" -eq 0 ]; then
+            npm test > /tmp/e2ee-test.log 2>&1
+            test_status=$?
+          else
+            test_status=99
+            echo 'TEST SKIPPED: install/build failed' > /tmp/e2ee-test.log
+          fi
+
+          {
+            echo "validated_sha=$validated_sha"
+            echo "static=$static_status"
+            echo "npm_ci=$ci_status"
+            echo "build=$build_status"
+            echo "test=$test_status"
+            echo
+            echo '--- npm ci tail ---'
+            tail -n 20 /tmp/e2ee-npm-ci.log
+            echo
+            echo '--- build tail ---'
+            tail -n 60 /tmp/e2ee-build.log
+            echo
+            echo '--- test tail ---'
+            tail -n 80 /tmp/e2ee-test.log
+          } > .tmp-e2ee-validation-result.txt
+
+          exit 0
+
+      - name: Publish result and remove validator
+        shell: bash
+        run: |
+          rm -f .github/workflows/tmp-e2ee-report-validation.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .tmp-e2ee-validation-result.txt .github/workflows/tmp-e2ee-report-validation.yml
+          git commit -m 'chore: record E2EE validation result [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
