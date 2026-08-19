@@ -2,6 +2,21 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import type { AuthSessionState, AuthAccessState, AccessLevel, ReasonCode, NextStep } from '../types/authSession';
 
+const JWT_FUTURE_RETRY_WINDOW_MS = 180_000;
+const JWT_FUTURE_MAX_DELAY_MS = 8_000;
+
+function isJwtIssuedAtFutureError(error: { code?: string | null; message?: string | null } | null): boolean {
+  return error?.code === 'PGRST303' && /JWT issued at future/i.test(error.message ?? '');
+}
+
+function retryDelayMs(attempt: number): number {
+  return Math.min(JWT_FUTURE_MAX_DELAY_MS, 1_000 * (2 ** Math.min(attempt, 3)));
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
 export function useAuthSession(): AuthSessionState {
   const [loading, setLoading] = useState(true);
   const [hasSession, setHasSession] = useState(false);
@@ -47,10 +62,27 @@ export function useAuthSession(): AuthSessionState {
         return;
       }
 
-      // One RPC now returns the canonical auth gate result plus the admin flag
-      // and effective UI permissions. This replaces the previous auth RPC ->
-      // profiles query -> several permission queries waterfall.
-      const { data, error } = await supabase.rpc('get_my_app_bootstrap_v1');
+      // Supabase Auth can occasionally issue a valid session token slightly ahead
+      // of the PostgREST node clock. Only PGRST303 / "JWT issued at future" is
+      // retried; every other auth/data-api error keeps the existing fail-closed path.
+      const retryStartedAt = Date.now();
+      let retryAttempt = 0;
+      let bootstrapResult = await supabase.rpc('get_my_app_bootstrap_v1');
+
+      while (
+        gen === generationRef.current &&
+        isJwtIssuedAtFutureError(bootstrapResult.error) &&
+        Date.now() - retryStartedAt < JWT_FUTURE_RETRY_WINDOW_MS
+      ) {
+        const remainingMs = JWT_FUTURE_RETRY_WINDOW_MS - (Date.now() - retryStartedAt);
+        const delayMs = Math.min(retryDelayMs(retryAttempt++), remainingMs);
+        if (delayMs <= 0) break;
+        await wait(delayMs);
+        if (gen !== generationRef.current) return;
+        bootstrapResult = await supabase.rpc('get_my_app_bootstrap_v1');
+      }
+
+      const { data, error } = bootstrapResult;
       if (gen !== generationRef.current) return;
 
       if (error || !data) {
