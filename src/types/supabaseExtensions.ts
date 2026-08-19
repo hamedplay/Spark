@@ -4,10 +4,47 @@ type PublicSchema = BaseDatabase['public'];
 type ProfileTable = PublicSchema['Tables']['profiles'];
 type UserPreferencesTable = PublicSchema['Tables']['user_preferences'];
 type MinutesApprovalCommentsTable = PublicSchema['Tables']['minutes_approval_comments'];
+type TasksTable = PublicSchema['Tables']['tasks'];
+
+type ActionsV2TaskRow = TasksTable['Row'] & {
+  start_date: string | null;
+  progress_percent: number;
+  estimated_minutes: number | null;
+  actual_minutes: number | null;
+  tags: string[];
+  project_id: string | null;
+  personal_project_id: string | null;
+  reminder_at: string | null;
+  parent_task_id: string | null;
+};
+
+type ActionsV2TaskInsert = TasksTable['Insert'] & {
+  start_date?: string | null;
+  progress_percent?: number;
+  estimated_minutes?: number | null;
+  actual_minutes?: number | null;
+  tags?: string[];
+  project_id?: string | null;
+  personal_project_id?: string | null;
+  reminder_at?: string | null;
+  parent_task_id?: string | null;
+};
+
+type ActionsV2TaskUpdate = TasksTable['Update'] & {
+  start_date?: string | null;
+  progress_percent?: number;
+  estimated_minutes?: number | null;
+  actual_minutes?: number | null;
+  tags?: string[];
+  project_id?: string | null;
+  personal_project_id?: string | null;
+  reminder_at?: string | null;
+  parent_task_id?: string | null;
+};
 
 export type Database = Omit<BaseDatabase, 'public'> & {
   public: Omit<PublicSchema, 'Tables' | 'Functions'> & {
-    Tables: Omit<PublicSchema['Tables'], 'profiles' | 'user_preferences' | 'minutes_approval_comments'> & {
+    Tables: Omit<PublicSchema['Tables'], 'profiles' | 'user_preferences' | 'minutes_approval_comments' | 'tasks'> & {
       profiles: {
         Row: ProfileTable['Row'] & {
           is_security_admin: boolean;
@@ -61,6 +98,42 @@ export type Database = Omit<BaseDatabase, 'public'> & {
           decision_id?: string | null;
         };
         Relationships: MinutesApprovalCommentsTable['Relationships'];
+      };
+      tasks: {
+        Row: ActionsV2TaskRow;
+        Insert: ActionsV2TaskInsert;
+        Update: ActionsV2TaskUpdate;
+        Relationships: TasksTable['Relationships'];
+      };
+      projects: {
+        Row: { id: string; name: string; code: string | null; created_at: string };
+        Insert: { id?: string; name: string; code?: string | null; created_at?: string };
+        Update: { id?: string; name?: string; code?: string | null; created_at?: string };
+        Relationships: [];
+      };
+      task_personal_projects: {
+        Row: { id: string; owner_id: string; name: string; description: string | null; color: string | null; created_at: string };
+        Insert: { id?: string; owner_id: string; name: string; description?: string | null; color?: string | null; created_at?: string };
+        Update: { id?: string; owner_id?: string; name?: string; description?: string | null; color?: string | null; created_at?: string };
+        Relationships: [];
+      };
+      task_checklist_items: {
+        Row: { id: string; task_id: string; title: string; is_completed: boolean; sort_order: number; created_by: string; created_at: string; completed_at: string | null };
+        Insert: { id?: string; task_id: string; title: string; is_completed?: boolean; sort_order?: number; created_by?: string; created_at?: string; completed_at?: string | null };
+        Update: { id?: string; task_id?: string; title?: string; is_completed?: boolean; sort_order?: number; created_by?: string; created_at?: string; completed_at?: string | null };
+        Relationships: [];
+      };
+      task_attachments: {
+        Row: { id: string; task_id: string; file_name: string; file_path: string; file_size: number | null; mime_type: string | null; uploaded_by: string; created_at: string };
+        Insert: { id?: string; task_id: string; file_name: string; file_path: string; file_size?: number | null; mime_type?: string | null; uploaded_by?: string; created_at?: string };
+        Update: { id?: string; task_id?: string; file_name?: string; file_path?: string; file_size?: number | null; mime_type?: string | null; uploaded_by?: string; created_at?: string };
+        Relationships: [];
+      };
+      task_dependencies: {
+        Row: { id: string; task_id: string; depends_on_task_id: string; created_by: string; created_at: string };
+        Insert: { id?: string; task_id: string; depends_on_task_id: string; created_by?: string; created_at?: string };
+        Update: { id?: string; task_id?: string; depends_on_task_id?: string; created_by?: string; created_at?: string };
+        Relationships: [];
       };
     };
     Functions: PublicSchema['Functions'] & {
