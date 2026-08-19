@@ -232,7 +232,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserI
           decision={progressDecision}
           history={progressHistory}
           canUpdate={canUpdateDecision(progressDecision)}
-          isManager={isManager()}
+          isManager={isManager() && progressDecision.primary_owner_user_id !== currentUserId}
           onClose={() => setProgressDecision(null)}
           onUpdated={onProgressUpdated}
         />
