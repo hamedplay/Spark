@@ -15,7 +15,6 @@ import './auth-modern.css';
 // Public auth now has one authoritative visual layer instead of stacked
 // reference/fix/theme/performance overrides that competed in the cascade.
 import './auth-login-v2.css';
-import './auth-login-motion.css';
 import './auth-placeholder-theme.css';
 import './auth-login-unified-tabs.ts';
 import './auth-pointer-glow.ts';
