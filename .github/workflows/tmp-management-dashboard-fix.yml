@@ -38,6 +38,7 @@ jobs:
             echo "Attempt $attempt: validating latest main"
             git fetch origin main
             git reset --hard origin/main
+            rm -f supabase/migrations/20260819171500_harden_management_dashboard_access.sql
             base_sha="$(git rev-parse HEAD)"
 
             # Fix only the overly-broad matcher in the temporary runner itself.
