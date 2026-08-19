@@ -1,10 +1,6 @@
 exit_code=1
-base=6df0ca8bc55fb5ea16a3cff6c705318f6e4261e3
+base=745fbb4152b2edcd895008e6076fca57d16166e8
 --- last validator log ---
-dist/assets/link-2-CFag-WpO.js                      0.24 kB │ gzip:   0.20 kB
-dist/assets/database-BDYuQvj9.js                    0.24 kB │ gzip:   0.20 kB
-dist/assets/user-check-8mTA7cQo.js                  0.24 kB │ gzip:   0.20 kB
-dist/assets/rotate-ccw-clock-D0GfTTzo.js            0.24 kB │ gzip:   0.20 kB
 dist/assets/chart-column-B3GnkWF-.js                0.25 kB │ gzip:   0.19 kB
 dist/assets/archive--6JzgSNR.js                     0.25 kB │ gzip:   0.21 kB
 dist/assets/lock-keyhole-D4ipVNlC.js                0.25 kB │ gzip:   0.22 kB
@@ -130,14 +126,18 @@ dist/assets/minutesWordExport-BgsU6yd-.js         380.61 kB │ gzip: 107.51 kB
 dist/assets/index-8ryaVKeO.js                     413.20 kB │ gzip: 118.61 kB
 dist/assets/exceljs.min-BsF42dRL.js               929.58 kB │ gzip: 256.39 kB
 
-[32m✓ built in 3.07s[39m
+[32m✓ built in 3.34s[39m
 [33m[plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
-unexpected working tree changes: ['dist/', 'scripts/tmp-management-dashboard-fix.py', 'src/AuthenticatedApp.tsx', 'src/app/layout/AppShell.tsx', 'src/app/layout/components/LayoutSidebar.tsx', 'src/app/layout/navigationMenu.ts', 'src/app/navigation/PageRenderer.tsx', 'src/app/navigation/pageRendererTypes.ts', 'src/components/Layout.tsx', 'src/components/ManagementDashboardPage.tsx', 'src/components/Minutes/Detail/TabDecisions.tsx', 'src/components/TasksPage.tsx', 'src/features/meetings/pages/MeetingsPage.tsx', 'supabase/migrations/20260819171500_harden_management_dashboard_access.sql', 'tests/app/layoutNavigation.test.ts']
+Scoped working tree verified
+rm '.tmp-management-dashboard-status.txt'
+error: the following file has local modifications:
+    scripts/tmp-management-dashboard-fix.py
+(use --cached to keep the file, or -f to force removal)
 Validator failed with exit code 1; recording diagnostic status
 From https://github.com/hamedplay/Spark
  * branch            main       -> FETCH_HEAD
-HEAD is now at 6df0ca8 chore: capture dashboard validator failures
+HEAD is now at 745fbb4 chore: ignore generated dashboard build output
