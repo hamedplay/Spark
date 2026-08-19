@@ -32,6 +32,20 @@ export function RoomCard({ room, currentUserId, onJoin, onInvite, joining }: {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const openConference = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!room.code) {
+      onJoin();
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set('conference', room.code);
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  };
+
   const meetingTime = room.meeting?.start_time && room.meeting?.end_time
     ? `${room.meeting.start_time.slice(0, 5)} - ${room.meeting.end_time.slice(0, 5)}`
     : null;
@@ -122,7 +136,7 @@ export function RoomCard({ room, currentUserId, onJoin, onInvite, joining }: {
             <span className="hidden sm:inline">دعوت</span>
           </button>
           <button
-            onClick={onJoin}
+            onClick={openConference}
             disabled={joining}
             aria-label="ورود به اتاق"
             aria-pressed={joining}
