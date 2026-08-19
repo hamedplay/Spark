@@ -376,7 +376,7 @@ export function GlobalCallProvider({
     if (!currentUserId) return;
 
     callChannelRef.current = supabase
-      .channel(`incoming-calls-${currentUserId}-${Date.now()}`)
+      .channel(`incoming-calls-${currentUserId}`)
       .on('broadcast', { event: 'incoming_call' }, async ({ payload }: any) => {
         if (!payload?.session_id) return;
         const { data: session } = await supabase
