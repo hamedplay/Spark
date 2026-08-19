@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: temporary-minutes-hub-scope-fix
+  cancel-in-progress: true
+
 jobs:
   fix:
     runs-on: ubuntu-latest
@@ -150,4 +154,5 @@ function getInitialStatusFilter(): MinutesStatusFilter {
           git add src/components/Minutes/MinutesHubPage.tsx src/components/Minutes/MinutesListPage.tsx .github/workflows/fix-minutes-hub-scope.yml
           git diff --cached --check
           git commit -m "fix: scope open minutes dashboard navigation [skip ci]"
+          git pull --rebase origin main
           git push origin HEAD:main
