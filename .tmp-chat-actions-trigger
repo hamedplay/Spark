@@ -1,2 +1,2 @@
 chat-actions-white-screen-fix validation trigger
-retry: api-writeback
+retry: cancel-stale-runs
