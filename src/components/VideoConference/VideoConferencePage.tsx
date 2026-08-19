@@ -441,7 +441,7 @@ export function VideoConferencePage() {
   const onlineParticipants = rooms.reduce((total, room) => total + (room.participant_count ?? 0), 0);
 
   return (
-    <div className="space-y-5" dir="rtl">
+    <div className="h-full min-h-0 space-y-5 overflow-y-auto pb-5" dir="rtl">
       {/* Page header */}
       <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_12px_35px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 sm:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
