@@ -1,0 +1,35 @@
+name: Temporary JWT clock-skew validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-jwt-clock-skew-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - run: npm ci
+      - name: Production build
+        run: npm run build
+      - name: Validate bounded fail-closed JWT skew handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='src/features/auth/hooks/useAuthSession.ts'
+          grep -Fq "error?.code === 'PGRST303'" "$file"
+          grep -Fq 'JWT issued at future' "$file"
+          grep -Fq 'JWT_FUTURE_RETRY_WINDOW_MS = 180_000' "$file"
+          grep -Fq "setReasonCode('ACCESS_CHECK_FAILED')" "$file"
+          if grep -Eq 'verify_jwt\s*=\s*false|decodeJwt|sign\(' "$file"; then
+            echo 'Unexpected JWT validation/signing behavior in frontend hook'
+            exit 1
+          fi
