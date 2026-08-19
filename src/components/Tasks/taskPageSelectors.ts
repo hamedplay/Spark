@@ -27,8 +27,13 @@ export function filterTasks({
       (task.title || '').toLowerCase().includes(query) ||
       (task.description || '').toLowerCase().includes(query) ||
       (task.tags || []).some(tag => tag.toLowerCase().includes(query));
-    const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'archived' ? task.archived : task.status === statusFilter && !task.archived);
+    const matchesStatus = statusFilter === 'all'
+      ? !task.archived
+      : statusFilter === 'archived'
+        ? task.archived
+        : statusFilter === 'completed'
+          ? task.status === 'completed'
+          : task.status === statusFilter && !task.archived;
     const matchesTab = taskTab === 'all' ||
       (taskTab === 'assigned_to_me'
         ? task.current_assignee_id === userId
