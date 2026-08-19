@@ -57,16 +57,21 @@ export function ActionCreateDrawer({
   const availableDependencies = useMemo(() => tasks.filter(t => t.id !== form.parentTaskId && !t.archived), [tasks, form.parentTaskId]);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     onCreate({ ...form, startDate, dueDate, reminderAt, dependencyIds, checklist, files });
   };
   const addChecklist = () => { if (checkText.trim()) { setChecklist(v => [...v, checkText.trim()]); setCheckText(''); } };
   const toggleDependency = (id: string) => setDependencyIds(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]);
+  const handleParentTaskChange = (parentTaskId: string) => {
+    setForm(v => ({ ...v, parentTaskId }));
+    if (parentTaskId) setDependencyIds(v => v.filter(id => id !== parentTaskId));
+  };
 
-  return <div className="fixed inset-0 z-[9999] bg-black/45 backdrop-blur-sm flex justify-end" dir="rtl" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+  return <div className="fixed inset-0 z-[9999] bg-black/45 backdrop-blur-sm flex justify-end" dir="rtl" onMouseDown={e => { if (!busy && e.target === e.currentTarget) onClose(); }}>
     <form onSubmit={submit} className="h-full w-full xl:w-[1180px] bg-white dark:bg-gray-950 shadow-2xl overflow-y-auto border-r border-gray-200 dark:border-gray-800">
       <div className="sticky top-0 z-20 bg-white/95 dark:bg-gray-950/95 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-5 md:px-7 py-4 flex items-center justify-between">
         <div><h2 className="text-xl font-bold text-gray-900 dark:text-white">ایجاد اقدام جدید</h2><p className="text-xs text-gray-500 mt-1">همه قابلیت‌های قبلی حفظ شده و امکانات پروژه، وابستگی، یادآور، چک‌لیست و فایل نیز اضافه شده‌اند.</p></div>
-        <div className="flex items-center gap-2"><button type="button" onClick={onClose} className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><X className="w-5 h-5" /></button><button disabled={busy} type="submit" className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-medium disabled:opacity-50 flex items-center gap-2"><Plus className="w-4 h-4" /> ایجاد اقدام</button></div>
+        <div className="flex items-center gap-2"><button type="button" disabled={busy} onClick={onClose} className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"><X className="w-5 h-5" /></button><button disabled={busy} type="submit" className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-medium disabled:opacity-50 flex items-center gap-2"><Plus className="w-4 h-4" /> {busy ? 'در حال ایجاد...' : 'ایجاد اقدام'}</button></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.7fr)_minmax(330px,0.9fr)] min-h-[calc(100vh-78px)]">
@@ -97,12 +102,12 @@ export function ActionCreateDrawer({
             <div><div className="flex items-center justify-between mb-1"><label className="field-label !mb-0">پروژه شخصی من</label><button type="button" onClick={onManagePersonalProjects} className="text-xs text-violet-600 hover:underline">مدیریت پروژه‌های شخصی</button></div><select value={form.personalProjectId} onChange={e=>setForm(v=>({...v,personalProjectId:e.target.value}))} className="action-input"><option value="">بدون پروژه شخصی</option>{personalProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><p className="text-[11px] text-gray-400 mt-1">این پروژه‌ها از پروژه‌های سازمانی کاملاً جدا هستند.</p></div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3"><div><label className="field-label">تاریخ شروع</label><JalaliDateInput value={startDate} onChange={setStartDate}/></div><div><label className="field-label">سررسید *</label><JalaliDateInput value={dueDate} onChange={setDueDate}/></div></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="field-label">تاریخ شروع</label><JalaliDateInput value={startDate} onChange={setStartDate}/></div><div><label className="field-label">سررسید *</label><JalaliDateInput value={dueDate} onChange={setDueDate}/></div></div>
           <div><label className="field-label">زمان تخمینی (ساعت)</label><input type="number" min="0" step="0.5" value={form.estimatedHours} onChange={e=>setForm(v=>({...v,estimatedHours:e.target.value}))} placeholder="مثلاً 2" className="action-input" /></div>
           <div><label className="field-label flex items-center gap-2"><Bell className="w-4 h-4"/> یادآور</label><JalaliDateInput value={reminderAt} onChange={setReminderAt}/></div>
           <div><label className="field-label">برچسب‌ها</label><input value={form.tagsText} onChange={e=>setForm(v=>({...v,tagsText:e.target.value}))} placeholder="فوری، طراحی، پیگیری" className="action-input" /></div>
 
-          <div><label className="field-label flex items-center gap-2"><CalendarDays className="w-4 h-4"/> اقدام والد</label><select value={form.parentTaskId} onChange={e=>setForm(v=>({...v,parentTaskId:e.target.value}))} className="action-input"><option value="">بدون اقدام والد</option>{tasks.filter(t=>!t.archived).map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></div>
+          <div><label className="field-label flex items-center gap-2"><CalendarDays className="w-4 h-4"/> اقدام والد</label><select value={form.parentTaskId} onChange={e=>handleParentTaskChange(e.target.value)} className="action-input"><option value="">بدون اقدام والد</option>{tasks.filter(t=>!t.archived).map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></div>
           <div><label className="field-label flex items-center gap-2"><Link2 className="w-4 h-4"/> وابستگی‌ها</label><div className="max-h-44 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 space-y-1">{availableDependencies.length===0?<div className="text-xs text-gray-400 text-center py-5">اقدام دیگری موجود نیست.</div>:availableDependencies.map(t=><label key={t.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-sm cursor-pointer"><input type="checkbox" checked={dependencyIds.includes(t.id)} onChange={()=>toggleDependency(t.id)}/><span className="truncate dark:text-gray-200">{t.title}</span></label>)}</div></div>
         </aside>
       </div>

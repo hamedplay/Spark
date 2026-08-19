@@ -21,9 +21,8 @@ function UserSelector({ users, groups, value, onChange, placeholder, disabled }:
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const allUsers: (UserProfile | OrgUserProfile)[] = groups
-    ? groups.flatMap(g => g.users)
-    : users;
+  const groupedUsers = groups?.flatMap(g => g.users) ?? [];
+  const allUsers: (UserProfile | OrgUserProfile)[] = groupedUsers.length > 0 ? groupedUsers : users;
 
   const selected = allUsers.find(u => u.user_id === value);
   const trimmed = search.trim();
@@ -56,7 +55,7 @@ function UserSelector({ users, groups, value, onChange, placeholder, disabled }:
               placeholder="جستجو..." className="w-full p-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white" />
           </div>
           <div className="max-h-56 overflow-y-auto">
-            {isSearching || !groups ? (
+            {isSearching || !groups?.length ? (
               filteredFlat.length === 0
                 ? <p className="px-3 py-3 text-gray-400 text-sm text-center">نتیجه‌ای یافت نشد</p>
                 : filteredFlat.map(u => (

@@ -201,6 +201,15 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     if (!payload.dueDate) { toast.error('تاریخ سررسید را انتخاب کنید'); return; }
     if (!payload.assigneeId) { toast.error('اقدام کننده را انتخاب کنید'); return; }
     if (!payload.title.trim()) { toast.error('عنوان را وارد کنید'); return; }
+    if (!payload.description.trim()) { toast.error('توضیحات را وارد کنید'); return; }
+    if (payload.startDate && payload.startDate.getTime() > payload.dueDate.getTime()) {
+      toast.error('تاریخ شروع نمی‌تواند بعد از تاریخ سررسید باشد');
+      return;
+    }
+    if (payload.parentTaskId && payload.dependencyIds.includes(payload.parentTaskId)) {
+      toast.error('اقدام والد نمی‌تواند همزمان وابستگی همان اقدام باشد');
+      return;
+    }
 
     setCreatingAction(true);
     const uploadedPaths: string[] = [];
