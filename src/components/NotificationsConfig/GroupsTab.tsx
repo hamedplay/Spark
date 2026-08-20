@@ -17,6 +17,7 @@ interface RegistryEvent {
 }
 
 const REGISTRY_CATEGORIES = ['minutes', 'decision'];
+const REGISTRY_CATEGORY_LABELS = new Set(['صورت‌جلسات', 'مصوبات']);
 
 export function GroupsTab() {
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -71,7 +72,7 @@ export function GroupsTab() {
 
   // Build the display list: registry events for minutes/decision, constants for everything else
   const allTypes = (() => {
-    const staticTypes = NOTIFICATION_TYPES.filter(n => !REGISTRY_CATEGORIES.includes(n.category));
+    const staticTypes = NOTIFICATION_TYPES.filter(n => !REGISTRY_CATEGORY_LABELS.has(n.category));
     const registryTypes = registryEvents.length > 0
       ? registryEvents.map(e => ({ key: e.event_key, label: e.label_fa, category: e.category === 'minutes' ? 'صورت‌جلسات' : 'مصوبات' }))
       : NOTIFICATION_TYPES.filter(n => n.category === 'صورت‌جلسات' || n.category === 'مصوبات');
