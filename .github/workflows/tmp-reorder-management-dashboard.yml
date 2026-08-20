@@ -1,0 +1,100 @@
+name: Temporary management dashboard reorder
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  reorder:
+    if: github.event.issue.title == 'TEMP: reorder management dashboard sections'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          package-manager-cache: false
+
+      - name: Reorder dashboard panels only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/ManagementDashboardPage.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          trend_anchor = '          <Panel title="روند تکمیل تسک‌ها"'
+          unit_anchor = '          <Panel title="عملکرد واحدها"'
+          distribution_anchor = '          <Panel title="توزیع تسک‌ها بر اساس وضعیت"'
+          meetings_anchor = '          <Panel title="جلسات اخیر"'
+          tasks_anchor = '          <Panel title="تسک‌های مهم"'
+          schedule_anchor = '          <Panel title="برنامه امروز"'
+
+          for anchor in (trend_anchor, unit_anchor, distribution_anchor, meetings_anchor, tasks_anchor, schedule_anchor):
+              if text.count(anchor) != 1:
+                  raise SystemExit(f'expected exactly one anchor: {anchor!r}, found {text.count(anchor)}')
+
+          trend_start = text.index(trend_anchor)
+          unit_start = text.index(unit_anchor, trend_start)
+          distribution_start = text.index(distribution_anchor, unit_start)
+          if not (trend_start < unit_start < distribution_start):
+              raise SystemExit('unexpected analytics panel order before transform')
+
+          trend_block = text[trend_start:unit_start]
+          unit_block = text[unit_start:distribution_start]
+          text = text[:trend_start] + unit_block + trend_block + text[distribution_start:]
+
+          meetings_start = text.index(meetings_anchor)
+          tasks_start = text.index(tasks_anchor, meetings_start)
+          schedule_start = text.index(schedule_anchor, tasks_start)
+          if not (meetings_start < tasks_start < schedule_start):
+              raise SystemExit('unexpected operational panel order before transform')
+
+          meetings_block = text[meetings_start:tasks_start]
+          tasks_block = text[tasks_start:schedule_start]
+          text = text[:meetings_start] + tasks_block + meetings_block + text[schedule_start:]
+
+          unit_pos = text.index(unit_anchor)
+          trend_pos = text.index(trend_anchor)
+          tasks_pos = text.index(tasks_anchor)
+          meetings_pos = text.index(meetings_anchor)
+          schedule_pos = text.index(schedule_anchor)
+          if not (unit_pos < trend_pos and tasks_pos < meetings_pos < schedule_pos):
+              raise SystemExit('post-transform ordering validation failed')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          git diff --check -- src/components/ManagementDashboardPage.tsx
+          test "$(git diff --name-only)" = "src/components/ManagementDashboardPage.tsx"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Commit directly to main
+        shell: bash
+        run: |
+          git config user.name "spark-maintenance-bot"
+          git config user.email "spark-maintenance-bot@users.noreply.github.com"
+          git add src/components/ManagementDashboardPage.tsx
+          test "$(git diff --cached --name-only)" = "src/components/ManagementDashboardPage.tsx"
+          git commit -m "fix: reorder management dashboard sections [skip ci]"
+          git push origin HEAD:main
