@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Building2, Send, X, Loader as Loader2, Search, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -40,6 +41,23 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
       if (user) setCurrentUserId(user.id);
     })();
     fetchMeetingDetails();
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+
+    const body = document.body;
+    const previousOverflow = body.style.overflow;
+    const previousPaddingRight = body.style.paddingRight;
+    const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+
+    body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+
+    return () => {
+      body.style.overflow = previousOverflow;
+      body.style.paddingRight = previousPaddingRight;
+    };
   }, []);
 
   const fetchMeetingDetails = async () => {
@@ -149,8 +167,10 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
     />
   );
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" dir="rtl">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[88vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
@@ -241,7 +261,8 @@ export function UserSelectorModal({ meetingId, onClose, onSuccess }: UserSelecto
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
