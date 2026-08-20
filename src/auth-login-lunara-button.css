@@ -30,8 +30,10 @@
 }
 
 .spark-reference-login .spark-reference-form:has(input[autocomplete="username"]) > .spark-reference-submit > span {
-  position: relative;
+  position: absolute;
+  left: 50%;
   z-index: 4;
+  transform: translateX(-50%);
   letter-spacing: .01em;
   transition: opacity .22s ease, transform .22s ease;
 }
