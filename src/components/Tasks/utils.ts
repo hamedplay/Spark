@@ -20,6 +20,17 @@ export interface TaskNotificationOptions {
   placeholders?: Record<string, string>;
 }
 
+function inferTaskNotificationEventType(
+  title: string,
+  message: string,
+): TaskNotificationEventType {
+  if (!title.startsWith('تغییر وضعیت اقدام:')) return 'assign';
+  if (message.includes('تکمیل شد')) return 'complete';
+  if (message.includes('شروع شد')) return 'status_in_progress';
+  if (message.includes('به حالت انتظار برگشت')) return 'status_pending';
+  return 'assign';
+}
+
 export async function sendTaskNotification(
   recipientId: string,
   actorId: string,
@@ -35,7 +46,7 @@ export async function sendTaskNotification(
     await insertNotification({
       userId: recipientId,
       category: 'task',
-      eventType: options.eventType ?? 'assign',
+      eventType: options.eventType ?? inferTaskNotificationEventType(title, message),
       fallbackTitle: title,
       fallbackMessage: message,
       placeholders: {
