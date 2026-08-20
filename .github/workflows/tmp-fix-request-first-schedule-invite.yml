@@ -1,0 +1,137 @@
+name: tmp-fix-request-first-schedule-invite
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-fix-request-first-schedule-invite.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Apply scoped request scheduling fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          # A meeting request being placed on the calendar for the first time is
+          # initial scheduling, not a generic edit. Commit it directly through
+          # the notification path instead of showing the edit/change decision.
+          replace_once(
+              'src/components/CalendarMeetingForm.tsx',
+              "        setEditDecision({ changeSet, snapshot });\n        return;",
+              "        if (isFirstSchedule) {\n          await commitEdit(snapshot, true);\n          return;\n        }\n\n        setEditDecision({ changeSet, snapshot });\n        return;",
+          )
+
+          # Participants already attached to a request are retained by the sync
+          # RPC. On first scheduling they still need the initial invitation.
+          replace_once(
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              "      if (diff.added_participant_ids.length) {\n        const eventType = getMeetingTemplateKey('participant', 'invite');\n        for (const recipientId of diff.added_participant_ids) {",
+              "      const participantInviteIds = isFirstSchedule\n        ? Array.from(new Set([...diff.added_participant_ids, ...diff.retained_participant_ids]))\n        : diff.added_participant_ids;\n\n      if (participantInviteIds.length) {\n        const eventType = getMeetingTemplateKey('participant', 'invite');\n        for (const recipientId of participantInviteIds) {",
+          )
+
+          # The same rule applies to observers that were already present on the
+          # request before it received a calendar time.
+          replace_once(
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              "      const removedObserverIds = [...previousNotifyForMeeting].filter(id => !observerIds.includes(id));\n\n      if (addedObserverIds.length) {\n        const eventType = getMeetingTemplateKey('observer', 'invite');\n        for (const recipientId of addedObserverIds) {",
+              "      const removedObserverIds = [...previousNotifyForMeeting].filter(id => !observerIds.includes(id));\n      const observerInviteIds = isFirstSchedule\n        ? Array.from(new Set([...addedObserverIds, ...retainedObserverIds]))\n        : addedObserverIds;\n\n      if (observerInviteIds.length) {\n        const eventType = getMeetingTemplateKey('observer', 'invite');\n        for (const recipientId of observerInviteIds) {",
+          )
+
+          # External invitees can also be retained on a request. Their first SMS
+          # must be the invitation template, not a later change template.
+          replace_once(
+              'src/components/CalendarMeetingForm/commitEdit.ts',
+              "        const externalDiff = computeExternalDiff(previousExternal, selectedExternal);\n        const inviteFallback = `دعوت به جلسه: «${meetingSubject}» | تاریخ: ${jalaliDate || meetingDateStr} | ساعت: ${currentTime}${currentPlaceholders.location_part}`;\n        if (externalDiff.added.length > 0) {\n          externalSmsResults.push(await sendSmsToExternals(\n            externalDiff.added,",
+              "        const externalDiff = computeExternalDiff(previousExternal, selectedExternal);\n        const externalInviteIds = isFirstSchedule\n          ? Array.from(new Set([...externalDiff.added, ...externalDiff.retained]))\n          : externalDiff.added;\n        const inviteFallback = `دعوت به جلسه: «${meetingSubject}» | تاریخ: ${jalaliDate || meetingDateStr} | ساعت: ${currentTime}${currentPlaceholders.location_part}`;\n        if (externalInviteIds.length > 0) {\n          externalSmsResults.push(await sendSmsToExternals(\n            externalInviteIds,",
+          )
+          PY
+
+          git diff --check
+
+      - name: Validate notification routing contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          form = Path('src/components/CalendarMeetingForm.tsx').read_text()
+          edit = Path('src/components/CalendarMeetingForm/commitEdit.ts').read_text()
+
+          required = [
+              "if (isFirstSchedule) {\n          await commitEdit(snapshot, true);",
+              "Array.from(new Set([...diff.added_participant_ids, ...diff.retained_participant_ids]))",
+              "Array.from(new Set([...addedObserverIds, ...retainedObserverIds]))",
+              "Array.from(new Set([...externalDiff.added, ...externalDiff.retained]))",
+              "if (!isFirstSchedule && (meetingChangeSet?.importantFields.length ?? 0) > 0 && diff.retained_participant_ids.length)",
+              "if (!isFirstSchedule && (meetingChangeSet?.importantFields.length ?? 0) > 0 && retainedObserverIds.length)",
+              "if (!isFirstSchedule && (meetingChangeSet?.importantFields.length ?? 0) > 0 && externalDiff.retained.length > 0)",
+          ]
+          haystack = form + '\n' + edit
+          missing = [item for item in required if item not in haystack]
+          if missing:
+              raise SystemExit('notification routing contract failed: ' + repr(missing))
+          print('request first-schedule notification routing contract OK')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit validated fix and cleanup temporary tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/tmp-fix-request-first-schedule-invite.yml
+          rm -f .github/workflows/tmp-fix-request-calendar-flow.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/CalendarMeetingForm.tsx \
+                  src/components/CalendarMeetingForm/commitEdit.ts \
+                  .github/workflows/tmp-fix-request-first-schedule-invite.yml \
+                  .github/workflows/tmp-fix-request-calendar-flow.yml
+          git diff --cached --check
+          git commit -m 'fix(calendar): send invitations on first request scheduling [skip ci]'
+          git push origin HEAD:main
+
+      - name: Cleanup temporary workflow on failure
+        if: failure()
+        shell: bash
+        run: |
+          git reset --hard HEAD || true
+          rm -f .github/workflows/tmp-fix-request-first-schedule-invite.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: cleanup failed request scheduling validator [skip ci]' || true
+          git push origin HEAD:main || true
