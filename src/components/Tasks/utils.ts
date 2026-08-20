@@ -6,6 +6,20 @@ moment.loadPersian({ dialect: 'persian-modern', usePersianDigits: false });
 
 export const toJalali = (iso: string) => moment(iso).format('jYYYY/jMM/jDD HH:mm');
 
+export type TaskNotificationEventType =
+  | 'assign'
+  | 'complete'
+  | 'note_added'
+  | 'referred'
+  | 'reminder'
+  | 'status_in_progress'
+  | 'status_pending';
+
+export interface TaskNotificationOptions {
+  eventType?: TaskNotificationEventType;
+  placeholders?: Record<string, string>;
+}
+
 export async function sendTaskNotification(
   recipientId: string,
   actorId: string,
@@ -14,16 +28,21 @@ export async function sendTaskNotification(
   senderName?: string,
   senderAvatarUrl?: string,
   taskTitle?: string,
+  options: TaskNotificationOptions = {},
 ) {
   if (!recipientId) return;
   try {
     await insertNotification({
       userId: recipientId,
       category: 'task',
-      eventType: 'assign',
+      eventType: options.eventType ?? 'assign',
       fallbackTitle: title,
       fallbackMessage: message,
-      placeholders: { task_title: taskTitle || title, sender_name: senderName || '' },
+      placeholders: {
+        task_title: taskTitle || title,
+        sender_name: senderName || '',
+        ...(options.placeholders || {}),
+      },
       senderId: actorId || null,
       senderName: senderName || null,
       senderAvatarUrl: senderAvatarUrl || null,
