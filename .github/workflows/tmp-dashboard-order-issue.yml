@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   fix:
-    if: github.event.issue.title == 'TEMP: apply management dashboard order v2' && github.actor == 'hamedplay'
+    if: ${{ github.event.issue.title == 'TEMP: apply management dashboard order v2' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
