@@ -170,7 +170,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserI
         {nested && (
           <div className="mb-3 flex items-start justify-between gap-3">
             <p className="font-medium text-gray-800 dark:text-gray-200">
-              <span className="ml-1 text-sm text-blue-600 dark:text-blue-400">{formatClauseLabel(dec.clause_order)} ـ</span>
+              <span className="ml-1 text-sm text-blue-600 dark:text-blue-400">{formatClauseLabel(dec.clause_order)} ـ</span>{' '}
               {dec.description || dec.title}
             </p>
             <div className="flex flex-wrap justify-end gap-2">
@@ -223,7 +223,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserI
         return (
           <div id={`decision-${parent.id}`} key={parent.id} className={`space-y-3 rounded-2xl border bg-white p-4 transition dark:bg-gray-800 ${focusDecisionId === parent.id ? 'border-violet-400 ring-2 ring-violet-400/50 dark:border-violet-500' : 'border-gray-100 dark:border-gray-700'}`}>
             <div className="flex items-start justify-between gap-3">
-              <p className="font-semibold text-gray-900 dark:text-white"><span className="ml-1 text-sm text-gray-400">مصوبه {index + 1} ـ</span>{parent.description || parent.title}</p>
+              <p className="font-semibold text-gray-900 dark:text-white"><span className="ml-1 text-sm text-gray-400">مصوبه {index + 1} ـ</span>{' '}{parent.description || parent.title}</p>
               {clauses.length === 0 ? (
                 <div className="flex flex-wrap justify-end gap-2"><DecisionPriorityBadge priority={parent.priority} /><DecisionStatusBadge status={parent.status} /></div>
               ) : (
