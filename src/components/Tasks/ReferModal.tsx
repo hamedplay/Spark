@@ -48,7 +48,14 @@ function ReferModal({ task, users, groups, currentUserId, actorName, actorAvatar
         toUserId, currentUserId,
         `اقدام به شما ارجاع داده شد: ${task.title}`,
         `${actorName} این اقدام را به شما ارجاع داد${note ? ` — ${note.slice(0, 80)}` : ''}`,
-        actorName, actorAvatarUrl,
+        actorName, actorAvatarUrl, task.title,
+        {
+          eventType: 'referred',
+          placeholders: {
+            assignee_name: toUserName || 'کاربر',
+            note_excerpt: note.trim(),
+          },
+        },
       );
 
       if (task.created_by_id && task.created_by_id !== currentUserId && task.created_by_id !== toUserId) {
@@ -56,7 +63,14 @@ function ReferModal({ task, users, groups, currentUserId, actorName, actorAvatar
           task.created_by_id, currentUserId,
           `ارجاع اقدام: ${task.title}`,
           `${actorName} اقدام را به ${toUserName} ارجاع داد`,
-          actorName, actorAvatarUrl,
+          actorName, actorAvatarUrl, task.title,
+          {
+            eventType: 'referred',
+            placeholders: {
+              assignee_name: toUserName || 'کاربر',
+              note_excerpt: note.trim(),
+            },
+          },
         );
       }
 
