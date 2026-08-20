@@ -71,3 +71,14 @@
     filter: none !important;
   }
 }
+
+/* The login CTA reserves asymmetric space for the decorative door/person.
+   Pin only its text label to the physical center of the button. */
+.spark-auth-flow .spark-reference-login .spark-reference-form:has(input[autocomplete='username']) > .spark-reference-submit > span {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  margin: 0 !important;
+  transform: translate(-50%, -50%) !important;
+  white-space: nowrap;
+}
