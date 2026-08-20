@@ -2,14 +2,14 @@ name: tmp-dashboard-order-issue
 
 on:
   issues:
-    types: [opened]
+    types: [reopened]
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: ${{ github.event.issue.title == 'TEMP: apply management dashboard order v2' }}
+    if: github.event.issue.title == 'TEMP: apply management dashboard order v2' && github.actor == 'hamedplay'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -75,8 +75,10 @@ jobs:
           git diff --check -- src/components/ManagementDashboardPage.tsx
           test "$(git diff --name-only)" = "src/components/ManagementDashboardPage.tsx"
 
-      - name: Setup Node
+      - id: node
+        name: Setup Node 24.18.1
         if: steps.transform.outcome == 'success'
+        continue-on-error: true
         uses: actions/setup-node@v4
         with:
           node-version: '24.18.1'
@@ -84,25 +86,25 @@ jobs:
 
       - id: install
         name: Install dependencies
-        if: steps.transform.outcome == 'success'
+        if: steps.transform.outcome == 'success' && steps.node.outcome == 'success'
         continue-on-error: true
         run: npm ci
 
       - id: build
         name: Build
-        if: steps.transform.outcome == 'success' && steps.install.outcome == 'success'
+        if: steps.install.outcome == 'success'
         continue-on-error: true
         run: npm run build
 
       - id: test
         name: Test
-        if: steps.transform.outcome == 'success' && steps.install.outcome == 'success' && steps.build.outcome == 'success'
+        if: steps.build.outcome == 'success'
         continue-on-error: true
         run: npm test
 
       - id: freshness
         name: Confirm dashboard source is still current
-        if: steps.transform.outcome == 'success' && steps.install.outcome == 'success' && steps.build.outcome == 'success' && steps.test.outcome == 'success'
+        if: steps.test.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -116,6 +118,7 @@ jobs:
         run: |
           set -euo pipefail
           transform='${{ steps.transform.outcome }}'
+          node='${{ steps.node.outcome }}'
           install='${{ steps.install.outcome }}'
           build='${{ steps.build.outcome }}'
           test_result='${{ steps.test.outcome }}'
@@ -128,11 +131,11 @@ jobs:
           rm -f tmp/management-dashboard-reorder-trigger.txt
           rm -f .tmp-management-dashboard-reorder-trigger
 
-          if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$test_result" = success ] && [ "$freshness" = success ]; then
+          if [ "$transform" = success ] && [ "$node" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$test_result" = success ] && [ "$freshness" = success ]; then
             message='fix: reorder management dashboard sections [skip ci]'
           else
             git restore --source=HEAD -- src/components/ManagementDashboardPage.tsx
-            message="chore: dashboard reorder validation failed transform-$transform install-$install build-$build test-$test_result freshness-$freshness [skip ci]"
+            message="chore: dashboard reorder validation failed transform-$transform node-$node install-$install build-$build test-$test_result freshness-$freshness [skip ci]"
           fi
 
           git config user.name 'github-actions[bot]'
