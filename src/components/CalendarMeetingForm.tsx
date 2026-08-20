@@ -511,6 +511,11 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           prevObserverIds,
         };
 
+        if (isFirstSchedule) {
+          await commitEdit(snapshot, true);
+          return;
+        }
+
         setEditDecision({ changeSet, snapshot });
         return;
       }

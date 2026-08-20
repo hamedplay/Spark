@@ -248,9 +248,13 @@ export async function commitCalendarMeetingEdit({
       };
       const meetingChangeSet = snapshot.changeSetsByMeetingId[diff.meeting_id];
 
-      if (diff.added_participant_ids.length) {
+      const participantInviteIds = isFirstSchedule
+        ? Array.from(new Set([...diff.added_participant_ids, ...diff.retained_participant_ids]))
+        : diff.added_participant_ids;
+
+      if (participantInviteIds.length) {
         const eventType = getMeetingTemplateKey('participant', 'invite');
-        for (const recipientId of diff.added_participant_ids) {
+        for (const recipientId of participantInviteIds) {
           const dedupeKey = `${operationId}:${diff.meeting_id}:${recipientId}:participants:${eventType}`;
           if (sentNotificationKeys.has(dedupeKey)) continue;
           sentNotificationKeys.add(dedupeKey);
@@ -335,10 +339,13 @@ export async function commitCalendarMeetingEdit({
       const addedObserverIds = observerIds.filter(id => !previousNotifyForMeeting.has(id));
       const retainedObserverIds = observerIds.filter(id => previousNotifyForMeeting.has(id));
       const removedObserverIds = [...previousNotifyForMeeting].filter(id => !observerIds.includes(id));
+      const observerInviteIds = isFirstSchedule
+        ? Array.from(new Set([...addedObserverIds, ...retainedObserverIds]))
+        : addedObserverIds;
 
-      if (addedObserverIds.length) {
+      if (observerInviteIds.length) {
         const eventType = getMeetingTemplateKey('observer', 'invite');
-        for (const recipientId of addedObserverIds) {
+        for (const recipientId of observerInviteIds) {
           const dedupeKey = `${operationId}:${diff.meeting_id}:${recipientId}:observers:${eventType}`;
           if (sentNotificationKeys.has(dedupeKey)) continue;
           sentNotificationKeys.add(dedupeKey);
@@ -420,10 +427,13 @@ export async function commitCalendarMeetingEdit({
       if (sendSms) {
         const previousExternal = snapshot.prevExternalByMeetingId[diff.meeting_id] || [];
         const externalDiff = computeExternalDiff(previousExternal, selectedExternal);
+        const externalInviteIds = isFirstSchedule
+          ? Array.from(new Set([...externalDiff.added, ...externalDiff.retained]))
+          : externalDiff.added;
         const inviteFallback = `دعوت به جلسه: «${meetingSubject}» | تاریخ: ${jalaliDate || meetingDateStr} | ساعت: ${currentTime}${currentPlaceholders.location_part}`;
-        if (externalDiff.added.length > 0) {
+        if (externalInviteIds.length > 0) {
           externalSmsResults.push(await sendSmsToExternals(
-            externalDiff.added,
+            externalInviteIds,
             contacts,
             inviteFallback,
             userId,
