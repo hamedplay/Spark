@@ -2,14 +2,14 @@ name: Temporary decision table visibility fix
 
 on:
   issues:
-    types: [opened]
+    types: [reopened]
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: ${{ github.event.issue.title == 'tmp-decision-table-visibility-run-2' && contains(github.event.issue.body, 'spark-decision-table-visibility-20260820-r2') }}
+    if: github.event.issue.title == 'tmp-decision-table-visibility-run-2' && github.actor == 'hamedplay'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -58,18 +58,14 @@ jobs:
 
           my = Path('src/components/Minutes/MyDecisionsPage.tsx').read_text(encoding='utf-8')
           follow = Path('src/components/Minutes/DecisionsFollowupPage.tsx').read_text(encoding='utf-8')
-          checks = [
-              'min-w-64 max-w-sm whitespace-normal break-words' in my,
-              'mobile-line-clamp-2 text-sm font-semibold leading-6 text-gray-900 dark:text-white">{dec.title}' not in my,
-              'whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}' in my,
-              'min-w-56 max-w-xs whitespace-normal break-words' in follow,
-              'mobile-line-clamp-2 text-sm font-semibold leading-6 text-gray-900 dark:text-white">{dec.title}' not in follow,
-              'whitespace-nowrap text-gray-400">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}' in follow,
-              'whitespace-nowrap">{dec.due_date ? formatJalaliDateForDisplay(dec.due_date)' in follow,
-              'whitespace-nowrap">{dec.latest_followup_at ? formatJalaliDateForDisplay(dec.latest_followup_at)' in follow,
-          ]
-          if not all(checks):
-              raise SystemExit('post-transform visibility assertions failed')
+          assert 'min-w-64 max-w-sm whitespace-normal break-words' in my
+          assert 'mobile-line-clamp-2 text-sm font-semibold leading-6 text-gray-900 dark:text-white">{dec.title}' not in my
+          assert 'whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}' in my
+          assert 'min-w-56 max-w-xs whitespace-normal break-words' in follow
+          assert 'mobile-line-clamp-2 text-sm font-semibold leading-6 text-gray-900 dark:text-white">{dec.title}' not in follow
+          assert 'whitespace-nowrap text-gray-400">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}' in follow
+          assert 'whitespace-nowrap">{dec.due_date ? formatJalaliDateForDisplay(dec.due_date)' in follow
+          assert 'whitespace-nowrap">{dec.latest_followup_at ? formatJalaliDateForDisplay(dec.latest_followup_at)' in follow
           PY
 
           git diff --check -- src/components/Minutes/MyDecisionsPage.tsx src/components/Minutes/DecisionsFollowupPage.tsx
@@ -77,7 +73,7 @@ jobs:
 
       - id: node
         name: Setup Node.js 24.18.1
-        if: ${{ steps.transform.outcome == 'success' }}
+        if: steps.transform.outcome == 'success'
         continue-on-error: true
         uses: actions/setup-node@v4
         with:
@@ -86,31 +82,31 @@ jobs:
 
       - id: install
         name: Install dependencies
-        if: ${{ steps.transform.outcome == 'success' && steps.node.outcome == 'success' }}
+        if: steps.transform.outcome == 'success' && steps.node.outcome == 'success'
         continue-on-error: true
         run: npm ci
 
       - id: build
         name: Build
-        if: ${{ steps.install.outcome == 'success' }}
+        if: steps.install.outcome == 'success'
         continue-on-error: true
         run: npm run build
 
       - id: decisions_test
         name: Decision hierarchy test
-        if: ${{ steps.build.outcome == 'success' }}
+        if: steps.build.outcome == 'success'
         continue-on-error: true
         run: npm run test:minutes-decisions
 
       - id: followup_test
         name: Follow-up runtime test
-        if: ${{ steps.build.outcome == 'success' }}
+        if: steps.build.outcome == 'success'
         continue-on-error: true
         run: npm run test:minutes-followup-runtime
 
       - id: deadline_test
         name: Decision deadline test
-        if: ${{ steps.build.outcome == 'success' }}
+        if: steps.build.outcome == 'success'
         continue-on-error: true
         run: npm run test:decision-deadline-filters
 
