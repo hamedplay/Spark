@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.tmp-management-dashboard-reorder-trigger'
+      - 'tmp/management-dashboard-reorder-trigger.txt'
 
 permissions:
   contents: write
@@ -111,6 +111,7 @@ jobs:
           git show 3cc52d6d113d3dd8e669fb656f861b45fb5a09fa:.github/workflows/ci.yml > .github/workflows/ci.yml
           rm -f .github/workflows/tmp-reorder-management-dashboard.yml
           rm -f .tmp-management-dashboard-reorder-trigger
+          rm -f tmp/management-dashboard-reorder-trigger.txt
 
           if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$test_result" = success ]; then
             message='fix: reorder management dashboard sections [skip ci]'
