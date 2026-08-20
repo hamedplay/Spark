@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - '.tmp-management-dashboard-reorder-trigger'
+      - 'tmp/management-dashboard-reorder-trigger.txt'
   pull_request:
   workflow_dispatch:
 
