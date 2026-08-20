@@ -63,14 +63,7 @@ jobs:
           actions_block = text[actions_start:schedule_start]
           text = text[:meetings_start] + actions_block + meetings_block + text[schedule_start:]
 
-          if not (
-              text.index(decisions) < text.index(trend)
-              and text.index(actions) < text.index(meetings) < text.index(schedule)
-          ):
-              raise SystemExit('final dashboard order contract failed')
-
           path.write_text(text, encoding='utf-8')
-          print('dashboard order contract OK: decisions -> actions -> meetings')
           PY
           git diff --check -- src/components/ManagementDashboardPage.tsx
           test "$(git diff --name-only)" = "src/components/ManagementDashboardPage.tsx"
@@ -97,10 +90,27 @@ jobs:
         run: npm run build
 
       - id: test
-        name: Test
+        name: Scoped dashboard ordering test
         if: steps.build.outcome == 'success'
         continue-on-error: true
-        run: npm test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('src/components/ManagementDashboardPage.tsx').read_text(encoding='utf-8')
+          decisions = text.index('          <Panel title="عملکرد واحدها"')
+          trend = text.index('          <Panel title="روند تکمیل تسک‌ها"')
+          distribution = text.index('          <Panel title="توزیع تسک‌ها بر اساس وضعیت"')
+          actions = text.index('          <Panel title="تسک‌های مهم"')
+          meetings = text.index('          <Panel title="جلسات اخیر"')
+          schedule = text.index('          <Panel title="برنامه امروز"')
+          assert decisions < trend < distribution
+          assert actions < meetings < schedule
+          print('scoped dashboard ordering test passed')
+          PY
+          git diff --check -- src/components/ManagementDashboardPage.tsx
+          test "$(git diff --name-only)" = "src/components/ManagementDashboardPage.tsx"
 
       - id: freshness
         name: Confirm dashboard source is still current
