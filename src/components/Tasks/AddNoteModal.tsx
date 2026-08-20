@@ -33,7 +33,11 @@ function AddNoteModal({ task, userId, actorName, actorAvatarUrl, onClose, onSave
         sendTaskNotification(rid, userId,
           `اقدام جدید روی: ${task.title}`,
           `${actorName} اقدام ثبت کرد: ${note.trim().slice(0, 100)}${note.length > 100 ? '…' : ''}`,
-          actorName, actorAvatarUrl, task.title
+          actorName, actorAvatarUrl, task.title,
+          {
+            eventType: 'note_added',
+            placeholders: { note_excerpt: note.trim().slice(0, 100) },
+          }
         )
       ));
 
