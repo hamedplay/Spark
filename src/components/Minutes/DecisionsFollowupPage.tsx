@@ -265,7 +265,7 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
           {/* Desktop table */}
           <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800 lg:block">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="min-w-[1180px] w-full text-sm">
                 <thead className="border-b border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-700/50">
                   <tr>
                     {['عنوان','جلسه','مسئول','واحد','وضعیت','پیشرفت','مهلت','سررسید','مانع','پیگیری','اقدام'].map(h => (
@@ -376,7 +376,7 @@ function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }
   return (
     <tr className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/30">
       <td className="px-3 py-3">
-        <div className="max-w-48 truncate font-medium text-gray-900 dark:text-white">{dec.title}</div>
+        <div className="min-w-56 max-w-xs whitespace-normal break-words font-medium leading-5 text-gray-900 dark:text-white">{dec.title}</div>
         <div className="mt-0.5 flex items-center gap-1">
           {dec.requires_followup && <Flag className="h-3 w-3 text-orange-400" />}
           <DecisionPriorityBadge priority={dec.priority} />
@@ -384,7 +384,7 @@ function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }
       </td>
       <td className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400">
         <div className="max-w-32 truncate">{dec.minute_title}</div>
-        <div className="text-gray-400">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}</div>
+        <div className="whitespace-nowrap text-gray-400">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}</div>
       </td>
       <td className="max-w-24 truncate px-3 py-3 text-xs text-gray-700 dark:text-gray-300">{dec.owner_name || '—'}</td>
       <td className="max-w-28 truncate px-3 py-3 text-xs text-gray-500 dark:text-gray-400">{dec.responsible_unit_name_snapshot || '—'}</td>
@@ -395,7 +395,7 @@ function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }
           <span className="whitespace-nowrap text-xs text-gray-500">{toPersianDigits(String(dec.progress_percent))}٪</span>
         </div>
       </td>
-      <td className="px-3 py-3 text-xs text-gray-500">{dec.due_date ? formatJalaliDateForDisplay(dec.due_date) : '—'}</td>
+      <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-500">{dec.due_date ? formatJalaliDateForDisplay(dec.due_date) : '—'}</td>
       <td className="px-3 py-3">
         {daysLabel ? (
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${deadlineCls}`}>{daysLabel}</span>
@@ -410,7 +410,7 @@ function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }
           </span>
         ) : '—'}
       </td>
-      <td className="px-3 py-3 text-xs text-gray-500">
+      <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-500">
         {dec.latest_followup_at ? formatJalaliDateForDisplay(dec.latest_followup_at) : '—'}
       </td>
       <td className="px-3 py-3">
@@ -454,7 +454,7 @@ function TrackingMobileCard({ dec, isManager, onViewDetail, onAction, onNavigate
     <article className="space-y-2.5 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="mobile-line-clamp-2 text-sm font-semibold leading-6 text-gray-900 dark:text-white">{dec.title}</h3>
+          <h3 className="break-words text-sm font-semibold leading-6 text-gray-900 dark:text-white">{dec.title}</h3>
           <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{dec.minute_title}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
@@ -494,11 +494,11 @@ function TrackingMobileCard({ dec, isManager, onViewDetail, onAction, onNavigate
       <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-50 px-2.5 py-2 text-[10px] text-gray-500 dark:bg-gray-700/30 dark:text-gray-400">
         <div className="min-w-0">
           <span className="block text-gray-400 dark:text-gray-500">مهلت</span>
-          <span className="truncate">{dec.due_date ? formatJalaliDateForDisplay(dec.due_date) : '—'}</span>
+          <span className="whitespace-nowrap">{dec.due_date ? formatJalaliDateForDisplay(dec.due_date) : '—'}</span>
         </div>
         <div className="min-w-0">
           <span className="block text-gray-400 dark:text-gray-500">آخرین پیگیری</span>
-          <span className="truncate">{dec.latest_followup_at ? formatJalaliDateForDisplay(dec.latest_followup_at) : '—'}</span>
+          <span className="whitespace-nowrap">{dec.latest_followup_at ? formatJalaliDateForDisplay(dec.latest_followup_at) : '—'}</span>
         </div>
       </div>
 

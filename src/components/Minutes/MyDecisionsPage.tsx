@@ -193,7 +193,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
           {/* Desktop table */}
           <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800 lg:block">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="min-w-[980px] w-full text-sm">
                 <thead className="border-b border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-700/50">
                   <tr>
                     {['عنوان مصوبه','جلسه','اولویت','وضعیت','پیشرفت','مهلت','سررسید','اقدام'].map(h => (
@@ -297,7 +297,7 @@ function DecisionTableRow({ dec, onViewDetail, onAction, onNavigate }: RowProps)
   return (
     <tr className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/30">
       <td className="px-4 py-3">
-        <div className="max-w-xs truncate font-medium text-gray-900 dark:text-white">{dec.title}</div>
+        <div className="min-w-64 max-w-sm whitespace-normal break-words font-medium leading-5 text-gray-900 dark:text-white">{dec.title}</div>
         {dec.requires_followup && (
           <span className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-orange-500">
             <Flag className="h-3 w-3" /> پیگیری
@@ -306,7 +306,7 @@ function DecisionTableRow({ dec, onViewDetail, onAction, onNavigate }: RowProps)
       </td>
       <td className="px-4 py-3">
         <div className="max-w-32 truncate text-xs text-gray-500 dark:text-gray-400">{dec.minute_title}</div>
-        <div className="text-xs text-gray-400 dark:text-gray-500">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}</div>
+        <div className="whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}</div>
       </td>
       <td className="px-4 py-3"><DecisionPriorityBadge priority={dec.priority} /></td>
       <td className="px-4 py-3"><DecisionStatusBadge status={dec.status} /></td>
@@ -316,7 +316,7 @@ function DecisionTableRow({ dec, onViewDetail, onAction, onNavigate }: RowProps)
           <span className="whitespace-nowrap text-xs text-gray-500">{toPersianDigits(String(dec.progress_percent))}٪</span>
         </div>
       </td>
-      <td className="px-4 py-3 text-xs text-gray-500">
+      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
         {dec.due_date ? formatJalaliDateForDisplay(dec.due_date) : '—'}
       </td>
       <td className="px-4 py-3">
@@ -373,7 +373,7 @@ function DecisionMobileCard({ dec, onViewDetail, onAction, onNavigate }: RowProp
     <article className="space-y-2.5 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="mobile-line-clamp-2 text-sm font-semibold leading-6 text-gray-900 dark:text-white">{dec.title}</h3>
+          <h3 className="break-words text-sm font-semibold leading-6 text-gray-900 dark:text-white">{dec.title}</h3>
           <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{dec.minute_title}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
