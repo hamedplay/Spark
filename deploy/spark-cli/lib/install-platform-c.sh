@@ -119,18 +119,6 @@ EOF
   fi
 }
 
-ssh_client_in_admin_cidr() {
-  local client="${SSH_CONNECTION%% *}"
-  [[ -z "$client" || "$client" == "$SSH_CONNECTION" ]] && return 0
-  python3 - "$client" "$ADMIN_CIDR" <<'PY'
-import ipaddress,sys
-try:
-    raise SystemExit(0 if ipaddress.ip_address(sys.argv[1]) in ipaddress.ip_network(sys.argv[2],strict=False) else 1)
-except ValueError:
-    raise SystemExit(1)
-PY
-}
-
 test_firewall() {
   ufw status verbose || return 1
   ufw status | grep -q "Status: active" || return 1
@@ -141,19 +129,14 @@ install_step_20() {
   title
   new_log "install-20-firewall"
   require_manager_values || return 1
-  if [[ -n "${SSH_CONNECTION:-}" ]] && ! ssh_client_in_admin_cidr; then
-    fail "IP فعلی SSH داخل ADMIN_CIDR=${ADMIN_CIDR} نیست. برای جلوگیری از lockout عملیات متوقف شد."
-    printf 'SSH_CONNECTION=%s\n' "$SSH_CONNECTION" >>"$CURRENT_LOG"
-    return 1
-  fi
-  if ! confirm_word "این مرحله UFW را reset می‌کند و فقط SSH از ${ADMIN_CIDR} را مجاز می‌گذارد." "FIREWALL"; then
+  if ! confirm_word "این مرحله UFW را reset می‌کند؛ SSH/HTTP/HTTPS/TURN باز می‌مانند و پورت‌های داخلی Supabase بسته می‌مانند." "FIREWALL"; then
     warn "تغییر Firewall لغو شد."
     return 1
   fi
   run_logged "Reset UFW" ufw --force reset || return 1
   run_logged "Default deny incoming" ufw default deny incoming || return 1
   run_logged "Default allow outgoing" ufw default allow outgoing || return 1
-  run_logged "Allow SSH from ADMIN_CIDR" ufw allow from "$ADMIN_CIDR" to any port 22 proto tcp || return 1
+  run_logged "Allow SSH" ufw allow 22/tcp || return 1
   run_logged "Allow HTTP" ufw allow 80/tcp || return 1
   run_logged "Allow HTTPS" ufw allow 443/tcp || return 1
   run_logged "Allow TURN TCP" ufw allow 3478/tcp || return 1
