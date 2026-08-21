@@ -1,0 +1,119 @@
+name: decision-default-active-validator
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ github.event.issue.title == 'RUN: decision default active filter validation' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 20
+
+      - id: transform
+        name: Apply scoped default-filter change
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD:src/components/Minutes/DecisionsFollowupPage.tsx > /tmp/followup-base-sha
+          git rev-parse HEAD:src/components/Minutes/MyDecisionsPage.tsx > /tmp/my-base-sha
+          python3 - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              Path('src/components/Minutes/DecisionsFollowupPage.tsx'),
+              Path('src/components/Minutes/MyDecisionsPage.tsx'),
+          ]
+          old = "useState<DecisionFilterState>(EMPTY_FILTERS);"
+          new = "useState<DecisionFilterState>(() => ({ ...EMPTY_FILTERS, statusFilter: 'active' }));"
+
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one initializer, found {count}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              assert new in text
+              assert "p_status: filters.statusFilter === 'all' ? null : filters.statusFilter" in text
+
+          print('scoped source contract passed')
+          PY
+          git diff --check -- src/components/Minutes/DecisionsFollowupPage.tsx src/components/Minutes/MyDecisionsPage.tsx
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' src/components/Minutes/DecisionsFollowupPage.tsx src/components/Minutes/MyDecisionsPage.tsx | sort)"
+
+      - name: Setup Node
+        if: steps.transform.outcome == 'success'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - id: install
+        name: Install dependencies
+        if: steps.transform.outcome == 'success'
+        continue-on-error: true
+        run: npm ci
+
+      - id: build
+        name: Build
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+
+      - id: test
+        name: Test active decision status semantics
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: node --import tsx --test tests/minutes/decisionDeadlineFilters.test.ts
+
+      - id: freshness
+        name: Confirm source files are still current
+        if: steps.test.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(cat /tmp/followup-base-sha)" = "$(git rev-parse origin/main:src/components/Minutes/DecisionsFollowupPage.tsx)"
+          test "$(cat /tmp/my-base-sha)" = "$(git rev-parse origin/main:src/components/Minutes/MyDecisionsPage.tsx)"
+
+      - name: Commit validated result and remove validator
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          transform='${{ steps.transform.outcome }}'
+          install='${{ steps.install.outcome }}'
+          build='${{ steps.build.outcome }}'
+          test_result='${{ steps.test.outcome }}'
+          freshness='${{ steps.freshness.outcome }}'
+
+          rm -f .github/workflows/decision-default-active-validator.yml
+
+          if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$test_result" = success ] && [ "$freshness" = success ]; then
+            message='fix: default decision pages to active status [skip ci]'
+          else
+            git restore --source=HEAD -- src/components/Minutes/DecisionsFollowupPage.tsx src/components/Minutes/MyDecisionsPage.tsx
+            message="chore: decision filter validation failed transform-$transform install-$install build-$build test-$test_result freshness-$freshness [skip ci]"
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m "$message"
+          git pull --rebase origin main
+          git push origin HEAD:main
