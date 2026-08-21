@@ -65,7 +65,7 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
     ]),
     ("Installation", [
         Action("install-01", "01  DNS verification", "Validate public DNS records against the configured production IP."),
-        Action("install-02", "02  Installation config", "Configure domains, addresses, ADMIN_CIDR and certificate email.", "confirm"),
+        Action("install-02", "02  Installation config", "Configure domains, addresses and certificate email.", "confirm"),
         Action("install-03", "03  Packages / Docker / Node", "Install and validate production base packages.", "controlled"),
         Action("install-04", "04  Spark repository", "Clone/update the Spark repository and manager.", "controlled"),
         Action("install-05", "05  Pinned Supabase source", "Install or validate the reviewed Supabase source pin.", "confirm"),
@@ -88,6 +88,7 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
     ]),
     ("Diagnostics", [
         Action("diagnostic-full", "Full validation", "Run all production validation checks."),
+        Action("diagnostic-installation-status", "Installation status", "Show installed and not-installed step numbers 01-20 from manager state markers."),
         Action("diagnostic-frontend", "Frontend", "Check the public frontend endpoint."),
         Action("diagnostic-api", "API / Auth / Functions", "Check API health and the password-login function route."),
         Action("diagnostic-docker", "Docker status", "Show the Supabase Compose service state."),
@@ -112,8 +113,8 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("diagnostic-ports", "Network / firewall", "Show listening ports and UFW policy."),
     ]),
     ("Security", [
-        Action("admin-open", "Open Supabase admin", "Create TLS/8443 gateway restricted to ADMIN_CIDR.", "confirm"),
-        Action("admin-close", "Close Supabase admin", "Remove the temporary TLS/8443 admin gateway.", "controlled"),
+        Action("admin-open", "Access & credentials", "Show credentials and open/close Database 5432 or Supabase Studio 8443.", "confirm"),
+        Action("admin-close", "Close Supabase Studio", "Close the external Supabase Studio HTTPS/8443 listener.", "controlled"),
         Action("diagnostic-exposure", "Public exposure check", "Verify DB/Kong/Supavisor ports are internal only."),
         Action("version-info", "Version & security", "Inspect runtime versions and repository state."),
     ]),
@@ -221,7 +222,9 @@ def collect_status() -> Dict[str, str]:
     except OSError:
         status["backups"] = "0"
     sockets = run_quiet(["ss", "-lnt"], timeout=0.8)
-    status["admin"] = "OPEN" if re.search(r"(?:^|:)8443\s", sockets, re.M) else "CLOSED"
+    status["db_access"] = "OPEN" if re.search(r"(?:^|:)5432\s", sockets, re.M) else "CLOSED"
+    status["studio"] = "OPEN" if re.search(r"(?:^|:)8443\s", sockets, re.M) else "CLOSED"
+    status["admin"] = status["studio"]
     status["nginx"] = run_quiet(["systemctl", "is-active", "nginx"], timeout=0.8) or "unknown"
     status["coturn"] = run_quiet(["systemctl", "is-active", "coturn"], timeout=0.8) or "unknown"
     status["docker"] = run_quiet(["systemctl", "is-active", "docker"], timeout=0.8) or "unknown"
@@ -479,7 +482,7 @@ class SparkUI:
         self.safe_add(win, 0, 1, title, self.color(6) | curses.A_BOLD)
         self.safe_add(win, 0, max(1, w - len(right) - 1), right, self.color(6))
         commit = self.status.get("commit", "n/a")
-        summary = f" commit {commit}  |  install {self.status.get('steps','0/20')}  |  admin {self.status.get('admin','CLOSED')}  |  nginx {self.status.get('nginx','?')}  |  load {self.status.get('load','?')}  mem {self.status.get('memory','?')}  disk {self.status.get('disk','?')}"
+        summary = f" commit {commit}  |  install {self.status.get('steps','0/20')}  |  db5432 {self.status.get('db_access','CLOSED')}  |  studio8443 {self.status.get('studio','CLOSED')}  |  nginx {self.status.get('nginx','?')}  |  load {self.status.get('load','?')}  mem {self.status.get('memory','?')}  disk {self.status.get('disk','?')}"
         self.safe_add(win, 1, 1, summary, self.color(7))
         self.safe_add(win, 2, 0, "-" * max(0, w - 1), self.color(1))
         win.noutrefresh()
@@ -553,7 +556,7 @@ class SparkUI:
             self.safe_add(win, y, 2, f"Risk: {action.risk}", risk_attr | curses.A_BOLD); y += 1
         if y < h - 1:
             self.safe_add(win, y, 1, "-" * max(1, w - 3), self.color(1)); y += 1
-        for label, value in [("Nginx", self.status.get("nginx", "?")), ("Coturn", self.status.get("coturn", "?")), ("Docker", self.status.get("docker", "?")), ("Admin 8443", self.status.get("admin", "?")), ("Install", self.status.get("steps", "?")), ("Backups", self.status.get("backups", "?")), ("Uptime", self.status.get("uptime", "?"))]:
+        for label, value in [("Nginx", self.status.get("nginx", "?")), ("Coturn", self.status.get("coturn", "?")), ("Docker", self.status.get("docker", "?")), ("DB 5432", self.status.get("db_access", "?")), ("Studio 8443", self.status.get("studio", "?")), ("Install", self.status.get("steps", "?")), ("Backups", self.status.get("backups", "?")), ("Uptime", self.status.get("uptime", "?"))]:
             if y >= h - 1:
                 break
             attr = self.color(2) if value in ("active", "OPEN") else self.color(7)
@@ -845,7 +848,7 @@ def self_test() -> int:
     assert SPARK_UI_VERSION == "2.0.0"
     assert len(CATEGORIES) >= 8
     ids = {a.action_id for _, actions in CATEGORIES for a in actions if not a.special}
-    required = {"diagnostic-full", "app-update", "install-all", "manager-update", "admin-open"}
+    required = {"diagnostic-full", "diagnostic-installation-status", "app-update", "install-all", "manager-update", "admin-open"}
     if not required.issubset(ids): raise RuntimeError("action registry is incomplete")
     import curses as _curses
     import pty as _pty
