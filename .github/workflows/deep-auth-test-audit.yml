@@ -1,15 +1,16 @@
-name: Temporary minutes config white screen validation
+name: Temporary minutes config white screen validator
 
 on:
-  issues:
-    types: [opened]
+  push:
+    branches: [main]
+    paths:
+      - 'tmp/minutes-config-white-screen-v2-trigger.txt'
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: ${{ github.event.issue.title == 'TEMP: validate minutes config white screen fix' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -17,7 +18,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: main
-          fetch-depth: 30
+          fetch-depth: 40
 
       - id: transform
         name: Fix preview decision contract
@@ -58,7 +59,7 @@ jobs:
         run: npm ci
 
       - id: build
-        name: Build
+        name: Build application
         if: steps.install.outcome == 'success'
         continue-on-error: true
         run: npm run build
@@ -98,7 +99,7 @@ jobs:
           git fetch origin main
           test "$(git rev-parse HEAD:src/components/Minutes/MinutesConfigPanel.tsx)" = "$(git rev-parse origin/main:src/components/Minutes/MinutesConfigPanel.tsx)"
 
-      - name: Commit validated fix and restore temporary tooling
+      - name: Commit result and restore repository tooling
         if: always()
         shell: bash
         run: |
@@ -110,9 +111,11 @@ jobs:
           contract='${{ steps.contract.outcome }}'
           freshness='${{ steps.freshness.outcome }}'
 
+          git show 5a7b2d626609d5c93052dd1c7151d185c56a7f32:.github/workflows/ci.yml > .github/workflows/ci.yml
           git show 5a7b2d626609d5c93052dd1c7151d185c56a7f32:.github/workflows/deep-auth-test-audit.yml > .github/workflows/deep-auth-test-audit.yml
           rm -f .github/workflows/tmp-fix-minutes-config-white-screen.yml
           rm -f tmp/minutes-config-white-screen-trigger.txt
+          rm -f tmp/minutes-config-white-screen-v2-trigger.txt
 
           if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$test_result" = success ] && [ "$contract" = success ] && [ "$freshness" = success ]; then
             message='fix: prevent minutes config preview crash [skip ci]'
