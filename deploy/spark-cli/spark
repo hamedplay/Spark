@@ -189,6 +189,7 @@ spark_backend_dispatch_inner() {
     install-all) run_all_install ;;
 
     diagnostic-full) new_log "test-full"; run_visible "Full validation" test_full_validation ;;
+    diagnostic-installation-status) new_log "installation-status"; installation_status_report ;;
     diagnostic-frontend) new_log "test-frontend"; run_visible "Frontend" test_frontend ;;
     diagnostic-api) new_log "test-api"; run_visible "API / Auth / Functions" test_api ;;
     diagnostic-docker) new_log "test-docker"; run_visible "Docker status" compose ps ;;
@@ -315,12 +316,14 @@ Run without an option to open the full-screen dynamic control center.
 
   --version       Show Spark Manager version
   --test          Run full validation without opening the UI
+  --steps         Show installed/not-installed step numbers (01-20)
   --update        Update Spark application without opening the UI
   --resources     Show server resource usage without opening the UI
   --ui-self-test  Validate the installed curses UI runtime
 EOF_HELP
     ;;
   --test) spark_backend_action diagnostic-full ;;
+  --steps) installation_status_report ;;
   --update) spark_backend_action app-update ;;
   --resources) spark_backend_action resources ;;
   --ui-self-test) spark_ui_self_test ;;
