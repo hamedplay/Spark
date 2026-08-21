@@ -1,0 +1,120 @@
+name: Temporary fix minutes config white screen
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ github.event.issue.title == 'TEMP: fix minutes config white screen' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 20
+
+      - id: transform
+        name: Fix preview decision contract
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='src/components/Minutes/MinutesConfigPanel.tsx'
+          test "$(git rev-parse HEAD:${target})" = "97aa441abaf1047af2f9c0487be6310b0031847f"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/Minutes/MinutesConfigPanel.tsx')
+          text = path.read_text(encoding='utf-8')
+          old = "{ id: 'd1', title: 'تصمیم نمونه', description: 'اقدام اجرایی مورد توافق', primaryOwnerName: 'کارشناس الف', responsibleUnitName: 'واحد برنامه‌ریزی', priority: 'normal', startDate: '2026-08-01', dueDate: '2026-09-01', status: 'in_progress', progressPercent: 30, latestUpdate: '', discussionResult: '', resultType: 'resolution', additionalNotes: '' },"
+          new = "{ id: 'd1', title: 'تصمیم نمونه', description: 'اقدام اجرایی مورد توافق', primaryOwnerName: 'کارشناس الف', responsibleUnitName: 'واحد برنامه‌ریزی', priority: 'normal', startDate: '2026-08-01', dueDate: '2026-09-01', status: 'in_progress', progressPercent: 30, latestUpdate: '', discussionResult: '', resultType: 'resolution', additionalNotes: '', clauses: [] },"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one preview decision anchor, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          git diff --check -- "$target"
+          test "$(git diff --name-only)" = "$target"
+          grep -F "additionalNotes: '', clauses: []" "$target"
+
+      - name: Setup Node 24.18.1
+        if: steps.transform.outcome == 'success'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - id: install
+        name: Install dependencies
+        if: steps.transform.outcome == 'success'
+        continue-on-error: true
+        run: npm ci
+
+      - id: build
+        name: TypeScript and Vite build
+        if: steps.transform.outcome == 'success' && steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+
+      - id: contract
+        name: Validate minutes preview decision contract
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          panel = Path('src/components/Minutes/MinutesConfigPanel.tsx').read_text(encoding='utf-8')
+          layout = Path('src/components/Minutes/MinutesDocumentLayout.tsx').read_text(encoding='utf-8')
+          types = Path('src/components/Minutes/MinutesDocumentData.ts').read_text(encoding='utf-8')
+          assert "additionalNotes: '', clauses: []" in panel
+          assert 'd.clauses.length' in layout
+          assert 'clauses: DocDecisionClause[];' in types
+          print('minutes config preview contract passed')
+          PY
+          git diff --check -- src/components/Minutes/MinutesConfigPanel.tsx
+
+      - id: freshness
+        name: Confirm target is still current
+        if: steps.contract.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD:src/components/Minutes/MinutesConfigPanel.tsx)" = "$(git rev-parse origin/main:src/components/Minutes/MinutesConfigPanel.tsx)"
+
+      - name: Commit validated fix and cleanup temporary tooling
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          transform='${{ steps.transform.outcome }}'
+          install='${{ steps.install.outcome }}'
+          build='${{ steps.build.outcome }}'
+          contract='${{ steps.contract.outcome }}'
+          freshness='${{ steps.freshness.outcome }}'
+
+          rm -f .github/workflows/tmp-fix-minutes-config-white-screen.yml
+
+          if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$contract" = success ] && [ "$freshness" = success ]; then
+            message='fix: prevent minutes config preview crash [skip ci]'
+          else
+            git restore --source=HEAD -- src/components/Minutes/MinutesConfigPanel.tsx
+            message="chore: cleanup failed minutes config validation transform-$transform install-$install build-$build contract-$contract freshness-$freshness [skip ci]"
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898242+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m "$message"
+          git pull --rebase origin main
+          git push origin HEAD:main
