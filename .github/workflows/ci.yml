@@ -3,9 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '.github/workflows/tmp-fix-management-dashboard-order.yml'
-      - '.tmp-action-decision-notification-trigger'
   pull_request:
   workflow_dispatch:
 
