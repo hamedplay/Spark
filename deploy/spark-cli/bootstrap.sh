@@ -8,7 +8,7 @@ CLI_PATH="/usr/local/bin/spark"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
 EXPECTED_VERSION="2.1.0+20260821.1"
-EXPECTED_MIGRATE_VERSION="1.0.0+20260822.1"
+EXPECTED_MIGRATE_VERSION="1.1.0+20260822.2"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
@@ -91,7 +91,7 @@ grep -q 'SPARK_UI_VERSION = "2.1.0+20260821.1"' "$tmp/spark-ui.py" || {
   echo "Spark UI version validation failed." >&2
   exit 1
 }
-grep -q 'SPARK_MIGRATE_VERSION="1.0.0+20260822.1"' "$tmp/spark-migrate" || {
+grep -q 'SPARK_MIGRATE_VERSION="1.1.0+20260822.2"' "$tmp/spark-migrate" || {
   echo "Spark migration companion version validation failed." >&2
   exit 1
 }
