@@ -31,7 +31,7 @@ export interface DecisionFilterState {
 
 export const EMPTY_FILTERS: DecisionFilterState = {
   search: '',
-  statusFilter: 'all',
+  statusFilter: 'active',
   priorityFilter: 'all',
   deadlineFilter: 'all',
   followupOnly: false,
