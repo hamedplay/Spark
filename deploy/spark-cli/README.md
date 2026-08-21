@@ -17,6 +17,15 @@ curl -fsSL https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-c
 spark
 ```
 
+برای دیدن اینکه کدام مرحله‌های نصب ثبت شده‌اند و کدام‌ها هنوز نصب نشده‌اند:
+
+```bash
+spark --steps
+```
+
+این گزارش از همان markerهای رسمی Spark Manager در `/var/lib/spark-manager/steps/`
+استفاده می‌کند که تیک‌های مراحل `01` تا `20` در Dashboard نیز از آن‌ها خوانده می‌شوند.
+
 ## معماری رابط v2
 
 - `deploy/spark-cli/spark` — Bash backend/launcher و نقطه اتصال به moduleهای عملیاتی موجود.
@@ -38,10 +47,10 @@ TUI قبلی وجود ندارد.
 
 صفحه اصلی همزمان شامل این بخش‌ها است:
 
-- Header: نسخه Manager، host، commit فعال و خلاصه وضعیت.
+- Header: نسخه Manager، host، commit فعال، تعداد مراحل نصب، وضعیت Database `5432` و Studio `8443`.
 - Sections: دسته‌بندی عملیات.
 - Actions: Actionهای دسته انتخاب‌شده.
-- Details / Live Status: شرح Action و وضعیت Nginx/Coturn/Docker/Admin/Install/Backup.
+- Details / Live Status: شرح Action و وضعیت Nginx/Coturn/Docker/DB/Studio/Install/Backup.
 - Output: خروجی و prompt زنده Task یا محتوای log انتخاب‌شده.
 - Footer: کلیدهای navigation و کنترل Task.
 
@@ -70,18 +79,31 @@ TUI قبلی وجود ندارد.
 Dashboard همه قابلیت‌های Manager قبلی را بدون منوهای nested در دسترس قرار می‌دهد:
 
 - نصب مرحله‌ای 1 تا 20 و Run All.
+- گزارش `Installation status` برای دیدن مرحله‌های Installed / Not Installed.
 - Full validation و تست‌های Frontend/API/Docker/Nginx/Scheduler/TURN/Exposure/DNS/SSL.
 - Docker service log selector.
 - Update کنترل‌شده Spark.
 - Linux package update.
 - Resource monitor.
 - Node/npm maintenance و audit بدون lint.
-- باز/بسته کردن Supabase admin TLS/8443 محدود به `ADMIN_CIDR`.
+- Access & Credentials: نمایش Credentialهای انسانی و باز/بستن Database روی `5432` و Supabase Studio روی `8443`.
 - Service management.
 - Backup management.
 - Certificate management.
 - Version/Security information.
 - Self-update Manager.
+
+## دسترسی Database و Supabase Studio
+
+ساختار عمداً ساده است:
+
+- Database به‌صورت داخلی روی `127.0.0.1:5433` باقی می‌ماند.
+- با `Open Database` یک listener روی Host `5432` ایجاد می‌شود و به listener داخلی هدایت می‌شود.
+- با `Close Database` همان listener حذف می‌شود.
+- Supabase Studio با `Open Supabase Studio` روی HTTPS پورت `8443` در Nginx در دسترس قرار می‌گیرد.
+- با `Close Supabase Studio` listener/config مربوط به `8443` حذف می‌شود.
+- اگر UFW فعال باشد، Manager هنگام Open/Close rule ساده‌ی همان پورت را اضافه/حذف می‌کند.
+- اگر UFW فعال نباشد، Manager فقط هشدار می‌دهد و عملیات Open/Close را متوقف نمی‌کند؛ در این حالت Firewall/ACL بیرونی سرور تعیین‌کننده دسترسی شبکه است.
 
 ## Logging
 
@@ -116,6 +138,6 @@ Crashهای خود renderer در فایل زیر ثبت می‌شوند:
 - migration قبلی ویرایش نمی‌شود.
 - Update روی repository dirty متوقف می‌شود.
 - `npm audit fix` واقعی اجرا نمی‌شود؛ فقط `--dry-run` وجود دارد.
-- Kong/DB/Supavisor برای Admin عمومی نمی‌شوند؛ دسترسی Admin از TLS/8443 محدود به `ADMIN_CIDR` استفاده می‌کند.
+- پورت‌های مدیریتی `5432` و `8443` به‌صورت پیش‌فرض بسته‌اند و فقط با Action صریح Open باز می‌شوند؛ Close همان listener را حذف می‌کند.
 - Bootstrap ابتدا Bash/Python syntax و UI self-test را اجرا می‌کند و نصب را atomically جایگزین می‌کند؛ در smoke-test ناموفق نسخه قبلی restore می‌شود.
 - از lint در workflow Manager استفاده نمی‌شود.
