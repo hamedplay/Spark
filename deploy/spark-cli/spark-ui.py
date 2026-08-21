@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-SPARK_UI_VERSION = "2.0.0"
+SPARK_UI_VERSION = "2.1.0+20260821.1"
 STATE_DIR = Path("/var/lib/spark-manager")
 STEP_DIR = STATE_DIR / "steps"
 LOG_DIR = Path("/var/log/spark-manager")
@@ -130,6 +130,17 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("backup-create", "Create manual backup", "Create PostgreSQL plus runtime/config backup.", "controlled"),
         Action("backup-list", "List backups", "Show retained backup directories."),
         Action("@recent-logs", "Recent manager logs", "Browse manager logs in the dashboard.", special="logs"),
+    ]),
+    ("Cleanup / Remove", [
+        Action("cleanup-database", "Delete Database data", "Stop Supabase and delete only the detected PostgreSQL data bind. Refuses to guess the data path.", "confirm"),
+        Action("cleanup-supabase", "Delete Supabase runtime", "Delete the complete local Supabase runtime, volumes/data, runtime config and runtime secrets.", "confirm"),
+        Action("cleanup-frontend", "Delete deployed Frontend", "Delete /var/www/spark only; the local source repository remains.", "confirm"),
+        Action("cleanup-source", "Delete Spark source", "Delete the local /opt/spark repository; GitHub and the installed Manager remain.", "confirm"),
+        Action("cleanup-logs", "Delete Manager logs", "Delete Spark Manager logs only; system journal and Docker logs are not touched.", "confirm"),
+        Action("cleanup-backups", "Delete all Backups", "Delete every retained Spark backup under /var/backups/spark.", "confirm"),
+        Action("cleanup-history", "Reset install History", "Clear only 01-20 DONE markers. Actual probes and runtime data are not changed.", "confirm"),
+        Action("cleanup-full", "Delete complete Spark project", "Remove all Spark-specific runtime/data/config/certs/schedulers/TURN/source/logs/backups while keeping Manager and shared OS packages.", "confirm"),
+        Action("cleanup-manager", "Uninstall Spark Manager", "Remove /usr/local/bin/spark and the installed Manager only; project/runtime is left untouched.", "confirm"),
     ]),
     ("Certificates", [
         Action("cert-list", "List certificates", "Show Certbot-managed certificates."),
@@ -788,6 +799,7 @@ class SparkUI:
             "Filtering: press / and type a fuzzy subsequence; Backspace edits; Esc clears the filter.",
             "Logs: press L to browse persistent manager logs. Diagnostics > Docker service logs opens an in-dashboard service chooser.",
             "Running tasks: the lower pane becomes the task terminal. Printable keys and Enter are routed to the child PTY, so existing confirmations such as MIGRATE, OPEN, RESTART and installation prompts continue to work without leaving the dashboard.",
+            "Cleanup / Remove actions are destructive and require their exact confirmation phrase before any deletion runs.",
             "While a task runs, PgUp/PgDn scrolls output and Ctrl-C sends SIGINT to the task process group.",
             "The UI refreshes only when state changes and uses curses noutrefresh/doupdate so unchanged cells are not repainted continuously.",
         ])
@@ -845,10 +857,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def self_test() -> int:
-    assert SPARK_UI_VERSION == "2.0.0"
-    assert len(CATEGORIES) >= 8
+    assert SPARK_UI_VERSION == "2.1.0+20260821.1"
+    assert len(CATEGORIES) >= 9
     ids = {a.action_id for _, actions in CATEGORIES for a in actions if not a.special}
-    required = {"diagnostic-full", "diagnostic-installation-status", "app-update", "install-all", "manager-update", "admin-open"}
+    required = {"diagnostic-full", "diagnostic-installation-status", "app-update", "install-all", "manager-update", "admin-open", "cleanup-database", "cleanup-full", "cleanup-manager"}
     if not required.issubset(ids): raise RuntimeError("action registry is incomplete")
     import curses as _curses
     import pty as _pty

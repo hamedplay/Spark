@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="2.0.0"
+SPARK_MANAGER_VERSION="2.1.0+20260821.1"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
 SPARK_ROOT="/opt/spark"
@@ -48,7 +48,7 @@ SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
 unset SOURCE SOURCE_DIR TARGET
 UI_PATH="${SCRIPT_DIR}/spark-ui.py"
 
-for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin; do
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup; do
   module_path="${SCRIPT_DIR}/lib/${module}.sh"
   if [[ ! -r "$module_path" ]]; then
     printf 'Spark Manager module missing: %s\n' "$module_path" >&2
@@ -63,7 +63,7 @@ install_manager_from_dir() {
   local stage backup module file
   [[ -f "${source_dir}/spark" ]] || { fail "Spark Manager entrypoint not found: ${source_dir}/spark"; return 1; }
   [[ -f "${source_dir}/spark-ui.py" ]] || { fail "Spark Manager UI not found: ${source_dir}/spark-ui.py"; return 1; }
-  for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin; do
+  for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup; do
     [[ -f "${source_dir}/lib/${module}.sh" ]] || { fail "Spark Manager module not found: ${module}.sh"; return 1; }
   done
 
@@ -234,6 +234,16 @@ spark_backend_dispatch_inner() {
     admin-open) open_supabase_admin_access ;;
     admin-close) close_supabase_admin_access ;;
 
+    cleanup-database) cleanup_database_data ;;
+    cleanup-supabase) cleanup_supabase_runtime ;;
+    cleanup-frontend) cleanup_frontend_deploy ;;
+    cleanup-source) cleanup_spark_source ;;
+    cleanup-logs) cleanup_manager_logs ;;
+    cleanup-backups) cleanup_backups ;;
+    cleanup-history) cleanup_install_history ;;
+    cleanup-full) cleanup_full_project ;;
+    cleanup-manager) cleanup_uninstall_manager ;;
+
     service-status)
       new_log "service-status"
       run_report "Nginx" systemctl status nginx --no-pager
@@ -299,7 +309,7 @@ path = Path(sys.argv[1])
 compile(path.read_text(encoding="utf-8"), str(path), "exec")
 import curses, pty, selectors
 PY
-  grep -q 'SPARK_UI_VERSION = "2.0.0"' "$UI_PATH"
+  grep -q 'SPARK_UI_VERSION = "2.1.0+20260821.1"' "$UI_PATH"
   grep -q 'curses.doupdate()' "$UI_PATH"
   grep -q 'pty.openpty()' "$UI_PATH"
 }
@@ -314,7 +324,7 @@ Usage: spark [option]
 
 Run without an option to open the full-screen dynamic control center.
 
-  --version       Show Spark Manager version
+  --version       Show Spark Manager version/build
   --test          Run full validation without opening the UI
   --steps         Show installed/not-installed step numbers (01-20)
   --update        Update Spark application without opening the UI

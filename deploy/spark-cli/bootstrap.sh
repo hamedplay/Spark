@@ -5,7 +5,7 @@ IFS=$'\n\t'
 REPO_API="https://api.github.com/repos/hamedplay/Spark"
 TARGET="/usr/local/lib/spark-manager"
 CLI_PATH="/usr/local/bin/spark"
-EXPECTED_VERSION="2.0.0"
+EXPECTED_VERSION="2.1.0+20260821.1"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
@@ -60,6 +60,7 @@ files=(
   lib/tests-backup.sh
   lib/update.sh
   lib/admin.sh
+  lib/cleanup.sh
 )
 
 for file in "${files[@]}"; do
@@ -77,12 +78,16 @@ compile(path.read_text(encoding="utf-8"), str(path), "exec")
 PY
 python3 "$tmp/spark-ui.py" --self-test
 
-grep -q 'SPARK_MANAGER_VERSION="2.0.0"' "$tmp/spark" || {
+grep -q 'SPARK_MANAGER_VERSION="2.1.0+20260821.1"' "$tmp/spark" || {
   echo "Spark Manager version validation failed." >&2
   exit 1
 }
-grep -q 'SPARK_UI_VERSION = "2.0.0"' "$tmp/spark-ui.py" || {
+grep -q 'SPARK_UI_VERSION = "2.1.0+20260821.1"' "$tmp/spark-ui.py" || {
   echo "Spark UI version validation failed." >&2
+  exit 1
+}
+grep -q 'cleanup_database_data' "$tmp/lib/cleanup.sh" || {
+  echo "Spark cleanup module validation failed." >&2
   exit 1
 }
 grep -q 'pty.openpty()' "$tmp/spark-ui.py" || {

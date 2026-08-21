@@ -1,6 +1,7 @@
 # Spark Server Manager
 
 Spark Server Manager ابزار مدیریت Production سامانه Spark روی Ubuntu 24.04 است.
+نسخه فعلی Manager: `2.1.0+20260821.1`.
 نسخه `2.x` رابط قدیمی مبتنی بر `terminal-menus.sh` را به طور کامل کنار گذاشته و
 از یک **single-screen curses dashboard** استفاده می‌کند؛ منو، وضعیت سرور، جزئیات
 Action و خروجی/Prompt عملیات همگی در همان صفحه باقی می‌مانند.
@@ -32,7 +33,7 @@ spark --steps
 
 - `deploy/spark-cli/spark` — Bash backend/launcher و نقطه اتصال به moduleهای عملیاتی موجود.
 - `deploy/spark-cli/spark-ui.py` — رابط Python stdlib `curses`.
-- `deploy/spark-cli/lib/*.sh` — منطق عملیاتی نصب، Update، Backup، تست، Security و Serviceها.
+- `deploy/spark-cli/lib/*.sh` — منطق عملیاتی نصب، Update، Backup، تست، Security، Cleanup و Serviceها.
 
 UI یک renderer پایدار و تمام‌صفحه دارد و با `noutrefresh()` / `doupdate()` فقط
 تغییرات لازم را به ترمینال می‌فرستد. بنابراین دیگر چرخه‌ی clear/rebuild مربوط به
@@ -49,10 +50,10 @@ TUI قبلی وجود ندارد.
 
 صفحه اصلی همزمان شامل این بخش‌ها است:
 
-- Header: نسخه Manager، host، commit فعال، تعداد مراحل نصب، وضعیت Database `5432` و Studio `8443`.
+- Header: نسخه/Build Manager، host، commit فعال، History مراحل نصب، وضعیت Database `5432` و Studio `8443`.
 - Sections: دسته‌بندی عملیات.
 - Actions: Actionهای دسته انتخاب‌شده.
-- Details / Live Status: شرح Action و وضعیت Nginx/Coturn/Docker/DB/Studio/Install/Backup.
+- Details / Live Status: شرح Action و وضعیت Nginx/Coturn/Docker/DB/Studio/History/Backup.
 - Output: خروجی و prompt زنده Task یا محتوای log انتخاب‌شده.
 - Footer: کلیدهای navigation و کنترل Task.
 
@@ -92,8 +93,26 @@ Dashboard همه قابلیت‌های Manager قبلی را بدون منوها
 - Service management.
 - Backup management.
 - Certificate management.
+- Cleanup / Remove برای حذف جزءبه‌جزء یا حذف کامل پروژه.
 - Version/Security information.
 - Self-update Manager.
+
+## Cleanup / Remove
+
+تمام عملیات حذف destructive هستند و قبل از اجرا عبارت تأیید دقیق خودشان را می‌خواهند.
+Actionهای اصلی:
+
+- `Delete Database data` — Supabase را متوقف می‌کند، mount واقعی PostgreSQL را از Compose تشخیص می‌دهد و فقط همان data path را حذف می‌کند. اگر مسیر با اطمینان قابل تشخیص نباشد، حذف متوقف می‌شود و حدس زده نمی‌شود.
+- `Delete Supabase runtime` — کل `/opt/spark-supabase` شامل runtime data/volumes/config/secrets را حذف می‌کند؛ Supabase source pin باقی می‌ماند.
+- `Delete deployed Frontend` — فقط `/var/www/spark` را حذف می‌کند.
+- `Delete Spark source` — فقط repository محلی `/opt/spark` را حذف می‌کند؛ GitHub و Manager باقی می‌مانند.
+- `Delete Manager logs` — فقط `/var/log/spark-manager` را پاک می‌کند؛ Journal سیستم و Docker logs حذف نمی‌شوند.
+- `Delete all Backups` — تمام Backupهای `/var/backups/spark` را حذف می‌کند.
+- `Reset install History` — فقط markerهای DONE مراحل 01 تا 20 را پاک می‌کند و به Runtime/Data دست نمی‌زند.
+- `Delete complete Spark project` — Source، Supabase Runtime/Data، Frontend، Spark config/secrets، Nginx config، Schedulerها، TURN config، Certificateهای دامنه‌های Spark، Backupها و Logها را حذف می‌کند. خود Spark Manager و packageهای مشترک سیستم مثل Docker/Nginx/Node/Certbot نگه داشته می‌شوند تا نصب مجدد ممکن باشد.
+- `Uninstall Spark Manager` — فقط command و فایل‌های نصب‌شده Manager را حذف می‌کند و Runtime پروژه را دست نمی‌زند.
+
+Full removal عمداً packageهای مشترک سیستم و ruleهای عمومی SSH/HTTP/HTTPS را حذف نمی‌کند؛ این‌ها ممکن است برای سرویس‌های غیر Spark نیز استفاده شوند.
 
 ## دسترسی Database و Supabase Studio
 
@@ -141,5 +160,7 @@ Crashهای خود renderer در فایل زیر ثبت می‌شوند:
 - Update روی repository dirty متوقف می‌شود.
 - `npm audit fix` واقعی اجرا نمی‌شود؛ فقط `--dry-run` وجود دارد.
 - پورت‌های مدیریتی `5432` و `8443` به‌صورت پیش‌فرض بسته‌اند و فقط با Action صریح Open باز می‌شوند؛ Close همان listener را حذف می‌کند.
+- عملیات حذف فقط روی مسیرها و اجزای Spark انجام می‌شود؛ حذف Database در صورت عدم تشخیص قطعی mount متوقف می‌شود.
+- Full removal دو تأیید مستقل می‌خواهد و packageهای مشترک سیستم را پاک نمی‌کند.
 - Bootstrap ابتدا Bash/Python syntax و UI self-test را اجرا می‌کند و نصب را atomically جایگزین می‌کند؛ در smoke-test ناموفق نسخه قبلی restore می‌شود.
 - از lint در workflow Manager استفاده نمی‌شود.
