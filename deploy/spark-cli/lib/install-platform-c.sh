@@ -120,16 +120,31 @@ EOF
 }
 
 test_firewall() {
+  local sockets db_public=0 db_managed=0
   ufw status verbose || return 1
   ufw status | grep -q "Status: active" || return 1
-  ! ss -lntp | grep -Eq '0\.0\.0\.0:(5432|5433|6543|8000|9000)\b|\[::\]:(5432|5433|6543|8000|9000)\b' || return 1
+  sockets="$(ss -lntp)" || return 1
+
+  if grep -Eq '0\.0\.0\.0:(5433|6543|8000|9000)\b|\[::\]:(5433|6543|8000|9000)\b' <<<"$sockets"; then
+    return 1
+  fi
+
+  grep -Eq '0\.0\.0\.0:5432\b|\[::\]:5432\b|\*:5432\b' <<<"$sockets" && db_public=1
+  systemctl is-active --quiet spark-db-access.socket 2>/dev/null && db_managed=1
+  if (( db_public && ! db_managed )); then
+    return 1
+  fi
 }
 
 install_step_20() {
   title
   new_log "install-20-firewall"
   require_manager_values || return 1
-  if ! confirm_word "این مرحله UFW را reset می‌کند؛ SSH/HTTP/HTTPS/TURN باز می‌مانند و پورت‌های داخلی Supabase بسته می‌مانند." "FIREWALL"; then
+  local db_was_open=0 studio_was_open=0
+  database_external_is_open 2>/dev/null && db_was_open=1
+  studio_external_is_open 2>/dev/null && studio_was_open=1
+
+  if ! confirm_word "این مرحله UFW را reset می‌کند؛ SSH/HTTP/HTTPS/TURN باز می‌مانند و وضعیت فعلی Database 5432 / Studio 8443 حفظ می‌شود." "FIREWALL"; then
     warn "تغییر Firewall لغو شد."
     return 1
   fi
@@ -143,8 +158,14 @@ install_step_20() {
   run_logged "Allow TURN UDP" ufw allow 3478/udp || return 1
   run_logged "Allow TURNS TCP" ufw allow 5349/tcp || return 1
   run_logged "Allow TURN relay UDP" ufw allow "${TURN_MIN_PORT}:${TURN_MAX_PORT}/udp" || return 1
+  if (( db_was_open )); then
+    run_logged "Preserve Database TCP/5432 access" ufw allow 5432/tcp || return 1
+  fi
+  if (( studio_was_open )); then
+    run_logged "Preserve Supabase Studio TCP/8443 access" ufw allow 8443/tcp || return 1
+  fi
   run_logged "Enable UFW" ufw --force enable || return 1
-  if run_logged "تست Firewall و عدم exposure داخلی" test_firewall; then
+  if run_logged "تست Firewall و exposure مدیریت‌شده" test_firewall; then
     mark_step 20
   else
     unmark_step 20
