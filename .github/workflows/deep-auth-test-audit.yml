@@ -1,133 +1,64 @@
-name: Temporary minutes config white screen validator
+name: Deep Auth Test Audit
 
 on:
   push:
-    branches: [main]
     paths:
-      - 'tmp/minutes-config-white-screen-v2-trigger.txt'
+      - '.github/workflows/deep-auth-test-audit.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  fix:
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     steps:
-      - name: Checkout latest main
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          ref: main
-          fetch-depth: 40
-
-      - id: transform
-        name: Fix preview decision contract
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          target='src/components/Minutes/MinutesConfigPanel.tsx'
-          expected='97aa441abaf1047af2f9c0487be6310b0031847f'
-          test "$(git rev-parse HEAD:${target})" = "$expected"
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('src/components/Minutes/MinutesConfigPanel.tsx')
-          text = path.read_text(encoding='utf-8')
-          old = "{ id: 'd1', title: 'تصمیم نمونه', description: 'اقدام اجرایی مورد توافق', primaryOwnerName: 'کارشناس الف', responsibleUnitName: 'واحد برنامه‌ریزی', priority: 'normal', startDate: '2026-08-01', dueDate: '2026-09-01', status: 'in_progress', progressPercent: 30, latestUpdate: '', discussionResult: '', resultType: 'resolution', additionalNotes: '' },"
-          new = "{ id: 'd1', title: 'تصمیم نمونه', description: 'اقدام اجرایی مورد توافق', primaryOwnerName: 'کارشناس الف', responsibleUnitName: 'واحد برنامه‌ریزی', priority: 'normal', startDate: '2026-08-01', dueDate: '2026-09-01', status: 'in_progress', progressPercent: 30, latestUpdate: '', discussionResult: '', resultType: 'resolution', additionalNotes: '', clauses: [] },"
-          count = text.count(old)
-          if count != 1:
-              raise SystemExit(f'expected exactly one preview decision anchor, found {count}')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-          git diff --check -- "$target"
-          test "$(git diff --name-only -- "$target")" = "$target"
-          grep -F "additionalNotes: '', clauses: []" "$target"
-
-      - name: Setup Node.js
-        if: steps.transform.outcome == 'success'
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
+          node-version: '24.18.1'
           cache: npm
-          package-manager-cache: false
-
-      - id: install
-        name: Install dependencies
-        if: steps.transform.outcome == 'success'
-        continue-on-error: true
-        run: npm ci
-
-      - id: build
-        name: Build application
-        if: steps.install.outcome == 'success'
-        continue-on-error: true
-        run: npm run build
-
-      - id: test
-        name: Run minutes decision tests
-        if: steps.build.outcome == 'success'
-        continue-on-error: true
-        run: npm run test:minutes-decisions
-
-      - id: contract
-        name: Validate preview contract
-        if: steps.test.outcome == 'success'
-        continue-on-error: true
+      - run: npm ci
+      - name: Run omitted Phase 5 and Phase 8 suites
         shell: bash
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          panel = Path('src/components/Minutes/MinutesConfigPanel.tsx').read_text(encoding='utf-8')
-          layout = Path('src/components/Minutes/MinutesDocumentLayout.tsx').read_text(encoding='utf-8')
-          types = Path('src/components/Minutes/MinutesDocumentData.ts').read_text(encoding='utf-8')
-          assert "additionalNotes: '', clauses: []" in panel
-          assert 'd.clauses.length' in layout
-          assert 'clauses: DocDecisionClause[];' in types
-          print('minutes config preview contract passed')
-          PY
-          git diff --check -- src/components/Minutes/MinutesConfigPanel.tsx
-
-      - id: freshness
-        name: Confirm target is still current
-        if: steps.contract.outcome == 'success'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          test "$(git rev-parse HEAD:src/components/Minutes/MinutesConfigPanel.tsx)" = "$(git rev-parse origin/main:src/components/Minutes/MinutesConfigPanel.tsx)"
-
-      - name: Commit result and restore repository tooling
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          transform='${{ steps.transform.outcome }}'
-          install='${{ steps.install.outcome }}'
-          build='${{ steps.build.outcome }}'
-          test_result='${{ steps.test.outcome }}'
-          contract='${{ steps.contract.outcome }}'
-          freshness='${{ steps.freshness.outcome }}'
-
-          git show 5a7b2d626609d5c93052dd1c7151d185c56a7f32:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git show 5a7b2d626609d5c93052dd1c7151d185c56a7f32:.github/workflows/deep-auth-test-audit.yml > .github/workflows/deep-auth-test-audit.yml
-          rm -f .github/workflows/tmp-fix-minutes-config-white-screen.yml
-          rm -f tmp/minutes-config-white-screen-trigger.txt
-          rm -f tmp/minutes-config-white-screen-v2-trigger.txt
-
-          if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$test_result" = success ] && [ "$contract" = success ] && [ "$freshness" = success ]; then
-            message='fix: prevent minutes config preview crash [skip ci]'
-          else
-            git restore --source=HEAD -- src/components/Minutes/MinutesConfigPanel.tsx
-            message="chore: cleanup failed minutes config validation transform-$transform install-$install build-$build test-$test_result contract-$contract freshness-$freshness [skip ci]"
-          fi
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898242+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --check
-          git commit -m "$message"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          set +e
+          failed=0
+          for script in \
+            test:phase5-login \
+            test:phase5-gateway \
+            test:phase5-session-issuers \
+            test:phase5-edge-gates \
+            test:phase5-cutover \
+            test:phase5-phone-otp-config \
+            test:phase5-phone-otp-challenge-table \
+            test:phase5-phone-otp-rate-limit-table \
+            test:phase5-phone-otp-rate-limit-rpc \
+            test:phase5-phone-otp-create-challenge-rpc \
+            test:phase5-phone-otp-delivery-result-rpc \
+            test:phase5-phone-otp-claim-challenge-rpc \
+            test:phase5-phone-otp-complete-claim-rpc \
+            test:phase5-phone-otp-release-claim-rpc \
+            test:phase5-phone-otp-gateway-method \
+            test:phase5-phone-otp-gateway-finalization-rpc \
+            test:phase5-phone-otp-request-edge \
+            test:phase5-phone-otp-verify-edge \
+            test:phase5-phone-otp-gateway-flow \
+            test:phase5-phone-otp-gateway-reconciliation-rpc \
+            test:phase5-phone-otp-activation \
+            test:phase5-phone-otp-login-ui \
+            test:phase8-identity-health \
+            test:phase8-runtime-p0 \
+            test:phase8-ready-gates
+          do
+            echo "::group::$script"
+            npm run "$script"
+            code=$?
+            echo "::endgroup::"
+            if [ "$code" -ne 0 ]; then
+              echo "FAILED: $script"
+              failed=1
+            else
+              echo "PASSED: $script"
+            fi
+          done
+          exit "$failed"
