@@ -287,7 +287,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
       { id: 'a1', order: 1, title: 'بررسی گزارش عملکرد', description: '', presenter: 'کارشناس الف', allocatedTime: '۳۰ دقیقه' },
     ],
     decisions: [
-      { id: 'd1', title: 'تصمیم نمونه', description: 'اقدام اجرایی مورد توافق', primaryOwnerName: 'کارشناس الف', responsibleUnitName: 'واحد برنامه‌ریزی', priority: 'normal', startDate: '2026-08-01', dueDate: '2026-09-01', status: 'in_progress', progressPercent: 30, latestUpdate: '', discussionResult: '', resultType: 'resolution', additionalNotes: '' },
+      { id: 'd1', title: 'تصمیم نمونه', description: 'اقدام اجرایی مورد توافق', primaryOwnerName: 'کارشناس الف', responsibleUnitName: 'واحد برنامه‌ریزی', priority: 'normal', startDate: '2026-08-01', dueDate: '2026-09-01', status: 'in_progress', progressPercent: 30, latestUpdate: '', discussionResult: '', resultType: 'resolution', additionalNotes: '', clauses: [] },
     ],
     approvals: [
       { id: 'ap1', approver_name: 'مدیر محترم', status: 'approved', approved_at: '2026-08-01T11:00:00Z', changes_requested_at: null },
