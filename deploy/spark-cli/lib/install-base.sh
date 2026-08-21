@@ -43,7 +43,6 @@ test_values() {
   valid_domain "$TURN_DOMAIN" || return 1
   valid_ipv4 "$TURN_PUBLIC_IP" || return 1
   valid_ipv4 "$TURN_PRIVATE_IP" || return 1
-  valid_cidr "$ADMIN_CIDR" || return 1
   valid_email "$LE_EMAIL" || return 1
 }
 
