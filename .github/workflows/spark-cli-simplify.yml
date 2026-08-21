@@ -1,0 +1,592 @@
+name: Spark CLI architecture cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-simplify.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  simplify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply scoped Spark CLI cleanup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          ROOT = Path('deploy/spark-cli')
+
+          def read(rel):
+              return (ROOT / rel).read_text(encoding='utf-8')
+
+          def write(rel, text):
+              (ROOT / rel).write_text(text, encoding='utf-8')
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, got {count}')
+              return text.replace(old, new, 1)
+
+          def sub_once(text, pattern, repl, label):
+              out, count = re.subn(pattern, repl, text, count=1, flags=re.S | re.M)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one regex match, got {count}')
+              return out
+
+          # core.sh: remove the CIDR setting from config, validation and required values.
+          text = read('lib/core.sh')
+          text = replace_once(text,
+              "    printf 'ADMIN_CIDR=%q\\n' \"${ADMIN_CIDR:-}\"\n", "",
+              'core save_config')
+          text = sub_once(text,
+              r"\nvalid_cidr\(\) \{.*?^\}\n\nvalid_domain\(\) \{",
+              "\nvalid_domain() {",
+              'core valid_cidr')
+          text = sub_once(text,
+              r"  while true; do\n    prompt_default v \"CIDR مدیریتی مجاز برای SSH\" .*?^  done\n",
+              "",
+              'core CIDR prompt')
+          text = replace_once(text,
+              '  for key in APP_DOMAIN WWW_DOMAIN API_DOMAIN TURN_DOMAIN TURN_PUBLIC_IP TURN_PRIVATE_IP ADMIN_CIDR LE_EMAIL TURN_MIN_PORT TURN_MAX_PORT; do\n',
+              '  for key in APP_DOMAIN WWW_DOMAIN API_DOMAIN TURN_DOMAIN TURN_PUBLIC_IP TURN_PRIVATE_IP LE_EMAIL TURN_MIN_PORT TURN_MAX_PORT; do\n',
+              'core required values')
+          write('lib/core.sh', text)
+
+          # install-base.sh: configuration validity no longer depends on CIDR.
+          text = read('lib/install-base.sh')
+          text = replace_once(text, '  valid_cidr "$ADMIN_CIDR" || return 1\n', '', 'install-base CIDR test')
+          write('lib/install-base.sh', text)
+
+          # install-platform-c.sh: simple firewall + actual installation state probe.
+          text = read('lib/install-platform-c.sh')
+          text = sub_once(text,
+              r"\nssh_client_in_admin_cidr\(\) \{.*?^\}\n\ntest_firewall\(\) \{",
+              "\ntest_firewall() {",
+              'remove SSH CIDR helper')
+
+          new_firewall_and_status = r'''install_step_20() {
+  title
+  new_log "install-20-firewall"
+  require_manager_values || return 1
+  if ! confirm_word "این مرحله UFW را reset می‌کند و فقط پورت‌های لازم Spark را مجاز می‌کند: SSH، HTTP/HTTPS و TURN." "FIREWALL"; then
+    warn "تغییر Firewall لغو شد."
+    return 1
+  fi
+  run_logged "Reset UFW" ufw --force reset || return 1
+  run_logged "Default deny incoming" ufw default deny incoming || return 1
+  run_logged "Default allow outgoing" ufw default allow outgoing || return 1
+  run_logged "Allow SSH" ufw allow 22/tcp || return 1
+  run_logged "Allow HTTP" ufw allow 80/tcp || return 1
+  run_logged "Allow HTTPS" ufw allow 443/tcp || return 1
+  run_logged "Allow TURN TCP" ufw allow 3478/tcp || return 1
+  run_logged "Allow TURN UDP" ufw allow 3478/udp || return 1
+  run_logged "Allow TURNS TCP" ufw allow 5349/tcp || return 1
+  run_logged "Allow TURN relay UDP" ufw allow "${TURN_MIN_PORT}:${TURN_MAX_PORT}/udp" || return 1
+  run_logged "Enable UFW" ufw --force enable || return 1
+  if run_logged "تست Firewall و عدم exposure داخلی" test_firewall; then
+    mark_step 20
+  else
+    unmark_step 20
+    return 1
+  fi
+}
+
+test_nginx_bootstrap_or_production() {
+  nginx -t >/dev/null 2>&1 || return 1
+  systemctl is-active --quiet nginx || return 1
+  [[ -L /etc/nginx/sites-enabled/spark || -L /etc/nginx/sites-enabled/spark-bootstrap ]]
+}
+
+test_migrations_current() {
+  local migrations_dir="${SPARK_ROOT}/supabase/migrations"
+  local local_versions remote_versions pending
+  require_dir "$migrations_dir" || return 1
+  require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
+
+  local_versions="$(find "$migrations_dir" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' \
+    | sed -nE 's/^([0-9]{14})_.*/\1/p' | sort -u)"
+  [[ -n "$local_versions" ]] || return 1
+
+  remote_versions="$(compose exec -T db psql -U postgres -d postgres -Atqc \
+    'select version from supabase_migrations.schema_migrations order by version;' 2>/dev/null \
+    | tr -d '\r' | sort -u)" || return 1
+
+  pending="$(comm -23 \
+    <(printf '%s\n' "$local_versions") \
+    <(printf '%s\n' "$remote_versions"))"
+  [[ -z "$pending" ]]
+}
+
+installation_step_name() {
+  case "$1" in
+    1) printf 'DNS' ;;
+    2) printf 'Configuration' ;;
+    3) printf 'Base packages' ;;
+    4) printf 'Spark repository' ;;
+    5) printf 'Supabase pin' ;;
+    6) printf 'Supabase secrets' ;;
+    7) printf 'Supabase environment' ;;
+    8) printf 'Edge Functions sync' ;;
+    9) printf 'Provider / worker env' ;;
+    10) printf 'Docker Compose' ;;
+    11) printf 'Supabase runtime' ;;
+    12) printf 'Database migrations' ;;
+    13) printf 'Frontend deploy' ;;
+    14) printf 'Nginx bootstrap' ;;
+    15) printf 'TLS certificates' ;;
+    16) printf 'Nginx production' ;;
+    17) printf 'Schedulers' ;;
+    18) printf 'TURN / Coturn' ;;
+    19) printf 'Certbot renewal' ;;
+    20) printf 'Firewall / UFW' ;;
+    *) return 1 ;;
+  esac
+}
+
+installation_step_check() {
+  case "$1" in
+    1) test_dns ;;
+    2) test_values ;;
+    3) test_base_packages ;;
+    4) test_spark_repo ;;
+    5) test_supabase_source ;;
+    6) test_supabase_secrets ;;
+    7) test_supabase_env ;;
+    8) test_function_sync ;;
+    9) test_provider_env ;;
+    10) test_compose_security ;;
+    11) test_supabase_health ;;
+    12) test_migrations_current ;;
+    13) test_frontend_deploy ;;
+    14) test_nginx_bootstrap_or_production ;;
+    15) test_certificates ;;
+    16) test_nginx_production ;;
+    17) test_schedulers ;;
+    18) test_turn ;;
+    19) test_certbot_hook ;;
+    20) test_firewall ;;
+    *) return 1 ;;
+  esac
+}
+
+installation_status() {
+  local n name actual recorded formatted
+  local installed=() missing=()
+
+  printf '\n%s\n' 'Spark installation state — actual probe vs saved history'
+  printf '%s\n' '────────────────────────────────────────────────────────────────────────'
+  printf '%-4s %-18s %-10s %s\n' 'No.' 'Actual' 'History' 'Component'
+  printf '%s\n' '────────────────────────────────────────────────────────────────────────'
+
+  for n in $(seq 1 20); do
+    name="$(installation_step_name "$n")"
+    printf -v formatted '%02d' "$n"
+    if installation_step_check "$n" >/dev/null 2>&1; then
+      actual='INSTALLED'
+      installed+=("$formatted")
+    else
+      actual='NOT INSTALLED'
+      missing+=("$formatted")
+    fi
+    if [[ -f "${STEP_DIR}/${n}.ok" ]]; then
+      recorded='saved'
+    else
+      recorded='-'
+    fi
+    printf '%-4s %-18s %-10s %s\n' "$formatted" "$actual" "$recorded" "$name"
+  done
+
+  printf '%s\n' '────────────────────────────────────────────────────────────────────────'
+  printf 'Installed     : %s\n' "${installed[*]:-(none)}"
+  printf 'Not installed : %s\n' "${missing[*]:-(none)}"
+  printf '\nHistory فقط نشان می‌دهد مرحله قبلاً با موفقیت اجرا شده؛ ستون Actual وضعیت واقعی همین سرور را تست می‌کند.\n'
+  return 0
+}
+
+'''
+          text = sub_once(text,
+              r"install_step_20\(\) \{.*?^\}\n\n(?=run_install_step\(\) \{)",
+              new_firewall_and_status,
+              'firewall/status block')
+          write('lib/install-platform-c.sh', text)
+
+          # admin.sh: remove IP allow-listing and hard UFW dependency. UFW is used only when already active.
+          text = read('lib/admin.sh')
+          access_helpers = r'''external_access_requirements() {
+  require_manager_values || return 1
+  require_file "${SUPABASE_ROOT}/.env" || return 1
+}
+
+ufw_is_active() {
+  ufw status 2>/dev/null | grep -q '^Status: active'
+}
+
+ufw_allow_temporary_port() {
+  local port="$1" marker="${STATE_DIR}/ufw-${1}-spark-manager.rule"
+  rm -f "$marker"
+  if ! ufw_is_active; then
+    warn "UFW غیرفعال است؛ Spark Manager این عملیات را به مرحله Firewall وابسته نمی‌کند."
+    warn "TCP/${port} در صورت وجود مسیر شبکه می‌تواند از بیرون قابل دسترس باشد؛ بعد از کار دسترسی را ببندید."
+    return 0
+  fi
+  if ufw status 2>/dev/null | grep -Eq "^${port}/tcp[[:space:]]+ALLOW"; then
+    info "TCP/${port} از قبل در UFW مجاز است؛ rule موجود دست‌کاری نمی‌شود."
+    return 0
+  fi
+  run_logged "Allow temporary TCP/${port} in UFW" ufw allow "${port}/tcp" || return 1
+  : >"$marker"
+  chmod 600 "$marker"
+}
+
+ufw_remove_temporary_port() {
+  local port="$1" marker="${STATE_DIR}/ufw-${1}-spark-manager.rule"
+  if [[ -f "$marker" ]] && ufw_is_active; then
+    set +e
+    ufw --force delete allow "${port}/tcp" >>"$CURRENT_LOG" 2>&1
+    set -e
+  fi
+  rm -f "$marker"
+}
+
+'''
+          text = sub_once(text,
+              r"valid_ipv4_cidr\(\) \{.*?^(?=find_systemd_socket_proxyd\(\) \{)",
+              access_helpers,
+              'admin access helpers')
+
+          text = sub_once(text,
+              r"cleanup_database_access_runtime\(\) \{.*?^\}\n\n(?=open_database_external_access\(\) \{)",
+              '''cleanup_database_access_runtime() {
+  set +e
+  systemctl disable --now spark-db-access.socket >>"$CURRENT_LOG" 2>&1
+  systemctl stop spark-db-access.service >>"$CURRENT_LOG" 2>&1
+  rm -f /etc/systemd/system/spark-db-access.socket /etc/systemd/system/spark-db-access.service
+  systemctl daemon-reload >>"$CURRENT_LOG" 2>&1
+  systemctl reset-failed spark-db-access.service spark-db-access.socket >>"$CURRENT_LOG" 2>&1
+  set -e
+  ufw_remove_temporary_port 5432
+}
+
+''',
+              'admin DB cleanup')
+
+          text = sub_once(text,
+              r"open_database_external_access\(\) \{.*?^\}\n\n(?=close_database_external_access\(\) \{)",
+              '''open_database_external_access() {
+  local proxyd
+  external_access_requirements || return 1
+
+  if ! timeout 3 bash -c '</dev/tcp/127.0.0.1/5433' >/dev/null 2>&1; then
+    fail "Supavisor محلی روی 127.0.0.1:5433 در دسترس نیست؛ ابتدا وضعیت Supabase را بررسی کنید."
+    return 1
+  fi
+  proxyd="$(find_systemd_socket_proxyd)" || {
+    fail "systemd-socket-proxyd روی این Ubuntu پیدا نشد."
+    return 1
+  }
+
+  if ! confirm_word "Database روی ${TURN_PUBLIC_IP:-<server-ip>}:5432 موقتاً باز می‌شود. محدودیت IP در Spark Manager اعمال نمی‌شود؛ پس از کار حتماً آن را ببندید." "OPEN"; then
+    warn "لغو شد."
+    return 1
+  fi
+
+  if database_external_is_open; then
+    systemctl disable --now spark-db-access.socket >>"$CURRENT_LOG" 2>&1 || true
+    systemctl stop spark-db-access.service >>"$CURRENT_LOG" 2>&1 || true
+  fi
+
+  ufw_allow_temporary_port 5432 || return 1
+  write_database_access_units "$proxyd"
+  if ! run_logged "Reload systemd" systemctl daemon-reload; then
+    cleanup_database_access_runtime
+    return 1
+  fi
+  if ! run_logged "Open PostgreSQL TCP/5432" systemctl enable --now spark-db-access.socket; then
+    cleanup_database_access_runtime
+    return 1
+  fi
+
+  if ! database_external_is_open || ! ss -lnt 2>/dev/null | grep -q ':5432 '; then
+    fail "Listener خارجی TCP/5432 ایجاد نشد؛ تغییرات rollback می‌شوند."
+    cleanup_database_access_runtime
+    return 1
+  fi
+  if ! timeout 4 bash -c '</dev/tcp/127.0.0.1/5432' >/dev/null 2>&1; then
+    fail "TCP/5432 باز شد ولی Proxy تا Supavisor پاسخ نداد؛ تغییرات rollback می‌شوند."
+    cleanup_database_access_runtime
+    return 1
+  fi
+
+  ok "Database access باز شد: ${TURN_PUBLIC_IP:-<server-ip>}:5432"
+  info "Database=postgres  Username=postgres؛ رمز را از گزینه نمایش Credentialها ببینید."
+}
+
+''',
+              'admin DB open')
+
+          text = sub_once(text,
+              r"close_database_external_access\(\) \{.*?^\}\n\n(?=write_supabase_studio_gateway\(\) \{)",
+              '''close_database_external_access() {
+  cleanup_database_access_runtime
+
+  if ss -lnt 2>/dev/null | grep -q ':5432 '; then
+    fail "هنوز listener دیگری روی TCP/5432 وجود دارد؛ برای جلوگیری از گزارش اشتباه، وضعیت را بررسی کنید."
+    ss -lntp | grep ':5432' | tee -a "$CURRENT_LOG" || true
+    return 1
+  fi
+  ok "دسترسی خارجی Database بسته شد. Supavisor داخلی 127.0.0.1:5433 بدون تغییر باقی ماند."
+}
+
+''',
+              'admin DB close')
+
+          studio_block = r'''write_supabase_studio_gateway() {
+  cat >/etc/nginx/sites-available/spark-supabase-admin <<EOF
+server {
+    listen 8443 ssl;
+    server_name ${API_DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${API_DOMAIN}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$spark_connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_read_timeout 3600s;
+    }
+}
+EOF
+}
+
+open_supabase_studio_access() {
+  local dashboard_user dashboard_password backup had_previous=0
+  external_access_requirements || return 1
+  require_file "/etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem" || return 1
+  require_file "/etc/letsencrypt/live/${API_DOMAIN}/privkey.pem" || return 1
+  if [[ ! -e /etc/nginx/sites-enabled/spark ]]; then
+    fail "Nginx Production فعال نیست؛ ابتدا مرحله 16 نصب را اجرا کنید."
+    return 1
+  fi
+
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD موجود نیست."; return 1; }
+
+  if ! confirm_word "Supabase Studio روی https://${API_DOMAIN}:8443 موقتاً باز می‌شود و با Credential داشبورد محافظت می‌شود. محدودیت IP در Spark Manager اعمال نمی‌شود." "OPEN"; then
+    warn "لغو شد."
+    return 1
+  fi
+
+  backup="$(mktemp)"
+  if [[ -f /etc/nginx/sites-available/spark-supabase-admin ]]; then
+    cp -a /etc/nginx/sites-available/spark-supabase-admin "$backup"
+    had_previous=1
+  fi
+
+  if ! ufw_allow_temporary_port 8443; then
+    rm -f "$backup"
+    return 1
+  fi
+
+  write_supabase_studio_gateway
+  ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+  if ! run_logged "Nginx config test" nginx -t || ! run_logged "Reload Nginx" systemctl reload nginx; then
+    ufw_remove_temporary_port 8443
+    if (( had_previous )); then
+      cp -a "$backup" /etc/nginx/sites-available/spark-supabase-admin
+      ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+      nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    else
+      rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
+      nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    fi
+    rm -f "$backup"
+    return 1
+  fi
+
+  if ! studio_external_is_open; then
+    fail "Nginx روی 8443 listen نشد؛ تغییرات rollback می‌شوند."
+    ufw_remove_temporary_port 8443
+    if (( had_previous )); then
+      cp -a "$backup" /etc/nginx/sites-available/spark-supabase-admin
+    else
+      rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
+    fi
+    nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    rm -f "$backup"
+    return 1
+  fi
+
+  if ! curl -fsSkL --connect-timeout 5 --max-time 15 \
+      --resolve "${API_DOMAIN}:8443:127.0.0.1" \
+      -u "${dashboard_user}:${dashboard_password}" \
+      "https://${API_DOMAIN}:8443/" -o /dev/null; then
+    fail "8443 باز شد ولی Supabase Studio با Credential فعلی پاسخ معتبر نداد؛ تغییرات rollback می‌شوند."
+    ufw_remove_temporary_port 8443
+    if (( had_previous )); then
+      cp -a "$backup" /etc/nginx/sites-available/spark-supabase-admin
+      ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+    else
+      rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
+    fi
+    nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    rm -f "$backup"
+    return 1
+  fi
+
+  rm -f "$backup"
+  ok "Supabase Studio باز شد: https://${API_DOMAIN}:8443"
+  info "Username=${dashboard_user}؛ رمز را از گزینه نمایش Credentialها ببینید."
+}
+
+close_supabase_studio_access() {
+  rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
+  ufw_remove_temporary_port 8443
+  run_logged "Nginx config test" nginx -t || return 1
+  run_logged "Reload Nginx" systemctl reload nginx || return 1
+
+  if studio_external_is_open; then
+    fail "هنوز listener مدیریتی روی 8443 باقی مانده است."
+    ss -lntp | grep ':8443' | tee -a "$CURRENT_LOG" || true
+    return 1
+  fi
+  ok "دسترسی خارجی Supabase Studio بسته شد."
+}
+
+'''
+          text = sub_once(text,
+              r"write_supabase_studio_gateway\(\) \{.*?^\}\n\n(?=security_access_wait\(\) \{)",
+              studio_block,
+              'admin Studio block')
+
+          text = sub_once(text,
+              r"close_supabase_admin_access\(\) \{.*?^\}\n",
+              '''close_supabase_admin_access() {
+  local rc=0
+  new_log "admin-access-close"
+  close_supabase_studio_access || rc=1
+  close_database_external_access || rc=1
+  return "$rc"
+}
+''',
+              'admin close-all')
+          write('lib/admin.sh', text)
+
+          # spark backend: expose installation status and show it before full validation.
+          text = read('spark')
+          text = replace_once(text, 'SPARK_MANAGER_VERSION="2.0.0"', 'SPARK_MANAGER_VERSION="2.0.1"', 'manager version')
+          text = replace_once(text,
+              '    diagnostic-full) new_log "test-full"; run_visible "Full validation" test_full_validation ;;\n',
+              '    diagnostic-installation) new_log "test-installation-status"; run_visible "Installation status 01-20" installation_status ;;\n    diagnostic-full) new_log "test-full"; installation_status; run_visible "Full validation" test_full_validation ;;\n',
+              'backend installation diagnostic')
+          text = replace_once(text,
+              '  --test          Run full validation without opening the UI\n',
+              '  --test          Run installation status + full validation\n  --install-status Show actual installed/not-installed state for steps 01-20\n',
+              'CLI help')
+          text = replace_once(text,
+              '  --test) spark_backend_action diagnostic-full ;;\n',
+              '  --test) spark_backend_action diagnostic-full ;;\n  --install-status) spark_backend_action diagnostic-installation ;;\n',
+              'CLI install status option')
+          write('spark', text)
+
+          # UI: remove CIDR wording and add dedicated diagnostic action.
+          text = read('spark-ui.py')
+          text = replace_once(text, 'SPARK_UI_VERSION = "2.0.0"', 'SPARK_UI_VERSION = "2.0.1"', 'UI version')
+          text = replace_once(text,
+              'Action("install-02", "02  Installation config", "Configure domains, addresses, ADMIN_CIDR and certificate email.", "confirm"),',
+              'Action("install-02", "02  Installation config", "Configure domains, server addresses and certificate email.", "confirm"),',
+              'UI install config text')
+          text = replace_once(text,
+              '    ("Diagnostics", [\n        Action("diagnostic-full", "Full validation", "Run all production validation checks."),',
+              '    ("Diagnostics", [\n        Action("diagnostic-installation", "Installation status 01-20", "Probe the real server state and show which numbered steps are installed or missing."),\n        Action("diagnostic-full", "Full validation", "Show installation state, then run all production validation checks."),',
+              'UI diagnostic action')
+          text = replace_once(text,
+              'Action("admin-open", "Open Supabase admin", "Create TLS/8443 gateway restricted to ADMIN_CIDR.", "confirm"),',
+              'Action("admin-open", "Open Supabase admin", "Manage temporary Database/Studio access and operator credentials.", "confirm"),',
+              'UI admin text')
+          write('spark-ui.py', text)
+
+          # Bootstrap version smoke tests follow the updated manager/UI version.
+          text = read('bootstrap.sh')
+          text = replace_once(text, 'EXPECTED_VERSION="2.0.0"', 'EXPECTED_VERSION="2.0.1"', 'bootstrap expected version')
+          text = replace_once(text, "grep -q 'SPARK_MANAGER_VERSION=\"2.0.0\"'", "grep -q 'SPARK_MANAGER_VERSION=\"2.0.1\"'", 'bootstrap manager grep')
+          text = replace_once(text, "grep -q 'SPARK_UI_VERSION = \"2.0.0\"'", "grep -q 'SPARK_UI_VERSION = \"2.0.1\"'", 'bootstrap UI grep')
+          write('bootstrap.sh', text)
+
+          # README: document the simple model and the new status probe.
+          text = read('README.md')
+          text = replace_once(text,
+              '- Full validation و تست‌های Frontend/API/Docker/Nginx/Scheduler/TURN/Exposure/DNS/SSL.\n',
+              '- Installation status واقعی برای مراحل 01 تا 20، سپس Full validation و تست‌های Frontend/API/Docker/Nginx/Scheduler/TURN/Exposure/DNS/SSL.\n',
+              'README diagnostics')
+          text = replace_once(text,
+              '- باز/بسته کردن Supabase admin TLS/8443 محدود به `ADMIN_CIDR`.\n',
+              '- باز/بسته کردن کنترل‌شده دسترسی موقت Database و Supabase Studio، بدون وابستگی به allow-list شبکه در Manager.\n',
+              'README admin operation')
+          text = replace_once(text,
+              '- Kong/DB/Supavisor برای Admin عمومی نمی‌شوند؛ دسترسی Admin از TLS/8443 محدود به `ADMIN_CIDR` استفاده می‌کند.\n',
+              '- Kong/DB/Supavisor در حالت عادی روی loopback باقی می‌مانند؛ بازکردن موقت Database/Studio فقط با تأیید صریح انجام می‌شود و فعال‌بودن UFW پیش‌شرط آن نیست.\n',
+              'README safety')
+          marker = 'سپس:\n\n```bash\nspark\n```\n'
+          text = replace_once(text, marker, marker + '\nبرای دیدن وضعیت واقعی مراحل نصب بدون اجرای نصب:\n\n```bash\nspark --install-status\n```\n', 'README status command')
+          write('README.md', text)
+          PY
+
+      - name: Validate Spark CLI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/spark
+          for file in deploy/spark-cli/lib/*.sh; do bash -n "$file"; done
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('deploy/spark-cli/spark-ui.py')
+          compile(path.read_text(encoding='utf-8'), str(path), 'exec')
+          PY
+          python3 deploy/spark-cli/spark-ui.py --self-test
+          if grep -RniE 'CIDR|ADMIN_CIDR|\.cidr' deploy/spark-cli; then
+            echo 'CIDR coupling still exists in deploy/spark-cli' >&2
+            exit 1
+          fi
+          grep -q 'diagnostic-installation' deploy/spark-cli/spark
+          grep -q -- '--install-status' deploy/spark-cli/spark
+          grep -q 'installation_status()' deploy/spark-cli/lib/install-platform-c.sh
+          grep -q 'SPARK_MANAGER_VERSION="2.0.1"' deploy/spark-cli/spark
+          grep -q 'SPARK_UI_VERSION = "2.0.1"' deploy/spark-cli/spark-ui.py
+          git diff --check
+
+      - name: Commit scoped result and remove temporary tooling
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -f .github/workflows/spark-cli-simplify.yml
+          git add deploy/spark-cli .github/workflows/spark-cli-simplify.yml
+          git diff --cached --check
+          git config user.name 'hamedplay'
+          git config user.email 'hamedkhaleghi493@gmail.com'
+          git commit -m 'fix: simplify Spark manager install architecture [skip ci]'
+          git push origin HEAD:main
