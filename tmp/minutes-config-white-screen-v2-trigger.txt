@@ -1,1 +1,0 @@
-run-scoped-minutes-config-white-screen-validator
