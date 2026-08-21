@@ -88,7 +88,7 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
     ]),
     ("Diagnostics", [
         Action("diagnostic-full", "Full validation", "Run all production validation checks."),
-        Action("diagnostic-installation-status", "Installation status", "Show installed and not-installed step numbers 01-20 from manager state markers."),
+        Action("diagnostic-installation-status", "Installation status 01-20", "Probe the actual server state for every numbered step and show saved History separately."),
         Action("diagnostic-frontend", "Frontend", "Check the public frontend endpoint."),
         Action("diagnostic-api", "API / Auth / Functions", "Check API health and the password-login function route."),
         Action("diagnostic-docker", "Docker status", "Show the Supabase Compose service state."),
@@ -482,7 +482,7 @@ class SparkUI:
         self.safe_add(win, 0, 1, title, self.color(6) | curses.A_BOLD)
         self.safe_add(win, 0, max(1, w - len(right) - 1), right, self.color(6))
         commit = self.status.get("commit", "n/a")
-        summary = f" commit {commit}  |  install {self.status.get('steps','0/20')}  |  db5432 {self.status.get('db_access','CLOSED')}  |  studio8443 {self.status.get('studio','CLOSED')}  |  nginx {self.status.get('nginx','?')}  |  load {self.status.get('load','?')}  mem {self.status.get('memory','?')}  disk {self.status.get('disk','?')}"
+        summary = f" commit {commit}  |  history {self.status.get('steps','0/20')}  |  db5432 {self.status.get('db_access','CLOSED')}  |  studio8443 {self.status.get('studio','CLOSED')}  |  nginx {self.status.get('nginx','?')}  |  load {self.status.get('load','?')}  mem {self.status.get('memory','?')}  disk {self.status.get('disk','?')}"
         self.safe_add(win, 1, 1, summary, self.color(7))
         self.safe_add(win, 2, 0, "-" * max(0, w - 1), self.color(1))
         win.noutrefresh()
@@ -508,7 +508,7 @@ class SparkUI:
             try:
                 n = int(action.action_id.rsplit("-", 1)[1])
                 completed = {int(x) for x in self.status.get("step_set", "").split(",") if x}
-                return "DONE" if n in completed else "PEND"
+                return "HIST" if n in completed else ""
             except ValueError:
                 return ""
         if action.action_id in ("admin-open", "admin-close"):
@@ -556,7 +556,7 @@ class SparkUI:
             self.safe_add(win, y, 2, f"Risk: {action.risk}", risk_attr | curses.A_BOLD); y += 1
         if y < h - 1:
             self.safe_add(win, y, 1, "-" * max(1, w - 3), self.color(1)); y += 1
-        for label, value in [("Nginx", self.status.get("nginx", "?")), ("Coturn", self.status.get("coturn", "?")), ("Docker", self.status.get("docker", "?")), ("DB 5432", self.status.get("db_access", "?")), ("Studio 8443", self.status.get("studio", "?")), ("Install", self.status.get("steps", "?")), ("Backups", self.status.get("backups", "?")), ("Uptime", self.status.get("uptime", "?"))]:
+        for label, value in [("Nginx", self.status.get("nginx", "?")), ("Coturn", self.status.get("coturn", "?")), ("Docker", self.status.get("docker", "?")), ("DB 5432", self.status.get("db_access", "?")), ("Studio 8443", self.status.get("studio", "?")), ("History", self.status.get("steps", "?")), ("Backups", self.status.get("backups", "?")), ("Uptime", self.status.get("uptime", "?"))]:
             if y >= h - 1:
                 break
             attr = self.color(2) if value in ("active", "OPEN") else self.color(7)
