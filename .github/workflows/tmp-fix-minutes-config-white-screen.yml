@@ -1,15 +1,16 @@
 name: Temporary fix minutes config white screen
 
 on:
-  issues:
-    types: [opened]
+  push:
+    branches: [main]
+    paths:
+      - 'tmp/minutes-config-white-screen-trigger.txt'
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: ${{ github.event.issue.title == 'TEMP: fix minutes config white screen' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -36,8 +37,7 @@ jobs:
           new = "{ id: 'd1', title: 'تصمیم نمونه', description: 'اقدام اجرایی مورد توافق', primaryOwnerName: 'کارشناس الف', responsibleUnitName: 'واحد برنامه‌ریزی', priority: 'normal', startDate: '2026-08-01', dueDate: '2026-09-01', status: 'in_progress', progressPercent: 30, latestUpdate: '', discussionResult: '', resultType: 'resolution', additionalNotes: '', clauses: [] },"
           if text.count(old) != 1:
               raise SystemExit(f'expected exactly one preview decision anchor, found {text.count(old)}')
-          text = text.replace(old, new, 1)
-          path.write_text(text, encoding='utf-8')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
           git diff --check -- "$target"
           test "$(git diff --name-only)" = "$target"
@@ -103,6 +103,7 @@ jobs:
           freshness='${{ steps.freshness.outcome }}'
 
           rm -f .github/workflows/tmp-fix-minutes-config-white-screen.yml
+          rm -f tmp/minutes-config-white-screen-trigger.txt
 
           if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$contract" = success ] && [ "$freshness" = success ]; then
             message='fix: prevent minutes config preview crash [skip ci]'
