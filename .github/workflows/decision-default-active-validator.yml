@@ -1,15 +1,16 @@
 name: decision-default-active-validator
 
 on:
-  issues:
-    types: [opened]
+  push:
+    branches: [main]
+    paths:
+      - '.decision-default-active-trigger'
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: ${{ github.event.issue.title == 'RUN: decision default active filter validation' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -17,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 20
+          fetch-depth: 30
 
       - id: transform
         name: Apply scoped default-filter change
@@ -46,8 +47,10 @@ jobs:
 
           for path in paths:
               text = path.read_text(encoding='utf-8')
-              assert new in text
-              assert "p_status: filters.statusFilter === 'all' ? null : filters.statusFilter" in text
+              if new not in text:
+                  raise SystemExit(f'{path}: active default not applied')
+              if "p_status: filters.statusFilter === 'all' ? null : filters.statusFilter" not in text:
+                  raise SystemExit(f'{path}: existing RPC forwarding contract changed')
 
           print('scoped source contract passed')
           PY
@@ -90,7 +93,7 @@ jobs:
           test "$(cat /tmp/followup-base-sha)" = "$(git rev-parse origin/main:src/components/Minutes/DecisionsFollowupPage.tsx)"
           test "$(cat /tmp/my-base-sha)" = "$(git rev-parse origin/main:src/components/Minutes/MyDecisionsPage.tsx)"
 
-      - name: Commit validated result and remove validator
+      - name: Commit validated result and cleanup
         if: always()
         shell: bash
         run: |
@@ -101,7 +104,9 @@ jobs:
           test_result='${{ steps.test.outcome }}'
           freshness='${{ steps.freshness.outcome }}'
 
+          git show 6f6e59ef83237980f9b710f08f23f25269a2c2db:.github/workflows/ci.yml > .github/workflows/ci.yml
           rm -f .github/workflows/decision-default-active-validator.yml
+          rm -f .decision-default-active-trigger
 
           if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$test_result" = success ] && [ "$freshness" = success ]; then
             message='fix: default decision pages to active status [skip ci]'
