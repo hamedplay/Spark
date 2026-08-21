@@ -9,12 +9,36 @@ test_api() {
 }
 
 test_db_exposure() {
-  ss -lntp | grep ':5432' || true
-  if ss -lntp | grep -Eq '0\.0\.0\.0:(5432|5433|6543|8000)|\[::\]:(5432|5433|6543|8000)'; then
-    echo "ERROR: internal DB/API port is publicly bound"
+  local sockets db_public=0 db_managed=0
+  sockets="$(ss -lntp)" || return 1
+
+  if grep -Eq '0\.0\.0\.0:(5433|6543|8000|9000)\b|\[::\]:(5433|6543|8000|9000)\b' <<<"$sockets"; then
+    echo "ERROR: internal Supabase port 5433/6543/8000/9000 is publicly bound"
+    grep -E ':(5433|6543|8000|9000)\b' <<<"$sockets" || true
     return 1
   fi
-  echo "No public bind for 5432/5433/6543/8000"
+
+  grep -Eq '0\.0\.0\.0:5432\b|\[::\]:5432\b|\*:5432\b' <<<"$sockets" && db_public=1
+  systemctl is-active --quiet spark-db-access.socket 2>/dev/null && db_managed=1
+
+  if (( db_public )); then
+    if (( db_managed )); then
+      echo "Database 5432: MANAGED OPEN (spark-db-access.socket)"
+    else
+      echo "ERROR: TCP/5432 is publicly bound outside Spark managed access"
+      grep -E ':5432\b' <<<"$sockets" || true
+      return 1
+    fi
+  else
+    echo "Database 5432: CLOSED"
+  fi
+
+  if studio_external_is_open 2>/dev/null; then
+    echo "Supabase Studio 8443: MANAGED OPEN"
+  else
+    echo "Supabase Studio 8443: CLOSED"
+  fi
+  echo "Internal Supabase ports 5433/6543/8000/9000: PRIVATE"
 }
 
 test_ssl_dns() {
@@ -42,7 +66,7 @@ test_full_validation() {
   echo "== TURN =="
   ss -lntup | grep -E ':(3478|5349)\b' || return 1
   turnutils_stunclient "$TURN_DOMAIN" -p 3478 || return 1
-  echo "== DB public exposure =="
+  echo "== DB / Studio exposure =="
   test_db_exposure || return 1
 }
 
@@ -85,44 +109,46 @@ test_menu() {
     printf '%sمنوی تست و لاگ%s\n\n' "$C_BOLD" "$C_RESET"
     printf ' 0) بازگشت\n'
     printf ' 1) Validation کامل سامانه\n'
-    printf ' 2) تست Frontend\n'
-    printf ' 3) تست API / Auth / Function route\n'
-    printf ' 4) Docker status\n'
-    printf ' 5) Docker service logs\n'
-    printf ' 6) Nginx status و logs\n'
-    printf ' 7) Scheduler status و logs\n'
-    printf ' 8) TURN status و logs\n'
-    printf ' 9) DB/API public exposure check\n'
-    printf '10) DNS و SSL\n'
-    printf '11) Listening ports + UFW\n'
-    printf '12) Migration dry-run\n\n'
+    printf ' 2) وضعیت مراحل نصب 01 تا 20\n'
+    printf ' 3) تست Frontend\n'
+    printf ' 4) تست API / Auth / Function route\n'
+    printf ' 5) Docker status\n'
+    printf ' 6) Docker service logs\n'
+    printf ' 7) Nginx status و logs\n'
+    printf ' 8) Scheduler status و logs\n'
+    printf ' 9) TURN status و logs\n'
+    printf '10) DB/API public exposure check\n'
+    printf '11) DNS و SSL\n'
+    printf '12) Listening ports + UFW\n'
+    printf '13) Migration dry-run\n\n'
     read -r -p "انتخاب: " choice
     case "$choice" in
       0) return ;;
       1) new_log "test-full"; run_visible "Validation کامل" test_full_validation || true; pause ;;
-      2) new_log "test-frontend"; run_visible "Frontend" test_frontend || true; pause ;;
-      3) new_log "test-api"; run_visible "API" test_api || true; pause ;;
-      4) new_log "test-docker"; run_visible "Docker status" compose ps || true; pause ;;
-      5) docker_logs_menu ;;
-      6)
+      2) new_log "installation-status"; installation_status_report; pause ;;
+      3) new_log "test-frontend"; run_visible "Frontend" test_frontend || true; pause ;;
+      4) new_log "test-api"; run_visible "API" test_api || true; pause ;;
+      5) new_log "test-docker"; run_visible "Docker status" compose ps || true; pause ;;
+      6) docker_logs_menu ;;
+      7)
         new_log "test-nginx"
         run_report "Nginx status" systemctl status nginx --no-pager
         journalctl -u nginx -n 120 --no-pager 2>&1 | tee -a "$CURRENT_LOG" || true
         pause ;;
-      7) new_log "test-schedulers"; run_report "Scheduler status" test_schedulers; scheduler_logs; pause ;;
-      8)
+      8) new_log "test-schedulers"; run_report "Scheduler status" test_schedulers; scheduler_logs; pause ;;
+      9)
         new_log "test-turn"
         run_report "TURN test" test_turn
         journalctl -u coturn -n 120 --no-pager 2>&1 | tee -a "$CURRENT_LOG" || true
         pause ;;
-      9) new_log "test-exposure"; run_visible "Public exposure check" test_db_exposure || true; pause ;;
-      10) new_log "test-dns-ssl"; run_visible "DNS/SSL" test_ssl_dns || true; pause ;;
-      11)
+      10) new_log "test-exposure"; run_visible "Public exposure check" test_db_exposure || true; pause ;;
+      11) new_log "test-dns-ssl"; run_visible "DNS/SSL" test_ssl_dns || true; pause ;;
+      12)
         new_log "test-ports-firewall"
         run_report "Listening ports" ss -lntup
         run_report "UFW" ufw status verbose
         pause ;;
-      12) new_log "test-migration-dryrun"; run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" || true; pause ;;
+      13) new_log "test-migration-dryrun"; run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" || true; pause ;;
       *) fail "گزینه نامعتبر"; sleep 1 ;;
     esac
   done
