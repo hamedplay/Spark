@@ -15,7 +15,6 @@ save_config() {
     printf 'TURN_DOMAIN=%q\n' "${TURN_DOMAIN:-}"
     printf 'TURN_PUBLIC_IP=%q\n' "${TURN_PUBLIC_IP:-}"
     printf 'TURN_PRIVATE_IP=%q\n' "${TURN_PRIVATE_IP:-}"
-    printf 'ADMIN_CIDR=%q\n' "${ADMIN_CIDR:-}"
     printf 'LE_EMAIL=%q\n' "${LE_EMAIL:-}"
     printf 'TURN_MIN_PORT=%q\n' "${TURN_MIN_PORT:-49160}"
     printf 'TURN_MAX_PORT=%q\n' "${TURN_MAX_PORT:-49200}"
@@ -27,6 +26,7 @@ save_config() {
 }
 
 load_config
+[[ -f "$MANAGER_CONF" ]] && save_config
 
 pause() {
   printf '\n'
@@ -126,6 +126,26 @@ step_badge() {
   fi
 }
 
+installation_status_report() {
+  local n installed=() pending=() state
+  printf 'Spark installation steps (manager state markers)\n'
+  printf '%s\n' '------------------------------------------------------------'
+  for n in $(seq 1 20); do
+    if [[ -f "${STEP_DIR}/${n}.ok" ]]; then
+      state="INSTALLED"
+      installed+=("$(printf '%02d' "$n")")
+    else
+      state="NOT INSTALLED"
+      pending+=("$(printf '%02d' "$n")")
+    fi
+    printf '%02d  %s\n' "$n" "$state"
+  done
+  printf '%s\n' '------------------------------------------------------------'
+  printf 'Installed     : %s\n' "${installed[*]:-none}"
+  printf 'Not installed : %s\n' "${pending[*]:-none}"
+  printf 'Total         : %d/20\n' "${#installed[@]}"
+}
+
 confirm_word() {
   local message="$1" word="$2" answer
   printf '%s\n' "$message"
@@ -150,17 +170,6 @@ import ipaddress,sys
 try:
     ip=ipaddress.ip_address(sys.argv[1])
     raise SystemExit(0 if ip.version == 4 else 1)
-except ValueError:
-    raise SystemExit(1)
-PY
-}
-
-valid_cidr() {
-  python3 - "$1" <<'PY'
-import ipaddress,sys
-try:
-    ipaddress.ip_network(sys.argv[1], strict=False)
-    raise SystemExit(0)
 except ValueError:
     raise SystemExit(1)
 PY
@@ -225,11 +234,6 @@ configure_values_interactive() {
     prompt_default v "Private IPv4 سرور (اگر NAT ندارید همان Public IP)" "${TURN_PRIVATE_IP:-$TURN_PUBLIC_IP}"
     valid_ipv4 "$v" && { TURN_PRIVATE_IP="$v"; break; }
     fail "IPv4 معتبر نیست."
-  done
-  while true; do
-    prompt_default v "CIDR مدیریتی مجاز برای SSH" "${ADMIN_CIDR:-}"
-    valid_cidr "$v" && { ADMIN_CIDR="$v"; break; }
-    fail "CIDR معتبر نیست؛ مثال: 203.0.113.10/32"
   done
   while true; do
     prompt_default v "Email برای Let's Encrypt" "${LE_EMAIL:-}"
@@ -318,7 +322,7 @@ env_has_nonempty() {
 require_manager_values() {
   local missing=()
   local key
-  for key in APP_DOMAIN WWW_DOMAIN API_DOMAIN TURN_DOMAIN TURN_PUBLIC_IP TURN_PRIVATE_IP ADMIN_CIDR LE_EMAIL TURN_MIN_PORT TURN_MAX_PORT; do
+  for key in APP_DOMAIN WWW_DOMAIN API_DOMAIN TURN_DOMAIN TURN_PUBLIC_IP TURN_PRIVATE_IP LE_EMAIL TURN_MIN_PORT TURN_MAX_PORT; do
     [[ -n "${!key:-}" ]] || missing+=("$key")
   done
   if ((${#missing[@]})); then
