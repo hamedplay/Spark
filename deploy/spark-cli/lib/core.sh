@@ -126,24 +126,121 @@ step_badge() {
   fi
 }
 
+installation_step_name() {
+  case "$1" in
+    1) printf 'DNS' ;;
+    2) printf 'Configuration' ;;
+    3) printf 'Base packages / Docker / Node' ;;
+    4) printf 'Spark repository' ;;
+    5) printf 'Supabase source pin' ;;
+    6) printf 'Supabase secrets' ;;
+    7) printf 'Supabase environment' ;;
+    8) printf 'Edge Functions sync' ;;
+    9) printf 'Provider / worker environment' ;;
+    10) printf 'Docker Compose' ;;
+    11) printf 'Supabase runtime' ;;
+    12) printf 'Database migrations' ;;
+    13) printf 'Frontend deployment' ;;
+    14) printf 'Nginx bootstrap / web server' ;;
+    15) printf 'TLS certificates' ;;
+    16) printf 'Production Nginx' ;;
+    17) printf 'Schedulers' ;;
+    18) printf 'TURN / Coturn' ;;
+    19) printf 'Certbot renewal' ;;
+    20) printf 'Firewall / UFW' ;;
+    *) return 1 ;;
+  esac
+}
+
+installation_migrations_current() {
+  local local_versions remote_versions pending
+  [[ -d "${SPARK_ROOT}/supabase/migrations" ]] || return 1
+  [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || return 1
+
+  local_versions="$(find "${SPARK_ROOT}/supabase/migrations" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' \
+    | sed -nE 's/^([0-9]{14})_.*/\1/p' | sort -u)"
+  [[ -n "$local_versions" ]] || return 1
+
+  remote_versions="$(compose exec -T db psql -U postgres -d postgres -Atqc \
+    'select version from supabase_migrations.schema_migrations order by version;' 2>/dev/null \
+    | tr -d '\r' | sort -u)" || return 1
+
+  pending="$(comm -23 \
+    <(printf '%s\n' "$local_versions") \
+    <(printf '%s\n' "$remote_versions"))"
+  [[ -z "$pending" ]]
+}
+
+installation_nginx_present() {
+  command -v nginx >/dev/null 2>&1 || return 1
+  nginx -t >/dev/null 2>&1 || return 1
+  systemctl is-active --quiet nginx || return 1
+  [[ -L /etc/nginx/sites-enabled/spark || -L /etc/nginx/sites-enabled/spark-bootstrap ]]
+}
+
+installation_step_probe() {
+  case "$1" in
+    1) test_dns ;;
+    2) test_values ;;
+    3) test_base_packages ;;
+    4) test_spark_repo ;;
+    5) test_supabase_source ;;
+    6) test_supabase_secrets ;;
+    7) test_supabase_env ;;
+    8) test_function_sync ;;
+    9) test_provider_env ;;
+    10) test_compose_security ;;
+    11) test_supabase_health ;;
+    12) installation_migrations_current ;;
+    13) test_frontend_deploy ;;
+    14) installation_nginx_present ;;
+    15) test_certificates ;;
+    16) test_nginx_production ;;
+    17) test_schedulers ;;
+    18) test_turn ;;
+    19) test_certbot_hook ;;
+    20) test_firewall ;;
+    *) return 1 ;;
+  esac
+}
+
 installation_status_report() {
-  local n installed=() pending=() state
-  printf 'Spark installation steps (manager state markers)\n'
-  printf '%s\n' '------------------------------------------------------------'
+  local n name actual history formatted
+  local installed=() missing=()
+
+  [[ -n "${CURRENT_LOG:-}" ]] || new_log "installation-status"
+
+  printf 'Spark installation status — actual server probe\n'
+  printf '%s\n' '----------------------------------------------------------------------------'
+  printf '%-4s %-15s %-9s %s\n' 'No.' 'Actual' 'History' 'Component'
+  printf '%s\n' '----------------------------------------------------------------------------'
+
   for n in $(seq 1 20); do
-    if [[ -f "${STEP_DIR}/${n}.ok" ]]; then
-      state="INSTALLED"
-      installed+=("$(printf '%02d' "$n")")
+    printf -v formatted '%02d' "$n"
+    name="$(installation_step_name "$n")"
+
+    if installation_step_probe "$n" >/dev/null 2>&1; then
+      actual='INSTALLED'
+      installed+=("$formatted")
     else
-      state="NOT INSTALLED"
-      pending+=("$(printf '%02d' "$n")")
+      actual='NOT INSTALLED'
+      missing+=("$formatted")
     fi
-    printf '%02d  %s\n' "$n" "$state"
+
+    if [[ -f "${STEP_DIR}/${n}.ok" ]]; then
+      history='DONE'
+    else
+      history='-'
+    fi
+
+    printf '%-4s %-15s %-9s %s\n' "$formatted" "$actual" "$history" "$name"
   done
-  printf '%s\n' '------------------------------------------------------------'
+
+  printf '%s\n' '----------------------------------------------------------------------------'
   printf 'Installed     : %s\n' "${installed[*]:-none}"
-  printf 'Not installed : %s\n' "${pending[*]:-none}"
+  printf 'Not installed : %s\n' "${missing[*]:-none}"
   printf 'Total         : %d/20\n' "${#installed[@]}"
+  printf '\nActual = وضعیت واقعی همین سرور. History = این مرحله قبلاً توسط Manager با موفقیت ثبت شده است.\n'
 }
 
 confirm_word() {
