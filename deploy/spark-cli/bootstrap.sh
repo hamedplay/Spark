@@ -5,7 +5,10 @@ IFS=$'\n\t'
 REPO_API="https://api.github.com/repos/hamedplay/Spark"
 TARGET="/usr/local/lib/spark-manager"
 CLI_PATH="/usr/local/bin/spark"
+MIGRATE_TARGET="/usr/local/lib/spark-migrate"
+MIGRATE_PATH="/usr/local/bin/spark-migrate"
 EXPECTED_VERSION="2.1.0+20260821.1"
+EXPECTED_MIGRATE_VERSION="1.0.0+20260822.1"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
@@ -52,6 +55,7 @@ mkdir -p "$tmp/lib"
 files=(
   spark
   spark-ui.py
+  spark-migrate
   lib/core.sh
   lib/install-base.sh
   lib/install-platform-a.sh
@@ -69,6 +73,7 @@ for file in "${files[@]}"; do
 done
 
 bash -n "$tmp/spark"
+bash -n "$tmp/spark-migrate"
 for file in "$tmp"/lib/*.sh; do bash -n "$file"; done
 python3 - "$tmp/spark-ui.py" <<'PY'
 from pathlib import Path
@@ -84,6 +89,10 @@ grep -q 'SPARK_MANAGER_VERSION="2.1.0+20260821.1"' "$tmp/spark" || {
 }
 grep -q 'SPARK_UI_VERSION = "2.1.0+20260821.1"' "$tmp/spark-ui.py" || {
   echo "Spark UI version validation failed." >&2
+  exit 1
+}
+grep -q 'SPARK_MIGRATE_VERSION="1.0.0+20260822.1"' "$tmp/spark-migrate" || {
+  echo "Spark migration companion version validation failed." >&2
   exit 1
 }
 grep -q 'cleanup_database_data' "$tmp/lib/cleanup.sh" || {
@@ -104,10 +113,13 @@ if grep -Eq 'terminal-menus|mainmenu\(|TUI_VENDOR' "$tmp/spark-ui.py"; then
 fi
 
 stage="$(mktemp -d /usr/local/lib/spark-manager.new.XXXXXX)"
+migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
 backup="/usr/local/lib/spark-manager.previous.$$"
+migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
 install -d -m 0755 "$stage/lib"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0644 "$tmp/spark-ui.py" "$stage/spark-ui.py"
+install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
 done
@@ -115,38 +127,63 @@ done
 if [[ -d "$TARGET" ]]; then
   mv "$TARGET" "$backup"
 fi
-if ! mv "$stage" "$TARGET"; then
-  [[ -d "$backup" ]] && mv "$backup" "$TARGET"
-  rm -rf "$stage"
-  exit 1
+if [[ -d "$MIGRATE_TARGET" ]]; then
+  mv "$MIGRATE_TARGET" "$migrate_backup"
 fi
-ln -sfn "$TARGET/spark" "$CLI_PATH"
 
-rollback_manager() {
-  rm -f "$CLI_PATH"
-  rm -rf "$TARGET"
+rollback_install() {
+  rm -f "$CLI_PATH" "$MIGRATE_PATH"
+  rm -rf "$TARGET" "$MIGRATE_TARGET"
   if [[ -d "$backup" ]]; then
     mv "$backup" "$TARGET"
     ln -sfn "$TARGET/spark" "$CLI_PATH"
   fi
+  if [[ -d "$migrate_backup" ]]; then
+    mv "$migrate_backup" "$MIGRATE_TARGET"
+    ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
+  fi
 }
+
+if ! mv "$stage" "$TARGET"; then
+  rollback_install
+  rm -rf "$stage" "$migrate_stage"
+  exit 1
+fi
+if ! mv "$migrate_stage" "$MIGRATE_TARGET"; then
+  rollback_install
+  rm -rf "$migrate_stage"
+  exit 1
+fi
+ln -sfn "$TARGET/spark" "$CLI_PATH"
+ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
 
 if ! version_output="$($CLI_PATH --version 2>/dev/null)"; then
   echo "Spark Server Manager version smoke test failed; rolling back." >&2
-  rollback_manager
+  rollback_install
   exit 1
 fi
 if [[ "$version_output" != "Spark Server Manager ${EXPECTED_VERSION}" ]]; then
   echo "Unexpected Spark Server Manager version: ${version_output}" >&2
-  rollback_manager
+  rollback_install
+  exit 1
+fi
+if ! migrate_version_output="$($MIGRATE_PATH --version 2>/dev/null)"; then
+  echo "Spark Cloud migration companion smoke test failed; rolling back." >&2
+  rollback_install
+  exit 1
+fi
+if [[ "$migrate_version_output" != "Spark Supabase Cloud Migration ${EXPECTED_MIGRATE_VERSION}" ]]; then
+  echo "Unexpected Spark migration companion version: ${migrate_version_output}" >&2
+  rollback_install
   exit 1
 fi
 if ! "$CLI_PATH" --ui-self-test >/dev/null 2>&1; then
   echo "Spark curses UI smoke test failed; rolling back." >&2
-  rollback_manager
+  rollback_install
   exit 1
 fi
 
-rm -rf "$backup"
+rm -rf "$backup" "$migrate_backup"
 rm -rf /usr/local/share/spark-manager 2>/dev/null || true
 printf 'Spark Server Manager %s installed from %s. Run: spark\n' "$EXPECTED_VERSION" "${MAIN_SHA:0:12}"
+printf 'Spark Supabase Cloud Migration %s installed. Run: spark-migrate\n' "$EXPECTED_MIGRATE_VERSION"
