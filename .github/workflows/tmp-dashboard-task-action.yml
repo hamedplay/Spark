@@ -1,0 +1,162 @@
+name: Temporary dashboard task action
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ github.event.issue.title == 'TEMP: dashboard task action workspace' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 20
+
+      - id: transform
+        name: Connect dashboard tasks to canonical action workspace
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD:src/components/ManagementDashboardPage.tsx)" = "639cc051523a377bd7c4f59b12896e8b661c0133"
+          test "$(git rev-parse HEAD:src/components/TasksPage.tsx)" = "b3cb966b3114128a32f44da8423b97a23bb7d7a9"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          dashboard_path = Path('src/components/ManagementDashboardPage.tsx')
+          dashboard = dashboard_path.read_text(encoding='utf-8')
+
+          old_open = """  const openTask = useCallback((taskId: string) => {\n    navigateWithParams('tasks', { task: taskId });\n  }, [navigateWithParams]);"""
+          new_open = """  const openTask = useCallback((taskId: string) => {\n    navigateWithParams('tasks', { task: taskId, taskAction: 'open' });\n  }, [navigateWithParams]);"""
+          if dashboard.count(old_open) != 1:
+              raise SystemExit(f'openTask anchor count={dashboard.count(old_open)}')
+          dashboard = dashboard.replace(old_open, new_open, 1)
+
+          old_panel = '<Panel title="تسک‌های مهم" subtitle="عقب‌مانده‌ها و اولویت‌های بالاتر در صدر فهرست" className="xl:col-span-3">'
+          new_panel = '<Panel title="تسک‌های مهم" subtitle="عقب‌مانده‌ها و اولویت‌های بالا — برای اقدام روی تسک کلیک کنید" className="xl:col-span-3">'
+          if dashboard.count(old_panel) != 1:
+              raise SystemExit(f'important tasks panel anchor count={dashboard.count(old_panel)}')
+          dashboard = dashboard.replace(old_panel, new_panel, 1)
+
+          old_meta = """                      <div className=\"mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-600\">\n                        <span className=\"truncate\">{task.assignee || 'بدون مسئول'}</span>\n                        <span className=\"flex-shrink-0\">{formatDate(task.due_local_date)}</span>\n                      </div>"""
+          new_meta = """                      <div className=\"mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-600\">\n                        <span className=\"truncate\">{task.assignee || 'بدون مسئول'}</span>\n                        <span className=\"flex flex-shrink-0 items-center gap-2\">\n                          <span className=\"rounded-md bg-violet-500/10 px-2 py-0.5 font-semibold text-violet-300\">اقدام</span>\n                          <span>{formatDate(task.due_local_date)}</span>\n                        </span>\n                      </div>"""
+          if dashboard.count(old_meta) != 1:
+              raise SystemExit(f'important task meta anchor count={dashboard.count(old_meta)}')
+          dashboard = dashboard.replace(old_meta, new_meta, 1)
+          dashboard_path.write_text(dashboard, encoding='utf-8')
+
+          tasks_path = Path('src/components/TasksPage.tsx')
+          tasks = tasks_path.read_text(encoding='utf-8')
+
+          focus_line = "  const [focusTaskId, setFocusTaskId] = useState<string | null>(() => new URL(window.location.href).searchParams.get('task'));"
+          focus_insert = focus_line + "\n  const [openFocusedTaskAction, setOpenFocusedTaskAction] = useState(() => new URL(window.location.href).searchParams.get('taskAction') === 'open');"
+          if tasks.count(focus_line) != 1:
+              raise SystemExit(f'focus task state anchor count={tasks.count(focus_line)}')
+          tasks = tasks.replace(focus_line, focus_insert, 1)
+
+          old_cleanup = """  useEffect(() => {\n    if (!focusTaskId && !dashboardTaskView) return;\n    setTaskTab('all');\n    setSearchTerm('');\n    setStatusFilter('all');\n    setPersonalProjectFilter('all');\n    const url = new URL(window.location.href);\n    url.searchParams.delete('task');\n    url.searchParams.delete('taskView');\n    window.history.replaceState({}, '', url.toString());\n  }, []);"""
+          new_cleanup = """  useEffect(() => {\n    if (!focusTaskId && !dashboardTaskView && !openFocusedTaskAction) return;\n    setTaskTab('all');\n    setSearchTerm('');\n    setStatusFilter('all');\n    setPersonalProjectFilter('all');\n    const url = new URL(window.location.href);\n    url.searchParams.delete('task');\n    url.searchParams.delete('taskView');\n    url.searchParams.delete('taskAction');\n    window.history.replaceState({}, '', url.toString());\n  }, []);\n\n  useEffect(() => {\n    if (!openFocusedTaskAction || !focusTaskId || loading) return;\n    const focusedTask = tasks.find(task => task.id === focusTaskId);\n    if (!focusedTask) {\n      setOpenFocusedTaskAction(false);\n      return;\n    }\n    setDetailTask(focusedTask);\n    setOpenFocusedTaskAction(false);\n  }, [focusTaskId, loading, openFocusedTaskAction, tasks]);"""
+          if tasks.count(old_cleanup) != 1:
+              raise SystemExit(f'external filter cleanup anchor count={tasks.count(old_cleanup)}')
+          tasks = tasks.replace(old_cleanup, new_cleanup, 1)
+          tasks_path.write_text(tasks, encoding='utf-8')
+          PY
+
+          git diff --check -- src/components/ManagementDashboardPage.tsx src/components/TasksPage.tsx
+          actual="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' src/components/ManagementDashboardPage.tsx src/components/TasksPage.tsx | sort)"
+          test "$actual" = "$expected"
+
+      - name: Setup Node 24.18.1
+        if: steps.transform.outcome == 'success'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - id: install
+        name: Install dependencies
+        if: steps.transform.outcome == 'success'
+        continue-on-error: true
+        run: npm ci
+
+      - id: build
+        name: Build
+        if: steps.transform.outcome == 'success' && steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+
+      - id: test
+        name: Test
+        if: steps.transform.outcome == 'success' && steps.install.outcome == 'success' && steps.build.outcome == 'success'
+        continue-on-error: true
+        run: npm test
+
+      - id: contract
+        name: Validate dashboard action contract
+        if: steps.transform.outcome == 'success' && steps.install.outcome == 'success' && steps.build.outcome == 'success' && steps.test.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          dashboard = Path('src/components/ManagementDashboardPage.tsx').read_text(encoding='utf-8')
+          tasks = Path('src/components/TasksPage.tsx').read_text(encoding='utf-8')
+          assert "{ task: taskId, taskAction: 'open' }" in dashboard
+          assert 'برای اقدام روی تسک کلیک کنید' in dashboard
+          assert '>اقدام</span>' in dashboard
+          assert "get('taskAction') === 'open'" in tasks
+          assert "setDetailTask(focusedTask);" in tasks
+          assert "url.searchParams.delete('taskAction');" in tasks
+          print('dashboard task action contract passed')
+          PY
+          git diff --check -- src/components/ManagementDashboardPage.tsx src/components/TasksPage.tsx
+
+      - id: freshness
+        name: Confirm source files are still current
+        if: steps.contract.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD:src/components/ManagementDashboardPage.tsx)" = "$(git rev-parse origin/main:src/components/ManagementDashboardPage.tsx)"
+          test "$(git rev-parse HEAD:src/components/TasksPage.tsx)" = "$(git rev-parse origin/main:src/components/TasksPage.tsx)"
+
+      - name: Commit validated result and remove temporary workflow
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          transform='${{ steps.transform.outcome }}'
+          install='${{ steps.install.outcome }}'
+          build='${{ steps.build.outcome }}'
+          test_result='${{ steps.test.outcome }}'
+          contract='${{ steps.contract.outcome }}'
+          freshness='${{ steps.freshness.outcome }}'
+
+          rm -f .github/workflows/tmp-dashboard-task-action.yml
+
+          if [ "$transform" = success ] && [ "$install" = success ] && [ "$build" = success ] && [ "$test_result" = success ] && [ "$contract" = success ] && [ "$freshness" = success ]; then
+            message='fix: open task actions from management dashboard [skip ci]'
+          else
+            git restore --source=HEAD -- src/components/ManagementDashboardPage.tsx src/components/TasksPage.tsx
+            message="chore: dashboard task action validation failed transform-$transform install-$install build-$build test-$test_result contract-$contract freshness-$freshness [skip ci]"
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m "$message"
+          git pull --rebase origin main
+          git push origin HEAD:main
