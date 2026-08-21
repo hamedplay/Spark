@@ -17,14 +17,16 @@ curl -fsSL https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-c
 spark
 ```
 
-برای دیدن اینکه کدام مرحله‌های نصب ثبت شده‌اند و کدام‌ها هنوز نصب نشده‌اند:
+برای دیدن وضعیت واقعی تمام مراحل نصب `01` تا `20` بدون اجرای مجدد نصب:
 
 ```bash
 spark --steps
 ```
 
-این گزارش از همان markerهای رسمی Spark Manager در `/var/lib/spark-manager/steps/`
-استفاده می‌کند که تیک‌های مراحل `01` تا `20` در Dashboard نیز از آن‌ها خوانده می‌شوند.
+این گزارش برای هر شماره دو ستون جدا دارد: `Actual` با تست واقعی همان بخش روی سرور،
+و `History` که فقط نشان می‌دهد آن مرحله قبلاً توسط Spark Manager با موفقیت ثبت شده است.
+بنابراین Down شدن سرویس، حذف شدن فایل/تنظیم، عقب‌ماندن migration یا غیرفعال شدن UFW
+با تیک قدیمی اشتباه گرفته نمی‌شود.
 
 ## معماری رابط v2
 
@@ -79,7 +81,7 @@ TUI قبلی وجود ندارد.
 Dashboard همه قابلیت‌های Manager قبلی را بدون منوهای nested در دسترس قرار می‌دهد:
 
 - نصب مرحله‌ای 1 تا 20 و Run All.
-- گزارش `Installation status` برای دیدن مرحله‌های Installed / Not Installed.
+- گزارش `Installation status` با Actual Probe برای دیدن شماره‌های Installed / Not Installed و History جداگانه.
 - Full validation و تست‌های Frontend/API/Docker/Nginx/Scheduler/TURN/Exposure/DNS/SSL.
 - Docker service log selector.
 - Update کنترل‌شده Spark.
