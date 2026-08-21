@@ -40,19 +40,237 @@ npm_menu() {
   done
 }
 
-open_supabase_admin_access() {
-  title
-  new_log "supabase-admin-open"
+valid_ipv4_cidr() {
+  python3 - "$1" <<'PY'
+import ipaddress,sys
+try:
+    network=ipaddress.ip_network(sys.argv[1], strict=False)
+    raise SystemExit(0 if network.version == 4 else 1)
+except ValueError:
+    raise SystemExit(1)
+PY
+}
+
+external_access_requirements() {
   require_manager_values || return 1
-  require_file "/etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem" || return 1
-  if [[ ! -e /etc/nginx/sites-enabled/spark ]]; then
-    fail "Nginx Production فعال نیست؛ ابتدا مرحله 16 نصب را اجرا کنید."
+  require_file "${SUPABASE_ROOT}/.env" || return 1
+  if ! ufw status 2>/dev/null | grep -q '^Status: active'; then
+    fail "UFW فعال نیست؛ ابتدا مرحله 20 (Firewall) را اجرا کنید تا دسترسی خارجی بدون محدودیت ناخواسته باز نشود."
     return 1
   fi
-  if ! confirm_word "برای حفظ معماری، Docker port 8000 عمومی نمی‌شود. یک Gateway مدیریتی TLS روی 8443 فقط برای ${ADMIN_CIDR} ساخته می‌شود." "OPEN"; then
+}
+
+prompt_external_access_cidr() {
+  local var_name="$1" label="$2" value
+  while true; do
+    prompt_default value "$label" "${ADMIN_CIDR:-}"
+    if valid_ipv4_cidr "$value"; then
+      printf -v "$var_name" '%s' "$value"
+      return 0
+    fi
+    fail "IPv4 CIDR معتبر نیست؛ مثال: 203.0.113.10/32"
+  done
+}
+
+ufw_remove_temporary_rule() {
+  local cidr="$1" port="$2"
+  [[ -n "$cidr" ]] || return 0
+  if ufw status 2>/dev/null | grep -q '^Status: active'; then
+    set +e
+    ufw --force delete allow from "$cidr" to any port "$port" proto tcp >>"$CURRENT_LOG" 2>&1
+    set -e
+  fi
+}
+
+find_systemd_socket_proxyd() {
+  local path
+  path="$(command -v systemd-socket-proxyd 2>/dev/null || true)"
+  if [[ -n "$path" && -x "$path" ]]; then
+    printf '%s\n' "$path"
+    return 0
+  fi
+  for path in /usr/lib/systemd/systemd-socket-proxyd /lib/systemd/systemd-socket-proxyd; do
+    if [[ -x "$path" ]]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done
+  return 1
+}
+
+database_external_is_open() {
+  systemctl is-active --quiet spark-db-access.socket 2>/dev/null
+}
+
+studio_external_is_open() {
+  [[ -L /etc/nginx/sites-enabled/spark-supabase-admin ]] \
+    && ss -lnt 2>/dev/null | grep -q ':8443 '
+}
+
+show_operator_credentials() {
+  local db_password dashboard_user dashboard_password db_state studio_state public_ip
+  require_manager_values || return 1
+  require_file "${SUPABASE_ROOT}/.env" || return 1
+
+  db_password="$(env_get "${SUPABASE_ROOT}/.env" POSTGRES_PASSWORD)"
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  public_ip="${TURN_PUBLIC_IP:-}"
+
+  [[ -n "$db_password" ]] || { fail "POSTGRES_PASSWORD در Supabase .env پیدا نشد."; return 1; }
+  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD در Supabase .env پیدا نشد."; return 1; }
+
+  db_state="CLOSED"
+  database_external_is_open && db_state="OPEN"
+  studio_state="CLOSED"
+  studio_external_is_open && studio_state="OPEN"
+
+  printf '\n%s%sCredentials مورد استفاده مدیر سیستم%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+  printf '%s\n' '────────────────────────────────────────────────────────────'
+  printf '%s\n' 'PostgreSQL'
+  printf '  Database : postgres\n'
+  printf '  Username : postgres\n'
+  printf '  Password : %s\n' "$db_password"
+  printf '  Local    : 127.0.0.1:5433\n'
+  if [[ -n "$public_ip" ]]; then
+    printf '  External : %s:5432  [%s]\n' "$public_ip" "$db_state"
+  else
+    printf '  External : <server-ip>:5432  [%s]\n' "$db_state"
+  fi
+
+  printf '\n%s\n' 'Supabase Studio'
+  printf '  Username : %s\n' "$dashboard_user"
+  printf '  Password : %s\n' "$dashboard_password"
+  printf '  URL      : https://%s:8443  [%s]\n' "$API_DOMAIN" "$studio_state"
+  printf '%s\n' '────────────────────────────────────────────────────────────'
+  warn "فقط Credentialهای انسانی نمایش داده شدند؛ JWT_SECRET و SERVICE_ROLE_KEY و Secretهای داخلی عمداً نمایش داده نمی‌شوند."
+  info "این مقادیر در log فایل Spark Manager نوشته نمی‌شوند."
+}
+
+write_database_access_units() {
+  local proxyd="$1"
+  cat >/etc/systemd/system/spark-db-access.socket <<'EOF'
+[Unit]
+Description=Spark temporary external PostgreSQL access socket
+
+[Socket]
+ListenStream=0.0.0.0:5432
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target
+EOF
+
+  cat >/etc/systemd/system/spark-db-access.service <<EOF
+[Unit]
+Description=Spark PostgreSQL TCP proxy to local Supavisor
+Requires=docker.service spark-db-access.socket
+After=docker.service spark-db-access.socket
+
+[Service]
+ExecStart=${proxyd} 127.0.0.1:5433
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+EOF
+}
+
+cleanup_database_access_runtime() {
+  local cidr="${1:-}"
+  set +e
+  systemctl disable --now spark-db-access.socket >>"$CURRENT_LOG" 2>&1
+  systemctl stop spark-db-access.service >>"$CURRENT_LOG" 2>&1
+  rm -f /etc/systemd/system/spark-db-access.socket /etc/systemd/system/spark-db-access.service
+  systemctl daemon-reload >>"$CURRENT_LOG" 2>&1
+  systemctl reset-failed spark-db-access.service spark-db-access.socket >>"$CURRENT_LOG" 2>&1
+  set -e
+  ufw_remove_temporary_rule "$cidr" 5432
+}
+
+open_database_external_access() {
+  local access_cidr old_cidr state_file proxyd
+  external_access_requirements || return 1
+  state_file="${STATE_DIR}/database-access.cidr"
+  old_cidr=""
+  [[ -f "$state_file" ]] && old_cidr="$(tr -d '[:space:]' <"$state_file")"
+
+  if ! timeout 3 bash -c '</dev/tcp/127.0.0.1/5433' >/dev/null 2>&1; then
+    fail "Supavisor محلی روی 127.0.0.1:5433 در دسترس نیست؛ ابتدا وضعیت Supabase را بررسی کنید."
+    return 1
+  fi
+  proxyd="$(find_systemd_socket_proxyd)" || {
+    fail "systemd-socket-proxyd روی این Ubuntu پیدا نشد."
+    return 1
+  }
+
+  prompt_external_access_cidr access_cidr "IPv4 CIDR مجاز برای Database روی TCP/5432" || return 1
+  if ! confirm_word "Database روی ${TURN_PUBLIC_IP:-<server-ip>}:5432 فقط برای ${access_cidr} باز می‌شود. مسیر داخلی 127.0.0.1:5433 بدون تغییر می‌ماند." "OPEN"; then
     warn "لغو شد."
     return 1
   fi
+
+  if database_external_is_open; then
+    systemctl disable --now spark-db-access.socket >>"$CURRENT_LOG" 2>&1 || true
+    systemctl stop spark-db-access.service >>"$CURRENT_LOG" 2>&1 || true
+  fi
+
+  if [[ -n "$old_cidr" && "$old_cidr" != "$access_cidr" ]]; then
+    ufw_remove_temporary_rule "$old_cidr" 5432
+  fi
+  if ! run_logged "UFW allow TCP/5432 from selected CIDR" ufw allow from "$access_cidr" to any port 5432 proto tcp; then
+    [[ -n "$old_cidr" && "$old_cidr" != "$access_cidr" ]] \
+      && ufw allow from "$old_cidr" to any port 5432 proto tcp >>"$CURRENT_LOG" 2>&1 || true
+    return 1
+  fi
+
+  write_database_access_units "$proxyd"
+  if ! run_logged "Reload systemd" systemctl daemon-reload; then
+    cleanup_database_access_runtime "$access_cidr"
+    return 1
+  fi
+  if ! run_logged "Open PostgreSQL TCP/5432" systemctl enable --now spark-db-access.socket; then
+    cleanup_database_access_runtime "$access_cidr"
+    return 1
+  fi
+
+  if ! database_external_is_open || ! ss -lnt 2>/dev/null | grep -q ':5432 '; then
+    fail "Listener خارجی TCP/5432 ایجاد نشد؛ تغییرات rollback می‌شوند."
+    cleanup_database_access_runtime "$access_cidr"
+    return 1
+  fi
+  if ! timeout 4 bash -c '</dev/tcp/127.0.0.1/5432' >/dev/null 2>&1; then
+    fail "TCP/5432 باز شد ولی Proxy تا Supavisor پاسخ نداد؛ تغییرات rollback می‌شوند."
+    cleanup_database_access_runtime "$access_cidr"
+    return 1
+  fi
+
+  printf '%s\n' "$access_cidr" >"$state_file"
+  chmod 600 "$state_file"
+  ok "Database access باز شد: ${TURN_PUBLIC_IP:-<server-ip>}:5432 — فقط ${access_cidr}"
+  info "Database=postgres  Username=postgres؛ رمز را از گزینه نمایش Credentialها ببینید."
+}
+
+close_database_external_access() {
+  local state_file access_cidr
+  state_file="${STATE_DIR}/database-access.cidr"
+  access_cidr=""
+  [[ -f "$state_file" ]] && access_cidr="$(tr -d '[:space:]' <"$state_file")"
+
+  cleanup_database_access_runtime "$access_cidr"
+  rm -f "$state_file"
+
+  if ss -lnt 2>/dev/null | grep -q ':5432 '; then
+    fail "هنوز listener دیگری روی TCP/5432 وجود دارد؛ برای جلوگیری از گزارش اشتباه، وضعیت را بررسی کنید."
+    ss -lntp | grep ':5432' | tee -a "$CURRENT_LOG" || true
+    return 1
+  fi
+  ok "دسترسی خارجی Database بسته شد. Supavisor داخلی 127.0.0.1:5433 بدون تغییر باقی ماند."
+}
+
+write_supabase_studio_gateway() {
+  local access_cidr="$1"
   cat >/etc/nginx/sites-available/spark-supabase-admin <<EOF
 server {
     listen 8443 ssl;
@@ -62,7 +280,8 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/${API_DOMAIN}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
 
-    allow ${ADMIN_CIDR};
+    allow 127.0.0.1;
+    allow ${access_cidr};
     deny all;
 
     client_max_body_size 50m;
@@ -73,48 +292,189 @@ server {
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$spark_connection_upgrade;
         proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_read_timeout 3600s;
     }
 }
 EOF
-  ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
-  if ! run_logged "Nginx config test" nginx -t; then
-    rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
-    return 1
-  fi
-  if ufw status | grep -q "Status: active"; then
-    run_logged "UFW allow 8443 فقط از ADMIN_CIDR" ufw allow from "$ADMIN_CIDR" to any port 8443 proto tcp || return 1
-  fi
-  run_logged "Reload Nginx" systemctl reload nginx || return 1
-  if ss -lnt | grep -q ':8443 '; then
-    ok "دسترسی مدیریتی: https://${API_DOMAIN}:8443 — فقط ${ADMIN_CIDR}"
-    ok "Kong همچنان فقط روی 127.0.0.1:8000 bind است."
-  else
-    fail "Port 8443 listen نشد."
-    return 1
-  fi
 }
 
-close_supabase_admin_access() {
-  title
-  new_log "supabase-admin-close"
-  require_manager_values || return 1
-  rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
-  if ufw status | grep -q "Status: active"; then
-    set +e
-    ufw --force delete allow from "$ADMIN_CIDR" to any port 8443 proto tcp >>"$CURRENT_LOG" 2>&1
-    set -e
+open_supabase_studio_access() {
+  local access_cidr old_cidr state_file dashboard_user dashboard_password backup had_previous=0
+  external_access_requirements || return 1
+  require_file "/etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem" || return 1
+  require_file "/etc/letsencrypt/live/${API_DOMAIN}/privkey.pem" || return 1
+  if [[ ! -e /etc/nginx/sites-enabled/spark ]]; then
+    fail "Nginx Production فعال نیست؛ ابتدا مرحله 16 نصب را اجرا کنید."
+    return 1
   fi
+
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD موجود نیست."; return 1; }
+
+  state_file="${STATE_DIR}/supabase-studio-access.cidr"
+  old_cidr=""
+  [[ -f "$state_file" ]] && old_cidr="$(tr -d '[:space:]' <"$state_file")"
+  prompt_external_access_cidr access_cidr "IPv4 CIDR مجاز برای Supabase Studio روی HTTPS/8443" || return 1
+
+  if ! confirm_word "Supabase Studio روی https://${API_DOMAIN}:8443 فقط برای ${access_cidr} باز می‌شود و قبل از موفق اعلام‌شدن واقعاً تست خواهد شد." "OPEN"; then
+    warn "لغو شد."
+    return 1
+  fi
+
+  backup="$(mktemp)"
+  if [[ -f /etc/nginx/sites-available/spark-supabase-admin ]]; then
+    cp -a /etc/nginx/sites-available/spark-supabase-admin "$backup"
+    had_previous=1
+  fi
+
+  if ! run_logged "UFW allow HTTPS/8443 from selected CIDR" ufw allow from "$access_cidr" to any port 8443 proto tcp; then
+    rm -f "$backup"
+    return 1
+  fi
+
+  write_supabase_studio_gateway "$access_cidr"
+  ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+  if ! run_logged "Nginx config test" nginx -t || ! run_logged "Reload Nginx" systemctl reload nginx; then
+    ufw_remove_temporary_rule "$access_cidr" 8443
+    if (( had_previous )); then
+      cp -a "$backup" /etc/nginx/sites-available/spark-supabase-admin
+      ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+      nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    else
+      rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
+      nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    fi
+    rm -f "$backup"
+    return 1
+  fi
+
+  if ! studio_external_is_open; then
+    fail "Nginx روی 8443 listen نشد؛ تغییرات rollback می‌شوند."
+    ufw_remove_temporary_rule "$access_cidr" 8443
+    if (( had_previous )); then
+      cp -a "$backup" /etc/nginx/sites-available/spark-supabase-admin
+    else
+      rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
+    fi
+    nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    rm -f "$backup"
+    return 1
+  fi
+
+  if ! curl -fsSkL --connect-timeout 5 --max-time 15 \
+      --resolve "${API_DOMAIN}:8443:127.0.0.1" \
+      -u "${dashboard_user}:${dashboard_password}" \
+      "https://${API_DOMAIN}:8443/" -o /dev/null; then
+    fail "8443 باز شد ولی Supabase Studio با Credential فعلی پاسخ معتبر نداد؛ تغییرات rollback می‌شوند."
+    ufw_remove_temporary_rule "$access_cidr" 8443
+    if (( had_previous )); then
+      cp -a "$backup" /etc/nginx/sites-available/spark-supabase-admin
+      ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+    else
+      rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
+    fi
+    nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    rm -f "$backup"
+    return 1
+  fi
+
+  rm -f "$backup"
+  if [[ -n "$old_cidr" && "$old_cidr" != "$access_cidr" ]]; then
+    ufw_remove_temporary_rule "$old_cidr" 8443
+  fi
+  printf '%s\n' "$access_cidr" >"$state_file"
+  chmod 600 "$state_file"
+  ok "Supabase Studio باز شد: https://${API_DOMAIN}:8443 — فقط ${access_cidr}"
+  info "Username=${dashboard_user}؛ رمز را از گزینه نمایش Credentialها ببینید."
+}
+
+close_supabase_studio_access() {
+  local state_file access_cidr
+  state_file="${STATE_DIR}/supabase-studio-access.cidr"
+  access_cidr=""
+  [[ -f "$state_file" ]] && access_cidr="$(tr -d '[:space:]' <"$state_file")"
+
+  rm -f /etc/nginx/sites-enabled/spark-supabase-admin /etc/nginx/sites-available/spark-supabase-admin
+  ufw_remove_temporary_rule "$access_cidr" 8443
+  rm -f "$state_file"
   run_logged "Nginx config test" nginx -t || return 1
   run_logged "Reload Nginx" systemctl reload nginx || return 1
-  if ! ss -lnt | grep -q ':8443 '; then
-    ok "دسترسی مدیریتی مستقیم Supabase بسته شد."
-  else
-    fail "هنوز listener دیگری روی 8443 وجود دارد؛ بررسی دستی لازم است."
+
+  if studio_external_is_open; then
+    fail "هنوز listener مدیریتی روی 8443 باقی مانده است."
     ss -lntp | grep ':8443' | tee -a "$CURRENT_LOG" || true
     return 1
   fi
+  ok "دسترسی خارجی Supabase Studio بسته شد."
+}
+
+security_access_wait() {
+  local _
+  printf '\n'
+  read -r -p "برای بازگشت به این منو Enter بزنید..." _
+}
+
+open_supabase_admin_access() {
+  local choice db_state studio_state
+  while true; do
+    db_state="CLOSED"
+    database_external_is_open && db_state="OPEN"
+    studio_state="CLOSED"
+    studio_external_is_open && studio_state="OPEN"
+
+    printf '\n%s%sAccess & Credentials%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+    printf 'Database 5432: %s   |   Supabase Studio 8443: %s\n\n' "$db_state" "$studio_state"
+    printf '0) بازگشت\n'
+    printf '1) نمایش رمزها و Credentialهای مورد استفاده مدیر\n'
+    printf '2) باز کردن دسترسی Database روی TCP/5432\n'
+    printf '3) بستن دسترسی خارجی Database\n'
+    printf '4) باز کردن Supabase Studio روی HTTPS/8443\n'
+    printf '5) بستن Supabase Studio\n\n'
+    read -r -p "انتخاب: " choice
+
+    case "$choice" in
+      0) return 0 ;;
+      1)
+        new_log "operator-credentials"
+        show_operator_credentials || true
+        security_access_wait
+        ;;
+      2)
+        new_log "database-access-open"
+        open_database_external_access || true
+        security_access_wait
+        ;;
+      3)
+        new_log "database-access-close"
+        close_database_external_access || true
+        security_access_wait
+        ;;
+      4)
+        new_log "supabase-studio-open"
+        open_supabase_studio_access || true
+        security_access_wait
+        ;;
+      5)
+        new_log "supabase-studio-close"
+        close_supabase_studio_access || true
+        security_access_wait
+        ;;
+      *)
+        fail "گزینه نامعتبر"
+        sleep 1
+        ;;
+    esac
+  done
+}
+
+close_supabase_admin_access() {
+  new_log "supabase-studio-close"
+  close_supabase_studio_access
 }
 
 resource_status() {
