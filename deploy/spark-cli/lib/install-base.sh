@@ -101,7 +101,6 @@ test_spark_repo() {
   require_file "${SPARK_ROOT}/package.json" || return 1
   require_file "${SPARK_ROOT}/package-lock.json" || return 1
   require_dir "${SPARK_ROOT}/supabase/functions" || return 1
-  require_dir "${SPARK_ROOT}/supabase/migrations" || return 1
 }
 
 install_step_4() {
@@ -114,15 +113,14 @@ install_step_4() {
       git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
       return 1
     fi
-    run_logged "دریافت آخرین main" git -C "$SPARK_ROOT" fetch origin || return 1
-    run_logged "checkout main" git -C "$SPARK_ROOT" checkout main || return 1
-    run_logged "fast-forward main" git -C "$SPARK_ROOT" pull --ff-only origin main || return 1
+    run_logged "Fetch آخرین Spark main" git -C "$SPARK_ROOT" fetch origin main || return 1
+    run_logged "Checkout Spark main" git -C "$SPARK_ROOT" checkout main || return 1
+    run_logged "Fast-forward Spark main" git -C "$SPARK_ROOT" pull --ff-only origin main || return 1
   elif [[ -e "$SPARK_ROOT" ]]; then
     fail "${SPARK_ROOT} وجود دارد ولی Git repository نیست."
     return 1
   else
-    run_logged "Clone کردن Spark" git clone "$REPO_URL" "$SPARK_ROOT" || return 1
-    run_logged "checkout main" git -C "$SPARK_ROOT" checkout main || return 1
+    run_logged "Clone آخرین Spark main" git clone --branch main --single-branch "$REPO_URL" "$SPARK_ROOT" || return 1
   fi
   if [[ -f "${SPARK_ROOT}/deploy/spark-cli/spark" ]]; then
     run_logged "نصب/به‌روزرسانی Spark Manager" install_manager_from_dir "${SPARK_ROOT}/deploy/spark-cli" || return 1
@@ -140,63 +138,47 @@ test_supabase_source() {
   require_file "${SUPABASE_SOURCE}/docker/docker-compose.yml" || return 1
   require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
   require_file "${SUPABASE_ROOT}/.env" || return 1
-  require_file "${SUPABASE_ROOT}/.spark-supabase-source-commit" || return 1
-  local actual installed
+  [[ "$(git -C "$SUPABASE_SOURCE" remote get-url origin)" == "https://github.com/supabase/supabase.git" ]] || return 1
+  [[ "$(git -C "$SUPABASE_SOURCE" branch --show-current)" == "main" ]] || return 1
+  local actual latest
   actual="$(git -C "$SUPABASE_SOURCE" rev-parse HEAD)" || return 1
-  installed="$(tr -d '[:space:]' <"${SUPABASE_ROOT}/.spark-supabase-source-commit")"
-  [[ -n "${SUPABASE_COMMIT:-}" && "$actual" == "$SUPABASE_COMMIT" && "$installed" == "$SUPABASE_COMMIT" ]] || return 1
+  latest="$(git -C "$SUPABASE_SOURCE" rev-parse origin/main)" || return 1
+  [[ "$actual" == "$latest" ]] || return 1
 }
 
 install_step_5() {
   title
-  new_log "install-05-supabase-pin"
-  local ref
-  prompt_default ref "Supabase tag/commit بررسی‌شده برای Production" "${SUPABASE_REF:-}"
-  [[ -n "$ref" ]] || { fail "Supabase ref نباید خالی باشد."; return 1; }
-  SUPABASE_REF="$ref"
-  save_config
+  new_log "install-05-supabase-latest"
 
   if [[ -d "${SUPABASE_SOURCE}/.git" ]]; then
-    run_logged "Fetch Supabase refs" git -C "$SUPABASE_SOURCE" fetch --tags origin || return 1
+    if [[ -n "$(git -C "$SUPABASE_SOURCE" status --porcelain)" ]]; then
+      fail "${SUPABASE_SOURCE} تغییرات commit نشده دارد؛ برای جلوگیری از overwrite مرحله متوقف شد."
+      git -C "$SUPABASE_SOURCE" status --short | tee -a "$CURRENT_LOG"
+      return 1
+    fi
+    run_logged "Fetch آخرین Supabase main" git -C "$SUPABASE_SOURCE" fetch origin main || return 1
+    run_logged "Checkout Supabase main" git -C "$SUPABASE_SOURCE" checkout main || return 1
+    run_logged "Fast-forward Supabase main" git -C "$SUPABASE_SOURCE" pull --ff-only origin main || return 1
   elif [[ -e "$SUPABASE_SOURCE" ]]; then
     fail "${SUPABASE_SOURCE} وجود دارد ولی Git repository نیست."
     return 1
   else
-    run_logged "Clone Supabase source" git clone https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
+    run_logged "Clone آخرین Supabase رسمی" git clone --branch main --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
   fi
-  run_logged "Checkout Supabase pin" git -C "$SUPABASE_SOURCE" checkout --detach "$SUPABASE_REF" || return 1
-  SUPABASE_COMMIT="$(git -C "$SUPABASE_SOURCE" rev-parse HEAD)"
-  save_config
-  ok "Supabase pinned SHA: ${SUPABASE_COMMIT}"
 
   if [[ -f "${SUPABASE_ROOT}/.env" ]]; then
-    warn "${SUPABASE_ROOT} از قبل فعال است؛ برای جلوگیری از حذف config آن را بازسازی نمی‌کنم."
-    if [[ -f "${SUPABASE_ROOT}/.spark-supabase-source-commit" ]]; then
-      local installed_commit
-      installed_commit="$(tr -d '[:space:]' <"${SUPABASE_ROOT}/.spark-supabase-source-commit")"
-      if [[ "$installed_commit" != "$SUPABASE_COMMIT" ]]; then
-        fail "Runtime Supabase از pin دیگری (${installed_commit}) ساخته شده است. Upgrade Supabase باید جداگانه و کنترل‌شده انجام شود."
-        return 1
-      fi
-    else
-      if ! confirm_word "Provenance این runtime ثبت نشده است. فقط اگر مطمئن هستید docker snapshot فعلی دقیقاً از همین pin ساخته شده، آن را adopt کنید." "ADOPT"; then
-        warn "Adopt لغو شد."
-        return 1
-      fi
-      printf '%s\n' "$SUPABASE_COMMIT" >"${SUPABASE_ROOT}/.spark-supabase-source-commit"
-      chmod 600 "${SUPABASE_ROOT}/.spark-supabase-source-commit"
-    fi
+    warn "${SUPABASE_ROOT} از قبل فعال است؛ Source رسمی به آخرین main به‌روزرسانی شد ولی runtime/config زنده overwrite نمی‌شود."
+    rm -f "${SUPABASE_ROOT}/.spark-supabase-source-commit"
   else
     rm -rf "$SUPABASE_ROOT"
     mkdir -p "$SUPABASE_ROOT"
-    run_logged "کپی snapshot Docker پین‌شده" cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/" || return 1
+    run_logged "کپی آخرین Docker snapshot رسمی Supabase" cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/" || return 1
     run_logged "ایجاد .env اولیه" cp "${SUPABASE_ROOT}/.env.example" "${SUPABASE_ROOT}/.env" || return 1
     chmod 600 "${SUPABASE_ROOT}/.env"
-    printf '%s\n' "$SUPABASE_COMMIT" >"${SUPABASE_ROOT}/.spark-supabase-source-commit"
-    chmod 600 "${SUPABASE_ROOT}/.spark-supabase-source-commit"
+    rm -f "${SUPABASE_ROOT}/.spark-supabase-source-commit"
   fi
 
-  if run_logged "تست Supabase pin و snapshot" test_supabase_source; then
+  if run_logged "تست آخرین Supabase source و runtime" test_supabase_source; then
     mark_step 5
   else
     unmark_step 5
@@ -353,7 +335,7 @@ install_step_8() {
   mkdir -p "${SUPABASE_ROOT}/volumes/functions"
   run_logged "Sync تمام Edge Functions" rsync -a --delete "${SPARK_ROOT}/supabase/functions/" "${SUPABASE_ROOT}/volumes/functions/" || return 1
   rm -rf "${SUPABASE_ROOT}/volumes/functions/main"
-  run_logged "Restore رسمی Main Router از Supabase pin" cp -a "${SUPABASE_SOURCE}/docker/volumes/functions/main" "${SUPABASE_ROOT}/volumes/functions/main" || return 1
+  run_logged "Restore رسمی Main Router از Supabase رسمی" cp -a "${SUPABASE_SOURCE}/docker/volumes/functions/main" "${SUPABASE_ROOT}/volumes/functions/main" || return 1
   if run_logged "تست تطابق Edge Functions و Main Router" test_function_sync; then
     mark_step 8
   else
