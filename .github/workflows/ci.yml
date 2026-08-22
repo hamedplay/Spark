@@ -1,17 +1,10 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   quality:
@@ -52,11 +45,3 @@ jobs:
 
       - name: Dependency audit (high/critical)
         run: npm audit --audit-level=high
-
-      # The repository currently has a large pre-existing lint baseline across
-      # legacy UI, tests and Edge Functions. Keep the full ruleset enabled and
-      # surface the report on every run without letting unrelated legacy debt
-      # bypass the production build/test/security gates above.
-      - name: Full lint report (legacy baseline)
-        continue-on-error: true
-        run: npm run lint

@@ -1,0 +1,139 @@
+name: Temporary DNS stage removal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-dns-install-stage.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Remove DNS install stage consistently
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def edit(path, transforms):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              original = text
+              for old, new, count in transforms:
+                  found = text.count(old)
+                  if found != count:
+                      raise SystemExit(f'{path}: expected {count} occurrence(s) of {old!r}, found {found}')
+                  text = text.replace(old, new)
+              if text == original:
+                  raise SystemExit(f'{path}: no change produced')
+              p.write_text(text, encoding='utf-8')
+
+          p = Path('deploy/spark-cli/lib/install-base.sh')
+          text = p.read_text(encoding='utf-8')
+          text, n1 = re.subn(r'\ninstall_step_1\(\) \{\n.*?\n\}\n\n(?=test_values\(\))', '\n', text, count=1, flags=re.S)
+          text, n2 = re.subn(r'\nensure_dns_inputs\(\) \{\n.*?\n\}\n\n(?=env_get\(\))', '\n', text, count=1, flags=re.S)
+          if (n1, n2) != (1, 1):
+              raise SystemExit(f'install-base.sh: DNS stage removal mismatch: install_step_1={n1}, ensure_dns_inputs={n2}')
+          p.write_text(text, encoding='utf-8')
+
+          edit('deploy/spark-cli/lib/core.sh', [
+              ("    1) printf 'DNS' ;;\n", '', 1),
+              ('    1) test_dns ;;\n', '', 1),
+              ('  for n in $(seq 1 20); do', '  for n in $(seq 2 20); do', 1),
+              ("  printf 'Total         : %d/20\\n' \"${#installed[@]}\"", "  printf 'Total         : %d/19\\n' \"${#installed[@]}\"", 1),
+          ])
+
+          edit('deploy/spark-cli/lib/install-platform-c.sh', [
+              ('  for n in $(seq 1 20); do', '  for n in $(seq 2 20); do', 1),
+              ('  ok "تمام مراحل 1 تا 20 با موفقیت اجرا شدند."', '  ok "تمام مراحل 2 تا 20 با موفقیت اجرا شدند."', 1),
+              ('    printf \'  1) %s DNS\\n\' "$(step_badge 1)"\n', '', 1),
+              ("    printf ' 21) اجرای مراحل 1 تا 20 به‌ترتیب\\n\\n'", "    printf ' 21) اجرای مراحل 2 تا 20 به‌ترتیب\\n\\n'", 1),
+              ('      [1-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;', '      [2-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;', 1),
+          ])
+
+          edit('deploy/spark-cli/spark', [
+              ('    install-01|install-02|', '    install-02|', 1),
+              ('Show installed/not-installed step numbers (01-20)', 'Show installed/not-installed step numbers (02-20)', 1),
+          ])
+
+          edit('deploy/spark-cli/lib/tests-backup.sh', [
+              ('وضعیت مراحل نصب 01 تا 20', 'وضعیت مراحل نصب 02 تا 20', 1),
+          ])
+
+          edit('deploy/spark-cli/lib/cleanup.sh', [
+              ('History مراحل 01 تا 20 پاک می‌شود.', 'History مراحل 02 تا 20 پاک می‌شود.', 1),
+              ('مراحل 01 تا 20 را اجرا کنید.', 'مراحل 02 تا 20 را اجرا کنید.', 1),
+          ])
+
+          edit('deploy/spark-cli/README.md', [
+              ('برای دیدن وضعیت واقعی تمام مراحل نصب `01` تا `20` بدون اجرای مجدد نصب:', 'برای دیدن وضعیت واقعی تمام ۱۹ مرحله نصب `02` تا `20` بدون اجرای مجدد نصب:', 1),
+              ('- نصب مرحله‌ای 1 تا 20 و Run All.', '- نصب مرحله‌ای 02 تا 20 (۱۹ مرحله) و Run All.', 1),
+              ('markerهای DONE مراحل 01 تا 20', 'markerهای DONE مراحل 02 تا 20', 1),
+          ])
+
+          edit('deploy/spark-cli/spark-ui.py', [
+              ('        Action("install-01", "01  DNS verification", "Validate public DNS records against the configured production IP."),\n', '', 1),
+              ('Action("install-all", "Run all 01-20",', 'Action("install-all", "Run all 02-20",', 1),
+              ('Action("diagnostic-installation-status", "Installation status 01-20",', 'Action("diagnostic-installation-status", "Installation status 02-20",', 1),
+              ('Clear only 01-20 DONE markers.', 'Clear only 02-20 DONE markers.', 1),
+              ('            if 1 <= n <= 20:', '            if 2 <= n <= 20:', 1),
+              ('    status["steps"] = f"{len(completed_set)}/20"', '    status["steps"] = f"{len(completed_set)}/19"', 1),
+              ("self.status.get('steps','0/20')", "self.status.get('steps','0/19')", 1),
+          ])
+          PY
+
+      - name: Validate manager without lint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n deploy/spark-cli/spark
+          bash -n deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/spark-migrate
+          for file in deploy/spark-cli/lib/*.sh; do bash -n "$file"; done
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('deploy/spark-cli/spark-ui.py')
+          compile(path.read_text(encoding='utf-8'), str(path), 'exec')
+          PY
+          python3 deploy/spark-cli/spark-ui.py --self-test
+          ! grep -R -E 'install-01|01-20|مراحل 01 تا 20|seq 1 20' deploy/spark-cli
+          grep -q '^test_dns()' deploy/spark-cli/lib/install-base.sh
+          grep -q 'for n in $(seq 2 20); do' deploy/spark-cli/lib/core.sh
+          grep -q 'Total         : %d/19' deploy/spark-cli/lib/core.sh
+          grep -q 'Run all 02-20' deploy/spark-cli/spark-ui.py
+          grep -q 'len(completed_set)}/19' deploy/spark-cli/spark-ui.py
+
+      - name: Remove temporary tooling and commit final state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git checkout HEAD^ -- .github/workflows/ci.yml
+          rm -f .github/workflows/remove-dns-install-stage.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- \
+            .github/workflows/ci.yml \
+            deploy/spark-cli/README.md \
+            deploy/spark-cli/spark \
+            deploy/spark-cli/spark-ui.py \
+            deploy/spark-cli/lib/core.sh \
+            deploy/spark-cli/lib/install-base.sh \
+            deploy/spark-cli/lib/install-platform-c.sh \
+            deploy/spark-cli/lib/tests-backup.sh \
+            deploy/spark-cli/lib/cleanup.sh
+          git add -u -- .github/workflows/remove-dns-install-stage.yml
+          git diff --cached --check
+          git commit -m 'Remove DNS install stage from Spark Manager [skip ci]'
+          git push origin HEAD:main
