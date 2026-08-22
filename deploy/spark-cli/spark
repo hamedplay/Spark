@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="2.1.0+20260822.2"
+SPARK_MANAGER_VERSION="2.1.0+20260822.3"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
 SPARK_ROOT="/opt/spark"
@@ -48,7 +48,7 @@ SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
 unset SOURCE SOURCE_DIR TARGET
 UI_PATH="${SCRIPT_DIR}/spark-ui.py"
 
-for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes; do
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session; do
   module_path="${SCRIPT_DIR}/lib/${module}.sh"
   if [[ ! -r "$module_path" ]]; then
     printf 'Spark Manager module missing: %s\n' "$module_path" >&2
@@ -64,7 +64,7 @@ install_manager_from_dir() {
   [[ -f "${source_dir}/spark" ]] || { fail "Spark Manager entrypoint not found: ${source_dir}/spark"; return 1; }
   [[ -f "${source_dir}/spark-ui.py" ]] || { fail "Spark Manager UI not found: ${source_dir}/spark-ui.py"; return 1; }
   [[ -f "${source_dir}/spark-ui-core.py" ]] || { fail "Spark Manager UI core not found: ${source_dir}/spark-ui-core.py"; return 1; }
-  for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes; do
+  for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session; do
     [[ -f "${source_dir}/lib/${module}.sh" ]] || { fail "Spark Manager module not found: ${module}.sh"; return 1; }
   done
 
