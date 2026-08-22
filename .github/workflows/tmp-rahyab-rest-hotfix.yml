@@ -1,0 +1,86 @@
+name: Temporary Rahyab REST hotfix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'chore: apply Rahyab REST hotfix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Rahyab REST send path
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('supabase/functions/send-sms/index.ts')
+          text = path.read_text()
+
+          old = '''      const maskVal = (v: string) => (!v || v.length <= 4) ? "***" : "***" + v.slice(-4);
+      const maskPhone = (v: string) => (!v || v.length <= 4) ? "***" : v.slice(0, 3) + "****" + v.slice(-4);
+'''
+          new = '''      const maskVal = (v: string) => (!v || v.length <= 4) ? "***" : "***" + v.slice(-4);
+      const maskPhone = (v: string) => (!v || v.length <= 4) ? "***" : v.slice(0, 3) + "****" + v.slice(-4);
+      const normalizeRahyabRecipient = (value: string): string => {
+        const digits = value.replace(/\\D/g, "");
+        if (/^00989\\d{9}$/.test(digits)) return `0${digits.slice(4)}`;
+        if (/^989\\d{9}$/.test(digits)) return `0${digits.slice(2)}`;
+        if (/^09\\d{9}$/.test(digits)) return digits;
+        if (/^9\\d{9}$/.test(digits)) return `0${digits}`;
+        return value.trim();
+      };
+'''
+          if old not in text:
+              raise SystemExit('maskPhone anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''          username: creds.username, password: creds.password,
+          from: fromNumber, to: to.trim(), farsi: "true", message,
+'''
+          new = '''          username: creds.username, password: creds.password,
+          from: fromNumber, to: normalizeRahyabRecipient(to), farsi: "true", message,
+'''
+          if old not in text:
+              raise SystemExit('Rahyab send params anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''        return json({ ok: errors.length === 0, sent: allValidIds.length, returnIds: allValidIds, errors });
+'''
+          new = '''        return json({
+          ok: errors.length === 0,
+          sent: allValidIds.length,
+          returnIds: allValidIds,
+          errors,
+          error: errors.length > 0 ? errors.join("; ") : undefined,
+          response: errors.length > 0 ? { errors } : undefined,
+        });
+'''
+          if old not in text:
+              raise SystemExit('Rahyab send response anchor not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+      - name: Validate targeted changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'const normalizeRahyabRecipient' supabase/functions/send-sms/index.ts
+          grep -F 'to: normalizeRahyabRecipient(to)' supabase/functions/send-sms/index.ts
+          grep -F 'error: errors.length > 0 ? errors.join("; ") : undefined' supabase/functions/send-sms/index.ts
+          git diff --check
+      - name: Commit hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add supabase/functions/send-sms/index.ts
+          git commit -m 'fix: align Rahyab REST recipient format and errors'
+          git push origin HEAD:main
