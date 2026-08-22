@@ -280,14 +280,21 @@ patch_compose() {
   wire_modern_auth_compose
 }
 
+cleanup_repository_runtime_artifacts() {
+  [[ -d "${SPARK_ROOT}/.git" ]] || return 0
+  rm -rf -- "${SPARK_ROOT}/dist"
+  rm -f -- "${SPARK_ROOT}/.env.production"
+}
+
 # Step 04 installs Manager directly from the local Spark repository.
 install_step_4() {
   title
   new_log "install-04-spark-repo"
   mkdir -p /opt
   if [[ -d "${SPARK_ROOT}/.git" ]]; then
+    run_logged "پاک‌سازی artifactهای runtime پروژه" cleanup_repository_runtime_artifacts || return 1
     if [[ -n "$(git -C "$SPARK_ROOT" status --porcelain)" ]]; then
-      fail "${SPARK_ROOT} تغییرات commit نشده دارد؛ برای جلوگیری از overwrite مرحله متوقف شد."
+      fail "${SPARK_ROOT} تغییرات commit نشده در source دارد؛ برای جلوگیری از overwrite مرحله متوقف شد."
       git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
       return 1
     fi
