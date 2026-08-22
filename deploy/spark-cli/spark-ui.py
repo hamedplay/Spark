@@ -58,22 +58,25 @@ INSTALL_LABELS = {
 def patch_categories() -> None:
     rebuilt = []
     for category, actions in core.CATEGORIES:
-        new_actions = []
         if category == "Security":
-            new_actions.append(core.Action(
-                "admin-open",
-                "Database connection info",
-                "View PostgreSQL pgAdmin connection details (host/port/database/user/password) and current access state.",
-                "confirm",
-            ))
+            rebuilt.append((category, [
+                core.Action(
+                    "admin-open",
+                    "Security Center",
+                    "Verified PostgreSQL/pgAdmin access, Supabase Studio access, credentials, login tests and firewall state.",
+                    "confirm",
+                ),
+                core.Action("diagnostic-exposure", "Public exposure check", "Verify internal database and API ports are not unintentionally public."),
+                core.Action("version-info", "Version & security", "Inspect runtime versions and repository state."),
+            ]))
+            continue
+
+        new_actions = []
         for action in actions:
             label = action.label
             description = action.description.replace("pinned Supabase", "Supabase").replace("the pinned main router", "the official Supabase main router")
             if action.action_id in INSTALL_LABELS:
                 label, description = INSTALL_LABELS[action.action_id]
-            if category == "Security" and action.action_id == "admin-open":
-                label = "Access & credentials / DB & Studio"
-                description = "View credentials or open/close Database 5432 and Supabase Studio 8443."
             new_actions.append(core.Action(action.action_id, label, description, action.risk, action.special))
         rebuilt.append((category, new_actions))
     core.CATEGORIES[:] = rebuilt
