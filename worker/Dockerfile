@@ -6,6 +6,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY index.js healthcheck.js ./
+RUN chmod 0644 /app/index.js /app/healthcheck.js
 
 RUN groupadd -r avatar && useradd -r -g avatar -d /app -s /sbin/nologin avatar
 RUN mkdir -p /tmp && chown avatar:avatar /tmp /app
