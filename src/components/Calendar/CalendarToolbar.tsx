@@ -243,7 +243,7 @@ export function CalendarToolbar(props: {
   ) : null;
 
   return (
-    <div className={`relative ${compactMobile && showMobileSidebar ? 'z-20' : 'z-40'} flex min-h-[42px] flex-shrink-0 items-center overflow-visible border-b border-slate-200/80 bg-white/95 shadow-[0_1px_0_rgba(15,23,42,0.02)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 ${compactMobile ? 'gap-1 px-1.5 py-1.5' : 'gap-1.5 px-3 py-1.5'}`}>
+    <div className={`relative ${compactMobile && showMobileSidebar ? 'z-20' : 'z-50'} flex min-h-[42px] flex-shrink-0 items-center overflow-visible border-b border-slate-200/80 bg-white/95 shadow-[0_1px_0_rgba(15,23,42,0.02)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 ${compactMobile ? 'gap-1 px-1.5 py-1.5' : 'gap-1.5 px-3 py-1.5'}`}>
       {calendarSidebarButton}
       {todayButton}
       {searchControl}
