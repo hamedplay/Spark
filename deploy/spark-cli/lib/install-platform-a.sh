@@ -151,9 +151,54 @@ install_step_10() {
   fi
 }
 
+supabase_db_password_preflight() {
+  (cd "$SUPABASE_ROOT" && docker compose exec -T db sh -lc \
+    'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U postgres -d "$POSTGRES_DB" -Atqc "select 1"' 2>&1 | grep -qx '1')
+}
+
+supabase_service_state() {
+  local service="$1"
+  (cd "$SUPABASE_ROOT" && docker compose ps --format json "$service" 2>/dev/null) | python3 -c '
+import json,sys
+raw=sys.stdin.read().strip()
+if not raw:
+    raise SystemExit(1)
+try:
+    value=json.loads(raw)
+except json.JSONDecodeError:
+    value=json.loads(raw.splitlines()[-1])
+if isinstance(value,list):
+    value=value[0] if value else {}
+state=str(value.get("State","")).lower()
+health=str(value.get("Health","")).lower()
+print(state + ("/"+health if health else ""))
+'
+}
+
+supabase_core_ready() {
+  local service state
+  for service in db api-gw auth rest realtime storage supavisor functions; do
+    state="$(supabase_service_state "$service" 2>/dev/null || true)"
+    [[ "$state" == running* ]] || return 1
+    [[ "$state" != *unhealthy* ]] || return 1
+    [[ "$state" != *restarting* ]] || return 1
+  done
+  curl -fsS --connect-timeout 5 http://127.0.0.1:8000/auth/v1/health >/dev/null || return 1
+}
+
+report_supabase_start_failure() {
+  local service
+  printf '\nSupabase startup diagnostics\n' | tee -a "$CURRENT_LOG"
+  printf '%s\n' '----------------------------------------' | tee -a "$CURRENT_LOG"
+  (cd "$SUPABASE_ROOT" && docker compose ps) 2>&1 | tee -a "$CURRENT_LOG" || true
+  for service in auth rest realtime storage supavisor api-gw functions avatar-worker; do
+    printf '\n--- %s (last 80 log lines) ---\n' "$service" | tee -a "$CURRENT_LOG"
+    (cd "$SUPABASE_ROOT" && docker compose logs --no-color --tail=80 "$service") 2>&1 | tee -a "$CURRENT_LOG" || true
+  done
+}
+
 test_supabase_health() {
-  compose ps || return 1
-  curl -fsS --connect-timeout 5 http://127.0.0.1:8000/auth/v1/health || return 1
+  supabase_core_ready
 }
 
 install_step_11() {
@@ -162,16 +207,42 @@ install_step_11() {
   run_logged "Validate Docker Compose" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet" || return 1
   run_logged "Pull imageهای Supabase" bash -c "cd '$SUPABASE_ROOT' && docker compose pull" || return 1
   run_logged "Build Avatar Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose build avatar-worker" || return 1
-  run_logged "Start Supabase" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d" || return 1
-  info "منتظر آماده‌شدن سرویس‌ها..."
-  sleep 12
-  if run_logged "Health check Supabase" test_supabase_health; then
-    mark_step 11
-  else
+
+  # Start the database first so an existing data directory with credentials from
+  # another runtime is detected before every dependent service enters a restart loop.
+  run_logged "Start Supabase database preflight" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d db" || return 1
+  local db_deadline=$((SECONDS + 60))
+  while (( SECONDS < db_deadline )); do
+    if [[ "$(supabase_service_state db 2>/dev/null || true)" == running/healthy ]]; then
+      break
+    fi
+    sleep 2
+  done
+  if ! run_logged "Verify configured PostgreSQL password against active database" supabase_db_password_preflight; then
+    fail "Database volume با POSTGRES_PASSWORD فعلی سازگار نیست. برای ایمنی هیچ data volume ای حذف یا reset نشد."
+    info "اگر این سرور باید نصب تازه باشد، ابتدا با Cleanup > Delete Database data فقط دیتای DB را پاک کنید؛ اگر داده مهم است، credential قبلی باید بازیابی/هماهنگ شود."
+    run_visible "Database status" bash -c "cd '$SUPABASE_ROOT' && docker compose ps db" || true
+    run_visible "Database logs" bash -c "cd '$SUPABASE_ROOT' && docker compose logs --no-color --tail=80 db" || true
     unmark_step 11
-    run_visible "Docker service status" compose ps || true
     return 1
   fi
+
+  run_logged "Start Supabase stack" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d" || return 1
+  info "منتظر آماده‌شدن سرویس‌های اصلی Supabase (حداکثر ۹۰ ثانیه)..."
+  local deadline=$((SECONDS + 90))
+  while (( SECONDS < deadline )); do
+    if supabase_core_ready; then
+      mark_step 11
+      ok "سرویس‌های اصلی Supabase آماده هستند."
+      return 0
+    fi
+    sleep 3
+  done
+
+  unmark_step 11
+  warn "Supabase در مهلت readiness آماده نشد؛ وضعیت و log سرویس‌های مشکل‌دار ثبت می‌شود."
+  report_supabase_start_failure
+  return 1
 }
 
 migration_dry_run() {
