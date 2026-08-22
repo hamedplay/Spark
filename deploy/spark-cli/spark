@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="2.1.0+20260821.1"
+SPARK_MANAGER_VERSION="2.1.0+20260822.2"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
 SPARK_ROOT="/opt/spark"
@@ -48,7 +48,7 @@ SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
 unset SOURCE SOURCE_DIR TARGET
 UI_PATH="${SCRIPT_DIR}/spark-ui.py"
 
-for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override; do
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes; do
   module_path="${SCRIPT_DIR}/lib/${module}.sh"
   if [[ ! -r "$module_path" ]]; then
     printf 'Spark Manager module missing: %s\n' "$module_path" >&2
@@ -63,17 +63,19 @@ install_manager_from_dir() {
   local stage backup module file
   [[ -f "${source_dir}/spark" ]] || { fail "Spark Manager entrypoint not found: ${source_dir}/spark"; return 1; }
   [[ -f "${source_dir}/spark-ui.py" ]] || { fail "Spark Manager UI not found: ${source_dir}/spark-ui.py"; return 1; }
-  for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override; do
+  [[ -f "${source_dir}/spark-ui-core.py" ]] || { fail "Spark Manager UI core not found: ${source_dir}/spark-ui-core.py"; return 1; }
+  for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes; do
     [[ -f "${source_dir}/lib/${module}.sh" ]] || { fail "Spark Manager module not found: ${module}.sh"; return 1; }
   done
 
   bash -n "${source_dir}/spark" || return 1
   for file in "${source_dir}"/lib/*.sh; do bash -n "$file" || return 1; done
-  python3 - "${source_dir}/spark-ui.py" <<'PY'
+  python3 - "${source_dir}/spark-ui.py" "${source_dir}/spark-ui-core.py" <<'PY'
 from pathlib import Path
 import sys
-path = Path(sys.argv[1])
-compile(path.read_text(encoding="utf-8"), str(path), "exec")
+for value in sys.argv[1:]:
+    path = Path(value)
+    compile(path.read_text(encoding="utf-8"), str(path), "exec")
 PY
 
   install -d -m 0755 /usr/local/lib
@@ -82,6 +84,7 @@ PY
   install -d -m 0755 "${stage}/lib"
   install -m 0755 "${source_dir}/spark" "${stage}/spark"
   install -m 0644 "${source_dir}/spark-ui.py" "${stage}/spark-ui.py"
+  install -m 0644 "${source_dir}/spark-ui-core.py" "${stage}/spark-ui-core.py"
   for file in "${source_dir}"/lib/*.sh; do
     install -m 0644 "$file" "${stage}/lib/$(basename "$file")"
   done
@@ -300,12 +303,14 @@ spark_backend_list_docker_services() {
 
 spark_ui_self_test() {
   [[ -r "$UI_PATH" ]] || return 1
+  [[ -r "${SCRIPT_DIR}/spark-ui-core.py" ]] || return 1
   command -v python3 >/dev/null 2>&1 || return 1
-  python3 - "$UI_PATH" <<'PY'
+  python3 - "$UI_PATH" "${SCRIPT_DIR}/spark-ui-core.py" <<'PY'
 from pathlib import Path
 import sys
-path = Path(sys.argv[1])
-compile(path.read_text(encoding="utf-8"), str(path), "exec")
+for value in sys.argv[1:]:
+    path = Path(value)
+    compile(path.read_text(encoding="utf-8"), str(path), "exec")
 import curses, pty, selectors
 PY
   grep -q 'SPARK_UI_VERSION = "2.1.0+20260821.1"' "$UI_PATH"
