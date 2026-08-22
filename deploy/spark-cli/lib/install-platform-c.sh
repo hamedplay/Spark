@@ -173,16 +173,203 @@ install_step_20() {
   fi
 }
 
+# Logical installer numbering: 01..18. Internal legacy function numbers stay intact.
+install_legacy_to_logical() {
+  case "$1" in
+    2) echo 1 ;; 3) echo 2 ;; 4) echo 3 ;; 5) echo 4 ;; 6) echo 5 ;; 7) echo 6 ;;
+    8) echo 7 ;; 9) echo 8 ;; 10) echo 9 ;; 11) echo 10 ;; 13) echo 11 ;; 14) echo 12 ;;
+    15) echo 13 ;; 16) echo 14 ;; 17) echo 15 ;; 18) echo 16 ;; 19) echo 17 ;; 20) echo 18 ;;
+    *) return 1 ;;
+  esac
+}
+
+install_logical_to_legacy() {
+  case "$1" in
+    1) echo 2 ;; 2) echo 3 ;; 3) echo 4 ;; 4) echo 5 ;; 5) echo 6 ;; 6) echo 7 ;;
+    7) echo 8 ;; 8) echo 9 ;; 9) echo 10 ;; 10) echo 11 ;; 11) echo 13 ;; 12) echo 14 ;;
+    13) echo 15 ;; 14) echo 16 ;; 15) echo 17 ;; 16) echo 18 ;; 17) echo 19 ;; 18) echo 20 ;;
+    *) return 1 ;;
+  esac
+}
+
+ensure_logical_install_history() {
+  local version_file="${STEP_DIR}/.layout-version"
+  local expected="logical-01-18-v1"
+  if [[ ! -f "$version_file" || "$(cat "$version_file" 2>/dev/null || true)" != "$expected" ]]; then
+    rm -f "${STEP_DIR}"/*.ok
+    printf '%s\n' "$expected" >"$version_file"
+    chmod 600 "$version_file"
+  fi
+}
+
+mark_step() {
+  local logical
+  logical="$(install_legacy_to_logical "$1")" || return 1
+  ensure_logical_install_history
+  printf '%s\n' "$(date -Is)" >"${STEP_DIR}/${logical}.ok"
+  chmod 600 "${STEP_DIR}/${logical}.ok"
+}
+
+unmark_step() {
+  local logical
+  logical="$(install_legacy_to_logical "$1")" || return 1
+  ensure_logical_install_history
+  rm -f "${STEP_DIR}/${logical}.ok"
+}
+
+step_badge() {
+  local logical
+  logical="$(install_legacy_to_logical "$1" 2>/dev/null || printf '%s' "$1")"
+  ensure_logical_install_history
+  if [[ -f "${STEP_DIR}/${logical}.ok" ]]; then
+    printf '%s[✓]%s' "$C_GREEN" "$C_RESET"
+  else
+    printf '[ ]'
+  fi
+}
+
+installation_step_name() {
+  case "$1" in
+    1) printf 'Configuration' ;;
+    2) printf 'Base packages / Docker / Node' ;;
+    3) printf 'Spark repository' ;;
+    4) printf 'Latest Supabase source' ;;
+    5) printf 'Supabase secrets' ;;
+    6) printf 'Supabase environment' ;;
+    7) printf 'Edge Functions sync' ;;
+    8) printf 'Provider / worker environment' ;;
+    9) printf 'Docker Compose' ;;
+    10) printf 'Supabase runtime' ;;
+    11) printf 'Frontend deployment' ;;
+    12) printf 'Nginx bootstrap / web server' ;;
+    13) printf 'TLS certificates' ;;
+    14) printf 'Production Nginx' ;;
+    15) printf 'Schedulers' ;;
+    16) printf 'TURN / Coturn' ;;
+    17) printf 'Certbot renewal' ;;
+    18) printf 'Firewall / UFW' ;;
+    *) return 1 ;;
+  esac
+}
+
+installation_step_probe() {
+  case "$1" in
+    1) test_values ;;
+    2) test_base_packages ;;
+    3) test_spark_repo ;;
+    4) test_supabase_source ;;
+    5) test_supabase_secrets ;;
+    6) test_supabase_env ;;
+    7) test_function_sync ;;
+    8) test_provider_env ;;
+    9) test_compose_security ;;
+    10) test_supabase_health ;;
+    11) test_frontend_deploy ;;
+    12) installation_nginx_present ;;
+    13) test_certificates ;;
+    14) test_nginx_production ;;
+    15) test_schedulers ;;
+    16) test_turn ;;
+    17) test_certbot_hook ;;
+    18) test_firewall ;;
+    *) return 1 ;;
+  esac
+}
+
+installation_status_report() {
+  local n name actual history formatted
+  local installed=() missing=()
+  ensure_logical_install_history
+  [[ -n "${CURRENT_LOG:-}" ]] || new_log "installation-status"
+
+  printf 'Spark installation status — actual server probe\n'
+  printf '%s\n' '----------------------------------------------------------------------------'
+  printf '%-4s %-15s %-9s %s\n' 'No.' 'Actual' 'History' 'Component'
+  printf '%s\n' '----------------------------------------------------------------------------'
+  for n in $(seq 1 18); do
+    printf -v formatted '%02d' "$n"
+    name="$(installation_step_name "$n")"
+    if installation_step_probe "$n" >/dev/null 2>&1; then
+      actual='INSTALLED'; installed+=("$formatted")
+    else
+      actual='NOT INSTALLED'; missing+=("$formatted")
+    fi
+    [[ -f "${STEP_DIR}/${n}.ok" ]] && history='DONE' || history='-'
+    printf '%-4s %-15s %-9s %s\n' "$formatted" "$actual" "$history" "$name"
+  done
+  printf '%s\n' '----------------------------------------------------------------------------'
+  printf 'Installed     : %s\n' "${installed[*]:-none}"
+  printf 'Not installed : %s\n' "${missing[*]:-none}"
+  printf 'Total         : %d/18\n' "${#installed[@]}"
+  printf '\nActual = وضعیت واقعی همین سرور. History = این مرحله قبلاً توسط Manager با موفقیت ثبت شده است.\n'
+}
+
+# Supabase official repository uses master as its default branch.
+test_supabase_source() {
+  require_dir "${SUPABASE_SOURCE}/.git" || return 1
+  require_file "${SUPABASE_SOURCE}/docker/docker-compose.yml" || return 1
+  require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
+  require_file "${SUPABASE_ROOT}/.env" || return 1
+  [[ "$(git -C "$SUPABASE_SOURCE" remote get-url origin)" == "https://github.com/supabase/supabase.git" ]] || return 1
+  [[ "$(git -C "$SUPABASE_SOURCE" branch --show-current)" == "master" ]] || return 1
+  local actual latest
+  actual="$(git -C "$SUPABASE_SOURCE" rev-parse HEAD)" || return 1
+  latest="$(git -C "$SUPABASE_SOURCE" rev-parse origin/master)" || return 1
+  [[ "$actual" == "$latest" ]] || return 1
+}
+
+install_step_5() {
+  title
+  new_log "install-04-supabase-latest"
+
+  if [[ -d "${SUPABASE_SOURCE}/.git" ]]; then
+    if [[ -n "$(git -C "$SUPABASE_SOURCE" status --porcelain)" ]]; then
+      fail "${SUPABASE_SOURCE} تغییرات commit نشده دارد؛ برای جلوگیری از overwrite مرحله متوقف شد."
+      git -C "$SUPABASE_SOURCE" status --short | tee -a "$CURRENT_LOG"
+      return 1
+    fi
+    run_logged "Fetch آخرین Supabase master" git -C "$SUPABASE_SOURCE" fetch origin master || return 1
+    run_logged "Checkout Supabase master" git -C "$SUPABASE_SOURCE" checkout master || return 1
+    run_logged "Fast-forward Supabase master" git -C "$SUPABASE_SOURCE" pull --ff-only origin master || return 1
+  elif [[ -e "$SUPABASE_SOURCE" ]]; then
+    fail "${SUPABASE_SOURCE} وجود دارد ولی Git repository نیست."
+    return 1
+  else
+    run_logged "Clone آخرین Supabase رسمی" git clone --branch master --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
+  fi
+
+  if [[ -f "${SUPABASE_ROOT}/.env" ]]; then
+    warn "${SUPABASE_ROOT} از قبل فعال است؛ Source رسمی به آخرین master به‌روزرسانی شد ولی runtime/config زنده overwrite نمی‌شود."
+    rm -f "${SUPABASE_ROOT}/.spark-supabase-source-commit"
+  else
+    rm -rf "$SUPABASE_ROOT"
+    mkdir -p "$SUPABASE_ROOT"
+    run_logged "کپی آخرین Docker snapshot رسمی Supabase" cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/" || return 1
+    run_logged "ایجاد .env اولیه" cp "${SUPABASE_ROOT}/.env.example" "${SUPABASE_ROOT}/.env" || return 1
+    chmod 600 "${SUPABASE_ROOT}/.env"
+    rm -f "${SUPABASE_ROOT}/.spark-supabase-source-commit"
+  fi
+
+  if run_logged "تست آخرین Supabase source و runtime" test_supabase_source; then
+    mark_step 5
+  else
+    unmark_step 5
+    return 1
+  fi
+}
+
 run_install_step() {
   local n="$1"
   "install_step_${n}"
 }
 
 run_all_install() {
-  local n
-  for n in 2 3 4 5 6 7 8 9 10 11 13 14 15 16 17 18 19 20; do
-    if ! run_install_step "$n"; then
-      fail "اجرای زنجیره‌ای در مرحله ${n} متوقف شد."
+  local legacy logical
+  for legacy in 2 3 4 5 6 7 8 9 10 11 13 14 15 16 17 18 19 20; do
+    logical="$(install_legacy_to_logical "$legacy")"
+    if ! run_install_step "$legacy"; then
+      printf -v logical '%02d' "$logical"
+      fail "اجرای زنجیره‌ای در مرحله ${logical} متوقف شد."
       return 1
     fi
   done
@@ -192,32 +379,35 @@ run_all_install() {
 install_menu() {
   while true; do
     title
-    printf '%sمنوی نصب Single Host — مطابق single-host.md%s\n\n' "$C_BOLD" "$C_RESET"
+    printf '%sمنوی نصب Single Host — ۱۸ مرحله%s\n\n' "$C_BOLD" "$C_RESET"
     printf '  0) بازگشت\n'
-    printf '  2) %s مقادیر نصب و Configuration\n' "$(step_badge 2)"
-    printf '  3) %s Packageهای پایه + Docker + Node 24\n' "$(step_badge 3)"
-    printf '  4) %s دریافت Spark\n' "$(step_badge 4)"
-    printf '  5) %s دریافت Supabase pin شده\n' "$(step_badge 5)"
-    printf '  6) %s تولید Secretهای Supabase\n' "$(step_badge 6)"
-    printf '  7) %s تکمیل Supabase .env\n' "$(step_badge 7)"
-    printf '  8) %s Sync Edge Functions + Main Router\n' "$(step_badge 8)"
-    printf '  9) %s Provider / Worker Environment\n' "$(step_badge 9)"
-    printf ' 10) %s Docker Compose hardening/config\n' "$(step_badge 10)"
-    printf ' 11) %s Validate و Start Supabase\n' "$(step_badge 11)"
-    printf ' 13) %s Build و Deploy Frontend\n' "$(step_badge 13)"
-    printf ' 14) %s Nginx Bootstrap\n' "$(step_badge 14)"
-    printf ' 15) %s Certificateها\n' "$(step_badge 15)"
-    printf ' 16) %s Nginx Production\n' "$(step_badge 16)"
-    printf ' 17) %s Schedulerهای Local\n' "$(step_badge 17)"
-    printf ' 18) %s TURN/Coturn\n' "$(step_badge 18)"
-    printf ' 19) %s Certbot Renewal Hook\n' "$(step_badge 19)"
-    printf ' 20) %s Firewall\n' "$(step_badge 20)"
-    printf ' 21) اجرای همه ۱۸ مرحله نصب به‌ترتیب\n\n'
+    printf '  1) %s مقادیر نصب و Configuration\n' "$(step_badge 2)"
+    printf '  2) %s Packageهای پایه + Docker + Node 24\n' "$(step_badge 3)"
+    printf '  3) %s دریافت آخرین Spark main\n' "$(step_badge 4)"
+    printf '  4) %s دریافت آخرین Supabase رسمی\n' "$(step_badge 5)"
+    printf '  5) %s تولید Secretهای Supabase\n' "$(step_badge 6)"
+    printf '  6) %s تکمیل Supabase .env\n' "$(step_badge 7)"
+    printf '  7) %s Sync Edge Functions + Main Router\n' "$(step_badge 8)"
+    printf '  8) %s Provider / Worker Environment\n' "$(step_badge 9)"
+    printf '  9) %s Docker Compose hardening/config\n' "$(step_badge 10)"
+    printf ' 10) %s Validate و Start Supabase\n' "$(step_badge 11)"
+    printf ' 11) %s Build و Deploy Frontend\n' "$(step_badge 13)"
+    printf ' 12) %s Nginx Bootstrap\n' "$(step_badge 14)"
+    printf ' 13) %s Certificateها\n' "$(step_badge 15)"
+    printf ' 14) %s Nginx Production\n' "$(step_badge 16)"
+    printf ' 15) %s Schedulerهای Local\n' "$(step_badge 17)"
+    printf ' 16) %s TURN/Coturn\n' "$(step_badge 18)"
+    printf ' 17) %s Certbot Renewal Hook\n' "$(step_badge 19)"
+    printf ' 18) %s Firewall\n' "$(step_badge 20)"
+    printf ' 19) اجرای همه ۱۸ مرحله نصب به‌ترتیب\n\n'
     read -r -p "انتخاب: " choice
     case "$choice" in
       0) return ;;
-      [2-9]|10|11|1[3-9]|20) run_install_step "$choice" || true; pause ;;
-      21) run_all_install || true; pause ;;
+      1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18)
+        run_install_step "$(install_logical_to_legacy "$choice")" || true
+        pause
+        ;;
+      19) run_all_install || true; pause ;;
       *) fail "گزینه نامعتبر"; sleep 1 ;;
     esac
   done
