@@ -140,10 +140,42 @@ def logical_draw_details(self):
         self.safe_add = original_safe_add
 
 
+def logical_self_test() -> int:
+    assert SPARK_UI_VERSION == "2.1.0+20260821.1"
+    assert len(core.CATEGORIES) >= 9
+    ids = {a.action_id for _, actions in core.CATEGORIES for a in actions if not a.special}
+    required = {
+        "diagnostic-full",
+        "diagnostic-installation-status",
+        "app-update",
+        "install-all",
+        "manager-update",
+        "security-db-info",
+        "security-db-test",
+        "security-db-open",
+        "security-db-close",
+        "security-studio-info",
+        "security-studio-open",
+        "security-studio-close",
+        "security-report",
+        "security-account-unlock",
+        "cleanup-database",
+        "cleanup-full",
+        "cleanup-manager",
+    }
+    if not required.issubset(ids):
+        missing = ", ".join(sorted(required - ids))
+        raise RuntimeError(f"action registry is incomplete: {missing}")
+    import curses as _curses
+    import pty as _pty
+    return 0
+
+
 patch_categories()
 core.collect_status = logical_collect_status
 core.SparkUI.action_badge = logical_action_badge
 core.SparkUI.draw_details = logical_draw_details
+core.self_test = logical_self_test
 
 
 def main(argv):
