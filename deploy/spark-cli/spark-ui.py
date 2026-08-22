@@ -60,12 +60,15 @@ def patch_categories() -> None:
     for category, actions in core.CATEGORIES:
         if category == "Security":
             rebuilt.append((category, [
-                core.Action(
-                    "admin-open",
-                    "Security Center",
-                    "Verified PostgreSQL/pgAdmin access, Supabase Studio access on HTTPS/443, credentials, login tests and firewall state.",
-                    "confirm",
-                ),
+                core.Action("security-db-info", "PostgreSQL / pgAdmin connection", "Show verified database connection details and current access state."),
+                core.Action("security-db-test", "Test database login", "Run a real login through the local Supavisor session endpoint."),
+                core.Action("security-db-open", "Open Database TCP/5432", "Open managed external PostgreSQL access after verification.", "confirm"),
+                core.Action("security-db-close", "Close Database TCP/5432", "Close managed external PostgreSQL access.", "controlled"),
+                core.Action("security-studio-info", "Supabase Studio access", "Show Studio HTTPS/443 access state and credentials."),
+                core.Action("security-studio-open", "Enable Supabase Studio", "Enable Studio on the API domain over HTTPS/443.", "confirm"),
+                core.Action("security-studio-close", "Disable Supabase Studio", "Disable Studio root access while keeping Supabase API routes active.", "controlled"),
+                core.Action("security-report", "Security / Firewall status", "Show database, Studio and firewall access state."),
+                core.Action("security-account-unlock", "Unlock user account", "Reset login lock state by username, email or phone.", "confirm"),
                 core.Action("diagnostic-exposure", "Public exposure check", "Verify internal database and API ports are not unintentionally public."),
                 core.Action("version-info", "Version & security", "Inspect runtime versions and repository state."),
             ]))
