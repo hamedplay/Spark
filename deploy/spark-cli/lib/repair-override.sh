@@ -24,12 +24,105 @@ normalize_auth_hook_secret() {
   chmod 600 "$supabase_env"
 }
 
+# GoTrue v2.189+ rejects HTTP hook URLs whose host is not localhost/loopback.
+# The Edge Function runs in another container, so http://functions:9000/... is
+# rejected during Auth startup. Route the hook through Spark's public HTTPS API
+# instead. It is safe for Auth to start before TLS is provisioned; the hook is
+# only invoked when an SMS action is requested, after the web/TLS steps finish.
+patch_compose() {
+  local compose_file="${SUPABASE_ROOT}/docker-compose.yml"
+  COMPOSE_FILE="$compose_file" SPARK_ROOT_ENV="$SPARK_ROOT" API_DOMAIN_ENV="$API_DOMAIN" python3 - <<'PY'
+import os,yaml
+from pathlib import Path
+
+path=Path(os.environ["COMPOSE_FILE"])
+data=yaml.safe_load(path.read_text(encoding="utf-8"))
+if not isinstance(data,dict) or not isinstance(data.get("services"),dict):
+    raise SystemExit("docker-compose.yml has no services mapping")
+services=data["services"]
+required=["api-gw","db","supavisor","auth","functions"]
+missing=[x for x in required if x not in services]
+if missing:
+    raise SystemExit(f"Refusing to guess service names. Missing: {missing}")
+
+api_domain=os.environ.get("API_DOMAIN_ENV","").strip()
+if not api_domain:
+    raise SystemExit("API_DOMAIN is required for the HTTPS Auth Hook URI")
+
+services["api-gw"]["ports"]=["127.0.0.1:8000:8000/tcp"]
+services["db"].pop("ports",None)
+services["supavisor"]["ports"]=[
+    "127.0.0.1:5433:5432/tcp",
+    "127.0.0.1:6543:6543/tcp",
+]
+
+def env_to_dict(v):
+    if v is None: return {}
+    if isinstance(v,dict): return dict(v)
+    if isinstance(v,list):
+        out={}
+        for item in v:
+            if isinstance(item,str):
+                if "=" in item:
+                    k,val=item.split("=",1); out[k]=val
+                else:
+                    out[item]=None
+            elif isinstance(item,dict):
+                out.update(item)
+        return out
+    raise SystemExit("Unsupported environment format")
+
+auth_env=env_to_dict(services["auth"].get("environment"))
+auth_env.update({
+    "GOTRUE_HOOK_SEND_SMS_ENABLED":"true",
+    "GOTRUE_HOOK_SEND_SMS_URI":f"https://{api_domain}/functions/v1/auth-send-sms-hook",
+    "GOTRUE_HOOK_SEND_SMS_SECRETS":"${SEND_SMS_HOOK_SECRET}",
+})
+services["auth"]["environment"]=auth_env
+
+fn=services["functions"]
+env_file=fn.get("env_file",[])
+if isinstance(env_file,str): env_file=[env_file]
+elif env_file is None: env_file=[]
+elif not isinstance(env_file,list): raise SystemExit("Unsupported functions env_file format")
+if "/etc/spark/functions-extra.env" not in env_file:
+    env_file.append("/etc/spark/functions-extra.env")
+fn["env_file"]=env_file
+fn_env=env_to_dict(fn.get("environment"))
+for key in [
+    "SEND_SMS_HOOK_SECRET","PHONE_RATE_LIMIT_PEPPER","PHONE_PASSWORD_RESET_SECRET",
+    "PHONE_LOGIN_ALLOWED_ORIGINS","DAILY_REPORT_CRON_SECRET",
+    "NOTIFICATION_OUTBOX_CRON_SECRET","MINUTES_REMINDER_CRON_SECRET",
+    "DECISION_DUE_CRON_SECRET",
+]:
+    fn_env[key]="${"+key+"}"
+fn["environment"]=fn_env
+
+services["avatar-worker"]={
+    "build":{
+        "context":os.path.join(os.environ["SPARK_ROOT_ENV"],"worker"),
+        "dockerfile":"Dockerfile",
+    },
+    "restart":"unless-stopped",
+    "env_file":["/etc/spark/avatar-worker.env"],
+    "depends_on":{"api-gw":{"condition":"service_healthy"}},
+    "read_only":True,
+    "tmpfs":["/tmp:size=64m,mode=1777"],
+    "security_opt":["no-new-privileges:true"],
+    "cap_drop":["ALL"],
+}
+
+path.write_text(yaml.safe_dump(data,sort_keys=False,default_flow_style=False),encoding="utf-8")
+PY
+}
+
 install_step_10() {
   title
   new_log "install-10-compose"
   require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
   require_file "${CONFIG_DIR}/functions-extra.env" || return 1
   require_file "${CONFIG_DIR}/avatar-worker.env" || return 1
+  require_manager_values || return 1
   local backup="${SUPABASE_ROOT}/docker-compose.yml.before-spark"
   local safety="${SUPABASE_ROOT}/docker-compose.yml.pre-manager-$(date +%Y%m%d%H%M%S)"
   cp -a "${SUPABASE_ROOT}/docker-compose.yml" "$safety"
@@ -64,10 +157,6 @@ repair_supabase_bootstrap() {
   local has_internal_db
   has_internal_db="$(cd "$SUPABASE_ROOT" && docker compose exec -T db psql -U postgres -d postgres -Atqc "select 1 from pg_database where datname='_supabase'" 2>/dev/null || true)"
 
-  # In an interrupted/partial initialization the PostgreSQL image may have
-  # created the main Supabase roles while supabase_functions_admin is still
-  # absent. Supabase's official role definition is:
-  # NOINHERIT CREATEROLE LOGIN NOREPLICATION.
   (cd "$SUPABASE_ROOT" && docker compose exec -T db psql \
     -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
 DO $$
@@ -80,13 +169,9 @@ $$;
 SQL
   ) || return 1
 
-  # Replay the official password synchronization after all roles it references
-  # are guaranteed to exist.
   (cd "$SUPABASE_ROOT" && docker compose exec -T db sh -lc \
     'psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /docker-entrypoint-initdb.d/init-scripts/99-roles.sql') || return 1
 
-  # Repair schemas and role search_paths expected by the official self-hosted
-  # services. This is intentionally idempotent and does not drop data.
   (cd "$SUPABASE_ROOT" && docker compose exec -T db psql \
     -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
 CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
@@ -118,20 +203,15 @@ ALTER ROLE supabase_admin SET search_path = "$user", public, auth, extensions;
 SQL
   ) || return 1
 
-  # Supavisor requires the internal _supabase database. Create it only when the
-  # interrupted bootstrap did not get far enough to create it.
   if [[ "$has_internal_db" != "1" ]]; then
     (cd "$SUPABASE_ROOT" && docker compose exec -T db sh -lc \
       'psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /docker-entrypoint-initdb.d/migrations/97-_supabase.sql') || return 1
   fi
 
-  # The official pooler bootstrap is idempotent after _supabase exists.
   (cd "$SUPABASE_ROOT" && docker compose exec -T db sh -lc \
     'psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /docker-entrypoint-initdb.d/migrations/99-pooler.sql') || return 1
 }
 
-# Override the core readiness probe so an interrupted initialization cannot be
-# reported as repaired while required service schemas are still absent.
 supabase_bootstrap_ready() {
   (cd "$SUPABASE_ROOT" && docker compose exec -T db psql -U postgres -d postgres -Atqc \
     "select case when
