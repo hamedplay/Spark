@@ -2,8 +2,25 @@ test_frontend() {
   curl -fIsS --connect-timeout 8 "https://${APP_DOMAIN}" || return 1
 }
 
+supabase_anon_key() {
+  env_get "${SUPABASE_ROOT}/.env" ANON_KEY
+}
+
+test_auth_health_url() {
+  local url="$1" anon
+  anon="$(supabase_anon_key)"
+  [[ -n "$anon" ]] || {
+    echo "ERROR: ANON_KEY is missing from ${SUPABASE_ROOT}/.env"
+    return 1
+  }
+  curl -fsS --connect-timeout 8 \
+    -H "apikey: ${anon}" \
+    -H "Authorization: Bearer ${anon}" \
+    "$url"
+}
+
 test_api() {
-  curl -fsS --connect-timeout 8 "https://${API_DOMAIN}/auth/v1/health" || return 1
+  test_auth_health_url "https://${API_DOMAIN}/auth/v1/health" || return 1
   printf '\n'
   curl -isS --connect-timeout 8 "https://${API_DOMAIN}/functions/v1/password-login" | sed -n '1,30p' || return 1
 }
@@ -51,12 +68,12 @@ test_ssl_dns() {
 test_full_validation() {
   require_manager_values || return 1
   echo "== Supabase local =="
-  curl -fsS http://127.0.0.1:8000/auth/v1/health || return 1
+  test_auth_health_url "http://127.0.0.1:8000/auth/v1/health" || return 1
   echo
   echo "== Frontend =="
   curl -fIsS "https://${APP_DOMAIN}" || return 1
   echo "== API =="
-  curl -fsS "https://${API_DOMAIN}/auth/v1/health" || return 1
+  test_auth_health_url "https://${API_DOMAIN}/auth/v1/health" || return 1
   echo
   curl -isS "https://${API_DOMAIN}/functions/v1/password-login" | sed -n '1,40p' || return 1
   echo "== Docker =="
