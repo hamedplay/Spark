@@ -12,6 +12,63 @@ studio_access_enabled() {
   [[ -f "$STUDIO_ACCESS_FLAG" ]]
 }
 
+studio_dashboard_credentials() {
+  local dashboard_user dashboard_password
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  [[ -n "$dashboard_password" ]] || return 1
+  printf '%s\n%s\n' "$dashboard_user" "$dashboard_password"
+}
+
+studio_gateway_direct_probe() {
+  local dashboard_user dashboard_password
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  [[ -n "$dashboard_password" ]] || return 1
+  curl -fsSL --connect-timeout 3 --max-time 12 \
+    -u "${dashboard_user}:${dashboard_password}" \
+    "http://127.0.0.1:8000/" -o /dev/null 2>&1
+}
+
+sync_official_envoy_gateway_assets() {
+  local source_dir="${SUPABASE_SOURCE}/docker/volumes/api/envoy"
+  local target_dir="${SUPABASE_ROOT}/volumes/api/envoy"
+  [[ -d "$source_dir" ]] || {
+    fail "Envoy assets در Source رسمی Supabase پیدا نشد: ${source_dir}"
+    return 1
+  }
+  [[ -f "${source_dir}/lds.template.yaml" ]] || {
+    fail "lds.template.yaml رسمی Supabase پیدا نشد؛ از sync ناقص جلوگیری شد."
+    return 1
+  }
+  [[ -f "${source_dir}/cds.yaml" ]] || {
+    fail "cds.yaml رسمی Supabase پیدا نشد؛ از sync ناقص جلوگیری شد."
+    return 1
+  }
+  mkdir -p "$target_dir"
+  rsync -a --delete "${source_dir}/" "${target_dir}/" || return 1
+}
+
+repair_studio_gateway_route() {
+  require_dir "${SUPABASE_SOURCE}/docker/volumes/api/envoy" || return 1
+  require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
+  run_logged "Sync official Supabase Envoy gateway assets" sync_official_envoy_gateway_assets || return 1
+  run_logged "Recreate Supabase Envoy gateway" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate api-gw" || return 1
+
+  local i
+  for i in {1..20}; do
+    if studio_gateway_direct_probe; then
+      ok "Envoy catch-all Studio route روی 127.0.0.1:8000 تأیید شد."
+      return 0
+    fi
+    sleep 1
+  done
+  fail "Envoy بعد از sync رسمی هنوز root Studio را پاسخ نمی‌دهد."
+  return 1
+}
+
 studio_external_is_open() {
   studio_access_enabled || return 1
   [[ -L /etc/nginx/sites-enabled/spark ]] || return 1
@@ -97,6 +154,13 @@ open_supabase_studio_access() {
   if ! confirm_word "دسترسی Supabase Studio روی https://${API_DOMAIN} (HTTPS/443) فعال می‌شود. APIهای Supabase بدون تغییر باقی می‌مانند." "OPEN"; then
     warn "لغو شد."
     return 1
+  fi
+
+  # Validate the actual upstream before touching public Nginx state. A stale
+  # runtime can keep old Envoy assets even after the official source was updated.
+  if ! studio_gateway_direct_probe; then
+    warn "Envoy root route آماده نیست؛ assetهای رسمی gateway بدون تغییر .env/data sync می‌شوند."
+    repair_studio_gateway_route || return 1
   fi
 
   mkdir -p "$CONFIG_DIR"
@@ -197,6 +261,21 @@ open_supabase_admin_access() {
 close_supabase_admin_access() {
   new_log "supabase-studio-close"
   close_supabase_studio_access
+}
+
+# Keep official Envoy gateway assets current when the Supabase source step is
+# rerun against an existing runtime. Secrets, data and the live Compose file are
+# intentionally not overwritten here.
+eval "$(declare -f install_step_5 | sed '1s/install_step_5/install_step_5_base/')"
+install_step_5() {
+  install_step_5_base || return 1
+  if [[ -f "${SUPABASE_ROOT}/.env" && -d "${SUPABASE_SOURCE}/docker/volumes/api/envoy" ]]; then
+    new_log "install-05-envoy-assets"
+    run_logged "Sync official Supabase Envoy gateway assets" sync_official_envoy_gateway_assets || {
+      unmark_step 5
+      return 1
+    }
+  fi
 }
 
 # -----------------------------------------------------------------------------
