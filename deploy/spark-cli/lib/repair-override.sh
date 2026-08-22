@@ -242,3 +242,110 @@ supabase_bootstrap_ready() {
       and (to_regprocedure('auth.role()') is null or pg_get_userbyid((select proowner from pg_proc where oid=to_regprocedure('auth.role()')))='supabase_auth_admin')
       then 1 else 0 end" 2>/dev/null | grep -qx 1)
 }
+
+# Spark uses dedicated www/api/turn hosts below the main application domain.
+# The old generic domain regex accepted values such as turn.shahr even when the
+# application domain was shahrmeeting.ir. Keep the syntax check, but also enforce
+# the service-domain relationship used by Nginx, Certbot and Coturn.
+valid_service_domain() {
+  local child="$1" parent="$2"
+  valid_domain "$child" || return 1
+  valid_domain "$parent" || return 1
+  [[ "$child" == *".${parent}" && "$child" != "$parent" ]]
+}
+
+test_values() {
+  require_manager_values || return 1
+  valid_domain "$APP_DOMAIN" || return 1
+  valid_service_domain "$WWW_DOMAIN" "$APP_DOMAIN" || return 1
+  valid_service_domain "$API_DOMAIN" "$APP_DOMAIN" || return 1
+  valid_service_domain "$TURN_DOMAIN" "$APP_DOMAIN" || return 1
+  valid_ipv4 "$TURN_PUBLIC_IP" || return 1
+  valid_ipv4 "$TURN_PRIVATE_IP" || return 1
+  valid_email "$LE_EMAIL" || return 1
+}
+
+configure_values_interactive() {
+  ensure_values
+  local v default_value
+
+  while true; do
+    prompt_default v "دامنه اصلی" "${APP_DOMAIN:-shahrmeeting.ir}"
+    valid_domain "$v" && { APP_DOMAIN="$v"; break; }
+    fail "دامنه اصلی معتبر نیست."
+  done
+
+  default_value="${WWW_DOMAIN:-}"
+  valid_service_domain "$default_value" "$APP_DOMAIN" || default_value="www.${APP_DOMAIN}"
+  while true; do
+    prompt_default v "دامنه www" "$default_value"
+    valid_service_domain "$v" "$APP_DOMAIN" && { WWW_DOMAIN="$v"; break; }
+    fail "دامنه www باید زیر دامنه ${APP_DOMAIN} باشد؛ مثال: www.${APP_DOMAIN}"
+  done
+
+  default_value="${API_DOMAIN:-}"
+  valid_service_domain "$default_value" "$APP_DOMAIN" || default_value="api.${APP_DOMAIN}"
+  while true; do
+    prompt_default v "دامنه API" "$default_value"
+    valid_service_domain "$v" "$APP_DOMAIN" && { API_DOMAIN="$v"; break; }
+    fail "دامنه API باید زیر دامنه ${APP_DOMAIN} باشد؛ مثال: api.${APP_DOMAIN}"
+  done
+
+  default_value="${TURN_DOMAIN:-}"
+  valid_service_domain "$default_value" "$APP_DOMAIN" || default_value="turn.${APP_DOMAIN}"
+  while true; do
+    prompt_default v "دامنه TURN" "$default_value"
+    valid_service_domain "$v" "$APP_DOMAIN" && { TURN_DOMAIN="$v"; break; }
+    fail "دامنه TURN باید زیر دامنه ${APP_DOMAIN} باشد؛ مثال: turn.${APP_DOMAIN}"
+  done
+
+  while true; do
+    prompt_default v "Public IPv4 سرور" "${TURN_PUBLIC_IP:-}"
+    valid_ipv4 "$v" && { TURN_PUBLIC_IP="$v"; break; }
+    fail "IPv4 معتبر نیست."
+  done
+  while true; do
+    prompt_default v "Private IPv4 سرور (اگر NAT ندارید همان Public IP)" "${TURN_PRIVATE_IP:-$TURN_PUBLIC_IP}"
+    valid_ipv4 "$v" && { TURN_PRIVATE_IP="$v"; break; }
+    fail "IPv4 معتبر نیست."
+  done
+  while true; do
+    prompt_default v "Email برای Let's Encrypt" "${LE_EMAIL:-}"
+    valid_email "$v" && { LE_EMAIL="$v"; break; }
+    fail "Email معتبر نیست."
+  done
+
+  prompt_default TURN_MIN_PORT "TURN minimum relay port" "${TURN_MIN_PORT:-49160}"
+  prompt_default TURN_MAX_PORT "TURN maximum relay port" "${TURN_MAX_PORT:-49200}"
+  [[ "$TURN_MIN_PORT" =~ ^[0-9]+$ && "$TURN_MAX_PORT" =~ ^[0-9]+$ ]] || {
+    fail "پورت TURN باید عددی باشد."
+    return 1
+  }
+  (( TURN_MIN_PORT < TURN_MAX_PORT && TURN_MIN_PORT >= 1024 && TURN_MAX_PORT <= 65535 )) || {
+    fail "بازه TURN نامعتبر است."
+    return 1
+  }
+
+  save_config
+  ok "تنظیمات در ${MANAGER_CONF} ذخیره شد (mode 600)."
+}
+
+install_step_15() {
+  title
+  new_log "install-15-certificates"
+  require_manager_values || return 1
+  if ! test_values; then
+    fail "تنظیمات دامنه معتبر نیست؛ مرحله 01 – Configuration را دوباره اجرا کنید."
+    info "TURN پیشنهادی برای دامنه فعلی: turn.${APP_DOMAIN}"
+    return 1
+  fi
+  run_logged "Certificate دامنه Frontend" certbot certonly --webroot -w /var/www/acme -d "$APP_DOMAIN" -d "$WWW_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
+  run_logged "Certificate دامنه API" certbot certonly --webroot -w /var/www/acme -d "$API_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
+  run_logged "Certificate دامنه TURN" certbot certonly --webroot -w /var/www/acme -d "$TURN_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
+  if run_logged "تست Certificateها" test_certificates; then
+    mark_step 15
+  else
+    unmark_step 15
+    return 1
+  fi
+}
