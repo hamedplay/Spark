@@ -66,6 +66,7 @@ files=(
   lib/update.sh
   lib/admin.sh
   lib/cleanup.sh
+  lib/repair-override.sh
 )
 
 for file in "${files[@]}"; do
