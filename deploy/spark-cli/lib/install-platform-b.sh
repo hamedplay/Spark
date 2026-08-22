@@ -172,7 +172,7 @@ install_step_16() {
   title
   new_log "install-16-nginx-production"
   require_manager_values || return 1
-  test_certificates >>"$CURRENT_LOG" 2>&1 || { fail "Certificateها آماده نیستند؛ مرحله 15 را اجرا کنید."; return 1; }
+  test_certificates >>"$CURRENT_LOG" 2>&1 || { fail "Certificateها آماده نیستند؛ مرحله 13 – TLS certificates را اجرا کنید."; return 1; }
   local old=""
   if [[ -f /etc/nginx/sites-available/spark ]]; then
     old="$(mktemp)"
