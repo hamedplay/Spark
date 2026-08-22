@@ -248,3 +248,170 @@ PY
   done <<<"$output"
   chmod 600 "$file"
 }
+
+# -----------------------------------------------------------------------------
+# Security Center: targeted account unlock by username, email, or phone.
+# Loaded after admin.sh so we can extend the existing Security Center without
+# changing the public UI/backend action contract.
+# -----------------------------------------------------------------------------
+
+spark_account_unlock() {
+  local identifier candidate count user_id username email phone account_status locked_until events result
+  require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
+  if ! docker inspect -f '{{.State.Running}}' supabase-db 2>/dev/null | grep -qx true; then
+    fail "کانتینر supabase-db در حال اجرا نیست."
+    return 1
+  fi
+
+  printf '\nشناسه کاربر را وارد کنید (username / email / phone): '
+  IFS= read -r identifier
+  identifier="${identifier#"${identifier%%[![:space:]]*}"}"
+  identifier="${identifier%"${identifier##*[![:space:]]}"}"
+  [[ -n "$identifier" ]] || { fail "شناسه خالی است."; return 1; }
+  (( ${#identifier} <= 256 )) || { fail "شناسه بیش از حد طولانی است."; return 1; }
+
+  candidate="$(docker exec supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -v identifier="$identifier" -AtF $'\t' <<'SQL'
+WITH input AS (
+  SELECT
+    lower(trim(:'identifier')) AS text_value,
+    regexp_replace(:'identifier', '[^0-9]', '', 'g') AS digits
+), normalized AS (
+  SELECT text_value,
+    CASE
+      WHEN digits LIKE '0098%' THEN substring(digits FROM 3)
+      WHEN digits LIKE '09%' THEN '98' || substring(digits FROM 2)
+      ELSE digits
+    END AS phone_value
+  FROM input
+), matched_ids AS (
+  SELECT p.user_id
+  FROM public.profiles p, normalized n
+  LEFT JOIN auth.users u ON u.id = p.user_id
+  WHERE lower(coalesce(p.normalized_username, '')) = n.text_value
+     OR lower(coalesce(p.normalized_email, '')) = n.text_value
+     OR lower(coalesce(u.email, '')) = n.text_value
+  UNION
+  SELECT r.user_id
+  FROM normalized n
+  CROSS JOIN LATERAL public.resolve_phone_password_login_v1(n.phone_value) r
+  WHERE n.phone_value <> ''
+), candidates AS (
+  SELECT DISTINCT p.user_id, p.normalized_username, u.email, u.phone,
+         p.account_status, p.locked_until
+  FROM matched_ids m
+  JOIN public.profiles p ON p.user_id = m.user_id
+  LEFT JOIN auth.users u ON u.id = m.user_id
+)
+SELECT concat_ws(E'\t',
+  user_id::text,
+  coalesce(normalized_username, ''),
+  coalesce(email, ''),
+  coalesce(phone, ''),
+  coalesce(account_status, ''),
+  coalesce(locked_until::text, '')
+)
+FROM candidates
+ORDER BY user_id
+LIMIT 3;
+SQL
+)" || { fail "جستجوی حساب در دیتابیس شکست خورد."; return 1; }
+
+  count="$(printf '%s\n' "$candidate" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [[ "$count" == "0" ]]; then
+    fail "کاربری با این username/email/phone پیدا نشد."
+    return 1
+  fi
+  if [[ "$count" != "1" ]]; then
+    fail "این شناسه به بیش از یک حساب match شد؛ برای ایمنی هیچ تغییری انجام نشد."
+    printf '%s\n' "$candidate"
+    return 1
+  fi
+
+  IFS=$'\t' read -r user_id username email phone account_status locked_until <<<"$candidate"
+  events="$(docker exec supabase-db psql -U postgres -d postgres -Atqc \
+    "select count(*) from public.auth_lock_events where user_id = '${user_id}'::uuid" 2>/dev/null || true)"
+
+  printf '\n%s%sحساب پیدا شد%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+  printf '%s\n' '────────────────────────────────────────────────────────────'
+  printf 'User ID       : %s\n' "$user_id"
+  printf 'Username      : %s\n' "${username:-—}"
+  printf 'Email         : %s\n' "${email:-—}"
+  printf 'Phone         : %s\n' "${phone:-—}"
+  printf 'Account status: %s\n' "${account_status:-—}"
+  printf 'Locked until  : %s\n' "${locked_until:-—}"
+  printf 'Lock events   : %s\n' "${events:-?}"
+  printf '%s\n' '────────────────────────────────────────────────────────────'
+  info "اگر status برابر SUSPENDED یا RETIRED باشد، این ابزار آن را ACTIVE نمی‌کند؛ فقط lock ناشی از تلاش ورود را پاک می‌کند."
+
+  if ! confirm_word "قفل ورود و شمارنده تلاش‌های ناموفق این حساب reset شود؟" "UNLOCK"; then
+    warn "لغو شد؛ هیچ تغییری انجام نشد."
+    return 1
+  fi
+
+  result="$(docker exec supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -AtF $'\t' -v user_id="$user_id" <<'SQL'
+BEGIN;
+UPDATE public.profiles
+SET locked_until = NULL,
+    account_status = CASE WHEN account_status = 'LOCKED' THEN 'ACTIVE' ELSE account_status END
+WHERE user_id = :'user_id'::uuid;
+DELETE FROM public.auth_lock_events
+WHERE user_id = :'user_id'::uuid;
+COMMIT;
+SELECT concat_ws(E'\t', account_status, coalesce(locked_until::text, 'NULL'))
+FROM public.profiles
+WHERE user_id = :'user_id'::uuid;
+SELECT count(*)::text
+FROM public.auth_lock_events
+WHERE user_id = :'user_id'::uuid;
+SQL
+)" || { fail "Unlock دیتابیس شکست خورد؛ transaction اعمال نشد."; return 1; }
+
+  account_status="$(printf '%s\n' "$result" | sed -n '1p')"
+  events="$(printf '%s\n' "$result" | sed -n '2p')"
+  if [[ "$events" != "0" ]] || [[ "$account_status" == *$'\t'* && "$account_status" != *$'\tNULL' ]]; then
+    fail "Validation نهایی unlock موفق نبود."
+    printf '%s\n' "$result"
+    return 1
+  fi
+
+  ok "قفل ورود حساب با موفقیت reset شد."
+  printf 'Final state: %s | lock events: %s\n' "$account_status" "$events"
+}
+
+# Extend the existing Security Center with account unlock while preserving every
+# existing database/Studio operation supplied by admin.sh/runtime-fixes.sh.
+open_supabase_admin_access() {
+  local choice db_state studio_state
+  while true; do
+    clear_screen
+    db_state="$(database_security_state)"
+    studio_state="CLOSED"; studio_external_is_open && studio_state="OPEN"
+    printf '%s%sSecurity Center%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+    printf '%s\n' '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+    printf 'Database : %-24s  Studio : %s\n\n' "$db_state" "$studio_state"
+    printf '0) بازگشت\n'
+    printf '1) اطلاعات اتصال PostgreSQL / pgAdmin\n'
+    printf '2) تست واقعی Login دیتابیس (Local Supavisor)\n'
+    printf '3) باز کردن Database روی TCP/5432\n'
+    printf '4) بستن Database روی TCP/5432\n'
+    printf '5) اطلاعات اتصال Supabase Studio\n'
+    printf '6) باز کردن Supabase Studio\n'
+    printf '7) بستن Supabase Studio\n'
+    printf '8) گزارش وضعیت Security / Firewall\n'
+    printf '9) رفع قفل حساب کاربری (username / email / phone)\n\n'
+    read -r -p "انتخاب: " choice
+    case "$choice" in
+      0) return 0 ;;
+      1) show_database_connection_info || true; security_access_wait ;;
+      2) new_log "database-login-test"; if run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433; then ok "Login واقعی دیتابیس موفق است."; fi; security_access_wait ;;
+      3) new_log "database-access-open"; open_database_external_access || true; security_access_wait ;;
+      4) new_log "database-access-close"; close_database_external_access || true; security_access_wait ;;
+      5) show_studio_connection_info || true; security_access_wait ;;
+      6) new_log "supabase-studio-open"; open_supabase_studio_access || true; security_access_wait ;;
+      7) new_log "supabase-studio-close"; close_supabase_studio_access || true; security_access_wait ;;
+      8) security_status_report; security_access_wait ;;
+      9) new_log "account-unlock"; spark_account_unlock || true; security_access_wait ;;
+      *) fail "گزینه نامعتبر"; sleep 1 ;;
+    esac
+  done
+}
