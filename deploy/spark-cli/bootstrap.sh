@@ -7,7 +7,7 @@ TARGET="/usr/local/lib/spark-manager"
 CLI_PATH="/usr/local/bin/spark"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
-EXPECTED_VERSION="2.1.0+20260821.1"
+EXPECTED_VERSION="2.1.0+20260822.2"
 EXPECTED_MIGRATE_VERSION="1.1.0+20260822.2"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
@@ -76,11 +76,6 @@ for file in "${files[@]}"; do
   curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/${file}" -o "${tmp}/${file}"
 done
 
-# The main Spark loader intentionally keeps a fixed module list. Append late
-# compatibility layers to repair-override.sh so they are sourced last.
-cat "$tmp/lib/env-modern.sh" >>"$tmp/lib/repair-override.sh"
-cat "$tmp/lib/runtime-fixes.sh" >>"$tmp/lib/repair-override.sh"
-
 bash -n "$tmp/spark"
 bash -n "$tmp/spark-migrate"
 for file in "$tmp"/lib/*.sh; do bash -n "$file"; done
@@ -93,7 +88,7 @@ for value in sys.argv[1:]:
 PY
 python3 "$tmp/spark-ui.py" --self-test
 
-grep -q 'SPARK_MANAGER_VERSION="2.1.0+20260821.1"' "$tmp/spark" || {
+grep -q 'SPARK_MANAGER_VERSION="2.1.0+20260822.2"' "$tmp/spark" || {
   echo "Spark Manager version validation failed." >&2
   exit 1
 }
@@ -109,16 +104,24 @@ grep -q 'cleanup_database_data' "$tmp/lib/cleanup.sh" || {
   echo "Spark cleanup module validation failed." >&2
   exit 1
 }
-grep -q 'ensure_modern_auth_keys' "$tmp/lib/repair-override.sh" || {
-  echo "Spark modern Supabase env layer was not loaded." >&2
+grep -q 'ensure_modern_auth_keys' "$tmp/lib/env-modern.sh" || {
+  echo "Spark modern Supabase env layer is missing." >&2
   exit 1
 }
-grep -q 'Studio HTTPS/443' "$tmp/lib/repair-override.sh" || {
-  echo "Spark Studio 443 runtime fix was not loaded." >&2
+grep -q 'Studio HTTPS/443' "$tmp/lib/runtime-fixes.sh" || {
+  echo "Spark Studio 443 runtime fix is missing." >&2
   exit 1
 }
-grep -q "GRANT anon, authenticated, service_role TO supabase_storage_admin" "$tmp/lib/repair-override.sh" || {
-  echo "Spark Storage role repair was not loaded." >&2
+grep -q "GRANT anon, authenticated, service_role TO supabase_storage_admin" "$tmp/lib/runtime-fixes.sh" || {
+  echo "Spark Storage role repair is missing." >&2
+  exit 1
+}
+grep -q 'studio_gateway_direct_probe' "$tmp/lib/runtime-fixes.sh" || {
+  echo "Spark Studio gateway probe is missing." >&2
+  exit 1
+}
+grep -q 'env-modern runtime-fixes' "$tmp/spark" || {
+  echo "Spark loader does not source runtime modules natively." >&2
   exit 1
 }
 grep -q 'pty.openpty()' "$tmp/spark-ui.py" || {
