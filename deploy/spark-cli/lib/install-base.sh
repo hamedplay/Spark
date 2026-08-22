@@ -76,6 +76,7 @@ EOF
   ' || return 1
 
   run_logged "تنظیم NodeSource Node 24" bash -c '
+    install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
     chmod a+r /etc/apt/keyrings/nodesource.gpg
     cat >/etc/apt/sources.list.d/nodesource.list <<EOF
@@ -199,15 +200,34 @@ print(f"{h}.{p}.{s}")
 PY
 }
 
+is_placeholder_value() {
+  local value="${1:-}"
+  [[ -z "$value" ]] && return 0
+  case "$value" in
+    your-tenant-id|stub|your-domain.example.com|admin@example.com|GOOGLE_PROJECT_ID|GOOGLE_PROJECT_NUMBER|sk-proj-xxxxxxxx|fake_mail_user|fake_mail_password|fake_sender)
+      return 0 ;;
+  esac
+  [[ "$value" == *xxxxxxxx* || "$value" == *YOUR_* || "$value" == *CHANGE_ME* ]]
+}
+
 ensure_fresh_secret() {
   local key="$1" generator="$2"
   local file="${SUPABASE_ROOT}/.env" example="${SUPABASE_ROOT}/.env.example"
   local current sample value
   current="$(env_get "$file" "$key")"
   sample="$(env_get "$example" "$key")"
-  if [[ -z "$current" || "$current" == "$sample" ]]; then
+  if [[ -z "$current" || "$current" == "$sample" ]] || is_placeholder_value "$current"; then
     value="$(eval "$generator")"
     env_set "$file" "$key" "$value"
+  fi
+}
+
+ensure_internal_identifier() {
+  local key="$1" prefix="$2" current sample
+  current="$(env_get "${SUPABASE_ROOT}/.env" "$key")"
+  sample="$(env_get "${SUPABASE_ROOT}/.env.example" "$key")"
+  if [[ -z "$current" || "$current" == "$sample" ]] || is_placeholder_value "$current"; then
+    env_set "${SUPABASE_ROOT}/.env" "$key" "${prefix}$(openssl rand -hex 8)"
   fi
 }
 
@@ -217,14 +237,15 @@ test_supabase_secrets() {
     POSTGRES_PASSWORD JWT_SECRET ANON_KEY SERVICE_ROLE_KEY DASHBOARD_PASSWORD
     SECRET_KEY_BASE REALTIME_DB_ENC_KEY VAULT_ENC_KEY PG_META_CRYPTO_KEY
     LOGFLARE_PUBLIC_ACCESS_TOKEN LOGFLARE_PRIVATE_ACCESS_TOKEN
-    S3_PROTOCOL_ACCESS_KEY_ID S3_PROTOCOL_ACCESS_KEY_SECRET
-    MINIO_ROOT_PASSWORD
+    S3_PROTOCOL_ACCESS_KEY_ID S3_PROTOCOL_ACCESS_KEY_SECRET MINIO_ROOT_PASSWORD
+    POOLER_TENANT_ID STORAGE_TENANT_ID
   )
   for key in "${keys[@]}"; do
     current="$(env_get "${SUPABASE_ROOT}/.env" "$key")"
     sample="$(env_get "${SUPABASE_ROOT}/.env.example" "$key")"
     [[ -n "$current" ]] || return 1
     [[ -z "$sample" || "$current" != "$sample" ]] || return 1
+    is_placeholder_value "$current" && return 1
   done
   [[ "$(stat -c '%a' "${SUPABASE_ROOT}/.env")" == "600" ]]
 }
@@ -235,7 +256,7 @@ install_step_6() {
   require_file "${SUPABASE_ROOT}/.env" || return 1
   require_file "${SUPABASE_ROOT}/.env.example" || return 1
 
-  info "Secretهای موجود حفظ می‌شوند؛ فقط مقدارهای خالی/default جایگزین خواهند شد."
+  info "Secretها و شناسه‌های داخلی موجود حفظ می‌شوند؛ فقط empty/default/placeholderها جایگزین می‌شوند."
   ensure_fresh_secret POSTGRES_PASSWORD "openssl rand -hex 16"
   ensure_fresh_secret JWT_SECRET "openssl rand -base64 30 | tr -d '\n'"
   ensure_fresh_secret SECRET_KEY_BASE "openssl rand -base64 48 | tr -d '\n'"
@@ -248,23 +269,24 @@ install_step_6() {
   ensure_fresh_secret S3_PROTOCOL_ACCESS_KEY_SECRET "openssl rand -hex 32"
   ensure_fresh_secret MINIO_ROOT_PASSWORD "openssl rand -hex 16"
   ensure_fresh_secret DASHBOARD_PASSWORD "openssl rand -hex 16"
+  ensure_internal_identifier POOLER_TENANT_ID "spark-"
+  ensure_internal_identifier STORAGE_TENANT_ID "spark-"
 
-  local jwt anon service
+  local jwt anon service sample_anon sample_service
   jwt="$(env_get "${SUPABASE_ROOT}/.env" JWT_SECRET)"
   anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"
   service="$(env_get "${SUPABASE_ROOT}/.env" SERVICE_ROLE_KEY)"
-  local sample_anon sample_service
   sample_anon="$(env_get "${SUPABASE_ROOT}/.env.example" ANON_KEY)"
   sample_service="$(env_get "${SUPABASE_ROOT}/.env.example" SERVICE_ROLE_KEY)"
-  if [[ -z "$anon" || "$anon" == "$sample_anon" ]]; then
+  if [[ -z "$anon" || "$anon" == "$sample_anon" ]] || is_placeholder_value "$anon"; then
     env_set "${SUPABASE_ROOT}/.env" ANON_KEY "$(generate_jwt anon "$jwt")"
   fi
-  if [[ -z "$service" || "$service" == "$sample_service" ]]; then
+  if [[ -z "$service" || "$service" == "$sample_service" ]] || is_placeholder_value "$service"; then
     env_set "${SUPABASE_ROOT}/.env" SERVICE_ROLE_KEY "$(generate_jwt service_role "$jwt")"
   fi
   chmod 600 "${SUPABASE_ROOT}/.env"
 
-  if run_logged "اعتبارسنجی Secretها بدون نمایش مقدار" test_supabase_secrets; then
+  if run_logged "اعتبارسنجی Secretها و شناسه‌های داخلی بدون نمایش مقدار" test_supabase_secrets; then
     mark_step 6
   else
     unmark_step 6
@@ -272,19 +294,49 @@ install_step_6() {
   fi
 }
 
+normalize_optional_external_env() {
+  local file="$1"
+  local smtp_host smtp_user smtp_pass openai
+  openai="$(env_get "$file" OPENAI_API_KEY)"
+  if is_placeholder_value "$openai"; then env_set "$file" OPENAI_API_KEY ""; fi
+
+  smtp_host="$(env_get "$file" SMTP_HOST)"
+  smtp_user="$(env_get "$file" SMTP_USER)"
+  smtp_pass="$(env_get "$file" SMTP_PASS)"
+  if is_placeholder_value "$smtp_host" || is_placeholder_value "$smtp_user" || is_placeholder_value "$smtp_pass"; then
+    env_set "$file" ENABLE_EMAIL_SIGNUP "false"
+    env_set "$file" SMTP_ADMIN_EMAIL "$LE_EMAIL"
+    env_set "$file" SMTP_HOST ""
+    env_set "$file" SMTP_PORT "587"
+    env_set "$file" SMTP_USER ""
+    env_set "$file" SMTP_PASS ""
+    env_set "$file" SMTP_SENDER_NAME "Spark"
+  fi
+  env_set "$file" GOOGLE_PROJECT_ID ""
+  env_set "$file" GOOGLE_PROJECT_NUMBER ""
+}
+
 test_supabase_env() {
-  local file="${SUPABASE_ROOT}/.env"
+  local file="${SUPABASE_ROOT}/.env" key value
+  [[ "$(env_get "$file" COMPOSE_FILE)" == "docker-compose.yml" ]] || return 1
   [[ "$(env_get "$file" SUPABASE_PUBLIC_URL)" == "https://${API_DOMAIN}" ]] || return 1
   [[ "$(env_get "$file" API_EXTERNAL_URL)" == "https://${API_DOMAIN}/auth/v1" ]] || return 1
   [[ "$(env_get "$file" SITE_URL)" == "https://${APP_DOMAIN}" ]] || return 1
+  [[ "$(env_get "$file" PROXY_DOMAIN)" == "$API_DOMAIN" ]] || return 1
+  [[ "$(env_get "$file" CERTBOT_EMAIL)" == "$LE_EMAIL" ]] || return 1
+  [[ "$(env_get "$file" POSTGRES_HOST)" == "db" ]] || return 1
+  [[ "$(env_get "$file" POSTGRES_DB)" == "postgres" ]] || return 1
+  [[ "$(env_get "$file" POSTGRES_PORT)" == "5432" ]] || return 1
   [[ "$(env_get "$file" FUNCTIONS_VERIFY_JWT)" == "false" ]] || return 1
-  env_has_nonempty "$file" SEND_SMS_HOOK_SECRET || return 1
-  env_has_nonempty "$file" PHONE_RATE_LIMIT_PEPPER || return 1
-  env_has_nonempty "$file" PHONE_PASSWORD_RESET_SECRET || return 1
-  env_has_nonempty "$file" DAILY_REPORT_CRON_SECRET || return 1
-  env_has_nonempty "$file" NOTIFICATION_OUTBOX_CRON_SECRET || return 1
-  env_has_nonempty "$file" MINUTES_REMINDER_CRON_SECRET || return 1
-  env_has_nonempty "$file" DECISION_DUE_CRON_SECRET || return 1
+  for key in POOLER_TENANT_ID STORAGE_TENANT_ID SEND_SMS_HOOK_SECRET PHONE_RATE_LIMIT_PEPPER PHONE_PASSWORD_RESET_SECRET DAILY_REPORT_CRON_SECRET NOTIFICATION_OUTBOX_CRON_SECRET MINUTES_REMINDER_CRON_SECRET DECISION_DUE_CRON_SECRET; do
+    value="$(env_get "$file" "$key")"
+    [[ -n "$value" ]] || return 1
+    is_placeholder_value "$value" && return 1
+  done
+  for key in OPENAI_API_KEY SMTP_HOST SMTP_USER SMTP_PASS GOOGLE_PROJECT_ID GOOGLE_PROJECT_NUMBER; do
+    value="$(env_get "$file" "$key")"
+    is_placeholder_value "$value" && return 1
+  done
 }
 
 install_step_7() {
@@ -293,11 +345,34 @@ install_step_7() {
   require_manager_values || return 1
   require_file "${SUPABASE_ROOT}/.env" || return 1
   local file="${SUPABASE_ROOT}/.env"
+
+  env_set "$file" COMPOSE_FILE "docker-compose.yml"
   env_set "$file" SUPABASE_PUBLIC_URL "https://${API_DOMAIN}"
   env_set "$file" API_EXTERNAL_URL "https://${API_DOMAIN}/auth/v1"
   env_set "$file" SITE_URL "https://${APP_DOMAIN}"
   env_set "$file" ADDITIONAL_REDIRECT_URLS "https://${APP_DOMAIN}/*,https://${WWW_DOMAIN}/*"
+  env_set "$file" POSTGRES_HOST "db"
+  env_set "$file" POSTGRES_DB "postgres"
+  env_set "$file" POSTGRES_PORT "5432"
+  env_set "$file" POOLER_PROXY_PORT_TRANSACTION "6543"
+  env_set "$file" POOLER_DEFAULT_POOL_SIZE "20"
+  env_set "$file" POOLER_MAX_CLIENT_CONN "100"
+  env_set "$file" POOLER_DB_POOL_SIZE "5"
+  env_set "$file" STUDIO_DEFAULT_ORGANIZATION "Spark"
+  env_set "$file" STUDIO_DEFAULT_PROJECT "Spark Production"
+  env_set "$file" PGRST_DB_SCHEMAS "public,graphql_public"
+  env_set "$file" PGRST_DB_MAX_ROWS "1000"
+  env_set "$file" PGRST_DB_EXTRA_SEARCH_PATH "public"
+  env_set "$file" API_GW_HTTP_PORT "8000"
+  env_set "$file" KONG_HTTP_PORT "8000"
+  env_set "$file" KONG_HTTPS_PORT "8443"
+  env_set "$file" GLOBAL_S3_BUCKET "spark-storage"
+  env_set "$file" REGION "local"
+  env_set "$file" MINIO_ROOT_USER "spark-storage"
   env_set "$file" FUNCTIONS_VERIFY_JWT "false"
+  env_set "$file" IMGPROXY_AUTO_WEBP "true"
+  env_set "$file" PROXY_DOMAIN "$API_DOMAIN"
+  env_set "$file" CERTBOT_EMAIL "$LE_EMAIL"
   env_set "$file" PHONE_LOGIN_ALLOWED_ORIGINS "https://${APP_DOMAIN},https://${WWW_DOMAIN}"
 
   env_has_nonempty "$file" SEND_SMS_HOOK_SECRET || env_set "$file" SEND_SMS_HOOK_SECRET "v1,whsec_$(openssl rand -base64 32 | tr -d '\n')"
@@ -307,14 +382,15 @@ install_step_7() {
   env_has_nonempty "$file" NOTIFICATION_OUTBOX_CRON_SECRET || env_set "$file" NOTIFICATION_OUTBOX_CRON_SECRET "$(openssl rand -hex 32)"
   env_has_nonempty "$file" MINUTES_REMINDER_CRON_SECRET || env_set "$file" MINUTES_REMINDER_CRON_SECRET "$(openssl rand -hex 32)"
   env_has_nonempty "$file" DECISION_DUE_CRON_SECRET || env_set "$file" DECISION_DUE_CRON_SECRET "$(openssl rand -hex 32)"
+
+  normalize_optional_external_env "$file"
   chmod 600 "$file"
 
   if grep -Eq 'GOTRUE_JWT_KEYS|API_JWT_JWKS|SUPABASE_JWKS|JWT_JWKS' "${SUPABASE_ROOT}/docker-compose.yml"; then
-    warn "این Supabase snapshot به JWT_KEYS/JWKS جدید اشاره می‌کند."
-    info "ابزار عمداً key-format یک نسخه دیگر را حدس نمی‌زند؛ docker compose config در مرحله 10 اعتبارسنجی خواهد شد."
+    info "Asymmetric/JWKS variables are optional in this runtime; empty values are retained and legacy JWT_SECRET remains active."
   fi
 
-  if run_logged "تست تنظیمات .env" test_supabase_env; then
+  if run_logged "تست کامل تنظیمات .env و عدم وجود placeholder فعال" test_supabase_env; then
     mark_step 7
   else
     unmark_step 7
