@@ -9,12 +9,12 @@ data=yaml.safe_load(path.read_text(encoding="utf-8"))
 if not isinstance(data,dict) or not isinstance(data.get("services"),dict):
     raise SystemExit("docker-compose.yml has no services mapping")
 services=data["services"]
-required=["kong","db","supavisor","auth","functions"]
+required=["api-gw","db","supavisor","auth","functions"]
 missing=[x for x in required if x not in services]
 if missing:
     raise SystemExit(f"Refusing to guess service names. Missing: {missing}")
 
-services["kong"]["ports"]=["127.0.0.1:8000:8000/tcp"]
+services["api-gw"]["ports"]=["127.0.0.1:8000:8000/tcp"]
 services["db"].pop("ports",None)
 services["supavisor"]["ports"]=[
     "127.0.0.1:5433:5432/tcp",
@@ -70,7 +70,7 @@ services["avatar-worker"]={
     },
     "restart":"unless-stopped",
     "env_file":["/etc/spark/avatar-worker.env"],
-    "depends_on":{"kong":{"condition":"service_healthy"}},
+    "depends_on":{"api-gw":{"condition":"service_healthy"}},
     "read_only":True,
     "tmpfs":["/tmp:size=64m,mode=1777"],
     "security_opt":["no-new-privileges:true"],
@@ -100,7 +100,7 @@ def published(p):
     if isinstance(p,dict):
         return f'{p.get("host_ip","")}:{p.get("published","")}:{p.get("target","")}'
     return str(p)
-kp=[published(x) for x in ports("kong")]
+kp=[published(x) for x in ports("api-gw")]
 sp=[published(x) for x in ports("supavisor")]
 dp=[published(x) for x in ports("db")]
 assert any("127.0.0.1" in p and "8000" in p for p in kp), kp
