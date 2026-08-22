@@ -68,6 +68,7 @@ files=(
   lib/cleanup.sh
   lib/repair-override.sh
   lib/env-modern.sh
+  lib/runtime-fixes.sh
 )
 
 for file in "${files[@]}"; do
@@ -75,9 +76,10 @@ for file in "${files[@]}"; do
   curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/${file}" -o "${tmp}/${file}"
 done
 
-# The main Spark loader intentionally keeps a fixed module list. Append the
-# late compatibility layer to repair-override.sh so it is sourced last.
+# The main Spark loader intentionally keeps a fixed module list. Append late
+# compatibility layers to repair-override.sh so they are sourced last.
 cat "$tmp/lib/env-modern.sh" >>"$tmp/lib/repair-override.sh"
+cat "$tmp/lib/runtime-fixes.sh" >>"$tmp/lib/repair-override.sh"
 
 bash -n "$tmp/spark"
 bash -n "$tmp/spark-migrate"
@@ -109,6 +111,14 @@ grep -q 'cleanup_database_data' "$tmp/lib/cleanup.sh" || {
 }
 grep -q 'ensure_modern_auth_keys' "$tmp/lib/repair-override.sh" || {
   echo "Spark modern Supabase env layer was not loaded." >&2
+  exit 1
+}
+grep -q 'Studio HTTPS/443' "$tmp/lib/repair-override.sh" || {
+  echo "Spark Studio 443 runtime fix was not loaded." >&2
+  exit 1
+}
+grep -q "GRANT anon, authenticated, service_role TO supabase_storage_admin" "$tmp/lib/repair-override.sh" || {
+  echo "Spark Storage role repair was not loaded." >&2
   exit 1
 }
 grep -q 'pty.openpty()' "$tmp/spark-ui.py" || {
