@@ -270,7 +270,7 @@ spark_account_unlock() {
   [[ -n "$identifier" ]] || { fail "شناسه خالی است."; return 1; }
   (( ${#identifier} <= 256 )) || { fail "شناسه بیش از حد طولانی است."; return 1; }
 
-  candidate="$(docker exec supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -v identifier="$identifier" -AtF $'\t' <<'SQL'
+  candidate="$(docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -v identifier="$identifier" -AtF $'\t' <<'SQL'
 WITH input AS (
   SELECT
     lower(trim(:'identifier')) AS text_value,
@@ -285,7 +285,8 @@ WITH input AS (
   FROM input
 ), matched_ids AS (
   SELECT p.user_id
-  FROM public.profiles p, normalized n
+  FROM public.profiles p
+  CROSS JOIN normalized n
   LEFT JOIN auth.users u ON u.id = p.user_id
   WHERE lower(coalesce(p.normalized_username, '')) = n.text_value
      OR lower(coalesce(p.normalized_email, '')) = n.text_value
@@ -348,7 +349,7 @@ SQL
     return 1
   fi
 
-  result="$(docker exec supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -AtF $'\t' -v user_id="$user_id" <<'SQL'
+  result="$(docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -qAtF $'\t' -v user_id="$user_id" <<'SQL'
 BEGIN;
 UPDATE public.profiles
 SET locked_until = NULL,
