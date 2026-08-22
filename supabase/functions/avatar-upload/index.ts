@@ -258,8 +258,9 @@ Deno.serve(async (req: Request) => {
   const userId = authResult.userId!;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const supabasePublicUrl = (Deno.env.get("SUPABASE_PUBLIC_URL") ?? "").replace(/\/+$/, "");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !supabasePublicUrl || !serviceRoleKey) {
     log("error", { requestId, userId, status: 500, errorCategory: "missing_runtime_config" });
     return json({ error: "Internal error" }, 500);
   }
@@ -432,10 +433,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Image processing unavailable" }, 500);
   }
 
-  const { data: publicUrlData } = adminClient.storage
-    .from(AVATARS_BUCKET)
-    .getPublicUrl(outputPath);
-  const avatarUrl = publicUrlData.publicUrl;
+  const avatarUrl = `${supabasePublicUrl}/storage/v1/object/public/${AVATARS_BUCKET}/${outputPath}`;
 
   const { data: completeRows, error: completeErr } = await adminClient.rpc(
     "complete_avatar_job",
