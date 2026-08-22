@@ -1,0 +1,129 @@
+name: Temporary install step 12 removal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-install-step-12.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Remove install step 12 consistently
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def edit(path, transforms):
+              p=Path(path); text=p.read_text(encoding='utf-8'); original=text
+              for old,new,count in transforms:
+                  found=text.count(old)
+                  if found != count:
+                      raise SystemExit(f'{path}: expected {count} occurrence(s) of {old!r}, found {found}')
+                  text=text.replace(old,new)
+              if text == original:
+                  raise SystemExit(f'{path}: no change produced')
+              p.write_text(text,encoding='utf-8')
+
+          p=Path('deploy/spark-cli/lib/install-platform-a.sh')
+          text=p.read_text(encoding='utf-8')
+          text,n=re.subn(r'\ninstall_step_12\(\) \{\n.*?\n\}\n\n(?=test_frontend_deploy\(\))','\n',text,count=1,flags=re.S)
+          if n != 1: raise SystemExit(f'install-platform-a.sh: install_step_12 removal count={n}')
+          p.write_text(text,encoding='utf-8')
+
+          edit('deploy/spark-cli/lib/core.sh',[
+              ("    12) printf 'Database migrations' ;;\n",'',1),
+              ('    12) installation_migrations_current ;;\n','',1),
+              ('  for n in $(seq 2 20); do','  for n in 2 3 4 5 6 7 8 9 10 11 13 14 15 16 17 18 19 20; do',1),
+              ('  printf \'Total         : %d/19\\n\' "${#installed[@]}"','  printf \'Total         : %d/18\\n\' "${#installed[@]}"',1),
+          ])
+
+          edit('deploy/spark-cli/lib/install-platform-c.sh',[
+              ('  for n in $(seq 2 20); do','  for n in 2 3 4 5 6 7 8 9 10 11 13 14 15 16 17 18 19 20; do',1),
+              ('  ok "تمام مراحل 2 تا 20 با موفقیت اجرا شدند."','  ok "تمام ۱۸ مرحله نصب با موفقیت اجرا شدند."',1),
+              ('    printf \' 12) %s اعمال Migrationهای Spark\\n\' "$(step_badge 12)"\n','',1),
+              ("    printf ' 21) اجرای مراحل 2 تا 20 به‌ترتیب\\n\\n'","    printf ' 21) اجرای همه ۱۸ مرحله نصب به‌ترتیب\\n\\n'",1),
+              ('      [2-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;','      [2-9]|10|11|1[3-9]|20) run_install_step "$choice" || true; pause ;;',1),
+          ])
+
+          edit('deploy/spark-cli/spark',[
+              ('install-10|install-11|install-12|install-13','install-10|install-11|install-13',1),
+              ('    diagnostic-migrations) new_log "test-migration-dryrun"; run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" ;;\n','',1),
+              ('Show installed/not-installed step numbers (02-20)','Show installed/not-installed install steps',1),
+          ])
+
+          edit('deploy/spark-cli/lib/tests-backup.sh',[
+              ('    printf \' 2) وضعیت مراحل نصب 02 تا 20\\n\'','    printf \' 2) وضعیت ۱۸ مرحله نصب\\n\'',1),
+              ('    printf \'13) Migration dry-run\\n\\n\'\n','',1),
+              ('      13) new_log "test-migration-dryrun"; run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" || true; pause ;;\n','',1),
+          ])
+
+          edit('deploy/spark-cli/spark-ui.py',[
+              ('        Action("install-12", "12  Database migrations", "Dry-run and apply only pending Spark migrations.", "confirm"),\n','',1),
+              ('        Action("diagnostic-migrations", "Migration dry-run", "Check pending migrations without changing production."),\n','',1),
+              ('Action("install-all", "Run all 02-20",','Action("install-all", "Run all 18 install steps",',1),
+              ('Action("diagnostic-installation-status", "Installation status 02-20",','Action("diagnostic-installation-status", "Installation status (18 steps)",',1),
+              ('Clear only 02-20 DONE markers.','Clear install-step DONE markers.',1),
+              ('            if 2 <= n <= 20:','            if 2 <= n <= 20 and n != 12:',1),
+              ('    status["steps"] = f"{len(completed_set)}/19"','    status["steps"] = f"{len(completed_set)}/18"',1),
+              ("self.status.get('steps','0/19')","self.status.get('steps','0/18')",1),
+          ])
+
+          edit('deploy/spark-cli/lib/cleanup.sh',[
+              ('برای بازسازی باید مراحل 11 و 12 را دوباره اجرا کنید.','برای بازسازی Runtime باید مرحله 11 را دوباره اجرا کنید؛ migration دیتابیس فقط از مسیر مستقل spark-migrate انجام می‌شود.',1),
+              ('  cleanup_unmark_steps 11 12','  cleanup_unmark_steps 11\n  rm -f "${STEP_DIR}/12.ok"  # legacy marker from removed install step',1),
+              ('History مراحل 02 تا 20 پاک می‌شود.','History مراحل نصب پاک می‌شود.',1),
+              ('مراحل 02 تا 20 را اجرا کنید.','۱۸ مرحله نصب موجود را اجرا کنید.',1),
+          ])
+
+          edit('deploy/spark-cli/README.md',[
+              ('برای دیدن وضعیت واقعی تمام ۱۹ مرحله نصب `02` تا `20` بدون اجرای مجدد نصب:','برای دیدن وضعیت واقعی تمام ۱۸ مرحله نصب بدون اجرای مجدد نصب:',1),
+              ('- نصب مرحله‌ای 02 تا 20 (۱۹ مرحله) و Run All.','- ۱۸ مرحله نصب فعال (شماره‌های 02–11 و 13–20) و Run All؛ migration دیتابیس از Installer حذف شده و ابزار مستقل `spark-migrate` مسیر آن است.',1),
+              ('markerهای DONE مراحل 02 تا 20','markerهای DONE مراحل نصب',1),
+          ])
+          PY
+
+      - name: Validate manager without lint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n deploy/spark-cli/spark
+          bash -n deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/spark-migrate
+          for file in deploy/spark-cli/lib/*.sh; do bash -n "$file"; done
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deploy/spark-cli/spark-ui.py')
+          compile(p.read_text(encoding='utf-8'),str(p),'exec')
+          PY
+          python3 deploy/spark-cli/spark-ui.py --self-test
+          ! grep -R -E 'install_step_12|install-12|12  Database migrations|12\) .*Migrationهای Spark|diagnostic-migrations|Migration dry-run' deploy/spark-cli --exclude=update.sh --exclude=spark-migrate
+          grep -q 'Total         : %d/18' deploy/spark-cli/lib/core.sh
+          grep -q 'n != 12' deploy/spark-cli/spark-ui.py
+          grep -q 'len(completed_set)}/18' deploy/spark-cli/spark-ui.py
+          git diff --check
+
+      - name: Remove temporary tooling and commit final state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -f .github/workflows/remove-install-step-12.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- deploy/spark-cli .github/workflows/remove-install-step-12.yml
+          git diff --cached --check
+          git commit -m 'Remove database migration install stage [skip ci]'
+          git push origin HEAD:main
