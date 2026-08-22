@@ -55,6 +55,7 @@ mkdir -p "$tmp/lib"
 files=(
   spark
   spark-ui.py
+  spark-ui-core.py
   spark-migrate
   lib/core.sh
   lib/install-base.sh
@@ -75,11 +76,12 @@ done
 bash -n "$tmp/spark"
 bash -n "$tmp/spark-migrate"
 for file in "$tmp"/lib/*.sh; do bash -n "$file"; done
-python3 - "$tmp/spark-ui.py" <<'PY'
+python3 - "$tmp/spark-ui.py" "$tmp/spark-ui-core.py" <<'PY'
 from pathlib import Path
 import sys
-path = Path(sys.argv[1])
-compile(path.read_text(encoding="utf-8"), str(path), "exec")
+for value in sys.argv[1:]:
+    path = Path(value)
+    compile(path.read_text(encoding="utf-8"), str(path), "exec")
 PY
 python3 "$tmp/spark-ui.py" --self-test
 
@@ -119,6 +121,7 @@ migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
 install -d -m 0755 "$stage/lib"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0644 "$tmp/spark-ui.py" "$stage/spark-ui.py"
+install -m 0644 "$tmp/spark-ui-core.py" "$stage/spark-ui-core.py"
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
