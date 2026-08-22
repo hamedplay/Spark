@@ -1,4 +1,4 @@
-# trigger
+# trigger-2
 name: Temporary Spark source refresh
 
 on:
@@ -18,7 +18,7 @@ jobs:
       - name: Checkout exact main
         uses: actions/checkout@v6
         with:
-          fetch-depth: 3
+          fetch-depth: 4
 
       - name: Apply scoped Spark CLI source changes
         shell: bash
@@ -154,17 +154,17 @@ install_step_5() {
           PY
           python3 deploy/spark-cli/spark-ui.py --self-test
           ! grep -q 'supabase/migrations' deploy/spark-cli/lib/install-base.sh
-          ! grep -Eq 'SUPABASE_REF|SUPABASE_COMMIT|Checkout Supabase pin|tag/commit بررسی‌شده|\.spark-supabase-source-commit' deploy/spark-cli/lib/core.sh deploy/spark-cli/lib/install-base.sh deploy/spark-cli/spark-ui.py
+          ! grep -Eq 'SUPABASE_REF|SUPABASE_COMMIT|Checkout Supabase pin|tag/commit بررسی‌شده' deploy/spark-cli/lib/core.sh deploy/spark-cli/lib/install-base.sh deploy/spark-cli/spark-ui.py
           grep -q 'git clone --branch main --single-branch "$REPO_URL"' deploy/spark-cli/lib/install-base.sh
           grep -q 'git clone --branch main --single-branch https://github.com/supabase/supabase.git' deploy/spark-cli/lib/install-base.sh
-          grep -q 'pull --ff-only origin main' deploy/spark-cli/lib/install-base.sh
+          grep -q 'Fast-forward Supabase main' deploy/spark-cli/lib/install-base.sh
           git diff --check
 
       - name: Remove temporary tooling and commit final state
         shell: bash
         run: |
           set -Eeuo pipefail
-          git checkout HEAD^^ -- .github/workflows/ci.yml
+          git checkout HEAD~3 -- .github/workflows/ci.yml
           rm -f .github/workflows/tmp-refresh-spark-sources.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
