@@ -67,12 +67,17 @@ files=(
   lib/admin.sh
   lib/cleanup.sh
   lib/repair-override.sh
+  lib/env-modern.sh
 )
 
 for file in "${files[@]}"; do
   echo "Downloading ${file}..."
   curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/${file}" -o "${tmp}/${file}"
 done
+
+# The main Spark loader intentionally keeps a fixed module list. Append the
+# late compatibility layer to repair-override.sh so it is sourced last.
+cat "$tmp/lib/env-modern.sh" >>"$tmp/lib/repair-override.sh"
 
 bash -n "$tmp/spark"
 bash -n "$tmp/spark-migrate"
@@ -100,6 +105,10 @@ grep -q 'SPARK_MIGRATE_VERSION="1.1.0+20260822.2"' "$tmp/spark-migrate" || {
 }
 grep -q 'cleanup_database_data' "$tmp/lib/cleanup.sh" || {
   echo "Spark cleanup module validation failed." >&2
+  exit 1
+}
+grep -q 'ensure_modern_auth_keys' "$tmp/lib/repair-override.sh" || {
+  echo "Spark modern Supabase env layer was not loaded." >&2
   exit 1
 }
 grep -q 'pty.openpty()' "$tmp/spark-ui.py" || {
