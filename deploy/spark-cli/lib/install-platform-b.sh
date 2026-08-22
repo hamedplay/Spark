@@ -33,17 +33,33 @@ install_step_14() {
   if systemctl is-active --quiet nginx; then mark_step 14; ok "Bootstrap Nginx فعال است."; else return 1; fi
 }
 
+cert_live_dir_for_domain() {
+  local domain="$1" dir
+  for dir in "/etc/letsencrypt/live/${domain}" /etc/letsencrypt/live/"${domain}"-*; do
+    [[ -d "$dir" ]] || continue
+    [[ -f "$dir/fullchain.pem" && -f "$dir/privkey.pem" ]] || continue
+    openssl x509 -in "$dir/fullchain.pem" -noout -checkend 0 >/dev/null 2>&1 || continue
+    if openssl x509 -in "$dir/fullchain.pem" -noout -ext subjectAltName 2>/dev/null \
+      | grep -Eq "(^|[[:space:],])DNS:${domain}([[:space:],]|$)"; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+  done
+  return 1
+}
+
 test_certificates() {
   certbot certificates || return 1
-  [[ -f "/etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem" ]] || return 1
-  [[ -f "/etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem" ]] || return 1
-  [[ -f "/etc/letsencrypt/live/${TURN_DOMAIN}/fullchain.pem" ]] || return 1
+  cert_live_dir_for_domain "$APP_DOMAIN" >/dev/null || return 1
+  cert_live_dir_for_domain "$API_DOMAIN" >/dev/null || return 1
+  cert_live_dir_for_domain "$TURN_DOMAIN" >/dev/null || return 1
 }
 
 install_step_15() {
   title
   new_log "install-15-certificates"
   require_manager_values || return 1
+  test_values || { fail "تنظیمات دامنه معتبر نیست؛ ابتدا مرحله 01 – Configuration را اصلاح کنید."; return 1; }
   run_logged "Certificate دامنه Frontend" certbot certonly --webroot -w /var/www/acme -d "$APP_DOMAIN" -d "$WWW_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
   run_logged "Certificate دامنه API" certbot certonly --webroot -w /var/www/acme -d "$API_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
   run_logged "Certificate دامنه TURN" certbot certonly --webroot -w /var/www/acme -d "$TURN_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
@@ -56,6 +72,16 @@ install_step_15() {
 }
 
 write_nginx_production() {
+  local app_cert_dir api_cert_dir
+  app_cert_dir="$(cert_live_dir_for_domain "$APP_DOMAIN")" || {
+    fail "Certificate معتبر برای ${APP_DOMAIN} پیدا نشد."
+    return 1
+  }
+  api_cert_dir="$(cert_live_dir_for_domain "$API_DOMAIN")" || {
+    fail "Certificate معتبر برای ${API_DOMAIN} پیدا نشد."
+    return 1
+  }
+
   cat >/etc/nginx/sites-available/spark <<EOF
 map \$http_upgrade \$spark_connection_upgrade {
     default upgrade;
@@ -80,8 +106,8 @@ server {
     listen 443 ssl http2;
     server_name ${APP_DOMAIN} ${WWW_DOMAIN};
 
-    ssl_certificate /etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${APP_DOMAIN}/privkey.pem;
+    ssl_certificate ${app_cert_dir}/fullchain.pem;
+    ssl_certificate_key ${app_cert_dir}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
 
     root /var/www/spark;
@@ -107,8 +133,8 @@ server {
     listen 443 ssl http2;
     server_name ${API_DOMAIN};
 
-    ssl_certificate /etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${API_DOMAIN}/privkey.pem;
+    ssl_certificate ${api_cert_dir}/fullchain.pem;
+    ssl_certificate_key ${api_cert_dir}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
 
     client_max_body_size 50m;
@@ -178,7 +204,11 @@ install_step_16() {
     old="$(mktemp)"
     cp -a /etc/nginx/sites-available/spark "$old"
   fi
-  write_nginx_production
+  if ! write_nginx_production; then
+    [[ -n "$old" ]] && cp -a "$old" /etc/nginx/sites-available/spark
+    rm -f "$old"
+    return 1
+  fi
   ln -sfn /etc/nginx/sites-available/spark /etc/nginx/sites-enabled/spark
   rm -f /etc/nginx/sites-enabled/spark-bootstrap
   if ! run_logged "Nginx production syntax" nginx -t; then
