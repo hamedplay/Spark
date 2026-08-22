@@ -18,8 +18,11 @@ ensure_studio_session_material() {
 
   mkdir -p "$CONFIG_DIR"
   token="$(cat "$STUDIO_SESSION_TOKEN_FILE" 2>/dev/null || true)"
-  if [[ ! "$token" =~ ^[A-Fa-f0-9]{64}$ ]]; then
-    token="$(openssl rand -hex 32)" || return 1
+  # Keep the cookie/map key at 128 bits (32 hex chars). This is cryptographically
+  # sufficient for a random session token and fits Nginx's default map hash bucket
+  # on Ubuntu 24.04 without changing global map_hash_bucket_size.
+  if [[ ! "$token" =~ ^[A-Fa-f0-9]{32}$ ]]; then
+    token="$(openssl rand -hex 16)" || return 1
     printf '%s\n' "$token" >"$STUDIO_SESSION_TOKEN_FILE"
   fi
   chmod 600 "$STUDIO_SESSION_TOKEN_FILE"
