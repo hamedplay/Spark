@@ -52,6 +52,7 @@ export function SectionDecisions({
   onRemoveDecision,
 }: SectionDecisionsProps) {
   const [openDecisionId, setOpenDecisionId] = useState<string | null>(null);
+  const [openClauseId, setOpenClauseId] = useState<string | null>(null);
   const [agendaPickerOpenId, setAgendaPickerOpenId] = useState<string | null>(null);
 
   const parents = useMemo(() => getParentDraftDecisions(decisions), [decisions]);
@@ -77,6 +78,7 @@ export function SectionDecisions({
       ...(siblings.length === 0 ? copyExecutionFields(parent) : {}),
     };
     setDecisions(list => [...list, clause]);
+    setOpenClauseId(clause.id);
   };
 
   const removeParent = (parent: DraftDecision) => {
@@ -89,6 +91,7 @@ export function SectionDecisions({
     const ids = new Set([parent.id, ...children.map(child => child.id)]);
     setDecisions(list => list.filter(row => !ids.has(row.id)));
     if (openDecisionId === parent.id) setOpenDecisionId(null);
+    if (openClauseId && children.some(child => child.id === openClauseId)) setOpenClauseId(null);
     if (agendaPickerOpenId === parent.id) setAgendaPickerOpenId(null);
   };
 
@@ -109,6 +112,7 @@ export function SectionDecisions({
         return row;
       });
     });
+    if (openClauseId === clause.id) setOpenClauseId(null);
   };
 
   const usersDisabled = profilesLoading || profiles.length === 0 || !!readOnly;
@@ -327,11 +331,11 @@ export function SectionDecisions({
         const isAgendaPickerOpen = agendaPickerOpenId === item.id;
         const clauses = getDraftDecisionClauses(decisions, item.decisionId);
         return (
-          <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl overflow-hidden">
+          <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl overflow-visible">
             <button
               type="button"
               onClick={() => setOpenDecisionId(isOpen ? null : item.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-right"
+              className={`w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-right ${isOpen ? 'rounded-t-2xl' : 'rounded-2xl'}`}
             >
               <ChevronLeft className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? '-rotate-90' : ''}`} />
               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">مصوبه {index + 1}</span>
@@ -422,32 +426,53 @@ export function SectionDecisions({
                     )}
                   </div>
 
-                  {clauses.map(clause => (
-                    <div key={clause.id} className="rounded-xl border border-gray-200 bg-gray-50/50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{formatClauseLabel(clause.clauseOrder)}</span>
-                        {!readOnly && (
-                          <button type="button" onClick={() => removeClause(item, clause)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20" aria-label="حذف بند">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                  {clauses.map(clause => {
+                    const isClauseOpen = openClauseId === clause.id;
+                    return (
+                      <div key={clause.id} className="rounded-xl border border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/50">
+                        <button
+                          type="button"
+                          onClick={() => setOpenClauseId(isClauseOpen ? null : clause.id)}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-right transition-colors hover:bg-gray-100 dark:hover:bg-gray-700/60"
+                        >
+                          <ChevronLeft className={`h-4 w-4 flex-shrink-0 text-gray-400 transition-transform ${isClauseOpen ? '-rotate-90' : ''}`} />
+                          <span className="flex-shrink-0 text-sm font-semibold text-gray-700 dark:text-gray-300">{formatClauseLabel(clause.clauseOrder)}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm text-gray-500 dark:text-gray-400">
+                            {clause.title || 'متن بند وارد نشده است'}
+                          </span>
+                          {!readOnly && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={event => { event.stopPropagation(); removeClause(item, clause); }}
+                              onKeyDown={event => { if (event.key === 'Enter') { event.stopPropagation(); removeClause(item, clause); } }}
+                              className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              aria-label="حذف بند"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </span>
+                          )}
+                        </button>
+
+                        {isClauseOpen && (
+                          <div className="grid grid-cols-1 gap-3 border-t border-gray-200 p-3 dark:border-gray-700 sm:grid-cols-2">
+                            <div className="sm:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">متن بند <span className="text-red-500">*</span></label>
+                              <textarea
+                                value={clause.title}
+                                onChange={event => update(clause.id, 'title', event.target.value)}
+                                disabled={!!readOnly}
+                                rows={3}
+                                placeholder="متن بند اجرایی را وارد کنید"
+                                className="w-full resize-y rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-gray-600 dark:bg-gray-700 dark:text-white disabled:opacity-60"
+                              />
+                            </div>
+                            {renderExecutionFields(clause, 'clause')}
+                          </div>
                         )}
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="sm:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">متن بند <span className="text-red-500">*</span></label>
-                          <textarea
-                            value={clause.title}
-                            onChange={event => update(clause.id, 'title', event.target.value)}
-                            disabled={!!readOnly}
-                            rows={3}
-                            placeholder="متن بند اجرایی را وارد کنید"
-                            className="w-full resize-y rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-gray-600 dark:bg-gray-700 dark:text-white disabled:opacity-60"
-                          />
-                        </div>
-                        {renderExecutionFields(clause, 'clause')}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
