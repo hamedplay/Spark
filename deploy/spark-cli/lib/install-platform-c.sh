@@ -180,13 +180,13 @@ run_install_step() {
 
 run_all_install() {
   local n
-  for n in $(seq 1 20); do
+  for n in $(seq 2 20); do
     if ! run_install_step "$n"; then
       fail "اجرای زنجیره‌ای در مرحله ${n} متوقف شد."
       return 1
     fi
   done
-  ok "تمام مراحل 1 تا 20 با موفقیت اجرا شدند."
+  ok "تمام مراحل 2 تا 20 با موفقیت اجرا شدند."
 }
 
 install_menu() {
@@ -194,7 +194,6 @@ install_menu() {
     title
     printf '%sمنوی نصب Single Host — مطابق single-host.md%s\n\n' "$C_BOLD" "$C_RESET"
     printf '  0) بازگشت\n'
-    printf '  1) %s DNS\n' "$(step_badge 1)"
     printf '  2) %s مقادیر نصب و Configuration\n' "$(step_badge 2)"
     printf '  3) %s Packageهای پایه + Docker + Node 24\n' "$(step_badge 3)"
     printf '  4) %s دریافت Spark\n' "$(step_badge 4)"
@@ -214,11 +213,11 @@ install_menu() {
     printf ' 18) %s TURN/Coturn\n' "$(step_badge 18)"
     printf ' 19) %s Certbot Renewal Hook\n' "$(step_badge 19)"
     printf ' 20) %s Firewall\n' "$(step_badge 20)"
-    printf ' 21) اجرای مراحل 1 تا 20 به‌ترتیب\n\n'
+    printf ' 21) اجرای مراحل 2 تا 20 به‌ترتیب\n\n'
     read -r -p "انتخاب: " choice
     case "$choice" in
       0) return ;;
-      [1-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;
+      [2-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;
       21) run_all_install || true; pause ;;
       *) fail "گزینه نامعتبر"; sleep 1 ;;
     esac

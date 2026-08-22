@@ -109,7 +109,7 @@ test_menu() {
     printf '%sمنوی تست و لاگ%s\n\n' "$C_BOLD" "$C_RESET"
     printf ' 0) بازگشت\n'
     printf ' 1) Validation کامل سامانه\n'
-    printf ' 2) وضعیت مراحل نصب 01 تا 20\n'
+    printf ' 2) وضعیت مراحل نصب 02 تا 20\n'
     printf ' 3) تست Frontend\n'
     printf ' 4) تست API / Auth / Function route\n'
     printf ' 5) Docker status\n'

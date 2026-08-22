@@ -64,7 +64,6 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("@recent-logs", "Recent manager logs", "Browse persistent Spark Manager logs in the lower pane.", special="logs"),
     ]),
     ("Installation", [
-        Action("install-01", "01  DNS verification", "Validate public DNS records against the configured production IP."),
         Action("install-02", "02  Installation config", "Configure domains, addresses and certificate email.", "confirm"),
         Action("install-03", "03  Packages / Docker / Node", "Install and validate production base packages.", "controlled"),
         Action("install-04", "04  Spark repository", "Clone/update the Spark repository and manager.", "controlled"),
@@ -84,11 +83,11 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("install-18", "18  TURN / Coturn", "Configure and validate Coturn/TURN.", "controlled"),
         Action("install-19", "19  Certbot renewal hook", "Install certificate renewal integration.", "controlled"),
         Action("install-20", "20  Production firewall", "Apply the production UFW policy after safety checks.", "confirm"),
-        Action("install-all", "Run all 01-20", "Execute the complete guided installation sequence.", "confirm"),
+        Action("install-all", "Run all 02-20", "Execute the complete guided installation sequence.", "confirm"),
     ]),
     ("Diagnostics", [
         Action("diagnostic-full", "Full validation", "Run all production validation checks."),
-        Action("diagnostic-installation-status", "Installation status 01-20", "Probe the actual server state for every numbered step and show saved History separately."),
+        Action("diagnostic-installation-status", "Installation status 02-20", "Probe the actual server state for every numbered step and show saved History separately."),
         Action("diagnostic-frontend", "Frontend", "Check the public frontend endpoint."),
         Action("diagnostic-api", "API / Auth / Functions", "Check API health and the password-login function route."),
         Action("diagnostic-docker", "Docker status", "Show the Supabase Compose service state."),
@@ -138,7 +137,7 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("cleanup-source", "Delete Spark source", "Delete the local /opt/spark repository; GitHub and the installed Manager remain.", "confirm"),
         Action("cleanup-logs", "Delete Manager logs", "Delete Spark Manager logs only; system journal and Docker logs are not touched.", "confirm"),
         Action("cleanup-backups", "Delete all Backups", "Delete every retained Spark backup under /var/backups/spark.", "confirm"),
-        Action("cleanup-history", "Reset install History", "Clear only 01-20 DONE markers. Actual probes and runtime data are not changed.", "confirm"),
+        Action("cleanup-history", "Reset install History", "Clear only 02-20 DONE markers. Actual probes and runtime data are not changed.", "confirm"),
         Action("cleanup-full", "Delete complete Spark project", "Remove all Spark-specific runtime/data/config/certs/schedulers/TURN/source/logs/backups while keeping Manager and shared OS packages.", "confirm"),
         Action("cleanup-manager", "Uninstall Spark Manager", "Remove /usr/local/bin/spark and the installed Manager only; project/runtime is left untouched.", "confirm"),
     ]),
@@ -222,11 +221,11 @@ def collect_status() -> Dict[str, str]:
     for path in step_files:
         try:
             n = int(path.stem)
-            if 1 <= n <= 20:
+            if 2 <= n <= 20:
                 completed_set.add(n)
         except ValueError:
             pass
-    status["steps"] = f"{len(completed_set)}/20"
+    status["steps"] = f"{len(completed_set)}/19"
     status["step_set"] = ",".join(str(n) for n in sorted(completed_set))
     try:
         status["backups"] = str(sum(1 for p in BACKUP_DIR.iterdir() if p.is_dir()))
@@ -493,7 +492,7 @@ class SparkUI:
         self.safe_add(win, 0, 1, title, self.color(6) | curses.A_BOLD)
         self.safe_add(win, 0, max(1, w - len(right) - 1), right, self.color(6))
         commit = self.status.get("commit", "n/a")
-        summary = f" commit {commit}  |  history {self.status.get('steps','0/20')}  |  db5432 {self.status.get('db_access','CLOSED')}  |  studio8443 {self.status.get('studio','CLOSED')}  |  nginx {self.status.get('nginx','?')}  |  load {self.status.get('load','?')}  mem {self.status.get('memory','?')}  disk {self.status.get('disk','?')}"
+        summary = f" commit {commit}  |  history {self.status.get('steps','0/19')}  |  db5432 {self.status.get('db_access','CLOSED')}  |  studio8443 {self.status.get('studio','CLOSED')}  |  nginx {self.status.get('nginx','?')}  |  load {self.status.get('load','?')}  mem {self.status.get('memory','?')}  disk {self.status.get('disk','?')}"
         self.safe_add(win, 1, 1, summary, self.color(7))
         self.safe_add(win, 2, 0, "-" * max(0, w - 1), self.color(1))
         win.noutrefresh()

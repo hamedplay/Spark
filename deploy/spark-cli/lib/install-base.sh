@@ -20,21 +20,6 @@ test_dns() {
   done
 }
 
-install_step_1() {
-  title
-  new_log "install-01-dns"
-  ensure_dns_inputs
-  info "این مرحله DNS provider را تغییر نمی‌دهد؛ رکوردهای خارجی را طبق راهنما اعتبارسنجی می‌کند."
-  if run_logged "بررسی DNS چهار دامنه" test_dns; then
-    mark_step 1
-    ok "مرحله 1 موفق است."
-  else
-    unmark_step 1
-    fail "حداقل یک رکورد DNS هنوز به ${TURN_PUBLIC_IP} اشاره نمی‌کند."
-    return 1
-  fi
-}
-
 test_values() {
   require_manager_values || return 1
   valid_domain "$APP_DOMAIN" || return 1

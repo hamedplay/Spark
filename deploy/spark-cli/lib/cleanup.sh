@@ -160,7 +160,7 @@ cleanup_backups() {
 
 cleanup_install_history() {
   new_log "cleanup-install-history"
-  if ! confirm_word "History مراحل 01 تا 20 پاک می‌شود. هیچ سرویس یا داده‌ای حذف نمی‌شود؛ فقط markerهای DONE پاک می‌شوند." "RESET-HISTORY"; then
+  if ! confirm_word "History مراحل 02 تا 20 پاک می‌شود. هیچ سرویس یا داده‌ای حذف نمی‌شود؛ فقط markerهای DONE پاک می‌شوند." "RESET-HISTORY"; then
     warn "Reset History لغو شد."
     return 1
   fi
@@ -275,7 +275,7 @@ cleanup_full_project() {
   chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
 
   ok "تمام اجزای پروژه Spark از سرور حذف شدند. Spark Manager و packageهای مشترک سیستم باقی مانده‌اند."
-  info "برای نصب مجدد، Spark Manager را باز کنید و مراحل 01 تا 20 را اجرا کنید."
+  info "برای نصب مجدد، Spark Manager را باز کنید و مراحل 02 تا 20 را اجرا کنید."
 }
 
 cleanup_uninstall_manager() {

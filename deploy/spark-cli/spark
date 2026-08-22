@@ -183,7 +183,7 @@ spark_backend_dispatch_inner() {
   local action="$1"
   shift || true
   case "$action" in
-    install-01|install-02|install-03|install-04|install-05|install-06|install-07|install-08|install-09|install-10|install-11|install-12|install-13|install-14|install-15|install-16|install-17|install-18|install-19|install-20)
+    install-02|install-03|install-04|install-05|install-06|install-07|install-08|install-09|install-10|install-11|install-12|install-13|install-14|install-15|install-16|install-17|install-18|install-19|install-20)
       run_install_step "$((10#${action##*-}))"
       ;;
     install-all) run_all_install ;;
@@ -326,7 +326,7 @@ Run without an option to open the full-screen dynamic control center.
 
   --version       Show Spark Manager version/build
   --test          Run full validation without opening the UI
-  --steps         Show installed/not-installed step numbers (01-20)
+  --steps         Show installed/not-installed step numbers (02-20)
   --update        Update Spark application without opening the UI
   --resources     Show server resource usage without opening the UI
   --ui-self-test  Validate the installed curses UI runtime

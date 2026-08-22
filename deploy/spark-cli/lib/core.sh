@@ -128,7 +128,6 @@ step_badge() {
 
 installation_step_name() {
   case "$1" in
-    1) printf 'DNS' ;;
     2) printf 'Configuration' ;;
     3) printf 'Base packages / Docker / Node' ;;
     4) printf 'Spark repository' ;;
@@ -180,7 +179,6 @@ installation_nginx_present() {
 
 installation_step_probe() {
   case "$1" in
-    1) test_dns ;;
     2) test_values ;;
     3) test_base_packages ;;
     4) test_spark_repo ;;
@@ -215,7 +213,7 @@ installation_status_report() {
   printf '%-4s %-15s %-9s %s\n' 'No.' 'Actual' 'History' 'Component'
   printf '%s\n' '----------------------------------------------------------------------------'
 
-  for n in $(seq 1 20); do
+  for n in $(seq 2 20); do
     printf -v formatted '%02d' "$n"
     name="$(installation_step_name "$n")"
 
@@ -239,7 +237,7 @@ installation_status_report() {
   printf '%s\n' '----------------------------------------------------------------------------'
   printf 'Installed     : %s\n' "${installed[*]:-none}"
   printf 'Not installed : %s\n' "${missing[*]:-none}"
-  printf 'Total         : %d/20\n' "${#installed[@]}"
+  printf 'Total         : %d/19\n' "${#installed[@]}"
   printf '\nActual = وضعیت واقعی همین سرور. History = این مرحله قبلاً توسط Manager با موفقیت ثبت شده است.\n'
 }
 
@@ -349,20 +347,6 @@ configure_values_interactive() {
   }
   save_config
   ok "تنظیمات در ${MANAGER_CONF} ذخیره شد (mode 600)."
-}
-
-ensure_dns_inputs() {
-  ensure_values
-  if [[ -z "${TURN_PUBLIC_IP:-}" ]]; then
-    local v
-    while true; do
-      prompt_default v "Public IPv4 که DNS باید به آن اشاره کند" ""
-      valid_ipv4 "$v" && { TURN_PUBLIC_IP="$v"; break; }
-      fail "IPv4 معتبر نیست."
-    done
-    TURN_PRIVATE_IP="${TURN_PRIVATE_IP:-$TURN_PUBLIC_IP}"
-    save_config
-  fi
 }
 
 env_get() {
