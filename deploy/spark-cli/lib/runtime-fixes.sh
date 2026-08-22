@@ -32,6 +32,18 @@ studio_gateway_direct_probe() {
     "http://127.0.0.1:8000/" -o /dev/null 2>&1
 }
 
+studio_probe_code() {
+  local url="$1" host_header="${2:-}" dashboard_user dashboard_password
+  local -a args=()
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  [[ -n "$dashboard_password" ]] || { printf '000'; return 1; }
+  [[ -n "$host_header" ]] && args+=( -H "Host: ${host_header}" )
+  curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 12 \
+    -u "${dashboard_user}:${dashboard_password}" "${args[@]}" "$url" 2>/dev/null || printf '000'
+}
+
 sync_official_envoy_gateway_assets() {
   local source_dir="${SUPABASE_SOURCE}/docker/volumes/api/envoy"
   local target_dir="${SUPABASE_ROOT}/volumes/api/envoy"
@@ -117,7 +129,7 @@ p=Path('/etc/nginx/sites-available/spark')
 s=p.read_text(encoding='utf-8')
 old='''    location / {\n        return 404;\n    }\n}\n'''
 if os.environ.get('STUDIO_ENABLED_ENV') == '1':
-    new='''    location / {\n        proxy_pass http://127.0.0.1:8000;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection $spark_connection_upgrade;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_read_timeout 3600s;\n    }\n}\n'''
+    new='''    location / {\n        proxy_pass http://127.0.0.1:8000;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection $spark_connection_upgrade;\n        proxy_set_header Host 127.0.0.1:8000;\n        proxy_set_header X-Forwarded-Host $host;\n        proxy_set_header X-Forwarded-Port 443;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_read_timeout 3600s;\n    }\n}\n'''
 else:
     new=old
 pos=s.rfind(old)
@@ -156,11 +168,19 @@ open_supabase_studio_access() {
     return 1
   fi
 
+  local code_direct code_host code_https
+  code_direct="$(studio_probe_code 'http://127.0.0.1:8000/')"
+  code_host="$(studio_probe_code 'http://127.0.0.1:8000/' "$API_DOMAIN")"
+  info "Studio probe قبل از Enable: Envoy-direct=${code_direct} Envoy-Host(${API_DOMAIN})=${code_host}"
+
   # Validate the actual upstream before touching public Nginx state. A stale
   # runtime can keep old Envoy assets even after the official source was updated.
   if ! studio_gateway_direct_probe; then
     warn "Envoy root route آماده نیست؛ assetهای رسمی gateway بدون تغییر .env/data sync می‌شوند."
     repair_studio_gateway_route || return 1
+    code_direct="$(studio_probe_code 'http://127.0.0.1:8000/')"
+    code_host="$(studio_probe_code 'http://127.0.0.1:8000/' "$API_DOMAIN")"
+    info "Studio probe بعد از Envoy repair: Envoy-direct=${code_direct} Envoy-Host(${API_DOMAIN})=${code_host}"
   fi
 
   mkdir -p "$CONFIG_DIR"
@@ -173,16 +193,12 @@ open_supabase_studio_access() {
     return 1
   fi
 
-  local dashboard_user dashboard_password
-  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
-  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
-  dashboard_user="${dashboard_user:-supabase}"
-  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD موجود نیست."; return 1; }
-  if ! curl -fsSkL --connect-timeout 5 --max-time 15 --resolve "${API_DOMAIN}:443:127.0.0.1" \
-      -u "${dashboard_user}:${dashboard_password}" "https://${API_DOMAIN}/" -o /dev/null; then
+  code_https="$(studio_probe_code "https://${API_DOMAIN}/")"
+  info "Studio probe روی Nginx/443: HTTP=${code_https}"
+  if [[ ! "$code_https" =~ ^2[0-9][0-9]$|^3[0-9][0-9]$ ]]; then
     rm -f "$STUDIO_ACCESS_FLAG"
     apply_studio_access_state >/dev/null 2>&1 || true
-    fail "Studio روی HTTPS/443 پاسخ معتبر نداد؛ دسترسی دوباره غیرفعال شد."
+    fail "Studio روی HTTPS/443 پاسخ معتبر نداد (HTTP ${code_https})؛ دسترسی دوباره غیرفعال شد."
     return 1
   fi
   ok "Supabase Studio روی HTTPS/443 فعال و پاسخ آن تأیید شد."
