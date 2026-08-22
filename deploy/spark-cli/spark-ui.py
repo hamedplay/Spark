@@ -63,7 +63,7 @@ def patch_categories() -> None:
                 core.Action(
                     "admin-open",
                     "Security Center",
-                    "Verified PostgreSQL/pgAdmin access, Supabase Studio access, credentials, login tests and firewall state.",
+                    "Verified PostgreSQL/pgAdmin access, Supabase Studio access on HTTPS/443, credentials, login tests and firewall state.",
                     "confirm",
                 ),
                 core.Action("diagnostic-exposure", "Public exposure check", "Verify internal database and API ports are not unintentionally public."),
@@ -97,6 +97,12 @@ def logical_collect_status():
                 completed.add(n)
     status["steps"] = f"{len(completed)}/18"
     status["step_set"] = ",".join(str(n) for n in sorted(completed))
+
+    # Studio no longer owns a dedicated listener. Access is controlled by the
+    # persisted root-route flag while all Supabase API routes continue on 443.
+    studio_flag = Path("/etc/spark/studio-access.enabled")
+    status["studio"] = "ENABLED" if studio_flag.is_file() else "DISABLED"
+    status["admin"] = status["studio"]
     return status
 
 
@@ -114,9 +120,27 @@ def logical_action_badge(self, action):
     return _original_action_badge(self, action)
 
 
+_original_draw_details = core.SparkUI.draw_details
+
+def logical_draw_details(self):
+    original_safe_add = self.safe_add
+
+    def patched_safe_add(win, y, x, text, *args, **kwargs):
+        if isinstance(text, str):
+            text = text.replace("Studio 8443", "Studio 443")
+        return original_safe_add(win, y, x, text, *args, **kwargs)
+
+    self.safe_add = patched_safe_add
+    try:
+        return _original_draw_details(self)
+    finally:
+        self.safe_add = original_safe_add
+
+
 patch_categories()
 core.collect_status = logical_collect_status
 core.SparkUI.action_badge = logical_action_badge
+core.SparkUI.draw_details = logical_draw_details
 
 
 def main(argv):
