@@ -233,6 +233,17 @@ spark_backend_dispatch_inner() {
     npm-outdated) new_log "npm-outdated"; run_report "npm outdated" bash -c "cd '$SPARK_ROOT' && npm outdated" ;;
     npm-fix-dry) new_log "npm-fix-dry"; run_report "npm audit fix --dry-run" bash -c "cd '$SPARK_ROOT' && npm audit fix --dry-run" ;;
 
+    security-db-info) show_database_connection_info ;;
+    security-db-test) new_log "database-login-test"; run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433 ;;
+    security-db-open) new_log "database-access-open"; open_database_external_access ;;
+    security-db-close) new_log "database-access-close"; close_database_external_access ;;
+    security-studio-info) show_studio_connection_info ;;
+    security-studio-open) new_log "supabase-studio-open"; open_supabase_studio_access ;;
+    security-studio-close) new_log "supabase-studio-close"; close_supabase_studio_access ;;
+    security-report) security_status_report ;;
+    security-account-unlock) new_log "account-unlock"; spark_account_unlock ;;
+
+    # Compatibility actions retained for older installed UIs.
     admin-open) open_supabase_admin_access ;;
     admin-close) close_supabase_admin_access ;;
 
