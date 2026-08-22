@@ -1,6 +1,6 @@
 # Modern Supabase environment/auth compatibility layer.
-# This file is concatenated to repair-override.sh by bootstrap/Step 04 so it is
-# loaded after all base install modules without changing the public CLI layout.
+# Loaded after the base install modules to keep the self-hosted runtime aligned
+# with the current Supabase environment contract.
 
 # Preserve the base implementations that we extend below.
 eval "$(declare -f install_step_6 | sed '1s/install_step_6/install_step_6_base/')"
@@ -124,12 +124,14 @@ ensure_modern_auth_keys() {
 
 complete_reference_env_defaults() {
   local file="${SUPABASE_ROOT}/.env"
-  # Values present and active in the current official/example environment are
-  # written explicitly so runtime behavior does not depend on upstream defaults.
+  # Provider availability and public sign-up are separate GoTrue controls.
+  # Keep email/password login enabled for existing users while public sign-up
+  # remains disabled for this internal application.
   env_set "$file" COMPOSE_FILE "docker-compose.yml"
   env_set "$file" DASHBOARD_USERNAME "supabase"
   env_set "$file" JWT_EXPIRY "3600"
-  env_set "$file" DISABLE_SIGNUP "false"
+  env_set "$file" ENABLE_EMAIL_SIGNUP "true"
+  env_set "$file" DISABLE_SIGNUP "true"
   env_set "$file" MAILER_URLPATHS_CONFIRMATION "/auth/v1/verify"
   env_set "$file" MAILER_URLPATHS_INVITE "/auth/v1/verify"
   env_set "$file" MAILER_URLPATHS_RECOVERY "/auth/v1/verify"
@@ -147,10 +149,11 @@ complete_reference_env_defaults() {
   env_set "$file" KONG_HTTPS_PORT "8443"
   env_set "$file" IMGPROXY_AUTO_WEBP "true"
 
-  # SMTP/OpenAI/OAuth/SAML credentials are external credentials, not generated
-  # secrets. Never fabricate them. Keep email signup disabled when SMTP is absent.
+  # SMTP/OpenAI/OAuth/SAML credentials are external credentials, not generated.
+  # Missing SMTP must not disable the email provider because password login for
+  # existing confirmed-email users does not require SMTP. Mail-sending flows such
+  # as recovery/confirmation remain unavailable until real SMTP is configured.
   if [[ -z "$(env_get "$file" SMTP_HOST)" || -z "$(env_get "$file" SMTP_USER)" || -z "$(env_get "$file" SMTP_PASS)" ]]; then
-    env_set "$file" ENABLE_EMAIL_SIGNUP "false"
     env_set "$file" SMTP_ADMIN_EMAIL "$LE_EMAIL"
     env_set "$file" SMTP_PORT "587"
     env_set "$file" SMTP_SENDER_NAME "Spark"
@@ -166,6 +169,8 @@ test_extended_supabase_env() {
   env_expect_exact "$file" POSTGRES_PORT "5432" || return 1
   env_expect_exact "$file" JWT_EXPIRY "3600" || return 1
   env_expect_exact "$file" DASHBOARD_USERNAME "supabase" || return 1
+  env_expect_exact "$file" ENABLE_EMAIL_SIGNUP "true" || return 1
+  env_expect_exact "$file" DISABLE_SIGNUP "true" || return 1
   env_expect_exact "$file" DOCKER_SOCKET_LOCATION "/var/run/docker.sock" || return 1
   env_expect_exact "$file" FUNCTIONS_VERIFY_JWT "false" || return 1
   for key in POOLER_TENANT_ID STORAGE_TENANT_ID POSTGRES_PASSWORD JWT_SECRET ANON_KEY SERVICE_ROLE_KEY DASHBOARD_PASSWORD SECRET_KEY_BASE REALTIME_DB_ENC_KEY VAULT_ENC_KEY PG_META_CRYPTO_KEY LOGFLARE_PUBLIC_ACCESS_TOKEN LOGFLARE_PRIVATE_ACCESS_TOKEN S3_PROTOCOL_ACCESS_KEY_ID S3_PROTOCOL_ACCESS_KEY_SECRET MINIO_ROOT_PASSWORD SEND_SMS_HOOK_SECRET PHONE_RATE_LIMIT_PEPPER PHONE_PASSWORD_RESET_SECRET DAILY_REPORT_CRON_SECRET NOTIFICATION_OUTBOX_CRON_SECRET MINUTES_REMINDER_CRON_SECRET DECISION_DUE_CRON_SECRET SUPABASE_PUBLISHABLE_KEY SUPABASE_SECRET_KEY ANON_KEY_ASYMMETRIC SERVICE_ROLE_KEY_ASYMMETRIC JWT_KEYS JWT_JWKS; do
@@ -186,6 +191,8 @@ test_supabase_env() {
   env_expect_exact "$file" POSTGRES_HOST "db" || return 1
   env_expect_exact "$file" POSTGRES_DB "postgres" || return 1
   env_expect_exact "$file" POSTGRES_PORT "5432" || return 1
+  env_expect_exact "$file" ENABLE_EMAIL_SIGNUP "true" || return 1
+  env_expect_exact "$file" DISABLE_SIGNUP "true" || return 1
   env_expect_exact "$file" FUNCTIONS_VERIFY_JWT "false" || return 1
   for key in POOLER_TENANT_ID STORAGE_TENANT_ID SEND_SMS_HOOK_SECRET PHONE_RATE_LIMIT_PEPPER PHONE_PASSWORD_RESET_SECRET DAILY_REPORT_CRON_SECRET NOTIFICATION_OUTBOX_CRON_SECRET MINUTES_REMINDER_CRON_SECRET DECISION_DUE_CRON_SECRET; do
     env_require_real "$file" "$key" || return 1
@@ -272,9 +279,7 @@ patch_compose() {
   wire_modern_auth_compose
 }
 
-# Step 04 installs Manager from the local Spark repo. Use a temporary copy and
-# concatenate this compatibility layer so that a repository refresh never
-# downgrades the installed Manager to an unpatched loader.
+# Step 04 installs Manager directly from the local Spark repository.
 install_step_4() {
   title
   new_log "install-04-spark-repo"
@@ -295,12 +300,7 @@ install_step_4() {
     run_logged "Clone آخرین Spark main" git clone --branch main --single-branch "$REPO_URL" "$SPARK_ROOT" || return 1
   fi
   if [[ -f "${SPARK_ROOT}/deploy/spark-cli/spark" ]]; then
-    local staged_manager
-    staged_manager="$(mktemp -d)"
-    cp -a "${SPARK_ROOT}/deploy/spark-cli/." "$staged_manager/"
-    cat "$staged_manager/lib/env-modern.sh" >>"$staged_manager/lib/repair-override.sh"
-    run_logged "نصب/به‌روزرسانی Spark Manager" install_manager_from_dir "$staged_manager" || { rm -rf "$staged_manager"; return 1; }
-    rm -rf "$staged_manager"
+    run_logged "نصب/به‌روزرسانی Spark Manager" install_manager_from_dir "${SPARK_ROOT}/deploy/spark-cli" || return 1
   fi
   if run_logged "تست repository" test_spark_repo; then
     mark_step 4
