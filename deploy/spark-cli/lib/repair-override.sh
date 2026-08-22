@@ -25,10 +25,7 @@ normalize_auth_hook_secret() {
 }
 
 # GoTrue v2.189+ rejects HTTP hook URLs whose host is not localhost/loopback.
-# The Edge Function runs in another container, so http://functions:9000/... is
-# rejected during Auth startup. Route the hook through Spark's public HTTPS API
-# instead. It is safe for Auth to start before TLS is provisioned; the hook is
-# only invoked when an SMS action is requested, after the web/TLS steps finish.
+# Route Spark's SMS Auth Hook through the public HTTPS API.
 patch_compose() {
   local compose_file="${SUPABASE_ROOT}/docker-compose.yml"
   COMPOSE_FILE="$compose_file" SPARK_ROOT_ENV="$SPARK_ROOT" API_DOMAIN_ENV="$API_DOMAIN" python3 - <<'PY'
@@ -179,6 +176,23 @@ ALTER SCHEMA auth OWNER TO supabase_auth_admin;
 ALTER ROLE supabase_auth_admin SET search_path = auth;
 GRANT USAGE, CREATE ON SCHEMA auth TO supabase_auth_admin;
 
+-- Supabase's own ownership migration assigns these helper functions to
+-- supabase_auth_admin. GoTrue's initial migration uses CREATE OR REPLACE and
+-- therefore fails if a pre-existing copy is owned by another role.
+DO $$
+BEGIN
+  IF to_regprocedure('auth.uid()') IS NOT NULL THEN
+    ALTER FUNCTION auth.uid() OWNER TO supabase_auth_admin;
+  END IF;
+  IF to_regprocedure('auth.role()') IS NOT NULL THEN
+    ALTER FUNCTION auth.role() OWNER TO supabase_auth_admin;
+  END IF;
+  IF to_regprocedure('auth.email()') IS NOT NULL THEN
+    ALTER FUNCTION auth.email() OWNER TO supabase_auth_admin;
+  END IF;
+END
+$$;
+
 CREATE SCHEMA IF NOT EXISTS storage AUTHORIZATION supabase_storage_admin;
 ALTER SCHEMA storage OWNER TO supabase_storage_admin;
 ALTER ROLE supabase_storage_admin SET search_path = storage;
@@ -224,5 +238,7 @@ supabase_bootstrap_ready() {
       and exists(select 1 from pg_namespace where nspname='storage')
       and exists(select 1 from pg_namespace where nspname='_realtime')
       and exists(select 1 from pg_namespace where nspname='graphql_public')
+      and (to_regprocedure('auth.uid()') is null or pg_get_userbyid((select proowner from pg_proc where oid=to_regprocedure('auth.uid()')))='supabase_auth_admin')
+      and (to_regprocedure('auth.role()') is null or pg_get_userbyid((select proowner from pg_proc where oid=to_regprocedure('auth.role()')))='supabase_auth_admin')
       then 1 else 0 end" 2>/dev/null | grep -qx 1)
 }
