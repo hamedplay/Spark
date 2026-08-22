@@ -240,10 +240,12 @@ installation_status_report() {
 }
 
 confirm_word() {
-  local message="$1" word="$2" answer
+  local message="$1" _legacy_word="${2:-}" answer
   printf '%s\n' "$message"
-  read -r -p "برای تأیید عبارت ${word} را وارد کنید: " answer
-  [[ "$answer" == "$word" ]]
+  printf '%s\n' '0) تأیید و ادامه'
+  printf '%s\n' 'Enter یا هر مقدار دیگر) لغو'
+  read -r -p "انتخاب: " answer
+  [[ "$answer" == "0" ]]
 }
 
 prompt_default() {
