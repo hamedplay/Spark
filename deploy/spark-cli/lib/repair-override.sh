@@ -1,5 +1,65 @@
 # Targeted compatibility overrides loaded after the core install modules.
 
+normalize_auth_hook_secret() {
+  local supabase_env="${SUPABASE_ROOT}/.env"
+  local functions_env="${CONFIG_DIR}/functions-extra.env"
+  local secret
+
+  secret="$(env_get "$supabase_env" SEND_SMS_HOOK_SECRET)"
+  if [[ -z "$secret" && -f "$functions_env" ]]; then
+    secret="$(env_get "$functions_env" SEND_SMS_HOOK_SECRET)"
+  fi
+  if [[ -z "$secret" ]]; then
+    secret="$(openssl rand -base64 32 | tr -d '\n')"
+  fi
+  if [[ "$secret" != v1,whsec_* ]]; then
+    secret="v1,whsec_${secret}"
+  fi
+
+  env_set "$supabase_env" SEND_SMS_HOOK_SECRET "$secret"
+  if [[ -f "$functions_env" ]]; then
+    env_set "$functions_env" SEND_SMS_HOOK_SECRET "$secret"
+    chmod 600 "$functions_env"
+  fi
+  chmod 600 "$supabase_env"
+}
+
+install_step_10() {
+  title
+  new_log "install-10-compose"
+  require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
+  require_file "${CONFIG_DIR}/functions-extra.env" || return 1
+  require_file "${CONFIG_DIR}/avatar-worker.env" || return 1
+  local backup="${SUPABASE_ROOT}/docker-compose.yml.before-spark"
+  local safety="${SUPABASE_ROOT}/docker-compose.yml.pre-manager-$(date +%Y%m%d%H%M%S)"
+  cp -a "${SUPABASE_ROOT}/docker-compose.yml" "$safety"
+  [[ -f "$backup" ]] || cp -a "${SUPABASE_ROOT}/docker-compose.yml" "$backup"
+
+  run_logged "Normalize Auth Hook secret" normalize_auth_hook_secret || {
+    cp -a "$safety" "${SUPABASE_ROOT}/docker-compose.yml"
+    return 1
+  }
+  if ! run_logged "اعمال تغییرات کنترل‌شده Docker Compose" patch_compose; then
+    cp -a "$safety" "${SUPABASE_ROOT}/docker-compose.yml"
+    return 1
+  fi
+  if ! run_logged "docker compose config" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet"; then
+    warn "Compose نامعتبر شد؛ فایل قبلی restore شد."
+    cp -a "$safety" "${SUPABASE_ROOT}/docker-compose.yml"
+    return 1
+  fi
+  if run_logged "تست bindهای Loopback و Avatar Worker" test_compose_security; then
+    rm -f "$safety"
+    mark_step 10
+  else
+    warn "Security validation شکست خورد؛ فایل قبلی restore شد."
+    cp -a "$safety" "${SUPABASE_ROOT}/docker-compose.yml"
+    rm -f "$safety"
+    unmark_step 10
+    return 1
+  fi
+}
+
 repair_supabase_bootstrap() {
   local has_internal_db
   has_internal_db="$(cd "$SUPABASE_ROOT" && docker compose exec -T db psql -U postgres -d postgres -Atqc "select 1 from pg_database where datname='_supabase'" 2>/dev/null || true)"
