@@ -17,6 +17,25 @@ update_rollback_runtime() {
   nginx -t && systemctl reload nginx || true
 }
 
+prepare_frontend_production_env() {
+  local root="$1" anon
+  anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"
+  [[ -n "$anon" ]] || { fail "ANON_KEY موجود نیست؛ build Frontend متوقف شد."; return 1; }
+  [[ -n "${API_DOMAIN:-}" ]] || { fail "API_DOMAIN تنظیم نشده؛ build Frontend متوقف شد."; return 1; }
+  env_set "${root}/.env.production" VITE_SUPABASE_URL "https://${API_DOMAIN}"
+  env_set "${root}/.env.production" VITE_SUPABASE_ANON_KEY "$anon"
+  chmod 600 "${root}/.env.production"
+}
+
+validate_frontend_production_build() {
+  local root="$1" expected="https://${API_DOMAIN}"
+  [[ -f "${root}/dist/index.html" ]] || return 1
+  grep -R -F -q -- "$expected" "${root}/dist" || {
+    fail "Frontend build شامل SUPABASE URL مورد انتظار نیست: ${expected}"
+    return 1
+  }
+}
+
 update_spark() (
   title
   new_log "update-spark"
@@ -111,8 +130,10 @@ update_spark() (
   rm -rf "$stage" "$functions_next" "$functions_prev" "$frontend_next" "$frontend_prev"
   run_logged "ساخت worktree موقت برای validation" git -C "$SPARK_ROOT" worktree add --detach "$stage" "$target_sha" || return 1
 
+  run_logged "ساخت env تولید Frontend در worktree" prepare_frontend_production_env "$stage" || return 1
   run_logged "npm ci در worktree موقت" bash -c "cd '$stage' && npm ci" || return 1
   run_logged "Production build قبل از deploy" bash -c "cd '$stage' && npm run build" || return 1
+  run_logged "Validate production Frontend environment" validate_frontend_production_build "$stage" || return 1
 
   if [[ -f "$stage/worker/Dockerfile" ]]; then
     run_logged "Validation build Avatar Worker از source جدید" docker build -t "$validation_image" -f "$stage/worker/Dockerfile" "$stage/worker" || return 1
@@ -161,8 +182,6 @@ update_spark() (
     source_advanced=1
   fi
 
-  # Atomic directory swaps: the old runtime tree remains available until the new
-  # containers / Nginx are validated.
   if [[ -d "${SUPABASE_ROOT}/volumes/functions" ]]; then
     if ! mv "${SUPABASE_ROOT}/volumes/functions" "$functions_prev"; then
       fail "انتقال runtime قبلی Functions شکست خورد."
