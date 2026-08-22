@@ -7,7 +7,7 @@ TARGET="/usr/local/lib/spark-manager"
 CLI_PATH="/usr/local/bin/spark"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
-EXPECTED_VERSION="2.1.0+20260822.2"
+EXPECTED_VERSION="2.1.0+20260822.3"
 EXPECTED_MIGRATE_VERSION="1.1.0+20260822.2"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
@@ -69,6 +69,7 @@ files=(
   lib/repair-override.sh
   lib/env-modern.sh
   lib/runtime-fixes.sh
+  lib/studio-session.sh
 )
 
 for file in "${files[@]}"; do
@@ -88,7 +89,7 @@ for value in sys.argv[1:]:
 PY
 python3 "$tmp/spark-ui.py" --self-test
 
-grep -q 'SPARK_MANAGER_VERSION="2.1.0+20260822.2"' "$tmp/spark" || {
+grep -q 'SPARK_MANAGER_VERSION="2.1.0+20260822.3"' "$tmp/spark" || {
   echo "Spark Manager version validation failed." >&2
   exit 1
 }
@@ -120,8 +121,12 @@ grep -q 'studio_gateway_direct_probe' "$tmp/lib/runtime-fixes.sh" || {
   echo "Spark Studio gateway probe is missing." >&2
   exit 1
 }
-grep -q 'env-modern runtime-fixes' "$tmp/spark" || {
-  echo "Spark loader does not source runtime modules natively." >&2
+grep -q 'spark_studio_session' "$tmp/lib/studio-session.sh" || {
+  echo "Spark Studio session auth module is missing." >&2
+  exit 1
+}
+grep -q 'env-modern runtime-fixes studio-session' "$tmp/spark" || {
+  echo "Spark loader does not source Studio session auth natively." >&2
   exit 1
 }
 grep -q 'pty.openpty()' "$tmp/spark-ui.py" || {
