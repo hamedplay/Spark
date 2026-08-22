@@ -74,7 +74,7 @@ cleanup_database_data() {
   new_log "cleanup-database"
   db_data="$(cleanup_find_database_data_bind)" || return 1
   info "PostgreSQL data path: ${db_data}"
-  if ! confirm_word "این عملیات تمام داده‌های PostgreSQL را حذف می‌کند و Supabase را متوقف می‌کند. برای بازسازی باید مراحل 11 و 12 را دوباره اجرا کنید." "DELETE-DATABASE"; then
+  if ! confirm_word "این عملیات تمام داده‌های PostgreSQL را حذف می‌کند و Supabase را متوقف می‌کند. برای بازسازی Runtime باید مرحله 11 را دوباره اجرا کنید؛ migration دیتابیس فقط از مسیر مستقل spark-migrate انجام می‌شود." "DELETE-DATABASE"; then
     warn "حذف Database لغو شد."
     return 1
   fi
@@ -88,7 +88,8 @@ cleanup_database_data() {
     fail "Database data path حذف نشد."
     return 1
   fi
-  cleanup_unmark_steps 11 12
+  cleanup_unmark_steps 11
+  rm -f "${STEP_DIR}/12.ok"  # legacy marker from removed install step
   ok "Database PostgreSQL کامل حذف شد. Runtime متوقف است؛ برای ساخت مجدد مراحل 11 و 12 را اجرا کنید."
 }
 
@@ -160,7 +161,7 @@ cleanup_backups() {
 
 cleanup_install_history() {
   new_log "cleanup-install-history"
-  if ! confirm_word "History مراحل 02 تا 20 پاک می‌شود. هیچ سرویس یا داده‌ای حذف نمی‌شود؛ فقط markerهای DONE پاک می‌شوند." "RESET-HISTORY"; then
+  if ! confirm_word "History مراحل نصب پاک می‌شود. هیچ سرویس یا داده‌ای حذف نمی‌شود؛ فقط markerهای DONE پاک می‌شوند." "RESET-HISTORY"; then
     warn "Reset History لغو شد."
     return 1
   fi
@@ -275,7 +276,7 @@ cleanup_full_project() {
   chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
 
   ok "تمام اجزای پروژه Spark از سرور حذف شدند. Spark Manager و packageهای مشترک سیستم باقی مانده‌اند."
-  info "برای نصب مجدد، Spark Manager را باز کنید و مراحل 02 تا 20 را اجرا کنید."
+  info "برای نصب مجدد، Spark Manager را باز کنید و ۱۸ مرحله نصب موجود را اجرا کنید."
 }
 
 cleanup_uninstall_manager() {

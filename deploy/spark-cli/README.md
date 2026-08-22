@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-c
 spark
 ```
 
-برای دیدن وضعیت واقعی تمام ۱۹ مرحله نصب `02` تا `20` بدون اجرای مجدد نصب:
+برای دیدن وضعیت واقعی تمام ۱۸ مرحله نصب بدون اجرای مجدد نصب:
 
 ```bash
 spark --steps
@@ -81,7 +81,7 @@ TUI قبلی وجود ندارد.
 
 Dashboard همه قابلیت‌های Manager قبلی را بدون منوهای nested در دسترس قرار می‌دهد:
 
-- نصب مرحله‌ای 02 تا 20 (۱۹ مرحله) و Run All.
+- ۱۸ مرحله نصب فعال (شماره‌های 02–11 و 13–20) و Run All؛ migration دیتابیس از Installer حذف شده و ابزار مستقل `spark-migrate` مسیر آن است.
 - گزارش `Installation status` با Actual Probe برای دیدن شماره‌های Installed / Not Installed و History جداگانه.
 - Full validation و تست‌های Frontend/API/Docker/Nginx/Scheduler/TURN/Exposure/DNS/SSL.
 - Docker service log selector.
@@ -108,7 +108,7 @@ Actionهای اصلی:
 - `Delete Spark source` — فقط repository محلی `/opt/spark` را حذف می‌کند؛ GitHub و Manager باقی می‌مانند.
 - `Delete Manager logs` — فقط `/var/log/spark-manager` را پاک می‌کند؛ Journal سیستم و Docker logs حذف نمی‌شوند.
 - `Delete all Backups` — تمام Backupهای `/var/backups/spark` را حذف می‌کند.
-- `Reset install History` — فقط markerهای DONE مراحل 02 تا 20 را پاک می‌کند و به Runtime/Data دست نمی‌زند.
+- `Reset install History` — فقط markerهای DONE مراحل نصب را پاک می‌کند و به Runtime/Data دست نمی‌زند.
 - `Delete complete Spark project` — Source، Supabase Runtime/Data، Frontend، Spark config/secrets، Nginx config، Schedulerها، TURN config، Certificateهای دامنه‌های Spark، Backupها و Logها را حذف می‌کند. خود Spark Manager و packageهای مشترک سیستم مثل Docker/Nginx/Node/Certbot نگه داشته می‌شوند تا نصب مجدد ممکن باشد.
 - `Uninstall Spark Manager` — فقط command و فایل‌های نصب‌شده Manager را حذف می‌کند و Runtime پروژه را دست نمی‌زند.
 

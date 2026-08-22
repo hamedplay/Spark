@@ -180,13 +180,13 @@ run_install_step() {
 
 run_all_install() {
   local n
-  for n in $(seq 2 20); do
+  for n in 2 3 4 5 6 7 8 9 10 11 13 14 15 16 17 18 19 20; do
     if ! run_install_step "$n"; then
       fail "اجرای زنجیره‌ای در مرحله ${n} متوقف شد."
       return 1
     fi
   done
-  ok "تمام مراحل 2 تا 20 با موفقیت اجرا شدند."
+  ok "تمام ۱۸ مرحله نصب با موفقیت اجرا شدند."
 }
 
 install_menu() {
@@ -204,7 +204,6 @@ install_menu() {
     printf '  9) %s Provider / Worker Environment\n' "$(step_badge 9)"
     printf ' 10) %s Docker Compose hardening/config\n' "$(step_badge 10)"
     printf ' 11) %s Validate و Start Supabase\n' "$(step_badge 11)"
-    printf ' 12) %s اعمال Migrationهای Spark\n' "$(step_badge 12)"
     printf ' 13) %s Build و Deploy Frontend\n' "$(step_badge 13)"
     printf ' 14) %s Nginx Bootstrap\n' "$(step_badge 14)"
     printf ' 15) %s Certificateها\n' "$(step_badge 15)"
@@ -213,11 +212,11 @@ install_menu() {
     printf ' 18) %s TURN/Coturn\n' "$(step_badge 18)"
     printf ' 19) %s Certbot Renewal Hook\n' "$(step_badge 19)"
     printf ' 20) %s Firewall\n' "$(step_badge 20)"
-    printf ' 21) اجرای مراحل 2 تا 20 به‌ترتیب\n\n'
+    printf ' 21) اجرای همه ۱۸ مرحله نصب به‌ترتیب\n\n'
     read -r -p "انتخاب: " choice
     case "$choice" in
       0) return ;;
-      [2-9]|1[0-9]|20) run_install_step "$choice" || true; pause ;;
+      [2-9]|10|11|1[3-9]|20) run_install_step "$choice" || true; pause ;;
       21) run_all_install || true; pause ;;
       *) fail "گزینه نامعتبر"; sleep 1 ;;
     esac

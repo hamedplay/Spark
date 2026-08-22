@@ -74,7 +74,6 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("install-09", "09  Provider / worker env", "Configure provider and avatar-worker runtime environment.", "controlled"),
         Action("install-10", "10  Compose hardening", "Apply Docker Compose production hardening.", "controlled"),
         Action("install-11", "11  Start Supabase", "Validate and start the Supabase stack.", "controlled"),
-        Action("install-12", "12  Database migrations", "Dry-run and apply only pending Spark migrations.", "confirm"),
         Action("install-13", "13  Frontend deployment", "Build and deploy the production frontend.", "controlled"),
         Action("install-14", "14  Nginx bootstrap", "Create the bootstrap Nginx configuration.", "controlled"),
         Action("install-15", "15  TLS certificates", "Issue/validate production TLS certificates.", "controlled"),
@@ -83,11 +82,11 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("install-18", "18  TURN / Coturn", "Configure and validate Coturn/TURN.", "controlled"),
         Action("install-19", "19  Certbot renewal hook", "Install certificate renewal integration.", "controlled"),
         Action("install-20", "20  Production firewall", "Apply the production UFW policy after safety checks.", "confirm"),
-        Action("install-all", "Run all 02-20", "Execute the complete guided installation sequence.", "confirm"),
+        Action("install-all", "Run all 18 install steps", "Execute the complete guided installation sequence.", "confirm"),
     ]),
     ("Diagnostics", [
         Action("diagnostic-full", "Full validation", "Run all production validation checks."),
-        Action("diagnostic-installation-status", "Installation status 02-20", "Probe the actual server state for every numbered step and show saved History separately."),
+        Action("diagnostic-installation-status", "Installation status (18 steps)", "Probe the actual server state for every numbered step and show saved History separately."),
         Action("diagnostic-frontend", "Frontend", "Check the public frontend endpoint."),
         Action("diagnostic-api", "API / Auth / Functions", "Check API health and the password-login function route."),
         Action("diagnostic-docker", "Docker status", "Show the Supabase Compose service state."),
@@ -98,7 +97,6 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("diagnostic-exposure", "DB/API exposure", "Verify internal DB/API ports are not publicly bound."),
         Action("diagnostic-dns-ssl", "DNS & SSL", "Validate DNS plus application/API certificates."),
         Action("diagnostic-ports", "Listening ports & UFW", "Display listening sockets and the effective UFW policy."),
-        Action("diagnostic-migrations", "Migration dry-run", "Check pending migrations without changing production."),
         Action("@recent-logs", "Recent manager logs", "Browse persistent manager log files without leaving the dashboard.", special="logs"),
     ]),
     ("Application", [
@@ -137,7 +135,7 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("cleanup-source", "Delete Spark source", "Delete the local /opt/spark repository; GitHub and the installed Manager remain.", "confirm"),
         Action("cleanup-logs", "Delete Manager logs", "Delete Spark Manager logs only; system journal and Docker logs are not touched.", "confirm"),
         Action("cleanup-backups", "Delete all Backups", "Delete every retained Spark backup under /var/backups/spark.", "confirm"),
-        Action("cleanup-history", "Reset install History", "Clear only 02-20 DONE markers. Actual probes and runtime data are not changed.", "confirm"),
+        Action("cleanup-history", "Reset install History", "Clear install-step DONE markers. Actual probes and runtime data are not changed.", "confirm"),
         Action("cleanup-full", "Delete complete Spark project", "Remove all Spark-specific runtime/data/config/certs/schedulers/TURN/source/logs/backups while keeping Manager and shared OS packages.", "confirm"),
         Action("cleanup-manager", "Uninstall Spark Manager", "Remove /usr/local/bin/spark and the installed Manager only; project/runtime is left untouched.", "confirm"),
     ]),
@@ -221,11 +219,11 @@ def collect_status() -> Dict[str, str]:
     for path in step_files:
         try:
             n = int(path.stem)
-            if 2 <= n <= 20:
+            if 2 <= n <= 20 and n != 12:
                 completed_set.add(n)
         except ValueError:
             pass
-    status["steps"] = f"{len(completed_set)}/19"
+    status["steps"] = f"{len(completed_set)}/18"
     status["step_set"] = ",".join(str(n) for n in sorted(completed_set))
     try:
         status["backups"] = str(sum(1 for p in BACKUP_DIR.iterdir() if p.is_dir()))
@@ -492,7 +490,7 @@ class SparkUI:
         self.safe_add(win, 0, 1, title, self.color(6) | curses.A_BOLD)
         self.safe_add(win, 0, max(1, w - len(right) - 1), right, self.color(6))
         commit = self.status.get("commit", "n/a")
-        summary = f" commit {commit}  |  history {self.status.get('steps','0/19')}  |  db5432 {self.status.get('db_access','CLOSED')}  |  studio8443 {self.status.get('studio','CLOSED')}  |  nginx {self.status.get('nginx','?')}  |  load {self.status.get('load','?')}  mem {self.status.get('memory','?')}  disk {self.status.get('disk','?')}"
+        summary = f" commit {commit}  |  history {self.status.get('steps','0/18')}  |  db5432 {self.status.get('db_access','CLOSED')}  |  studio8443 {self.status.get('studio','CLOSED')}  |  nginx {self.status.get('nginx','?')}  |  load {self.status.get('load','?')}  mem {self.status.get('memory','?')}  disk {self.status.get('disk','?')}"
         self.safe_add(win, 1, 1, summary, self.color(7))
         self.safe_add(win, 2, 0, "-" * max(0, w - 1), self.color(1))
         win.noutrefresh()

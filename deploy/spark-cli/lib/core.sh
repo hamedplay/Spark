@@ -138,7 +138,6 @@ installation_step_name() {
     9) printf 'Provider / worker environment' ;;
     10) printf 'Docker Compose' ;;
     11) printf 'Supabase runtime' ;;
-    12) printf 'Database migrations' ;;
     13) printf 'Frontend deployment' ;;
     14) printf 'Nginx bootstrap / web server' ;;
     15) printf 'TLS certificates' ;;
@@ -189,7 +188,6 @@ installation_step_probe() {
     9) test_provider_env ;;
     10) test_compose_security ;;
     11) test_supabase_health ;;
-    12) installation_migrations_current ;;
     13) test_frontend_deploy ;;
     14) installation_nginx_present ;;
     15) test_certificates ;;
@@ -213,7 +211,7 @@ installation_status_report() {
   printf '%-4s %-15s %-9s %s\n' 'No.' 'Actual' 'History' 'Component'
   printf '%s\n' '----------------------------------------------------------------------------'
 
-  for n in $(seq 2 20); do
+  for n in 2 3 4 5 6 7 8 9 10 11 13 14 15 16 17 18 19 20; do
     printf -v formatted '%02d' "$n"
     name="$(installation_step_name "$n")"
 
@@ -237,7 +235,7 @@ installation_status_report() {
   printf '%s\n' '----------------------------------------------------------------------------'
   printf 'Installed     : %s\n' "${installed[*]:-none}"
   printf 'Not installed : %s\n' "${missing[*]:-none}"
-  printf 'Total         : %d/19\n' "${#installed[@]}"
+  printf 'Total         : %d/18\n' "${#installed[@]}"
   printf '\nActual = وضعیت واقعی همین سرور. History = این مرحله قبلاً توسط Manager با موفقیت ثبت شده است.\n'
 }
 

@@ -109,7 +109,7 @@ test_menu() {
     printf '%sمنوی تست و لاگ%s\n\n' "$C_BOLD" "$C_RESET"
     printf ' 0) بازگشت\n'
     printf ' 1) Validation کامل سامانه\n'
-    printf ' 2) وضعیت مراحل نصب 02 تا 20\n'
+    printf ' 2) وضعیت ۱۸ مرحله نصب\n'
     printf ' 3) تست Frontend\n'
     printf ' 4) تست API / Auth / Function route\n'
     printf ' 5) Docker status\n'
@@ -120,7 +120,6 @@ test_menu() {
     printf '10) DB/API public exposure check\n'
     printf '11) DNS و SSL\n'
     printf '12) Listening ports + UFW\n'
-    printf '13) Migration dry-run\n\n'
     read -r -p "انتخاب: " choice
     case "$choice" in
       0) return ;;
@@ -148,7 +147,6 @@ test_menu() {
         run_report "Listening ports" ss -lntup
         run_report "UFW" ufw status verbose
         pause ;;
-      13) new_log "test-migration-dryrun"; run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" || true; pause ;;
       *) fail "گزینه نامعتبر"; sleep 1 ;;
     esac
   done

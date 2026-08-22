@@ -186,25 +186,6 @@ migration_apply() {
   (cd "$root" && npx --yes supabase@latest db push --db-url "$url" --include-all)
 }
 
-install_step_12() {
-  title
-  new_log "install-12-migrations"
-  require_dir "${SPARK_ROOT}/supabase/migrations" || return 1
-  require_file "${SUPABASE_ROOT}/.env" || return 1
-  run_visible "Migration dry-run" migration_dry_run "$SPARK_ROOT" || return 1
-  if ! confirm_word "Dry-run بالا را بررسی کنید. اعمال migrationها ممکن است schema/data را تغییر دهد." "APPLY"; then
-    warn "اعمال migration لغو شد."
-    return 1
-  fi
-  run_logged "اعمال migrationهای Spark" migration_apply "$SPARK_ROOT" || return 1
-  if run_logged "Dry-run پس از اعمال" migration_dry_run "$SPARK_ROOT"; then
-    mark_step 12
-  else
-    unmark_step 12
-    return 1
-  fi
-}
-
 test_frontend_deploy() {
   require_file "${SPARK_ROOT}/dist/index.html" || return 1
   require_file "/var/www/spark/index.html" || return 1
