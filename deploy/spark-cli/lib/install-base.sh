@@ -202,7 +202,7 @@ PY
 
 is_placeholder_value() {
   local value="${1:-}"
-  [[ -z "$value" ]] && return 0
+  [[ -z "$value" ]] && return 1
   case "$value" in
     your-tenant-id|stub|your-domain.example.com|admin@example.com|GOOGLE_PROJECT_ID|GOOGLE_PROJECT_NUMBER|sk-proj-xxxxxxxx|fake_mail_user|fake_mail_password|fake_sender)
       return 0 ;;
