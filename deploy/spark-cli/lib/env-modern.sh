@@ -270,6 +270,7 @@ services['storage']['environment']['JWT_JWKS']='${JWT_JWKS}'
 services['functions']['environment']['SUPABASE_JWKS']='${JWT_JWKS}'
 services['functions']['environment']['SUPABASE_PUBLISHABLE_KEYS']='{"default":"${SUPABASE_PUBLISHABLE_KEY}"}'
 services['functions']['environment']['SUPABASE_SECRET_KEYS']='{"default":"${SUPABASE_SECRET_KEY}"}'
+services['functions']['environment']['SUPABASE_PUBLIC_URL']='${SUPABASE_PUBLIC_URL}'
 p.write_text(yaml.safe_dump(data,sort_keys=False,default_flow_style=False),encoding='utf-8')
 PY
 }
