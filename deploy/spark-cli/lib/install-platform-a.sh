@@ -156,6 +156,32 @@ supabase_db_password_preflight() {
     'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U postgres -d "$POSTGRES_DB" -Atqc "select 1"' 2>&1 | grep -qx '1')
 }
 
+repair_supabase_bootstrap() {
+  local has_internal_db
+  has_internal_db="$(cd "$SUPABASE_ROOT" && docker compose exec -T db psql -U postgres -d postgres -Atqc "select 1 from pg_database where datname='_supabase'" 2>/dev/null || true)"
+
+  # Official roles.sql is safe to replay and synchronizes all service-role
+  # passwords with the active POSTGRES_PASSWORD after an interrupted bootstrap.
+  (cd "$SUPABASE_ROOT" && docker compose exec -T db sh -lc \
+    'psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /docker-entrypoint-initdb.d/init-scripts/99-roles.sql') || return 1
+
+  # _supabase is created by the official 97-_supabase.sql migration and is
+  # required by Supavisor. Only replay creation when the database is absent.
+  if [[ "$has_internal_db" != "1" ]]; then
+    (cd "$SUPABASE_ROOT" && docker compose exec -T db sh -lc \
+      'psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /docker-entrypoint-initdb.d/migrations/97-_supabase.sql') || return 1
+  fi
+
+  # pooler.sql is idempotent once _supabase exists (CREATE SCHEMA IF NOT EXISTS).
+  (cd "$SUPABASE_ROOT" && docker compose exec -T db sh -lc \
+    'psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /docker-entrypoint-initdb.d/migrations/99-pooler.sql') || return 1
+}
+
+supabase_bootstrap_ready() {
+  (cd "$SUPABASE_ROOT" && docker compose exec -T db psql -U postgres -d postgres -Atqc \
+    "select case when exists(select 1 from pg_database where datname='_supabase') and exists(select 1 from pg_roles where rolname='supabase_storage_admin') and exists(select 1 from pg_roles where rolname='supabase_auth_admin') and exists(select 1 from pg_roles where rolname='authenticator') then 1 else 0 end" 2>/dev/null | grep -qx 1)
+}
+
 supabase_service_state() {
   local service="$1"
   (cd "$SUPABASE_ROOT" && docker compose ps --format json "$service" 2>/dev/null) | python3 -c '
@@ -176,14 +202,17 @@ print(state + ("/"+health if health else ""))
 }
 
 supabase_core_ready() {
-  local service state
+  local service state anon
   for service in db api-gw auth rest realtime storage supavisor functions; do
     state="$(supabase_service_state "$service" 2>/dev/null || true)"
     [[ "$state" == running* ]] || return 1
     [[ "$state" != *unhealthy* ]] || return 1
     [[ "$state" != *restarting* ]] || return 1
   done
-  curl -fsS --connect-timeout 5 http://127.0.0.1:8000/auth/v1/health >/dev/null || return 1
+  anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"
+  [[ -n "$anon" ]] || return 1
+  curl -fsS --connect-timeout 5 -H "apikey: $anon" -H "Authorization: Bearer $anon" \
+    http://127.0.0.1:8000/auth/v1/health >/dev/null || return 1
 }
 
 report_supabase_start_failure() {
@@ -206,10 +235,8 @@ install_step_11() {
   new_log "install-11-supabase-start"
   run_logged "Validate Docker Compose" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet" || return 1
   run_logged "Pull imageهای Supabase" bash -c "cd '$SUPABASE_ROOT' && docker compose pull" || return 1
-  run_logged "Build Avatar Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose build avatar-worker" || return 1
+  run_logged "Build Avatar Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose build --no-cache avatar-worker" || return 1
 
-  # Start the database first so an existing data directory with credentials from
-  # another runtime is detected before every dependent service enters a restart loop.
   run_logged "Start Supabase database preflight" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d db" || return 1
   local db_deadline=$((SECONDS + 60))
   while (( SECONDS < db_deadline )); do
@@ -220,12 +247,30 @@ install_step_11() {
   done
   if ! run_logged "Verify configured PostgreSQL password against active database" supabase_db_password_preflight; then
     fail "Database volume با POSTGRES_PASSWORD فعلی سازگار نیست. برای ایمنی هیچ data volume ای حذف یا reset نشد."
-    info "اگر این سرور باید نصب تازه باشد، ابتدا با Cleanup > Delete Database data فقط دیتای DB را پاک کنید؛ اگر داده مهم است، credential قبلی باید بازیابی/هماهنگ شود."
     run_visible "Database status" bash -c "cd '$SUPABASE_ROOT' && docker compose ps db" || true
     run_visible "Database logs" bash -c "cd '$SUPABASE_ROOT' && docker compose logs --no-color --tail=80 db" || true
     unmark_step 11
     return 1
   fi
+
+  if ! supabase_bootstrap_ready; then
+    warn "Bootstrap داخلی Supabase ناقص است؛ فقط init scriptهای رسمی لازم برای service roles و Supavisor بازپخش می‌شوند."
+    run_logged "Repair interrupted Supabase bootstrap" repair_supabase_bootstrap || {
+      unmark_step 11
+      return 1
+    }
+  else
+    # Even on a complete bootstrap, synchronize service-role passwords with the
+    # configured secret. This is safe and avoids stale role credentials.
+    run_logged "Synchronize Supabase service-role passwords" repair_supabase_bootstrap || {
+      unmark_step 11
+      return 1
+    }
+  fi
+  run_logged "Validate Supabase internal bootstrap" supabase_bootstrap_ready || {
+    unmark_step 11
+    return 1
+  }
 
   run_logged "Start Supabase stack" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d" || return 1
   info "منتظر آماده‌شدن سرویس‌های اصلی Supabase (حداکثر ۹۰ ثانیه)..."
