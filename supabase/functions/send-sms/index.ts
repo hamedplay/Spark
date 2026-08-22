@@ -326,10 +326,7 @@ Deno.serve(async (req: Request) => {
 
       // ── Delivery response parser ───────────────────────────────────────
       interface RahyabDeliveryItem {
-        returnId: string;
-        code: string;
-        statusKey: string;
-        statusLabel: string;
+        returnId: string; code: string; statusKey: string; statusLabel: string;
       }
 
       type RahyabDeliveryOverallStatus =
@@ -374,7 +371,6 @@ Deno.serve(async (req: Request) => {
         return { ok: overallStatus === "delivered", status: overallStatus, items, rawResponse: raw, errorMessage: null };
       }
 
-      // ── Compare large integer strings safely (no Number conversion) ────
       function comparePositiveIntegerStrings(a: string, b: string): number {
         const na = a.replace(/^0+/, "") || "0";
         const nb = b.replace(/^0+/, "") || "0";
@@ -382,7 +378,6 @@ Deno.serve(async (req: Request) => {
         return na.localeCompare(nb);
       }
 
-      // ── Receive XML parser ─────────────────────────────────────────────
       interface RahyabReceivedSms {
         rowId: string; sender: string; receiver: string; time: string; message: string;
       }
@@ -393,17 +388,11 @@ Deno.serve(async (req: Request) => {
         const raw = rawBody.trim();
         const appError = extractRahyabError(raw);
         if (appError) return { ok: false, messages: [], nextLastRowId: currentLastRowId, rawResponse: raw, errorMessage: appError };
-
-        // Truly empty response = no new messages
         if (!raw) return { ok: true, messages: [], nextLastRowId: currentLastRowId, rawResponse: raw, errorMessage: null };
 
-        // Non-empty response must have valid smsBatch root
         const hasSmsBatchRoot = /<smsBatch(?:\s|>)[\s\S]*<\/smsBatch>/i.test(raw);
         if (!hasSmsBatchRoot) {
-          return {
-            ok: false, messages: [], nextLastRowId: currentLastRowId, rawResponse: raw,
-            errorMessage: "پاسخ Receive رهیاب ساختار معتبر smsBatch ندارد",
-          };
+          return { ok: false, messages: [], nextLastRowId: currentLastRowId, rawResponse: raw, errorMessage: "پاسخ Receive رهیاب ساختار معتبر smsBatch ندارد" };
         }
 
         const messages: RahyabReceivedSms[] = [];
@@ -425,7 +414,6 @@ Deno.serve(async (req: Request) => {
         return { ok: true, messages, nextLastRowId, rawResponse: raw, errorMessage: null };
       }
 
-      // ── GetInfoXML parser ──────────────────────────────────────────────
       interface RahyabAccountInfo {
         creditType: string | null; credit: string | null; active: boolean | null; expireDate: string | null;
         prices: Array<{ provider: string; unicodePrice: string | null; nonUnicodePrice: string | null }>;
@@ -440,7 +428,6 @@ Deno.serve(async (req: Request) => {
         if (appError) return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: appError };
         if (!raw) return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: "پاسخ معتبری از سرویس رهیاب دریافت نشد" };
 
-        // Must have UserAllInformation root — rejects HTML error pages and partial responses
         const hasValidRoot = /<UserAllInformation(?:\s|>)[\s\S]*<\/UserAllInformation>/i.test(raw);
         if (!hasValidRoot) {
           return { ok: false, accountInfo: null, rawResponse: raw, errorMessage: "پاسخ GetInfoXML رهیاب ساختار معتبر UserAllInformation ندارد" };
@@ -480,7 +467,6 @@ Deno.serve(async (req: Request) => {
         return { ok: true, accountInfo, rawResponse: raw, errorMessage: null };
       }
 
-      // ── Shared send execution (used by both production and test) ──────
       interface RahyabRestSendExecutionResult {
         ok: boolean;
         status: "success" | "partial_success" | "error";
@@ -493,9 +479,14 @@ Deno.serve(async (req: Request) => {
 
       async function sendRahyabRestSms(to: string, message: string): Promise<RahyabRestSendExecutionResult> {
         const url = `${apiBase}/url/send.ashx`;
+        const digits = to.replace(/\D/g, "");
+        const rahyabTo = /^00989\d{9}$/.test(digits) ? `0${digits.slice(4)}`
+          : /^989\d{9}$/.test(digits) ? `0${digits.slice(2)}`
+          : /^9\d{9}$/.test(digits) ? `0${digits}`
+          : to.trim();
         const params: Record<string, string> = {
           username: creds.username, password: creds.password,
-          from: fromNumber, to: to.trim(), farsi: "true", message,
+          from: fromNumber, to: rahyabTo, farsi: "true", message,
         };
         const r = await callRest(url, params, "POST");
         const parsed = parseRahyabSendResponse(r.body || "");
@@ -511,7 +502,6 @@ Deno.serve(async (req: Request) => {
         };
       }
 
-      // ── test_connection → GET /ip.ashx ────────────────────────────────
       if (mode === "test_connection") {
         const url = `${apiBase}/ip.ashx`;
         const r = await callRest(url, {}, "GET");
@@ -523,7 +513,6 @@ Deno.serve(async (req: Request) => {
         return json({ ok: true, ip: ipText, debug: dbg });
       }
 
-      // ── send (production) ─────────────────────────────────────────────
       if (mode === "send") {
         const rawMobiles: string[] = body.mobiles || [];
         const message: string = body.message || "";
@@ -552,10 +541,16 @@ Deno.serve(async (req: Request) => {
             cost: null,
           });
         }
-        return json({ ok: errors.length === 0, sent: allValidIds.length, returnIds: allValidIds, errors });
+        return json({
+          ok: errors.length === 0,
+          sent: allValidIds.length,
+          returnIds: allValidIds,
+          errors,
+          error: errors.length > 0 ? errors.join("; ") : undefined,
+          response: errors.length > 0 ? { errors } : undefined,
+        });
       }
 
-      // ── rahyab_rest_test — individual test actions ─────────────────────
       if (mode === "rahyab_rest_test") {
         const action: string = body.action || "";
 
@@ -650,11 +645,9 @@ Deno.serve(async (req: Request) => {
         return json({ ok: false, error: `عملیات ناشناخته: ${action}` }, 400);
       }
 
-      // ── rahyab_rest_delivery_lookup ────────────────────────────────────
       if (mode === "rahyab_rest_delivery_lookup" && deliveryLookupCtx) {
         const { logId, providerMessageId } = deliveryLookupCtx;
 
-        // Validate provider_message_id is a positive integer string
         if (!isValidRahyabReturnId(providerMessageId)) {
           return json({ ok: false, error: `provider_message_id نامعتبر: ${providerMessageId}` }, 400);
         }
@@ -666,16 +659,9 @@ Deno.serve(async (req: Request) => {
         const parsed = parseRahyabDeliveryResponse(r.body || "", [providerMessageId]);
         const now = new Date().toISOString();
 
-        // Map overall status to delivery_status column value
         const deliveryStatusMap: Record<string, string> = {
-          delivered: "delivered",
-          pending: "pending",
-          failed: "not_delivered",
-          not_found: "not_found",
-          partial: "unknown",
-          error: "error",
+          delivered: "delivered", pending: "pending", failed: "not_delivered", not_found: "not_found", partial: "unknown", error: "error",
         };
-        // For single-message lookup: use first item's code if available
         const firstItem = parsed.items[0];
         const rawCode = firstItem?.code ?? null;
         const deliveryStatusFromCode: Record<string, string> = {
@@ -685,7 +671,6 @@ Deno.serve(async (req: Request) => {
           ? (deliveryStatusFromCode[rawCode] ?? "unknown")
           : (deliveryStatusMap[parsed.status] ?? "error");
 
-        // Update sms_dispatch_logs
         await supabase.from("sms_dispatch_logs").update({
           delivery_status: dbDeliveryStatus,
           delivery_code: rawCode,
@@ -697,15 +682,14 @@ Deno.serve(async (req: Request) => {
           parsedResult: JSON.stringify({ overallStatus: parsed.status, code: rawCode, deliveryStatus: dbDeliveryStatus }),
         }];
 
-        // Human-readable message for UI
         const statusMessages: Record<string, string> = {
-          delivered:     "پیامک به گوشی تحویل شده است",
-          pending:       "پیامک ارسال شده اما وضعیت تحویل هنوز مشخص نیست",
+          delivered: "پیامک به گوشی تحویل شده است",
+          pending: "پیامک ارسال شده اما وضعیت تحویل هنوز مشخص نیست",
           not_delivered: "پیامک به گوشی تحویل نشده",
-          blocked:       "پیامک ارسال نشده یا بلاک شده",
-          not_found:     "شناسه پیام در سامانه رهیاب پیدا نشد",
-          unknown:       "وضعیت نامشخص",
-          error:         parsed.errorMessage || r.error || "خطا در استعلام وضعیت",
+          blocked: "پیامک ارسال نشده یا بلاک شده",
+          not_found: "شناسه پیام در سامانه رهیاب پیدا نشد",
+          unknown: "وضعیت نامشخص",
+          error: parsed.errorMessage || r.error || "خطا در استعلام وضعیت",
         };
 
         return json({
@@ -725,17 +709,16 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: "mode نامعتبر برای rahyab_rest" }, 400);
     }
 
-    // ── Route to Rahyab if provider_type === 'rahyab' ─────────────────
     if (p.provider_type === "rahyab") {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
       const providerOverride = {
-        token:      p.token || p.api_key || "",
-        username:   p.username || "",
-        password:   p.password || "",
+        token: p.token || p.api_key || "",
+        username: p.username || "",
+        password: p.password || "",
         short_code: p.line_number || "",
-        soap_url:   p.api_url || "http://RahyabBulk.ir/WebService/sms.asmx",
+        soap_url: p.api_url || "http://RahyabBulk.ir/WebService/sms.asmx",
       };
 
       let rahyabBody: Record<string, unknown>;
@@ -747,7 +730,6 @@ Deno.serve(async (req: Request) => {
         rahyabBody = { action: "send", mobiles: body.mobiles, message: body.message, isFarsi: true, _providerOverride: providerOverride };
       }
 
-      // Internal service-to-service call; service key is the correct credential here.
       const resp = await fetch(`${supabaseUrl}/functions/v1/rahyab-sms`, {
         method: "POST",
         headers: {
@@ -775,7 +757,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ── Standard REST provider (sms.ir-style) ─────────────────────────
     const apiKey: string = p.api_key || "";
     const lineNumber: string = p.line_number || "";
     const baseUrl: string = (p.api_url || "https://api.sms.ir").replace(/\/$/, "");
@@ -785,7 +766,6 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: "کلید API تنظیم نشده است" }, 400);
     }
 
-    // ── MODE: test_connection ─────────────────────────────────────────
     if (mode === "test_connection") {
       const reqUrl = `${baseUrl}/v1/credit`;
       const reqHeaders = { "Accept": "application/json", "X-API-KEY": `***${apiKey.slice(-4)}` };
@@ -844,7 +824,6 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, credit: data.data, response: data, debug: [debugEntry] });
     }
 
-    // ── MODE: send (likeToLike) ───────────────────────────────────────
     const rawMobiles: string[] = body.mobiles || [];
     const message: string = body.message || "";
     const messageTextsInput: string[] | undefined = body.messageTexts;
@@ -859,7 +838,6 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: "شماره خط ارسال تنظیم نشده است" }, 400);
     }
 
-    // Validate each destination number before any external call
     const invalidNumbers = rawMobiles.filter(m => !isValidPhone(m.replace(/\s/g, "")));
     if (invalidNumbers.length > 0) {
       return json({ ok: false, error: `شماره موبایل نامعتبر: ${invalidNumbers.slice(0, 3).join(", ")}` }, 400);
