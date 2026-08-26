@@ -33,11 +33,12 @@ async function sendExternalCancellation(
 ): Promise<void> {
   const { data: meeting, error: meetingError } = await supabase
     .from('meetings')
-    .select('user_id, external_participants')
+    .select('user_id, external_participants, send_sms')
     .eq('id', meetingId)
     .maybeSingle();
 
   if (meetingError) throw meetingError;
+  if (meeting?.send_sms !== true) return;
 
   const externalNames = (meeting?.external_participants ?? []) as string[];
   if (externalNames.length === 0) return;
@@ -66,6 +67,7 @@ async function sendExternalCancellation(
     body: {
       mode: 'external',
       mobiles,
+      meetingId,
       message: `جلسه «${meetingSubject}» لغو شده است`,
       category: 'meeting',
       eventType: 'cancel',
@@ -161,10 +163,14 @@ export async function deleteMeetingPermanently(
     input.senderId
   );
 
-  await supabase
+  const { error: inboxDeleteError } = await supabase
     .from('meeting_inbox')
     .delete()
     .eq('meeting_id', input.meetingId);
+
+  if (inboxDeleteError) {
+    throw inboxDeleteError;
+  }
 
   const { error } = await supabase
     .from('meetings')
