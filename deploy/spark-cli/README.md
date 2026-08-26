@@ -143,15 +143,14 @@ Crashهای خود renderer در فایل زیر ثبت می‌شوند:
 
 ## Update برنامه
 
-منطق Update Production نسبت به نسخه قبلی تغییر نکرده است:
+Update Production فقط کد و Runtime برنامه را به‌روزرسانی می‌کند و به Database migrationها دست نمی‌زند:
 
 1. `origin/main` fetch و fast-forward بودن بررسی می‌شود.
 2. build و validation ابتدا در worktree موقت انجام می‌شود.
-3. migrationهای قبلی حق modify/delete/rename ندارند؛ فقط migration جدید پذیرفته می‌شود.
-4. قبل از deploy backup گرفته می‌شود.
-5. migration جدید dry-run و سپس با تأیید `MIGRATE` اعمال می‌شود.
-6. Frontend و Edge Functions خارج از مسیر live آماده و سپس controlled swap می‌شوند.
-7. در failure runtime rollback می‌شود؛ migration دیتابیس خودکار rollback نمی‌شود.
+3. قبل از deploy backup Runtime گرفته می‌شود.
+4. Frontend و Edge Functions خارج از مسیر live آماده و سپس controlled swap می‌شوند.
+5. در failure، Runtime به نسخه قبلی rollback می‌شود.
+6. اعمال و مدیریت migrationهای Database خارج از Update است و به‌صورت دستی انجام می‌شود.
 
 ## ایمنی
 
