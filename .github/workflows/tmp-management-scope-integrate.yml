@@ -1,0 +1,67 @@
+name: Temporary management scope integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-management-scope-integrate.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Patch management dashboard
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/components/ManagementDashboardPage.tsx')
+          text = path.read_text()
+          import_anchor = "import { ManagementMinutesOverview } from './Minutes/ManagementMinutesOverview';"
+          import_line = "import { ManagementScopeWorkspace } from './ManagementScopeWorkspace';"
+          if import_line not in text:
+              if import_anchor not in text:
+                  raise SystemExit('ManagementMinutesOverview import anchor not found')
+              text = text.replace(import_anchor, import_anchor + "\n" + import_line, 1)
+
+          render_anchor = "        <div className=\"grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6\">{kpis.map(item => <KpiCard key={item.title} {...item} />)}</div>"
+          render_line = "        <ManagementScopeWorkspace onChanged={() => void loadDashboard(true)} />"
+          if render_line not in text:
+              if render_anchor not in text:
+                  raise SystemExit('KPI render anchor not found')
+              text = text.replace(render_anchor, render_anchor + "\n\n" + render_line, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit integration and cleanup
+        shell: bash
+        run: |
+          git config user.name "spark-manager-bot"
+          git config user.email "spark-manager-bot@users.noreply.github.com"
+          rm -f .github/workflows/tmp-management-scope-integrate.yml
+          git add src/components/ManagementDashboardPage.tsx .github/workflows/tmp-management-scope-integrate.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "feat: integrate management subtree workspace [skip ci]"
+          git push origin HEAD:main
