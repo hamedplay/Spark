@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import type { PageId } from '../app/navigation/useNavigation';
 import { ManagementMinutesOverview } from './Minutes/ManagementMinutesOverview';
+import { ManagementScopeWorkspace } from './ManagementScopeWorkspace';
 
 interface DashboardStats {
   total_tasks: number;
@@ -486,6 +487,8 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
         </div>
 
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">{kpis.map(item => <KpiCard key={item.title} {...item} />)}</div>
+
+        <ManagementScopeWorkspace onChanged={() => void loadDashboard(true)} />
 
         <div className="grid gap-3 xl:grid-cols-12">
           <Panel title="عملکرد واحدها" subtitle="برای مشاهده مصوبات هر واحد روی همان واحد کلیک کنید" className="xl:col-span-6">
