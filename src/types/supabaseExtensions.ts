@@ -176,6 +176,65 @@ export type Database = Omit<BaseDatabase, 'public'> & {
         };
         Returns: unknown;
       };
+      get_management_capabilities_v1: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
+      get_management_scope_people_v1: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
+      get_management_decisions_v2: {
+        Args: {
+          p_search?: string | null;
+          p_status?: string | null;
+          p_unit_id?: string | null;
+          p_owner_user_id?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: unknown;
+      };
+      get_management_decision_detail_v1: {
+        Args: { p_decision_id: string };
+        Returns: unknown;
+      };
+      manage_management_decision_v1: {
+        Args: {
+          p_decision_id: string;
+          p_expected_updated_at?: string | null;
+          p_status?: string | null;
+          p_progress_percent?: number | null;
+          p_report_text?: string | null;
+        };
+        Returns: unknown;
+      };
+      get_management_tasks_v1: {
+        Args: {
+          p_search?: string | null;
+          p_status?: string | null;
+          p_assignee_user_id?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: unknown;
+      };
+      get_management_task_detail_v1: {
+        Args: { p_task_id: string };
+        Returns: unknown;
+      };
+      manage_management_task_v1: {
+        Args: {
+          p_task_id: string;
+          p_status?: string | null;
+          p_progress_percent?: number | null;
+          p_priority?: string | null;
+          p_due_date?: string | null;
+          p_assignee_user_id?: string | null;
+          p_note?: string | null;
+        };
+        Returns: unknown;
+      };
     };
   };
 };
