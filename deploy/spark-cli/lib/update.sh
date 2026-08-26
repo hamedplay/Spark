@@ -65,6 +65,78 @@ test_update_spark_validation() {
   test_schedulers || return 1
 }
 
+list_pending_spark_migrations() {
+  local migration_dir="${1:-${SPARK_ROOT}/supabase/migrations}"
+  local applied version file
+
+  [[ -d "$migration_dir" ]] || return 0
+
+  applied="$(compose exec -T db psql -U postgres -d postgres -Atqc \
+    'select version from supabase_migrations.schema_migrations order by version;' 2>/dev/null \
+    | tr -d '\r' | sort -u)" || return 1
+
+  while IFS= read -r file; do
+    [[ -n "$file" ]] || continue
+    version="$(basename "$file" | sed -nE 's/^([0-9]{14})_.*/\1/p')"
+    [[ -n "$version" ]] || continue
+    if ! grep -Fxq "$version" <<<"$applied"; then
+      printf '%s\n' "$file"
+    fi
+  done < <(find "$migration_dir" -maxdepth 1 -type f -name '*.sql' | sort)
+}
+
+apply_one_spark_migration() {
+  local file="$1" base version name
+  base="$(basename "$file")"
+  version="$(sed -nE 's/^([0-9]{14})_.*/\1/p' <<<"$base")"
+  name="$(sed -nE 's/^[0-9]{14}_(.*)\.sql$/\1/p' <<<"$base")"
+
+  [[ "$version" =~ ^[0-9]{14}$ ]] || { fail "Migration version نامعتبر است: $base"; return 1; }
+  [[ "$name" =~ ^[A-Za-z0-9_]+$ ]] || { fail "Migration name نامعتبر است: $base"; return 1; }
+
+  {
+    printf '\\set ON_ERROR_STOP on\nBEGIN;\n'
+    cat "$file"
+    printf '\nINSERT INTO supabase_migrations.schema_migrations(version, name) VALUES (\x27%s\x27, \x27%s\x27);\n' "$version" "$name"
+    printf "NOTIFY pgrst, 'reload schema';\nCOMMIT;\n"
+  } | compose exec -T db psql -U postgres -d postgres
+}
+
+reconcile_spark_migrations() {
+  local migration_dir="${1:-${SPARK_ROOT}/supabase/migrations}"
+  local pending=() file answer
+
+  mapfile -t pending < <(list_pending_spark_migrations "$migration_dir") || return 1
+  if (("${#pending[@]}" == 0)); then
+    ok "Database migrations از قبل همگام هستند."
+    return 0
+  fi
+
+  warn "${#pending[@]} migration اعمال‌نشده در Database سلف‌هاست پیدا شد:"
+  for file in "${pending[@]}"; do
+    printf '  - %s\n' "$(basename "$file")"
+  done
+
+  printf '\n'
+  read -r -p "برای اعمال migrationهای بالا عبارت MIGRATE را وارد کنید: " answer
+  [[ "$answer" == "MIGRATE" ]] || {
+    fail "Migration تأیید نشد؛ Update قبل از deploy Frontend متوقف شد."
+    return 1
+  }
+
+  for file in "${pending[@]}"; do
+    run_logged "Apply migration $(basename "$file")" apply_one_spark_migration "$file" || return 1
+  done
+
+  if ! installation_migrations_current; then
+    fail "پس از migration هنوز Database با repository همگام نیست."
+    return 1
+  fi
+
+  run_logged "Reload PostgREST schema cache" bash -c "cd '$SUPABASE_ROOT' && docker compose exec -T db psql -U postgres -d postgres -c \"NOTIFY pgrst, 'reload schema';\"" || return 1
+  ok "Database migrations و PostgREST schema cache همگام شدند."
+}
+
 update_spark() (
   title
   new_log "update-spark"
@@ -154,6 +226,9 @@ update_spark() (
     run_logged "Validation build Avatar Worker از source جدید" docker build -t "$validation_image" -f "$stage/worker/Dockerfile" "$stage/worker" || return 1
   fi
   run_logged "Validate Docker Compose فعلی" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet" || return 1
+
+  run_logged "بررسی اتصال Database برای migration" bash -c "cd '$SUPABASE_ROOT' && docker compose exec -T db psql -U postgres -d postgres -Atqc 'select 1' | grep -qx 1" || return 1
+  reconcile_spark_migrations "$stage/supabase/migrations" || return 1
 
   info "آماده‌سازی Edge Functions جدید خارج از مسیر live..."
   mkdir -p "$functions_next"
