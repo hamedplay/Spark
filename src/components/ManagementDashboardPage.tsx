@@ -19,7 +19,7 @@ import {
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import type { PageId } from '../app/navigation/useNavigation';
-import { ManagementMinutesOverview } from './Minutes/ManagementMinutesOverview';
+import { ManagementMinutesOverview, type ManagementDashboardFilterTarget } from './Minutes/ManagementMinutesOverview';
 import { ManagementScopeWorkspace } from './ManagementScopeWorkspace';
 
 interface DashboardStats {
@@ -380,6 +380,7 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
   const [decisionReportLoading, setDecisionReportLoading] = useState(false);
   const [decisionReportUnit, setDecisionReportUnit] = useState<UnitPerformanceItem | null>(null);
   const [decisionReportItems, setDecisionReportItems] = useState<ManagementDecisionItem[]>([]);
+  const [workspaceFocus, setWorkspaceFocus] = useState<(ManagementDashboardFilterTarget & { requestId: number }) | null>(null);
 
   const loadDashboard = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true); else setLoading(true);
@@ -429,8 +430,17 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
   }, [onNavigate]);
 
   const openTask = useCallback((taskId: string) => { navigateWithParams('tasks', { task: taskId }); }, [navigateWithParams]);
-  const openTaskView = useCallback((view: string) => { navigateWithParams('tasks', { taskView: view }); }, [navigateWithParams]);
   const openMeeting = useCallback((meetingId: string) => { navigateWithParams('meetings', { meetingFocus: meetingId }); }, [navigateWithParams]);
+
+  const focusManagementWorkspace = useCallback((target: ManagementDashboardFilterTarget) => {
+    setWorkspaceFocus((current) => ({
+      ...target,
+      requestId: (current?.requestId ?? 0) + 1,
+    }));
+    window.requestAnimationFrame(() => {
+      document.getElementById('management-scope-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
 
   const openDecisionByIds = useCallback((decisionId: string, minuteId: string | null | undefined) => {
     if (!minuteId) { toast.error('صورت‌جلسه مرتبط با این مصوبه مشخص نیست'); return; }
@@ -456,12 +466,12 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
 
   const stats = data.stats;
   const kpis = [
-    { title: 'کل اقدامات', value: stats.total_tasks, sub: 'همه اقدامات غیرآرشیوی', icon: ListTodo, tone: 'blue' as Tone, onClick: () => openTaskView('all') },
-    { title: 'اقدامات امروز', value: stats.today_tasks, sub: 'سررسید امروز', icon: CalendarDays, tone: 'violet' as Tone, onClick: () => openTaskView('today') },
-    { title: 'در حال انجام', value: stats.in_progress_tasks, sub: 'نیازمند ادامه کار', icon: Activity, tone: 'cyan' as Tone, onClick: () => openTaskView('in_progress') },
-    { title: 'تکمیل‌شده', value: stats.completed_tasks, sub: 'اقدامات بسته‌شده', icon: CheckCircle2, tone: 'green' as Tone, onClick: () => openTaskView('completed') },
-    { title: 'عقب‌مانده', value: stats.overdue_tasks, sub: 'عبور کرده از مهلت', icon: Clock3, tone: 'rose' as Tone, onClick: () => openTaskView('overdue') },
-    { title: 'اقدامات فوری', value: stats.urgent_tasks, sub: 'اولویت بالا و باز', icon: Zap, tone: 'amber' as Tone, onClick: () => openTaskView('urgent') },
+    { title: 'کل اقدامات', value: stats.total_tasks, sub: 'همه اقدامات زیرمجموعه', icon: ListTodo, tone: 'blue' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'all', label: 'کل اقدامات زیرمجموعه' }) },
+    { title: 'اقدامات امروز', value: stats.today_tasks, sub: 'سررسید امروز در زیرمجموعه', icon: CalendarDays, tone: 'violet' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'today', label: 'اقدامات امروز زیرمجموعه' }) },
+    { title: 'در حال انجام', value: stats.in_progress_tasks, sub: 'در حال انجام در زیرمجموعه', icon: Activity, tone: 'cyan' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'in_progress', label: 'اقدامات در حال انجام زیرمجموعه' }) },
+    { title: 'تکمیل‌شده', value: stats.completed_tasks, sub: 'اقدامات بسته‌شده زیرمجموعه', icon: CheckCircle2, tone: 'green' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'completed', label: 'اقدامات تکمیل‌شده زیرمجموعه' }) },
+    { title: 'عقب‌مانده', value: stats.overdue_tasks, sub: 'عبور کرده از مهلت در زیرمجموعه', icon: Clock3, tone: 'rose' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'overdue', label: 'اقدامات عقب‌مانده زیرمجموعه' }) },
+    { title: 'اقدامات فوری', value: stats.urgent_tasks, sub: 'اولویت بالا و باز در زیرمجموعه', icon: Zap, tone: 'amber' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'urgent', label: 'اقدامات فوری زیرمجموعه' }) },
   ];
 
   return (
@@ -479,7 +489,7 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
           <div className="h-px flex-1 bg-gradient-to-l from-slate-700/70 to-transparent" />
         </div>
 
-        <ManagementMinutesOverview onNavigate={onNavigate} />
+        <ManagementMinutesOverview onFilter={focusManagementWorkspace} />
 
         <div className="flex items-center gap-3 pt-2">
           <h2 className="text-base font-black text-white sm:text-lg">اقدامات</h2>
@@ -488,7 +498,13 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
 
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">{kpis.map(item => <KpiCard key={item.title} {...item} />)}</div>
 
-        <ManagementScopeWorkspace onChanged={() => void loadDashboard(true)} />
+        <div id="management-scope-workspace" className="scroll-mt-4">
+          <ManagementScopeWorkspace
+            focus={workspaceFocus}
+            onOpenMinute={(minuteId) => navigateWithParams('minutes-detail', { minute: minuteId })}
+            onChanged={() => void loadDashboard(true)}
+          />
+        </div>
 
         <div className="grid gap-3 xl:grid-cols-12">
           <Panel title="عملکرد واحدها" subtitle="برای مشاهده مصوبات هر واحد روی همان واحد کلیک کنید" className="xl:col-span-6">
