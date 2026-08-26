@@ -9,7 +9,6 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import type { PageId } from '../../app/navigation/useNavigation';
 import { supabase } from '../../lib/supabase';
 
 interface DashboardStats {
@@ -17,6 +16,7 @@ interface DashboardStats {
   draft: number;
   open_decisions: number;
   overdue_decisions: number;
+  pending_approval: number;
   pending_my_approval: number;
   created_last_30: number;
   decisions_near_deadline: number;
@@ -69,7 +69,13 @@ function StatCard({ label, value, note, icon: Icon, toneKey, progress, onClick }
   );
 }
 
-export function ManagementMinutesOverview({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+export type ManagementDashboardFilterTarget = {
+  tab: 'minutes' | 'decisions' | 'tasks';
+  view: string;
+  label: string;
+};
+
+export function ManagementMinutesOverview({ onFilter }: { onFilter: (target: ManagementDashboardFilterTarget) => void }) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   const load = useCallback(async () => {
@@ -88,12 +94,12 @@ export function ManagementMinutesOverview({ onNavigate }: { onNavigate: (page: P
     ? Math.max(Object.values(stats.decision_status_counts || {}).reduce((sum, value) => sum + Number(value || 0), 0), stats.open_decisions, stats.overdue_decisions)
     : 0;
   const cards = [
-    { label: 'کل صورت‌جلسات', value: stats?.total_minutes ?? null, note: stats ? `${nf.format(stats.created_last_30)} مورد در ۳۰ روز اخیر` : 'در حال دریافت آمار', icon: FileCheck2, toneKey: 'violet' as Tone, progress: stats?.total_minutes ? 100 : 0, page: 'minutes' as PageId },
-    { label: 'پیش‌نویس', value: stats?.draft ?? null, note: stats?.draft ? 'نیازمند تکمیل یا ارسال' : stats ? 'پیش‌نویس بازی ندارید' : 'در حال دریافت آمار', icon: FileText, toneKey: 'slate' as Tone, progress: stats ? percent(stats.draft, stats.total_minutes) : 0, page: 'minutes' as PageId },
-    { label: 'منتظر تأیید من', value: stats?.pending_my_approval ?? null, note: stats?.pending_my_approval ? 'نیازمند اقدام شما' : stats ? 'اقدام فوری ندارید' : 'در حال دریافت آمار', icon: Clock3, toneKey: 'amber' as Tone, progress: stats ? percent(stats.pending_my_approval, stats.total_minutes) : 0, page: 'minutes-approvals' as PageId },
-    { label: 'مصوبات فعال', value: stats?.open_decisions ?? null, note: stats?.open_decisions ? 'در جریان اجرا و پیگیری' : stats ? 'مصوبه فعالی وجود ندارد' : 'در حال دریافت آمار', icon: TrendingUp, toneKey: 'blue' as Tone, progress: stats ? percent(stats.open_decisions, decisionTotal) : 0, page: 'minutes-my-decisions' as PageId },
-    { label: 'عقب‌مانده', value: stats?.overdue_decisions ?? null, note: stats?.overdue_decisions ? 'نیازمند پیگیری فوری' : stats ? 'همه موارد در زمان‌بندی‌اند' : 'در حال دریافت آمار', icon: AlertCircle, toneKey: 'rose' as Tone, progress: stats ? percent(stats.overdue_decisions, decisionTotal) : 0, page: 'minutes-followup' as PageId },
-    { label: 'نزدیک سررسید', value: stats?.decisions_near_deadline ?? null, note: stats?.decisions_near_deadline ? 'پیش از عبور از مهلت بررسی شود' : stats ? 'سررسید نزدیکی وجود ندارد' : 'در حال دریافت آمار', icon: Zap, toneKey: 'orange' as Tone, progress: stats ? percent(stats.decisions_near_deadline, Math.max(1, stats.open_decisions)) : 0, page: 'minutes-my-decisions' as PageId },
+    { label: 'کل صورت‌جلسات', value: stats?.total_minutes ?? null, note: stats ? `${nf.format(stats.created_last_30)} مورد در ۳۰ روز اخیر` : 'در حال دریافت آمار', icon: FileCheck2, toneKey: 'violet' as Tone, progress: stats?.total_minutes ? 100 : 0, target: { tab: 'minutes', view: 'all', label: 'کل صورت‌جلسات زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'پیش‌نویس', value: stats?.draft ?? null, note: stats?.draft ? 'نیازمند تکمیل یا ارسال' : stats ? 'پیش‌نویس بازی ندارید' : 'در حال دریافت آمار', icon: FileText, toneKey: 'slate' as Tone, progress: stats ? percent(stats.draft, stats.total_minutes) : 0, target: { tab: 'minutes', view: 'draft', label: 'پیش‌نویس‌های زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'منتظر تأیید', value: stats?.pending_approval ?? null, note: stats?.pending_approval ? 'در انتظار تکمیل فرآیند تأیید' : stats ? 'موردی در انتظار تأیید نیست' : 'در حال دریافت آمار', icon: Clock3, toneKey: 'amber' as Tone, progress: stats ? percent(stats.pending_approval, stats.total_minutes) : 0, target: { tab: 'minutes', view: 'pending_approval', label: 'صورت‌جلسات منتظر تأیید زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'مصوبات فعال', value: stats?.open_decisions ?? null, note: stats?.open_decisions ? 'در جریان اجرا و پیگیری' : stats ? 'مصوبه فعالی وجود ندارد' : 'در حال دریافت آمار', icon: TrendingUp, toneKey: 'blue' as Tone, progress: stats ? percent(stats.open_decisions, decisionTotal) : 0, target: { tab: 'decisions', view: 'active', label: 'مصوبات فعال زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'عقب‌مانده', value: stats?.overdue_decisions ?? null, note: stats?.overdue_decisions ? 'نیازمند پیگیری فوری' : stats ? 'همه موارد در زمان‌بندی‌اند' : 'در حال دریافت آمار', icon: AlertCircle, toneKey: 'rose' as Tone, progress: stats ? percent(stats.overdue_decisions, decisionTotal) : 0, target: { tab: 'decisions', view: 'overdue', label: 'مصوبات عقب‌مانده زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'نزدیک سررسید', value: stats?.decisions_near_deadline ?? null, note: stats?.decisions_near_deadline ? 'پیش از عبور از مهلت بررسی شود' : stats ? 'سررسید نزدیکی وجود ندارد' : 'در حال دریافت آمار', icon: Zap, toneKey: 'orange' as Tone, progress: stats ? percent(stats.decisions_near_deadline, Math.max(1, stats.open_decisions)) : 0, target: { tab: 'decisions', view: 'near_deadline', label: 'مصوبات نزدیک سررسید زیرمجموعه' } as ManagementDashboardFilterTarget },
   ];
 
   return (
@@ -102,7 +108,7 @@ export function ManagementMinutesOverview({ onNavigate }: { onNavigate: (page: P
       <div className="pointer-events-none absolute -left-20 top-24 h-72 w-72 rounded-full bg-violet-400/10 blur-3xl dark:bg-violet-600/10" />
       <div className="relative z-10">
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
-          {cards.map(card => <StatCard key={card.label} {...card} onClick={() => onNavigate(card.page)} />)}
+          {cards.map(card => <StatCard key={card.label} label={card.label} value={card.value} note={card.note} icon={card.icon} toneKey={card.toneKey} progress={card.progress} onClick={() => onFilter(card.target)} />)}
         </div>
       </div>
     </section>
