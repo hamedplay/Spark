@@ -35,6 +35,15 @@ interface DashboardStats {
   completion_rate: number;
 }
 
+interface TaskFilterCounts {
+  all: number;
+  today: number;
+  in_progress: number;
+  completed: number;
+  overdue: number;
+  urgent: number;
+}
+
 interface StatusDistributionItem {
   status: 'completed' | 'in_progress' | 'pending' | 'overdue' | string;
   count: number;
@@ -380,16 +389,37 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
   const [decisionReportLoading, setDecisionReportLoading] = useState(false);
   const [decisionReportUnit, setDecisionReportUnit] = useState<UnitPerformanceItem | null>(null);
   const [decisionReportItems, setDecisionReportItems] = useState<ManagementDecisionItem[]>([]);
+  const [taskFilterCounts, setTaskFilterCounts] = useState<TaskFilterCounts | null>(null);
   const [workspaceFocus, setWorkspaceFocus] = useState<(ManagementDashboardFilterTarget & { requestId: number }) | null>(null);
 
   const loadDashboard = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true); else setLoading(true);
     try {
-      const { data: functionData, error } = await supabase.functions.invoke('management-dashboard');
-      if (error) throw error;
-      const normalized = normalizeDashboardData(functionData?.data);
+      const [dashboardResult, allTasks, todayTasks, inProgressTasks, completedTasks, overdueTasks, urgentTasks] = await Promise.all([
+        supabase.functions.invoke('management-dashboard'),
+        supabase.rpc('get_management_tasks_v2', { p_view: 'all', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_tasks_v2', { p_view: 'today', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_tasks_v2', { p_view: 'in_progress', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_tasks_v2', { p_view: 'completed', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_tasks_v2', { p_view: 'overdue', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_tasks_v2', { p_view: 'urgent', p_limit: 1, p_offset: 0 }),
+      ]);
+      if (dashboardResult.error) throw dashboardResult.error;
+      const taskResults = [allTasks, todayTasks, inProgressTasks, completedTasks, overdueTasks, urgentTasks];
+      const failedTaskResult = taskResults.find((result) => result.error);
+      if (failedTaskResult?.error) throw failedTaskResult.error;
+
+      const normalized = normalizeDashboardData(dashboardResult.data?.data);
       if (!normalized) throw new Error('INVALID_MANAGEMENT_DASHBOARD_RESPONSE');
       setData(normalized);
+      setTaskFilterCounts({
+        all: toSafeNumber((allTasks.data as { total_count?: unknown } | null)?.total_count),
+        today: toSafeNumber((todayTasks.data as { total_count?: unknown } | null)?.total_count),
+        in_progress: toSafeNumber((inProgressTasks.data as { total_count?: unknown } | null)?.total_count),
+        completed: toSafeNumber((completedTasks.data as { total_count?: unknown } | null)?.total_count),
+        overdue: toSafeNumber((overdueTasks.data as { total_count?: unknown } | null)?.total_count),
+        urgent: toSafeNumber((urgentTasks.data as { total_count?: unknown } | null)?.total_count),
+      });
     } catch (error) {
       console.error('[ManagementDashboardPage] load failed', error);
       toast.error('بارگذاری داشبورد مدیریتی ناموفق بود');
@@ -429,7 +459,6 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
     onNavigate(page);
   }, [onNavigate]);
 
-  const openTask = useCallback((taskId: string) => { navigateWithParams('tasks', { task: taskId }); }, [navigateWithParams]);
   const openMeeting = useCallback((meetingId: string) => { navigateWithParams('meetings', { meetingFocus: meetingId }); }, [navigateWithParams]);
 
   const focusManagementWorkspace = useCallback((target: ManagementDashboardFilterTarget) => {
@@ -448,30 +477,37 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
     navigateWithParams('minutes-detail', { minute: minuteId, mtab: 'decisions', decision: decisionId });
   }, [navigateWithParams]);
 
-  const openDecision = useCallback((alert: DeadlineAlertItem) => { openDecisionByIds(alert.id, alert.minute_id); }, [openDecisionByIds]);
-
   const insights = useMemo(() => {
     if (!data) return [] as string[];
     const result: string[] = [];
-    if (data.stats.overdue_tasks > 0) result.push(`${nf.format(data.stats.overdue_tasks)} اقدام از مهلت عبور کرده و نیازمند تعیین تکلیف مدیریتی است.`);
+    const overdueCount = taskFilterCounts?.overdue ?? data.stats.overdue_tasks;
+    if (overdueCount > 0) result.push(`${nf.format(overdueCount)} اقدام از مهلت عبور کرده و نیازمند تعیین تکلیف مدیریتی است.`);
     if (data.stats.completion_rate >= 70) result.push(`نرخ تکمیل فعلی ${nf.format(data.stats.completion_rate)}٪ است و در محدوده مطلوب قرار دارد.`);
     else result.push(`نرخ تکمیل فعلی ${nf.format(data.stats.completion_rate)}٪ است؛ تمرکز روی اقدامات در حال انجام می‌تواند نتیجه را بهبود دهد.`);
     const topUnit = data.unit_performance[0];
     if (topUnit) result.push(`${topUnit.unit_name} با میانگین پیشرفت ${nf.format(topUnit.progress_percent)}٪ بالاترین عملکرد ثبت‌شده در مصوبات را دارد.`);
     return result.slice(0, 3);
-  }, [data]);
+  }, [data, taskFilterCounts]);
 
   if (loading) return <div className="flex min-h-[70vh] items-center justify-center rounded-3xl bg-[#06101f] text-slate-200"><div className="flex flex-col items-center gap-3"><Loader2 className="h-9 w-9 animate-spin text-violet-400" /><span className="text-sm text-slate-400">در حال آماده‌سازی داشبورد مدیریتی...</span></div></div>;
   if (!data) return <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 rounded-3xl border border-slate-700 bg-[#06101f] px-5 text-center text-slate-200"><AlertTriangle className="h-10 w-10 text-amber-400" /><div><h2 className="font-bold">داشبورد مدیریتی در دسترس نیست</h2><p className="mt-1 text-sm text-slate-500">داده‌ها دریافت نشدند. دوباره تلاش کنید.</p></div><button onClick={() => void loadDashboard()} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500">تلاش مجدد</button></div>;
 
   const stats = data.stats;
+  const taskCounts = taskFilterCounts ?? {
+    all: stats.total_tasks,
+    today: stats.today_tasks,
+    in_progress: stats.in_progress_tasks,
+    completed: stats.completed_tasks,
+    overdue: stats.overdue_tasks,
+    urgent: stats.urgent_tasks,
+  };
   const kpis = [
-    { title: 'کل اقدامات', value: stats.total_tasks, sub: 'همه اقدامات زیرمجموعه', icon: ListTodo, tone: 'blue' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'all', label: 'کل اقدامات زیرمجموعه' }) },
-    { title: 'اقدامات امروز', value: stats.today_tasks, sub: 'سررسید امروز در زیرمجموعه', icon: CalendarDays, tone: 'violet' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'today', label: 'اقدامات امروز زیرمجموعه' }) },
-    { title: 'در حال انجام', value: stats.in_progress_tasks, sub: 'در حال انجام در زیرمجموعه', icon: Activity, tone: 'cyan' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'in_progress', label: 'اقدامات در حال انجام زیرمجموعه' }) },
-    { title: 'تکمیل‌شده', value: stats.completed_tasks, sub: 'اقدامات بسته‌شده زیرمجموعه', icon: CheckCircle2, tone: 'green' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'completed', label: 'اقدامات تکمیل‌شده زیرمجموعه' }) },
-    { title: 'عقب‌مانده', value: stats.overdue_tasks, sub: 'عبور کرده از مهلت در زیرمجموعه', icon: Clock3, tone: 'rose' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'overdue', label: 'اقدامات عقب‌مانده زیرمجموعه' }) },
-    { title: 'اقدامات فوری', value: stats.urgent_tasks, sub: 'اولویت بالا و باز در زیرمجموعه', icon: Zap, tone: 'amber' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'urgent', label: 'اقدامات فوری زیرمجموعه' }) },
+    { title: 'کل اقدامات', value: taskCounts.all, sub: 'همه اقدامات زیرمجموعه', icon: ListTodo, tone: 'blue' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'all', label: 'کل اقدامات زیرمجموعه' }) },
+    { title: 'اقدامات امروز', value: taskCounts.today, sub: 'سررسید امروز در زیرمجموعه', icon: CalendarDays, tone: 'violet' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'today', label: 'اقدامات امروز زیرمجموعه' }) },
+    { title: 'در حال انجام', value: taskCounts.in_progress, sub: 'در حال انجام در زیرمجموعه', icon: Activity, tone: 'cyan' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'in_progress', label: 'اقدامات در حال انجام زیرمجموعه' }) },
+    { title: 'تکمیل‌شده', value: taskCounts.completed, sub: 'اقدامات بسته‌شده زیرمجموعه', icon: CheckCircle2, tone: 'green' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'completed', label: 'اقدامات تکمیل‌شده زیرمجموعه' }) },
+    { title: 'عقب‌مانده', value: taskCounts.overdue, sub: 'عبور کرده از مهلت در زیرمجموعه', icon: Clock3, tone: 'rose' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'overdue', label: 'اقدامات عقب‌مانده زیرمجموعه' }) },
+    { title: 'اقدامات فوری', value: taskCounts.urgent, sub: 'اولویت بالا و باز در زیرمجموعه', icon: Zap, tone: 'amber' as Tone, onClick: () => focusManagementWorkspace({ tab: 'tasks', view: 'urgent', label: 'اقدامات فوری زیرمجموعه' }) },
   ];
 
   return (
@@ -516,7 +552,12 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
               </button>
             ))}</div> : <EmptyState text="برای عملکرد واحدها هنوز داده کافی وجود ندارد" />}
           </Panel>
-          <Panel title="هشدارهای مهلت" subtitle="موارد معوق یا دارای سررسید تا ۱۰ روز آینده" className="xl:col-span-6">{data.deadline_alerts.length ? <div className="space-y-2">{data.deadline_alerts.map((alert) => { const overdue = alert.days_remaining < 0; const today = alert.days_remaining === 0; const badge = overdue ? `${nf.format(Math.abs(alert.days_remaining))} روز گذشته` : today ? 'امروز' : `${nf.format(alert.days_remaining)} روز`; return <button type="button" onClick={() => alert.source === 'decision' ? openDecision(alert) : openTask(alert.id)} key={`${alert.source}-${alert.id}`} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-right transition hover:border-violet-500/30 focus:outline-none focus:ring-2 focus:ring-violet-400/40 ${overdue ? 'border-rose-500/20 bg-rose-500/[0.06]' : 'border-slate-800/80 bg-slate-900/35'}`}><div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${overdue ? 'bg-rose-500/10 text-rose-300' : alert.source === 'decision' ? 'bg-violet-500/10 text-violet-300' : 'bg-amber-500/10 text-amber-300'}`}>{alert.source === 'decision' ? <Target className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><p className="truncate text-[11px] text-slate-200">{alert.title}</p><p className="mt-0.5 text-[9px] text-slate-600">{alert.source === 'decision' ? 'مصوبه' : 'اقدام'} · {formatDate(alert.due_date)}</p></div><span className={`flex-shrink-0 rounded-md px-2 py-1 text-[9px] ${overdue ? 'bg-rose-500/10 text-rose-300' : today ? 'bg-amber-500/10 text-amber-300' : 'bg-blue-500/10 text-blue-300'}`}>{badge}</span></button>; })}</div> : <EmptyState text="هشدار مهلت فعالی وجود ندارد" />}</Panel>
+          <Panel title="هشدارهای مهلت" subtitle="موارد معوق یا دارای سررسید تا ۱۰ روز آینده" className="xl:col-span-6">{data.deadline_alerts.length ? <div className="space-y-2">{data.deadline_alerts.map((alert) => { const overdue = alert.days_remaining < 0; const today = alert.days_remaining === 0; const badge = overdue ? `${nf.format(Math.abs(alert.days_remaining))} روز گذشته` : today ? 'امروز' : `${nf.format(alert.days_remaining)} روز`; return <button type="button" onClick={() => focusManagementWorkspace({
+  tab: alert.source === 'decision' ? 'decisions' : 'tasks',
+  view: 'all',
+  label: alert.source === 'decision' ? 'جزئیات هشدار مهلت مصوبه' : 'جزئیات هشدار مهلت اقدام',
+  detail: { type: alert.source === 'decision' ? 'decisions' : 'tasks', id: alert.id },
+})} key={`${alert.source}-${alert.id}`} className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-right transition hover:border-violet-500/30 focus:outline-none focus:ring-2 focus:ring-violet-400/40 ${overdue ? 'border-rose-500/20 bg-rose-500/[0.06]' : 'border-slate-800/80 bg-slate-900/35'}`}><div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${overdue ? 'bg-rose-500/10 text-rose-300' : alert.source === 'decision' ? 'bg-violet-500/10 text-violet-300' : 'bg-amber-500/10 text-amber-300'}`}>{alert.source === 'decision' ? <Target className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><p className="truncate text-[11px] text-slate-200">{alert.title}</p><p className="mt-0.5 text-[9px] text-slate-600">{alert.source === 'decision' ? 'مصوبه' : 'اقدام'} · {formatDate(alert.due_date)} · مشاهده جزئیات</p></div><span className={`flex-shrink-0 rounded-md px-2 py-1 text-[9px] ${overdue ? 'bg-rose-500/10 text-rose-300' : today ? 'bg-amber-500/10 text-amber-300' : 'bg-blue-500/10 text-blue-300'}`}>{badge}</span></button>; })}</div> : <EmptyState text="هشدار مهلت فعالی وجود ندارد" />}</Panel>
         </div>
 
         <div className="grid gap-3 xl:grid-cols-12">
@@ -533,7 +574,7 @@ export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: Pag
           <div className="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-l from-violet-500/[0.08] via-slate-950/40 to-cyan-500/[0.05] p-4 xl:col-span-8"><div className="absolute -bottom-14 -left-10 h-36 w-36 rounded-full bg-violet-500/15 blur-2xl" /><div className="relative flex flex-col gap-4 sm:flex-row sm:items-center"><div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border border-violet-400/20 bg-violet-500/10 shadow-[0_0_30px_rgba(124,58,237,0.18)]"><Sparkles className="h-7 w-7 text-violet-300" /></div><div className="min-w-0 flex-1"><h3 className="font-bold text-white">بینش‌های هوشمند مدیریتی</h3><div className="mt-2 space-y-1.5">{insights.map((insight, index) => <p key={index} className="flex gap-2 text-[11px] leading-5 text-slate-400"><span className="mt-2 h-1 w-1 flex-shrink-0 rounded-full bg-violet-400" />{insight}</p>)}</div></div></div></div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:col-span-4 xl:grid-cols-3">
             <button type="button" onClick={() => void loadDecisionReport()} className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3 text-center transition hover:border-emerald-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"><UsersRound className="mx-auto h-5 w-5 text-emerald-300" /><p className="mt-2 text-xl font-black text-white">{nf.format(stats.total_decisions)}</p><p className="mt-1 text-[9px] text-slate-500">کل مصوبات · مشاهده گزارش</p></button>
-            <button type="button" onClick={() => openTaskView('completed')} className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-3 text-center transition hover:border-amber-400/40 focus:outline-none focus:ring-2 focus:ring-amber-400/40"><Gauge className="mx-auto h-5 w-5 text-amber-300" /><p className="mt-2 text-xl font-black text-white">{nf.format(stats.completion_rate)}٪</p><p className="mt-1 text-[9px] text-slate-500">تکمیل به‌موقع</p></button>
+            <button type="button" onClick={() => focusManagementWorkspace({ tab: 'tasks', view: 'completed', label: 'اقدامات تکمیل‌شده زیرمجموعه' })} className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-3 text-center transition hover:border-amber-400/40 focus:outline-none focus:ring-2 focus:ring-amber-400/40"><Gauge className="mx-auto h-5 w-5 text-amber-300" /><p className="mt-2 text-xl font-black text-white">{nf.format(stats.completion_rate)}٪</p><p className="mt-1 text-[9px] text-slate-500">تکمیل به‌موقع</p></button>
             <button type="button" onClick={() => navigateWithParams('meetings', { meetingView: 'open' })} className="col-span-2 rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] p-3 text-center transition hover:border-blue-400/40 focus:outline-none focus:ring-2 focus:ring-blue-400/40 sm:col-span-1"><TrendingUp className="mx-auto h-5 w-5 text-blue-300" /><p className="mt-2 text-xl font-black text-white">{nf.format(stats.active_meetings)}</p><p className="mt-1 text-[9px] text-slate-500">جلسات فعال</p></button>
           </div>
         </div>
