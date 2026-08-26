@@ -66,6 +66,7 @@ async function sendExternalCancellation(
     body: {
       mode: 'external',
       mobiles,
+      meetingId,
       message: `جلسه «${meetingSubject}» لغو شده است`,
       category: 'meeting',
       eventType: 'cancel',
@@ -161,10 +162,14 @@ export async function deleteMeetingPermanently(
     input.senderId
   );
 
-  await supabase
+  const { error: inboxDeleteError } = await supabase
     .from('meeting_inbox')
     .delete()
     .eq('meeting_id', input.meetingId);
+
+  if (inboxDeleteError) {
+    throw inboxDeleteError;
+  }
 
   const { error } = await supabase
     .from('meetings')
