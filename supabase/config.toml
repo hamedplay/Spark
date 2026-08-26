@@ -36,6 +36,3 @@ verify_jwt = false
 
 [functions.scheduler-dispatch]
 verify_jwt = false
-
-[functions.csp-report]
-verify_jwt = false

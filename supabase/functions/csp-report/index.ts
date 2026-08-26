@@ -108,10 +108,7 @@ Deno.serve(async (req: Request) => {
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     "unknown";
   if (isRateLimited(clientIp)) {
-    // CSP reporting is telemetry, not an interactive API. Once the per-instance
-    // write budget is exhausted, silently drop excess reports so browsers do
-    // not retry or surface noisy network/ORB errors while DB writes stay bounded.
-    return new Response(null, { status: 204 });
+    return new Response(null, { status: 429 });
   }
 
   // Reject wrong content types early
