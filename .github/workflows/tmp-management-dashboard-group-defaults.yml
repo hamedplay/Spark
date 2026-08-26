@@ -1,0 +1,84 @@
+name: Temporary management dashboard group defaults
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-management-dashboard-group-defaults.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Patch dashboard group defaults
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/UserGroups/AccessPanel.tsx')
+          s = p.read_text()
+          key_anchor = "const MANAGEMENT_DASHBOARD_PERMISSION_KEY = 'management_dashboard';"
+          key_block = (
+              "const MANAGEMENT_DASHBOARD_PERMISSION_KEY = 'management_dashboard';\n"
+              "const MANAGEMENT_SCOPE_PERMISSION_KEYS = [\n"
+              "  'management_decisions.view',\n"
+              "  'management_decisions.manage',\n"
+              "  'management_tasks.view',\n"
+              "  'management_tasks.manage',\n"
+              "] as const;"
+          )
+          if 'MANAGEMENT_SCOPE_PERMISSION_KEYS' not in s:
+              if key_anchor not in s:
+                  raise SystemExit('management dashboard key anchor not found')
+              s = s.replace(key_anchor, key_block, 1)
+          toggle_anchor = "  const toggle = (key: string) => setPerms(p => ({ ...p, [key]: !p[key] }));"
+          toggle_block = (
+              "  const toggle = (key: string) => setPerms(p => ({ ...p, [key]: !p[key] }));\n\n"
+              "  const toggleManagementDashboard = () => {\n"
+              "    setPerms(current => {\n"
+              "      const enabling = !current[MANAGEMENT_DASHBOARD_PERMISSION_KEY];\n"
+              "      if (!enabling) {\n"
+              "        return { ...current, [MANAGEMENT_DASHBOARD_PERMISSION_KEY]: false };\n"
+              "      }\n\n"
+              "      const next: Record<string, boolean> = {\n"
+              "        ...current,\n"
+              "        [MANAGEMENT_DASHBOARD_PERMISSION_KEY]: true,\n"
+              "      };\n"
+              "      MANAGEMENT_SCOPE_PERMISSION_KEYS.forEach(key => { next[key] = true; });\n"
+              "      return next;\n"
+              "    });\n"
+              "  };"
+          )
+          if 'const toggleManagementDashboard' not in s:
+              if toggle_anchor not in s:
+                  raise SystemExit('toggle anchor not found')
+              s = s.replace(toggle_anchor, toggle_block, 1)
+          click_anchor = "onClick={() => toggle(MANAGEMENT_DASHBOARD_PERMISSION_KEY)}"
+          if click_anchor in s:
+              s = s.replace(click_anchor, "onClick={toggleManagementDashboard}", 1)
+          elif 'onClick={toggleManagementDashboard}' not in s:
+              raise SystemExit('management dashboard toggle click anchor not found')
+          p.write_text(s)
+          PY
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Commit and cleanup
+        shell: bash
+        run: |
+          git config user.name "spark-manager-bot"
+          git config user.email "spark-manager-bot@users.noreply.github.com"
+          rm -f .github/workflows/tmp-management-dashboard-group-defaults.yml
+          git add src/components/UserGroups/AccessPanel.tsx .github/workflows/tmp-management-dashboard-group-defaults.yml
+          git commit -m "fix: default management scope permissions with dashboard [skip ci]"
+          git push origin HEAD:main
