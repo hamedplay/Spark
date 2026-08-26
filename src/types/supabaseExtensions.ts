@@ -195,6 +195,28 @@ export type Database = Omit<BaseDatabase, 'public'> & {
         };
         Returns: unknown;
       };
+      get_management_minutes_v1: {
+        Args: {
+          p_search?: string | null;
+          p_status?: string | null;
+          p_view?: string;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: unknown;
+      };
+      get_management_decisions_v3: {
+        Args: {
+          p_search?: string | null;
+          p_status?: string | null;
+          p_unit_id?: string | null;
+          p_owner_user_id?: string | null;
+          p_view?: string;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: unknown;
+      };
       get_management_decision_detail_v1: {
         Args: { p_decision_id: string };
         Returns: unknown;
@@ -214,6 +236,17 @@ export type Database = Omit<BaseDatabase, 'public'> & {
           p_search?: string | null;
           p_status?: string | null;
           p_assignee_user_id?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: unknown;
+      };
+      get_management_tasks_v2: {
+        Args: {
+          p_search?: string | null;
+          p_status?: string | null;
+          p_assignee_user_id?: string | null;
+          p_view?: string;
           p_limit?: number;
           p_offset?: number;
         };
