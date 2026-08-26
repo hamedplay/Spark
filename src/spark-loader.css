@@ -1,0 +1,394 @@
+.spark-loader {
+  --spark-loader-size: clamp(12rem, 42vw, 17rem);
+  --spark-loader-core-size: 7.75rem;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.65rem;
+  overflow: hidden;
+  color: #172033;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(34, 211, 238, 0.12), transparent 28%),
+    radial-gradient(circle at 58% 48%, rgba(168, 85, 247, 0.11), transparent 35%),
+    linear-gradient(145deg, #f8fbff 0%, #f5f7fb 48%, #f7f4ff 100%);
+}
+
+.spark-loader--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding:
+    max(1.5rem, env(safe-area-inset-top, 0px))
+    max(1.25rem, env(safe-area-inset-right, 0px))
+    max(1.5rem, env(safe-area-inset-bottom, 0px))
+    max(1.25rem, env(safe-area-inset-left, 0px));
+}
+
+.spark-loader--embedded {
+  width: 100%;
+  min-height: min(34rem, 68vh);
+  border-radius: 1.5rem;
+}
+
+.dark .spark-loader {
+  color: #f8fafc;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(6, 182, 212, 0.14), transparent 28%),
+    radial-gradient(circle at 58% 48%, rgba(168, 85, 247, 0.16), transparent 35%),
+    radial-gradient(circle at 42% 58%, rgba(37, 99, 235, 0.11), transparent 32%),
+    linear-gradient(150deg, #050816 0%, #090d1f 52%, #10091d 100%);
+}
+
+.spark-loader__ambient {
+  position: absolute;
+  z-index: -1;
+  width: min(35rem, 92vw);
+  height: min(35rem, 92vw);
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      from 30deg,
+      rgba(34, 211, 238, 0.09),
+      rgba(59, 130, 246, 0.03),
+      rgba(168, 85, 247, 0.12),
+      rgba(236, 72, 153, 0.06),
+      rgba(34, 211, 238, 0.09)
+    );
+  filter: blur(34px);
+  animation: spark-loader-ambient 5.8s ease-in-out infinite;
+}
+
+.spark-loader__stage {
+  position: relative;
+  display: grid;
+  width: var(--spark-loader-size);
+  height: var(--spark-loader-size);
+  place-items: center;
+}
+
+.spark-loader__orbital,
+.spark-loader__ring,
+.spark-loader__dots {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+}
+
+.spark-loader__orbital {
+  filter: drop-shadow(0 0 0.75rem rgba(59, 130, 246, 0.14));
+}
+
+.spark-loader__ring {
+  margin: auto;
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+}
+
+.spark-loader__ring--outer {
+  inset: 1%;
+  background: conic-gradient(
+    from 8deg,
+    transparent 0 7%,
+    #22d3ee 10% 19%,
+    transparent 22% 32%,
+    #3b82f6 35% 48%,
+    transparent 51% 62%,
+    #8b5cf6 65% 76%,
+    #ec4899 78% 87%,
+    transparent 90% 100%
+  );
+  filter: drop-shadow(0 0 7px rgba(34, 211, 238, 0.58)) drop-shadow(0 0 10px rgba(236, 72, 153, 0.3));
+  animation: spark-loader-spin 3.2s linear infinite;
+}
+
+.spark-loader__ring--middle {
+  inset: 8%;
+  background: conic-gradient(
+    from 180deg,
+    transparent 0 11%,
+    rgba(96, 165, 250, 0.95) 13% 28%,
+    transparent 30% 47%,
+    rgba(192, 132, 252, 0.95) 50% 64%,
+    transparent 67% 82%,
+    rgba(34, 211, 238, 0.9) 85% 95%,
+    transparent 97% 100%
+  );
+  opacity: 0.88;
+  animation: spark-loader-spin-reverse 4.7s linear infinite;
+}
+
+.spark-loader__ring--inner {
+  inset: 17%;
+  background: conic-gradient(
+    from 260deg,
+    rgba(14, 165, 233, 0.15),
+    #38bdf8 13% 22%,
+    transparent 25% 52%,
+    #c084fc 55% 67%,
+    transparent 70% 88%,
+    #f472b6 91% 96%,
+    transparent 98%
+  );
+  opacity: 0.72;
+  animation: spark-loader-spin 6.1s linear infinite;
+}
+
+.spark-loader__dots {
+  inset: 12%;
+  border: 2px dotted rgba(99, 102, 241, 0.28);
+  animation: spark-loader-spin 8.5s linear infinite;
+}
+
+.dark .spark-loader__dots {
+  border-color: rgba(167, 139, 250, 0.38);
+}
+
+.spark-loader__spark {
+  position: absolute;
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 9999px;
+  background: #67e8f9;
+  box-shadow: 0 0 7px #22d3ee, 0 0 15px rgba(34, 211, 238, 0.7);
+  animation: spark-loader-twinkle 1.9s ease-in-out infinite;
+}
+
+.spark-loader__spark--one {
+  top: 15%;
+  right: 6%;
+}
+
+.spark-loader__spark--two {
+  bottom: 20%;
+  left: 4%;
+  background: #c084fc;
+  box-shadow: 0 0 7px #a855f7, 0 0 15px rgba(168, 85, 247, 0.65);
+  animation-delay: 0.55s;
+}
+
+.spark-loader__spark--three {
+  right: 18%;
+  bottom: 5%;
+  width: 0.22rem;
+  height: 0.22rem;
+  background: #f0abfc;
+  box-shadow: 0 0 7px #e879f9;
+  animation-delay: 1.05s;
+}
+
+.spark-loader__core {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  width: var(--spark-loader-core-size);
+  height: var(--spark-loader-core-size);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 18px 50px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 0 32px rgba(59, 130, 246, 0.1);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: spark-loader-core-breathe 2.8s ease-in-out infinite;
+}
+
+.dark .spark-loader__core {
+  border-color: rgba(148, 163, 184, 0.15);
+  background: rgba(7, 12, 30, 0.76);
+  box-shadow:
+    0 20px 55px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 36px rgba(59, 130, 246, 0.16),
+    0 0 52px rgba(168, 85, 247, 0.1);
+}
+
+.spark-loader__logo-wrap {
+  display: grid;
+  width: 4.4rem;
+  height: 4.4rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 1.35rem;
+  filter: drop-shadow(0 7px 15px rgba(14, 165, 233, 0.12));
+}
+
+.spark-loader__logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.spark-loader__brand {
+  max-width: 6rem;
+  overflow: hidden;
+  color: rgba(30, 41, 59, 0.72);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  line-height: 1;
+  text-indent: 0.32em;
+  white-space: nowrap;
+}
+
+.dark .spark-loader__brand {
+  color: rgba(226, 232, 240, 0.76);
+}
+
+.spark-loader__message {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.48);
+  padding: 0.55rem 1rem;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .spark-loader__message {
+  border-color: rgba(148, 163, 184, 0.11);
+  background: rgba(15, 23, 42, 0.34);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.2);
+}
+
+.spark-loader__message-text {
+  background: linear-gradient(90deg, #0891b2 0%, #4f46e5 48%, #c026d3 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.dark .spark-loader__message-text {
+  background-image: linear-gradient(90deg, #67e8f9 0%, #a78bfa 50%, #f0abfc 100%);
+}
+
+.spark-loader__typing {
+  display: inline-flex;
+  direction: ltr;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.spark-loader__typing i {
+  width: 0.24rem;
+  height: 0.24rem;
+  border-radius: 9999px;
+  background: #6366f1;
+  animation: spark-loader-dot 1.15s ease-in-out infinite;
+}
+
+.spark-loader__typing i:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.spark-loader__typing i:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+.spark-loader--compact {
+  --spark-loader-size: clamp(9rem, 34vw, 12rem);
+  --spark-loader-core-size: 5.5rem;
+  gap: 1rem;
+}
+
+.spark-loader--compact .spark-loader__logo-wrap {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.9rem;
+}
+
+.spark-loader--compact .spark-loader__brand {
+  font-size: 0.45rem;
+}
+
+.spark-loader--compact .spark-loader__message {
+  padding: 0.4rem 0.8rem;
+}
+
+.spark-loader--compact .spark-loader__message-text {
+  font-size: 0.8rem;
+}
+
+@keyframes spark-loader-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spark-loader-spin-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes spark-loader-core-breathe {
+  0%, 100% { transform: scale(0.98); }
+  50% { transform: scale(1.025); }
+}
+
+@keyframes spark-loader-ambient {
+  0%, 100% { opacity: 0.58; transform: scale(0.92) rotate(0deg); }
+  50% { opacity: 0.96; transform: scale(1.04) rotate(18deg); }
+}
+
+@keyframes spark-loader-dot {
+  0%, 70%, 100% { opacity: 0.25; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-0.16rem); }
+}
+
+@keyframes spark-loader-twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+@media (max-width: 420px) {
+  .spark-loader {
+    --spark-loader-size: min(13.25rem, 74vw);
+    --spark-loader-core-size: 6.7rem;
+    gap: 1.25rem;
+  }
+
+  .spark-loader__logo-wrap {
+    width: 3.75rem;
+    height: 3.75rem;
+  }
+
+  .spark-loader__brand {
+    font-size: 0.48rem;
+  }
+
+  .spark-loader__message {
+    max-width: min(92vw, 18rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark-loader__ambient,
+  .spark-loader__ring,
+  .spark-loader__dots,
+  .spark-loader__core,
+  .spark-loader__spark,
+  .spark-loader__typing i {
+    animation: none !important;
+  }
+}

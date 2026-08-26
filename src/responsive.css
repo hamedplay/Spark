@@ -1,0 +1,280 @@
+/* Shared responsive foundation for application pages.
+ * Component-level breakpoints own the final composition. These rules provide
+ * consistent mobile density, overflow safety and touch ergonomics without
+ * changing a component's intended column count globally. */
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+input,
+textarea,
+select,
+button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+button,
+a,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.app-responsive-content,
+.app-responsive-content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Flex/grid children with long Persian labels, URLs or identifiers must be
+ * allowed to shrink instead of forcing the page wider than the viewport. */
+.app-responsive-content :where(.flex, .grid) > * {
+  min-width: 0;
+}
+
+.app-responsive-content .overflow-x-auto,
+.app-responsive-content [data-horizontal-scroll] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.app-responsive-content p,
+.app-responsive-content li,
+.app-responsive-content dd,
+.app-responsive-content td,
+.app-responsive-content th,
+.app-responsive-content label {
+  overflow-wrap: anywhere;
+}
+
+/* Utilities for components that opt into the common mobile system. */
+.mobile-scroll-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.mobile-scroll-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-line-clamp-1,
+.mobile-line-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mobile-line-clamp-1 { -webkit-line-clamp: 1; }
+.mobile-line-clamp-2 { -webkit-line-clamp: 2; }
+
+/* Native details are used for secondary mobile guidance instead of keeping
+ * explanatory copy permanently in the reading flow. */
+details > summary {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (max-width: 640px) {
+  /* Many desktop-first blocks use generous padding. Tighten only the common
+   * utility sizes on phones while keeping comfortable 44px touch targets. */
+  .app-responsive-content .p-5,
+  .app-responsive-content .p-6 {
+    padding: 0.875rem !important;
+  }
+
+  .app-responsive-content .p-8 {
+    padding: 1rem !important;
+  }
+
+  .app-responsive-content .px-6,
+  .app-responsive-content .px-8 {
+    padding-inline: 0.875rem !important;
+  }
+
+  .app-responsive-content .py-6,
+  .app-responsive-content .py-8 {
+    padding-block: 0.875rem !important;
+  }
+
+  /* Legacy empty/loading states often reserved desktop-sized whitespace. */
+  .app-responsive-content .py-16 {
+    padding-block: 2.25rem !important;
+  }
+
+  .app-responsive-content .py-20 {
+    padding-block: 2.75rem !important;
+  }
+
+  .app-responsive-content .gap-6 {
+    gap: 0.875rem !important;
+  }
+
+  .app-responsive-content .gap-5 {
+    gap: 0.75rem !important;
+  }
+
+  .app-responsive-content .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.875rem !important;
+  }
+
+  .app-responsive-content .space-y-5 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.75rem !important;
+  }
+
+  .app-responsive-content .mb-8 {
+    margin-bottom: 1rem !important;
+  }
+
+  .app-responsive-content .mb-6 {
+    margin-bottom: 0.875rem !important;
+  }
+
+  /* Phone typography should prioritize information density. */
+  .app-responsive-content .text-4xl {
+    font-size: 1.75rem !important;
+    line-height: 2.1rem !important;
+  }
+
+  .app-responsive-content .text-3xl {
+    font-size: 1.5rem !important;
+    line-height: 1.9rem !important;
+  }
+
+  /* Supporting page copy never pushes primary controls below the fold. */
+  .app-responsive-content h1 + p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    overflow: hidden;
+    max-width: 100%;
+  }
+
+  /* Profile helper copy is secondary information. Keep one compact preview
+   * line on phones; the desktop layout retains the full explanatory text. */
+  .app-responsive-content .profile-field [data-spark-field-icon='right'] > p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    overflow: hidden;
+    margin-top: 0.25rem !important;
+    font-size: 0.6875rem !important;
+    line-height: 1.1rem !important;
+  }
+
+  /* A 44px control is touch-friendly without visually inflating content. */
+  .app-responsive-content :is(input, select, textarea, button):not([type='checkbox']):not([type='radio']):not([type='range']) {
+    min-height: 44px;
+  }
+
+  .app-responsive-content input[type='checkbox'],
+  .app-responsive-content input[type='radio'] {
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  /* Legacy data tables keep all columns and become locally scrollable instead
+   * of widening/clipping the whole application viewport. */
+  .app-responsive-content table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-responsive-content table th,
+  .app-responsive-content table td {
+    white-space: nowrap;
+  }
+
+  .app-responsive-content [role='dialog'] {
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - 1rem);
+    overflow: auto;
+  }
+
+  .react-datepicker,
+  .react-datepicker-popper {
+    max-width: calc(100vw - 1rem) !important;
+  }
+
+  .react-datepicker-popper {
+    inset-inline: 0 auto !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-responsive-content {
+    font-size: 0.9375rem;
+  }
+
+  .app-responsive-content .p-5,
+  .app-responsive-content .p-6,
+  .app-responsive-content .p-8 {
+    padding: 0.75rem !important;
+  }
+
+  /* Extra-narrow Android devices need slightly tighter select text so the
+   * selected value does not collide with the native disclosure indicator. */
+  .app-responsive-content select {
+    font-size: 0.75rem;
+  }
+}
+
+/* Safe-area support for bottom action bars on iOS/PWA installations. */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .mobile-safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Video conference lobby: mobile scroll ownership and room priority
+   --------------------------------------------------------------------------
+   Layout owns the vertical scroll for the video-conference full-height page.
+   The lobby root previously owned a second full-height overflow scroller,
+   which could trap touch scrolling inside the fixed-height application shell.
+   Keep only the outer Layout scroller and let the lobby participate in normal
+   document flow. On phone/tablet widths, show available rooms before secondary
+   join/create/media controls so an active room is immediately reachable.
+   -------------------------------------------------------------------------- */
+.app-responsive-content > .h-full.min-h-0.space-y-5.overflow-y-auto.pb-5[dir='rtl'] {
+  height: auto !important;
+  min-height: 100%;
+  overflow: visible !important;
+}
+
+@media (max-width: 1279px) {
+  .app-responsive-content > .h-full.min-h-0.space-y-5.overflow-y-auto.pb-5[dir='rtl'] > .grid.grid-cols-1.gap-5 > main {
+    order: -1;
+  }
+}

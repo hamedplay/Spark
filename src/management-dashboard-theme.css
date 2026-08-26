@@ -1,0 +1,392 @@
+/* Management dashboard theme bridge.
+   The dashboard keeps its current dark visual language when the app root has
+   the `dark` class. In light mode these overrides restyle only the management
+   dashboard shell (identified by its unique #06101f surface) and descendants,
+   so the page follows Spark's existing theme source of truth. */
+
+html:not(.dark) [class~="bg-[#06101f]"] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08) !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class*="bg-slate-950"],
+html:not(.dark) [class~="bg-[#06101f]"] [class*="bg-slate-900"] {
+  background-color: rgba(255, 255, 255, 0.86) !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class*="bg-slate-800"] {
+  background-color: #e2e8f0 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class*="bg-slate-700"] {
+  background-color: #f1f5f9 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class~="bg-[#071426]"] {
+  background-color: #ffffff !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class*="border-slate-800"],
+html:not(.dark) [class~="bg-[#06101f]"] [class*="border-slate-700"] {
+  border-color: #e2e8f0 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-white"],
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-slate-100"],
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-slate-200"] {
+  color: #0f172a !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-slate-300"] {
+  color: #334155 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-slate-400"] {
+  color: #475569 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-slate-500"],
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-slate-600"] {
+  color: #64748b !important;
+}
+
+/* Keep accent colors readable against a light surface. */
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-blue-300"] { color: #2563eb !important; }
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-violet-200"],
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-violet-300"] { color: #7c3aed !important; }
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-cyan-300"] { color: #0891b2 !important; }
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-emerald-300"] { color: #059669 !important; }
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-rose-300"] { color: #e11d48 !important; }
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-amber-300"] { color: #d97706 !important; }
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-teal-300"] { color: #0d9488 !important; }
+
+/* The timeline dots use the dark dashboard surface as their ring. */
+html:not(.dark) [class~="bg-[#06101f]"] [class~="ring-[#071426]"] {
+  --tw-ring-color: #ffffff !important;
+}
+
+/* Replace the intentionally dark middle stop of the insight card in light mode. */
+html:not(.dark) [class~="bg-[#06101f]"] [class*="via-slate-950"] {
+  background-image: linear-gradient(
+    to left,
+    rgba(139, 92, 246, 0.09),
+    rgba(255, 255, 255, 0.92),
+    rgba(6, 182, 212, 0.06)
+  ) !important;
+}
+
+/* Colored dashboard tiles keep their hue but gain a clean light-mode base. */
+html:not(.dark) [class~="bg-[#06101f]"] [class*="from-blue-500/10"],
+html:not(.dark) [class~="bg-[#06101f]"] [class*="from-violet-500/10"],
+html:not(.dark) [class~="bg-[#06101f]"] [class*="from-cyan-500/10"],
+html:not(.dark) [class~="bg-[#06101f]"] [class*="from-emerald-500/10"],
+html:not(.dark) [class~="bg-[#06101f]"] [class*="from-rose-500/10"],
+html:not(.dark) [class~="bg-[#06101f]"] [class*="from-amber-500/10"],
+html:not(.dark) [class~="bg-[#06101f]"] [class*="from-teal-500/10"] {
+  background-color: rgba(255, 255, 255, 0.72);
+}
+
+/* --------------------------------------------------------------------------
+   Video conference lobby — follows the Meetings page visual language.
+   The #join-code control uniquely scopes these rules to the conference lobby.
+   -------------------------------------------------------------------------- */
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 24px;
+  background: linear-gradient(135deg, #ffffff 0%, rgba(248, 250, 252, 0.82) 54%, rgba(238, 242, 255, 0.5) 100%);
+  padding: 12px;
+  color: #0f172a;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code)::before,
+[class~="space-y-5"][dir="rtl"]:has(#join-code)::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  border-radius: 999px;
+  filter: blur(72px);
+  pointer-events: none;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code)::before {
+  top: -95px;
+  left: -80px;
+  width: 220px;
+  height: 220px;
+  background: rgba(196, 181, 253, 0.12);
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code)::after {
+  top: 110px;
+  right: -70px;
+  width: 190px;
+  height: 190px;
+  background: rgba(165, 243, 252, 0.11);
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Reduce the large vertical rhythm inherited from the old lobby. */
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 12px !important;
+}
+
+/* Header integrates into the page shell, like MeetingsPage. */
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child > div:first-child {
+  gap: 10px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child h2 {
+  font-size: 18px !important;
+  line-height: 28px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.015em;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child h2 + p {
+  margin-top: 2px !important;
+  font-size: 11px !important;
+  line-height: 18px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child button {
+  min-height: 36px;
+}
+
+/* Compact KPI row. */
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child > div:last-child {
+  margin-top: 10px !important;
+  gap: 8px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child > div:last-child > div {
+  min-height: 58px;
+  border-radius: 12px !important;
+  border-color: rgba(226, 232, 240, 0.9) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  padding: 9px 11px !important;
+  box-shadow: 0 7px 20px rgba(15, 23, 42, 0.035) !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child > div:last-child > div p:last-child {
+  margin-top: 2px !important;
+  font-size: 17px !important;
+  line-height: 22px !important;
+}
+
+/* Main layout: narrower controls column and less whitespace. */
+[class~="space-y-5"][dir="rtl"]:has(#join-code) > div:nth-child(2) {
+  gap: 12px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) aside > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 10px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) aside > section,
+[class~="space-y-5"][dir="rtl"]:has(#join-code) main > section {
+  border-radius: 14px !important;
+  border-color: rgba(226, 232, 240, 0.85) !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035) !important;
+  backdrop-filter: blur(6px);
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) aside > section {
+  padding: 12px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) main > section {
+  padding: 12px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) aside h3,
+[class~="space-y-5"][dir="rtl"]:has(#join-code) main h3 {
+  font-size: 13px !important;
+  line-height: 20px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) aside p,
+[class~="space-y-5"][dir="rtl"]:has(#join-code) main > section > div:first-child p {
+  line-height: 16px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) #join-code,
+[class~="space-y-5"][dir="rtl"]:has(#join-code) #create-name {
+  min-height: 36px;
+  border-color: #e2e8f0 !important;
+  background: #ffffff !important;
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+  font-size: 12px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) aside button {
+  min-height: 34px;
+}
+
+/* Rooms panel header and empty/loading states consume less height. */
+[class~="space-y-5"][dir="rtl"]:has(#join-code) main > section > div:first-child {
+  margin-bottom: 12px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) main [class*="min-h-[330px]"] {
+  min-height: 210px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) main > section > div.grid {
+  gap: 10px !important;
+}
+
+/* Room cards: clean white cards, low shadow, no floating dashboard effect. */
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card {
+  border-color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  padding: 11px !important;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04) !important;
+  transform: none !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card:hover {
+  border-color: #cbd5e1 !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.065) !important;
+  transform: none !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card > div:nth-of-type(2) {
+  margin-top: 9px !important;
+  border-color: #e2e8f0 !important;
+  background: #f8fafc !important;
+  padding: 8px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card > div:nth-of-type(3) {
+  margin-top: 9px !important;
+  border-color: #e2e8f0 !important;
+  padding-top: 9px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card button {
+  min-height: 30px !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-white"],
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-slate-100"] {
+  color: #0f172a !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-slate-200"] {
+  color: #334155 !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-slate-300"] {
+  color: #475569 !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-slate-400"] {
+  color: #64748b !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class*="bg-slate-900"] {
+  background-color: #f8fafc !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class*="border-slate-700"],
+[class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class*="border-slate-800"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* Dark mode mirrors MeetingsPage rather than the management dashboard shell. */
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) {
+  border-color: #1e293b;
+  background: linear-gradient(135deg, #020617 0%, #020617 62%, rgba(49, 46, 129, 0.14) 100%);
+  color: #f8fafc;
+  box-shadow: 0 18px 50px rgba(2, 6, 23, 0.28);
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code)::before {
+  background: rgba(124, 58, 237, 0.08);
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code)::after {
+  background: rgba(6, 182, 212, 0.07);
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) [class~="text-slate-900"],
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) [class~="text-slate-800"],
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) [class~="text-slate-700"] {
+  color: #f1f5f9 !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) [class~="text-slate-500"],
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) [class~="text-slate-400"] {
+  color: #94a3b8 !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) > section:first-child > div:last-child > div,
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) aside > section,
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) main > section,
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card {
+  border-color: #1e293b !important;
+  background: rgba(15, 23, 42, 0.7) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) #join-code,
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) #create-name {
+  border-color: #334155 !important;
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card > div:nth-of-type(2),
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class*="bg-slate-900"] {
+  border-color: #334155 !important;
+  background: rgba(30, 41, 59, 0.78) !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-white"],
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-slate-100"] {
+  color: #f8fafc !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-slate-200"] {
+  color: #e2e8f0 !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-slate-300"] {
+  color: #cbd5e1 !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) .conference-room-card [class~="text-slate-400"] {
+  color: #94a3b8 !important;
+}
+
+@media (min-width: 640px) {
+  [class~="space-y-5"][dir="rtl"]:has(#join-code) {
+    padding: 16px;
+  }
+}
+
+@media (min-width: 1280px) {
+  [class~="space-y-5"][dir="rtl"]:has(#join-code) > div:nth-child(2) {
+    grid-template-columns: 280px minmax(0, 1fr) !important;
+  }
+}

@@ -1,0 +1,49 @@
+.spark-reference-login .spark-auth-pointer-glow {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(50vw, 50vh, 0) translate3d(-50%, -50%, 0);
+  background: radial-gradient(circle,
+    rgb(255 255 255 / .24) 0%,
+    rgb(var(--spark-neon-soft, 111 255 226) / .18) 24%,
+    rgb(var(--spark-neon, 35 232 196) / .09) 48%,
+    transparent 74%);
+  box-shadow:
+    0 0 12px rgb(var(--spark-neon-soft, 111 255 226) / .08),
+    0 0 24px rgb(var(--spark-neon, 35 232 196) / .07);
+  mix-blend-mode: screen;
+  filter: blur(.5px);
+  will-change: transform, opacity;
+  transition: opacity .12s ease;
+}
+
+.spark-reference-login .spark-auth-pointer-glow::before {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 255 255 / .18), transparent 72%);
+  pointer-events: none;
+}
+
+.spark-reference-login .spark-auth-pointer-glow::after {
+  content: none;
+}
+
+.spark-reference-login .spark-auth-pointer-glow.is-visible {
+  opacity: .9;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .spark-reference-login .spark-auth-pointer-glow { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark-reference-login .spark-auth-pointer-glow { display: none; }
+}

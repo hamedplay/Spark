@@ -1,0 +1,217 @@
+/* Unified left-side login controls matching the supplied reference. */
+
+/* Keep the native credential-method buttons available for React state updates,
+   but remove them from the visible UI. */
+.spark-reference-form > .spark-reference-tabs {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  clip-path: inset(50%) !important;
+}
+
+.spark-login-native-otp-trigger {
+  display: none !important;
+}
+
+.spark-login-unified-tabs {
+  position: relative;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  direction: rtl;
+  gap: 4px;
+  min-height: 50px;
+  margin: 2px 0 14px;
+  padding: 4px;
+  border: 1px solid rgb(var(--spark-neon-soft) / .28);
+  border-radius: 16px;
+  background: rgb(1 18 20 / .76);
+  box-shadow: inset 0 0 22px rgb(var(--spark-neon) / .035), 0 8px 24px rgb(0 0 0 / .12);
+  overflow: hidden;
+}
+
+.spark-login-unified-tabs::before {
+  content: '';
+  position: absolute;
+  inset: -50% auto -50% -20%;
+  width: 18%;
+  background: linear-gradient(90deg, transparent, rgb(var(--spark-neon-soft) / .16), transparent);
+  transform: skewX(-16deg);
+  animation: spark-login-unified-sheen 5.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.spark-login-unified-tab {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #879b95;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease, opacity .2s ease;
+}
+
+.spark-login-unified-tab svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.spark-login-unified-tab:hover:not(:disabled) {
+  color: #eafff9;
+  background: rgb(var(--spark-neon) / .055);
+  transform: translateY(-1px);
+}
+
+.spark-login-unified-tab.is-active {
+  color: #f5fffc;
+  border-color: rgb(var(--spark-neon-soft) / .52);
+  background: linear-gradient(135deg, rgb(8 104 91 / .78), rgb(5 67 63 / .84));
+  box-shadow: inset 0 0 20px rgb(var(--spark-neon) / .10), 0 0 20px rgb(var(--spark-neon) / .12);
+}
+
+.spark-login-unified-tab.is-active svg {
+  color: rgb(var(--spark-neon-soft));
+  filter: drop-shadow(0 0 7px rgb(var(--spark-neon) / .45));
+  animation: spark-reference-tab-icon 2.8s ease-in-out infinite;
+}
+
+.spark-login-unified-tab:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+/* Restore the live backend/database status indicator and render it as a database icon. */
+.spark-reference-connection {
+  display: grid !important;
+  top: 16px !important;
+  right: 16px !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 11px !important;
+  opacity: .9 !important;
+  color: #7f9690;
+  background: rgb(1 17 19 / .78) !important;
+  box-shadow: inset 0 0 16px rgb(var(--spark-neon) / .04), 0 0 18px rgb(0 0 0 / .15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.spark-reference-connection svg {
+  display: none !important;
+}
+
+.spark-reference-connection::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='12' cy='5' rx='9' ry='3'/%3E%3Cpath d='M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5'/%3E%3Cpath d='M3 12c0 1.7 4 3 9 3s9-1.3 9-3'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='12' cy='5' rx='9' ry='3'/%3E%3Cpath d='M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5'/%3E%3Cpath d='M3 12c0 1.7 4 3 9 3s9-1.3 9-3'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.spark-reference-connection-connected {
+  color: rgb(var(--spark-neon-soft)) !important;
+  border-color: rgb(var(--spark-neon-soft) / .38) !important;
+  box-shadow: inset 0 0 16px rgb(var(--spark-neon) / .06), 0 0 18px rgb(var(--spark-neon) / .13) !important;
+}
+
+.spark-reference-connection-disconnected {
+  color: #fb7185 !important;
+  border-color: rgb(251 113 133 / .34) !important;
+}
+
+.spark-reference-connection-checking {
+  color: #91a6a0 !important;
+}
+
+/* Identifier is one unified field for username, email or mobile. */
+.spark-reference-form input[autocomplete="username"] {
+  text-align: left;
+}
+
+.spark-reference-form input[autocomplete="username"]::placeholder {
+  direction: rtl;
+  text-align: right;
+}
+
+/* With the SMS trigger moved to the top tabs, keep registration centered below the CTA. */
+.spark-reference-secondary-actions:has(.spark-login-native-otp-trigger) {
+  justify-content: center;
+}
+
+@media (max-height: 760px) and (min-width: 961px) {
+  .spark-login-unified-tabs {
+    min-height: 44px;
+    margin-bottom: 9px;
+    border-radius: 13px;
+  }
+
+  .spark-login-unified-tab {
+    min-height: 36px;
+    padding: 6px 9px;
+    border-radius: 10px;
+    font-size: 10px;
+    gap: 7px;
+  }
+
+  .spark-login-unified-tab svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .spark-reference-connection {
+    top: 12px !important;
+    right: 12px !important;
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .spark-reference-connection::before {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .spark-login-unified-tabs {
+    margin-bottom: 12px;
+  }
+
+  .spark-login-unified-tab {
+    padding-inline: 6px;
+    gap: 5px;
+    font-size: 9px;
+  }
+
+  .spark-login-unified-tab svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+@keyframes spark-login-unified-sheen {
+  0%, 64% { transform: translateX(-130%) skewX(-16deg); opacity: 0; }
+  73% { opacity: 1; }
+  100% { transform: translateX(720%) skewX(-16deg); opacity: 0; }
+}

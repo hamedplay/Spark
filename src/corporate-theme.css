@@ -1,0 +1,296 @@
+/* --------------------------------------------------------------------------
+   Spark corporate palette bridge
+   --------------------------------------------------------------------------
+   Loaded after all feature/theme styles. Tailwind's slate/indigo/violet/blue/
+   cyan scales are already remapped in tailwind.config.js; this file catches
+   legacy hard-coded gradients and arbitrary colors so the whole product uses
+   the same Graphite + Deep Teal visual language.
+   -------------------------------------------------------------------------- */
+
+:root {
+  --spark-corp-primary: #316f64;
+  --spark-corp-primary-hover: #29594f;
+  --spark-corp-primary-soft: #f1f8f6;
+  --spark-corp-primary-border: #bdddd4;
+  --spark-corp-accent: #1e7d70;
+  --spark-corp-graphite: #18181b;
+  --spark-corp-graphite-2: #27272a;
+  --spark-corp-muted: #71717a;
+}
+
+.dark {
+  --dm-bg: #171816;
+  --dm-received: #30322f;
+  --dm-sent: #263a34;
+  --dm-accent: #5da797;
+  --dm-text: #fafafa;
+}
+
+.dark body,
+.dark #root {
+  background-color: #171816 !important;
+}
+
+/* Generic focus language for controls that do not live inside a scoped theme. */
+:where(input, select, textarea):focus-visible {
+  outline-color: rgba(49, 111, 100, 0.34);
+}
+
+/* React datepicker still had explicit Tailwind-blue hex values. */
+.react-datepicker__day--selected,
+.dark .react-datepicker__time-list-item--selected {
+  background-color: var(--spark-corp-primary) !important;
+}
+
+.react-datepicker__day--today {
+  color: var(--spark-corp-primary) !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: #f1f8f6 !important;
+}
+
+/* Remaining legacy-page bridge: neutral white/graphite surfaces + teal focus. */
+.spark-modern-page {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(49, 111, 100, 0.055), transparent 28rem),
+    linear-gradient(135deg, #ffffff, #fafafa 58%, rgba(241, 248, 246, 0.68)) !important;
+}
+
+.spark-modern-page :is(input, select, textarea):focus {
+  border-color: #91c4b7 !important;
+  box-shadow: 0 0 0 3px rgba(49, 111, 100, 0.1) !important;
+}
+
+.spark-modern-page :is(.bg-blue-500, .bg-blue-600) {
+  background-color: #586970 !important;
+}
+
+.spark-modern-page :is(.hover\:bg-blue-600:hover, .hover\:bg-blue-700:hover) {
+  background-color: #49565c !important;
+}
+
+.spark-modern-page :is(.text-blue-500, .text-blue-600) {
+  color: #586970 !important;
+}
+
+.spark-modern-page :is(.bg-teal-500, .bg-teal-600) {
+  background-color: #316f64 !important;
+}
+
+.spark-modern-page :is(.text-teal-500, .text-teal-600) {
+  color: #316f64 !important;
+}
+
+.dark .spark-modern-page {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(62, 137, 122, 0.11), transparent 28rem),
+    linear-gradient(135deg, #09090b, #121312 56%, #181a18) !important;
+}
+
+.dark .spark-modern-page :is(input, select, textarea):focus {
+  border-color: #5da797 !important;
+  box-shadow: 0 0 0 3px rgba(62, 137, 122, 0.16) !important;
+}
+
+/* Management dashboard: replace the old navy arbitrary surfaces in dark mode. */
+html.dark [class~="bg-[#06101f]"] {
+  background-color: #101311 !important;
+  border-color: #2b312e !important;
+  color: #f4f4f5 !important;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28) !important;
+}
+
+html.dark [class~="bg-[#06101f]"] [class~="bg-[#071426]"] {
+  background-color: #171b18 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-blue-300"] {
+  color: #586970 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-violet-200"],
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-violet-300"] {
+  color: #316f64 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-cyan-300"],
+html:not(.dark) [class~="bg-[#06101f]"] [class~="text-teal-300"] {
+  color: #1e7d70 !important;
+}
+
+html:not(.dark) [class~="bg-[#06101f]"] [class*="via-slate-950"] {
+  background-image: linear-gradient(
+    to left,
+    rgba(49, 111, 100, 0.09),
+    rgba(255, 255, 255, 0.94),
+    rgba(82, 82, 91, 0.04)
+  ) !important;
+}
+
+/* Video-conference lobby: remove lavender/cyan ambient color casts. */
+[class~="space-y-5"][dir="rtl"]:has(#join-code) {
+  background: linear-gradient(135deg, #ffffff 0%, #fafafa 58%, rgba(241, 248, 246, 0.72) 100%) !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code)::before {
+  background: rgba(62, 137, 122, 0.1) !important;
+}
+
+[class~="space-y-5"][dir="rtl"]:has(#join-code)::after {
+  background: rgba(82, 82, 91, 0.055) !important;
+}
+
+html.dark [class~="space-y-5"][dir="rtl"]:has(#join-code) {
+  background: linear-gradient(135deg, #09090b 0%, #111311 58%, rgba(15, 36, 33, 0.62) 100%) !important;
+  border-color: #27272a !important;
+}
+
+/* Notes: replace explicit violet/indigo CTA and ambient gradients. */
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) {
+  background: linear-gradient(135deg, #ffffff 0%, #fafafa 58%, rgba(241, 248, 246, 0.72) 100%) !important;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::before {
+  background: rgba(62, 137, 122, 0.1) !important;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::after {
+  background: rgba(82, 82, 91, 0.05) !important;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .max-w-7xl > div:first-child button {
+  background: linear-gradient(to left, #316f64, #244841) !important;
+  box-shadow: 0 7px 20px rgba(49, 111, 100, 0.18) !important;
+}
+
+[class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) > .fixed.bottom-6.left-6 > button {
+  border-color: rgba(49, 111, 100, 0.22) !important;
+  background: linear-gradient(135deg, #3e897a, #29594f) !important;
+  box-shadow: 0 10px 24px rgba(49, 111, 100, 0.2) !important;
+}
+
+html.dark [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar) {
+  background: linear-gradient(135deg, #09090b 0%, #111311 56%, rgba(15, 36, 33, 0.58) 100%) !important;
+}
+
+html.dark [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::before {
+  background: rgba(62, 137, 122, 0.09) !important;
+}
+
+html.dark [class~="min-h-screen"][dir="rtl"]:has(.notes-toolbar)::after {
+  background: rgba(113, 113, 122, 0.05) !important;
+}
+
+/* Loader: the old cyan/blue/purple/pink visual was the strongest non-corporate
+   surface. Keep the animation, replace only its palette. */
+.spark-loader {
+  color: #27272a !important;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(62, 137, 122, 0.12), transparent 28%),
+    radial-gradient(circle at 58% 48%, rgba(113, 113, 122, 0.08), transparent 35%),
+    linear-gradient(145deg, #fbfcfb 0%, #f7f8f7 48%, #f1f8f6 100%) !important;
+}
+
+.dark .spark-loader {
+  color: #fafafa !important;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(62, 137, 122, 0.14), transparent 28%),
+    radial-gradient(circle at 58% 48%, rgba(113, 113, 122, 0.08), transparent 35%),
+    linear-gradient(150deg, #090a09 0%, #111311 52%, #151a17 100%) !important;
+}
+
+.spark-loader__ambient {
+  background: conic-gradient(
+    from 30deg,
+    rgba(62, 137, 122, 0.12),
+    rgba(82, 82, 91, 0.035),
+    rgba(49, 111, 100, 0.1),
+    rgba(217, 119, 6, 0.045),
+    rgba(62, 137, 122, 0.12)
+  ) !important;
+}
+
+.spark-loader__orbital {
+  filter: drop-shadow(0 0 0.75rem rgba(49, 111, 100, 0.16)) !important;
+}
+
+.spark-loader__ring--outer {
+  background: conic-gradient(
+    from 8deg,
+    transparent 0 7%,
+    #5da797 10% 19%,
+    transparent 22% 32%,
+    #316f64 35% 48%,
+    transparent 51% 62%,
+    #8b9d95 65% 76%,
+    #d97706 78% 87%,
+    transparent 90% 100%
+  ) !important;
+  filter: drop-shadow(0 0 7px rgba(49, 111, 100, 0.5)) !important;
+}
+
+.spark-loader__ring--middle {
+  background: conic-gradient(
+    from 180deg,
+    transparent 0 11%,
+    rgba(93, 167, 151, 0.95) 13% 28%,
+    transparent 30% 47%,
+    rgba(62, 137, 122, 0.95) 50% 64%,
+    transparent 67% 82%,
+    rgba(139, 157, 149, 0.9) 85% 95%,
+    transparent 97% 100%
+  ) !important;
+}
+
+.spark-loader__ring--inner {
+  background: conic-gradient(
+    from 260deg,
+    rgba(62, 137, 122, 0.14),
+    #5da797 13% 22%,
+    transparent 25% 52%,
+    #316f64 55% 67%,
+    transparent 70% 88%,
+    #d97706 91% 96%,
+    transparent 98%
+  ) !important;
+}
+
+.spark-loader__dots {
+  border-color: rgba(49, 111, 100, 0.3) !important;
+}
+
+.dark .spark-loader__dots {
+  border-color: rgba(93, 167, 151, 0.38) !important;
+}
+
+.spark-loader__spark,
+.spark-loader__spark--two,
+.spark-loader__spark--three {
+  background: #5da797 !important;
+  box-shadow: 0 0 7px #316f64, 0 0 15px rgba(49, 111, 100, 0.58) !important;
+}
+
+.spark-loader__core {
+  box-shadow:
+    0 18px 50px rgba(24, 24, 27, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 0 32px rgba(49, 111, 100, 0.1) !important;
+}
+
+.dark .spark-loader__core {
+  background: rgba(17, 19, 17, 0.82) !important;
+  box-shadow:
+    0 20px 55px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 36px rgba(49, 111, 100, 0.15) !important;
+}
+
+.spark-loader__message-text,
+.dark .spark-loader__message-text {
+  background-image: linear-gradient(90deg, #586970 0%, #316f64 52%, #29594f 100%) !important;
+}
+
+.spark-loader__typing i {
+  background: #316f64 !important;
+}
