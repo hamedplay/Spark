@@ -1,0 +1,56 @@
+name: Temporary management scope filter fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-management-scope-filter-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Patch filter behavior
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/ManagementScopeWorkspace.tsx')
+          s = p.read_text()
+          old = "  const loadLists = useCallback(async (silent = false) => {\n    if (silent) setRefreshing(true); else setLoading(true);"
+          new = "  const loadLists = useCallback(async (silent = false, overrides?: { search?: string; status?: string; person?: string }) => {\n    const effectiveSearch = overrides?.search ?? search;\n    const effectiveStatus = overrides?.status ?? statusFilter;\n    const effectivePerson = overrides?.person ?? personFilter;\n    if (silent) setRefreshing(true); else setLoading(true);"
+          if old not in s:
+              raise SystemExit('loadLists anchor not found')
+          s = s.replace(old, new, 1)
+          s = s.replace("p_search: search.trim() || null,\n          p_status: statusFilter || null,\n          p_unit_id: null,\n          p_owner_user_id: personFilter || null,", "p_search: effectiveSearch.trim() || null,\n          p_status: tab === 'decisions' ? (effectiveStatus || null) : null,\n          p_unit_id: null,\n          p_owner_user_id: tab === 'decisions' ? (effectivePerson || null) : null,", 1)
+          s = s.replace("p_search: search.trim() || null,\n          p_status: statusFilter || null,\n          p_assignee_user_id: personFilter || null,", "p_search: effectiveSearch.trim() || null,\n          p_status: tab === 'tasks' ? (effectiveStatus || null) : null,\n          p_assignee_user_id: tab === 'tasks' ? (effectivePerson || null) : null,", 1)
+          s = s.replace("  }, [personFilter, search, statusFilter]);", "  }, [personFilter, search, statusFilter, tab]);", 1)
+          old_clear = "  const clearFilters = useCallback(() => {\n    setSearch('');\n    setStatusFilter('');\n    setPersonFilter('');\n    window.setTimeout(() => void loadLists(true), 0);\n  }, [loadLists]);"
+          new_clear = "  const clearFilters = useCallback(() => {\n    setSearch('');\n    setStatusFilter('');\n    setPersonFilter('');\n    void loadLists(true, { search: '', status: '', person: '' });\n  }, [loadLists]);"
+          if old_clear not in s:
+              raise SystemExit('clearFilters anchor not found')
+          s = s.replace(old_clear, new_clear, 1)
+          p.write_text(s)
+          PY
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Commit and cleanup
+        shell: bash
+        run: |
+          git config user.name "spark-manager-bot"
+          git config user.email "spark-manager-bot@users.noreply.github.com"
+          rm -f .github/workflows/tmp-management-scope-filter-fix.yml
+          git add src/components/ManagementScopeWorkspace.tsx .github/workflows/tmp-management-scope-filter-fix.yml
+          git commit -m "fix: isolate management workspace filters [skip ci]"
+          git push origin HEAD:main
