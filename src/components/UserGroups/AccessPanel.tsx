@@ -18,12 +18,34 @@ interface SavePermissionsResult {
 }
 
 const MANAGEMENT_DASHBOARD_PERMISSION_KEY = 'management_dashboard';
+const MANAGEMENT_SCOPE_PERMISSION_KEYS = [
+  'management_decisions.view',
+  'management_decisions.manage',
+  'management_tasks.view',
+  'management_tasks.manage',
+] as const;
 
 export function AccessPanel({ group, onBack }: { group: UserGroup; onBack: () => void }) {
   const [perms, setPerms] = useState<Record<string, boolean>>(group.permissions || {});
   const [saving, setSaving] = useState(false);
 
   const toggle = (key: string) => setPerms(p => ({ ...p, [key]: !p[key] }));
+
+  const toggleManagementDashboard = () => {
+    setPerms(current => {
+      const enabling = !current[MANAGEMENT_DASHBOARD_PERMISSION_KEY];
+      if (!enabling) {
+        return { ...current, [MANAGEMENT_DASHBOARD_PERMISSION_KEY]: false };
+      }
+
+      const next: Record<string, boolean> = {
+        ...current,
+        [MANAGEMENT_DASHBOARD_PERMISSION_KEY]: true,
+      };
+      MANAGEMENT_SCOPE_PERMISSION_KEYS.forEach(key => { next[key] = true; });
+      return next;
+    });
+  };
 
   const toggleModule = (moduleKey: string) => {
     const newVal = !perms[moduleKey];
@@ -135,7 +157,7 @@ export function AccessPanel({ group, onBack }: { group: UserGroup; onBack: () =>
             </div>
             <button
               type="button"
-              onClick={() => toggle(MANAGEMENT_DASHBOARD_PERMISSION_KEY)}
+              onClick={toggleManagementDashboard}
               aria-pressed={Boolean(perms[MANAGEMENT_DASHBOARD_PERMISSION_KEY])}
               aria-label={`${perms[MANAGEMENT_DASHBOARD_PERMISSION_KEY] ? 'غیرفعال کردن' : 'فعال کردن'} داشبورد مدیریتی برای این گروه`}
               className={`relative h-6 w-12 flex-shrink-0 rounded-full transition-colors ${perms[MANAGEMENT_DASHBOARD_PERMISSION_KEY] ? 'bg-violet-600' : 'bg-gray-200 dark:bg-gray-600'}`}
