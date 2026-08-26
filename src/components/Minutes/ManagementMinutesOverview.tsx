@@ -12,15 +12,23 @@ import {
 import { supabase } from '../../lib/supabase';
 
 interface DashboardStats {
+  created_last_30: number;
+}
+
+interface FilterCounts {
   total_minutes: number;
   draft: number;
-  open_decisions: number;
-  overdue_decisions: number;
   pending_approval: number;
-  pending_my_approval: number;
-  created_last_30: number;
-  decisions_near_deadline: number;
-  decision_status_counts: Record<string, number>;
+  all_decisions: number;
+  active_decisions: number;
+  overdue_decisions: number;
+  near_deadline_decisions: number;
+}
+
+function totalCount(data: unknown): number {
+  if (!data || typeof data !== 'object') return 0;
+  const value = Number((data as { total_count?: unknown }).total_count ?? 0);
+  return Number.isFinite(value) ? value : 0;
 }
 
 type Tone = 'violet' | 'slate' | 'amber' | 'blue' | 'rose' | 'orange';
@@ -73,16 +81,39 @@ export type ManagementDashboardFilterTarget = {
   tab: 'minutes' | 'decisions' | 'tasks';
   view: string;
   label: string;
+  detail?: { type: 'decisions' | 'tasks'; id: string };
 };
 
 export function ManagementMinutesOverview({ onFilter }: { onFilter: (target: ManagementDashboardFilterTarget) => void }) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [counts, setCounts] = useState<FilterCounts | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('get_management_minutes_dashboard_stats_v1');
-      if (error) throw error;
-      setStats(data as DashboardStats);
+      const [statsResult, totalMinutes, draftMinutes, pendingMinutes, allDecisions, activeDecisions, overdueDecisions, nearDeadlineDecisions] = await Promise.all([
+        supabase.rpc('get_management_minutes_dashboard_stats_v1'),
+        supabase.rpc('get_management_minutes_v1', { p_view: 'all', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_minutes_v1', { p_view: 'draft', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_minutes_v1', { p_view: 'pending_approval', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_decisions_v3', { p_view: 'all', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_decisions_v3', { p_view: 'active', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_decisions_v3', { p_view: 'overdue', p_limit: 1, p_offset: 0 }),
+        supabase.rpc('get_management_decisions_v3', { p_view: 'near_deadline', p_limit: 1, p_offset: 0 }),
+      ]);
+      const results = [statsResult, totalMinutes, draftMinutes, pendingMinutes, allDecisions, activeDecisions, overdueDecisions, nearDeadlineDecisions];
+      const failed = results.find((result) => result.error);
+      if (failed?.error) throw failed.error;
+
+      setStats(statsResult.data as DashboardStats);
+      setCounts({
+        total_minutes: totalCount(totalMinutes.data),
+        draft: totalCount(draftMinutes.data),
+        pending_approval: totalCount(pendingMinutes.data),
+        all_decisions: totalCount(allDecisions.data),
+        active_decisions: totalCount(activeDecisions.data),
+        overdue_decisions: totalCount(overdueDecisions.data),
+        near_deadline_decisions: totalCount(nearDeadlineDecisions.data),
+      });
     } catch (error) {
       console.error('[ManagementMinutesOverview] load failed', error);
     }
@@ -90,16 +121,14 @@ export function ManagementMinutesOverview({ onFilter }: { onFilter: (target: Man
 
   useEffect(() => { void load(); }, [load]);
 
-  const decisionTotal = stats
-    ? Math.max(Object.values(stats.decision_status_counts || {}).reduce((sum, value) => sum + Number(value || 0), 0), stats.open_decisions, stats.overdue_decisions)
-    : 0;
+  const decisionTotal = counts?.all_decisions ?? 0;
   const cards = [
-    { label: 'کل صورت‌جلسات', value: stats?.total_minutes ?? null, note: stats ? `${nf.format(stats.created_last_30)} مورد در ۳۰ روز اخیر` : 'در حال دریافت آمار', icon: FileCheck2, toneKey: 'violet' as Tone, progress: stats?.total_minutes ? 100 : 0, target: { tab: 'minutes', view: 'all', label: 'کل صورت‌جلسات زیرمجموعه' } as ManagementDashboardFilterTarget },
-    { label: 'پیش‌نویس', value: stats?.draft ?? null, note: stats?.draft ? 'نیازمند تکمیل یا ارسال' : stats ? 'پیش‌نویس بازی ندارید' : 'در حال دریافت آمار', icon: FileText, toneKey: 'slate' as Tone, progress: stats ? percent(stats.draft, stats.total_minutes) : 0, target: { tab: 'minutes', view: 'draft', label: 'پیش‌نویس‌های زیرمجموعه' } as ManagementDashboardFilterTarget },
-    { label: 'منتظر تأیید', value: stats?.pending_approval ?? null, note: stats?.pending_approval ? 'در انتظار تکمیل فرآیند تأیید' : stats ? 'موردی در انتظار تأیید نیست' : 'در حال دریافت آمار', icon: Clock3, toneKey: 'amber' as Tone, progress: stats ? percent(stats.pending_approval, stats.total_minutes) : 0, target: { tab: 'minutes', view: 'pending_approval', label: 'صورت‌جلسات منتظر تأیید زیرمجموعه' } as ManagementDashboardFilterTarget },
-    { label: 'مصوبات فعال', value: stats?.open_decisions ?? null, note: stats?.open_decisions ? 'در جریان اجرا و پیگیری' : stats ? 'مصوبه فعالی وجود ندارد' : 'در حال دریافت آمار', icon: TrendingUp, toneKey: 'blue' as Tone, progress: stats ? percent(stats.open_decisions, decisionTotal) : 0, target: { tab: 'decisions', view: 'active', label: 'مصوبات فعال زیرمجموعه' } as ManagementDashboardFilterTarget },
-    { label: 'عقب‌مانده', value: stats?.overdue_decisions ?? null, note: stats?.overdue_decisions ? 'نیازمند پیگیری فوری' : stats ? 'همه موارد در زمان‌بندی‌اند' : 'در حال دریافت آمار', icon: AlertCircle, toneKey: 'rose' as Tone, progress: stats ? percent(stats.overdue_decisions, decisionTotal) : 0, target: { tab: 'decisions', view: 'overdue', label: 'مصوبات عقب‌مانده زیرمجموعه' } as ManagementDashboardFilterTarget },
-    { label: 'نزدیک سررسید', value: stats?.decisions_near_deadline ?? null, note: stats?.decisions_near_deadline ? 'پیش از عبور از مهلت بررسی شود' : stats ? 'سررسید نزدیکی وجود ندارد' : 'در حال دریافت آمار', icon: Zap, toneKey: 'orange' as Tone, progress: stats ? percent(stats.decisions_near_deadline, Math.max(1, stats.open_decisions)) : 0, target: { tab: 'decisions', view: 'near_deadline', label: 'مصوبات نزدیک سررسید زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'کل صورت‌جلسات', value: counts?.total_minutes ?? null, note: stats ? `${nf.format(stats.created_last_30)} مورد در ۳۰ روز اخیر` : 'در حال دریافت آمار', icon: FileCheck2, toneKey: 'violet' as Tone, progress: counts?.total_minutes ? 100 : 0, target: { tab: 'minutes', view: 'all', label: 'کل صورت‌جلسات زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'پیش‌نویس', value: counts?.draft ?? null, note: counts?.draft ? 'نیازمند تکمیل یا ارسال' : counts ? 'پیش‌نویس بازی ندارید' : 'در حال دریافت آمار', icon: FileText, toneKey: 'slate' as Tone, progress: counts ? percent(counts.draft, counts.total_minutes) : 0, target: { tab: 'minutes', view: 'draft', label: 'پیش‌نویس‌های زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'منتظر تأیید', value: counts?.pending_approval ?? null, note: counts?.pending_approval ? 'در انتظار تکمیل فرآیند تأیید' : counts ? 'موردی در انتظار تأیید نیست' : 'در حال دریافت آمار', icon: Clock3, toneKey: 'amber' as Tone, progress: counts ? percent(counts.pending_approval, counts.total_minutes) : 0, target: { tab: 'minutes', view: 'pending_approval', label: 'صورت‌جلسات منتظر تأیید زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'مصوبات فعال', value: counts?.active_decisions ?? null, note: counts?.active_decisions ? 'در جریان اجرا و پیگیری' : counts ? 'مصوبه فعالی وجود ندارد' : 'در حال دریافت آمار', icon: TrendingUp, toneKey: 'blue' as Tone, progress: counts ? percent(counts.active_decisions, decisionTotal) : 0, target: { tab: 'decisions', view: 'active', label: 'مصوبات فعال زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'عقب‌مانده', value: counts?.overdue_decisions ?? null, note: counts?.overdue_decisions ? 'نیازمند پیگیری فوری' : counts ? 'همه موارد در زمان‌بندی‌اند' : 'در حال دریافت آمار', icon: AlertCircle, toneKey: 'rose' as Tone, progress: counts ? percent(counts.overdue_decisions, decisionTotal) : 0, target: { tab: 'decisions', view: 'overdue', label: 'مصوبات عقب‌مانده زیرمجموعه' } as ManagementDashboardFilterTarget },
+    { label: 'نزدیک سررسید', value: counts?.near_deadline_decisions ?? null, note: counts?.near_deadline_decisions ? 'پیش از عبور از مهلت بررسی شود' : counts ? 'سررسید نزدیکی وجود ندارد' : 'در حال دریافت آمار', icon: Zap, toneKey: 'orange' as Tone, progress: counts ? percent(counts.near_deadline_decisions, Math.max(1, decisionTotal)) : 0, target: { tab: 'decisions', view: 'near_deadline', label: 'مصوبات نزدیک سررسید زیرمجموعه' } as ManagementDashboardFilterTarget },
   ];
 
   return (
