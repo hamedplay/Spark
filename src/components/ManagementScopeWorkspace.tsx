@@ -278,7 +278,10 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
   const [taskAssignee, setTaskAssignee] = useState('');
   const [taskNote, setTaskNote] = useState('');
 
-  const loadLists = useCallback(async (silent = false) => {
+  const loadLists = useCallback(async (silent = false, overrides?: { search?: string; status?: string; person?: string }) => {
+    const effectiveSearch = overrides?.search ?? search;
+    const effectiveStatus = overrides?.status ?? statusFilter;
+    const effectivePerson = overrides?.person ?? personFilter;
     if (silent) setRefreshing(true); else setLoading(true);
     try {
       const [capResult, peopleResult] = await Promise.all([
@@ -295,10 +298,10 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
       const calls: PromiseLike<unknown>[] = [];
       if (caps?.decisions_view) {
         calls.push(supabase.rpc('get_management_decisions_v2', {
-          p_search: search.trim() || null,
-          p_status: statusFilter || null,
+          p_search: effectiveSearch.trim() || null,
+          p_status: tab === 'decisions' ? (effectiveStatus || null) : null,
           p_unit_id: null,
-          p_owner_user_id: personFilter || null,
+          p_owner_user_id: tab === 'decisions' ? (effectivePerson || null) : null,
           p_limit: 250,
           p_offset: 0,
         }));
@@ -306,9 +309,9 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
 
       if (caps?.tasks_view) {
         calls.push(supabase.rpc('get_management_tasks_v1', {
-          p_search: search.trim() || null,
-          p_status: statusFilter || null,
-          p_assignee_user_id: personFilter || null,
+          p_search: effectiveSearch.trim() || null,
+          p_status: tab === 'tasks' ? (effectiveStatus || null) : null,
+          p_assignee_user_id: tab === 'tasks' ? (effectivePerson || null) : null,
           p_limit: 250,
           p_offset: 0,
         }));
@@ -331,7 +334,7 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
       setLoading(false);
       setRefreshing(false);
     }
-  }, [personFilter, search, statusFilter]);
+  }, [personFilter, search, statusFilter, tab]);
 
   useEffect(() => { void loadLists(); }, []); // initial load only; filters apply explicitly
 
@@ -341,7 +344,7 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
     setSearch('');
     setStatusFilter('');
     setPersonFilter('');
-    window.setTimeout(() => void loadLists(true), 0);
+    void loadLists(true, { search: '', status: '', person: '' });
   }, [loadLists]);
 
   const openDecision = useCallback(async (id: string) => {
