@@ -33,6 +33,16 @@ export const PERMISSION_REGISTRY: PermissionGroup[] = [
     ],
   },
   {
+    label: 'مدیریت زیرمجموعه سازمانی',
+    color: 'text-violet-600',
+    items: [
+      { key: 'management_decisions.view', label: 'مشاهده مصوبات زیرمجموعه', description: 'مشاهده فهرست، جزئیات و تاریخچه کامل مصوبات فقط در محدوده واحد سازمانی و زیرواحدهای مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+      { key: 'management_decisions.manage', label: 'مدیریت مصوبات زیرمجموعه', description: 'ثبت بروزرسانی مدیریتی وضعیت، پیشرفت و گزارش روی مصوبات داخل محدوده سازمانی مجاز؛ متن رسمی مصوبه تغییر نمی‌کند', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+      { key: 'management_tasks.view', label: 'مشاهده اقدامات زیرمجموعه', description: 'مشاهده فهرست، جزئیات، گردش کار، چک‌لیست و وابستگی اقدامات کاربران داخل محدوده سازمانی مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+      { key: 'management_tasks.manage', label: 'مدیریت اقدامات زیرمجموعه', description: 'مدیریت وضعیت، پیشرفت، اولویت، موعد و مسئول اقدام فقط در محدوده سازمانی مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+    ],
+  },
+  {
     label: 'صورت‌جلسات و مصوبات',
     color: 'text-teal-600',
     moduleKey: 'minutes_view',
