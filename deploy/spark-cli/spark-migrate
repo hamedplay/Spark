@@ -1,0 +1,463 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SPARK_MIGRATE_VERSION="1.1.0+20260822.2"
+BACKUP_ROOT="/var/backups/spark"
+SUPABASE_CLI_PACKAGE="${SUPABASE_CLI_PACKAGE:-supabase@latest}"
+PG_IMAGE="${SPARK_MIGRATE_PG_IMAGE:-postgres:17-alpine}"
+
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  exec sudo -E "$0" "$@"
+fi
+
+mkdir -p "$BACKUP_ROOT"
+chmod 700 "$BACKUP_ROOT"
+
+say() { printf '%s\n' "$*"; }
+info() { printf '[i] %s\n' "$*"; }
+ok() { printf '[OK] %s\n' "$*"; }
+warn() { printf '[!] %s\n' "$*"; }
+fail() { printf '[ERROR] %s\n' "$*" >&2; }
+
+require_tools() {
+  command -v docker >/dev/null 2>&1 || { fail "Docker is required. Run Spark install step 03 first."; return 1; }
+  command -v npx >/dev/null 2>&1 || { fail "Node/npx is required. Run Spark install step 03 first."; return 1; }
+  command -v python3 >/dev/null 2>&1 || { fail "python3 is required."; return 1; }
+  docker info >/dev/null 2>&1 || { fail "Docker daemon is not available."; return 1; }
+}
+
+prompt_db_url() {
+  local __var="$1" label="$2" value
+  say ""
+  say "Supabase Cloud: Dashboard -> Connect -> Session pooler"
+  say "Paste the full PostgreSQL connection string. Input is hidden."
+  say "If the password contains reserved URL characters, use the percent-encoded URL shown by Supabase."
+  read -r -s -p "${label}: " value
+  printf '\n'
+  [[ "$value" == postgres://* || "$value" == postgresql://* ]] || {
+    fail "Database URL must start with postgres:// or postgresql://"
+    return 1
+  }
+  printf -v "$__var" '%s' "$value"
+}
+
+project_hint() {
+  local url="$1"
+  DB_URL="$url" python3 - <<'PY'
+import os
+from urllib.parse import urlsplit
+u = urlsplit(os.environ['DB_URL'])
+user = u.username or ''
+host = u.hostname or ''
+ref = ''
+if user.startswith('postgres.'):
+    ref = user.split('.', 1)[1]
+elif host.startswith('db.') and host.endswith('.supabase.co'):
+    ref = host.split('.', 2)[1]
+print(ref or f'{user}@{host}')
+PY
+}
+
+psql_query() {
+  local url="$1" sql="$2"
+  docker run --rm "$PG_IMAGE" \
+    psql "$url" -X --set=ON_ERROR_STOP=1 -Atqc "$sql"
+}
+
+test_connection() {
+  local url="$1"
+  [[ "$(psql_query "$url" 'select 1')" == "1" ]]
+}
+
+security_counts() {
+  local url="$1"
+  psql_query "$url" "
+    select
+      count(*) filter (where has_function_privilege('anon', p.oid, 'EXECUTE'))::text || '|' ||
+      count(*) filter (where has_function_privilege('authenticated', p.oid, 'EXECUTE'))::text
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.prosecdef;
+  "
+}
+
+assert_secure_source() {
+  local url="$1" counts
+  counts="$(security_counts "$url")" || return 1
+  if [[ "$counts" != "0|0" ]]; then
+    fail "Source is not in the hardened Spark state. SECURITY DEFINER exposure anon|authenticated = ${counts}."
+    fail "Fix the source security before creating a migration backup."
+    return 1
+  fi
+  ok "Source security pre-check: anon=0 authenticated=0"
+}
+
+cli_dump() {
+  local url="$1" output="$2"
+  shift 2
+  npx --yes "$SUPABASE_CLI_PACKAGE" db dump --db-url "$url" -f "$output" "$@"
+}
+
+write_security_snapshot() {
+  local url="$1" output="$2"
+
+  cat >"$output" <<'SQL'
+-- Spark portable public-function ACL snapshot.
+-- Credentials are never written to this file.
+\set ON_ERROR_STOP on
+SQL
+
+  psql_query "$url" "
+    select format(
+      'REVOKE EXECUTE ON FUNCTION %I.%s FROM PUBLIC, anon, authenticated, service_role;',
+      n.nspname, p.oid::regprocedure::text
+    )
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.prokind='f'
+      and not exists (
+        select 1
+        from pg_depend d
+        where d.classid='pg_proc'::regclass
+          and d.objid=p.oid
+          and d.deptype='e'
+      )
+    order by p.proname, p.oid;
+  " >>"$output" || return 1
+
+  psql_query "$url" "
+    with f as (
+      select n.nspname,
+             p.oid::regprocedure::text as sig,
+             x.grantee,
+             x.privilege_type
+      from pg_proc p
+      join pg_namespace n on n.oid=p.pronamespace
+      cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) x
+      where n.nspname='public'
+        and p.prokind='f'
+        and not exists (
+          select 1
+          from pg_depend d
+          where d.classid='pg_proc'::regclass
+            and d.objid=p.oid
+            and d.deptype='e'
+        )
+    )
+    select format(
+      'GRANT EXECUTE ON FUNCTION %I.%s TO %s;',
+      nspname,
+      sig,
+      case when grantee=0 then 'PUBLIC' else quote_ident(pg_get_userbyid(grantee)) end
+    )
+    from f
+    where privilege_type='EXECUTE'
+      and (grantee=0 or pg_get_userbyid(grantee) in ('anon','authenticated','service_role'))
+    order by sig, grantee;
+  " >>"$output" || return 1
+
+  cat >>"$output" <<'SQL'
+
+-- Reset target defaults, then generated GRANT statements restore the source state.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated, service_role;
+SQL
+
+  psql_query "$url" "
+    with d as (
+      select x.grantee, x.privilege_type
+      from pg_default_acl a
+      join pg_namespace n on n.oid=a.defaclnamespace
+      cross join lateral aclexplode(a.defaclacl) x
+      where a.defaclrole='postgres'::regrole
+        and n.nspname='public'
+        and a.defaclobjtype='f'
+    )
+    select format(
+      'ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO %s;',
+      case when grantee=0 then 'PUBLIC' else quote_ident(pg_get_userbyid(grantee)) end
+    )
+    from d
+    where privilege_type='EXECUTE'
+      and (grantee=0 or pg_get_userbyid(grantee) in ('anon','authenticated','service_role'))
+    order by grantee;
+  " >>"$output" || return 1
+
+  cat >>"$output" <<'SQL'
+
+DO $spark_security$
+DECLARE
+  v_anon integer;
+  v_auth integer;
+BEGIN
+  SELECT count(*) INTO v_anon
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+  WHERE n.nspname='public' AND p.prosecdef
+    AND has_function_privilege('anon', p.oid, 'EXECUTE');
+
+  SELECT count(*) INTO v_auth
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+  WHERE n.nspname='public' AND p.prosecdef
+    AND has_function_privilege('authenticated', p.oid, 'EXECUTE');
+
+  IF v_anon <> 0 OR v_auth <> 0 THEN
+    RAISE EXCEPTION 'Spark security restore failed: anon=%, authenticated=%', v_anon, v_auth;
+  END IF;
+END
+$spark_security$;
+SQL
+}
+
+write_managed_schema_snapshot() {
+  local url="$1" output="$2"
+
+  cat >"$output" <<'SQL'
+-- Spark custom objects attached to Supabase-managed auth/storage schemas.
+-- Built-in Supabase triggers are intentionally excluded.
+\set ON_ERROR_STOP on
+SQL
+
+  # Preserve all current RLS policies on auth/storage tables. Supabase's portable
+  # schema dump excludes these managed schemas, while Spark relies on storage RLS.
+  psql_query "$url" "
+    with policies as (
+      select p.polname,
+             n.nspname as schema_name,
+             c.relname as table_name,
+             p.polpermissive,
+             p.polcmd,
+             pg_get_expr(p.polqual, p.polrelid) as using_expr,
+             pg_get_expr(p.polwithcheck, p.polrelid) as check_expr,
+             coalesce((
+               select string_agg(
+                 case when role_oid=0 then 'PUBLIC' else quote_ident(pg_get_userbyid(role_oid)) end,
+                 ', ' order by role_oid
+               )
+               from unnest(p.polroles) role_oid
+             ), 'PUBLIC') as role_list
+      from pg_policy p
+      join pg_class c on c.oid=p.polrelid
+      join pg_namespace n on n.oid=c.relnamespace
+      where n.nspname in ('auth','storage')
+    )
+    select format(
+      'DROP POLICY IF EXISTS %I ON %I.%I; CREATE POLICY %I ON %I.%I AS %s FOR %s TO %s%s%s;',
+      polname,
+      schema_name,
+      table_name,
+      polname,
+      schema_name,
+      table_name,
+      case when polpermissive then 'PERMISSIVE' else 'RESTRICTIVE' end,
+      case polcmd when '*' then 'ALL' when 'r' then 'SELECT' when 'a' then 'INSERT' when 'w' then 'UPDATE' when 'd' then 'DELETE' end,
+      role_list,
+      case when using_expr is null then '' else format(' USING (%s)', using_expr) end,
+      case when check_expr is null then '' else format(' WITH CHECK (%s)', check_expr) end
+    )
+    from policies
+    order by schema_name, table_name, polname;
+  " >>"$output" || return 1
+
+  # Preserve only managed-schema triggers whose trigger function belongs to
+  # public (Spark-owned). Built-in storage/auth trigger functions are excluded.
+  psql_query "$url" "
+    select format(
+      'DROP TRIGGER IF EXISTS %I ON %I.%I; %s;',
+      t.tgname,
+      n.nspname,
+      c.relname,
+      pg_get_triggerdef(t.oid, true)
+    )
+    from pg_trigger t
+    join pg_class c on c.oid=t.tgrelid
+    join pg_namespace n on n.oid=c.relnamespace
+    join pg_proc f on f.oid=t.tgfoid
+    join pg_namespace fn on fn.oid=f.pronamespace
+    where not t.tgisinternal
+      and n.nspname in ('auth','storage')
+      and fn.nspname='public'
+    order by n.nspname, c.relname, t.tgname;
+  " >>"$output" || return 1
+}
+
+backup_cloud() {
+  require_tools || return 1
+
+  local source_url stamp dest source_hint
+  prompt_db_url source_url "Source DB URL" || return 1
+  info "Testing source Cloud database..."
+  test_connection "$source_url" || { fail "Cannot connect to source database."; unset source_url; return 1; }
+  assert_secure_source "$source_url" || { unset source_url; return 1; }
+
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  dest="${BACKUP_ROOT}/migration-${stamp}"
+  mkdir -p "$dest"
+  chmod 700 "$dest"
+  source_hint="$(project_hint "$source_url")"
+
+  info "1/7 Dumping roles..."
+  cli_dump "$source_url" "$dest/roles.sql" --role-only || { rm -rf "$dest"; unset source_url; return 1; }
+
+  info "2/7 Dumping portable schema..."
+  cli_dump "$source_url" "$dest/schema.sql" || { rm -rf "$dest"; unset source_url; return 1; }
+
+  info "3/7 Snapshotting Spark auth/storage policies and custom triggers..."
+  write_managed_schema_snapshot "$source_url" "$dest/managed-schema.sql" || { rm -rf "$dest"; unset source_url; return 1; }
+
+  info "4/7 Dumping data..."
+  cli_dump "$source_url" "$dest/data.sql" --use-copy --data-only \
+    -x 'storage.buckets_vectors' -x 'storage.vector_indexes' || { rm -rf "$dest"; unset source_url; return 1; }
+
+  info "5/7 Dumping migration history schema..."
+  cli_dump "$source_url" "$dest/history_schema.sql" --schema supabase_migrations || { rm -rf "$dest"; unset source_url; return 1; }
+
+  info "6/7 Dumping migration history data..."
+  cli_dump "$source_url" "$dest/history_data.sql" --use-copy --data-only --schema supabase_migrations || { rm -rf "$dest"; unset source_url; return 1; }
+
+  info "7/7 Snapshotting Spark function permissions..."
+  write_security_snapshot "$source_url" "$dest/security.sql" || { rm -rf "$dest"; unset source_url; return 1; }
+
+  cat >"$dest/manifest.txt" <<EOF
+format=spark-supabase-migration-v2
+created_at=$(date -Is)
+source=${source_hint}
+migrate_version=${SPARK_MIGRATE_VERSION}
+restore=single-transaction-on-error-stop
+EOF
+
+  (cd "$dest" && sha256sum roles.sql schema.sql managed-schema.sql data.sql history_schema.sql history_data.sql security.sql manifest.txt >SHA256SUMS)
+  chmod -R go-rwx "$dest"
+  unset source_url
+
+  say ""
+  ok "Migration backup created: $dest"
+  say "It contains roles/schema/data/migration history, Spark auth/storage policies/custom triggers, and exact public-function ACLs."
+  warn "Edge Functions, Auth dashboard settings/API keys, Edge secrets, Realtime dashboard settings and physical Storage bucket files are outside this database bundle."
+}
+
+restore_cloud() {
+  require_tools || return 1
+
+  local backup_dir target_url source_hint target_hint counts
+  read -r -p "Migration backup directory: " backup_dir
+  [[ -d "$backup_dir" ]] || { fail "Backup directory does not exist."; return 1; }
+  backup_dir="$(readlink -f "$backup_dir")"
+
+  local required=(roles.sql schema.sql managed-schema.sql data.sql history_schema.sql history_data.sql security.sql manifest.txt SHA256SUMS)
+  local f
+  for f in "${required[@]}"; do
+    [[ -s "$backup_dir/$f" ]] || { fail "Missing file: $f"; return 1; }
+  done
+
+  info "Validating backup checksums..."
+  (cd "$backup_dir" && sha256sum -c SHA256SUMS) || { fail "Backup checksum validation failed."; return 1; }
+
+  source_hint="$(awk -F= '$1=="source" {print substr($0,index($0,"=")+1)}' "$backup_dir/manifest.txt" | head -n1)"
+  prompt_db_url target_url "Target DB URL" || return 1
+  target_hint="$(project_hint "$target_url")"
+
+  if [[ -n "$source_hint" && "$source_hint" == "$target_hint" ]]; then
+    fail "Target appears to be the same project as the backup source. Restore refused."
+    unset target_url
+    return 1
+  fi
+
+  info "Testing target Cloud database..."
+  test_connection "$target_url" || { fail "Cannot connect to target database."; unset target_url; return 1; }
+
+  say ""
+  warn "Restore target: ${target_hint}"
+  warn "Use a NEW/FRESH Supabase project. The restore is one transaction and stops on the first SQL error."
+  read -r -p "Type RESTORE to continue: " answer
+  [[ "$answer" == "RESTORE" ]] || { warn "Cancelled."; unset target_url; return 1; }
+
+  info "Restoring roles + schema + managed auth/storage objects + data + migration history + Spark ACLs..."
+  if ! docker run --rm \
+      -v "$backup_dir:/backup:ro" \
+      "$PG_IMAGE" \
+      psql \
+        --single-transaction \
+        --set=ON_ERROR_STOP=1 \
+        --file=/backup/roles.sql \
+        --file=/backup/schema.sql \
+        --file=/backup/managed-schema.sql \
+        --command='SET session_replication_role = replica' \
+        --file=/backup/data.sql \
+        --file=/backup/history_schema.sql \
+        --file=/backup/history_data.sql \
+        --file=/backup/security.sql \
+        --dbname="$target_url"; then
+    fail "Restore failed. PostgreSQL rolled the transaction back; no partial restore is accepted by this tool."
+    unset target_url
+    return 1
+  fi
+
+  counts="$(security_counts "$target_url")" || { unset target_url; return 1; }
+  unset target_url
+
+  [[ "$counts" == "0|0" ]] || {
+    fail "Post-restore security validation failed. anon|authenticated = ${counts}"
+    return 1
+  }
+
+  say ""
+  ok "Cloud database restore completed successfully."
+  ok "SECURITY DEFINER exposure: anon=0 authenticated=0"
+  warn "Now reconfigure/deploy project-level items that are not stored in the DB: Edge Functions/secrets, Auth settings/API keys, Realtime settings and physical Storage files."
+}
+
+verify_cloud() {
+  require_tools || return 1
+  local url counts
+  prompt_db_url url "Supabase DB URL to verify" || return 1
+  test_connection "$url" || { fail "Cannot connect to database."; unset url; return 1; }
+  counts="$(security_counts "$url")" || { unset url; return 1; }
+  unset url
+  say "SECURITY DEFINER exposure anon|authenticated = ${counts}"
+  if [[ "$counts" == "0|0" ]]; then
+    ok "Spark database function security state is hardened."
+  else
+    fail "Database has client-executable SECURITY DEFINER functions."
+    return 1
+  fi
+}
+
+interactive_menu() {
+  while true; do
+    clear 2>/dev/null || true
+    say "Spark Supabase Cloud Migration ${SPARK_MIGRATE_VERSION}"
+    say ""
+    say "1) Backup Supabase Cloud database"
+    say "2) Restore backup to NEW Supabase Cloud project"
+    say "3) Verify Cloud database security"
+    say "0) Exit"
+    say ""
+    read -r -p "Select: " choice
+    case "$choice" in
+      1) backup_cloud; read -r -p "Press Enter..." _ ;;
+      2) restore_cloud; read -r -p "Press Enter..." _ ;;
+      3) verify_cloud; read -r -p "Press Enter..." _ ;;
+      0) return 0 ;;
+      *) warn "Invalid selection"; sleep 1 ;;
+    esac
+  done
+}
+
+case "${1:-}" in
+  backup) backup_cloud ;;
+  restore) restore_cloud ;;
+  verify) verify_cloud ;;
+  --version|-V) printf 'Spark Supabase Cloud Migration %s\n' "$SPARK_MIGRATE_VERSION" ;;
+  --help|-h)
+    cat <<EOF
+Usage: spark-migrate [backup|restore|verify]
+
+No argument opens the interactive menu.
+Cloud connections use the Supabase Session pooler PostgreSQL URL.
+EOF
+    ;;
+  "") interactive_menu ;;
+  *) fail "Unknown command: $1"; exit 2 ;;
+esac

@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SPARK_MANAGER_VERSION="3.0.0"
+REPO_URL="https://github.com/hamedplay/Spark.git"
+RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
+SPARK_ROOT="/opt/spark"
+SUPABASE_SOURCE="/opt/supabase-source"
+SUPABASE_ROOT="/opt/spark-supabase"
+CONFIG_DIR="/etc/spark"
+MANAGER_CONF="${CONFIG_DIR}/manager.conf"
+STATE_DIR="/var/lib/spark-manager"
+STEP_DIR="${STATE_DIR}/steps"
+LOG_DIR="/var/log/spark-manager"
+BACKUP_DIR="/var/backups/spark"
+CLI_PATH="/usr/local/bin/spark"
+
+C_RESET=$'\033[0m'
+C_GREEN=$'\033[32m'
+C_RED=$'\033[31m'
+C_YELLOW=$'\033[33m'
+C_BLUE=$'\033[34m'
+C_CYAN=$'\033[36m'
+C_WHITE=$'\033[37m'
+C_BOLD=$'\033[1m'
+C_DIM=$'\033[2m'
+CURRENT_LOG=""
+
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  exec sudo -E "$0" "$@"
+fi
+
+mkdir -p "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
+chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  TARGET="$(readlink -- "$SOURCE")"
+  if [[ "$TARGET" == /* ]]; then
+    SOURCE="$TARGET"
+  else
+    SOURCE="${SOURCE_DIR}/${TARGET}"
+  fi
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
+unset SOURCE SOURCE_DIR TARGET
+UI_PATH="${SCRIPT_DIR}/spark-ui.py"
+
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit; do
+  module_path="${SCRIPT_DIR}/lib/${module}.sh"
+  if [[ ! -r "$module_path" ]]; then
+    printf 'Spark Manager module missing: %s\n' "$module_path" >&2
+    exit 1
+  fi
+  source "$module_path"
+done
+unset module module_path
+
+install_manager_from_dir() {
+  local source_dir="$1"
+  local stage backup module file
+  [[ -f "${source_dir}/spark" ]] || { fail "Spark Manager entrypoint not found: ${source_dir}/spark"; return 1; }
+  [[ -f "${source_dir}/spark-ui.py" ]] || { fail "Spark Manager UI not found: ${source_dir}/spark-ui.py"; return 1; }
+  [[ -f "${source_dir}/spark-ui-core.py" ]] || { fail "Spark Manager UI core not found: ${source_dir}/spark-ui-core.py"; return 1; }
+  for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit; do
+    [[ -f "${source_dir}/lib/${module}.sh" ]] || { fail "Spark Manager module not found: ${module}.sh"; return 1; }
+  done
+
+  bash -n "${source_dir}/spark" || return 1
+  for file in "${source_dir}"/lib/*.sh; do bash -n "$file" || return 1; done
+  python3 - "${source_dir}/spark-ui.py" "${source_dir}/spark-ui-core.py" <<'PY'
+from pathlib import Path
+import sys
+for value in sys.argv[1:]:
+    path = Path(value)
+    compile(path.read_text(encoding="utf-8"), str(path), "exec")
+PY
+
+  install -d -m 0755 /usr/local/lib
+  stage="$(mktemp -d /usr/local/lib/spark-manager.new.XXXXXX)"
+  backup="/usr/local/lib/spark-manager.previous.$$"
+  install -d -m 0755 "${stage}/lib" "${stage}/livekit"
+  [[ -d "${source_dir}/../livekit" ]] || { fail "Spark LiveKit deployment assets not found next to manager source."; rm -rf "$stage"; return 1; }
+  install -m 0755 "${source_dir}/spark" "${stage}/spark"
+  install -m 0644 "${source_dir}/spark-ui.py" "${stage}/spark-ui.py"
+  install -m 0644 "${source_dir}/spark-ui-core.py" "${stage}/spark-ui-core.py"
+  for file in "${source_dir}"/lib/*.sh; do
+    install -m 0644 "$file" "${stage}/lib/$(basename "$file")"
+  done
+  rsync -a --delete "${source_dir}/../livekit/" "${stage}/livekit/"
+
+  if [[ -d /usr/local/lib/spark-manager ]]; then
+    mv /usr/local/lib/spark-manager "$backup"
+  fi
+  if ! mv "$stage" /usr/local/lib/spark-manager; then
+    [[ -d "$backup" ]] && mv "$backup" /usr/local/lib/spark-manager
+    rm -rf "$stage"
+    return 1
+  fi
+  ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
+
+  if ! version_output="$($CLI_PATH --version 2>/dev/null)" || [[ "$version_output" != "Spark Server Manager ${SPARK_MANAGER_VERSION}" ]]; then
+    rm -f "$CLI_PATH"
+    rm -rf /usr/local/lib/spark-manager
+    if [[ -d "$backup" ]]; then
+      mv "$backup" /usr/local/lib/spark-manager
+      ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
+    fi
+    return 1
+  fi
+  if ! "$CLI_PATH" --ui-self-test >/dev/null 2>&1; then
+    rm -f "$CLI_PATH"
+    rm -rf /usr/local/lib/spark-manager
+    if [[ -d "$backup" ]]; then
+      mv "$backup" /usr/local/lib/spark-manager
+      ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
+    fi
+    return 1
+  fi
+
+  rm -rf "$backup"
+  rm -rf /usr/local/share/spark-manager 2>/dev/null || true
+}
+
+self_update() {
+  title
+  new_log "manager-self-update"
+  local response sha tmp
+  response="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+    -H 'Cache-Control: no-cache' \
+    "https://api.github.com/repos/hamedplay/Spark/commits/main?nocache=$(date +%s)")" || {
+      fail "Unable to resolve the latest Spark Manager revision."
+      return 1
+    }
+  sha="$(printf '%s' "$response" \
+    | grep -m1 -Eo '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' \
+    | grep -Eo '[0-9a-f]{40}' || true)"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
+    fail "GitHub returned an invalid Spark Manager revision."
+    return 1
+  }
+
+  tmp="$(mktemp)"
+  if ! run_logged "Download Spark Manager bootstrap (${sha:0:12})" \
+    curl -fsSL -H 'Cache-Control: no-cache' \
+      "https://raw.githubusercontent.com/hamedplay/Spark/${sha}/deploy/spark-cli/bootstrap.sh" \
+      -o "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! bash -n "$tmp" >>"$CURRENT_LOG" 2>&1; then
+    fail "Downloaded bootstrap has invalid syntax."
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! run_visible "Install latest Spark Manager" bash "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+  ok "Spark Manager updated. Exit and run spark again to load the new version."
+}
+
+spark_backend_prepare() {
+  clear_screen() { :; }
+  title() {
+    printf '\n%s%s== Spark task ==%s %s\n' "$C_BOLD" "$C_CYAN" "$C_RESET" "$(date -Is)"
+  }
+  pause() { :; }
+}
+
+spark_backend_docker_logs() {
+  local service="${1:-}"
+  [[ -n "$service" ]] || { fail "Docker service is required."; return 2; }
+  local services
+  services="$(compose config --services)" || return 1
+  if ! grep -Fxq "$service" <<<"$services"; then
+    fail "Invalid Docker service: $service"
+    return 2
+  fi
+  new_log "logs-docker-${service}"
+  run_report "Docker logs: ${service}" compose logs --tail=250 --timestamps "$service"
+}
+
+spark_backend_dispatch_inner() {
+  local action="$1"
+  shift || true
+  case "$action" in
+    install-01|install-02|install-03|install-04|install-05|install-06|install-07|install-08|install-09|install-10|install-11|install-12|install-13|install-14|install-15|install-16|install-17|install-18|install-19|install-20|install-21)
+      run_install_step "$((10#${action##*-}))"
+      ;;
+    install-all) run_all_install ;;
+
+    diagnostic-full) new_log "test-full"; run_visible "Full validation" test_full_validation ;;
+    diagnostic-installation-status) new_log "installation-status"; installation_status_report ;;
+    diagnostic-frontend) new_log "test-frontend"; run_visible "Frontend" test_frontend ;;
+    diagnostic-api) new_log "test-api"; run_visible "API / Auth / Functions" test_api ;;
+    diagnostic-docker) new_log "test-docker"; run_visible "Docker status" compose ps ;;
+    diagnostic-docker-logs) spark_backend_docker_logs "${1:-}" ;;
+    diagnostic-nginx)
+      new_log "test-nginx"
+      run_report "Nginx status" systemctl status nginx --no-pager
+      journalctl -u nginx -n 160 --no-pager 2>&1 | tee -a "$CURRENT_LOG" || true
+      ;;
+    diagnostic-schedulers)
+      new_log "test-schedulers"
+      run_report "Scheduler status" test_schedulers
+      scheduler_logs
+      ;;
+    diagnostic-turn)
+      new_log "test-turn"
+      run_report "TURN test" test_turn
+      journalctl -u coturn -n 160 --no-pager 2>&1 | tee -a "$CURRENT_LOG" || true
+      ;;
+    diagnostic-livekit) new_log "test-livekit"; run_visible "LiveKit media platform" test_livekit_full_validation ;;
+    diagnostic-exposure) new_log "test-exposure"; run_visible "DB/API public exposure" test_db_exposure ;;
+    diagnostic-dns-ssl) new_log "test-dns-ssl"; run_visible "DNS / SSL" test_ssl_dns ;;
+    diagnostic-ports)
+      new_log "test-ports-firewall"
+      run_report "Listening ports" ss -lntup
+      run_report "UFW" ufw status verbose
+      ;;
+
+    app-update) update_spark ;;
+    linux-update) linux_update ;;
+    resources) resource_status ;;
+    version-info) version_info ;;
+
+    npm-versions) new_log "npm-versions"; run_report "Node / npm versions" bash -c 'node --version; npm --version' ;;
+    npm-update) new_log "npm-update"; run_visible "Update npm 11" npm install -g 'npm@^11.6.2' ;;
+    npm-ci) new_log "npm-ci"; run_visible "npm ci" bash -c "cd '$SPARK_ROOT' && npm ci" ;;
+    npm-audit) new_log "npm-audit"; run_report "npm audit" bash -c "cd '$SPARK_ROOT' && npm audit" ;;
+    npm-audit-prod) new_log "npm-audit-prod"; run_report "npm audit --omit=dev" bash -c "cd '$SPARK_ROOT' && npm audit --omit=dev" ;;
+    npm-outdated) new_log "npm-outdated"; run_report "npm outdated" bash -c "cd '$SPARK_ROOT' && npm outdated" ;;
+    npm-fix-dry) new_log "npm-fix-dry"; run_report "npm audit fix --dry-run" bash -c "cd '$SPARK_ROOT' && npm audit fix --dry-run" ;;
+
+    security-db-info) show_database_connection_info ;;
+    security-db-test) new_log "database-login-test"; run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433 ;;
+    security-db-open) new_log "database-access-open"; open_database_external_access ;;
+    security-db-close) new_log "database-access-close"; close_database_external_access ;;
+    security-studio-info) show_studio_connection_info ;;
+    security-studio-open) new_log "supabase-studio-open"; open_supabase_studio_access ;;
+    security-studio-close) new_log "supabase-studio-close"; close_supabase_studio_access ;;
+    security-report) security_status_report ;;
+    security-account-unlock) new_log "account-unlock"; spark_account_unlock ;;
+
+    # Compatibility actions retained for older installed UIs.
+    admin-open) open_supabase_admin_access ;;
+    admin-close) close_supabase_admin_access ;;
+
+    cleanup-database) cleanup_database_data ;;
+    cleanup-supabase) cleanup_supabase_runtime ;;
+    cleanup-frontend) cleanup_frontend_deploy ;;
+    cleanup-source) cleanup_spark_source ;;
+    cleanup-logs) cleanup_manager_logs ;;
+    cleanup-backups) cleanup_backups ;;
+    cleanup-history) cleanup_install_history ;;
+    cleanup-livekit) cleanup_livekit_runtime ;;
+    cleanup-full) cleanup_full_project ;;
+    cleanup-manager) cleanup_uninstall_manager ;;
+
+    service-status)
+      new_log "service-status"
+      run_report "Nginx" systemctl status nginx --no-pager
+      run_report "Coturn (legacy/fallback)" systemctl status coturn --no-pager
+      if [[ -f "$LIVEKIT_ENV" ]]; then run_report "LiveKit" livekit_compose ps; fi
+      run_report "Docker" compose ps
+      run_report "Timers" systemctl list-timers 'spark-*' --no-pager
+      ;;
+    service-functions) new_log "service-functions"; run_visible "Restart Functions + Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate functions avatar-worker" ;;
+    service-nginx) new_log "service-nginx"; run_visible "Nginx test/reload" bash -c 'nginx -t && systemctl reload nginx' ;;
+    service-coturn) new_log "service-coturn"; run_visible "Restart Coturn" systemctl restart coturn ;;
+    service-livekit) livekit_restart ;;
+    service-supabase)
+      new_log "service-supabase"
+      if confirm_word "The complete Supabase stack will be recreated/restarted and may briefly interrupt service." "RESTART"; then
+        run_visible "Restart Supabase stack" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate"
+      else
+        warn "Cancelled."
+      fi
+      ;;
+    service-timers) new_log "service-timers"; run_visible "Restart schedulers" bash -c 'systemctl restart spark-daily-report.timer spark-minutes-reminder.timer spark-decision-due.timer spark-notification-outbox.timer' ;;
+
+    cert-list) new_log "cert-list"; run_report "Certificates" certbot certificates ;;
+    cert-dry-run) new_log "cert-dry-run"; run_visible "Certificate renewal dry-run" certbot renew --dry-run ;;
+    cert-renew) new_log "cert-renew"; run_visible "Certbot renew" certbot renew ;;
+
+    backup-create)
+      new_log "backup-manual"
+      run_visible "Create DB + config backup" create_backup manual
+      ;;
+    backup-list) new_log "backup-list"; run_report "Backups" list_backups ;;
+
+    manager-update) self_update ;;
+    *) fail "Unknown Spark backend action: $action"; return 2 ;;
+  esac
+}
+
+spark_backend_action() {
+  local action="${1:-}"
+  shift || true
+  [[ -n "$action" ]] || { printf 'Backend action is required.\n' >&2; return 2; }
+  spark_backend_prepare
+  printf 'SPARK_ACTION_BEGIN %s %s\n' "$action" "$(date -Is)"
+  local rc=0
+  set +e
+  ( set -Eeuo pipefail; spark_backend_dispatch_inner "$action" "$@" )
+  rc=$?
+  set -e
+  printf 'SPARK_ACTION_END %s rc=%d %s\n' "$action" "$rc" "$(date -Is)"
+  return "$rc"
+}
+
+spark_backend_list_docker_services() {
+  [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || return 0
+  compose config --services 2>/dev/null || true
+}
+
+spark_ui_self_test() {
+  [[ -r "$UI_PATH" ]] || return 1
+  [[ -r "${SCRIPT_DIR}/spark-ui-core.py" ]] || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 - "$UI_PATH" "${SCRIPT_DIR}/spark-ui-core.py" <<'PY'
+from pathlib import Path
+import sys
+for value in sys.argv[1:]:
+    path = Path(value)
+    compile(path.read_text(encoding="utf-8"), str(path), "exec")
+import curses, pty, selectors
+PY
+  grep -Fq "SPARK_UI_VERSION = \"${SPARK_MANAGER_VERSION}\"" "$UI_PATH"
+  grep -q 'curses.doupdate()' "$UI_PATH"
+  grep -q 'pty.openpty()' "$UI_PATH"
+}
+
+case "${1:-}" in
+  --version|-V)
+    printf 'Spark Server Manager %s\n' "$SPARK_MANAGER_VERSION"
+    ;;
+  --help|-h)
+    cat <<EOF_HELP
+Usage: spark [option]
+
+Run without an option to open the full-screen dynamic control center.
+
+  --version       Show Spark Manager version/build
+  --test          Run full validation without opening the UI
+  --steps         Show installed/not-installed install steps
+  --update        Update Spark application without opening the UI
+  --resources     Show server resource usage without opening the UI
+  --ui-self-test  Validate the installed curses UI runtime
+EOF_HELP
+    ;;
+  --test) spark_backend_action diagnostic-full ;;
+  --steps) installation_status_report ;;
+  --update) spark_backend_action app-update ;;
+  --resources) spark_backend_action resources ;;
+  --ui-self-test) spark_ui_self_test ;;
+  --backend-action)
+    shift
+    spark_backend_action "$@"
+    ;;
+  --backend-list-docker-services) spark_backend_list_docker_services ;;
+  "")
+    [[ -r "$UI_PATH" ]] || { printf 'Spark UI missing: %s\n' "$UI_PATH" >&2; exit 1; }
+    exec python3 "$UI_PATH" --spark "$0"
+    ;;
+  *)
+    fail "Unknown option: $1"
+    exit 2
+    ;;
+esac

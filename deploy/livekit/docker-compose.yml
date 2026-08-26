@@ -1,0 +1,160 @@
+services:
+  minio:
+    image: ${MINIO_IMAGE}
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    command: ["server", "/data", "--address", "127.0.0.1:9000", "--console-address", "127.0.0.1:9001"]
+    volumes:
+      - livekit_minio_data:/data
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE}
+    restart: "no"
+    network_mode: host
+    depends_on:
+      - minio
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        until mc alias set local http://127.0.0.1:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"; do sleep 2; done
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+
+  redis:
+    image: ${REDIS_IMAGE}
+    restart: unless-stopped
+    network_mode: host
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - livekit_redis_data:/data
+
+  livekit:
+    image: ${LIVEKIT_SERVER_IMAGE}
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - redis
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 60000
+          use_external_ip: true
+        redis:
+          address: 127.0.0.1:6379
+        keys:
+          ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+        prometheus_port: 6789
+        turn:
+          enabled: true
+          domain: ${LIVEKIT_TURN_DOMAIN}
+          udp_port: 443
+          tls_port: 5349
+          cert_file: /etc/livekit/turn-cert/fullchain.pem
+          key_file: /etc/livekit/turn-cert/privkey.pem
+        ingress:
+          rtmp_base_url: rtmp://${LIVEKIT_INGRESS_DOMAIN}:1935/live
+          whip_base_url: https://${LIVEKIT_INGRESS_DOMAIN}/whip
+        webhook:
+          api_key: ${LIVEKIT_API_KEY}
+          urls:
+            - ${LIVEKIT_WEBHOOK_URL}
+        room:
+          auto_create: false
+          empty_timeout: 300
+          departure_timeout: 60
+          max_participants: 20
+    volumes:
+      - ./certs/turn:/etc/livekit/turn-cert:ro
+
+  egress:
+    image: ${LIVEKIT_EGRESS_IMAGE}
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - redis
+      - livekit
+      - minio
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_WS_URL: ws://127.0.0.1:7880
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: ${S3_REGION}
+      EGRESS_CONFIG_BODY: |
+        ws_url: ws://127.0.0.1:7880
+        api_key: ${LIVEKIT_API_KEY}
+        api_secret: ${LIVEKIT_API_SECRET}
+        redis:
+          address: 127.0.0.1:6379
+        health_port: 9091
+        prometheus_port: 6788
+        log_level: info
+        s3:
+          access_key: ${S3_ACCESS_KEY}
+          secret: ${S3_SECRET_KEY}
+          region: ${S3_REGION}
+          endpoint: ${S3_ENDPOINT}
+          bucket: ${S3_BUCKET}
+          force_path_style: true
+
+  ingress:
+    image: ${LIVEKIT_INGRESS_IMAGE}
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - redis
+      - livekit
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_WS_URL: ws://127.0.0.1:7880
+      INGRESS_CONFIG_BODY: |
+        ws_url: ws://127.0.0.1:7880
+        api_key: ${LIVEKIT_API_KEY}
+        api_secret: ${LIVEKIT_API_SECRET}
+        redis:
+          address: 127.0.0.1:6379
+        health_port: 9092
+        prometheus_port: 6787
+        rtmp_port: 1935
+        whip_port: 8080
+        rtc_config:
+          udp_port: 7885
+          use_external_ip: true
+        log_level: info
+
+  caddy:
+    image: ${CADDY_IMAGE}
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - livekit
+      - ingress
+    environment:
+      LIVEKIT_DOMAIN: ${LIVEKIT_DOMAIN}
+      LIVEKIT_INGRESS_DOMAIN: ${LIVEKIT_INGRESS_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - livekit_caddy_data:/data
+      - livekit_caddy_config:/config
+
+volumes:
+  livekit_minio_data:
+  livekit_redis_data:
+  livekit_caddy_data:
+  livekit_caddy_config:

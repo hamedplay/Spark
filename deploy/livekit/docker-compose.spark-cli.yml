@@ -1,0 +1,7 @@
+# Single-host override used by deploy/spark-cli.
+# Spark Manager already owns TCP 80/443 through Nginx, so the standalone Caddy
+# proxy is deliberately placed behind an inactive profile in this mode.
+services:
+  caddy:
+    profiles:
+      - standalone-proxy

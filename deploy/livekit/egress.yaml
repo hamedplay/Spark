@@ -1,0 +1,6 @@
+redis:
+  address: 127.0.0.1:6379
+health_port: 9091
+prometheus_port: 6788
+log_level: info
+# API key, secret, ws URL and S3 credentials are injected by environment.
