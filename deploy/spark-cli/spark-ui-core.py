@@ -100,7 +100,7 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("@recent-logs", "Recent manager logs", "Browse persistent manager log files without leaving the dashboard.", special="logs"),
     ]),
     ("Application", [
-        Action("app-update", "Update Spark", "Fast-forward only application/runtime update with staging and rollback; database is never inspected or modified.", "confirm"),
+        Action("app-update", "Update Spark", "Validated application/runtime update with staging, rollback, and controlled recovery from rewritten main history; database is never inspected or modified.", "confirm"),
         Action("diagnostic-full", "Post-deploy validation", "Run the complete validation suite."),
         Action("version-info", "Active versions", "Show current Spark/Supabase/runtime versions."),
     ]),

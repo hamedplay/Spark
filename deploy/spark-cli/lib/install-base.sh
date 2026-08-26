@@ -116,7 +116,20 @@ install_step_3() {
     fi
     run_logged "Fetch آخرین Spark main" git -C "$SPARK_ROOT" fetch origin main || return 1
     run_logged "Checkout Spark main" git -C "$SPARK_ROOT" checkout main || return 1
-    run_logged "Fast-forward Spark main" git -C "$SPARK_ROOT" pull --ff-only origin main || return 1
+    local current_sha target_sha recovery_ref
+    current_sha="$(git -C "$SPARK_ROOT" rev-parse HEAD)" || return 1
+    target_sha="$(git -C "$SPARK_ROOT" rev-parse origin/main)" || return 1
+    if [[ "$current_sha" != "$target_sha" ]]; then
+      if git -C "$SPARK_ROOT" merge-base --is-ancestor "$current_sha" "$target_sha"; then
+        run_logged "Fast-forward Spark main" git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
+      else
+        recovery_ref="refs/spark-manager/recovery/install-$(date +%Y%m%d-%H%M%S)-${current_sha:0:12}"
+        run_logged "حفظ recovery ref برای Spark source قبلی" git -C "$SPARK_ROOT" update-ref "$recovery_ref" "$current_sha" || return 1
+        warn "تاریخچه Spark main بازنویسی شده یا checkout روی lineage قدیمی است؛ managed checkout به origin/main همگام می‌شود."
+        run_logged "همگام‌سازی Spark main با origin/main" git -C "$SPARK_ROOT" reset --hard "$target_sha" || return 1
+        info "Recovery ref: ${recovery_ref}"
+      fi
+    fi
   elif [[ -e "$SPARK_ROOT" ]]; then
     fail "${SPARK_ROOT} وجود دارد ولی Git repository نیست."
     return 1

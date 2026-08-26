@@ -77,9 +77,9 @@ update_spark() (
     return 1
   }
 
-  local old_sha target_sha stage backup validation_image=""
+  local old_sha target_sha stage backup validation_image="" recovery_ref=""
   local functions_next="" functions_prev="" frontend_next="" frontend_prev=""
-  local runtime_switched=0 update_success=0 source_advanced=0
+  local runtime_switched=0 update_success=0 source_advanced=0 history_diverged=0
 
   old_sha="$(git -C "$SPARK_ROOT" rev-parse HEAD)"
   run_logged "Fetch origin/main" git -C "$SPARK_ROOT" fetch origin main || return 1
@@ -88,8 +88,8 @@ update_spark() (
   info "Target : ${target_sha}"
 
   if ! git -C "$SPARK_ROOT" merge-base --is-ancestor "$old_sha" "$target_sha"; then
-    fail "origin/main نسبت به نسخه فعلی fast-forward نیست؛ Update خودکار برای جلوگیری از rewrite متوقف شد."
-    return 1
+    history_diverged=1
+    warn "تاریخچه local main با origin/main هم‌خط نیست؛ پس از staging/validation کامل، checkout مدیریت‌شده با حفظ recovery ref به origin/main همگام می‌شود."
   fi
 
   if [[ "$old_sha" == "$target_sha" ]]; then
@@ -178,7 +178,14 @@ update_spark() (
   ok "Runtime backup: ${backup}"
 
   if [[ "$old_sha" != "$target_sha" ]]; then
-    run_logged "Fast-forward /opt/spark به origin/main" git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
+    if (( history_diverged == 1 )); then
+      recovery_ref="refs/spark-manager/recovery/update-$(date +%Y%m%d-%H%M%S)-${old_sha:0:12}"
+      run_logged "حفظ recovery ref برای source قبلی" git -C "$SPARK_ROOT" update-ref "$recovery_ref" "$old_sha" || return 1
+      run_logged "همگام‌سازی managed checkout با origin/main" git -C "$SPARK_ROOT" reset --hard "$target_sha" || return 1
+      info "Recovery ref: ${recovery_ref}"
+    else
+      run_logged "Fast-forward /opt/spark به origin/main" git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
+    fi
     source_advanced=1
   fi
 
