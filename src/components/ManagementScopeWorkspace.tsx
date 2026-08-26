@@ -29,6 +29,7 @@ interface WorkspaceFocus {
   view: string;
   label: string;
   requestId: number;
+  detail?: { type: DetailTab; id: string };
 }
 
 interface ManagementCapabilities {
@@ -465,6 +466,15 @@ export function ManagementScopeWorkspace({ focus, onOpenMinute, onChanged }: { f
       setDetailLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!focus?.detail) return;
+    if (focus.detail.type === 'decisions') {
+      void openDecision(focus.detail.id);
+    } else {
+      void openTask(focus.detail.id);
+    }
+  }, [focus?.requestId, openDecision, openTask]);
 
   const saveDecision = useCallback(async () => {
     if (!decisionDetail) return;
