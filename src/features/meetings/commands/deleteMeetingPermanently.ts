@@ -1,0 +1,177 @@
+import { getMeetingTemplateKey } from '../../../config/templateCatalog';
+import { insertNotification } from '../../../lib/notifications';
+import { supabase } from '../../../lib/supabase';
+
+export interface DeleteMeetingPermanentlyInput {
+  meetingId: string;
+  meetingSubject: string;
+
+  participantUserIds: string[];
+  notifyUserIds: string[];
+
+  senderId: string | null;
+}
+
+interface ProfileRow {
+  user_id: string;
+  full_name: string | null;
+}
+
+interface ExternalContactRow {
+  name: string;
+  phone: string | null;
+}
+
+function normalizeContactName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+async function sendExternalCancellation(
+  meetingId: string,
+  meetingSubject: string,
+  senderId: string | null
+): Promise<void> {
+  const { data: meeting, error: meetingError } = await supabase
+    .from('meetings')
+    .select('user_id, external_participants')
+    .eq('id', meetingId)
+    .maybeSingle();
+
+  if (meetingError) throw meetingError;
+
+  const externalNames = (meeting?.external_participants ?? []) as string[];
+  if (externalNames.length === 0) return;
+
+  const ownerUserId = meeting?.user_id ?? senderId;
+  if (!ownerUserId) return;
+
+  const { data: contacts, error: contactsError } = await supabase
+    .from('contacts_email')
+    .select('name, phone')
+    .eq('user_id', ownerUserId);
+
+  if (contactsError) throw contactsError;
+
+  const requestedNames = new Set(externalNames.map(normalizeContactName));
+  const mobiles = Array.from(new Set(
+    ((contacts ?? []) as ExternalContactRow[])
+      .filter(contact => requestedNames.has(normalizeContactName(contact.name)))
+      .map(contact => contact.phone?.trim() || '')
+      .filter(Boolean)
+  ));
+
+  if (mobiles.length === 0) return;
+
+  const { data, error } = await supabase.functions.invoke('send-sms', {
+    body: {
+      mode: 'external',
+      mobiles,
+      message: `جلسه «${meetingSubject}» لغو شده است`,
+      category: 'meeting',
+      eventType: 'cancel',
+      triggeredByUserId: senderId,
+    },
+  });
+
+  if (error) throw error;
+  if (data?.ok === false) {
+    throw new Error(data?.error || 'ارسال پیام لغو جلسه برای مهمانان خارج سازمان ناموفق بود');
+  }
+}
+
+export async function deleteMeetingPermanently(
+  input: DeleteMeetingPermanentlyInput
+): Promise<void> {
+  const participantUserIds =
+    input.participantUserIds;
+
+  const recipientIds = Array.from(new Set([
+    ...participantUserIds,
+    ...input.notifyUserIds,
+  ])).filter(
+    (userId) =>
+      userId !== input.senderId
+  );
+
+  if (recipientIds.length > 0) {
+    const { data: profiles } =
+      await supabase
+        .from('profiles_public')
+        .select('user_id, full_name')
+        .in('user_id', recipientIds);
+
+    const nameMap: Record<string, string> = {};
+
+    for (const profile of (profiles ?? []) as ProfileRow[]) {
+      nameMap[profile.user_id] =
+        profile.full_name || '';
+    }
+
+    await Promise.all(
+      recipientIds.map((userId) => {
+        const isParticipant =
+          participantUserIds.includes(userId);
+
+        return insertNotification({
+          userId,
+
+          category: 'meeting',
+
+          eventType: getMeetingTemplateKey(
+            isParticipant
+              ? 'participant'
+              : 'observer',
+            'cancel'
+          ),
+
+          audience:
+            isParticipant
+              ? 'participants'
+              : 'observers',
+
+          fallbackTitle:
+            'جلسه لغو شد',
+
+          fallbackMessage:
+            `جلسه «${input.meetingSubject}» لغو شده است`,
+
+          placeholders: {
+            meeting_subject:
+              input.meetingSubject,
+
+            full_name:
+              nameMap[userId] || '',
+
+            recipient_greeting:
+              nameMap[userId]
+                ? `${nameMap[userId]} گرامی`
+                : 'همکار گرامی',
+          },
+
+          senderId: input.senderId,
+          actionUrl: 'meetings',
+        });
+      })
+    );
+  }
+
+  await sendExternalCancellation(
+    input.meetingId,
+    input.meetingSubject,
+    input.senderId
+  );
+
+  await supabase
+    .from('meeting_inbox')
+    .delete()
+    .eq('meeting_id', input.meetingId);
+
+  const { error } = await supabase
+    .from('meetings')
+    .delete()
+    .eq('id', input.meetingId);
+
+  if (error) {
+    throw error;
+  }
+}
