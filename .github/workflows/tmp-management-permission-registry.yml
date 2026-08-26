@@ -1,0 +1,59 @@
+name: Temporary management permission registry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-management-permission-registry.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Add granular management permissions to registry
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/features/permissions/permissionRegistry.ts')
+          s = p.read_text()
+          marker = "  {\n    label: 'صورت‌جلسات و مصوبات',"
+          block = """  {
+    label: 'مدیریت زیرمجموعه سازمانی',
+    color: 'text-violet-600',
+    items: [
+      { key: 'management_decisions.view', label: 'مشاهده مصوبات زیرمجموعه', description: 'مشاهده فهرست، جزئیات و تاریخچه کامل مصوبات فقط در محدوده واحد سازمانی و زیرواحدهای مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+      { key: 'management_decisions.manage', label: 'مدیریت مصوبات زیرمجموعه', description: 'ثبت بروزرسانی مدیریتی وضعیت، پیشرفت و گزارش روی مصوبات داخل محدوده سازمانی مجاز؛ متن رسمی مصوبه تغییر نمی‌کند', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+      { key: 'management_tasks.view', label: 'مشاهده اقدامات زیرمجموعه', description: 'مشاهده فهرست، جزئیات، گردش کار، چک‌لیست و وابستگی اقدامات کاربران داخل محدوده سازمانی مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+      { key: 'management_tasks.manage', label: 'مدیریت اقدامات زیرمجموعه', description: 'مدیریت وضعیت، پیشرفت، اولویت، موعد و مسئول اقدام فقط در محدوده سازمانی مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+    ],
+  },
+"""
+          if "management_decisions.view" not in s:
+              if marker not in s:
+                  raise SystemExit('permission registry insertion anchor not found')
+              s = s.replace(marker, block + marker, 1)
+              p.write_text(s)
+          PY
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Commit and cleanup
+        shell: bash
+        run: |
+          git config user.name "spark-manager-bot"
+          git config user.email "spark-manager-bot@users.noreply.github.com"
+          rm -f .github/workflows/tmp-management-permission-registry.yml
+          git add src/features/permissions/permissionRegistry.ts .github/workflows/tmp-management-permission-registry.yml
+          git commit -m "feat: expose management subtree permissions [skip ci]"
+          git push origin HEAD:main
