@@ -1,0 +1,59 @@
+name: Temporary CSP report rate-limit fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-csp-report-rate-limit.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch rate-limit response
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('supabase/functions/csp-report/index.ts')
+          s = p.read_text(encoding='utf-8')
+          old = '''  if (isRateLimited(clientIp)) {
+    return new Response(null, { status: 429 });
+  }
+'''
+          new = '''  if (isRateLimited(clientIp)) {
+    // CSP reporting is telemetry, not an interactive API. Once the per-instance
+    // write budget is exhausted, silently drop excess reports so browsers do
+    // not retry or surface noisy network/ORB errors while DB writes stay bounded.
+    return new Response(null, { status: 204 });
+  }
+'''
+          if old not in s:
+              raise SystemExit('rate-limit anchor not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Validate patch
+        shell: bash
+        run: |
+          grep -Fq 'return new Response(null, { status: 204 });' supabase/functions/csp-report/index.ts
+          ! grep -Fq 'return new Response(null, { status: 429 });' supabase/functions/csp-report/index.ts
+
+      - name: Commit and self-remove workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-csp-report-rate-limit.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add supabase/functions/csp-report/index.ts .github/workflows/fix-csp-report-rate-limit.yml
+          git commit -m 'fix: silently drop excess csp reports [skip ci]'
+          git push origin HEAD:main
