@@ -1,0 +1,20 @@
+name: Temporary self-host migration updater validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-selfhost-migration-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax
+        run: bash -n deploy/spark-cli/lib/update.sh
+      - name: Migration reconciliation wiring
+        run: |
+          grep -q 'reconcile_spark_migrations' deploy/spark-cli/lib/update.sh
+          grep -q "NOTIFY pgrst, 'reload schema'" deploy/spark-cli/lib/update.sh
+          grep -q 'supabase_migrations.schema_migrations' deploy/spark-cli/lib/update.sh
