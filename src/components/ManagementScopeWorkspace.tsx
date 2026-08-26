@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ClipboardCheck,
   Filter,
+  FileText,
   History,
   ListTodo,
   Loader2,
@@ -19,8 +20,16 @@ import {
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
-type WorkspaceTab = 'decisions' | 'tasks';
-type DetailTarget = { type: WorkspaceTab; id: string } | null;
+type DetailTab = 'decisions' | 'tasks';
+type WorkspaceTab = 'minutes' | DetailTab;
+type DetailTarget = { type: DetailTab; id: string } | null;
+
+interface WorkspaceFocus {
+  tab: WorkspaceTab;
+  view: string;
+  label: string;
+  requestId: number;
+}
 
 interface ManagementCapabilities {
   decisions_view: boolean;
@@ -36,6 +45,22 @@ interface ScopePerson {
   unit_name: string;
   position_id: string | null;
   position_title: string | null;
+}
+
+interface MinuteRow {
+  id: string;
+  meeting_id: string;
+  meeting_title_snapshot: string | null;
+  meeting_date_snapshot: string | null;
+  meeting_start_time_snapshot: string | null;
+  org_unit_id: string | null;
+  unit_name: string;
+  secretary_name_snapshot: string | null;
+  chair_name_snapshot: string | null;
+  status: string;
+  revision_number: number;
+  created_at: string;
+  updated_at: string;
 }
 
 interface DecisionRow {
@@ -169,6 +194,14 @@ const dateTimeFormatter = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
   minute: '2-digit',
 });
 
+const minuteStatusLabels: Record<string, string> = {
+  draft: 'پیش‌نویس',
+  pending_approval: 'منتظر تأیید',
+  changes_requested: 'نیازمند اصلاح',
+  approved: 'تأییدشده',
+  published: 'منتشرشده',
+};
+
 const decisionStatusLabels: Record<string, string> = {
   not_started: 'شروع نشده',
   planned: 'برنامه‌ریزی‌شده',
@@ -233,7 +266,7 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 function StatusBadge({ status, kind }: { status: string; kind: WorkspaceTab }) {
-  const label = kind === 'decisions' ? decisionStatusLabels[status] : taskStatusLabels[status];
+  const label = kind === 'minutes' ? minuteStatusLabels[status] : kind === 'decisions' ? decisionStatusLabels[status] : taskStatusLabels[status];
   const classes = status === 'completed'
     ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
     : status === 'stopped'
@@ -248,17 +281,21 @@ function SmallEmpty({ children }: { children: React.ReactNode }) {
   return <div className="flex min-h-36 items-center justify-center rounded-2xl border border-dashed border-slate-700/70 px-4 text-center text-xs text-slate-500">{children}</div>;
 }
 
-export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void }) {
+export function ManagementScopeWorkspace({ focus, onOpenMinute, onChanged }: { focus?: WorkspaceFocus | null; onOpenMinute?: (minuteId: string) => void; onChanged?: () => void }) {
   const [tab, setTab] = useState<WorkspaceTab>('decisions');
   const [capabilities, setCapabilities] = useState<ManagementCapabilities | null>(null);
   const [people, setPeople] = useState<ScopePerson[]>([]);
+  const [minutes, setMinutes] = useState<MinuteRow[]>([]);
   const [decisions, setDecisions] = useState<DecisionRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [minuteTotal, setMinuteTotal] = useState(0);
   const [decisionTotal, setDecisionTotal] = useState(0);
   const [taskTotal, setTaskTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [personFilter, setPersonFilter] = useState('');
+  const [viewFilter, setViewFilter] = useState('all');
+  const [viewLabel, setViewLabel] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [detailTarget, setDetailTarget] = useState<DetailTarget>(null);
@@ -278,10 +315,15 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
   const [taskAssignee, setTaskAssignee] = useState('');
   const [taskNote, setTaskNote] = useState('');
 
-  const loadLists = useCallback(async (silent = false, overrides?: { search?: string; status?: string; person?: string }) => {
+  const loadLists = useCallback(async (
+    silent = false,
+    overrides?: { search?: string; status?: string; person?: string; tab?: WorkspaceTab; view?: string },
+  ) => {
+    const targetTab = overrides?.tab ?? tab;
     const effectiveSearch = overrides?.search ?? search;
     const effectiveStatus = overrides?.status ?? statusFilter;
     const effectivePerson = overrides?.person ?? personFilter;
+    const effectiveView = overrides?.view ?? viewFilter;
     if (silent) setRefreshing(true); else setLoading(true);
     try {
       const [capResult, peopleResult] = await Promise.all([
@@ -295,34 +337,41 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
       setCapabilities(caps);
       setPeople(Array.isArray(peopleResult.data) ? peopleResult.data as unknown as ScopePerson[] : []);
 
-      const calls: PromiseLike<unknown>[] = [];
-      if (caps?.decisions_view) {
-        calls.push(supabase.rpc('get_management_decisions_v2', {
+      const [minuteResult, decisionResult, taskResult] = await Promise.all([
+        supabase.rpc('get_management_minutes_v1', {
           p_search: effectiveSearch.trim() || null,
-          p_status: tab === 'decisions' ? (effectiveStatus || null) : null,
+          p_status: targetTab === 'minutes' ? (effectiveStatus || null) : null,
+          p_view: targetTab === 'minutes' ? effectiveView : 'all',
+          p_limit: 250,
+          p_offset: 0,
+        }),
+        caps?.decisions_view ? supabase.rpc('get_management_decisions_v3', {
+          p_search: effectiveSearch.trim() || null,
+          p_status: targetTab === 'decisions' ? (effectiveStatus || null) : null,
           p_unit_id: null,
-          p_owner_user_id: tab === 'decisions' ? (effectivePerson || null) : null,
+          p_owner_user_id: targetTab === 'decisions' ? (effectivePerson || null) : null,
+          p_view: targetTab === 'decisions' ? effectiveView : 'all',
           p_limit: 250,
           p_offset: 0,
-        }));
-      } else calls.push(Promise.resolve({ data: { rows: [], total_count: 0 }, error: null }));
-
-      if (caps?.tasks_view) {
-        calls.push(supabase.rpc('get_management_tasks_v1', {
+        }) : Promise.resolve({ data: { rows: [], total_count: 0 }, error: null }),
+        caps?.tasks_view ? supabase.rpc('get_management_tasks_v2', {
           p_search: effectiveSearch.trim() || null,
-          p_status: tab === 'tasks' ? (effectiveStatus || null) : null,
-          p_assignee_user_id: tab === 'tasks' ? (effectivePerson || null) : null,
+          p_status: targetTab === 'tasks' ? (effectiveStatus || null) : null,
+          p_assignee_user_id: targetTab === 'tasks' ? (effectivePerson || null) : null,
+          p_view: targetTab === 'tasks' ? effectiveView : 'all',
           p_limit: 250,
           p_offset: 0,
-        }));
-      } else calls.push(Promise.resolve({ data: { rows: [], total_count: 0 }, error: null }));
-
-      const [decisionResult, taskResult] = await Promise.all(calls) as Array<{ data: unknown; error: { message?: string } | null }>;
+        }) : Promise.resolve({ data: { rows: [], total_count: 0 }, error: null }),
+      ]);
+      if (minuteResult.error) throw minuteResult.error;
       if (decisionResult.error) throw decisionResult.error;
       if (taskResult.error) throw taskResult.error;
 
+      const minuteList = normalizeList<MinuteRow>(minuteResult.data);
       const decisionList = normalizeList<DecisionRow>(decisionResult.data);
       const taskList = normalizeList<TaskRow>(taskResult.data);
+      setMinutes(minuteList.rows);
+      setMinuteTotal(minuteList.total_count);
       setDecisions(decisionList.rows);
       setDecisionTotal(decisionList.total_count);
       setTasks(taskList.rows);
@@ -334,9 +383,20 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
       setLoading(false);
       setRefreshing(false);
     }
-  }, [personFilter, search, statusFilter, tab]);
+  }, [personFilter, search, statusFilter, tab, viewFilter]);
 
-  useEffect(() => { void loadLists(); }, []); // initial load only; filters apply explicitly
+  useEffect(() => { void loadLists(); }, []); // initial load only
+
+  useEffect(() => {
+    if (!focus) return;
+    setTab(focus.tab);
+    setSearch('');
+    setStatusFilter('');
+    setPersonFilter('');
+    setViewFilter(focus.view || 'all');
+    setViewLabel(focus.label || '');
+    void loadLists(true, { tab: focus.tab, view: focus.view || 'all', search: '', status: '', person: '' });
+  }, [focus?.requestId]);
 
   const applyFilters = useCallback(() => { void loadLists(true); }, [loadLists]);
 
@@ -344,7 +404,19 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
     setSearch('');
     setStatusFilter('');
     setPersonFilter('');
-    void loadLists(true, { search: '', status: '', person: '' });
+    setViewFilter('all');
+    setViewLabel('');
+    void loadLists(true, { search: '', status: '', person: '', view: 'all' });
+  }, [loadLists]);
+
+  const switchTab = useCallback((nextTab: WorkspaceTab) => {
+    setTab(nextTab);
+    setSearch('');
+    setStatusFilter('');
+    setPersonFilter('');
+    setViewFilter('all');
+    setViewLabel('');
+    void loadLists(true, { tab: nextTab, search: '', status: '', person: '', view: 'all' });
   }, [loadLists]);
 
   const openDecision = useCallback(async (id: string) => {
@@ -445,18 +517,15 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
     }
   }, [loadLists, onChanged, openTask, taskAssignee, taskDetail, taskDueDate, taskNote, taskPriority, taskProgress, taskStatus]);
 
-  const activeRows = tab === 'decisions' ? decisions : tasks;
-  const activeTotal = tab === 'decisions' ? decisionTotal : taskTotal;
-  const canViewActive = tab === 'decisions' ? capabilities?.decisions_view : capabilities?.tasks_view;
+  const activeRows = tab === 'minutes' ? minutes : tab === 'decisions' ? decisions : tasks;
+  const activeTotal = tab === 'minutes' ? minuteTotal : tab === 'decisions' ? decisionTotal : taskTotal;
+  const canViewActive = tab === 'minutes' ? true : tab === 'decisions' ? capabilities?.decisions_view : capabilities?.tasks_view;
 
-  const statusOptions = useMemo(() => tab === 'decisions'
-    ? Object.entries(decisionStatusLabels)
-    : Object.entries(taskStatusLabels), [tab]);
-
-  useEffect(() => {
-    setStatusFilter('');
-    setPersonFilter('');
-  }, [tab]);
+  const statusOptions = useMemo(() => tab === 'minutes'
+    ? Object.entries(minuteStatusLabels)
+    : tab === 'decisions'
+      ? Object.entries(decisionStatusLabels)
+      : Object.entries(taskStatusLabels), [tab]);
 
   if (loading) {
     return <section className="rounded-2xl border border-slate-700/60 bg-slate-950/35 p-5"><div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><Loader2 className="h-6 w-6 animate-spin text-violet-400" />در حال آماده‌سازی فضای مدیریت زیرمجموعه...</div></section>;
@@ -471,28 +540,35 @@ export function ManagementScopeWorkspace({ onChanged }: { onChanged?: () => void
               <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-300"><ShieldCheck className="h-3.5 w-3.5" />حوزه مدیریتی سازمانی</span>
               <span className="rounded-full border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-[10px] text-slate-500">{nf.format(people.length)} کاربر در زیرمجموعه</span>
             </div>
-            <h3 className="mt-2 text-base font-black text-white">مصوبات و اقدامات زیرمجموعه</h3>
+            <h3 className="mt-2 text-base font-black text-white">صورت‌جلسات، مصوبات و اقدامات زیرمجموعه</h3>
             <p className="mt-1 text-[11px] text-slate-500">مشاهده جزئیات، مراحل و مدیریت عملیاتی فقط در محدوده سازمانی مجاز شما</p>
           </div>
           <button type="button" onClick={() => void loadLists(true)} disabled={refreshing} className="inline-flex self-start items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-[11px] text-slate-300 transition hover:border-violet-500/35 hover:text-white disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />بروزرسانی</button>
         </div>
 
         <div className="p-4">
-          <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-950/45 p-1">
-            <button type="button" onClick={() => setTab('decisions')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${tab === 'decisions' ? 'bg-violet-500/15 text-violet-200 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}><Target className="h-4 w-4" />مصوبات زیرمجموعه <span className="rounded-md bg-slate-950/50 px-1.5 py-0.5 text-[9px]">{nf.format(decisionTotal)}</span></button>
-            <button type="button" onClick={() => setTab('tasks')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${tab === 'tasks' ? 'bg-cyan-500/15 text-cyan-200 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}><ListTodo className="h-4 w-4" />اقدامات زیرمجموعه <span className="rounded-md bg-slate-950/50 px-1.5 py-0.5 text-[9px]">{nf.format(taskTotal)}</span></button>
+          <div className="mb-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-950/45 p-1">
+            <button type="button" onClick={() => switchTab('minutes')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${tab === 'minutes' ? 'bg-blue-500/15 text-blue-200 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}><FileText className="h-4 w-4" />صورت‌جلسات <span className="rounded-md bg-slate-950/50 px-1.5 py-0.5 text-[9px]">{nf.format(minuteTotal)}</span></button>
+            <button type="button" onClick={() => switchTab('decisions')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${tab === 'decisions' ? 'bg-violet-500/15 text-violet-200 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}><Target className="h-4 w-4" />مصوبات <span className="rounded-md bg-slate-950/50 px-1.5 py-0.5 text-[9px]">{nf.format(decisionTotal)}</span></button>
+            <button type="button" onClick={() => switchTab('tasks')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${tab === 'tasks' ? 'bg-cyan-500/15 text-cyan-200 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}><ListTodo className="h-4 w-4" />اقدامات <span className="rounded-md bg-slate-950/50 px-1.5 py-0.5 text-[9px]">{nf.format(taskTotal)}</span></button>
           </div>
 
-          <div className="mb-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_220px_auto]">
-            <label className="relative block"><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') applyFilters(); }} placeholder={tab === 'decisions' ? 'جستجو در عنوان، شرح یا صورتجلسه...' : 'جستجو در عنوان یا شرح اقدام...'} className="h-10 w-full rounded-xl border border-slate-700/80 bg-slate-950/55 pr-9 pl-3 text-xs text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-violet-500/50" /></label>
+          {viewLabel && <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] px-3 py-2 text-[10px] text-violet-200"><span>فیلتر فعال: {viewLabel}</span><button type="button" onClick={clearFilters} className="text-violet-300 hover:text-white">نمایش همه</button></div>}
+
+          <div className={`mb-3 grid gap-2 ${tab === 'minutes' ? 'md:grid-cols-[minmax(0,1fr)_180px_auto]' : 'md:grid-cols-[minmax(0,1fr)_180px_220px_auto]'}`}>
+            <label className="relative block"><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') applyFilters(); }} placeholder={tab === 'minutes' ? 'جستجو در عنوان یا واحد صورت‌جلسه...' : tab === 'decisions' ? 'جستجو در عنوان، شرح یا صورتجلسه...' : 'جستجو در عنوان یا شرح اقدام...'} className="h-10 w-full rounded-xl border border-slate-700/80 bg-slate-950/55 pr-9 pl-3 text-xs text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-violet-500/50" /></label>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-xl border border-slate-700/80 bg-slate-950/55 px-3 text-xs text-slate-300 outline-none focus:border-violet-500/50"><option value="">همه وضعیت‌ها</option>{statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-            <select value={personFilter} onChange={(event) => setPersonFilter(event.target.value)} className="h-10 rounded-xl border border-slate-700/80 bg-slate-950/55 px-3 text-xs text-slate-300 outline-none focus:border-violet-500/50"><option value="">همه افراد زیرمجموعه</option>{people.map((person) => <option key={person.user_id} value={person.user_id}>{person.full_name} — {person.unit_name}</option>)}</select>
+            {tab !== 'minutes' && <select value={personFilter} onChange={(event) => setPersonFilter(event.target.value)} className="h-10 rounded-xl border border-slate-700/80 bg-slate-950/55 px-3 text-xs text-slate-300 outline-none focus:border-violet-500/50"><option value="">همه افراد زیرمجموعه</option>{people.map((person) => <option key={person.user_id} value={person.user_id}>{person.full_name} — {person.unit_name}</option>)}</select>}
             <div className="flex gap-2"><button type="button" onClick={applyFilters} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-violet-600 px-3 text-[11px] font-semibold text-white transition hover:bg-violet-500"><Filter className="h-3.5 w-3.5" />اعمال</button><button type="button" onClick={clearFilters} className="h-10 rounded-xl border border-slate-700 px-3 text-[11px] text-slate-500 transition hover:text-slate-300">پاک</button></div>
           </div>
 
           {!canViewActive ? <SmallEmpty>برای مشاهده {tab === 'decisions' ? 'مصوبات' : 'اقدامات'} زیرمجموعه Permission لازم به این سمت داده نشده است.</SmallEmpty> : activeRows.length === 0 ? <SmallEmpty>موردی مطابق فیلترهای انتخابی در حوزه مدیریتی شما وجود ندارد.</SmallEmpty> : (
             <div className="max-h-[520px] space-y-2 overflow-y-auto pl-1">
-              {tab === 'decisions' ? decisions.map((item) => (
+              {tab === 'minutes' ? minutes.map((item) => (
+                <button type="button" key={item.id} onClick={() => onOpenMinute?.(item.id)} className="group block w-full rounded-xl border border-slate-800/80 bg-slate-950/30 p-3 text-right transition hover:border-blue-500/35 hover:bg-slate-900/55 focus:outline-none focus:ring-2 focus:ring-blue-400/30">
+                  <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><p className="line-clamp-2 text-xs font-semibold leading-5 text-slate-200">{item.meeting_title_snapshot || 'صورت‌جلسه بدون عنوان'}</p><StatusBadge status={item.status} kind="minutes" /></div><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500"><span className="inline-flex items-center gap-1"><UsersRound className="h-3 w-3" />{item.unit_name}</span><span>تاریخ جلسه: {formatDate(item.meeting_date_snapshot)}</span>{item.secretary_name_snapshot && <span>دبیر: {item.secretary_name_snapshot}</span>}</div></div><ChevronLeft className="mt-1 h-4 w-4 flex-shrink-0 text-slate-700 transition group-hover:text-blue-400" /></div>
+                </button>
+              )) : tab === 'decisions' ? decisions.map((item) => (
                 <button type="button" key={item.id} onClick={() => void openDecision(item.id)} className="group block w-full rounded-xl border border-slate-800/80 bg-slate-950/30 p-3 text-right transition hover:border-violet-500/35 hover:bg-slate-900/55 focus:outline-none focus:ring-2 focus:ring-violet-400/30">
                   <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><p className="line-clamp-2 text-xs font-semibold leading-5 text-slate-200">{item.title}</p><StatusBadge status={item.status} kind="decisions" /></div><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500"><span className="inline-flex items-center gap-1"><UsersRound className="h-3 w-3" />{item.unit_name}</span><span className="inline-flex items-center gap-1"><UserRound className="h-3 w-3" />{item.owner_name || 'بدون مسئول'}</span><span>مهلت: {formatDate(item.due_date)}</span>{item.overdue && <span className="text-rose-300">عقب‌مانده</span>}{item.open_obstacle_count > 0 && <span className="text-amber-300">{nf.format(item.open_obstacle_count)} مانع باز</span>}</div><ProgressBar value={item.progress_percent} /></div><ChevronLeft className="mt-1 h-4 w-4 flex-shrink-0 text-slate-700 transition group-hover:text-violet-400" /></div>
                 </button>
