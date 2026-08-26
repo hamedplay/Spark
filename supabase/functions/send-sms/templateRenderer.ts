@@ -14,7 +14,7 @@ export type SystemSmsRenderResult =
   | { ok: true; text: string; templateId: string; context: Record<string, unknown> }
   | { ok: false; errorCode: "SMS_TEMPLATE_NOT_FOUND" | "SMS_TEMPLATE_CONTEXT_MISSING"; error: string; missing?: string[] };
 
-const OPTIONAL_PLACEHOLDERS = new Set(["join_link", "location_part"]);
+const OPTIONAL_PLACEHOLDERS = new Set(["join_link", "location_part", "meeting_time_part"]);
 const DATE_PLACEHOLDERS = new Set(["meeting_date", "event_date", "due_date", "decision_due_date", "followup_date"]);
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
@@ -94,13 +94,15 @@ async function enrichContext(input: SystemSmsRenderInput): Promise<Record<string
       const date = formatTemplateDate(meeting.request_date);
       const start = nonEmpty(meeting.start_time);
       const end = nonEmpty(meeting.end_time);
+      const meetingTime = buildMeetingTime(start, end);
       const location = nonEmpty(meeting.location);
 
       if (!nonEmpty(context.meeting_subject) && subject) context.meeting_subject = subject;
       if (!nonEmpty(context.meeting_date) && date) context.meeting_date = date;
       if (!nonEmpty(context.start_time) && start) context.start_time = start;
       if (!nonEmpty(context.end_time) && end) context.end_time = end;
-      if (!nonEmpty(context.meeting_time)) context.meeting_time = buildMeetingTime(start, end);
+      if (!nonEmpty(context.meeting_time)) context.meeting_time = meetingTime;
+      if (!nonEmpty(context.meeting_time_part)) context.meeting_time_part = meetingTime ? ` ساعت ${meetingTime}` : "";
       if (!nonEmpty(context.location) && location) context.location = location;
       if (!nonEmpty(context.location_part)) context.location_part = location ? ` در محل ${location}` : "";
 
