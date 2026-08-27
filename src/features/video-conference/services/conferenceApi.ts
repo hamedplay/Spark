@@ -1,8 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../../../lib/supabase';
+import type { Database } from '../../../types/supabase';
+import type { ConferenceRole, HostAction } from '../types/conference.types';
 
-export type ConferenceRole = 'host' | 'admin' | 'moderator' | 'member' | 'guest';
-export type HostAction = 'remove' | 'mute' | 'promote' | 'demote' | 'lock' | 'unlock' | 'end' | 'lower-hand';
+export type { ConferenceRole, HostAction } from '../types/conference.types';
+
+type ConferenceClient = SupabaseClient<Database>;
 
 export interface LiveKitTokenResponse {
   token: string;
@@ -18,7 +21,7 @@ export type LiveKitJoinState =
   | { status: 'waiting' }
   | { status: 'rejected'; reason: string };
 
-export async function requestLiveKitToken(roomId: string, client: SupabaseClient<any> = supabase): Promise<LiveKitJoinState> {
+export async function requestLiveKitToken(roomId: string, client: ConferenceClient = supabase): Promise<LiveKitJoinState> {
   const { data, error } = await client.functions.invoke('conference-livekit-token', { body: { roomId } });
 
   if (!error && data?.token && data?.serverUrl) return { status: 'ready', data: data as LiveKitTokenResponse };
@@ -56,14 +59,14 @@ export async function resolveWaitingParticipant(roomId: string, userId: string, 
   return data;
 }
 
-export async function setRaiseHand(roomId: string, raised: boolean, client: SupabaseClient<any> = supabase) {
+export async function setRaiseHand(roomId: string, raised: boolean, client: ConferenceClient = supabase) {
   const { data, error } = await client.rpc('set_livekit_raise_hand', { p_room_id: roomId, p_raised: raised });
   if (error) throw error;
   if (!data?.ok) throw new Error(String(data?.reason || 'RAISE_HAND_FAILED'));
   return data;
 }
 
-export async function runHostAction(roomId: string, action: HostAction, targetUserId?: string, client: SupabaseClient<any> = supabase) {
+export async function runHostAction(roomId: string, action: HostAction, targetUserId?: string, client: ConferenceClient = supabase) {
   const { data, error } = await client.functions.invoke('conference-host-control', {
     body: { roomId, action, targetUserId },
   });
@@ -71,7 +74,7 @@ export async function runHostAction(roomId: string, action: HostAction, targetUs
   return data;
 }
 
-export async function setRecording(roomId: string, action: 'start' | 'stop', client: SupabaseClient<any> = supabase) {
+export async function setRecording(roomId: string, action: 'start' | 'stop', client: ConferenceClient = supabase) {
   const { data, error } = await client.functions.invoke('conference-recording', { body: { roomId, action } });
   if (error || !data?.ok) throw new Error(String(data?.error || error?.message || 'RECORDING_FAILED'));
   return data;

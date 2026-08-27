@@ -1,0 +1,206 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Room, RoomEvent } from 'livekit-client';
+import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
+import { requestLiveKitToken } from '../services/conferenceApi';
+import { publishConferenceReaction, setConferenceCamera, setConferenceMicrophone } from '../services/conferenceMedia';
+import { useConferenceState } from './useConferenceState';
+
+const ERROR_LABELS: Record<string, string> = {
+  ROOM_FULL: 'ظرفیت جلسه تکمیل شده است.',
+  ROOM_LOCKED: 'جلسه قفل شده است.',
+  NOT_AUTHORIZED: 'اجازه ورود به این جلسه را ندارید.',
+  BANNED: 'دسترسی شما به این جلسه مسدود شده است.',
+  REJECTED: 'درخواست ورود شما رد شده است.',
+  CONFERENCE_NOT_CONFIGURED: 'زیرساخت ویدیوکنفرانس هنوز پیکربندی نشده است.',
+  TOKEN_FAILED: 'دریافت مجوز اتصال ناموفق بود.',
+};
+
+interface Params {
+  roomId: string;
+  currentUserName: string;
+  localStream: MediaStream;
+  client: ConferenceSupabaseClient;
+}
+
+export function useLiveKitRoom({ roomId, currentUserName, localStream, client }: Params) {
+  const roomRef = useRef<Room | null>(null);
+  const connectingRef = useRef(false);
+  const {
+    uiState, setUiState, errorMessage, setErrorMessage, revision, role, setRole, quality, setQuality,
+    activeSpeakerIdentity, setActiveSpeakerIdentity, reaction, refresh, showReaction, fail,
+  } = useConferenceState();
+  const [micEnabled, setMicEnabled] = useState(() => localStream.getAudioTracks().some((track) => track.enabled));
+  const [cameraEnabled, setCameraEnabled] = useState(() => localStream.getVideoTracks().some((track) => track.enabled));
+
+  const connect = useCallback(async () => {
+    if (connectingRef.current) return;
+    connectingRef.current = true;
+    setUiState('joining');
+    setErrorMessage('');
+
+    try {
+      const join = await requestLiveKitToken(roomId, client);
+      if (join.status === 'waiting') {
+        setUiState('waiting');
+        return;
+      }
+      if (join.status === 'rejected') {
+        fail(ERROR_LABELS[join.reason.toUpperCase()] || 'ورود به جلسه ناموفق بود.');
+        return;
+      }
+
+      setRole(join.data.role);
+      const nextRoom = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        stopLocalTrackOnUnpublish: true,
+      });
+      roomRef.current = nextRoom;
+
+      // Preserve the original ordering: listeners are installed before connect so
+      // participant/track events emitted during the handshake are not missed.
+      nextRoom.on(RoomEvent.ParticipantConnected, refresh);
+      nextRoom.on(RoomEvent.ParticipantDisconnected, refresh);
+      nextRoom.on(RoomEvent.TrackSubscribed, refresh);
+      nextRoom.on(RoomEvent.TrackUnsubscribed, refresh);
+      nextRoom.on(RoomEvent.TrackMuted, refresh);
+      nextRoom.on(RoomEvent.TrackUnmuted, refresh);
+      nextRoom.on(RoomEvent.Reconnecting, () => setUiState('reconnecting'));
+      nextRoom.on(RoomEvent.Reconnected, () => setUiState('connected'));
+      nextRoom.on(RoomEvent.Disconnected, () => setUiState((current) => current === 'failed' ? current : 'failed'));
+      nextRoom.on(RoomEvent.ActiveSpeakersChanged, (participants) => {
+        setActiveSpeakerIdentity(participants[0]?.identity ?? null);
+      });
+      nextRoom.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+        if (participant.identity === nextRoom.localParticipant.identity) setQuality(quality);
+      });
+      nextRoom.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
+        if (topic !== 'spark-reaction') return;
+        try {
+          const value = JSON.parse(new TextDecoder().decode(payload));
+          if (typeof value?.emoji === 'string') showReaction(value.emoji);
+        } catch {
+          // Malformed ephemeral data is intentionally ignored.
+        }
+      });
+
+      const audioSettings = localStream.getAudioTracks()[0]?.getSettings();
+      const videoSettings = localStream.getVideoTracks()[0]?.getSettings();
+      localStream.getTracks().forEach((track) => track.stop());
+
+      await nextRoom.connect(join.data.serverUrl, join.data.token, { autoSubscribe: true });
+      nextRoom.localParticipant.setName(currentUserName);
+
+      if (micEnabled) {
+        await nextRoom.localParticipant.setMicrophoneEnabled(
+          true,
+          audioSettings?.deviceId ? { deviceId: audioSettings.deviceId } : undefined,
+        );
+      }
+      if (cameraEnabled) {
+        await nextRoom.localParticipant.setCameraEnabled(
+          true,
+          videoSettings?.deviceId ? {
+            deviceId: videoSettings.deviceId,
+            resolution: { width: 1920, height: 1080, frameRate: 30 },
+          } : undefined,
+          { simulcast: true },
+        );
+      }
+      setUiState('connected');
+      refresh();
+    } catch (error) {
+      console.error('[VideoConference][LiveKit] connect failed', error);
+      fail('اتصال رسانه‌ای برقرار نشد. تنظیمات LiveKit/TURN و شبکه را بررسی کنید.');
+    } finally {
+      connectingRef.current = false;
+    }
+  }, [cameraEnabled, client, currentUserName, fail, localStream, micEnabled, refresh, roomId, setActiveSpeakerIdentity, setErrorMessage, setQuality, setRole, setUiState, showReaction]);
+
+  useEffect(() => {
+    void connect();
+    return () => {
+      const current = roomRef.current;
+      roomRef.current = null;
+      current?.removeAllListeners();
+      current?.disconnect();
+      localStream.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && roomRef.current && uiState === 'reconnecting') refresh();
+    };
+    const handleOnline = () => {
+      if (uiState === 'failed' && !roomRef.current) void connect();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [connect, refresh, uiState]);
+
+  const toggleMic = useCallback(async () => {
+    const current = roomRef.current;
+    if (!current) return;
+    const next = !micEnabled;
+    try {
+      await setConferenceMicrophone(current, next);
+      setMicEnabled(next);
+    } catch (error) {
+      console.error('[VideoConference] microphone toggle failed', error);
+    }
+  }, [micEnabled]);
+
+  const toggleCamera = useCallback(async () => {
+    const current = roomRef.current;
+    if (!current) return;
+    const next = !cameraEnabled;
+    try {
+      await setConferenceCamera(current, next);
+      setCameraEnabled(next);
+    } catch (error) {
+      console.error('[VideoConference] camera toggle failed', error);
+    }
+  }, [cameraEnabled]);
+
+  const sendReaction = useCallback(async (emoji: string) => {
+    const current = roomRef.current;
+    if (!current) return;
+    try {
+      await publishConferenceReaction(current, emoji);
+      showReaction(emoji);
+    } catch (error) {
+      console.error('[VideoConference] reaction send failed', error);
+    }
+  }, [showReaction]);
+
+  const disconnect = useCallback(() => {
+    const current = roomRef.current;
+    roomRef.current = null;
+    current?.removeAllListeners();
+    current?.disconnect();
+  }, []);
+
+  return {
+    room: roomRef.current,
+    connect,
+    disconnect,
+    micEnabled,
+    cameraEnabled,
+    toggleMic,
+    toggleCamera,
+    sendReaction,
+    uiState,
+    errorMessage,
+    revision,
+    role,
+    quality,
+    activeSpeakerIdentity,
+    reaction,
+    fail,
+  };
+}
