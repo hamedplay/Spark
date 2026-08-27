@@ -1,0 +1,19 @@
+name: Temporary mobile week hour column validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-mobile-week-hour-column.yml'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - name: Production build
+        run: npm run build
+      - name: Validate fixed hour column
+        run: |
+          test "$(grep -c "insetInlineStart: 0" src/components/Calendar/WeekView.tsx)" -ge 3
+          grep -q "sticky z-40" src/components/Calendar/WeekView.tsx
+          grep -q "minWidth: scrollableMobileWeek ? '720px'" src/components/Calendar/WeekView.tsx
