@@ -11,11 +11,18 @@ import { ConferenceParticipantsPanel } from '../participants/ConferenceParticipa
 import { ConferenceToolsBar } from './ConferenceToolsBar';
 import { MediaDevicesPanel } from './MediaDevicesPanel';
 
-export function ConferenceTools({ room, roomId, currentUserId, currentUserName, role, onEnded }: ConferenceToolsProps) {
+export function ConferenceTools({
+  room,
+  roomId,
+  currentUserId,
+  currentUserName,
+  authorization,
+  onEnded,
+}: ConferenceToolsProps) {
   const client = useConferenceClient();
   const [panel, setPanel] = useState<ConferencePanel>(null);
-  const chat = useConferenceChat({ client, roomId, currentUserId, currentUserName, role });
-  const moderation = useConferenceModeration({ client, roomId, currentUserId, role, onEnded });
+  const chat = useConferenceChat({ client, roomId, currentUserId, currentUserName, authorization });
+  const moderation = useConferenceModeration({ client, roomId, currentUserId, authorization, onEnded });
   const devices = useMediaDevices(room);
 
   useConferenceRealtime({
@@ -40,10 +47,12 @@ export function ConferenceTools({ room, roomId, currentUserId, currentUserName, 
         raised={moderation.raised}
         raisedCount={moderation.raisedParticipants.length}
         busy={moderation.busy}
-        isManager={moderation.isManager}
         recording={Boolean(moderation.recording)}
         locked={moderation.locked}
-        role={role}
+        canStartRecording={moderation.canStartRecording}
+        canStopRecording={moderation.canStopRecording}
+        canLockRoom={moderation.canLockRoom}
+        canEndMeeting={moderation.canEndMeeting}
         onPanelChange={setPanel}
         onToggleRaise={moderation.toggleRaise}
         onToggleRecording={moderation.toggleRecording}
@@ -58,8 +67,18 @@ export function ConferenceTools({ room, roomId, currentUserId, currentUserName, 
             <button onClick={() => setPanel(null)} className="h-9 rounded-lg px-3 text-xs text-slate-300 hover:bg-white/10">بستن</button>
           </div>
 
-          {panel === 'chat' && <ConferenceChatPanel messages={chat.messages} message={chat.message} currentUserId={currentUserId} onMessageChange={chat.setMessage} onSend={chat.sendMessage} />}
-          {panel === 'participants' && <ConferenceParticipantsPanel participants={moderation.participants} currentUserId={currentUserId} isManager={moderation.isManager} onHostAction={moderation.hostAction} />}
+          {panel === 'chat' && <ConferenceChatPanel messages={chat.messages} message={chat.message} currentUserId={currentUserId} canSend={chat.canSend} onMessageChange={chat.setMessage} onSend={chat.sendMessage} />}
+          {panel === 'participants' && (
+            <ConferenceParticipantsPanel
+              participants={moderation.participants}
+              currentUserId={currentUserId}
+              canMuteOthers={moderation.canMuteOthers}
+              canRemoveParticipants={moderation.canRemoveParticipants}
+              canManageRoles={moderation.canManageRoles}
+              onHostAction={moderation.hostAction}
+              onRoleChange={moderation.changeRole}
+            />
+          )}
           {panel === 'devices' && (
             <MediaDevicesPanel
               audioInputs={devices.audioInputs}

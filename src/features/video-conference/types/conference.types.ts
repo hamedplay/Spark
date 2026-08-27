@@ -6,6 +6,60 @@ export type ConferenceUiState = 'joining' | 'waiting' | 'connected' | 'reconnect
 export type ConferencePanel = 'chat' | 'participants' | 'devices' | null;
 export type ConferenceParticipant = LocalParticipant | RemoteParticipant;
 
+export const CONFERENCE_RBAC_ROLES = [
+  'OWNER',
+  'HOST',
+  'CO_HOST',
+  'MODERATOR',
+  'PRESENTER',
+  'PARTICIPANT',
+  'VIEWER',
+] as const;
+
+export type ConferenceRbacRole = typeof CONFERENCE_RBAC_ROLES[number];
+
+export const CONFERENCE_PERMISSIONS = [
+  'BAN_PARTICIPANT',
+  'CREATE_POLL',
+  'DELETE_CHAT',
+  'DISABLE_CAMERA',
+  'DISABLE_MIC',
+  'END_MEETING',
+  'JOIN_ROOM',
+  'LOCK_ROOM',
+  'MANAGE_BREAKOUTS',
+  'MANAGE_CHAT',
+  'MANAGE_POLLS',
+  'MANAGE_ROLES',
+  'MANAGE_TIMER',
+  'MANAGE_WAITING_ROOM',
+  'MANAGE_WHITEBOARD',
+  'MUTE_OTHERS',
+  'PIN_PARTICIPANT',
+  'PUBLISH_CAMERA',
+  'PUBLISH_MIC',
+  'PUBLISH_SCREEN',
+  'REMOVE_PARTICIPANT',
+  'SEND_CHAT',
+  'SEND_PRIVATE_CHAT',
+  'SHARE_FILE',
+  'START_BREAK',
+  'START_RECORDING',
+  'STOP_RECORDING',
+  'SUBSCRIBE_MEDIA',
+  'TRANSFER_OWNERSHIP',
+  'USE_WHITEBOARD',
+  'VOTE_POLL',
+] as const;
+
+export type ConferencePermission = typeof CONFERENCE_PERMISSIONS[number];
+
+export interface ConferenceAuthorization {
+  loaded: boolean;
+  role: ConferenceRbacRole | null;
+  permissions: ConferencePermission[];
+}
+
 export interface ConferenceRoomShape {
   id: string;
   name: string;
@@ -35,7 +89,7 @@ export interface ConferenceMessageRow {
 export interface ParticipantRow {
   user_id: string;
   display_name: string;
-  role: string;
+  role: ConferenceRbacRole;
   is_muted: boolean;
   is_hand_raised: boolean;
   hand_raised_at: string | null;
@@ -58,7 +112,7 @@ export interface ConferenceToolsProps {
   roomId: string;
   currentUserId: string;
   currentUserName: string;
-  role: ConferenceRole;
+  authorization: ConferenceAuthorization;
   onEnded: () => void;
 }
 

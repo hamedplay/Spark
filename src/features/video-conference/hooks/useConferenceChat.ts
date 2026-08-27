@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import { loadConferenceMessages } from '../services/conferenceRealtime';
-import type { ConferenceMessageRow, ConferenceRole } from '../types/conference.types';
+import type { ConferenceAuthorization, ConferenceMessageRow } from '../types/conference.types';
+import { conferenceMessageRole, hasConferencePermission } from '../utils/conferencePermissions';
 
 interface Params {
   client: ConferenceSupabaseClient;
   roomId: string;
   currentUserId: string;
   currentUserName: string;
-  role: ConferenceRole;
+  authorization: ConferenceAuthorization;
 }
 
-export function useConferenceChat({ client, roomId, currentUserId, currentUserName, role }: Params) {
+export function useConferenceChat({ client, roomId, currentUserId, currentUserName, authorization }: Params) {
   const [messages, setMessages] = useState<ConferenceMessageRow[]>([]);
   const [message, setMessage] = useState('');
+  const canSend = hasConferencePermission(authorization, 'SEND_CHAT');
 
   const refreshMessages = useCallback(async () => {
     try {
@@ -27,20 +29,21 @@ export function useConferenceChat({ client, roomId, currentUserId, currentUserNa
 
   const sendMessage = useCallback(async () => {
     const body = message.trim();
-    if (!body || body.length > 4000) return;
+    if (!canSend || !body || body.length > 4000) return;
+
     setMessage('');
     const { error } = await client.from('conference_messages').insert({
       room_id: roomId,
       user_id: currentUserId,
       display_name: currentUserName.slice(0, 60),
       body,
-      role: role === 'admin' || role === 'moderator' ? role : 'user',
+      role: conferenceMessageRole(authorization.role),
     });
     if (error) {
       console.error('[VideoConference] chat send failed', error);
       setMessage(body);
     }
-  }, [client, currentUserId, currentUserName, message, role, roomId]);
+  }, [authorization.role, canSend, client, currentUserId, currentUserName, message, roomId]);
 
-  return { messages, message, setMessage, refreshMessages, sendMessage };
+  return { messages, message, setMessage, refreshMessages, sendMessage, canSend };
 }

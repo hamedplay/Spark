@@ -1,12 +1,14 @@
 import { useCallback } from 'react';
 import { Wifi } from 'lucide-react';
 import { useConferenceClient } from '../../../../components/VideoConference/conferenceClient';
+import { useConferenceAuthorization } from '../../hooks/useConferenceAuthorization';
 import { useLiveKitRoom } from '../../hooks/useLiveKitRoom';
 import { useNetworkQuality } from '../../hooks/useNetworkQuality';
 import { useParticipants } from '../../hooks/useParticipants';
 import { useScreenShare } from '../../hooks/useScreenShare';
 import { useWaitingRoom } from '../../hooks/useWaitingRoom';
 import type { ConferenceRoomShape } from '../../types/conference.types';
+import { hasConferencePermission } from '../../utils/conferencePermissions';
 import { LiveKitConferenceTools } from '../LiveKitConferenceTools';
 import { ParticipantGrid } from '../participants/ParticipantGrid';
 import { ReactionOverlay } from '../reactions/ReactionOverlay';
@@ -25,14 +27,20 @@ interface Props {
 export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUserName, localStream, onLeave }: Props) {
   const conferenceClient = useConferenceClient();
   const livekit = useLiveKitRoom({ roomId: sparkRoom.id, currentUserName, localStream, client: conferenceClient });
-  const isManager = livekit.role === 'host' || livekit.role === 'admin' || livekit.role === 'moderator';
+  const { authorization } = useConferenceAuthorization({
+    client: conferenceClient,
+    roomId: sparkRoom.id,
+    currentUserId,
+  });
+
+  const canManageWaitingRoom = hasConferencePermission(authorization, 'MANAGE_WAITING_ROOM');
   const handleAdmitted = useCallback(() => { void livekit.connect(); }, [livekit.connect]);
   const handleRejected = useCallback(() => livekit.fail('درخواست ورود شما توسط میزبان رد شد.'), [livekit.fail]);
   const waiting = useWaitingRoom({
     client: conferenceClient,
     roomId: sparkRoom.id,
     currentUserId,
-    isManager,
+    isManager: canManageWaitingRoom,
     uiState: livekit.uiState,
     onAdmitted: handleAdmitted,
     onRejected: handleRejected,
@@ -51,12 +59,8 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
     onLeave();
   };
 
-  if (livekit.uiState === 'joining') {
-    return <ConferenceRoomStatus state="joining" onLeave={onLeave} />;
-  }
-  if (livekit.uiState === 'waiting') {
-    return <ConferenceRoomStatus state="waiting" onLeave={onLeave} />;
-  }
+  if (livekit.uiState === 'joining') return <ConferenceRoomStatus state="joining" onLeave={onLeave} />;
+  if (livekit.uiState === 'waiting') return <ConferenceRoomStatus state="waiting" onLeave={onLeave} />;
   if (livekit.uiState === 'failed') {
     return <ConferenceRoomStatus state="failed" errorMessage={livekit.errorMessage} onRetry={() => void livekit.connect()} onLeave={onLeave} />;
   }
@@ -75,7 +79,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         {waiting.waitingRows.length > 0 && <span className="rounded-full bg-amber-400 px-2 py-1 text-xs font-bold text-slate-950">{waiting.waitingRows.length} در انتظار</span>}
       </header>
 
-      {waiting.waitingRows.length > 0 && isManager && <WaitingRoomList roomId={sparkRoom.id} rows={waiting.waitingRows} />}
+      {waiting.waitingRows.length > 0 && canManageWaitingRoom && <WaitingRoomList roomId={sparkRoom.id} rows={waiting.waitingRows} />}
 
       <ParticipantGrid participants={visibleParticipants} localIdentity={livekit.room?.localParticipant.identity} activeSpeakerIdentity={livekit.activeSpeakerIdentity} />
       <ReactionOverlay reaction={livekit.reaction} />
@@ -86,7 +90,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           roomId={sparkRoom.id}
           currentUserId={currentUserId}
           currentUserName={currentUserName}
-          role={livekit.role}
+          authorization={authorization}
           onEnded={() => void leave()}
         />
       )}
@@ -95,7 +99,9 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         micEnabled={livekit.micEnabled}
         cameraEnabled={livekit.cameraEnabled}
         screenEnabled={screen.screenEnabled}
-        allowScreenShare={sparkRoom.allow_screen_share !== false && typeof navigator.mediaDevices?.getDisplayMedia === 'function'}
+        allowMicrophone={hasConferencePermission(authorization, 'PUBLISH_MIC')}
+        allowCamera={hasConferencePermission(authorization, 'PUBLISH_CAMERA')}
+        allowScreenShare={hasConferencePermission(authorization, 'PUBLISH_SCREEN') && sparkRoom.allow_screen_share !== false && typeof navigator.mediaDevices?.getDisplayMedia === 'function'}
         allowReactions={sparkRoom.allow_reactions !== false}
         onToggleMic={() => void livekit.toggleMic()}
         onToggleCamera={() => void livekit.toggleCamera()}

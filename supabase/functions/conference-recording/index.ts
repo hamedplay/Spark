@@ -48,7 +48,7 @@ Deno.serve(async (req: Request) => {
     return reply(403, { error: "NOT_AUTHORIZED" });
   }
 
-  const { data: authz, error: authzError } = await userClient.rpc("authorize_livekit_recording", { p_room_id: body.roomId });
+  const { data: authz, error: authzError } = await userClient.rpc("authorize_livekit_recording", { p_room_id: body.roomId, p_action: body.action });
   if (authzError || !authz?.ok) return reply(403, { error: String(authz?.reason || "NOT_AUTHORIZED").toUpperCase() });
 
   const egress = new EgressClient(livekitUrl, livekitApiKey, livekitApiSecret);

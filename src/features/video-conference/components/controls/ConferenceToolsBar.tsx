@@ -1,5 +1,5 @@
 import { Hand, Lock, MessageCircle, Radio, Settings2, Square, Unlock, Users } from 'lucide-react';
-import type { ConferencePanel, ConferenceRole } from '../../types/conference.types';
+import type { ConferencePanel } from '../../types/conference.types';
 
 interface Props {
   panel: ConferencePanel;
@@ -7,10 +7,12 @@ interface Props {
   raised: boolean;
   raisedCount: number;
   busy: string | null;
-  isManager: boolean;
   recording: boolean;
   locked: boolean;
-  role: ConferenceRole;
+  canStartRecording: boolean;
+  canStopRecording: boolean;
+  canLockRoom: boolean;
+  canEndMeeting: boolean;
   onPanelChange: (panel: ConferencePanel) => void;
   onToggleRaise: () => Promise<void>;
   onToggleRecording: () => Promise<void>;
@@ -24,10 +26,12 @@ export function ConferenceToolsBar({
   raised,
   raisedCount,
   busy,
-  isManager,
   recording,
   locked,
-  role,
+  canStartRecording,
+  canStopRecording,
+  canLockRoom,
+  canEndMeeting,
   onPanelChange,
   onToggleRaise,
   onToggleRecording,
@@ -35,6 +39,7 @@ export function ConferenceToolsBar({
   onEnd,
 }: Props) {
   const togglePanel = (next: Exclude<ConferencePanel, null>) => onPanelChange(panel === next ? null : next);
+  const canToggleRecording = recording ? canStopRecording : canStartRecording;
 
   return (
     <div className="absolute bottom-[88px] left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/10 bg-slate-900/90 p-1.5 shadow-xl backdrop-blur" dir="rtl">
@@ -42,9 +47,9 @@ export function ConferenceToolsBar({
       <button onClick={() => void onToggleRaise()} disabled={busy === 'raise'} className={`flex h-11 w-11 items-center justify-center rounded-xl ${raised ? 'bg-amber-500 text-slate-950' : 'hover:bg-white/10'}`} aria-label={raised ? 'پایین آوردن دست' : 'بالا بردن دست'}><Hand className="h-5 w-5" /></button>
       <button onClick={() => togglePanel('participants')} className="relative flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label="شرکت‌کنندگان"><Users className="h-5 w-5" />{raisedCount > 0 && <span className="absolute -left-1 -top-1 rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-slate-950">{raisedCount}</span>}</button>
       <button onClick={() => togglePanel('devices')} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label="انتخاب دستگاه"><Settings2 className="h-5 w-5" /></button>
-      {isManager && <button onClick={() => void onToggleRecording()} disabled={busy === 'recording'} className={`flex h-11 w-11 items-center justify-center rounded-xl ${recording ? 'bg-rose-600' : 'hover:bg-white/10'}`} aria-label={recording ? 'توقف ضبط' : 'شروع ضبط'}>{recording ? <Square className="h-4 w-4 fill-current" /> : <Radio className="h-5 w-5" />}</button>}
-      {isManager && <button onClick={() => void onToggleLock()} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label={locked ? 'باز کردن قفل جلسه' : 'قفل جلسه'}>{locked ? <Unlock className="h-5 w-5" /> : <Lock className="h-5 w-5" />}</button>}
-      {role === 'host' && <button onClick={() => void onEnd()} className="flex h-11 items-center justify-center rounded-xl bg-rose-700 px-3 text-xs font-bold" aria-label="پایان جلسه برای همه">پایان برای همه</button>}
+      {canToggleRecording && <button onClick={() => void onToggleRecording()} disabled={busy === 'recording'} className={`flex h-11 w-11 items-center justify-center rounded-xl ${recording ? 'bg-rose-600' : 'hover:bg-white/10'}`} aria-label={recording ? 'توقف ضبط' : 'شروع ضبط'}>{recording ? <Square className="h-4 w-4 fill-current" /> : <Radio className="h-5 w-5" />}</button>}
+      {canLockRoom && <button onClick={() => void onToggleLock()} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label={locked ? 'باز کردن قفل جلسه' : 'قفل جلسه'}>{locked ? <Unlock className="h-5 w-5" /> : <Lock className="h-5 w-5" />}</button>}
+      {canEndMeeting && <button onClick={() => void onEnd()} className="flex h-11 items-center justify-center rounded-xl bg-rose-700 px-3 text-xs font-bold" aria-label="پایان جلسه برای همه">پایان برای همه</button>}
     </div>
   );
 }

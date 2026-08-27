@@ -5,11 +5,12 @@ interface Props {
   messages: ConferenceMessageRow[];
   message: string;
   currentUserId: string;
+  canSend: boolean;
   onMessageChange: (value: string) => void;
   onSend: () => Promise<void>;
 }
 
-export function ConferenceChatPanel({ messages, message, currentUserId, onMessageChange, onSend }: Props) {
+export function ConferenceChatPanel({ messages, message, currentUserId, canSend, onMessageChange, onSend }: Props) {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     void onSend();
@@ -28,8 +29,15 @@ export function ConferenceChatPanel({ messages, message, currentUserId, onMessag
         ))}
       </div>
       <form onSubmit={submit} className="flex gap-2 border-t border-white/10 p-3">
-        <input value={message} onChange={(event: ChangeEvent<HTMLInputElement>) => onMessageChange(event.target.value)} maxLength={4000} placeholder="پیام…" className="min-h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950 px-3 text-sm outline-none focus:border-violet-500" />
-        <button type="submit" className="min-h-11 rounded-xl bg-violet-600 px-4 text-xs font-bold">ارسال</button>
+        <input
+          value={message}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => onMessageChange(event.target.value)}
+          maxLength={4000}
+          disabled={!canSend}
+          placeholder={canSend ? 'پیام…' : 'مجوز ارسال پیام ندارید'}
+          className="min-h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950 px-3 text-sm outline-none focus:border-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        <button type="submit" disabled={!canSend} className="min-h-11 rounded-xl bg-violet-600 px-4 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50">ارسال</button>
       </form>
     </div>
   );

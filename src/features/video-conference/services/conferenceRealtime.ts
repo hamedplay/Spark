@@ -12,11 +12,9 @@ export async function loadConferenceMessages(client: ConferenceSupabaseClient, r
 }
 
 export async function loadConferenceParticipants(client: ConferenceSupabaseClient, roomId: string): Promise<ParticipantRow[]> {
-  const { data, error } = await client.from('conference_participants')
-    .select('user_id,display_name,role,is_muted,is_hand_raised,hand_raised_at,status')
-    .eq('room_id', roomId)
-    .eq('status', 'joined')
-    .order('hand_raised_at', { ascending: true, nullsFirst: false });
+  const { data, error } = await client.rpc('get_conference_participants_rbac', {
+    p_room_id: roomId,
+  });
   if (error) throw error;
   return (data || []) as ParticipantRow[];
 }

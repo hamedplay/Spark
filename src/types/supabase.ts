@@ -3003,6 +3003,36 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      get_my_conference_authorization: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          role?: string | null;
+          permissions?: string[];
+        };
+      };
+      get_conference_participants_rbac: {
+        Args: { p_room_id: string };
+        Returns: {
+          user_id: string;
+          display_name: string;
+          role: string;
+          is_muted: boolean;
+          is_hand_raised: boolean;
+          hand_raised_at: string | null;
+          status: string;
+        }[];
+      };
+      set_conference_participant_role: {
+        Args: { p_room_id: string; p_target_user_id: string; p_role: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          role?: string;
+          permissions?: string[];
+        };
+      };
       get_all_users: {
         Args: Record<PropertyKey, never>;
         Returns: {

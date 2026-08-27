@@ -1,24 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
+import { setConferenceParticipantRole } from '../services/conferenceAuthorization';
 import { runHostAction, setRaiseHand, setRecording } from '../services/conferenceApi';
 import { loadConferenceParticipants, loadConferenceRoomState } from '../services/conferenceRealtime';
-import type { ConferenceRole, HostAction, ParticipantRow, RecordingRow } from '../types/conference.types';
+import type {
+  ConferenceAuthorization,
+  ConferenceRbacRole,
+  HostAction,
+  ParticipantRow,
+  RecordingRow,
+} from '../types/conference.types';
+import { hasConferencePermission } from '../utils/conferencePermissions';
 
 interface Params {
   client: ConferenceSupabaseClient;
   roomId: string;
   currentUserId: string;
-  role: ConferenceRole;
+  authorization: ConferenceAuthorization;
   onEnded: () => void;
 }
 
-export function useConferenceModeration({ client, roomId, currentUserId, role, onEnded }: Params) {
+export function useConferenceModeration({ client, roomId, currentUserId, authorization, onEnded }: Params) {
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
   const [raised, setRaised] = useState(false);
   const [locked, setLocked] = useState(false);
   const [recording, setRecordingState] = useState<RecordingRow | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const isManager = role === 'host' || role === 'admin' || role === 'moderator';
 
   const refreshParticipants = useCallback(async () => {
     try {
@@ -81,6 +88,18 @@ export function useConferenceModeration({ client, roomId, currentUserId, role, o
     }
   }, [client, onEnded, refreshParticipants, refreshRoomState, roomId]);
 
+  const changeRole = useCallback(async (targetUserId: string, role: ConferenceRbacRole) => {
+    setBusy(`role:${targetUserId}`);
+    try {
+      await setConferenceParticipantRole(client, roomId, targetUserId, role);
+      await refreshParticipants();
+    } catch (error) {
+      console.error('[VideoConference] role change failed', { targetUserId, role, error });
+    } finally {
+      setBusy(null);
+    }
+  }, [client, refreshParticipants, roomId]);
+
   const toggleRecording = useCallback(async () => {
     setBusy('recording');
     try {
@@ -99,12 +118,19 @@ export function useConferenceModeration({ client, roomId, currentUserId, role, o
     locked,
     recording,
     busy,
-    isManager,
     raisedParticipants,
     refreshParticipants,
     refreshRoomState,
     toggleRaise,
     hostAction,
+    changeRole,
     toggleRecording,
+    canMuteOthers: hasConferencePermission(authorization, 'MUTE_OTHERS'),
+    canRemoveParticipants: hasConferencePermission(authorization, 'REMOVE_PARTICIPANT'),
+    canManageRoles: hasConferencePermission(authorization, 'MANAGE_ROLES'),
+    canStartRecording: hasConferencePermission(authorization, 'START_RECORDING'),
+    canStopRecording: hasConferencePermission(authorization, 'STOP_RECORDING'),
+    canLockRoom: hasConferencePermission(authorization, 'LOCK_ROOM'),
+    canEndMeeting: hasConferencePermission(authorization, 'END_MEETING'),
   };
 }

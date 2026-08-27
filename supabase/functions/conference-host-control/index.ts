@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
   const { data: accessState, error: accessError } = await userClient.rpc("get_my_auth_access_state");
   if (accessError || !accessState || accessState.access_level !== "FULL") return reply(403, { error: "NOT_AUTHORIZED" });
 
-  const { data: authz, error: authzError } = await userClient.rpc("authorize_livekit_host_action", { p_room_id: body.roomId, p_target_user_id: body.targetUserId ?? null });
+  const { data: authz, error: authzError } = await userClient.rpc("authorize_livekit_host_action", { p_room_id: body.roomId, p_target_user_id: body.targetUserId ?? null, p_action: body.action });
   if (authzError || !authz?.ok) return reply(403, { error: String(authz?.reason || "FORBIDDEN").toUpperCase() });
 
   const roomName = String(authz.livekit_room_name);
@@ -75,7 +75,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (body.action === "promote" || body.action === "demote") {
-      const nextRole = body.action === "promote" ? "admin" : "member";
+      const nextRole = body.action === "promote" ? "CO_HOST" : "PARTICIPANT";
       const { data, error } = await userClient.rpc("set_conference_participant_role", { p_room_id: body.roomId, p_target_user_id: body.targetUserId, p_role: nextRole });
       if (error || !data?.ok) return reply(403, { error: String(data?.reason || "ROLE_CHANGE_FAILED").toUpperCase() });
       await roomService.updateParticipant(roomName, body.targetUserId!, { metadata: JSON.stringify({ role: nextRole }), permission: { canPublish: true, canSubscribe: true, canPublishData: true } });
@@ -84,7 +84,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (body.action === "end") {
-      if (authz.role !== "host") return reply(403, { error: "HOST_ONLY" });
       const egress = new EgressClient(livekitUrl, livekitApiKey, livekitApiSecret);
       const { data: activeRecordings } = await service.from("conference_recordings").select("id,provider_egress_id").eq("room_id", body.roomId).in("status", ["starting", "active", "stopping"]);
       for (const recording of activeRecordings || []) {
