@@ -2272,6 +2272,72 @@ export type Database = {
           }
         ];
       };
+      conference_moderator_messages: {
+        Row: {
+          id: string;
+          room_id: string;
+          sender_id: string;
+          sender_name: string;
+          body: string;
+          reply_to_id: string | null;
+          reply_to_body: string | null;
+          reply_to_sender_name: string | null;
+          is_deleted: boolean;
+          edited_at: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          sender_id: string;
+          sender_name?: string;
+          body?: string;
+          reply_to_id?: string | null;
+          reply_to_body?: string | null;
+          reply_to_sender_name?: string | null;
+          is_deleted?: boolean;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          sender_id?: string;
+          sender_name?: string;
+          body?: string;
+          reply_to_id?: string | null;
+          reply_to_body?: string | null;
+          reply_to_sender_name?: string | null;
+          is_deleted?: boolean;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'conference_moderator_messages_room_id_fkey';
+            columns: ['room_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_rooms';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'conference_moderator_messages_reply_to_id_fkey';
+            columns: ['reply_to_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_moderator_messages';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       conference_polls: {
         Row: {
           id: string;
@@ -3403,6 +3469,34 @@ export type Database = {
           active?: boolean;
           remaining?: number;
           retry_after_ms?: number;
+        };
+      };
+      authorize_conference_moderator_chat_action: {
+        Args: {
+          p_room_id: string;
+          p_action: string;
+          p_message_id?: string | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          already_deleted?: boolean;
+        };
+      };
+      apply_conference_moderator_chat_action: {
+        Args: {
+          p_room_id: string;
+          p_actor_user_id: string;
+          p_action: string;
+          p_message_id?: string | null;
+          p_body?: string | null;
+          p_reply_to_id?: string | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          already_deleted?: boolean;
+          message?: unknown;
         };
       };
       authorize_conference_private_chat_action: {

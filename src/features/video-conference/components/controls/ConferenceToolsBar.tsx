@@ -1,4 +1,4 @@
-import { Hand, Lock, MessageCircle, MessageSquare, Radio, Settings2, Square, Unlock, Users } from 'lucide-react';
+import { Hand, Lock, MessageCircle, MessageSquare, Radio, Settings2, ShieldCheck, Square, Unlock, Users } from 'lucide-react';
 import type { ConferencePanel } from '../../types/conference.types';
 
 interface Props {
@@ -6,6 +6,7 @@ interface Props {
   messageCount: number;
   privateUnreadCount: number;
   canPrivateChat: boolean;
+  canModeratorChat: boolean;
   raised: boolean;
   raisedCount: number;
   busy: string | null;
@@ -27,6 +28,7 @@ export function ConferenceToolsBar({
   messageCount,
   privateUnreadCount,
   canPrivateChat,
+  canModeratorChat,
   raised,
   raisedCount,
   busy,
@@ -52,6 +54,11 @@ export function ConferenceToolsBar({
         <button onClick={() => togglePanel('private-chat')} className="relative flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label="پیام خصوصی">
           <MessageSquare className="h-5 w-5" />
           {privateUnreadCount > 0 && <span className="absolute -left-1 -top-1 min-w-4 rounded-full bg-rose-500 px-1 text-[9px]">{privateUnreadCount > 99 ? '99+' : privateUnreadCount}</span>}
+        </button>
+      )}
+      {canModeratorChat && (
+        <button onClick={() => togglePanel('moderator-chat')} className="flex h-11 w-11 items-center justify-center rounded-xl text-amber-300 hover:bg-white/10" aria-label="گفتگوی مدیران">
+          <ShieldCheck className="h-5 w-5" />
         </button>
       )}
       <button onClick={() => void onToggleRaise()} disabled={busy === 'raise'} className={`flex h-11 w-11 items-center justify-center rounded-xl ${raised ? 'bg-amber-500 text-slate-950' : 'hover:bg-white/10'}`} aria-label={raised ? 'پایین آوردن دست' : 'بالا بردن دست'}><Hand className="h-5 w-5" /></button>

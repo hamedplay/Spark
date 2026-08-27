@@ -3,11 +3,13 @@ import { useState } from 'react';
 import { useConferenceClient } from '../../../../components/VideoConference/conferenceClient';
 import { useConferenceChat } from '../../hooks/useConferenceChat';
 import { useConferenceModeration } from '../../hooks/useConferenceModeration';
+import { useConferenceModeratorChat } from '../../hooks/useConferenceModeratorChat';
 import { useConferencePrivateChat } from '../../hooks/useConferencePrivateChat';
 import { useConferenceRealtime } from '../../hooks/useConferenceRealtime';
 import { useMediaDevices } from '../../hooks/useMediaDevices';
 import type { ConferencePanel, ConferenceToolsProps } from '../../types/conference.types';
 import { ConferenceChatPanel } from '../chat/ConferenceChatPanel';
+import { ConferenceModeratorChatPanel } from '../chat/ConferenceModeratorChatPanel';
 import { ConferencePrivateChatPanel } from '../chat/ConferencePrivateChatPanel';
 import { ConferenceParticipantsPanel } from '../participants/ConferenceParticipantsPanel';
 import { ConferenceToolsBar } from './ConferenceToolsBar';
@@ -49,6 +51,12 @@ export function ConferenceTools({
     phaseAllowsChat: phase.allowChat,
     participants: moderation.participants,
   });
+  const moderatorChat = useConferenceModeratorChat({
+    client,
+    roomId,
+    currentUserId,
+    authorization,
+  });
   const devices = useMediaDevices(room);
 
   useConferenceRealtime({
@@ -72,6 +80,7 @@ export function ConferenceTools({
         messageCount={chat.messages.length}
         privateUnreadCount={privateChat.unreadCount}
         canPrivateChat={privateChat.canUse}
+        canModeratorChat={moderatorChat.canUse}
         raised={moderation.raised}
         raisedCount={moderation.raisedParticipants.length}
         busy={moderation.busy}
@@ -96,7 +105,9 @@ export function ConferenceTools({
                 ? 'گفتگوی جلسه'
                 : panel === 'private-chat'
                   ? 'پیام خصوصی'
-                  : panel === 'participants'
+                  : panel === 'moderator-chat'
+                    ? 'گفتگوی مدیران'
+                    : panel === 'participants'
                     ? 'شرکت‌کنندگان'
                     : 'دستگاه‌های رسانه‌ای'}
             </strong>
@@ -146,6 +157,24 @@ export function ConferenceTools({
               onEdit={privateChat.beginEdit}
               onDelete={privateChat.deleteMessage}
               onCancelContext={privateChat.resetComposer}
+            />
+          )}
+          {panel === 'moderator-chat' && (
+            <ConferenceModeratorChatPanel
+              messages={moderatorChat.messages}
+              currentUserId={currentUserId}
+              message={moderatorChat.message}
+              canSend={moderatorChat.canUse}
+              busy={moderatorChat.busy}
+              errorMessage={moderatorChat.errorMessage}
+              replyTo={moderatorChat.replyTo}
+              editing={moderatorChat.editing}
+              onMessageChange={moderatorChat.setMessage}
+              onSend={moderatorChat.sendMessage}
+              onReply={moderatorChat.beginReply}
+              onEdit={moderatorChat.beginEdit}
+              onDelete={moderatorChat.deleteMessage}
+              onCancelContext={moderatorChat.resetComposer}
             />
           )}
           {panel === 'participants' && (
