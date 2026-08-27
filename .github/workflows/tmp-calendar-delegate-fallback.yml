@@ -1,0 +1,19 @@
+name: Temporary calendar delegate fallback validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-calendar-delegate-fallback.yml'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - name: Production build
+        run: npm run build
+      - name: Validate delegate enrichment is non-blocking
+        run: |
+          ! grep -q "if (ownerDelegateError) throw ownerDelegateError" src/components/Calendar/useCalendarDataActions.ts
+          grep -q "owner delegate status enrichment unavailable" src/components/Calendar/useCalendarDataActions.ts
+          grep -q "!ownerDelegateError && ownerDelegateRows" src/components/Calendar/useCalendarDataActions.ts
