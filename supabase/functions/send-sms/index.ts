@@ -488,6 +488,7 @@ Deno.serve(async (req: Request) => {
         failedReturnIds: string[];
         rawResponse: string;
         error: string | null;
+        errorCode: string | null;
         requestResult: { ok: boolean; status: number; body: string; durationMs: number; t0: number; error?: string };
       }
 
@@ -505,13 +506,19 @@ Deno.serve(async (req: Request) => {
         const r = await callRest(url, params, "POST");
         const parsed = parseRahyabSendResponse(r.body || "");
         const ok = !r.error && r.ok && parsed.success;
+        const transportError = r.error
+          ? (r.error.includes("timeout") ? "PROVIDER_TIMEOUT" : "PROVIDER_TRANSPORT_ERROR")
+          : null;
         return {
           ok,
           status: ok ? parsed.status : "error",
           validReturnIds: parsed.validReturnIds,
           failedReturnIds: parsed.failedReturnIds,
           rawResponse: parsed.rawResponse,
-          error: ok ? null : (parsed.errorMessage || r.error || "ارسال ناموفق"),
+          error: ok
+            ? null
+            : (r.error || (!r.ok && r.status ? `HTTP ${r.status}` : null) || parsed.errorMessage || "ارسال ناموفق"),
+          errorCode: ok ? null : (transportError || (!r.ok && r.status ? "PROVIDER_HTTP_ERROR" : "PROVIDER_REJECTED")),
           requestResult: r,
         };
       }
@@ -538,20 +545,43 @@ Deno.serve(async (req: Request) => {
 
         const allValidIds: string[] = [];
         const errors: string[] = [];
+        const failures: Array<{
+          phone: string;
+          errorCode: string | null;
+          error: string;
+          httpStatus: number;
+          durationMs: number;
+          transportError: string | null;
+          responseBody: string | null;
+        }> = [];
 
         for (const to of rawMobiles) {
           const sent = await sendRahyabRestSms(to, message);
           if (sent.ok) {
             allValidIds.push(...sent.validReturnIds);
           } else {
-            errors.push(`${maskPhone(to)}: ${sent.error || "ارسال ناموفق"}`);
+            const errorText = sent.error || "ارسال ناموفق";
+            errors.push(`${maskPhone(to)}: ${errorText}`);
+            failures.push({
+              phone: maskPhone(to),
+              errorCode: sent.errorCode,
+              error: errorText,
+              httpStatus: sent.requestResult.status,
+              durationMs: sent.requestResult.durationMs,
+              transportError: sent.requestResult.error ?? null,
+              responseBody: sent.requestResult.body ? sent.requestResult.body.slice(0, 1000) : null,
+            });
           }
         }
+
+        const dominantErrorCode = failures.find(f => f.errorCode === "PROVIDER_TIMEOUT")?.errorCode
+          || failures.find(f => f.errorCode)?.errorCode
+          || null;
 
         if (isAuthOtp) {
           return json({
             ok: errors.length === 0,
-            errorCode: errors.length === 0 ? null : "SMS_PROVIDER_REJECTED",
+            errorCode: errors.length === 0 ? null : (dominantErrorCode || "SMS_PROVIDER_REJECTED"),
             returnIds: allValidIds,
             packId: null,
             cost: null,
@@ -562,8 +592,9 @@ Deno.serve(async (req: Request) => {
           sent: allValidIds.length,
           returnIds: allValidIds,
           errors,
+          errorCode: errors.length > 0 ? (dominantErrorCode || "PROVIDER_ERROR") : undefined,
           error: errors.length > 0 ? errors.join("; ") : undefined,
-          response: errors.length > 0 ? { errors } : undefined,
+          response: errors.length > 0 ? { errors, failures } : undefined,
         });
       }
 
