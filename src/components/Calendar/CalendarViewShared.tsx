@@ -247,6 +247,22 @@ export function renderMeetingBlock(
   const canMove = meeting.user_id === currentUserId || meeting.meeting_manager === currentUserId;
   const isTiny = visualHeight < 28;
   const titleStyle = getAdaptiveMeetingTitleStyle(slotHeight, colWidthMultiple, visualHeight);
+  const delegateStatus = meeting.owner_delegate_status;
+  const delegateName = meeting.owner_delegate_name || '';
+  const delegateRing = delegateStatus === 'accepted'
+    ? 'ring-2 ring-emerald-300 dark:ring-emerald-500/70'
+    : delegateStatus === 'pending'
+      ? 'ring-2 ring-amber-300 dark:ring-amber-500/70'
+      : delegateStatus === 'declined'
+        ? 'ring-2 ring-rose-300 dark:ring-rose-500/70'
+        : '';
+  const delegateLabel = delegateStatus === 'accepted'
+    ? `جانشین: ${delegateName}`
+    : delegateStatus === 'pending'
+      ? `در انتظار پاسخ جانشین: ${delegateName}`
+      : delegateStatus === 'declined'
+        ? `جانشین رد کرد: ${delegateName}`
+        : '';
 
   const GUTTER = 2;
   const insetStyle: React.CSSProperties = {
@@ -420,7 +436,7 @@ export function renderMeetingBlock(
 
   return (
     <div key={meeting.id}
-      className={`absolute rounded-lg overflow-hidden select-none group ${isNested ? 'ring-[3px] ring-white dark:ring-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.35)] border-2 border-white/80 dark:border-gray-900/80' : 'border-2 border-white/60 dark:border-gray-900/60 shadow-sm'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
+      className={`absolute rounded-lg overflow-hidden select-none group ${delegateRing} ${isNested ? 'ring-[3px] ring-white dark:ring-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.35)] border-2 border-white/80 dark:border-gray-900/80' : 'border-2 border-white/60 dark:border-gray-900/60 shadow-sm'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
       style={{ top: `${visualTop}px`, height: `${visualHeight}px`, backgroundColor: color, zIndex: (isBeingDragged || isBeingResized) ? 30 : blockZIndex, touchAction: isBeingDragged ? 'none' : 'pan-x pan-y', ...insetStyle, transition: (isBeingDragged || isBeingResized) ? 'none' : 'box-shadow 0.15s', ...ghostStyle }}
       onMouseDown={onBlockDown}
       onTouchStart={onBlockTouch}
@@ -456,13 +472,20 @@ export function renderMeetingBlock(
         setDetailMeeting(meeting);
       }}
     >
-      <div className="px-2 py-1 h-full flex items-start overflow-hidden">
+      <div className="px-2 py-1 h-full flex flex-col items-start overflow-hidden">
         <div
           className={`text-white font-semibold ${isTiny ? 'truncate' : 'line-clamp-2'} flex-shrink-0`}
           style={titleStyle}
+          title={delegateLabel ? `${meeting.subject} — ${delegateLabel}` : meeting.subject}
         >
           {meeting.subject}
         </div>
+        {delegateLabel && !isTiny && visualHeight >= 40 && (
+          <div className="mt-0.5 max-w-full truncate rounded bg-black/20 px-1 py-0.5 text-[8px] font-medium leading-none text-white/95">
+            {delegateStatus === 'accepted' ? '✓ ' : delegateStatus === 'pending' ? '… ' : '! '}
+            {delegateLabel}
+          </div>
+        )}
         {canMove && !isTiny && (
           <button onClick={e => { e.stopPropagation(); handleEditMeeting(meeting); }} onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
             className="absolute top-1 left-1 p-0.5 text-white/50 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 rounded">
