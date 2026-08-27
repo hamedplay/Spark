@@ -147,6 +147,25 @@ export function MeetingDetailModal({
   }, [m.id]);
 
   useEffect(() => {
+    const handleDelegationChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        meetingId?: string;
+        delegateUserId?: string;
+        delegateName?: string;
+        status?: 'pending' | 'accepted' | 'declined';
+      }>).detail;
+      if (!detail?.meetingId || detail.meetingId !== m.id || !detail.delegateUserId || !detail.delegateName || !detail.status) return;
+      setMyDelegate({
+        userId: detail.delegateUserId,
+        name: detail.delegateName,
+        status: detail.status,
+      });
+    };
+    window.addEventListener('spark:meeting-delegation-changed', handleDelegationChanged);
+    return () => window.removeEventListener('spark:meeting-delegation-changed', handleDelegationChanged);
+  }, [m.id]);
+
+  useEffect(() => {
     if (!currentUserId) {
       setMyDelegate(null);
       return;
