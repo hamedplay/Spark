@@ -65,6 +65,8 @@ export function MeetingOwnerDelegateModal({
           DELEGATE_PROFILE_INVALID: 'پروفایل جانشین فعال یا معتبر نیست.',
           DELEGATE_DIFFERENT_ORG: 'جانشین باید از همان سازمان باشد.',
           DELEGATE_ALREADY_INVITED: 'این کاربر از قبل در این جلسه حضور دارد یا دعوت شده است.',
+          OWNER_DELEGATE_ALREADY_PENDING: 'برای این جلسه یک درخواست جانشینی هنوز در انتظار پاسخ است.',
+          OWNER_DELEGATE_ALREADY_ACCEPTED: 'جانشین این جلسه قبلاً تأیید شده است.',
         };
         toast.error(messages[result?.error_code || ''] || 'ثبت جانشین ناموفق بود');
         return;
