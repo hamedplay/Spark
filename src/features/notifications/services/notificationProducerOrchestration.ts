@@ -238,6 +238,8 @@ export async function produceNotificationWithDependencies(
           audience,
           message: smsMessage,
           context: variables,
+          meetingId:
+            payload.meetingId ?? null,
           senderId:
             payload.senderId,
         }
