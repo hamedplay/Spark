@@ -208,7 +208,6 @@ export function MeetingsPage(props: MeetingsPageProps) {
                   setPendingSchedule({ meetingId: m.id, meeting: m });
                   setActivePage('calendar');
                 }}
-                onOpenVideoConference={() => setActivePage('video-conference')}
               />
             ))}
           </div>
