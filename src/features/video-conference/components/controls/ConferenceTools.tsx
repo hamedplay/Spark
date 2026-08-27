@@ -84,12 +84,14 @@ export function ConferenceTools({
               canRemoveParticipants={moderation.canRemoveParticipants}
               canManageRoles={moderation.canManageRoles}
               canManageTimer={moderation.canManageTimer}
+              speakerQueue={moderation.speakerQueue}
               speakerSessionsByUser={moderation.speakerSessionsByUser}
               speakerRemainingByUser={moderation.speakerRemainingByUser}
               timerBusy={moderation.busy}
               onHostAction={moderation.hostAction}
               onRoleChange={moderation.changeRole}
               onTimerAction={moderation.timerAction}
+              onQueueAction={moderation.queueAction}
             />
           )}
           {panel === 'devices' && (

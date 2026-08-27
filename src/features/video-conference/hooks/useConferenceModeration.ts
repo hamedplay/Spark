@@ -3,6 +3,7 @@ import type { ConferenceSupabaseClient } from '../../../components/VideoConferen
 import { setConferenceParticipantRole } from '../services/conferenceAuthorization';
 import { runHostAction, setRaiseHand, setRecording } from '../services/conferenceApi';
 import { loadConferenceParticipants, loadConferenceRoomState } from '../services/conferenceRealtime';
+import { runConferenceSpeakerQueueAction } from '../services/conferenceSpeakerQueue';
 import type {
   ConferenceAuthorization,
   ConferenceRbacRole,
@@ -10,6 +11,8 @@ import type {
   HostAction,
   ParticipantRow,
   RecordingRow,
+  SpeakerQueueAction,
+  SpeakerQueueItem,
   SpeakerTimerAction,
 } from '../types/conference.types';
 import { hasConferencePermission } from '../utils/conferencePermissions';
@@ -62,11 +65,27 @@ export function useConferenceModeration({
     void refreshRoomState();
   }, [refreshParticipants, refreshRoomState]);
 
-  const raisedParticipants = useMemo(
+  const speakerQueue = useMemo<SpeakerQueueItem[]>(
     () => participants
-      .filter((participant) => participant.is_hand_raised)
-      .sort((a, b) => String(a.hand_raised_at).localeCompare(String(b.hand_raised_at))),
-    [participants],
+      .flatMap((participant) => {
+        const session = speakerTimer.sessionsByUser[participant.user_id];
+        return session?.status === 'QUEUED'
+          ? [{ participant, session }]
+          : [];
+      })
+      .sort((left, right) => {
+        const leftPosition = left.session.queue_position ?? Number.MAX_SAFE_INTEGER;
+        const rightPosition = right.session.queue_position ?? Number.MAX_SAFE_INTEGER;
+        if (leftPosition !== rightPosition) return leftPosition - rightPosition;
+        return String(left.participant.hand_raised_at || left.session.starts_at)
+          .localeCompare(String(right.participant.hand_raised_at || right.session.starts_at));
+      }),
+    [participants, speakerTimer.sessionsByUser],
+  );
+
+  const raisedParticipants = useMemo(
+    () => speakerQueue.map((item) => item.participant),
+    [speakerQueue],
   );
 
   const toggleRaise = useCallback(async () => {
@@ -74,13 +93,16 @@ export function useConferenceModeration({
     setBusy('raise');
     try {
       await setRaiseHand(roomId, next, client);
-      setRaised(next);
+      await Promise.all([
+        speakerTimer.refresh(),
+        refreshParticipants(),
+      ]);
     } catch (error) {
       console.error('[VideoConference] raise hand failed', error);
     } finally {
       setBusy(null);
     }
-  }, [client, raised, roomId]);
+  }, [client, raised, refreshParticipants, roomId, speakerTimer]);
 
   const hostAction = useCallback(async (action: HostAction, targetUserId?: string) => {
     setBusy(`${action}:${targetUserId || ''}`);
@@ -89,26 +111,32 @@ export function useConferenceModeration({
       if (action === 'lock') setLocked(true);
       if (action === 'unlock') setLocked(false);
       if (action === 'end') onEnded();
-      await refreshParticipants();
-      await refreshRoomState();
+      await Promise.all([
+        refreshParticipants(),
+        refreshRoomState(),
+        speakerTimer.refresh(),
+      ]);
     } catch (error) {
       console.error('[VideoConference] host action failed', { action, error });
     } finally {
       setBusy(null);
     }
-  }, [client, onEnded, refreshParticipants, refreshRoomState, roomId]);
+  }, [client, onEnded, refreshParticipants, refreshRoomState, roomId, speakerTimer]);
 
   const changeRole = useCallback(async (targetUserId: string, role: ConferenceRbacRole) => {
     setBusy(`role:${targetUserId}`);
     try {
       await setConferenceParticipantRole(client, roomId, targetUserId, role);
-      await refreshParticipants();
+      await Promise.all([
+        refreshParticipants(),
+        speakerTimer.refresh(),
+      ]);
     } catch (error) {
       console.error('[VideoConference] role change failed', { targetUserId, role, error });
     } finally {
       setBusy(null);
     }
-  }, [client, refreshParticipants, roomId]);
+  }, [client, refreshParticipants, roomId, speakerTimer]);
 
   const timerAction = useCallback(async (
     targetUserId: string,
@@ -130,6 +158,35 @@ export function useConferenceModeration({
     }
   }, [refreshParticipants, speakerTimer]);
 
+  const queueAction = useCallback(async (
+    targetUserId: string,
+    action: SpeakerQueueAction,
+    seconds?: number,
+  ) => {
+    setBusy(`queue:${targetUserId}:${action}`);
+    try {
+      await runConferenceSpeakerQueueAction(
+        client,
+        roomId,
+        targetUserId,
+        action,
+        seconds,
+      );
+      await Promise.all([
+        speakerTimer.refresh(),
+        refreshParticipants(),
+      ]);
+    } catch (error) {
+      console.error('[VideoConference] speaker queue action failed', {
+        targetUserId,
+        action,
+        error,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }, [client, refreshParticipants, roomId, speakerTimer]);
+
   const toggleRecording = useCallback(async () => {
     setBusy('recording');
     try {
@@ -149,12 +206,14 @@ export function useConferenceModeration({
     recording,
     busy,
     raisedParticipants,
+    speakerQueue,
     refreshParticipants,
     refreshRoomState,
     toggleRaise,
     hostAction,
     changeRole,
     timerAction,
+    queueAction,
     speakerSessionsByUser: speakerTimer.sessionsByUser,
     speakerRemainingByUser: speakerTimer.remainingByUser,
     toggleRecording,

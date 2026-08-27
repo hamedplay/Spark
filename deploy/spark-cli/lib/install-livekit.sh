@@ -522,6 +522,7 @@ test_livekit_full_validation() {
   livekit_function_unauthorized_probe conference-host-control || return 1
   livekit_function_unauthorized_probe conference-recording || return 1
   livekit_function_unauthorized_probe conference-speaker-timer-control || return 1
+  livekit_function_unauthorized_probe conference-speaker-queue-control || return 1
   livekit_function_unauthorized_probe conference-speaker-timer-enforcer || return 1
   livekit_function_unauthorized_probe livekit-webhook || return 1
   livekit_secret_leak_probe || return 1

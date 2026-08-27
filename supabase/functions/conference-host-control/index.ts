@@ -48,6 +48,13 @@ function sameSources(current: TrackSource[] | undefined, desired: TrackSource[])
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function isParticipantMissing(error: unknown): boolean {
+  const payload = asRecord(error);
+  const status = Number(payload?.status ?? 0);
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return status === 404 || message.includes("not found");
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers });
   if (req.method !== "POST") return reply(405, { error: "METHOD_NOT_ALLOWED" });
@@ -161,7 +168,51 @@ Deno.serve(async (req: Request) => {
         p_action: "lower_hand",
       });
       if (error || !data?.ok) return reply(500, { error: "LOWER_HAND_FAILED" });
-      return reply(200, { ok: true });
+
+      const session = asRecord(data.session);
+      const sessionId = typeof session?.id === "string" ? session.id : "";
+      const policy = parseLiveKitPolicy(data.livekit_policy);
+      if (!sessionId || !policy.ok) return reply(200, { ok: true });
+
+      try {
+        await roomService.getParticipant(roomName, body.targetUserId!);
+        await roomService.updateParticipant(roomName, body.targetUserId!, {
+          permission: {
+            canPublish: policy.canPublish,
+            canSubscribe: policy.canSubscribe,
+            canPublishData: policy.canPublishData,
+            canPublishSources: policy.publishSources,
+          },
+        });
+        await service.rpc("complete_conference_speaker_enforcement", {
+          p_session_id: sessionId,
+          p_success: true,
+          p_error: null,
+          p_runtime_updated: true,
+        });
+        return reply(200, { ok: true, runtimeUpdated: true });
+      } catch (runtimeError) {
+        if (isParticipantMissing(runtimeError)) {
+          await service.rpc("complete_conference_speaker_enforcement", {
+            p_session_id: sessionId,
+            p_success: true,
+            p_error: null,
+            p_runtime_updated: false,
+          });
+          return reply(200, { ok: true, runtimeUpdated: false, participantOffline: true });
+        }
+
+        const message = runtimeError instanceof Error
+          ? runtimeError.message
+          : "LIVEKIT_SYNC_FAILED";
+        await service.rpc("complete_conference_speaker_enforcement", {
+          p_session_id: sessionId,
+          p_success: false,
+          p_error: message,
+          p_runtime_updated: false,
+        });
+        return reply(502, { error: "LIVEKIT_QUEUE_SYNC_PENDING" });
+      }
     }
 
     if (body.action === "promote" || body.action === "demote" || body.action === "set-role") {

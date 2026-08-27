@@ -69,6 +69,13 @@ export type SpeakerTimerAction =
   | 'resume'
   | 'stop';
 
+export type SpeakerQueueAction =
+  | 'move_up'
+  | 'move_down'
+  | 'remove'
+  | 'set_time'
+  | 'allow';
+
 export interface ConferenceAuthorization {
   loaded: boolean;
   role: ConferenceRbacRole | null;
@@ -128,6 +135,7 @@ export interface SpeakerSessionRow {
   allocated_seconds: number;
   used_seconds: number;
   status: SpeakerSessionStatus;
+  queue_position: number | null;
   paused_at: string | null;
   ended_at: string | null;
   end_reason: string | null;
@@ -142,6 +150,11 @@ export interface SpeakerTimerSnapshot {
   sessions: SpeakerSessionRow[];
 }
 
+export interface SpeakerQueueItem {
+  participant: ParticipantRow;
+  session: SpeakerSessionRow;
+}
+
 export interface ConferenceSpeakerTimerController {
   sessionsByUser: Record<string, SpeakerSessionRow>;
   remainingByUser: Record<string, number>;
@@ -150,6 +163,7 @@ export interface ConferenceSpeakerTimerController {
     action: SpeakerTimerAction,
     seconds?: number,
   ) => Promise<unknown>;
+  refresh: () => Promise<void>;
 }
 
 export interface MediaDeviceOption {

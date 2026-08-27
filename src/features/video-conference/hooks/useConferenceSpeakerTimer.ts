@@ -95,7 +95,8 @@ export function useConferenceSpeakerTimer({ client, roomId, currentUserId }: Par
     : null;
   const microphoneBlocked = Boolean(
     ownSession && (
-      ownSession.status === 'PAUSED'
+      ownSession.status === 'QUEUED'
+      || ownSession.status === 'PAUSED'
       || ownSession.status === 'EXPIRED'
       || ownSession.status === 'COMPLETED'
       || (ownSession.status === 'ACTIVE' && ownRemainingSeconds === 0)

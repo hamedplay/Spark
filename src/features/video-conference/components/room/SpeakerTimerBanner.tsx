@@ -15,6 +15,14 @@ function formatSeconds(value: number): string {
 export function SpeakerTimerBanner({ session, remainingSeconds }: Props) {
   if (!session) return null;
 
+  if (session.status === 'QUEUED') {
+    return (
+      <div className="absolute right-3 top-[68px] z-30 max-w-sm rounded-xl bg-amber-700 px-3 py-2 text-xs font-bold text-white shadow-lg" aria-live="polite">
+        در صف صحبت هستید{session.queue_position ? ` · جایگاه ${session.queue_position}` : ''}. میکروفون تا اجازه مدیر غیرفعال است.
+      </div>
+    );
+  }
+
   if (session.status === 'ACTIVE') {
     return (
       <div className="absolute right-3 top-[68px] z-30 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 shadow-lg" aria-live="polite">

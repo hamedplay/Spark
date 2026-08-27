@@ -4,10 +4,13 @@ import type {
   ConferenceRbacRole,
   HostAction,
   ParticipantRow,
+  SpeakerQueueAction,
+  SpeakerQueueItem,
   SpeakerSessionRow,
   SpeakerTimerAction,
 } from '../../types/conference.types';
 import { ASSIGNABLE_CONFERENCE_ROLES, conferenceRoleLabel } from '../../utils/conferencePermissions';
+import { SpeakerQueuePanel } from './SpeakerQueuePanel';
 import { SpeakerTimerControl } from './SpeakerTimerControl';
 
 interface Props {
@@ -17,6 +20,7 @@ interface Props {
   canRemoveParticipants: boolean;
   canManageRoles: boolean;
   canManageTimer: boolean;
+  speakerQueue: SpeakerQueueItem[];
   speakerSessionsByUser: Record<string, SpeakerSessionRow>;
   speakerRemainingByUser: Record<string, number>;
   timerBusy: string | null;
@@ -25,6 +29,11 @@ interface Props {
   onTimerAction: (
     targetUserId: string,
     action: SpeakerTimerAction,
+    seconds?: number,
+  ) => Promise<void>;
+  onQueueAction: (
+    targetUserId: string,
+    action: SpeakerQueueAction,
     seconds?: number,
   ) => Promise<void>;
 }
@@ -36,18 +45,34 @@ export function ConferenceParticipantsPanel({
   canRemoveParticipants,
   canManageRoles,
   canManageTimer,
+  speakerQueue,
   speakerSessionsByUser,
   speakerRemainingByUser,
   timerBusy,
   onHostAction,
   onRoleChange,
   onTimerAction,
+  onQueueAction,
 }: Props) {
   return (
     <div className="max-h-[48dvh] overflow-y-auto p-2">
+      <SpeakerQueuePanel
+        items={speakerQueue}
+        canManage={canManageTimer}
+        busy={timerBusy}
+        onAction={onQueueAction}
+      />
+
       {participants.map((participant) => {
         const canTarget = participant.user_id !== currentUserId && participant.role !== 'OWNER';
-        const canTimeSpeaker = canTarget && canManageTimer && participant.role !== 'VIEWER';
+        const speakerSession = speakerSessionsByUser[participant.user_id];
+        const canTimeSpeaker = (
+          canTarget
+          && canManageTimer
+          && participant.role !== 'VIEWER'
+          && speakerSession?.status !== 'QUEUED'
+        );
+
         return (
           <div key={participant.user_id} className="rounded-xl px-3 py-2 hover:bg-white/5">
             <div className="flex items-center justify-between gap-2">
@@ -82,7 +107,7 @@ export function ConferenceParticipantsPanel({
             {canTimeSpeaker && (
               <SpeakerTimerControl
                 userId={participant.user_id}
-                session={speakerSessionsByUser[participant.user_id]}
+                session={speakerSession}
                 remainingSeconds={speakerRemainingByUser[participant.user_id]}
                 busy={Boolean(timerBusy?.startsWith(`timer:${participant.user_id}:`))}
                 onAction={onTimerAction}

@@ -1917,6 +1917,7 @@ export type Database = {
           allocated_seconds: number;
           used_seconds: number;
           status: 'QUEUED' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
+          queue_position: number | null;
           paused_at: string | null;
           ended_at: string | null;
           end_reason: string | null;
@@ -1940,6 +1941,7 @@ export type Database = {
           allocated_seconds: number;
           used_seconds?: number;
           status?: 'QUEUED' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
+          queue_position?: number | null;
           paused_at?: string | null;
           ended_at?: string | null;
           end_reason?: string | null;
@@ -1963,6 +1965,7 @@ export type Database = {
           allocated_seconds?: number;
           used_seconds?: number;
           status?: 'QUEUED' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
+          queue_position?: number | null;
           paused_at?: string | null;
           ended_at?: string | null;
           end_reason?: string | null;
@@ -3136,6 +3139,37 @@ export type Database = {
           server_time?: string;
           session?: unknown;
           livekit_policy?: unknown;
+        };
+      };
+      authorize_conference_speaker_queue_action: {
+        Args: {
+          p_room_id: string;
+          p_target_user_id: string;
+          p_action: string;
+          p_seconds?: number | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          actor_user_id?: string;
+          action?: string;
+        };
+      };
+      apply_livekit_conference_speaker_queue_action: {
+        Args: {
+          p_room_id: string;
+          p_target_user_id: string;
+          p_action: string;
+          p_seconds: number | null;
+          p_actor_user_id: string;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          server_time?: string;
+          session?: unknown;
+          livekit_policy?: unknown;
+          runtime_sync_required?: boolean;
         };
       };
       get_all_users: {

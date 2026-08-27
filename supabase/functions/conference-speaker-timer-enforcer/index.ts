@@ -105,7 +105,7 @@ Deno.serve(async (req: Request) => {
   const roomService = new RoomServiceClient(livekitUrl, livekitApiKey, livekitApiSecret);
   try {
     const participant = await roomService.getParticipant(roomName, userId);
-    if (status === "PAUSED" || status === "EXPIRED" || status === "COMPLETED") {
+    if (status === "QUEUED" || status === "PAUSED" || status === "EXPIRED" || status === "COMPLETED") {
       const audioTracks = participant.tracks.filter((track) =>
         String(track.mimeType || "").startsWith("audio/")
       );
