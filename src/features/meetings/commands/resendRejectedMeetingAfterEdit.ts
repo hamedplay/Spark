@@ -96,6 +96,7 @@ export async function resendRejectedMeetingAfterEdit(
                 : 'همکار گرامی',
           },
 
+          meetingId: input.meetingId,
           senderId: input.senderId,
           actionUrl: 'meetings',
         })
