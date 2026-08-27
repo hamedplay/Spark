@@ -1,0 +1,74 @@
+name: phase6-validation-temp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/phase6-validation-temp.yml
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+          cache: npm
+
+      - name: Install current dependencies
+        run: npm ci
+
+      - name: Video conference phases 1-6
+        run: node --test tests/video-conference/phase1FrontendFoundation.test.mjs tests/video-conference/phase2Rbac.test.mjs tests/video-conference/phase3LiveKitPermissions.test.mjs tests/video-conference/phase4SpeakerTimer.test.mjs tests/video-conference/phase5SpeakerQueue.test.mjs tests/video-conference/phase6MeetingPhase.test.mjs
+
+      - name: Spark Manager syntax
+        run: bash -n deploy/spark-cli/lib/install-livekit.sh
+
+      - name: Production build and TypeScript
+        run: npm run build
+
+      - name: Compare regression failures with pre-Phase-6 baseline
+        shell: bash
+        run: |
+          set -u
+          CURRENT_SHA="$GITHUB_SHA"
+          BASE_SHA="6566cdb4226e9af23a944e8df1baf29319cd685c"
+
+          run_matrix() {
+            local output="$1"
+            : > "$output"
+            mapfile -t scripts < <(node -e "const p=require('./package.json'); for (const part of p.scripts.test.split('&&')) { const m=part.trim().match(/^npm run ([^ ]+)/); if (m) console.log(m[1]); }")
+            for script in "${scripts[@]}"; do
+              if npm run "$script"; then
+                echo "PASS=$script"
+              else
+                echo "$script" >> "$output"
+                echo "FAIL=$script"
+              fi
+            done
+            sort -u -o "$output" "$output"
+          }
+
+          git checkout --detach "$BASE_SHA"
+          npm ci
+          run_matrix /tmp/baseline-failures.txt
+
+          git checkout --detach "$CURRENT_SHA"
+          npm ci
+          run_matrix /tmp/current-failures.txt
+
+          echo "Baseline failures:"
+          cat /tmp/baseline-failures.txt || true
+          echo "Current failures:"
+          cat /tmp/current-failures.txt || true
+
+          comm -13 /tmp/baseline-failures.txt /tmp/current-failures.txt > /tmp/new-failures.txt
+          if [ -s /tmp/new-failures.txt ]; then
+            echo "New regressions introduced:"
+            cat /tmp/new-failures.txt
+            exit 1
+          fi
+          echo "No new regression failures."
