@@ -169,7 +169,12 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
     meetingId,
   });
 
-  if (!rendered.ok) {
+  const legacyMessage = typeof body.message === "string" ? body.message.trim() : "";
+  const useLegacyMessage = !rendered.ok
+    && rendered.errorCode === "SMS_TEMPLATE_CONTEXT_MISSING"
+    && legacyMessage.length > 0;
+
+  if (!rendered.ok && !useLegacyMessage) {
     const status = rendered.errorCode === "SMS_TEMPLATE_NOT_FOUND" ? "skipped" : "failed";
     await finishLog(supabase, claimed.id, {
       status,
@@ -186,8 +191,11 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
     }, rendered.errorCode === "SMS_TEMPLATE_NOT_FOUND" ? 200 : 422);
   }
 
-  const message = rendered.text;
-  await finishLog(supabase, claimed.id, { message });
+  const message = rendered.ok ? rendered.text : legacyMessage;
+  await finishLog(supabase, claimed.id, {
+    message,
+    error_text: useLegacyMessage ? "TEMPLATE_CONTEXT_FALLBACK: used caller-rendered message" : null,
+  });
 
   const { data: dispatchRows, error: rpcError } = await supabase
     .rpc("get_sms_dispatch_info", { target_user_id: targetUserId, p_category: category });
@@ -277,7 +285,7 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
       status: "sent",
       targetPhone: rawPhone,
       providerId: effectiveProviderId,
-      templateId: rendered.templateId,
+      templateId: rendered.ok ? rendered.templateId : null,
       returnIds: result.returnIds ?? null,
     });
   }
@@ -339,7 +347,12 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
     meetingId,
   });
 
-  if (!rendered.ok) {
+  const legacyMessage = typeof body.message === "string" ? body.message.trim() : "";
+  const useLegacyMessage = !rendered.ok
+    && rendered.errorCode === "SMS_TEMPLATE_CONTEXT_MISSING"
+    && legacyMessage.length > 0;
+
+  if (!rendered.ok && !useLegacyMessage) {
     for (const phone of validMobiles) {
       const key = externalDispatchKey(eventKey, meetingId, eventType, phone);
       const claim = await claimLog(supabase, {
@@ -369,7 +382,7 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
     }, 422);
   }
 
-  const message = rendered.text;
+  const message = rendered.ok ? rendered.text : legacyMessage;
   const { data: defProv } = await supabase
     .from("sms_providers")
     .select("id, title")
@@ -413,7 +426,7 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
       reason: "DUPLICATE_SMS_DISPATCH",
       sent: 0,
       skipped: invalidMobiles.length + duplicateCount,
-      templateId: rendered.templateId,
+      templateId: rendered.ok ? rendered.templateId : null,
     });
   }
 
@@ -503,7 +516,7 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
     status: result.ok ? "sent" : "failed",
     sent: result.ok ? claimedPhones.length : 0,
     skipped: invalidMobiles.length + duplicateCount,
-    templateId: rendered.templateId,
+    templateId: rendered.ok ? rendered.templateId : null,
     errorCode: result.ok ? undefined : (result.errorCode || "PROVIDER_ERROR"),
     error: result.ok ? undefined : (result.error ?? "خطای ناشناخته"),
     returnIds,
