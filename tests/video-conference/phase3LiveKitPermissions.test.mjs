@@ -11,6 +11,7 @@ const conferenceApi = read('src/features/video-conference/services/conferenceApi
 const liveKitHook = read('src/features/video-conference/hooks/useLiveKitRoom.ts');
 const policyMigration = read('supabase/migrations/20260827202146_video_conference_phase3_livekit_permission_policy.sql');
 const mutationMigration = read('supabase/migrations/20260827202503_video_conference_phase3_edge_role_mutation.sql');
+const edgeOnlyMigration = read('supabase/migrations/20260827203136_video_conference_phase3_role_rpc_edge_only.sql');
 
 test('token issuance reads LiveKit media policy from PostgreSQL', () => {
   assert.match(tokenEdge, /get_my_livekit_conference_policy/);
@@ -66,4 +67,11 @@ test('client reacts to runtime participant permission changes', () => {
   assert.match(liveKitHook, /RoomEvent\.ParticipantPermissionsChanged/);
   assert.match(liveKitHook, /localParticipant\.isMicrophoneEnabled/);
   assert.match(liveKitHook, /localParticipant\.isCameraEnabled/);
+});
+
+
+test('direct authenticated role mutation is disabled so LiveKit sync cannot be bypassed', () => {
+  assert.match(edgeOnlyMigration, /public\.set_conference_participant_role\(uuid,uuid,text\)[\s\S]*from authenticated/i);
+  assert.match(edgeOnlyMigration, /private\.set_conference_participant_role\(uuid,uuid,text\)[\s\S]*from authenticated/i);
+  assert.match(edgeOnlyMigration, /to service_role/i);
 });

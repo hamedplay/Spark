@@ -1,5 +1,5 @@
 name: phase3-validation-temp
-# rerun after phase2 contract update
+# rerun after edge-only role hardening
 
 on:
   push:
