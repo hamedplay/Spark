@@ -42,9 +42,10 @@ test('frontend management affordances are permission-driven instead of legacy ro
   assert.doesNotMatch(toolsBar, /role\s*===/);
 });
 
-test('frontend reads canonical authorization and participant roles from server RPCs', () => {
+test('frontend reads canonical authorization and participant roles from server boundaries', () => {
   assert.match(authorization, /get_my_conference_authorization/);
-  assert.match(authorization, /set_conference_participant_role/);
+  assert.match(authorization, /conference-host-control/);
+  assert.match(authorization, /action:\s*'set-role'/);
   assert.match(realtime, /get_conference_participants_rbac/);
 });
 
