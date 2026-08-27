@@ -272,7 +272,7 @@ export function MultiDayView(p: CalendarViewProps) {
           <div className="flex-none">
             <div style={multiDayOffHoursWrapStyle}>
               <div
-                className="relative flex overflow-hidden bg-white dark:bg-slate-950"
+                className="relative flex bg-white dark:bg-slate-950"
                 ref={setGridRef}
                 style={offHoursInnerStyle}
               >
