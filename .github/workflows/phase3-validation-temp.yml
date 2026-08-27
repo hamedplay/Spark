@@ -1,4 +1,5 @@
 name: phase3-validation-temp
+# rerun after phase2 contract update
 
 on:
   push:
