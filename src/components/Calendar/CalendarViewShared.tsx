@@ -574,6 +574,21 @@ export function renderPreviewPopup(p: CalendarViewProps) {
               <X className="w-4 h-4" />
             </button>
           </div>
+          {m.owner_delegate_status && m.owner_delegate_name && (
+            <div className={`mb-3 rounded-xl border px-3 py-2 text-[11px] font-medium ${
+              m.owner_delegate_status === 'accepted'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300'
+                : m.owner_delegate_status === 'pending'
+                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300'
+                  : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-700/50 dark:bg-rose-900/20 dark:text-rose-300'
+            }`}>
+              {m.owner_delegate_status === 'accepted'
+                ? `جانشین: ${m.owner_delegate_name} — تأییدشده`
+                : m.owner_delegate_status === 'pending'
+                  ? `جانشین پیشنهادی: ${m.owner_delegate_name} — در انتظار پاسخ`
+                  : `جانشین پیشنهادی: ${m.owner_delegate_name} — رد شده`}
+            </div>
+          )}
           <div className="space-y-2 text-sm">
             {m.start_time && m.end_time && (
               <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
