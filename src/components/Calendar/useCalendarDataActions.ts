@@ -68,12 +68,12 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         supabase.from('meeting_inbox')
           .select('meeting_id, status')
           .eq('user_id', userId),
-        supabase.rpc('get_my_meeting_owner_delegations_v1'),
+        supabase.rpc('get_my_meeting_delegations_v1'),
       ]);
 
       if (error) throw error;
       if (ownerDelegateError) {
-        console.warn('[CalendarPage] owner delegate status enrichment unavailable:', ownerDelegateError);
+        console.warn('[CalendarPage] meeting delegation status enrichment unavailable:', ownerDelegateError);
       }
 
       const inboxStatus = new Map<string, string>(
