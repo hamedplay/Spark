@@ -33,7 +33,7 @@ async function sendExternalCancellation(
 ): Promise<void> {
   const { data: meeting, error: meetingError } = await supabase
     .from('meetings')
-    .select('user_id, external_participants, send_sms')
+    .select('user_id, external_participants, send_sms, request_date, start_time, end_time')
     .eq('id', meetingId)
     .maybeSingle();
 
@@ -71,6 +71,13 @@ async function sendExternalCancellation(
       message: `جلسه «${meetingSubject}» لغو شده است`,
       category: 'meeting',
       eventType: 'cancel',
+      context: {
+        meeting_subject: meetingSubject,
+        meeting_date: meeting?.request_date || '',
+        start_time: meeting?.start_time || '',
+        end_time: meeting?.end_time || '',
+        meeting_time: [meeting?.start_time, meeting?.end_time].filter(Boolean).join(' - '),
+      },
       triggeredByUserId: senderId,
     },
   });
@@ -84,6 +91,16 @@ async function sendExternalCancellation(
 export async function deleteMeetingPermanently(
   input: DeleteMeetingPermanentlyInput
 ): Promise<void> {
+  const { data: meetingContext, error: meetingContextError } = await supabase
+    .from('meetings')
+    .select('request_date, start_time, end_time')
+    .eq('id', input.meetingId)
+    .maybeSingle();
+
+  if (meetingContextError) {
+    throw meetingContextError;
+  }
+
   const participantUserIds =
     input.participantUserIds;
 
@@ -137,9 +154,23 @@ export async function deleteMeetingPermanently(
           fallbackMessage:
             `جلسه «${input.meetingSubject}» لغو شده است`,
 
+          meetingId: input.meetingId,
+
           placeholders: {
             meeting_subject:
               input.meetingSubject,
+
+            meeting_date:
+              meetingContext?.request_date || '',
+
+            start_time:
+              meetingContext?.start_time || '',
+
+            end_time:
+              meetingContext?.end_time || '',
+
+            meeting_time:
+              [meetingContext?.start_time, meetingContext?.end_time].filter(Boolean).join(' - '),
 
             full_name:
               nameMap[userId] || '',
