@@ -273,6 +273,10 @@ export type Database = Omit<BaseDatabase, 'public'> & {
         Args: Record<PropertyKey, never>;
         Returns: unknown;
       };
+      get_my_meeting_delegations_v1: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
       manage_management_task_v1: {
         Args: {
           p_task_id: string;
