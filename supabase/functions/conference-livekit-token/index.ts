@@ -1,12 +1,19 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
-import { AccessToken, RoomServiceClient } from "npm:livekit-server-sdk@2.18.0";
+import { AccessToken, RoomServiceClient, TrackSource } from "npm:livekit-server-sdk@2.18.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
+};
+
+const sourceMap: Record<string, TrackSource> = {
+  camera: TrackSource.CAMERA,
+  microphone: TrackSource.MICROPHONE,
+  screen_share: TrackSource.SCREEN_SHARE,
+  screen_share_audio: TrackSource.SCREEN_SHARE_AUDIO,
 };
 
 function json(status: number, body: Record<string, unknown>) {
@@ -19,6 +26,29 @@ function livekitApiUrl(url: string): string {
 
 function livekitWsUrl(url: string): string {
   return url.replace(/^https:/i, "wss:").replace(/^http:/i, "ws:").replace(/\/$/, "");
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object"
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function parseLiveKitPolicy(value: unknown) {
+  const payload = asRecord(value);
+  const sourceNames = Array.isArray(payload?.publish_sources)
+    ? payload.publish_sources.filter((item): item is string => typeof item === "string" && item in sourceMap)
+    : [];
+
+  return {
+    ok: payload?.ok === true,
+    role: typeof payload?.role === "string" ? payload.role : "",
+    canPublish: payload?.can_publish === true,
+    canSubscribe: payload?.can_subscribe === true,
+    canPublishData: payload?.can_publish_data === true,
+    sourceNames,
+    publishSources: sourceNames.map((source) => sourceMap[source]),
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -48,13 +78,13 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // Validate the bearer token and require a fully authorized permanent Spark member.
   const { data: authUserData, error: authUserError } = await userClient.auth.getUser();
   const authUser = authUserData?.user;
   if (authUserError || !authUser?.id) return json(401, { error: "NOT_AUTHENTICATED" });
   if ((authUser as unknown as { is_anonymous?: boolean }).is_anonymous === true) {
     return json(403, { error: "NOT_AUTHORIZED" });
   }
+
   const { data: accessState, error: accessError } = await userClient.rpc("get_my_auth_access_state");
   if (accessError || !accessState || accessState.access_level !== "FULL" || accessState.user_id !== authUser.id) {
     return json(403, { error: "NOT_AUTHORIZED" });
@@ -71,7 +101,6 @@ Deno.serve(async (req: Request) => {
     return json(400, { error: "ROOM_ID_REQUIRED" });
   }
 
-  // The database RPC is the room authorization boundary for the authenticated Spark member.
   const { data: join, error: joinError } = await userClient.rpc("prepare_livekit_conference_join", {
     p_room_id: body.roomId,
   });
@@ -88,6 +117,16 @@ Deno.serve(async (req: Request) => {
       : reason === "room_locked" ? 423
       : 403;
     return json(status, { error: reason.toUpperCase(), reason });
+  }
+
+  const { data: policyData, error: policyError } = await userClient.rpc(
+    "get_my_livekit_conference_policy",
+    { p_room_id: body.roomId },
+  );
+  const livekitPolicy = parseLiveKitPolicy(policyData);
+  if (policyError || !livekitPolicy.ok) {
+    console.error("conference-livekit-token: permission policy failed", { code: policyError?.code });
+    return json(403, { error: "LIVEKIT_PERMISSION_DENIED" });
   }
 
   const roomName = String(join.livekit_room_name ?? "");
@@ -117,15 +156,20 @@ Deno.serve(async (req: Request) => {
     identity: authUser.id,
     name: displayName,
     ttl: "10m",
-    metadata: JSON.stringify({ role, sparkRoomId: body.roomId }),
+    metadata: JSON.stringify({
+      role,
+      rbacRole: livekitPolicy.role,
+      sparkRoomId: body.roomId,
+    }),
   });
 
   token.addGrant({
     roomJoin: true,
     room: roomName,
-    canPublish: true,
-    canSubscribe: true,
-    canPublishData: true,
+    canPublish: livekitPolicy.canPublish,
+    canSubscribe: livekitPolicy.canSubscribe,
+    canPublishData: livekitPolicy.canPublishData,
+    canPublishSources: livekitPolicy.publishSources,
     roomAdmin: false,
   });
 
@@ -135,6 +179,13 @@ Deno.serve(async (req: Request) => {
     serverUrl: browserWsUrl,
     roomName,
     role,
+    rbacRole: livekitPolicy.role,
+    livekitPolicy: {
+      canPublish: livekitPolicy.canPublish,
+      canSubscribe: livekitPolicy.canSubscribe,
+      canPublishData: livekitPolicy.canPublishData,
+      publishSources: livekitPolicy.sourceNames,
+    },
     maxParticipants,
     expiresInSeconds: 600,
   });

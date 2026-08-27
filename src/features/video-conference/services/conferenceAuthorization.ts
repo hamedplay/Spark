@@ -53,16 +53,18 @@ export async function setConferenceParticipantRole(
 ) {
   if (role === 'OWNER') throw new Error('OWNER_ROLE_IS_TRANSFER_ONLY');
 
-  const { data, error } = await client.rpc('set_conference_participant_role', {
-    p_room_id: roomId,
-    p_target_user_id: userId,
-    p_role: role,
+  const { data, error } = await client.functions.invoke('conference-host-control', {
+    body: {
+      roomId,
+      action: 'set-role',
+      targetUserId: userId,
+      targetRole: role,
+    },
   });
-  if (error) throw error;
 
-  const payload = asObject(data);
-  if (!payload || payload.ok !== true) {
-    throw new Error(String(payload?.reason || 'ROLE_CHANGE_FAILED'));
+  if (error || !data?.ok) {
+    throw new Error(String(data?.error || error?.message || 'ROLE_CHANGE_FAILED'));
   }
-  return payload;
+
+  return data;
 }

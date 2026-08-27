@@ -10,9 +10,10 @@ const ERROR_LABELS: Record<string, string> = {
   ROOM_LOCKED: 'جلسه قفل شده است.',
   NOT_AUTHORIZED: 'اجازه ورود به این جلسه را ندارید.',
   BANNED: 'دسترسی شما به این جلسه مسدود شده است.',
-  REJECTED: 'درخواست ورود شما رد شده است.',
+  REJECTED: 'درخواست ورود شما رد شد.',
   CONFERENCE_NOT_CONFIGURED: 'زیرساخت ویدیوکنفرانس هنوز پیکربندی نشده است.',
   TOKEN_FAILED: 'دریافت مجوز اتصال ناموفق بود.',
+  LIVEKIT_PERMISSION_DENIED: 'مجوز رسانه‌ای جلسه قابل دریافت نیست.',
 };
 
 interface Params {
@@ -50,6 +51,12 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       }
 
       setRole(join.data.role);
+      const canPublishMic = join.data.livekitPolicy.publishSources.includes('microphone');
+      const canPublishCamera = join.data.livekitPolicy.publishSources.includes('camera');
+
+      if (!canPublishMic) setMicEnabled(false);
+      if (!canPublishCamera) setCameraEnabled(false);
+
       const nextRoom = new Room({
         adaptiveStream: true,
         dynacast: true,
@@ -65,6 +72,12 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       nextRoom.on(RoomEvent.TrackUnsubscribed, refresh);
       nextRoom.on(RoomEvent.TrackMuted, refresh);
       nextRoom.on(RoomEvent.TrackUnmuted, refresh);
+      nextRoom.on(RoomEvent.ParticipantPermissionsChanged, (_previous, participant) => {
+        if (participant.identity !== nextRoom.localParticipant.identity) return;
+        setMicEnabled(nextRoom.localParticipant.isMicrophoneEnabled);
+        setCameraEnabled(nextRoom.localParticipant.isCameraEnabled);
+        refresh();
+      });
       nextRoom.on(RoomEvent.Reconnecting, () => setUiState('reconnecting'));
       nextRoom.on(RoomEvent.Reconnected, () => setUiState('connected'));
       nextRoom.on(RoomEvent.Disconnected, () => setUiState((current) => current === 'failed' ? current : 'failed'));
@@ -91,13 +104,13 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       await nextRoom.connect(join.data.serverUrl, join.data.token, { autoSubscribe: true });
       nextRoom.localParticipant.setName(currentUserName);
 
-      if (micEnabled) {
+      if (micEnabled && canPublishMic) {
         await nextRoom.localParticipant.setMicrophoneEnabled(
           true,
           audioSettings?.deviceId ? { deviceId: audioSettings.deviceId } : undefined,
         );
       }
-      if (cameraEnabled) {
+      if (cameraEnabled && canPublishCamera) {
         await nextRoom.localParticipant.setCameraEnabled(
           true,
           videoSettings?.deviceId ? {
@@ -115,7 +128,7 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
     } finally {
       connectingRef.current = false;
     }
-  }, [cameraEnabled, client, currentUserName, fail, localStream, micEnabled, refresh, roomId, setActiveSpeakerIdentity, setErrorMessage, setQuality, setRole, setUiState, showReaction]);
+  }, [cameraEnabled, client, currentUserName, fail, localStream, micEnabled, refresh, roomId, setActiveSpeakerIdentity, setCameraEnabled, setErrorMessage, setMicEnabled, setQuality, setRole, setUiState, showReaction]);
 
   useEffect(() => {
     void connect();

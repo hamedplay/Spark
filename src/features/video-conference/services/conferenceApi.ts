@@ -1,17 +1,28 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../../../lib/supabase';
 import type { Database } from '../../../types/supabase';
-import type { ConferenceRole, HostAction } from '../types/conference.types';
+import type { ConferenceRbacRole, ConferenceRole, HostAction } from '../types/conference.types';
 
 export type { ConferenceRole, HostAction } from '../types/conference.types';
 
 type ConferenceClient = SupabaseClient<Database>;
+
+export type LiveKitPublishSource = 'camera' | 'microphone' | 'screen_share' | 'screen_share_audio';
+
+export interface LiveKitMediaPolicy {
+  canPublish: boolean;
+  canSubscribe: boolean;
+  canPublishData: boolean;
+  publishSources: LiveKitPublishSource[];
+}
 
 export interface LiveKitTokenResponse {
   token: string;
   serverUrl: string;
   roomName: string;
   role: ConferenceRole;
+  rbacRole: ConferenceRbacRole;
+  livekitPolicy: LiveKitMediaPolicy;
   maxParticipants: number;
   expiresInSeconds: number;
 }
