@@ -52,6 +52,7 @@ The same `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must be configured as server
 - `conference-phase-control`
 - `conference-phase-enforcer`
 - `conference-chat-control`
+- `conference-private-chat-control`
 - `livekit-webhook`
 
 Also configure:
@@ -101,8 +102,9 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 10. Speaker timer and hand-raise queue state are authoritative in Postgres. `conference-speaker-queue-control` performs Host reorder/time/allow/remove actions, and the timer enforcer reconciles queued/paused/expired/completed microphone permissions with LiveKit.
 11. Meeting phase state is authoritative in `conference_rooms` with revisioned `conference_phase_events`. `conference-phase-control` applies Host transitions and `conference-phase-enforcer` synchronizes automatic Countdown/Break/Resuming transitions to every connected LiveKit participant.
 12. Public conference chat history is persisted in PostgreSQL. `conference-chat-control` handles SFU send/edit/delete/reaction mutations, while Realtime only refreshes persisted message/reaction/mention state.
-13. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-14. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+13. One-to-one private conference chat is persisted in `conference_private_messages`. Only sender and recipient can read through RLS; `conference-private-chat-control` handles send/edit/delete/read-receipt mutations.
+14. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+15. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 

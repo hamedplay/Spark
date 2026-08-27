@@ -1,9 +1,11 @@
-import { Hand, Lock, MessageCircle, Radio, Settings2, Square, Unlock, Users } from 'lucide-react';
+import { Hand, Lock, MessageCircle, MessageSquare, Radio, Settings2, Square, Unlock, Users } from 'lucide-react';
 import type { ConferencePanel } from '../../types/conference.types';
 
 interface Props {
   panel: ConferencePanel;
   messageCount: number;
+  privateUnreadCount: number;
+  canPrivateChat: boolean;
   raised: boolean;
   raisedCount: number;
   busy: string | null;
@@ -23,6 +25,8 @@ interface Props {
 export function ConferenceToolsBar({
   panel,
   messageCount,
+  privateUnreadCount,
+  canPrivateChat,
   raised,
   raisedCount,
   busy,
@@ -44,6 +48,12 @@ export function ConferenceToolsBar({
   return (
     <div className="absolute bottom-[88px] left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/10 bg-slate-900/90 p-1.5 shadow-xl backdrop-blur" dir="rtl">
       <button onClick={() => togglePanel('chat')} className="relative flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label="گفتگوی جلسه"><MessageCircle className="h-5 w-5" />{messageCount > 0 && <span className="absolute -left-1 -top-1 min-w-4 rounded-full bg-violet-500 px-1 text-[9px]">{messageCount > 99 ? '99+' : messageCount}</span>}</button>
+      {canPrivateChat && (
+        <button onClick={() => togglePanel('private-chat')} className="relative flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label="پیام خصوصی">
+          <MessageSquare className="h-5 w-5" />
+          {privateUnreadCount > 0 && <span className="absolute -left-1 -top-1 min-w-4 rounded-full bg-rose-500 px-1 text-[9px]">{privateUnreadCount > 99 ? '99+' : privateUnreadCount}</span>}
+        </button>
+      )}
       <button onClick={() => void onToggleRaise()} disabled={busy === 'raise'} className={`flex h-11 w-11 items-center justify-center rounded-xl ${raised ? 'bg-amber-500 text-slate-950' : 'hover:bg-white/10'}`} aria-label={raised ? 'پایین آوردن دست' : 'بالا بردن دست'}><Hand className="h-5 w-5" /></button>
       <button onClick={() => togglePanel('participants')} className="relative flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label="شرکت‌کنندگان"><Users className="h-5 w-5" />{raisedCount > 0 && <span className="absolute -left-1 -top-1 rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-slate-950">{raisedCount}</span>}</button>
       <button onClick={() => togglePanel('devices')} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-white/10" aria-label="انتخاب دستگاه"><Settings2 className="h-5 w-5" /></button>

@@ -3,10 +3,12 @@ import { useState } from 'react';
 import { useConferenceClient } from '../../../../components/VideoConference/conferenceClient';
 import { useConferenceChat } from '../../hooks/useConferenceChat';
 import { useConferenceModeration } from '../../hooks/useConferenceModeration';
+import { useConferencePrivateChat } from '../../hooks/useConferencePrivateChat';
 import { useConferenceRealtime } from '../../hooks/useConferenceRealtime';
 import { useMediaDevices } from '../../hooks/useMediaDevices';
 import type { ConferencePanel, ConferenceToolsProps } from '../../types/conference.types';
 import { ConferenceChatPanel } from '../chat/ConferenceChatPanel';
+import { ConferencePrivateChatPanel } from '../chat/ConferencePrivateChatPanel';
 import { ConferenceParticipantsPanel } from '../participants/ConferenceParticipantsPanel';
 import { ConferenceToolsBar } from './ConferenceToolsBar';
 import { MediaDevicesPanel } from './MediaDevicesPanel';
@@ -39,6 +41,14 @@ export function ConferenceTools({
     phaseAllowsChat: phase.allowChat,
     mentionCandidates: moderation.participants,
   });
+  const privateChat = useConferencePrivateChat({
+    client,
+    roomId,
+    currentUserId,
+    authorization,
+    phaseAllowsChat: phase.allowChat,
+    participants: moderation.participants,
+  });
   const devices = useMediaDevices(room);
 
   useConferenceRealtime({
@@ -60,6 +70,8 @@ export function ConferenceTools({
       <ConferenceToolsBar
         panel={panel}
         messageCount={chat.messages.length}
+        privateUnreadCount={privateChat.unreadCount}
+        canPrivateChat={privateChat.canUse}
         raised={moderation.raised}
         raisedCount={moderation.raisedParticipants.length}
         busy={moderation.busy}
@@ -79,7 +91,15 @@ export function ConferenceTools({
       {panel && (
         <aside className="absolute inset-x-2 bottom-[146px] z-40 max-h-[55dvh] overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur sm:inset-x-auto sm:left-4 sm:w-[420px]" dir="rtl">
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <strong className="text-sm">{panel === 'chat' ? 'گفتگوی جلسه' : panel === 'participants' ? 'شرکت‌کنندگان' : 'دستگاه‌های رسانه‌ای'}</strong>
+            <strong className="text-sm">
+              {panel === 'chat'
+                ? 'گفتگوی جلسه'
+                : panel === 'private-chat'
+                  ? 'پیام خصوصی'
+                  : panel === 'participants'
+                    ? 'شرکت‌کنندگان'
+                    : 'دستگاه‌های رسانه‌ای'}
+            </strong>
             <button onClick={() => setPanel(null)} className="h-9 rounded-lg px-3 text-xs text-slate-300 hover:bg-white/10">بستن</button>
           </div>
 
@@ -104,6 +124,28 @@ export function ConferenceTools({
               onReact={chat.toggleReaction}
               onCancelContext={chat.resetComposer}
               onToggleMention={chat.toggleMention}
+            />
+          )}
+          {panel === 'private-chat' && (
+            <ConferencePrivateChatPanel
+              conversation={privateChat.conversation}
+              peers={privateChat.peers}
+              selectedPeerUserId={privateChat.selectedPeerUserId}
+              unreadByPeer={privateChat.unreadByPeer}
+              currentUserId={currentUserId}
+              message={privateChat.message}
+              canSend={privateChat.canSend}
+              busy={privateChat.busy}
+              errorMessage={privateChat.errorMessage}
+              replyTo={privateChat.replyTo}
+              editing={privateChat.editing}
+              onSelectPeer={privateChat.selectPeer}
+              onMessageChange={privateChat.setMessage}
+              onSend={privateChat.sendMessage}
+              onReply={privateChat.beginReply}
+              onEdit={privateChat.beginEdit}
+              onDelete={privateChat.deleteMessage}
+              onCancelContext={privateChat.resetComposer}
             />
           )}
           {panel === 'participants' && (

@@ -3,7 +3,7 @@ import type { ConnectionQuality, LocalParticipant, RemoteParticipant, Room } fro
 export type ConferenceRole = 'host' | 'admin' | 'moderator' | 'member' | 'guest';
 export type HostAction = 'remove' | 'mute' | 'promote' | 'demote' | 'lock' | 'unlock' | 'end' | 'lower-hand';
 export type ConferenceUiState = 'joining' | 'waiting' | 'connected' | 'reconnecting' | 'failed';
-export type ConferencePanel = 'chat' | 'participants' | 'devices' | null;
+export type ConferencePanel = 'chat' | 'private-chat' | 'participants' | 'devices' | null;
 export type ConferenceParticipant = LocalParticipant | RemoteParticipant;
 
 export const CONFERENCE_RBAC_ROLES = [
@@ -83,6 +83,12 @@ export type ConferenceChatAction =
   | 'delete'
   | 'react';
 
+export type ConferencePrivateChatAction =
+  | 'send'
+  | 'edit'
+  | 'delete'
+  | 'read';
+
 export type MeetingPhase =
   | 'SCHEDULED'
   | 'WAITING'
@@ -158,6 +164,26 @@ export interface ConferenceMessageRow {
   is_deleted: boolean;
   reactions: ConferenceMessageReactionRow[];
   mentioned_user_ids: string[];
+}
+
+export interface ConferencePrivateMessageRow {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  recipient_id: string;
+  sender_name: string;
+  recipient_name: string;
+  body: string;
+  reply_to_id: string | null;
+  reply_to_body: string | null;
+  reply_to_sender_name: string | null;
+  is_deleted: boolean;
+  edited_at: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  read_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ParticipantRow {
