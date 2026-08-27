@@ -14,6 +14,7 @@ const chatPanel = read('src/features/video-conference/components/chat/Conference
 const composer = read('src/features/video-conference/components/chat/ConferenceChatComposer.tsx');
 const item = read('src/features/video-conference/components/chat/ConferenceMessageItem.tsx');
 const tools = read('src/features/video-conference/components/controls/ConferenceTools.tsx');
+const performanceHardening = read('supabase/migrations/20260827223747_video_conference_phase7_chat_performance_hardening.sql');
 const manager = read('deploy/spark-cli/lib/install-livekit.sh');
 
 test('public chat persistence adds edit/delete metadata plus normalized reactions and mentions', () => {
@@ -120,7 +121,7 @@ test('mentions are selected from joined participants and persisted by user id', 
   assert.match(chatHook, /mentionCandidates/);
   assert.match(composer, /message\.includes\('@'\)/);
   assert.match(composer, /@\{participant\.display_name\}/);
-  assert.match(tools, /mentionCandidates=\{moderation\.participants\}/);
+  assert.match(tools, /mentionCandidates:\s*moderation\.participants/);
 });
 
 test('message item preserves timestamps and displays deleted history without removing rows', () => {
@@ -140,4 +141,11 @@ test('phase chat policy remains part of every send edit and reaction authorizati
 
 test('self-hosted validation probes the new chat edge function', () => {
   assert.match(manager, /livekit_function_unauthorized_probe conference-chat-control/);
+});
+
+
+test('reply lookup and room-read RLS have Phase 7 performance hardening', () => {
+  assert.match(performanceHardening, /conference_messages_reply_to_idx/);
+  assert.match(performanceHardening, /on public\.conference_messages\(reply_to_id\)/);
+  assert.match(performanceHardening, /p\.user_id=\(select auth\.uid\(\)\)/);
 });
