@@ -40,12 +40,15 @@ export function WeekView(p: CalendarViewProps) {
 
   return (
     <div className="mx-2 mb-2 mt-1 flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3">
-      <div className="flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain">
+      <div
+        className="flex min-h-0 flex-1 overflow-auto overscroll-contain"
+        ref={el => { (timeGridRef as any).current = el; (timeScrollRef as any).current = el; }}
+      >
         <div
           className="flex min-h-0 flex-1 flex-col"
           style={{ minWidth: scrollableMobileWeek ? '720px' : '0px' }}
         >
-          <div className="flex-shrink-0 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="sticky top-0 z-50 flex-shrink-0 border-b border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-950">
             <div className="grid grid-cols-[56px_repeat(7,1fr)] bg-white dark:bg-slate-950">
               <div
                 className="sticky z-40 border-l border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-950"
@@ -126,7 +129,7 @@ export function WeekView(p: CalendarViewProps) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto" ref={el => { (timeGridRef as any).current = el; (timeScrollRef as any).current = el; }}>
+          <div className="flex-1">
             <div style={offHoursWrapStyle}>
               <div className="relative grid grid-cols-[56px_repeat(7,1fr)] bg-white dark:bg-slate-950" ref={weekGridRef} style={offHoursInnerStyle}>
                 {(() => {
@@ -142,21 +145,31 @@ export function WeekView(p: CalendarViewProps) {
                       <div className="absolute h-px bg-rose-300/40 dark:bg-rose-700/30" style={{ left: 0, right: '56px' }} />
                       <div className="absolute h-px bg-rose-500" style={{ right: colRight, width: colWidth }} />
                       <div className="absolute h-2 w-2 -translate-y-[3px] rounded-full bg-rose-500" style={{ right: `calc(56px + ${todayIdx + 1} * (100% - 56px) / 7 - 4px)` }} />
-                      <div className="absolute right-0 -translate-y-2" style={{ width: '56px' }}>
-                        <span className="block text-center text-[9px] font-bold leading-none text-rose-500">{timeLabel}</span>
-                      </div>
                     </div>
                   );
                 })()}
 
                 <div
-                  className="sticky z-40 border-l border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-950"
-                  style={{ insetInlineStart: 0 }}
+                  className="sticky z-40 min-w-[56px] max-w-[56px] border-l border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-950"
+                  style={{ insetInlineStart: 0, width: '56px' }}
                   onWheel={e => { if (e.ctrlKey || e.altKey) { e.preventDefault(); adjustSlotHeight(e.deltaY < 0 ? 4 : -4); } }}
                   onTouchStart={handleHourColTouchStart}
                   onTouchMove={handleHourColTouchMove}
                   onTouchEnd={handleHourColTouchEnd}
                 >
+                  {weekDays.some(d => isToday(d.jy, d.jm, d.jd)) && (() => {
+                    const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
+                    const top = ((nowMin - HOURS_START * 60) / 30) * slotHeight;
+                    const timeLabel = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+                    return (
+                      <span
+                        className="pointer-events-none absolute right-1 z-50 -translate-y-1/2 rounded bg-white/95 px-0.5 text-[9px] font-bold leading-none text-rose-500 dark:bg-slate-950/95"
+                        style={{ top: `${top}px` }}
+                      >
+                        {timeLabel}
+                      </span>
+                    );
+                  })()}
                   {Array.from({ length: HOURS_END - HOURS_START }, (_, i) => i + HOURS_START).map(h => (
                     <div key={h} style={{ height: `${slotHeight * 2}px` }} className="relative">
                       {h > 0 && <span className="absolute -top-2.5 right-1 text-[10px] text-slate-400">{String(h).padStart(2, '0')}:00</span>}
