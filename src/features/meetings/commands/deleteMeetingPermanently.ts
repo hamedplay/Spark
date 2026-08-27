@@ -68,6 +68,7 @@ async function sendExternalCancellation(
       mode: 'external',
       mobiles,
       meetingId,
+      eventKey: `meeting:${meetingId}:cancel:external`,
       message: `جلسه «${meetingSubject}» لغو شده است`,
       category: 'meeting',
       eventType: 'cancel',
@@ -155,6 +156,9 @@ export async function deleteMeetingPermanently(
             `جلسه «${input.meetingSubject}» لغو شده است`,
 
           meetingId: input.meetingId,
+
+          eventKey:
+            `meeting:${input.meetingId}:cancel:${isParticipant ? 'participants' : 'observers'}:${userId}`,
 
           placeholders: {
             meeting_subject:
