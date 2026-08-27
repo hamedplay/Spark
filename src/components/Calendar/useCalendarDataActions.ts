@@ -72,7 +72,9 @@ export function useCalendarDataActions(scope: Record<string, any>) {
       ]);
 
       if (error) throw error;
-      if (ownerDelegateError) throw ownerDelegateError;
+      if (ownerDelegateError) {
+        console.warn('[CalendarPage] owner delegate status enrichment unavailable:', ownerDelegateError);
+      }
 
       const inboxStatus = new Map<string, string>(
         (inboxRows || []).map((r: any) => [r.meeting_id, r.status])
@@ -97,7 +99,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         return s !== 'pending' && s !== 'declined';
       });
       const ownerDelegateByMeeting = new Map<string, any>(
-        (ownerDelegateRows || []).map((row: any) => [row.meeting_id, row])
+        (!ownerDelegateError && ownerDelegateRows ? ownerDelegateRows : []).map((row: any) => [row.meeting_id, row])
       );
       const enriched = filtered.map((meeting: any) => {
         if (meeting.user_id !== userId) return meeting;
