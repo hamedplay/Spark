@@ -10,12 +10,23 @@ interface Params {
   currentUserId: string;
   currentUserName: string;
   authorization: ConferenceAuthorization;
+  phaseAllowsChat: boolean;
 }
 
-export function useConferenceChat({ client, roomId, currentUserId, currentUserName, authorization }: Params) {
+export function useConferenceChat({
+  client,
+  roomId,
+  currentUserId,
+  currentUserName,
+  authorization,
+  phaseAllowsChat,
+}: Params) {
   const [messages, setMessages] = useState<ConferenceMessageRow[]>([]);
   const [message, setMessage] = useState('');
-  const canSend = hasConferencePermission(authorization, 'SEND_CHAT');
+  const canSend = (
+    phaseAllowsChat
+    && hasConferencePermission(authorization, 'SEND_CHAT')
+  );
 
   const refreshMessages = useCallback(async () => {
     try {

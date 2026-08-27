@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { Wifi } from 'lucide-react';
 import { useConferenceClient } from '../../../../components/VideoConference/conferenceClient';
 import { useConferenceAuthorization } from '../../hooks/useConferenceAuthorization';
+import { useConferencePhase } from '../../hooks/useConferencePhase';
 import { useConferenceSpeakerTimer } from '../../hooks/useConferenceSpeakerTimer';
 import { useLiveKitRoom } from '../../hooks/useLiveKitRoom';
 import { useNetworkQuality } from '../../hooks/useNetworkQuality';
@@ -16,6 +17,7 @@ import { ReactionOverlay } from '../reactions/ReactionOverlay';
 import { RoomMediaControls } from '../controls/RoomMediaControls';
 import { WaitingRoomList } from '../waiting-room/WaitingRoomList';
 import { ConferenceRoomStatus } from './ConferenceRoomStatus';
+import { MeetingPhaseOverlay } from './MeetingPhaseOverlay';
 import { SpeakerTimerBanner } from './SpeakerTimerBanner';
 
 interface Props {
@@ -30,6 +32,11 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
   const conferenceClient = useConferenceClient();
   const livekit = useLiveKitRoom({ roomId: sparkRoom.id, currentUserName, localStream, client: conferenceClient });
   const { authorization } = useConferenceAuthorization({
+    client: conferenceClient,
+    roomId: sparkRoom.id,
+    currentUserId,
+  });
+  const phase = useConferencePhase({
     client: conferenceClient,
     roomId: sparkRoom.id,
     currentUserId,
@@ -88,9 +95,19 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
 
       {waiting.waitingRows.length > 0 && canManageWaitingRoom && <WaitingRoomList roomId={sparkRoom.id} rows={waiting.waitingRows} />}
 
-      <ParticipantGrid participants={visibleParticipants} localIdentity={livekit.room?.localParticipant.identity} activeSpeakerIdentity={livekit.activeSpeakerIdentity} />
-      <ReactionOverlay reaction={livekit.reaction} />
+      {!phase.mediaHidden && (
+        <ParticipantGrid
+          participants={visibleParticipants}
+          localIdentity={livekit.room?.localParticipant.identity}
+          activeSpeakerIdentity={livekit.activeSpeakerIdentity}
+        />
+      )}
+      {!phase.mediaHidden && <ReactionOverlay reaction={livekit.reaction} />}
       <SpeakerTimerBanner session={speakerTimer.ownSession} remainingSeconds={speakerTimer.ownRemainingSeconds} />
+      <MeetingPhaseOverlay
+        phase={phase.currentPhase}
+        remainingSeconds={phase.remainingSeconds}
+      />
 
       {livekit.room && (
         <LiveKitConferenceTools
@@ -99,6 +116,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           currentUserId={currentUserId}
           currentUserName={currentUserName}
           authorization={authorization}
+          phase={phase}
           speakerTimer={speakerTimer}
           onEnded={() => void leave()}
         />
@@ -108,8 +126,15 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         micEnabled={livekit.micEnabled}
         cameraEnabled={livekit.cameraEnabled}
         screenEnabled={screen.screenEnabled}
-        allowMicrophone={hasConferencePermission(authorization, 'PUBLISH_MIC') && !speakerTimer.microphoneBlocked}
-        allowCamera={hasConferencePermission(authorization, 'PUBLISH_CAMERA')}
+        allowMicrophone={
+          phase.allowMic
+          && hasConferencePermission(authorization, 'PUBLISH_MIC')
+          && !speakerTimer.microphoneBlocked
+        }
+        allowCamera={
+          phase.allowCamera
+          && hasConferencePermission(authorization, 'PUBLISH_CAMERA')
+        }
         allowScreenShare={hasConferencePermission(authorization, 'PUBLISH_SCREEN') && sparkRoom.allow_screen_share !== false && typeof navigator.mediaDevices?.getDisplayMedia === 'function'}
         allowReactions={sparkRoom.allow_reactions !== false}
         onToggleMic={() => void livekit.toggleMic()}

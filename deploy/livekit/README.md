@@ -49,6 +49,8 @@ The same `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must be configured as server
 - `conference-speaker-timer-control`
 - `conference-speaker-queue-control`
 - `conference-speaker-timer-enforcer`
+- `conference-phase-control`
+- `conference-phase-enforcer`
 - `livekit-webhook`
 
 Also configure:
@@ -96,8 +98,9 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 8. Recording uses LiveKit RoomComposite Egress through `conference-recording` and transitions `queued -> recording -> processing -> ready/failed` through verified lifecycle events.
 9. LiveKit signed webhooks are verified by `livekit-webhook` and synchronize room, participant and egress lifecycle back into Postgres.
 10. Speaker timer and hand-raise queue state are authoritative in Postgres. `conference-speaker-queue-control` performs Host reorder/time/allow/remove actions, and the timer enforcer reconciles queued/paused/expired/completed microphone permissions with LiveKit.
-11. Spark Manager configures the five-second DB worker endpoint used for timer and queue permission reconciliation.
-12. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+11. Meeting phase state is authoritative in `conference_rooms` with revisioned `conference_phase_events`. `conference-phase-control` applies Host transitions and `conference-phase-enforcer` synchronizes automatic Countdown/Break/Resuming transitions to every connected LiveKit participant.
+12. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+13. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 

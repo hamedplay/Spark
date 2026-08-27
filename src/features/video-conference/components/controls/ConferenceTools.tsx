@@ -17,12 +17,20 @@ export function ConferenceTools({
   currentUserId,
   currentUserName,
   authorization,
+  phase,
   speakerTimer,
   onEnded,
 }: ConferenceToolsProps) {
   const client = useConferenceClient();
   const [panel, setPanel] = useState<ConferencePanel>(null);
-  const chat = useConferenceChat({ client, roomId, currentUserId, currentUserName, authorization });
+  const chat = useConferenceChat({
+    client,
+    roomId,
+    currentUserId,
+    currentUserName,
+    authorization,
+    phaseAllowsChat: phase.allowChat,
+  });
   const moderation = useConferenceModeration({
     client,
     roomId,
@@ -80,6 +88,7 @@ export function ConferenceTools({
             <ConferenceParticipantsPanel
               participants={moderation.participants}
               currentUserId={currentUserId}
+              phase={phase}
               canMuteOthers={moderation.canMuteOthers}
               canRemoveParticipants={moderation.canRemoveParticipants}
               canManageRoles={moderation.canManageRoles}

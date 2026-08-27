@@ -30,6 +30,7 @@ export const CONFERENCE_PERMISSIONS = [
   'MANAGE_BREAKOUTS',
   'MANAGE_CHAT',
   'MANAGE_POLLS',
+  'MANAGE_PHASE',
   'MANAGE_ROLES',
   'MANAGE_TIMER',
   'MANAGE_WAITING_ROOM',
@@ -75,6 +76,37 @@ export type SpeakerQueueAction =
   | 'remove'
   | 'set_time'
   | 'allow';
+
+export type MeetingPhase =
+  | 'SCHEDULED'
+  | 'WAITING'
+  | 'COUNTDOWN'
+  | 'LIVE'
+  | 'BREAK'
+  | 'RESUMING'
+  | 'ENDED';
+
+export type ConferencePhaseAction =
+  | 'open_waiting'
+  | 'start_countdown'
+  | 'start_break'
+  | 'resume';
+
+export interface ConferencePhasePolicy {
+  allowMic: boolean;
+  allowCamera: boolean;
+  allowChat: boolean;
+}
+
+export interface ConferencePhaseSnapshot extends ConferencePhasePolicy {
+  loaded: boolean;
+  serverTime: string;
+  currentPhase: MeetingPhase;
+  phaseStartedAt: string;
+  phaseEndsAt: string | null;
+  revision: number;
+  canManage: boolean;
+}
 
 export interface ConferenceAuthorization {
   loaded: boolean;
@@ -155,6 +187,18 @@ export interface SpeakerQueueItem {
   session: SpeakerSessionRow;
 }
 
+export interface ConferencePhaseController extends ConferencePhaseSnapshot {
+  remainingSeconds: number | null;
+  mediaHidden: boolean;
+  busy: boolean;
+  refresh: () => Promise<void>;
+  runAction: (
+    action: ConferencePhaseAction,
+    durationSeconds?: number,
+    policy?: ConferencePhasePolicy,
+  ) => Promise<unknown>;
+}
+
 export interface ConferenceSpeakerTimerController {
   sessionsByUser: Record<string, SpeakerSessionRow>;
   remainingByUser: Record<string, number>;
@@ -177,6 +221,7 @@ export interface ConferenceToolsProps {
   currentUserId: string;
   currentUserName: string;
   authorization: ConferenceAuthorization;
+  phase: ConferencePhaseController;
   speakerTimer: ConferenceSpeakerTimerController;
   onEnded: () => void;
 }

@@ -1787,6 +1787,13 @@ export type Database = {
           expires_at: string | null;
           created_at: string;
           ended_at: string | null;
+          current_phase: 'SCHEDULED' | 'WAITING' | 'COUNTDOWN' | 'LIVE' | 'BREAK' | 'RESUMING' | 'ENDED';
+          phase_started_at: string;
+          phase_ends_at: string | null;
+          phase_revision: number;
+          phase_allow_mic: boolean;
+          phase_allow_camera: boolean;
+          phase_allow_chat: boolean;
         };
         Insert: {
           id?: string;
@@ -1809,6 +1816,13 @@ export type Database = {
           expires_at?: string | null;
           created_at?: string;
           ended_at?: string | null;
+          current_phase?: 'SCHEDULED' | 'WAITING' | 'COUNTDOWN' | 'LIVE' | 'BREAK' | 'RESUMING' | 'ENDED';
+          phase_started_at?: string;
+          phase_ends_at?: string | null;
+          phase_revision?: number;
+          phase_allow_mic?: boolean;
+          phase_allow_camera?: boolean;
+          phase_allow_chat?: boolean;
         };
         Update: {
           id?: string;
@@ -1831,8 +1845,98 @@ export type Database = {
           expires_at?: string | null;
           created_at?: string;
           ended_at?: string | null;
+          current_phase?: 'SCHEDULED' | 'WAITING' | 'COUNTDOWN' | 'LIVE' | 'BREAK' | 'RESUMING' | 'ENDED';
+          phase_started_at?: string;
+          phase_ends_at?: string | null;
+          phase_revision?: number;
+          phase_allow_mic?: boolean;
+          phase_allow_camera?: boolean;
+          phase_allow_chat?: boolean;
         };
         Relationships: [];
+      };
+      conference_phase_events: {
+        Row: {
+          id: string;
+          room_id: string;
+          revision: number;
+          from_phase: string | null;
+          to_phase: string;
+          actor_user_id: string | null;
+          reason: string;
+          duration_seconds: number | null;
+          phase_started_at: string;
+          phase_ends_at: string | null;
+          allow_mic: boolean;
+          allow_camera: boolean;
+          allow_chat: boolean;
+          runtime_sync_status: 'PENDING' | 'DISPATCHED' | 'DONE' | 'FAILED' | 'SUPERSEDED';
+          last_dispatched_at: string | null;
+          enforcement_attempts: number;
+          enforced_at: string | null;
+          last_enforcement_error: string | null;
+          participants_updated: number;
+          participants_offline: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          revision: number;
+          from_phase?: string | null;
+          to_phase: string;
+          actor_user_id?: string | null;
+          reason: string;
+          duration_seconds?: number | null;
+          phase_started_at: string;
+          phase_ends_at?: string | null;
+          allow_mic: boolean;
+          allow_camera: boolean;
+          allow_chat: boolean;
+          runtime_sync_status?: 'PENDING' | 'DISPATCHED' | 'DONE' | 'FAILED' | 'SUPERSEDED';
+          last_dispatched_at?: string | null;
+          enforcement_attempts?: number;
+          enforced_at?: string | null;
+          last_enforcement_error?: string | null;
+          participants_updated?: number;
+          participants_offline?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          revision?: number;
+          from_phase?: string | null;
+          to_phase?: string;
+          actor_user_id?: string | null;
+          reason?: string;
+          duration_seconds?: number | null;
+          phase_started_at?: string;
+          phase_ends_at?: string | null;
+          allow_mic?: boolean;
+          allow_camera?: boolean;
+          allow_chat?: boolean;
+          runtime_sync_status?: 'PENDING' | 'DISPATCHED' | 'DONE' | 'FAILED' | 'SUPERSEDED';
+          last_dispatched_at?: string | null;
+          enforcement_attempts?: number;
+          enforced_at?: string | null;
+          last_enforcement_error?: string | null;
+          participants_updated?: number;
+          participants_offline?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'conference_phase_events_room_id_fkey';
+            columns: ['room_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_rooms';
+            referencedColumns: ['id'];
+          }
+        ];
       };
       conference_participants: {
         Row: {
@@ -3114,6 +3218,63 @@ export type Database = {
           reason?: string;
           role?: string;
           permissions?: string[];
+        };
+      };
+      get_conference_phase_snapshot: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          server_time: string;
+          current_phase?: string;
+          phase_started_at?: string;
+          phase_ends_at?: string | null;
+          revision?: number;
+          allow_mic?: boolean;
+          allow_camera?: boolean;
+          allow_chat?: boolean;
+          can_manage?: boolean;
+        };
+      };
+      authorize_conference_phase_action: {
+        Args: {
+          p_room_id: string;
+          p_action: string;
+          p_duration_seconds?: number | null;
+          p_allow_mic?: boolean | null;
+          p_allow_camera?: boolean | null;
+          p_allow_chat?: boolean | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          actor_user_id?: string;
+          action?: string;
+          current_phase?: string;
+        };
+      };
+      apply_livekit_conference_phase_action: {
+        Args: {
+          p_room_id: string;
+          p_action: string;
+          p_duration_seconds: number | null;
+          p_allow_mic: boolean | null;
+          p_allow_camera: boolean | null;
+          p_allow_chat: boolean | null;
+          p_actor_user_id: string;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          server_time?: string;
+          event_id?: string;
+          revision?: number;
+          current_phase?: string;
+          phase_started_at?: string;
+          phase_ends_at?: string | null;
+          allow_mic?: boolean;
+          allow_camera?: boolean;
+          allow_chat?: boolean;
         };
       };
       get_conference_speaker_timer_snapshot: {

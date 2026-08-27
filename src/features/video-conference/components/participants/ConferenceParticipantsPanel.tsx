@@ -1,6 +1,7 @@
 import type { ChangeEvent } from 'react';
 import { Hand, MicOff, UserMinus } from 'lucide-react';
 import type {
+  ConferencePhaseController,
   ConferenceRbacRole,
   HostAction,
   ParticipantRow,
@@ -10,12 +11,14 @@ import type {
   SpeakerTimerAction,
 } from '../../types/conference.types';
 import { ASSIGNABLE_CONFERENCE_ROLES, conferenceRoleLabel } from '../../utils/conferencePermissions';
+import { MeetingPhaseControls } from '../controls/MeetingPhaseControls';
 import { SpeakerQueuePanel } from './SpeakerQueuePanel';
 import { SpeakerTimerControl } from './SpeakerTimerControl';
 
 interface Props {
   participants: ParticipantRow[];
   currentUserId: string;
+  phase: ConferencePhaseController;
   canMuteOthers: boolean;
   canRemoveParticipants: boolean;
   canManageRoles: boolean;
@@ -41,6 +44,7 @@ interface Props {
 export function ConferenceParticipantsPanel({
   participants,
   currentUserId,
+  phase,
   canMuteOthers,
   canRemoveParticipants,
   canManageRoles,
@@ -56,6 +60,8 @@ export function ConferenceParticipantsPanel({
 }: Props) {
   return (
     <div className="max-h-[48dvh] overflow-y-auto p-2">
+      <MeetingPhaseControls phase={phase} />
+
       <SpeakerQueuePanel
         items={speakerQueue}
         canManage={canManageTimer}
