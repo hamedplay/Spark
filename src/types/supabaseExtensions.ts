@@ -263,6 +263,16 @@ export type Database = Omit<BaseDatabase, 'public'> & {
         };
         Returns: unknown;
       };
+      decline_meeting_invitation_v2: {
+        Args: {
+          p_meeting_inbox_id: string;
+        };
+        Returns: unknown;
+      };
+      get_my_meeting_owner_delegations_v1: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
       manage_management_task_v1: {
         Args: {
           p_task_id: string;
