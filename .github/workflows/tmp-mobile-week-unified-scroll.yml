@@ -1,0 +1,20 @@
+name: Temporary mobile week unified scroll validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-mobile-week-unified-scroll.yml'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - name: Production build
+        run: npm run build
+      - name: Validate unified time column scrolling
+        run: |
+          grep -q "overflow-auto overscroll-contain" src/components/Calendar/WeekView.tsx
+          ! grep -q 'className="flex-1 overflow-y-auto"' src/components/Calendar/WeekView.tsx
+          grep -q "min-w-\[56px\] max-w-\[56px\]" src/components/Calendar/WeekView.tsx
+          grep -q "currentTime.getHours()" src/components/Calendar/WeekView.tsx
