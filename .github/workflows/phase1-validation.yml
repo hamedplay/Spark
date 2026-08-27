@@ -1,0 +1,79 @@
+name: Temporary Phase 1 Validation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/phase1-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Validate without lint
+        shell: bash
+        run: |
+          set +e
+          npm ci > /tmp/npm-ci.log 2>&1
+          ci_status=$?
+
+          build_status=99
+          phase1_status=99
+          tests_status=99
+
+          if [ "$ci_status" -eq 0 ]; then
+            npm run build > /tmp/build.log 2>&1
+            build_status=$?
+
+            node --test tests/video-conference/phase1FrontendFoundation.test.mjs > /tmp/phase1-test.log 2>&1
+            phase1_status=$?
+
+            npm test > /tmp/full-test.log 2>&1
+            tests_status=$?
+          else
+            echo "npm ci did not complete; downstream commands skipped" > /tmp/build.log
+            cp /tmp/build.log /tmp/phase1-test.log
+            cp /tmp/build.log /tmp/full-test.log
+          fi
+
+          {
+            echo "source_commit=$GITHUB_SHA"
+            echo "npm_ci=$ci_status"
+            echo "build=$build_status"
+            echo "phase1_test=$phase1_status"
+            echo "full_test=$tests_status"
+            echo "--- npm ci tail ---"
+            tail -n 60 /tmp/npm-ci.log
+            echo "--- build tail ---"
+            tail -n 80 /tmp/build.log
+            echo "--- phase1 test tail ---"
+            tail -n 80 /tmp/phase1-test.log
+            echo "--- full test tail ---"
+            tail -n 100 /tmp/full-test.log
+          } > .phase1-validation-result.txt
+
+          git config user.name "spark-phase1-validator"
+          git config user.email "spark-phase1-validator@users.noreply.github.com"
+          git add .phase1-validation-result.txt
+          git commit -m "chore: record temporary phase1 validation result"
+          git push origin HEAD:main
+
+          if [ "$ci_status" -ne 0 ] || [ "$build_status" -ne 0 ] || [ "$phase1_status" -ne 0 ] || [ "$tests_status" -ne 0 ]; then
+            exit 1
+          fi
