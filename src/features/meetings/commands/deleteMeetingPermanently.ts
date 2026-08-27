@@ -127,7 +127,7 @@ export async function deleteMeetingPermanently(
         profile.full_name || '';
     }
 
-    await Promise.all(
+    await Promise.allSettled(
       recipientIds.map((userId) => {
         const isParticipant =
           participantUserIds.includes(userId);
@@ -192,11 +192,15 @@ export async function deleteMeetingPermanently(
     );
   }
 
-  await sendExternalCancellation(
-    input.meetingId,
-    input.meetingSubject,
-    input.senderId
-  );
+  try {
+    await sendExternalCancellation(
+      input.meetingId,
+      input.meetingSubject,
+      input.senderId
+    );
+  } catch (error) {
+    console.warn('[deleteMeetingPermanently] external cancellation SMS failed; continuing meeting deletion', error);
+  }
 
   const { error: inboxDeleteError } = await supabase
     .from('meeting_inbox')
