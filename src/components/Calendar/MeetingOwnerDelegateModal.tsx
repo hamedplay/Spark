@@ -88,6 +88,7 @@ export function MeetingOwnerDelegateModal({
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose();
       }}
+      onClick={(event) => event.stopPropagation()}
     >
       <section className="flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-gray-800 sm:rounded-2xl">
         <header className="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-700">
