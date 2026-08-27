@@ -1,0 +1,27 @@
+name: phase4-validation-temp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/phase4-validation-temp.yml
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate video conference phases 1-4
+        run: node --test tests/video-conference/phase1FrontendFoundation.test.mjs tests/video-conference/phase2Rbac.test.mjs tests/video-conference/phase3LiveKitPermissions.test.mjs tests/video-conference/phase4SpeakerTimer.test.mjs
+      - name: Validate Spark Manager shell syntax
+        run: bash -n deploy/spark-cli/lib/install-livekit.sh
+      - name: Run regression suite
+        run: npm test
+      - name: Production build
+        run: npm run build
