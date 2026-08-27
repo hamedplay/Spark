@@ -1905,6 +1905,86 @@ export type Database = {
           }
         ];
       };
+      conference_speaker_sessions: {
+        Row: {
+          id: string;
+          room_id: string;
+          user_id: string;
+          granted_by: string;
+          starts_at: string;
+          active_started_at: string | null;
+          expires_at: string | null;
+          allocated_seconds: number;
+          used_seconds: number;
+          status: 'QUEUED' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
+          paused_at: string | null;
+          ended_at: string | null;
+          end_reason: string | null;
+          enforcement_status: 'NONE' | 'PENDING' | 'DISPATCHED' | 'DONE' | 'FAILED';
+          enforcement_requested_at: string;
+          last_dispatched_at: string | null;
+          enforced_at: string | null;
+          enforcement_attempts: number;
+          last_enforcement_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          user_id: string;
+          granted_by: string;
+          starts_at?: string;
+          active_started_at?: string | null;
+          expires_at?: string | null;
+          allocated_seconds: number;
+          used_seconds?: number;
+          status?: 'QUEUED' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
+          paused_at?: string | null;
+          ended_at?: string | null;
+          end_reason?: string | null;
+          enforcement_status?: 'NONE' | 'PENDING' | 'DISPATCHED' | 'DONE' | 'FAILED';
+          enforcement_requested_at?: string;
+          last_dispatched_at?: string | null;
+          enforced_at?: string | null;
+          enforcement_attempts?: number;
+          last_enforcement_error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          user_id?: string;
+          granted_by?: string;
+          starts_at?: string;
+          active_started_at?: string | null;
+          expires_at?: string | null;
+          allocated_seconds?: number;
+          used_seconds?: number;
+          status?: 'QUEUED' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
+          paused_at?: string | null;
+          ended_at?: string | null;
+          end_reason?: string | null;
+          enforcement_status?: 'NONE' | 'PENDING' | 'DISPATCHED' | 'DONE' | 'FAILED';
+          enforcement_requested_at?: string;
+          last_dispatched_at?: string | null;
+          enforced_at?: string | null;
+          enforcement_attempts?: number;
+          last_enforcement_error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'conference_speaker_sessions_room_id_fkey';
+            columns: ['room_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_rooms';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       conference_messages: {
         Row: {
           id: string;
@@ -3031,6 +3111,31 @@ export type Database = {
           reason?: string;
           role?: string;
           permissions?: string[];
+        };
+      };
+      get_conference_speaker_timer_snapshot: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          server_time: string;
+          can_manage?: boolean;
+          sessions: unknown[];
+        };
+      };
+      control_conference_speaker_timer: {
+        Args: {
+          p_room_id: string;
+          p_target_user_id: string;
+          p_action: string;
+          p_seconds?: number | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          server_time?: string;
+          session?: unknown;
+          livekit_policy?: unknown;
         };
       };
       get_all_users: {

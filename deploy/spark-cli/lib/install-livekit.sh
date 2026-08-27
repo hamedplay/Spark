@@ -438,6 +438,28 @@ livekit_function_unauthorized_probe() {
   [[ "$code" == "401" || "$code" == "403" ]]
 }
 
+livekit_configure_speaker_timer_worker() {
+  local worker_url
+  worker_url="https://${API_DOMAIN}/functions/v1/conference-speaker-timer-enforcer"
+
+  (
+    cd "$SUPABASE_ROOT"
+    docker compose exec -T db psql \
+      -v ON_ERROR_STOP=1 \
+      -v worker_url="$worker_url" \
+      -U postgres -d postgres <<'SQL'
+DO $spark$
+BEGIN
+  IF to_regprocedure('private.configure_conference_speaker_timer_worker(text)') IS NULL THEN
+    RAISE EXCEPTION 'speaker timer worker configuration RPC is missing';
+  END IF;
+END
+$spark$;
+SELECT private.configure_conference_speaker_timer_worker(:'worker_url');
+SQL
+  ) >>"$CURRENT_LOG" 2>&1
+}
+
 livekit_api_smoke() {
   local key secret token body
   key="$(livekit_env_value LIVEKIT_API_KEY)"
@@ -495,9 +517,12 @@ test_livekit_full_validation() {
   turnutils_stunclient "$(livekit_env_value LIVEKIT_TURN_DOMAIN)" -p "$LIVEKIT_TURN_UDP_PORT" >/dev/null 2>&1 || return 1
   livekit_turn_tls_probe || return 1
   livekit_api_smoke || return 1
+  livekit_configure_speaker_timer_worker || return 1
   livekit_function_unauthorized_probe conference-livekit-token || return 1
   livekit_function_unauthorized_probe conference-host-control || return 1
   livekit_function_unauthorized_probe conference-recording || return 1
+  livekit_function_unauthorized_probe conference-speaker-timer-control || return 1
+  livekit_function_unauthorized_probe conference-speaker-timer-enforcer || return 1
   livekit_function_unauthorized_probe livekit-webhook || return 1
   livekit_secret_leak_probe || return 1
   ! systemctl is-active --quiet coturn 2>/dev/null || return 1

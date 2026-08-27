@@ -46,6 +46,8 @@ The same `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must be configured as server
 - `conference-livekit-token`
 - `conference-host-control`
 - `conference-recording`
+- `conference-speaker-timer-control`
+- `conference-speaker-timer-enforcer`
 - `livekit-webhook`
 
 Also configure:
@@ -92,7 +94,8 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 7. Host moderation uses `conference-host-control`; browser tokens never receive `roomAdmin`.
 8. Recording uses LiveKit RoomComposite Egress through `conference-recording` and transitions `queued -> recording -> processing -> ready/failed` through verified lifecycle events.
 9. LiveKit signed webhooks are verified by `livekit-webhook` and synchronize room, participant and egress lifecycle back into Postgres.
-10. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+10. Speaker timer state is authoritative in Postgres; Spark Manager configures the five-second DB worker endpoint, while `conference-speaker-timer-enforcer` synchronizes expiry/pause/stop into LiveKit microphone permissions.
+11. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 

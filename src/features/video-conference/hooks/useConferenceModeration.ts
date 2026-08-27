@@ -6,9 +6,11 @@ import { loadConferenceParticipants, loadConferenceRoomState } from '../services
 import type {
   ConferenceAuthorization,
   ConferenceRbacRole,
+  ConferenceSpeakerTimerController,
   HostAction,
   ParticipantRow,
   RecordingRow,
+  SpeakerTimerAction,
 } from '../types/conference.types';
 import { hasConferencePermission } from '../utils/conferencePermissions';
 
@@ -17,10 +19,18 @@ interface Params {
   roomId: string;
   currentUserId: string;
   authorization: ConferenceAuthorization;
+  speakerTimer: ConferenceSpeakerTimerController;
   onEnded: () => void;
 }
 
-export function useConferenceModeration({ client, roomId, currentUserId, authorization, onEnded }: Params) {
+export function useConferenceModeration({
+  client,
+  roomId,
+  currentUserId,
+  authorization,
+  speakerTimer,
+  onEnded,
+}: Params) {
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
   const [raised, setRaised] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -100,6 +110,26 @@ export function useConferenceModeration({ client, roomId, currentUserId, authori
     }
   }, [client, refreshParticipants, roomId]);
 
+  const timerAction = useCallback(async (
+    targetUserId: string,
+    action: SpeakerTimerAction,
+    seconds?: number,
+  ) => {
+    setBusy(`timer:${targetUserId}:${action}`);
+    try {
+      await speakerTimer.runAction(targetUserId, action, seconds);
+      await refreshParticipants();
+    } catch (error) {
+      console.error('[VideoConference] speaker timer action failed', {
+        targetUserId,
+        action,
+        error,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }, [refreshParticipants, speakerTimer]);
+
   const toggleRecording = useCallback(async () => {
     setBusy('recording');
     try {
@@ -124,10 +154,14 @@ export function useConferenceModeration({ client, roomId, currentUserId, authori
     toggleRaise,
     hostAction,
     changeRole,
+    timerAction,
+    speakerSessionsByUser: speakerTimer.sessionsByUser,
+    speakerRemainingByUser: speakerTimer.remainingByUser,
     toggleRecording,
     canMuteOthers: hasConferencePermission(authorization, 'MUTE_OTHERS'),
     canRemoveParticipants: hasConferencePermission(authorization, 'REMOVE_PARTICIPANT'),
     canManageRoles: hasConferencePermission(authorization, 'MANAGE_ROLES'),
+    canManageTimer: hasConferencePermission(authorization, 'MANAGE_TIMER'),
     canStartRecording: hasConferencePermission(authorization, 'START_RECORDING'),
     canStopRecording: hasConferencePermission(authorization, 'STOP_RECORDING'),
     canLockRoom: hasConferencePermission(authorization, 'LOCK_ROOM'),

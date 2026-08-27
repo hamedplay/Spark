@@ -54,6 +54,21 @@ export const CONFERENCE_PERMISSIONS = [
 
 export type ConferencePermission = typeof CONFERENCE_PERMISSIONS[number];
 
+export type SpeakerSessionStatus =
+  | 'QUEUED'
+  | 'ACTIVE'
+  | 'PAUSED'
+  | 'EXPIRED'
+  | 'CANCELLED'
+  | 'COMPLETED';
+
+export type SpeakerTimerAction =
+  | 'start'
+  | 'extend'
+  | 'pause'
+  | 'resume'
+  | 'stop';
+
 export interface ConferenceAuthorization {
   loaded: boolean;
   role: ConferenceRbacRole | null;
@@ -102,6 +117,41 @@ export interface RecordingRow {
   created_at: string;
 }
 
+export interface SpeakerSessionRow {
+  id: string;
+  room_id: string;
+  user_id: string;
+  granted_by: string;
+  starts_at: string;
+  active_started_at: string | null;
+  expires_at: string | null;
+  allocated_seconds: number;
+  used_seconds: number;
+  status: SpeakerSessionStatus;
+  paused_at: string | null;
+  ended_at: string | null;
+  end_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SpeakerTimerSnapshot {
+  loaded: boolean;
+  serverTime: string;
+  canManage: boolean;
+  sessions: SpeakerSessionRow[];
+}
+
+export interface ConferenceSpeakerTimerController {
+  sessionsByUser: Record<string, SpeakerSessionRow>;
+  remainingByUser: Record<string, number>;
+  runAction: (
+    targetUserId: string,
+    action: SpeakerTimerAction,
+    seconds?: number,
+  ) => Promise<unknown>;
+}
+
 export interface MediaDeviceOption {
   deviceId: string;
   label: string;
@@ -113,6 +163,7 @@ export interface ConferenceToolsProps {
   currentUserId: string;
   currentUserName: string;
   authorization: ConferenceAuthorization;
+  speakerTimer: ConferenceSpeakerTimerController;
   onEnded: () => void;
 }
 
