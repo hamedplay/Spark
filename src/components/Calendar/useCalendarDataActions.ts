@@ -128,6 +128,18 @@ export function useCalendarDataActions(scope: Record<string, any>) {
   // Keep ref in sync so real-time callbacks always call latest version
   useEffect(() => { fetchMeetingsRef.current = () => fetchMeetings(); }, [fetchMeetings]);
 
+  useEffect(() => {
+    const userId = currentUserId ?? providedUserId;
+    if (!userId) return;
+    const channel = supabase
+      .channel(`calendar-owner-delegate-${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => {
+        fetchMeetingsRef.current();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUserId, providedUserId]);
+
   // Re-fetch when visible month changes
   useEffect(() => {
     if (currentJy && currentJm) fetchMeetings(currentJy, currentJm);
