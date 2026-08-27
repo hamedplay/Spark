@@ -36,6 +36,7 @@ interface InboxEntry {
   meeting_id: string;
   status: 'pending' | 'accepted' | 'delegated' | 'declined';
   delegate_to: string | null;
+  delegated_by_user_id: string | null;
 }
 
 interface InboxMeeting {
@@ -87,6 +88,7 @@ export function MeetingInboxButton() {
         meeting_id,
         status,
         delegate_to,
+        delegated_by_user_id,
         meeting:meetings (
           id, subject, request_date, start_time, end_time,
           location, user_id, participant_user_ids, notify_users, calendar_id
@@ -120,6 +122,7 @@ export function MeetingInboxButton() {
         meeting_id: row.meeting_id,
         status: row.status as InboxEntry['status'],
         delegate_to: row.delegate_to,
+        delegated_by_user_id: row.delegated_by_user_id ?? null,
       });
       mtgMap[mtg.id] = mtg;
     }
@@ -156,6 +159,7 @@ export function MeetingInboxButton() {
             meeting_id,
             status,
             delegate_to,
+            delegated_by_user_id,
             meeting:meetings (
               id, subject, request_date, start_time, end_time,
               location, user_id, participant_user_ids, notify_users, calendar_id
@@ -183,6 +187,7 @@ export function MeetingInboxButton() {
           meeting_id: row.meeting_id,
           status: row.status as InboxEntry['status'],
           delegate_to: row.delegate_to,
+          delegated_by_user_id: row.delegated_by_user_id ?? null,
         };
         if (entry.status === 'pending') {
           setEntries(prev => prev.some(item => item.id === entry!.id) ? prev : [...prev, entry!]);
@@ -269,12 +274,15 @@ export function MeetingInboxButton() {
   };
 
   const afterAccept = async (entry: InboxEntry, meeting: any) => {
+    const ownerDelegate = entry.delegated_by_user_id === meeting.user_id;
     await insertNotification({
       userId: meeting.user_id,
       category: 'meeting',
       eventType: getMeetingTemplateKey('organizer', 'confirmed'),
-      fallbackTitle: 'تأیید شرکت در جلسه',
-      fallbackMessage: `${getProfileName(currentUserId)} شرکت در جلسه «${meeting.subject}» را تأیید کرد`,
+      fallbackTitle: ownerDelegate ? 'تأیید جانشینی جلسه' : 'تأیید شرکت در جلسه',
+      fallbackMessage: ownerDelegate
+        ? `${getProfileName(currentUserId)} تأیید کرد به‌عنوان جانشین شما در جلسه «${meeting.subject}» حضور داشته باشد`
+        : `${getProfileName(currentUserId)} شرکت در جلسه «${meeting.subject}» را تأیید کرد`,
       placeholders: {
         meeting_subject: meeting.subject,
         meeting_date: formatMeetingDate(meeting),
@@ -292,7 +300,9 @@ export function MeetingInboxButton() {
     });
     setEntries(prev => prev.filter(e => e.id !== entry.id));
     setMeetings(prev => { const n = { ...prev }; delete n[entry.meeting_id]; return n; });
-    toast.success(`جلسه «${meeting.subject}» تأیید شد و در تقویم ثبت شد`);
+    toast.success(ownerDelegate
+      ? `جانشینی در جلسه «${meeting.subject}» تأیید شد و جلسه به تقویم شما اضافه شد`
+      : `جلسه «${meeting.subject}» تأیید شد و در تقویم ثبت شد`);
   };
 
   const handleDecline = async (entry: InboxEntry) => {
@@ -302,24 +312,22 @@ export function MeetingInboxButton() {
     setLoading(true);
     setDeclineConfirmEntry(null);
     try {
-      // 1. Mark inbox entry as declined
-      const { error: inboxErr } = await supabase
-        .from('meeting_inbox')
-        .update({ status: 'declined' })
-        .eq('id', entry.id);
-      if (inboxErr) throw inboxErr;
+      const { data: declineResult, error: declineError } = await supabase.rpc('decline_meeting_invitation_v2', {
+        p_meeting_inbox_id: entry.id,
+      });
+      if (declineError) throw declineError;
+      if (!declineResult?.success) throw new Error(declineResult?.error_code || 'DECLINE_FAILED');
 
-      // 2. Flag the meeting as rejected so creator sees it needs attention
-      //    (SECURITY DEFINER function — participant cannot update meetings directly)
-      await supabase.rpc('flag_meeting_rejected', { p_meeting_id: meeting.id });
+      const ownerDelegate = Boolean(declineResult.owner_delegate);
 
-      // 3. Notify organizer and direct them to meeting management
       await insertNotification({
         userId: meeting.user_id,
         category: 'meeting',
         eventType: getMeetingTemplateKey('organizer', 'declined'),
-        fallbackTitle: 'رد دعوت جلسه',
-        fallbackMessage: `${getProfileName(currentUserId)} دعوت به جلسه «${meeting.subject}» را رد کرد`,
+        fallbackTitle: ownerDelegate ? 'رد درخواست جانشینی' : 'رد دعوت جلسه',
+        fallbackMessage: ownerDelegate
+          ? `${getProfileName(currentUserId)} درخواست حضور به‌عنوان جانشین شما در جلسه «${meeting.subject}» را رد کرد`
+          : `${getProfileName(currentUserId)} دعوت به جلسه «${meeting.subject}» را رد کرد`,
         placeholders: {
           meeting_subject: meeting.subject,
           meeting_date: formatMeetingDate(meeting),
@@ -333,12 +341,14 @@ export function MeetingInboxButton() {
         },
         senderId: currentUserId,
         senderName: getProfileName(currentUserId),
-        actionUrl: 'meetings',
+        actionUrl: ownerDelegate ? 'calendar' : 'meetings',
       });
 
       setEntries(prev => prev.filter(e => e.id !== entry.id));
       setMeetings(prev => { const n = { ...prev }; delete n[entry.meeting_id]; return n; });
-      toast.success(`دعوت به جلسه «${meeting.subject}» رد شد`);
+      toast.success(ownerDelegate
+        ? `درخواست جانشینی برای جلسه «${meeting.subject}» رد شد`
+        : `دعوت به جلسه «${meeting.subject}» رد شد`);
     } catch {
       toast.error('خطا در رد کردن جلسه');
     } finally {
@@ -633,6 +643,10 @@ export function MeetingInboxButton() {
                     const meeting = meetings[entry.meeting_id];
                     if (!meeting) return null;
                     const creatorName = getProfileName(meeting.user_id);
+                    const isOwnerDelegateRequest = entry.delegated_by_user_id === meeting.user_id;
+                    const requestSenderName = isOwnerDelegateRequest
+                      ? getProfileName(entry.delegated_by_user_id)
+                      : creatorName;
                     const participantNames = (meeting.participant_user_ids || [])
                       .filter(id => id !== currentUserId)
                       .map(id => getProfileName(id))
@@ -647,12 +661,17 @@ export function MeetingInboxButton() {
                               {creatorName.charAt(0)}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-400">دعوت از طرف</span>
-                          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">{creatorName}</span>
+                          <span className="text-xs text-gray-400">{isOwnerDelegateRequest ? 'درخواست جانشینی از طرف' : 'دعوت از طرف'}</span>
+                          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">{requestSenderName}</span>
                         </div>
 
                         {/* Title */}
                         <p className="text-sm font-bold text-gray-800 dark:text-white mb-2 leading-tight">{meeting.subject}</p>
+                        {isOwnerDelegateRequest && (
+                          <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300">
+                            آیا تأیید می‌کنید به‌عنوان جانشین «{requestSenderName}» در این جلسه حضور داشته باشید؟
+                          </div>
+                        )}
 
                         {/* Details */}
                         <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-2">
@@ -692,7 +711,7 @@ export function MeetingInboxButton() {
                             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 active:scale-95"
                           >
                             <Check className="w-3.5 h-3.5" />
-                            قبول
+                            {isOwnerDelegateRequest ? 'قبول جانشینی' : 'قبول'}
                           </button>
                           <button
                             onClick={() => { setDeclineConfirmEntry(entry); }}
