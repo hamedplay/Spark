@@ -47,7 +47,10 @@ export function WeekView(p: CalendarViewProps) {
         >
           <div className="flex-shrink-0 border-b border-slate-200/80 dark:border-slate-800">
             <div className="grid grid-cols-[56px_repeat(7,1fr)] bg-white dark:bg-slate-950">
-              <div />
+              <div
+                className="sticky z-40 border-l border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-950"
+                style={{ insetInlineStart: 0 }}
+              />
               {weekDays.map(d => {
                 const hasHol = getOccasionsForDay(d.jy, d.jm, d.jd).some((o: any) => o.is_holiday);
                 return (
@@ -67,7 +70,10 @@ export function WeekView(p: CalendarViewProps) {
             </div>
 
             <div className="grid grid-cols-[56px_repeat(7,1fr)] border-t border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/60">
-              <div className="flex items-center justify-center">
+              <div
+                className="sticky z-40 flex items-center justify-center border-l border-slate-100 bg-slate-50/95 dark:border-slate-800 dark:bg-slate-900"
+                style={{ insetInlineStart: 0 }}
+              >
                 <span className="px-1 text-center text-[9px] leading-tight text-slate-400">کل<br/>روز</span>
               </div>
               {weekDays.map(d => {
@@ -144,6 +150,8 @@ export function WeekView(p: CalendarViewProps) {
                 })()}
 
                 <div
+                  className="sticky z-40 border-l border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-950"
+                  style={{ insetInlineStart: 0 }}
                   onWheel={e => { if (e.ctrlKey || e.altKey) { e.preventDefault(); adjustSlotHeight(e.deltaY < 0 ? 4 : -4); } }}
                   onTouchStart={handleHourColTouchStart}
                   onTouchMove={handleHourColTouchMove}
