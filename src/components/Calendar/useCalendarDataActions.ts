@@ -58,7 +58,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
       const queryTo   = fmt(dayAfter);
       console.log('[CalendarPage] fetchMeetings query range:', queryFrom, '→', queryTo, '(jy/jm:', baseJy, baseJm + ')');
 
-      const [{ data, error }, { data: inboxRows }] = await Promise.all([
+      const [{ data, error }, { data: inboxRows }, { data: ownerDelegateRows, error: ownerDelegateError }] = await Promise.all([
         supabase.from('meetings')
           .select('id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
           .neq('status', 'closed')
@@ -68,9 +68,11 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         supabase.from('meeting_inbox')
           .select('meeting_id, status')
           .eq('user_id', userId),
+        supabase.rpc('get_my_meeting_owner_delegations_v1'),
       ]);
 
       if (error) throw error;
+      if (ownerDelegateError) throw ownerDelegateError;
 
       const inboxStatus = new Map<string, string>(
         (inboxRows || []).map((r: any) => [r.meeting_id, r.status])
@@ -94,15 +96,31 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         const s = inboxStatus.get(m.id);
         return s !== 'pending' && s !== 'declined';
       });
-      console.log('[CalendarPage] fetchMeetings → setMeetings count:', filtered.length, 'userId:', userId, 'jy/jm:', baseJy, baseJm);
+      const ownerDelegateByMeeting = new Map<string, any>(
+        (ownerDelegateRows || []).map((row: any) => [row.meeting_id, row])
+      );
+      const enriched = filtered.map((meeting: any) => {
+        if (meeting.user_id !== userId) return meeting;
+        const delegation = ownerDelegateByMeeting.get(meeting.id);
+        if (!delegation) return meeting;
+        return {
+          ...meeting,
+          owner_delegate_user_id: delegation.delegate_user_id,
+          owner_delegate_name: delegation.delegate_name,
+          owner_delegate_status: delegation.status,
+          owner_delegate_updated_at: delegation.updated_at,
+        };
+      });
+
+      console.log('[CalendarPage] fetchMeetings → setMeetings count:', enriched.length, 'userId:', userId, 'jy/jm:', baseJy, baseJm);
       // Sample the first 5 meetings to debug date grouping
-      filtered.slice(0, 5).forEach((m: any) => {
+      enriched.slice(0, 5).forEach((m: any) => {
         const groupKey = parseRequestDateToDateStr(m.request_date);
         const rawDate = new Date(m.request_date);
         const jalKey = groupKey ? (() => { const jk = toJalaali(new Date(groupKey + 'T00:00:00')); return `${jk.jy}/${jk.jm}/${jk.jd}`; })() : 'null';
         console.log('[CalendarPage] sample meeting:', m.subject, '| request_date raw:', m.request_date, '| parsedGreg:', groupKey, '| jalali:', jalKey, '| rawDateUTC:', rawDate.toISOString(), '| start_time:', m.start_time);
       });
-      setMeetings(filtered);
+      setMeetings(enriched);
     } catch { toast.error('خطا در دریافت جلسات'); }
     finally { setIsRefreshing(false); }
   }, [currentJy, currentJm, isRefreshing, currentUserId, providedUserId]);
