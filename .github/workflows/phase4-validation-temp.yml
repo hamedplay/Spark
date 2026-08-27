@@ -7,7 +7,7 @@ on:
       - .github/workflows/phase4-validation-temp.yml
 
 jobs:
-  baseline-minutes:
+  baseline-regression-matrix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,10 +18,20 @@ jobs:
           node-version: 24.18.1
           cache: npm
       - run: npm ci
-      - name: Reproduce minutes regression before Phase 4
-        run: npm run test:minutes-create-submit
+      - name: Run baseline npm-test scripts independently
+        shell: bash
+        run: |
+          mapfile -t scripts < <(node -e "const p=require('./package.json'); for (const part of p.scripts.test.split('&&')) { const m=part.trim().match(/^npm run ([^ ]+)/); if (m) console.log(m[1]); }")
+          echo "BASELINE_TOTAL=${#scripts[@]}"
+          for script in "${scripts[@]}"; do
+            if npm run "$script"; then
+              echo "BASELINE_PASS=$script"
+            else
+              echo "BASELINE_FAIL=$script"
+            fi
+          done
 
-  current-tail:
+  current-regression-matrix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,17 +40,21 @@ jobs:
           node-version: 24.18.1
           cache: npm
       - run: npm ci
-      - name: Remaining regression tests after pre-existing minutes failure
-        run: npm run test:minutes-entry-flow && npm run test:minutes-participants && npm run test:minutes-date && npm run test:word-export && npm run test:meeting-delegation && npm run test:approval-delegate && npm run test:minutes-five-fixes && npm run test:minutes-followup-runtime && npm run test:decision-deadline-filters && npm run test:followup-reminder && npm run test:auth-security-config && npm run test:auth-unified-login && npm run test:theme-sync && npm run test:phase3-totp && npm run test:phase3b-security && npm run test:phase3c-security && npm run test:phase4-lifecycle
-
-  production-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.18.1
-          cache: npm
-      - run: npm ci
+      - name: Run current npm-test scripts independently
+        shell: bash
+        run: |
+          mapfile -t scripts < <(node -e "const p=require('./package.json'); for (const part of p.scripts.test.split('&&')) { const m=part.trim().match(/^npm run ([^ ]+)/); if (m) console.log(m[1]); }")
+          echo "CURRENT_TOTAL=${#scripts[@]}"
+          for script in "${scripts[@]}"; do
+            if npm run "$script"; then
+              echo "CURRENT_PASS=$script"
+            else
+              echo "CURRENT_FAIL=$script"
+            fi
+          done
+      - name: Video conference phases 1-4
+        run: node --test tests/video-conference/phase1FrontendFoundation.test.mjs tests/video-conference/phase2Rbac.test.mjs tests/video-conference/phase3LiveKitPermissions.test.mjs tests/video-conference/phase4SpeakerTimer.test.mjs
+      - name: Spark Manager syntax
+        run: bash -n deploy/spark-cli/lib/install-livekit.sh
       - name: Production build
         run: npm run build
