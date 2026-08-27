@@ -102,7 +102,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           activeSpeakerIdentity={livekit.activeSpeakerIdentity}
         />
       )}
-      {!phase.mediaHidden && <ReactionOverlay reaction={livekit.reaction} />}
+      {!phase.mediaHidden && <ReactionOverlay reactions={livekit.reactions} />}
       <SpeakerTimerBanner session={speakerTimer.ownSession} remainingSeconds={speakerTimer.ownRemainingSeconds} />
       <MeetingPhaseOverlay
         phase={phase.currentPhase}
@@ -137,10 +137,11 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         }
         allowScreenShare={hasConferencePermission(authorization, 'PUBLISH_SCREEN') && sparkRoom.allow_screen_share !== false && typeof navigator.mediaDevices?.getDisplayMedia === 'function'}
         allowReactions={sparkRoom.allow_reactions !== false}
+        reactionError={livekit.reactionError}
         onToggleMic={() => void livekit.toggleMic()}
         onToggleCamera={() => void livekit.toggleCamera()}
         onToggleScreen={() => void screen.toggleScreen()}
-        onReaction={() => void livekit.sendReaction('👏')}
+        onReaction={(reaction) => void livekit.sendReaction(reaction)}
         onLeave={() => void leave()}
       />
     </div>

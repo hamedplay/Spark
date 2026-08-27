@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent } from 'livekit-client';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import { requestLiveKitToken } from '../services/conferenceApi';
-import { publishConferenceReaction, setConferenceCamera, setConferenceMicrophone } from '../services/conferenceMedia';
+import {
+  ConferenceReactionError,
+  publishConferenceReaction,
+  setConferenceCamera,
+  setConferenceMicrophone,
+} from '../services/conferenceMedia';
+import type { ConferenceReactionEvent } from '../types/conference.types';
 import { useConferenceState } from './useConferenceState';
 
 const ERROR_LABELS: Record<string, string> = {
@@ -28,10 +34,11 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
   const connectingRef = useRef(false);
   const {
     uiState, setUiState, errorMessage, setErrorMessage, revision, role, setRole, quality, setQuality,
-    activeSpeakerIdentity, setActiveSpeakerIdentity, reaction, refresh, showReaction, fail,
+    activeSpeakerIdentity, setActiveSpeakerIdentity, reactions, refresh, showReaction, fail,
   } = useConferenceState();
   const [micEnabled, setMicEnabled] = useState(() => localStream.getAudioTracks().some((track) => track.enabled));
   const [cameraEnabled, setCameraEnabled] = useState(() => localStream.getVideoTracks().some((track) => track.enabled));
+  const [reactionError, setReactionError] = useState('');
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;
@@ -87,11 +94,32 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       nextRoom.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
         if (participant.identity === nextRoom.localParticipant.identity) setQuality(quality);
       });
-      nextRoom.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
+      nextRoom.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
         if (topic !== 'spark-reaction') return;
+
+        // Phase 10 accepts only server-originated reaction packets. Participant-
+        // originated packets on this topic are ignored so browser publishData
+        // cannot bypass server authorization or rate limiting.
+        if (participant) return;
+
         try {
-          const value = JSON.parse(new TextDecoder().decode(payload));
-          if (typeof value?.emoji === 'string') showReaction(value.emoji);
+          const value = JSON.parse(new TextDecoder().decode(payload)) as Partial<ConferenceReactionEvent>;
+          if (
+            typeof value.id !== 'string'
+            || typeof value.reaction !== 'string'
+            || typeof value.participantIdentity !== 'string'
+            || typeof value.displayName !== 'string'
+            || typeof value.timestamp !== 'string'
+          ) return;
+
+          showReaction({
+            id: value.id,
+            reaction: value.reaction,
+            participantIdentity: value.participantIdentity,
+            displayName: value.displayName,
+            avatarUrl: typeof value.avatarUrl === 'string' ? value.avatarUrl : null,
+            timestamp: value.timestamp,
+          });
         } catch {
           // Malformed ephemeral data is intentionally ignored.
         }
@@ -180,16 +208,27 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
     }
   }, [cameraEnabled]);
 
-  const sendReaction = useCallback(async (emoji: string) => {
-    const current = roomRef.current;
-    if (!current) return;
+  const sendReaction = useCallback(async (reaction: string) => {
+    if (!roomRef.current) return;
+
+    setReactionError('');
     try {
-      await publishConferenceReaction(current, emoji);
-      showReaction(emoji);
+      const event = await publishConferenceReaction(client, roomId, reaction);
+      showReaction(event);
     } catch (error) {
       console.error('[VideoConference] reaction send failed', error);
+      if (error instanceof ConferenceReactionError && error.code === 'RATE_LIMITED') {
+        const seconds = Math.max(1, Math.ceil(error.retryAfterMs / 1000));
+        setReactionError(`واکنش‌ها خیلی سریع ارسال شده‌اند؛ حدود ${seconds} ثانیه دیگر تلاش کنید.`);
+      } else if (error instanceof ConferenceReactionError && error.code === 'REACTIONS_DISABLED') {
+        setReactionError('واکنش‌ها در این جلسه غیرفعال هستند.');
+      } else {
+        setReactionError('ارسال واکنش انجام نشد.');
+      }
+
+      window.setTimeout(() => setReactionError(''), 3000);
     }
-  }, [showReaction]);
+  }, [client, roomId, showReaction]);
 
   const disconnect = useCallback(() => {
     const current = roomRef.current;
@@ -213,7 +252,8 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
     role,
     quality,
     activeSpeakerIdentity,
-    reaction,
+    reactions,
+    reactionError,
     fail,
   };
 }

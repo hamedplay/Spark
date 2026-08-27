@@ -1,6 +1,10 @@
 import { useCallback, useState } from 'react';
 import { ConnectionQuality } from 'livekit-client';
-import type { ConferenceRole, ConferenceUiState } from '../types/conference.types';
+import type {
+  ConferenceReactionEvent,
+  ConferenceRole,
+  ConferenceUiState,
+} from '../types/conference.types';
 
 export function useConferenceState() {
   const [uiState, setUiState] = useState<ConferenceUiState>('joining');
@@ -9,13 +13,19 @@ export function useConferenceState() {
   const [role, setRole] = useState<ConferenceRole>('member');
   const [quality, setQuality] = useState<ConnectionQuality | 'unknown'>('unknown');
   const [activeSpeakerIdentity, setActiveSpeakerIdentity] = useState<string | null>(null);
-  const [reaction, setReaction] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<ConferenceReactionEvent[]>([]);
 
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
 
-  const showReaction = useCallback((emoji: string) => {
-    setReaction(emoji);
-    window.setTimeout(() => setReaction(null), 2500);
+  const showReaction = useCallback((event: ConferenceReactionEvent) => {
+    setReactions((current) => {
+      if (current.some((item) => item.id === event.id)) return current;
+      return [...current, event].slice(-12);
+    });
+
+    window.setTimeout(() => {
+      setReactions((current) => current.filter((item) => item.id !== event.id));
+    }, 3200);
   }, []);
 
   const fail = useCallback((message: string) => {
@@ -35,7 +45,7 @@ export function useConferenceState() {
     setQuality,
     activeSpeakerIdentity,
     setActiveSpeakerIdentity,
-    reaction,
+    reactions,
     refresh,
     showReaction,
     fail,

@@ -172,6 +172,15 @@ export interface ConferenceMessageRow {
   mentioned_user_ids: string[];
 }
 
+export interface ConferenceReactionEvent {
+  id: string;
+  reaction: string;
+  participantIdentity: string;
+  displayName: string;
+  avatarUrl: string | null;
+  timestamp: string;
+}
+
 export interface ConferencePrivateMessageRow {
   id: string;
   room_id: string;
@@ -302,5 +311,5 @@ export interface ConferenceStateSnapshot {
   revision: number;
   quality: ConnectionQuality | 'unknown';
   activeSpeakerIdentity: string | null;
-  reaction: string | null;
+  reactions: ConferenceReactionEvent[];
 }

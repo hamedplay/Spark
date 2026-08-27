@@ -3471,6 +3471,31 @@ export type Database = {
           retry_after_ms?: number;
         };
       };
+      authorize_conference_reaction: {
+        Args: {
+          p_room_id: string;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          participant_identity?: string;
+          display_name?: string;
+          avatar_url?: string | null;
+          livekit_room_name?: string;
+        };
+      };
+      consume_conference_reaction_rate_limit: {
+        Args: {
+          p_room_id: string;
+          p_actor_user_id: string;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          remaining?: number;
+          retry_after_ms?: number;
+        };
+      };
       authorize_conference_moderator_chat_action: {
         Args: {
           p_room_id: string;
