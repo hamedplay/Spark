@@ -96,6 +96,7 @@ export function MeetingInboxButton() {
       `)
       .eq('user_id', user.id)
       .eq('status', 'pending')
+      .is('delegate_to', null)
       .not('meeting_id', 'is', null);
 
     if (inboxErr) {
@@ -298,6 +299,29 @@ export function MeetingInboxButton() {
       senderName: getProfileName(currentUserId),
       actionUrl: 'calendar',
     });
+    if (entry.delegated_by_user_id && entry.delegated_by_user_id !== meeting.user_id) {
+      await insertNotification({
+        userId: entry.delegated_by_user_id,
+        category: 'meeting',
+        eventType: getMeetingTemplateKey('organizer', 'confirmed'),
+        fallbackTitle: 'تأیید جانشینی جلسه',
+        fallbackMessage: `${getProfileName(currentUserId)} تأیید کرد به‌عنوان جانشین شما در جلسه «${meeting.subject}» حضور داشته باشد`,
+        placeholders: {
+          meeting_subject: meeting.subject,
+          meeting_date: formatMeetingDate(meeting),
+          start_time: meeting.start_time || '',
+          end_time: meeting.end_time || '',
+          participant_name: getProfileName(currentUserId),
+          recipient_greeting: `${getProfileName(entry.delegated_by_user_id)} گرامی`,
+          full_name: getProfileName(entry.delegated_by_user_id),
+          organizer_name: getProfileName(meeting.user_id),
+          location: meeting.location || '',
+        },
+        senderId: currentUserId,
+        senderName: getProfileName(currentUserId),
+        actionUrl: 'calendar',
+      });
+    }
     setEntries(prev => prev.filter(e => e.id !== entry.id));
     setMeetings(prev => { const n = { ...prev }; delete n[entry.meeting_id]; return n; });
     toast.success(ownerDelegate
@@ -319,19 +343,21 @@ export function MeetingInboxButton() {
       const declinePayload = declineResult as {
         success?: boolean;
         error_code?: string;
-        owner_delegate?: boolean;
+        delegate_request?: boolean;
+        delegator_user_id?: string | null;
       } | null;
       if (!declinePayload?.success) throw new Error(declinePayload?.error_code || 'DECLINE_FAILED');
 
-      const ownerDelegate = Boolean(declinePayload.owner_delegate);
+      const delegateRequest = Boolean(declinePayload.delegate_request);
+      const delegatorUserId = declinePayload.delegator_user_id || null;
 
       await insertNotification({
         userId: meeting.user_id,
         category: 'meeting',
         eventType: getMeetingTemplateKey('organizer', 'declined'),
-        fallbackTitle: ownerDelegate ? 'رد درخواست جانشینی' : 'رد دعوت جلسه',
-        fallbackMessage: ownerDelegate
-          ? `${getProfileName(currentUserId)} درخواست حضور به‌عنوان جانشین شما در جلسه «${meeting.subject}» را رد کرد`
+        fallbackTitle: delegateRequest ? 'رد درخواست جانشینی' : 'رد دعوت جلسه',
+        fallbackMessage: delegateRequest
+          ? `${getProfileName(currentUserId)} درخواست حضور به‌عنوان جانشین در جلسه «${meeting.subject}» را رد کرد`
           : `${getProfileName(currentUserId)} دعوت به جلسه «${meeting.subject}» را رد کرد`,
         placeholders: {
           meeting_subject: meeting.subject,
@@ -346,12 +372,36 @@ export function MeetingInboxButton() {
         },
         senderId: currentUserId,
         senderName: getProfileName(currentUserId),
-        actionUrl: ownerDelegate ? 'calendar' : 'meetings',
+        actionUrl: delegateRequest ? 'calendar' : 'meetings',
       });
+
+      if (delegateRequest && delegatorUserId && delegatorUserId !== meeting.user_id) {
+        await insertNotification({
+          userId: delegatorUserId,
+          category: 'meeting',
+          eventType: getMeetingTemplateKey('organizer', 'declined'),
+          fallbackTitle: 'رد درخواست جانشینی',
+          fallbackMessage: `${getProfileName(currentUserId)} درخواست جانشینی شما برای جلسه «${meeting.subject}» را رد کرد`,
+          placeholders: {
+            meeting_subject: meeting.subject,
+            meeting_date: formatMeetingDate(meeting),
+            start_time: meeting.start_time || '',
+            end_time: meeting.end_time || '',
+            participant_name: getProfileName(currentUserId),
+            recipient_greeting: `${getProfileName(delegatorUserId)} گرامی`,
+            full_name: getProfileName(delegatorUserId),
+            organizer_name: getProfileName(meeting.user_id),
+            location: meeting.location || '',
+          },
+          senderId: currentUserId,
+          senderName: getProfileName(currentUserId),
+          actionUrl: 'calendar',
+        });
+      }
 
       setEntries(prev => prev.filter(e => e.id !== entry.id));
       setMeetings(prev => { const n = { ...prev }; delete n[entry.meeting_id]; return n; });
-      toast.success(ownerDelegate
+      toast.success(delegateRequest
         ? `درخواست جانشینی برای جلسه «${meeting.subject}» رد شد`
         : `دعوت به جلسه «${meeting.subject}» رد شد`);
     } catch {
@@ -411,7 +461,10 @@ export function MeetingInboxButton() {
       setMeetings(prev => { const n = { ...prev }; delete n[entry.meeting_id]; return n; });
       setDelegateForEntry(null);
       setOpen(false);
-      toast.success(`جانشین «${delegateName}» با موفقیت ثبت شد`);
+      window.dispatchEvent(new CustomEvent('spark:meeting-delegation-changed', {
+        detail: { meetingId: entry.meeting_id, delegateUserId: delegateToId, delegateName, status: 'pending' },
+      }));
+      toast.success(`درخواست جانشینی برای «${delegateName}» به کارتابل او ارسال شد`);
     } catch {
       toast.error('خطا در ثبت جانشین');
     } finally {
@@ -648,8 +701,8 @@ export function MeetingInboxButton() {
                     const meeting = meetings[entry.meeting_id];
                     if (!meeting) return null;
                     const creatorName = getProfileName(meeting.user_id);
-                    const isOwnerDelegateRequest = entry.delegated_by_user_id === meeting.user_id;
-                    const requestSenderName = isOwnerDelegateRequest
+                    const isDelegateRequest = Boolean(entry.delegated_by_user_id);
+                    const requestSenderName = isDelegateRequest && entry.delegated_by_user_id
                       ? getProfileName(entry.delegated_by_user_id)
                       : creatorName;
                     const participantNames = (meeting.participant_user_ids || [])
@@ -666,13 +719,13 @@ export function MeetingInboxButton() {
                               {creatorName.charAt(0)}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-400">{isOwnerDelegateRequest ? 'درخواست جانشینی از طرف' : 'دعوت از طرف'}</span>
+                          <span className="text-xs text-gray-400">{isDelegateRequest ? 'درخواست جانشینی از طرف' : 'دعوت از طرف'}</span>
                           <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">{requestSenderName}</span>
                         </div>
 
                         {/* Title */}
                         <p className="text-sm font-bold text-gray-800 dark:text-white mb-2 leading-tight">{meeting.subject}</p>
-                        {isOwnerDelegateRequest && (
+                        {isDelegateRequest && (
                           <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300">
                             آیا تأیید می‌کنید به‌عنوان جانشین «{requestSenderName}» در این جلسه حضور داشته باشید؟
                           </div>
@@ -716,7 +769,7 @@ export function MeetingInboxButton() {
                             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 active:scale-95"
                           >
                             <Check className="w-3.5 h-3.5" />
-                            {isOwnerDelegateRequest ? 'قبول جانشینی' : 'قبول'}
+                            {isDelegateRequest ? 'قبول جانشینی' : 'قبول'}
                           </button>
                           <button
                             onClick={() => { setDeclineConfirmEntry(entry); }}
