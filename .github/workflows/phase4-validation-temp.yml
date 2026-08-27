@@ -7,7 +7,21 @@ on:
       - .github/workflows/phase4-validation-temp.yml
 
 jobs:
-  validate:
+  baseline-notification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 788143a6eb231c32aac3f7942f4a3383194b9e5b
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+          cache: npm
+      - run: npm ci
+      - name: Reproduce notification regression before Phase 4
+        run: npm run test:notification-model
+
+  current-validation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,13 +29,12 @@ jobs:
         with:
           node-version: 24.18.1
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Validate video conference phases 1-4
+      - run: npm ci
+      - name: Video conference phases 1-4
         run: node --test tests/video-conference/phase1FrontendFoundation.test.mjs tests/video-conference/phase2Rbac.test.mjs tests/video-conference/phase3LiveKitPermissions.test.mjs tests/video-conference/phase4SpeakerTimer.test.mjs
-      - name: Validate Spark Manager shell syntax
+      - name: Spark Manager syntax
         run: bash -n deploy/spark-cli/lib/install-livekit.sh
-      - name: Run regression suite
-        run: npm test
+      - name: Regression tests after pre-existing notification failure
+        run: npm run test:notification-lifecycle && npm run test:notification-producer-model && npm run test:notification-template-cache && npm run test:notification-producer && npm run test:minutes-access && npm run test:minutes-prefill && npm run test:minutes-decisions && npm run test:approval-mode && npm run test:minutes-integration && npm run test:minutes-entry-button && npm run test:minutes-create-submit && npm run test:minutes-entry-flow && npm run test:minutes-participants && npm run test:minutes-date && npm run test:word-export && npm run test:meeting-delegation && npm run test:approval-delegate && npm run test:minutes-five-fixes && npm run test:minutes-followup-runtime && npm run test:decision-deadline-filters && npm run test:followup-reminder && npm run test:auth-security-config && npm run test:auth-unified-login && npm run test:theme-sync && npm run test:phase3-totp && npm run test:phase3b-security && npm run test:phase3c-security && npm run test:phase4-lifecycle
       - name: Production build
         run: npm run build
