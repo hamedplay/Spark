@@ -84,6 +84,7 @@ export async function resendMeetingInvitations(
                 : 'همکار گرامی',
           },
 
+          meetingId: input.meetingId,
           senderId: input.senderId,
           actionUrl: 'meetings',
         })
