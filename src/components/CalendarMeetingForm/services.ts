@@ -19,6 +19,7 @@ export async function sendSmsToExternals(
   triggeredByUserId?: string | null,
   placeholders?: Record<string, string>,
   eventType: 'invite' | 'change' | 'cancel' = 'invite',
+  meetingId?: string | null,
 ): Promise<ExternalSmsResult> {
   if (!externalNames.length) return { ok: true, sent: 0, skipped: 0 };
 
@@ -52,6 +53,7 @@ export async function sendSmsToExternals(
         mobiles,
         message: smsMessage,
         context: placeholders ?? {},
+        meetingId: meetingId ?? null,
         triggeredByUserId: triggeredByUserId ?? null,
         category: 'meeting',
         eventType,
