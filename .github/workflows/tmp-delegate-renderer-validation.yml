@@ -1,0 +1,19 @@
+name: Temporary delegate renderer validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-delegate-renderer-validation.yml'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - name: Production build
+        run: npm run build
+      - name: Validate delegate renderer scope
+        run: |
+          test "$(grep -c "const renderDelegateOption" src/components/MeetingInboxButton.tsx)" -eq 1
+          grep -q "filteredDelegates.map(renderDelegateOption)" src/components/MeetingInboxButton.tsx
+          grep -q "group.users.map(renderDelegateOption)" src/components/MeetingInboxButton.tsx
