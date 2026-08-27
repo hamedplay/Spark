@@ -256,6 +256,13 @@ export type Database = Omit<BaseDatabase, 'public'> & {
         Args: { p_task_id: string };
         Returns: unknown;
       };
+      assign_meeting_owner_delegate: {
+        Args: {
+          p_meeting_id: string;
+          p_delegate_user_id: string;
+        };
+        Returns: unknown;
+      };
       manage_management_task_v1: {
         Args: {
           p_task_id: string;
