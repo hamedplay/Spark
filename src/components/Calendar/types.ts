@@ -30,6 +30,10 @@ export interface MeetingData {
   meeting_manager?: string | null;
   is_online?: boolean | null;
   conference_room_id?: string | null;
+  owner_delegate_user_id?: string | null;
+  owner_delegate_name?: string | null;
+  owner_delegate_status?: 'pending' | 'accepted' | 'declined' | null;
+  owner_delegate_updated_at?: string | null;
 }
 
 export interface CalendarEntry {
