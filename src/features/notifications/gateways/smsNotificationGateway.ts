@@ -11,6 +11,7 @@ export interface DispatchSmsNotificationInput {
   message: string;
   context?: Record<string, string>;
   meetingId?: string | null;
+  eventKey?: string | null;
   senderId?: string | null;
 }
 
@@ -49,6 +50,9 @@ export async function dispatchSmsNotification(
 
             meetingId:
               input.meetingId ?? null,
+
+            eventKey:
+              input.eventKey ?? null,
 
             triggeredByUserId:
               input.senderId ?? null,
@@ -93,51 +97,40 @@ export async function dispatchSmsNotification(
       error: row?.error,
     };
   } catch (error: unknown) {
+    const functionError = error as {
+      message?: string;
+      context?: Response;
+    };
+
+    if (functionError?.context instanceof Response) {
+      try {
+        const payload = await functionError.context.clone().json() as {
+          status?: 'sent' | 'skipped' | 'failed';
+          reason?: string;
+          errorCode?: string;
+          error?: string;
+        };
+        return {
+          ok: false,
+          status: payload.status ?? 'failed',
+          reason: payload.reason,
+          errorCode: payload.errorCode ?? 'EDGE_FUNCTION_ERROR',
+          error: payload.error ?? functionError.message ?? 'خطا در سرویس پیامک',
+        };
+      } catch {
+        // Fall through to the network-level error below.
+      }
+    }
+
     const message =
       error instanceof Error
         ? error.message
         : String(error);
 
-    try {
-      await supabase
-        .from(
-          'sms_dispatch_logs'
-        )
-        .insert({
-          target_user_id:
-            input.userId,
-
-          triggered_by_user_id:
-            input.senderId ?? null,
-
-          category:
-            input.category,
-
-          event_type:
-            input.eventType,
-
-          audience:
-            input.audience,
-
-          message:
-            input.message,
-
-          target_phone: null,
-
-          status: 'failed',
-
-          error_text:
-            `CLIENT_INVOKE_ERROR: ${message}`,
-        });
-    } catch {
-      // ignore secondary logging failure
-    }
-
     return {
       ok: false,
       status: 'failed',
-      errorCode:
-        'CLIENT_INVOKE_ERROR',
+      errorCode: 'CLIENT_NETWORK_ERROR',
       error: message,
     };
   }
