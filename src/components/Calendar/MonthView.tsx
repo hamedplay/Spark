@@ -88,14 +88,31 @@ export function MonthView(p: CalendarViewProps) {
                 <div className="mt-0.5 space-y-0.5">
                   {dm.slice(0, 3).map(m => {
                     const c = getMeetingColor(m);
+                    const delegateStatus = m.owner_delegate_status;
+                    const delegateName = m.owner_delegate_name || '';
+                    const delegateTitle = delegateStatus === 'accepted'
+                      ? `جانشین: ${delegateName}`
+                      : delegateStatus === 'pending'
+                        ? `در انتظار پاسخ جانشین: ${delegateName}`
+                        : delegateStatus === 'declined'
+                          ? `جانشین رد کرد: ${delegateName}`
+                          : '';
+                    const delegateRing = delegateStatus === 'accepted'
+                      ? 'ring-2 ring-emerald-300'
+                      : delegateStatus === 'pending'
+                        ? 'ring-2 ring-amber-300'
+                        : delegateStatus === 'declined'
+                          ? 'ring-2 ring-rose-300'
+                          : '';
                     return (
                       <div
                         key={m.id}
-                        className="truncate rounded-md px-1 py-0.5 text-[8px] font-medium leading-tight text-white shadow-sm sm:px-1.5 sm:text-[10px]"
+                        className={`truncate rounded-md px-1 py-0.5 text-[8px] font-medium leading-tight text-white shadow-sm sm:px-1.5 sm:text-[10px] ${delegateRing}`}
                         style={{ backgroundColor: c }}
-                        title={m.subject}
+                        title={delegateTitle ? `${m.subject} — ${delegateTitle}` : m.subject}
                       >
                         <span className="hidden sm:inline">{m.start_time ? toFarsiTime(m.start_time) + ' ' : ''}</span>
+                        {delegateStatus === 'accepted' ? '✓ ' : delegateStatus === 'pending' ? '… ' : delegateStatus === 'declined' ? '! ' : ''}
                         {m.subject}
                       </div>
                     );
