@@ -786,17 +786,17 @@ const getJalaliDate = (): string => {
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
             <ExternalLink className="w-4 h-4" />گوگل کلندر
           </button>
-          {isOwner && currentUserId && (!ownerDelegate || myDelegate.status === 'declined') && (
+          {isOwner && currentUserId && (!myDelegate || myDelegate.status === 'declined') && (
             <button onClick={() => setShowOwnerDelegate(true)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
-              <UserCheck className="w-4 h-4" />{ownerDelegate?.status === 'declined' ? 'انتخاب جانشین جدید' : 'انتخاب جانشین'}
+              <UserCheck className="w-4 h-4" />{myDelegate?.status === 'declined' ? 'انتخاب جانشین جدید' : 'انتخاب جانشین'}
             </button>
           )}
-          {isOwner && ownerDelegate?.status === 'pending' && (
+          {isOwner && myDelegate?.status === 'pending' && (
             <button disabled className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 text-amber-600 text-sm font-medium cursor-not-allowed opacity-80 dark:bg-amber-900/20 dark:text-amber-300">
               <Clock className="w-4 h-4" />در انتظار پاسخ جانشین
             </button>
           )}
-          {isOwner && ownerDelegate?.status === 'accepted' && (
+          {isOwner && myDelegate?.status === 'accepted' && (
             <button disabled className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 text-emerald-600 text-sm font-medium cursor-default dark:bg-emerald-900/20 dark:text-emerald-300">
               <CheckCircle2 className="w-4 h-4" />جانشین تأییدشده
             </button>
