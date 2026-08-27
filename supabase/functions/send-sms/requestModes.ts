@@ -1,8 +1,6 @@
 import { isValidPhone, normalizePhone } from "./phone.ts";
 import { renderSystemSmsTemplate } from "./templateRenderer.ts";
 
-// The Edge Function creates its Supabase client without generated Database typing.
-// Preserve that deliberately loose query-builder boundary after extraction.
 type SmsClient = any;
 type Caller = { userId: string; isAdmin: boolean };
 type JsonResponder = (data: unknown, status?: number) => Response;
@@ -13,10 +11,94 @@ type ModeContext = {
   json: JsonResponder;
 };
 
+type DispatchLogSeed = {
+  dispatchKey: string | null;
+  meetingId: string | null;
+  targetUserId: string | null;
+  targetPhone: string | null;
+  triggeredByUserId: string | null;
+  category: string;
+  eventType: string;
+  audience: string;
+  message: string;
+  providerId?: string | null;
+  providerName?: string | null;
+};
+
 function objectContext(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function normalizedEventKey(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 500) : null;
+}
+
+function internalDispatchKey(eventKey: string | null, meetingId: string | null, eventType: string, audience: string, targetUserId: string): string | null {
+  if (eventKey) return `event:${eventKey}:sms:user:${targetUserId}`;
+  if (meetingId && eventType === "cancel") return `meeting:${meetingId}:sms:cancel:${audience}:user:${targetUserId}`;
+  return null;
+}
+
+function externalDispatchKey(eventKey: string | null, meetingId: string | null, eventType: string, phone: string): string | null {
+  const base = eventKey
+    ? `event:${eventKey}`
+    : (meetingId && eventType === "cancel" ? `meeting:${meetingId}:cancel:external` : null);
+  return base ? `${base}:sms:phone:${phone}` : null;
+}
+
+async function claimLog(supabase: SmsClient, seed: DispatchLogSeed): Promise<{ id: string | null; claimed: boolean; status: string | null }> {
+  if (seed.dispatchKey) {
+    const { data, error } = await supabase.rpc("claim_sms_dispatch_v1", {
+      p_dispatch_key: seed.dispatchKey,
+      p_target_user_id: seed.targetUserId,
+      p_target_phone: seed.targetPhone,
+      p_triggered_by_user_id: seed.triggeredByUserId,
+      p_category: seed.category,
+      p_event_type: seed.eventType,
+      p_audience: seed.audience,
+      p_message: seed.message,
+      p_meeting_id: seed.meetingId,
+      p_provider_id: seed.providerId ?? null,
+      p_provider_name: seed.providerName ?? null,
+    });
+    if (error) throw error;
+    const row = data?.[0];
+    return {
+      id: row?.log_id ?? null,
+      claimed: row?.claimed === true,
+      status: row?.existing_status ?? null,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("sms_dispatch_logs")
+    .insert({
+      dispatch_key: null,
+      meeting_id: seed.meetingId,
+      target_user_id: seed.targetUserId,
+      target_phone: seed.targetPhone,
+      triggered_by_user_id: seed.triggeredByUserId,
+      category: seed.category,
+      event_type: seed.eventType,
+      audience: seed.audience,
+      message: seed.message,
+      provider_id: seed.providerId ?? null,
+      provider_name: seed.providerName ?? null,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return { id: data?.id ?? null, claimed: true, status: "pending" };
+}
+
+async function finishLog(supabase: SmsClient, logId: string | null, patch: Record<string, unknown>): Promise<void> {
+  if (!logId) return;
+  await supabase.from("sms_dispatch_logs").update(patch).eq("id", logId);
 }
 
 export async function handleDispatchMode({ supabase, body, caller, json }: ModeContext): Promise<Response> {
@@ -25,13 +107,14 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
   const eventType: string = body.eventType || "";
   const audience: string = body.audience || "all";
   const meetingId: string | null = typeof body.meetingId === "string" && body.meetingId ? body.meetingId : null;
+  const eventKey = normalizedEventKey(body.eventKey);
   const context = objectContext(body.context);
   const triggeredByUserId: string | null = body.triggeredByUserId ?? caller.userId ?? null;
+  const dbTriggeredBy = triggeredByUserId === "service" ? null : triggeredByUserId;
 
   if (!targetUserId) return json({ ok: false, errorCode: "TARGET_PROFILE_NOT_FOUND", error: "targetUserId الزامی است" }, 400);
   if (!category || !eventType) return json({ ok: false, errorCode: "INVALID_REQUEST", error: "category و eventType الزامی است" }, 400);
 
-  // Verify target user profile exists before rendering or resolving routing rules.
   const { data: targetProfile } = await supabase
     .from("profiles")
     .select("user_id, phone, is_active")
@@ -40,8 +123,9 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
 
   if (!targetProfile) {
     await supabase.from("sms_dispatch_logs").insert({
+      meeting_id: meetingId,
       target_user_id: targetUserId,
-      triggered_by_user_id: triggeredByUserId === "service" ? null : triggeredByUserId,
+      triggered_by_user_id: dbTriggeredBy,
       category,
       event_type: eventType,
       audience,
@@ -53,7 +137,28 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
     return json({ ok: true, status: "skipped", reason: "TARGET_PROFILE_NOT_FOUND" });
   }
 
-  // Render here, server-side. System callers cannot inject final SMS text.
+  const dispatchKey = internalDispatchKey(eventKey, meetingId, eventType, audience, targetUserId);
+  const claimed = await claimLog(supabase, {
+    dispatchKey,
+    meetingId,
+    targetUserId,
+    targetPhone: targetProfile.phone ?? null,
+    triggeredByUserId: dbTriggeredBy,
+    category,
+    eventType,
+    audience,
+    message: "",
+  });
+
+  if (!claimed.claimed) {
+    return json({
+      ok: true,
+      status: "skipped",
+      reason: "DUPLICATE_SMS_DISPATCH",
+      existingStatus: claimed.status,
+    });
+  }
+
   const rendered = await renderSystemSmsTemplate({
     supabase,
     category,
@@ -65,20 +170,15 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
   });
 
   if (!rendered.ok) {
-    await supabase.from("sms_dispatch_logs").insert({
-      target_user_id: targetUserId,
-      triggered_by_user_id: triggeredByUserId === "service" ? null : triggeredByUserId,
-      category,
-      event_type: eventType,
-      audience,
-      message: "",
-      target_phone: targetProfile.phone ?? null,
-      status: rendered.errorCode === "SMS_TEMPLATE_NOT_FOUND" ? "skipped" : "failed",
+    const status = rendered.errorCode === "SMS_TEMPLATE_NOT_FOUND" ? "skipped" : "failed";
+    await finishLog(supabase, claimed.id, {
+      status,
       error_text: `${rendered.errorCode}: ${rendered.error}`,
+      target_phone: targetProfile.phone ?? null,
     });
     return json({
       ok: rendered.errorCode === "SMS_TEMPLATE_NOT_FOUND",
-      status: rendered.errorCode === "SMS_TEMPLATE_NOT_FOUND" ? "skipped" : "failed",
+      status,
       reason: rendered.errorCode,
       errorCode: rendered.errorCode,
       error: rendered.error,
@@ -87,31 +187,16 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
   }
 
   const message = rendered.text;
-  const logBase = {
-    target_user_id: targetUserId,
-    triggered_by_user_id: triggeredByUserId === "service" ? null : triggeredByUserId,
-    category,
-    event_type: eventType,
-    audience,
-    message,
-  };
+  await finishLog(supabase, claimed.id, { message });
 
-  // Resolve SMS rule: target user's group membership + sms_group_rules for this category.
   const { data: dispatchRows, error: rpcError } = await supabase
     .rpc("get_sms_dispatch_info", { target_user_id: targetUserId, p_category: category });
 
-  if (rpcError) {
-    await supabase.from("sms_dispatch_logs").insert({
-      ...logBase, target_phone: null, status: "failed",
-      error_text: `SMS_RULE_NOT_FOUND: ${rpcError.message}`,
-    });
-    return json({ ok: true, status: "skipped", reason: "SMS_RULE_NOT_FOUND" });
-  }
-
-  if (!dispatchRows?.length) {
-    await supabase.from("sms_dispatch_logs").insert({
-      ...logBase, target_phone: null, status: "skipped",
-      error_text: `SMS_RULE_NOT_FOUND: پیامک برای دسته «${category}» در گروه‌های کاربر فعال نیست`,
+  if (rpcError || !dispatchRows?.length) {
+    const reason = rpcError?.message || `پیامک برای دسته «${category}» در گروه‌های کاربر فعال نیست`;
+    await finishLog(supabase, claimed.id, {
+      status: "skipped",
+      error_text: `SMS_RULE_NOT_FOUND: ${reason}`,
     });
     return json({ ok: true, status: "skipped", reason: "SMS_RULE_NOT_FOUND" });
   }
@@ -120,14 +205,15 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
   const rawPhone: string = dispatchRows[0].phone?.trim() ?? "";
 
   if (!rawPhone || rawPhone.length < 7) {
-    await supabase.from("sms_dispatch_logs").insert({
-      ...logBase, target_phone: rawPhone || null, provider_id: resolvedProviderId,
-      status: "skipped", error_text: "INVALID_TARGET_PHONE: شماره موبایل کاربر ثبت نشده یا معتبر نیست",
+    await finishLog(supabase, claimed.id, {
+      target_phone: rawPhone || null,
+      provider_id: resolvedProviderId,
+      status: "skipped",
+      error_text: "INVALID_TARGET_PHONE: شماره موبایل کاربر ثبت نشده یا معتبر نیست",
     });
     return json({ ok: true, status: "skipped", reason: "INVALID_TARGET_PHONE" });
   }
 
-  // Resolve provider name for logging.
   let providerName: string | null = null;
   let effectiveProviderId: string | null = resolvedProviderId;
   if (effectiveProviderId) {
@@ -135,34 +221,50 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
     providerName = prov?.title ?? null;
   } else {
     const { data: defProv } = await supabase.from("sms_providers").select("id, title").eq("is_default", true).eq("is_active", true).maybeSingle();
-    if (defProv) { effectiveProviderId = defProv.id; providerName = defProv.title; }
+    if (defProv) {
+      effectiveProviderId = defProv.id;
+      providerName = defProv.title;
+    }
   }
 
-  // Delegate only the already server-rendered text to the low-level provider mode.
-  const sendBody = { mode: "send", mobiles: [rawPhone], message };
-  if (effectiveProviderId) (sendBody as Record<string, unknown>).providerId = effectiveProviderId;
+  await finishLog(supabase, claimed.id, {
+    target_phone: rawPhone,
+    provider_id: effectiveProviderId,
+    provider_name: providerName,
+  });
 
-  const innerResp = await fetch(
-    `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+  const sendBody: Record<string, unknown> = { mode: "send", mobiles: [rawPhone], message };
+  if (effectiveProviderId) sendBody.providerId = effectiveProviderId;
+
+  let result: any;
+  try {
+    const innerResp = await fetch(
+      `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+        },
+        body: JSON.stringify(sendBody),
       },
-      body: JSON.stringify(sendBody),
-    },
-  );
-  const result = await innerResp.json();
+    );
+    result = await innerResp.json();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await finishLog(supabase, claimed.id, {
+      status: "failed",
+      error_text: `PROVIDER_TRANSPORT_ERROR: ${detail}`,
+      raw_response: { transportError: detail },
+    });
+    return json({ ok: false, status: "failed", errorCode: "PROVIDER_TRANSPORT_ERROR", error: detail });
+  }
 
   if (result.ok) {
     const providerMessageId: string | null = result.returnIds?.[0] ?? null;
-    await supabase.from("sms_dispatch_logs").insert({
-      ...logBase,
-      target_phone: rawPhone,
-      provider_id: effectiveProviderId,
-      provider_name: providerName,
+    await finishLog(supabase, claimed.id, {
       status: "sent",
+      error_text: null,
       pack_id: result.packId ?? null,
       message_ids: result.messageIds ?? null,
       cost: result.cost ?? null,
@@ -176,25 +278,20 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
       targetPhone: rawPhone,
       providerId: effectiveProviderId,
       templateId: rendered.templateId,
-      packId: result.packId ?? null,
-      messageIds: result.messageIds ?? null,
       returnIds: result.returnIds ?? null,
     });
   }
 
-  await supabase.from("sms_dispatch_logs").insert({
-    ...logBase,
-    target_phone: rawPhone,
-    provider_id: effectiveProviderId,
-    provider_name: providerName,
+  const providerErrorCode = result.errorCode || "PROVIDER_ERROR";
+  await finishLog(supabase, claimed.id, {
     status: "failed",
-    error_text: `PROVIDER_ERROR: ${result.error ?? "خطای ناشناخته از سرویس پیامک"}`,
+    error_text: `${providerErrorCode}: ${result.error ?? "خطای ناشناخته از سرویس پیامک"}`,
     raw_response: result.response ?? null,
   });
   return json({
     ok: false,
     status: "failed",
-    errorCode: "PROVIDER_ERROR",
+    errorCode: providerErrorCode,
     error: result.error ?? "خطای ناشناخته از سرویس پیامک",
   });
 }
@@ -202,31 +299,37 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
 export async function handleExternalMode({ supabase, body, caller, json, isAuthOtp }: ModeContext & { isAuthOtp: boolean }): Promise<Response> {
   const rawMobiles: string[] = body.mobiles || [];
   const triggeredByUserId: string | null = body.triggeredByUserId ?? caller.userId ?? null;
+  const dbTriggeredBy = triggeredByUserId === "service" ? null : triggeredByUserId;
   const category: string = body.category || "meeting";
   const eventType: string = body.eventType || "invite";
   const audience = "external";
   const meetingId: string | null = typeof body.meetingId === "string" && body.meetingId ? body.meetingId : null;
+  const eventKey = normalizedEventKey(body.eventKey);
   const context = objectContext(body.context);
 
   if (!rawMobiles.length) return json({ ok: false, errorCode: "INVALID_REQUEST", error: "شماره موبایل وارد نشده" }, 400);
   if (!category || !eventType) return json({ ok: false, errorCode: "INVALID_REQUEST", error: "category و eventType الزامی است" }, 400);
 
-  // Normalize and deduplicate.
   const seen = new Set<string>();
   const validMobiles: string[] = [];
   const invalidMobiles: string[] = [];
   for (const raw of rawMobiles) {
     const trimmed = raw.replace(/\s/g, "");
-    if (!isValidPhone(trimmed)) { invalidMobiles.push(raw); continue; }
+    if (!isValidPhone(trimmed)) {
+      invalidMobiles.push(raw);
+      continue;
+    }
     const norm = normalizePhone(trimmed);
-    if (!seen.has(norm)) { seen.add(norm); validMobiles.push(norm); }
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      validMobiles.push(norm);
+    }
   }
 
   if (!validMobiles.length) {
     return json({ ok: false, errorCode: "INVALID_TARGET_PHONE", error: `شماره موبایل معتبری یافت نشد. نامعتبر: ${invalidMobiles.join(", ")}` }, 400);
   }
 
-  // External system SMS is also template-driven. Caller-provided body.message is intentionally ignored.
   const rendered = await renderSystemSmsTemplate({
     supabase,
     category,
@@ -237,18 +340,26 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
   });
 
   if (!rendered.ok) {
-    const logs = validMobiles.map(phone => ({
-      triggered_by_user_id: triggeredByUserId === "service" ? null : triggeredByUserId,
-      target_user_id: null,
-      target_phone: phone,
-      category,
-      event_type: eventType,
-      audience,
-      message: "",
-      status: "failed",
-      error_text: `${rendered.errorCode}: ${rendered.error}`,
-    }));
-    await supabase.from("sms_dispatch_logs").insert(logs);
+    for (const phone of validMobiles) {
+      const key = externalDispatchKey(eventKey, meetingId, eventType, phone);
+      const claim = await claimLog(supabase, {
+        dispatchKey: key,
+        meetingId,
+        targetUserId: null,
+        targetPhone: phone,
+        triggeredByUserId: dbTriggeredBy,
+        category,
+        eventType,
+        audience,
+        message: "",
+      });
+      if (claim.claimed) {
+        await finishLog(supabase, claim.id, {
+          status: "failed",
+          error_text: `${rendered.errorCode}: ${rendered.error}`,
+        });
+      }
+    }
     return json({
       ok: false,
       status: "failed",
@@ -259,52 +370,119 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
   }
 
   const message = rendered.text;
+  const { data: defProv } = await supabase
+    .from("sms_providers")
+    .select("id, title")
+    .eq("is_default", true)
+    .eq("is_active", true)
+    .maybeSingle();
+  const providerId: string | null = defProv?.id ?? null;
+  const providerName: string | null = defProv?.title ?? null;
 
-  // Delegate to low-level provider dispatch; provider selection remains server-side.
-  const innerResp = await fetch(
-    `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+  const claimedPhones: string[] = [];
+  const logByPhone = new Map<string, string>();
+  let duplicateCount = 0;
+
+  for (const phone of validMobiles) {
+    const key = externalDispatchKey(eventKey, meetingId, eventType, phone);
+    const claim = await claimLog(supabase, {
+      dispatchKey: key,
+      meetingId,
+      targetUserId: null,
+      targetPhone: phone,
+      triggeredByUserId: dbTriggeredBy,
+      category,
+      eventType,
+      audience,
+      message,
+      providerId,
+      providerName,
+    });
+    if (!claim.claimed) {
+      duplicateCount += 1;
+      continue;
+    }
+    if (claim.id) logByPhone.set(phone, claim.id);
+    claimedPhones.push(phone);
+  }
+
+  if (!claimedPhones.length) {
+    return json({
+      ok: true,
+      status: "skipped",
+      reason: "DUPLICATE_SMS_DISPATCH",
+      sent: 0,
+      skipped: invalidMobiles.length + duplicateCount,
+      templateId: rendered.templateId,
+    });
+  }
+
+  let result: any;
+  try {
+    const innerResp = await fetch(
+      `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+        },
+        body: JSON.stringify({ mode: "send", mobiles: claimedPhones, message, providerId }),
       },
-      body: JSON.stringify({ mode: "send", mobiles: validMobiles, message }),
-    },
-  );
-  const result = await innerResp.json();
+    );
+    result = await innerResp.json();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    for (const phone of claimedPhones) {
+      await finishLog(supabase, logByPhone.get(phone) ?? null, {
+        status: "failed",
+        error_text: `PROVIDER_TRANSPORT_ERROR: ${detail}`,
+        raw_response: { transportError: detail },
+      });
+    }
+    return json({
+      ok: false,
+      status: "failed",
+      sent: 0,
+      skipped: invalidMobiles.length + duplicateCount,
+      errorCode: "PROVIDER_TRANSPORT_ERROR",
+      error: detail,
+    });
+  }
 
-  // Resolve provider name for logging.
-  const { data: defProv } = await supabase.from("sms_providers").select("id, title").eq("is_default", true).eq("is_active", true).maybeSingle();
-  const logProviderId: string | null = defProv?.id ?? null;
-  const logProviderName: string | null = defProv?.title ?? null;
-
-  const logBase = {
-    triggered_by_user_id: triggeredByUserId === "service" ? null : triggeredByUserId,
-    target_user_id: null,
-    category,
-    event_type: eventType,
-    audience,
-    message,
-  };
-
-  const logs = validMobiles.map(phone => ({
-    ...logBase,
-    target_phone: phone,
-    provider_id: logProviderId,
-    provider_name: logProviderName,
-    status: result.ok ? "sent" : "failed",
-    error_text: result.ok ? null : `PROVIDER_ERROR: ${result.error ?? "خطای ناشناخته"}`,
-    pack_id: result.ok ? (result.packId ?? null) : null,
-    message_ids: result.ok ? (result.messageIds ?? null) : null,
-    raw_response: result.response ?? null,
-  }));
-  await supabase.from("sms_dispatch_logs").insert(logs);
+  const returnIds: string[] = Array.isArray(result.returnIds) ? result.returnIds : [];
+  for (let i = 0; i < claimedPhones.length; i++) {
+    const phone = claimedPhones[i];
+    const providerMessageId = returnIds[i] ?? null;
+    await finishLog(supabase, logByPhone.get(phone) ?? null, result.ok
+      ? {
+          status: "sent",
+          error_text: null,
+          pack_id: result.packId ?? null,
+          message_ids: result.messageIds ?? null,
+          raw_response: result.response ?? null,
+          provider_message_id: providerMessageId,
+          delivery_status: providerMessageId ? "pending" : null,
+        }
+      : {
+          status: "failed",
+          error_text: `${result.errorCode || "PROVIDER_ERROR"}: ${result.error ?? "خطای ناشناخته"}`,
+          raw_response: result.response ?? null,
+        });
+  }
 
   if (invalidMobiles.length > 0) {
     await supabase.from("sms_dispatch_logs").insert(
       invalidMobiles.map(phone => ({
-        ...logBase, target_phone: phone, status: "skipped",
+        meeting_id: meetingId,
+        triggered_by_user_id: dbTriggeredBy,
+        target_user_id: null,
+        target_phone: phone,
+        category,
+        event_type: eventType,
+        audience,
+        message,
+        status: "skipped",
         error_text: "INVALID_TARGET_PHONE: شماره نامعتبر است",
       })),
     );
@@ -313,23 +491,21 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
   if (isAuthOtp) {
     return json({
       ok: result.ok,
-      errorCode: result.ok ? null : "SMS_PROVIDER_REJECTED",
+      errorCode: result.ok ? null : (result.errorCode || "SMS_PROVIDER_REJECTED"),
+      returnIds,
       packId: result.packId ?? null,
-      messageIds: result.messageIds ?? null,
-      returnIds: result.returnIds ?? null,
       cost: result.cost ?? null,
     });
   }
+
   return json({
     ok: result.ok,
     status: result.ok ? "sent" : "failed",
-    sent: result.ok ? validMobiles.length : 0,
-    skipped: invalidMobiles.length,
+    sent: result.ok ? claimedPhones.length : 0,
+    skipped: invalidMobiles.length + duplicateCount,
     templateId: rendered.templateId,
-    errorCode: result.ok ? undefined : "PROVIDER_ERROR",
+    errorCode: result.ok ? undefined : (result.errorCode || "PROVIDER_ERROR"),
     error: result.ok ? undefined : (result.error ?? "خطای ناشناخته"),
-    packId: result.packId ?? null,
-    messageIds: result.messageIds ?? null,
-    returnIds: result.returnIds ?? null,
+    returnIds,
   });
 }
