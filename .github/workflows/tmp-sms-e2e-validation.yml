@@ -1,0 +1,22 @@
+name: Temporary SMS end-to-end validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-sms-e2e-validation.yml'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - name: Production build
+        run: npm run build
+      - name: Validate SMS wiring
+        run: |
+          grep -q "eventKey:" src/features/notifications/services/notificationProducerOrchestration.ts
+          grep -q "CLIENT_NETWORK_ERROR" src/features/notifications/gateways/smsNotificationGateway.ts
+          grep -q "DUPLICATE_SMS_DISPATCH" supabase/functions/send-sms/requestModes.ts
+          grep -q "PROVIDER_TIMEOUT" supabase/functions/send-sms/index.ts
+          grep -q "dispatch_key" supabase/migrations/20260827143000_add_sms_dispatch_idempotency.sql
+          grep -q "eventKey:.*external" src/features/meetings/commands/deleteMeetingPermanently.ts
