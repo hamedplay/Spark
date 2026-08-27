@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
 import { normalizeMeetingDate, normalizeClockTime } from '../../lib/minutesDate';
 import { MeetingOwnerDelegateModal } from './MeetingOwnerDelegateModal';
+import { MeetingShareDialog } from '../../features/meetings/components/MeetingCard/MeetingShareDialog';
 
 interface AgendaItem {
   id: string;
@@ -43,6 +44,8 @@ export function MeetingDetailModal({
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareChoice, setShowShareChoice] = useState(false);
+  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
   const [showOwnerDelegate, setShowOwnerDelegate] = useState(false);
   const [canDelegateInvitation, setCanDelegateInvitation] = useState(false);
   const shareCardRef = useRef<HTMLDivElement>(null);
@@ -309,39 +312,95 @@ const getJalaliDate = (): string => {
   const handleShareAsText = async () => {
     setShowShareChoice(false);
     const text = buildShareText();
-    if (navigator.share) {
-      try { await navigator.share({ title: m.subject, text }); } catch { /* cancelled */ }
-    } else {
-      try { await navigator.clipboard.writeText(text); toast.success('اطلاعات جلسه کپی شد'); }
-      catch { toast.error('اشتراک‌گذاری پشتیبانی نمی‌شود'); }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('متن جلسه در کلیپ‌بورد کپی شد');
+    } catch {
+      toast.error('خطا در کپی متن جلسه');
     }
   };
 
   const handleShareAsImage = async () => {
     setShowShareChoice(false);
-    if (!shareCardRef.current) { toast.error('خطا در تولید تصویر'); return; }
+    if (!shareCardRef.current) {
+      toast.error('خطا در ایجاد تصویر');
+      return;
+    }
+
     try {
+      setShareLoading(true);
       toast.loading('در حال تولید تصویر...');
-      const dataUrl = await toPng(shareCardRef.current, { quality: 0.95, pixelRatio: 2 });
+      const dataUrl = await toPng(shareCardRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        const image = new window.Image();
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('IMAGE_PRELOAD_FAILED'));
+        image.src = dataUrl;
+      });
+
       toast.dismiss();
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], 'meeting.png', { type: 'image/png' });
-      if (navigator.share && (navigator.canShare?.({ files: [file] }) ?? false)) {
-        await navigator.share({ title: m.subject, files: [file] });
-      } else {
-        const a = document.createElement('a');
-        a.href = dataUrl;
-        a.download = `meeting-${m.id.slice(0, 8)}.png`;
-        a.click();
-        toast.success('تصویر دانلود شد');
-      }
+      setShareImageUrl(dataUrl);
     } catch {
       toast.dismiss();
-      toast.error('خطا در تولید تصویر');
+      toast.error('خطا در ایجاد تصویر');
+    } finally {
+      setShareLoading(false);
     }
   };
 
+  const handleNativeShareImage = async () => {
+    if (!shareImageUrl) return;
+
+    try {
+      const commaIndex = shareImageUrl.indexOf(',');
+      if (commaIndex < 0) throw new Error('INVALID_DATA_URL');
+
+      const metadata = shareImageUrl.slice(0, commaIndex);
+      const payload = shareImageUrl.slice(commaIndex + 1);
+      const mimeType = /^data:([^;,]+)/.exec(metadata)?.[1] || 'image/png';
+      let blob: Blob;
+
+      if (metadata.includes(';base64')) {
+        const binary = atob(payload);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        blob = new Blob([bytes], { type: mimeType });
+      } else {
+        blob = new Blob([decodeURIComponent(payload)], { type: mimeType });
+      }
+
+      const file = new File([blob], `meeting-${m.id.slice(0, 8)}.png`, { type: 'image/png' });
+      if (!navigator.share || !(navigator.canShare?.({ files: [file] }) ?? false)) {
+        toast.error('اشتراک‌گذاری مستقیم تصویر در این مرورگر پشتیبانی نمی‌شود');
+        return;
+      }
+
+      await navigator.share({ title: m.subject, files: [file] });
+      toast.success('تصویر جلسه به اشتراک گذاشته شد');
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') toast.error('خطا در اشتراک‌گذاری تصویر');
+    }
+  };
+
+  const handleDownloadShareImage = () => {
+    if (!shareImageUrl) return;
+
+    const link = document.createElement('a');
+    link.href = shareImageUrl;
+    link.download = `meeting-${m.id.slice(0, 8)}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('تصویر PNG دانلود شد');
+  };
+
   const handleNativeShare = () => {
+    if (shareLoading) return;
     setShowShareChoice(true);
   };
 
@@ -639,7 +698,7 @@ const getJalaliDate = (): string => {
               <Edit2 className="w-4 h-4" />ویرایش
             </button>
           )}
-          <button onClick={handleNativeShare} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm font-medium hover:bg-green-100 transition-colors">
+          <button onClick={handleNativeShare} disabled={shareLoading} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm font-medium hover:bg-green-100 transition-colors disabled:opacity-60 disabled:cursor-wait">
             <Share2 className="w-4 h-4" />اشتراک‌گذاری
           </button>
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
@@ -697,6 +756,15 @@ const getJalaliDate = (): string => {
         </div>
       </div>
 
+      {shareImageUrl && (
+        <MeetingShareDialog
+          imageUrl={shareImageUrl}
+          onClose={() => setShareImageUrl(null)}
+          onShare={handleNativeShareImage}
+          onDownload={handleDownloadShareImage}
+        />
+      )}
+
       {showOwnerDelegate && currentUserId && (
         <MeetingOwnerDelegateModal
           meetingId={m.id}
@@ -726,8 +794,8 @@ const getJalaliDate = (): string => {
                 <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="font-semibold text-gray-800 dark:text-white text-sm">به صورت متن</p>
-                <p className="text-xs text-gray-400 mt-0.5">ارسال متن جلسه به اپلیکیشن‌های مختلف</p>
+                <p className="font-semibold text-gray-800 dark:text-white text-sm">اشتراک متن</p>
+                <p className="text-xs text-gray-400 mt-0.5">کپی متن جلسه در کلیپ‌بورد</p>
               </div>
             </button>
             <button onClick={handleShareAsImage}
@@ -736,8 +804,8 @@ const getJalaliDate = (): string => {
                 <Image className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="font-semibold text-gray-800 dark:text-white text-sm">به صورت تصویر</p>
-                <p className="text-xs text-gray-400 mt-0.5">دانلود یا ارسال تصویر کارت جلسه</p>
+                <p className="font-semibold text-gray-800 dark:text-white text-sm">اشتراک تصویر</p>
+                <p className="text-xs text-gray-400 mt-0.5">پیش‌نمایش، اشتراک یا دانلود PNG</p>
               </div>
             </button>
           </div>
