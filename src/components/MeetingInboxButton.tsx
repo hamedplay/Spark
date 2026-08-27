@@ -316,9 +316,14 @@ export function MeetingInboxButton() {
         p_meeting_inbox_id: entry.id,
       });
       if (declineError) throw declineError;
-      if (!declineResult?.success) throw new Error(declineResult?.error_code || 'DECLINE_FAILED');
+      const declinePayload = declineResult as {
+        success?: boolean;
+        error_code?: string;
+        owner_delegate?: boolean;
+      } | null;
+      if (!declinePayload?.success) throw new Error(declinePayload?.error_code || 'DECLINE_FAILED');
 
-      const ownerDelegate = Boolean(declineResult.owner_delegate);
+      const ownerDelegate = Boolean(declinePayload.owner_delegate);
 
       await insertNotification({
         userId: meeting.user_id,
