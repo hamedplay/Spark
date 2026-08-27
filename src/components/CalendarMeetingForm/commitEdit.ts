@@ -447,6 +447,7 @@ export async function commitCalendarMeetingEdit({
             currentPlaceholders,
             'invite',
             diff.meeting_id,
+            `${operationId}:${diff.meeting_id}:external:invite`,
           ));
         }
         if (!isFirstSchedule && (meetingChangeSet?.importantFields.length ?? 0) > 0 && externalDiff.retained.length > 0) {
@@ -459,6 +460,7 @@ export async function commitCalendarMeetingEdit({
             currentPlaceholders,
             'change',
             diff.meeting_id,
+            `${operationId}:${diff.meeting_id}:external:change`,
           ));
         }
         if (externalDiff.removed.length > 0) {
@@ -471,6 +473,7 @@ export async function commitCalendarMeetingEdit({
             currentPlaceholders,
             'cancel',
             diff.meeting_id,
+            `${operationId}:${diff.meeting_id}:external:cancel`,
           ));
         }
       }
