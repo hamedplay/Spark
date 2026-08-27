@@ -812,55 +812,95 @@ const getJalaliDate = (): string => {
         </div>
       )}
 
-      {/* Hidden card used for image generation */}
+      {/* Hidden card used for image generation — same visual language as meeting requests */}
       <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -1 }}>
-        <div ref={shareCardRef} style={{ width: 360, backgroundColor: '#fff', fontFamily: 'Vazirmatn, system-ui, sans-serif', direction: 'rtl', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.12)' }}>
-          <div style={{ backgroundColor: getMeetingColor(m), padding: '16px 20px' }}>
-            <p style={{ color: '#fff', fontWeight: 700, fontSize: 16, margin: 0 }}>{m.subject}</p>
-            {getJalaliDate() && (
-              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, margin: '4px 0 0' }}>{getJalaliDate()}</p>
-            )}
-            {(m.start_time || m.end_time) && (
-              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, margin: '4px 0 0' }}>{normalizeClockTime(m.start_time) ?? m.start_time} — {normalizeClockTime(m.end_time) ?? m.end_time}</p>
-            )}
+        <div
+          ref={shareCardRef}
+          style={{
+            width: 380,
+            backgroundColor: '#ffffff',
+            fontFamily: 'Vazirmatn, system-ui, sans-serif',
+            direction: 'rtl',
+            borderRadius: 20,
+            overflow: 'hidden',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 14px 40px rgba(15,23,42,0.12)',
+          }}
+        >
+          <div style={{ height: 5, background: 'linear-gradient(90deg, #8b5cf6 0%, #6366f1 25%, #06b6d4 50%, #10b981 75%, #f59e0b 100%)' }} />
+
+          <div style={{ padding: '18px 20px 14px', backgroundColor: '#ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 55%, #10b981 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 6px 18px rgba(99,102,241,0.18)' }}>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+              </div>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: '#0f172a', fontWeight: 800, fontSize: 16, margin: 0, lineHeight: 1.55, wordBreak: 'break-word' }}>
+                  {m.subject}
+                </p>
+                <p style={{ color: '#64748b', fontSize: 10.5, margin: '4px 0 0' }}>Spark Meeting Manager</p>
+              </div>
+
+              <span style={{ color: '#047857', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 999, padding: '4px 8px', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                جلسه تقویم
+              </span>
+            </div>
           </div>
-          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          <div style={{ margin: '0 16px', height: 1, backgroundColor: '#e2e8f0' }} />
+
+          <div style={{ padding: '16px 20px 18px', display: 'flex', flexDirection: 'column', gap: 11, backgroundColor: '#f8fafc' }}>
             {(() => {
               const creatorName = isOwner ? 'شما' : resolveName(m.user_id);
               const participantNames = (m.participant_user_ids || []).map(uid => resolveName(uid)).join('، ');
               const notifyNames = ((m.notify_users || []) as string[]).map(uid => resolveName(uid)).join('، ');
-              const extNames = (m.external_participants || []).join('، ');
+              const externalNames = (m.external_participants || []).join('، ');
+              const start = normalizeClockTime(m.start_time) ?? m.start_time;
+              const finish = normalizeClockTime(m.end_time) ?? m.end_time;
               const rows = [
                 { label: 'ایجادکننده', value: creatorName },
                 { label: 'تاریخ', value: getJalaliDate() },
-                { label: 'زمان', value: (normalizeClockTime(m.start_time) ?? m.start_time) && (normalizeClockTime(m.end_time) ?? m.end_time) ? `${normalizeClockTime(m.start_time) ?? m.start_time} — ${normalizeClockTime(m.end_time) ?? m.end_time}` : '' },
+                { label: 'زمان', value: start && finish ? `${start} — ${finish}` : '' },
                 { label: 'محل برگزاری', value: m.location },
                 { label: 'نماینده', value: m.representative },
                 { label: 'تلفن تماس', value: m.phone },
                 { label: 'شرکت‌کنندگان', value: participantNames },
                 { label: 'مطلعین', value: notifyNames },
-                { label: 'خارج سازمان', value: extNames },
+                { label: 'خارج سازمان', value: externalNames },
                 { label: 'لینک آنلاین', value: roomCode ? `${window.location.origin}/?conference=${roomCode}` : '' },
                 { label: 'یادداشت', value: m.notes },
-                { label: 'دستور جلسه', value: agendaItems.length > 0
+                {
+                  label: 'دستور جلسه',
+                  value: agendaItems.length > 0
                     ? agendaItems.map((item, idx) => {
                         const parts = [`${idx + 1}. ${item.title}`];
                         if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
                         if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
                         return parts.join(' | ');
                       }).join('\n')
-                    : '' },
-              ].filter(r => r.value);
-              return rows.map(r => (
-                <div key={r.label} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <span style={{ color: '#6b7280', fontSize: 12, minWidth: 96, flexShrink: 0 }}>{r.label}:</span>
-                  <span style={{ color: '#111827', fontSize: 12, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{r.value}</span>
+                    : '',
+                },
+              ].filter(row => row.value);
+
+              const accentColors = ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
+              return rows.map((row, index) => (
+                <div key={row.label} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                  <span style={{ width: 4, height: 4, borderRadius: 999, backgroundColor: accentColors[index % accentColors.length], marginTop: 7, flexShrink: 0 }} />
+                  <span style={{ color: '#64748b', fontSize: 11.5, minWidth: 88, flexShrink: 0 }}>{row.label}:</span>
+                  <span style={{ color: '#0f172a', fontSize: 11.5, fontWeight: 500, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{row.value}</span>
                 </div>
               ));
             })()}
           </div>
-          <div style={{ padding: '10px 20px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
-            <p style={{ color: '#9ca3af', fontSize: 11, margin: 0, textAlign: 'center' }}>سیستم مدیریت جلسات</p>
+
+          <div style={{ padding: '11px 20px', backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: '#8b5cf6' }} />
+            <span style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: '#06b6d4' }} />
+            <span style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: '#10b981' }} />
+            <p style={{ color: '#475569', fontSize: 10.5, margin: '0 3px 0 0' }}>سیستم مدیریت جلسات اسپارک</p>
           </div>
         </div>
       </div>
