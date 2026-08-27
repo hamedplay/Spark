@@ -75,3 +75,9 @@ test('direct authenticated role mutation is disabled so LiveKit sync cannot be b
   assert.match(edgeOnlyMigration, /private\.set_conference_participant_role\(uuid,uuid,text\)[\s\S]*from authenticated/i);
   assert.match(edgeOnlyMigration, /to service_role/i);
 });
+
+
+test('self-hosted join tokens use a short replay window', () => {
+  assert.match(tokenEdge, /ttl:\s*"2m"/);
+  assert.match(tokenEdge, /expiresInSeconds:\s*120/);
+});

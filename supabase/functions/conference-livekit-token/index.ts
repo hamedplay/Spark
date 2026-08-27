@@ -155,7 +155,7 @@ Deno.serve(async (req: Request) => {
   const token = new AccessToken(livekitApiKey, livekitApiSecret, {
     identity: authUser.id,
     name: displayName,
-    ttl: "10m",
+    ttl: "2m",
     metadata: JSON.stringify({
       role,
       rbacRole: livekitPolicy.role,
@@ -187,6 +187,6 @@ Deno.serve(async (req: Request) => {
       publishSources: livekitPolicy.sourceNames,
     },
     maxParticipants,
-    expiresInSeconds: 600,
+    expiresInSeconds: 120,
   });
 });
