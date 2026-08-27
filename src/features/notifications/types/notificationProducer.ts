@@ -22,6 +22,7 @@ export interface NotifyPayload {
   senderAvatarUrl?: string | null;
 
   actionUrl?: string | null;
+  meetingId?: string | null;
 
   channels?: NotifyChannels;
 
