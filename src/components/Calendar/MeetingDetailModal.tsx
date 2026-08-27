@@ -6,6 +6,7 @@ import { isMeetingEligibleForMinutes } from '../../lib/isMeetingEligibleForMinut
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
 import { normalizeMeetingDate, normalizeClockTime } from '../../lib/minutesDate';
+import { MeetingOwnerDelegateModal } from './MeetingOwnerDelegateModal';
 
 interface AgendaItem {
   id: string;
@@ -42,6 +43,7 @@ export function MeetingDetailModal({
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareChoice, setShowShareChoice] = useState(false);
+  const [showOwnerDelegate, setShowOwnerDelegate] = useState(false);
   const [canDelegateInvitation, setCanDelegateInvitation] = useState(false);
   const shareCardRef = useRef<HTMLDivElement>(null);
   // Guard against double-click / double-navigation when confirming minutes creation.
@@ -643,7 +645,12 @@ const getJalaliDate = (): string => {
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
             <ExternalLink className="w-4 h-4" />گوگل کلندر
           </button>
-          {canDelegateInvitation && (
+          {isOwner && currentUserId && (
+            <button onClick={() => setShowOwnerDelegate(true)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
+              <UserCheck className="w-4 h-4" />انتخاب جانشین
+            </button>
+          )}
+          {!isOwner && canDelegateInvitation && (
             <button onClick={handleOpenDelegate} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
               <UserCheck className="w-4 h-4" />انتخاب جانشین
             </button>
@@ -689,6 +696,18 @@ const getJalaliDate = (): string => {
           )}
         </div>
       </div>
+
+      {showOwnerDelegate && currentUserId && (
+        <MeetingOwnerDelegateModal
+          meetingId={m.id}
+          meetingSubject={m.subject}
+          currentUserId={currentUserId}
+          participantUserIds={m.participant_user_ids || []}
+          notifyUserIds={(m.notify_users || []) as string[]}
+          onClose={() => setShowOwnerDelegate(false)}
+          onSuccess={() => setShowOwnerDelegate(false)}
+        />
+      )}
 
       {/* Share choice modal */}
       {showShareChoice && (
