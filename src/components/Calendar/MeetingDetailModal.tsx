@@ -47,6 +47,13 @@ export function MeetingDetailModal({
   const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [showOwnerDelegate, setShowOwnerDelegate] = useState(false);
+  const [ownerDelegate, setOwnerDelegate] = useState<{
+    userId: string;
+    name: string;
+    status: 'pending' | 'accepted' | 'declined';
+  } | null>(() => m.owner_delegate_user_id && m.owner_delegate_name && m.owner_delegate_status
+    ? { userId: m.owner_delegate_user_id, name: m.owner_delegate_name, status: m.owner_delegate_status }
+    : null);
   const [canDelegateInvitation, setCanDelegateInvitation] = useState(false);
   const shareCardRef = useRef<HTMLDivElement>(null);
   // Guard against double-click / double-navigation when confirming minutes creation.
@@ -138,6 +145,24 @@ export function MeetingDetailModal({
       .order('sort_order')
       .then(({ data }) => { if (data) setAgendaItems(data as AgendaItem[]); });
   }, [m.id]);
+
+  useEffect(() => {
+    if (!isOwner) {
+      setOwnerDelegate(null);
+      return;
+    }
+    let cancelled = false;
+    supabase.rpc('get_my_meeting_owner_delegations_v1').then(({ data, error }) => {
+      if (cancelled || error) return;
+      const row = (data || []).find((item: any) => item.meeting_id === m.id);
+      setOwnerDelegate(row ? {
+        userId: row.delegate_user_id,
+        name: row.delegate_name,
+        status: row.status as 'pending' | 'accepted' | 'declined',
+      } : null);
+    });
+    return () => { cancelled = true; };
+  }, [m.id, isOwner, m.owner_delegate_user_id, m.owner_delegate_status]);
 
   useEffect(() => {
     if (!currentUserId || isOwner) {
@@ -691,6 +716,38 @@ const getJalaliDate = (): string => {
           )}
         </div>
 
+        {isOwner && ownerDelegate && (
+          <div className={`mx-4 mb-3 rounded-xl border p-3 ${
+            ownerDelegate.status === 'accepted'
+              ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-700/50 dark:bg-emerald-900/20'
+              : ownerDelegate.status === 'pending'
+                ? 'border-amber-200 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-900/20'
+                : 'border-rose-200 bg-rose-50 dark:border-rose-700/50 dark:bg-rose-900/20'
+          }`}>
+            <div className="flex items-start gap-2">
+              <UserCheck className={`mt-0.5 h-4 w-4 flex-shrink-0 ${
+                ownerDelegate.status === 'accepted' ? 'text-emerald-600' : ownerDelegate.status === 'pending' ? 'text-amber-600' : 'text-rose-600'
+              }`} />
+              <div>
+                <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">
+                  {ownerDelegate.status === 'accepted'
+                    ? `جانشین جلسه: ${ownerDelegate.name}`
+                    : ownerDelegate.status === 'pending'
+                      ? `در انتظار پاسخ جانشین: ${ownerDelegate.name}`
+                      : `درخواست جانشینی توسط ${ownerDelegate.name} رد شد`}
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+                  {ownerDelegate.status === 'accepted'
+                    ? 'این شخص حضور به‌عنوان جانشین شما را تأیید کرده است.'
+                    : ownerDelegate.status === 'pending'
+                      ? 'تا زمان تأیید، این جلسه در تقویم جانشین قرار نمی‌گیرد.'
+                      : 'می‌توانید جانشین دیگری برای این جلسه انتخاب کنید.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="border-t border-gray-100 dark:border-gray-700 p-4 grid grid-cols-2 gap-2 flex-shrink-0">
           {canEdit && (
@@ -704,9 +761,19 @@ const getJalaliDate = (): string => {
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
             <ExternalLink className="w-4 h-4" />گوگل کلندر
           </button>
-          {isOwner && currentUserId && (
+          {isOwner && currentUserId && (!ownerDelegate || ownerDelegate.status === 'declined') && (
             <button onClick={() => setShowOwnerDelegate(true)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
-              <UserCheck className="w-4 h-4" />انتخاب جانشین
+              <UserCheck className="w-4 h-4" />{ownerDelegate?.status === 'declined' ? 'انتخاب جانشین جدید' : 'انتخاب جانشین'}
+            </button>
+          )}
+          {isOwner && ownerDelegate?.status === 'pending' && (
+            <button disabled className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 text-amber-600 text-sm font-medium cursor-not-allowed opacity-80 dark:bg-amber-900/20 dark:text-amber-300">
+              <Clock className="w-4 h-4" />در انتظار پاسخ جانشین
+            </button>
+          )}
+          {isOwner && ownerDelegate?.status === 'accepted' && (
+            <button disabled className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 text-emerald-600 text-sm font-medium cursor-default dark:bg-emerald-900/20 dark:text-emerald-300">
+              <CheckCircle2 className="w-4 h-4" />جانشین تأییدشده
             </button>
           )}
           {!isOwner && canDelegateInvitation && (
@@ -773,7 +840,10 @@ const getJalaliDate = (): string => {
           participantUserIds={m.participant_user_ids || []}
           notifyUserIds={(m.notify_users || []) as string[]}
           onClose={() => setShowOwnerDelegate(false)}
-          onSuccess={() => setShowOwnerDelegate(false)}
+          onSuccess={(delegateUserId, delegateName) => {
+            setOwnerDelegate({ userId: delegateUserId, name: delegateName, status: 'pending' });
+            setShowOwnerDelegate(false);
+          }}
         />
       )}
 
