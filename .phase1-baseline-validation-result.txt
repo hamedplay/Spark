@@ -1,0 +1,53 @@
+baseline_commit=a78ea9b057916f2ae881efab09b43874d394ebe6
+npm_ci=0
+notification_model_test=1
+--- baseline test tail ---
+
+> meeting-manager@0.0.0 test:notification-model
+> node --import tsx --test tests/notifications/notificationModel.test.ts
+
+✔ preserves notification click navigation precedence (1.06697ms)
+✖ uses only action URL for rich-toast navigation (2.729502ms)
+✔ preserves all Minutes and standard page mappings (0.147666ms)
+✔ counts unread notifications (0.211114ms)
+✔ deduplicates an incoming notification by ID (0.177942ms)
+✔ prepends an incoming notification and retains only fifty rows (0.211004ms)
+✔ replaces a matching Realtime update without reordering (0.172391ms)
+✔ marks one notification as read locally (0.1498ms)
+✔ marks every notification as read locally (0.327521ms)
+✔ formats legacy Persian relative time boundaries (0.386932ms)
+✔ groups today and yesterday notifications in input order (0.507747ms)
+✔ preserves consecutive grouping instead of globally merging labels (0.162613ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 11
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 198.421005
+
+✖ failing tests:
+
+test at tests/notifications/notificationModel.test.ts:1:1351
+✖ uses only action URL for rich-toast navigation (2.729502ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'tasks'
+  - undefined
+  
+      at TestContext.<anonymous> (/tmp/spark-baseline/tests/notifications/notificationModel.test.ts:83:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'tasks',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
