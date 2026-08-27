@@ -240,6 +240,8 @@ export async function produceNotificationWithDependencies(
           context: variables,
           meetingId:
             payload.meetingId ?? null,
+          eventKey:
+            payload.eventKey ?? null,
           senderId:
             payload.senderId,
         }
