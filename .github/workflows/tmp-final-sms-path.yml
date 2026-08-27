@@ -1,0 +1,22 @@
+name: Temporary final SMS path validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-final-sms-path.yml'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - name: Production build
+        run: npm run build
+      - name: Validate final SMS invariants
+        run: |
+          grep -q "Promise.allSettled" src/features/meetings/commands/deleteMeetingPermanently.ts
+          grep -q "DUPLICATE_SMS_DISPATCH" supabase/functions/send-sms/requestModes.ts
+          grep -q "PROVIDER_TIMEOUT" supabase/functions/send-sms/index.ts
+          grep -q "eventKey:" src/features/notifications/services/notificationProducerOrchestration.ts
+          grep -q "CLIENT_NETWORK_ERROR" src/features/notifications/gateways/smsNotificationGateway.ts
+          grep -q "claim_sms_dispatch_v1" supabase/migrations/20260827143000_add_sms_dispatch_idempotency.sql
