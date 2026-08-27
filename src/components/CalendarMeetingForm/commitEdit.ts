@@ -188,6 +188,7 @@ export async function commitCalendarMeetingEdit({
           full_name: senderName,
           recipient_greeting: `${senderName} گرامی`,
         },
+        meetingId: prefillMeetingId,
         senderId: userId,
         senderName,
         actionUrl: 'calendar',
@@ -270,6 +271,7 @@ export async function commitCalendarMeetingEdit({
               full_name: participantNameMap[recipientId] || '',
               recipient_greeting: participantNameMap[recipientId] ? `${participantNameMap[recipientId]} گرامی` : 'همکار گرامی',
             },
+            meetingId: diff.meeting_id,
             senderId: userId,
             senderName,
             actionUrl: 'calendar',
@@ -297,6 +299,7 @@ export async function commitCalendarMeetingEdit({
               full_name: participantNameMap[recipientId] || '',
               recipient_greeting: participantNameMap[recipientId] ? `${participantNameMap[recipientId]} گرامی` : 'همکار گرامی',
             },
+            meetingId: diff.meeting_id,
             senderId: userId,
             senderName,
             actionUrl: 'calendar',
@@ -324,6 +327,7 @@ export async function commitCalendarMeetingEdit({
               full_name: participantNameMap[recipientId] || '',
               recipient_greeting: participantNameMap[recipientId] ? `${participantNameMap[recipientId]} گرامی` : 'همکار گرامی',
             },
+            meetingId: diff.meeting_id,
             senderId: userId,
             senderName,
             actionUrl: 'calendar',
@@ -361,6 +365,7 @@ export async function commitCalendarMeetingEdit({
               full_name: participantNameMap[recipientId] || '',
               recipient_greeting: participantNameMap[recipientId] ? `${participantNameMap[recipientId]} گرامی` : 'همکار گرامی',
             },
+            meetingId: diff.meeting_id,
             senderId: userId,
             senderName,
             actionUrl: 'calendar',
@@ -388,6 +393,7 @@ export async function commitCalendarMeetingEdit({
               full_name: participantNameMap[recipientId] || '',
               recipient_greeting: participantNameMap[recipientId] ? `${participantNameMap[recipientId]} گرامی` : 'همکار گرامی',
             },
+            meetingId: diff.meeting_id,
             senderId: userId,
             senderName,
             actionUrl: 'calendar',
@@ -415,6 +421,7 @@ export async function commitCalendarMeetingEdit({
               full_name: participantNameMap[recipientId] || '',
               recipient_greeting: participantNameMap[recipientId] ? `${participantNameMap[recipientId]} گرامی` : 'همکار گرامی',
             },
+            meetingId: diff.meeting_id,
             senderId: userId,
             senderName,
             actionUrl: 'calendar',
@@ -439,6 +446,7 @@ export async function commitCalendarMeetingEdit({
             userId,
             currentPlaceholders,
             'invite',
+            diff.meeting_id,
           ));
         }
         if (!isFirstSchedule && (meetingChangeSet?.importantFields.length ?? 0) > 0 && externalDiff.retained.length > 0) {
@@ -450,6 +458,7 @@ export async function commitCalendarMeetingEdit({
             userId,
             currentPlaceholders,
             'change',
+            diff.meeting_id,
           ));
         }
         if (externalDiff.removed.length > 0) {
@@ -461,6 +470,7 @@ export async function commitCalendarMeetingEdit({
             userId,
             currentPlaceholders,
             'cancel',
+            diff.meeting_id,
           ));
         }
       }
