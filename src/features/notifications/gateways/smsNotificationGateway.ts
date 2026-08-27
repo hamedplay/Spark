@@ -10,6 +10,7 @@ export interface DispatchSmsNotificationInput {
   audience: string;
   message: string;
   context?: Record<string, string>;
+  meetingId?: string | null;
   senderId?: string | null;
 }
 
@@ -45,6 +46,9 @@ export async function dispatchSmsNotification(
 
             context:
               input.context ?? {},
+
+            meetingId:
+              input.meetingId ?? null,
 
             triggeredByUserId:
               input.senderId ?? null,
