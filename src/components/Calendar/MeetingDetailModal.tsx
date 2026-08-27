@@ -154,7 +154,13 @@ export function MeetingDetailModal({
     let cancelled = false;
     supabase.rpc('get_my_meeting_owner_delegations_v1').then(({ data, error }) => {
       if (cancelled || error) return;
-      const row = (data || []).find((item: any) => item.meeting_id === m.id);
+      const rows = Array.isArray(data) ? data as Array<{
+        meeting_id: string;
+        delegate_user_id: string;
+        delegate_name: string;
+        status: 'pending' | 'accepted' | 'declined';
+      }> : [];
+      const row = rows.find((item) => item.meeting_id === m.id);
       setOwnerDelegate(row ? {
         userId: row.delegate_user_id,
         name: row.delegate_name,
