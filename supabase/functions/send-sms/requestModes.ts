@@ -52,7 +52,7 @@ function externalDispatchKey(eventKey: string | null, meetingId: string | null, 
 
 async function claimLog(supabase: SmsClient, seed: DispatchLogSeed): Promise<{ id: string | null; claimed: boolean; status: string | null }> {
   if (seed.dispatchKey) {
-    const { data, error } = await supabase.rpc("claim_sms_dispatch_v1", {
+    const { data, error } = await supabase.schema("private").rpc("claim_sms_dispatch_v1", {
       p_dispatch_key: seed.dispatchKey,
       p_target_user_id: seed.targetUserId,
       p_target_phone: seed.targetPhone,
