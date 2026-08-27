@@ -77,6 +77,12 @@ export type SpeakerQueueAction =
   | 'set_time'
   | 'allow';
 
+export type ConferenceChatAction =
+  | 'send'
+  | 'edit'
+  | 'delete'
+  | 'react';
+
 export type MeetingPhase =
   | 'SCHEDULED'
   | 'WAITING'
@@ -131,13 +137,27 @@ export interface WaitingRow {
   requested_at: string;
 }
 
+export interface ConferenceMessageReactionRow {
+  user_id: string;
+  emoji: string;
+  created_at: string;
+}
+
 export interface ConferenceMessageRow {
   id: string;
   user_id: string;
   display_name: string;
   body: string;
   created_at: string | null;
+  reply_to_id: string | null;
+  reply_to_body: string | null;
+  reply_to_name: string | null;
+  edited_at: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
   is_deleted: boolean;
+  reactions: ConferenceMessageReactionRow[];
+  mentioned_user_ids: string[];
 }
 
 export interface ParticipantRow {

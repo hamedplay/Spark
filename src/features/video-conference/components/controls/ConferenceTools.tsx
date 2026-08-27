@@ -23,14 +23,6 @@ export function ConferenceTools({
 }: ConferenceToolsProps) {
   const client = useConferenceClient();
   const [panel, setPanel] = useState<ConferencePanel>(null);
-  const chat = useConferenceChat({
-    client,
-    roomId,
-    currentUserId,
-    currentUserName,
-    authorization,
-    phaseAllowsChat: phase.allowChat,
-  });
   const moderation = useConferenceModeration({
     client,
     roomId,
@@ -38,6 +30,14 @@ export function ConferenceTools({
     authorization,
     speakerTimer,
     onEnded,
+  });
+  const chat = useConferenceChat({
+    client,
+    roomId,
+    currentUserId,
+    authorization,
+    phaseAllowsChat: phase.allowChat,
+    mentionCandidates: moderation.participants,
   });
   const devices = useMediaDevices(room);
 
@@ -83,7 +83,29 @@ export function ConferenceTools({
             <button onClick={() => setPanel(null)} className="h-9 rounded-lg px-3 text-xs text-slate-300 hover:bg-white/10">بستن</button>
           </div>
 
-          {panel === 'chat' && <ConferenceChatPanel messages={chat.messages} message={chat.message} currentUserId={currentUserId} canSend={chat.canSend} onMessageChange={chat.setMessage} onSend={chat.sendMessage} />}
+          {panel === 'chat' && (
+            <ConferenceChatPanel
+              messages={chat.messages}
+              message={chat.message}
+              currentUserId={currentUserId}
+              canSend={chat.canSend}
+              canDeleteAny={chat.canDeleteAny}
+              busy={chat.busy}
+              errorMessage={chat.errorMessage}
+              replyTo={chat.replyTo}
+              editing={chat.editing}
+              mentionCandidates={chat.mentionCandidates}
+              selectedMentionUserIds={chat.selectedMentionUserIds}
+              onMessageChange={chat.setMessage}
+              onSend={chat.sendMessage}
+              onReply={chat.beginReply}
+              onEdit={chat.beginEdit}
+              onDelete={chat.deleteMessage}
+              onReact={chat.toggleReaction}
+              onCancelContext={chat.resetComposer}
+              onToggleMention={chat.toggleMention}
+            />
+          )}
           {panel === 'participants' && (
             <ConferenceParticipantsPanel
               participants={moderation.participants}

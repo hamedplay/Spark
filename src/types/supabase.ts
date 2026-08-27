@@ -2099,17 +2099,35 @@ export type Database = {
           user_id: string;
           display_name: string;
           body: string;
+          created_at: string | null;
+          reply_to_id: string | null;
+          reply_to_body: string | null;
+          reply_to_name: string | null;
+          is_deleted: boolean;
+          role: 'admin' | 'moderator' | 'user' | 'system';
           image_url: string | null;
-          created_at: string;
+          image_path: string | null;
+          edited_at: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
         };
         Insert: {
           id?: string;
           room_id: string;
           user_id: string;
-          display_name: string;
-          body: string;
+          display_name?: string;
+          body?: string;
+          created_at?: string | null;
+          reply_to_id?: string | null;
+          reply_to_body?: string | null;
+          reply_to_name?: string | null;
+          is_deleted?: boolean;
+          role?: 'admin' | 'moderator' | 'user' | 'system';
           image_url?: string | null;
-          created_at?: string;
+          image_path?: string | null;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
         };
         Update: {
           id?: string;
@@ -2117,7 +2135,64 @@ export type Database = {
           user_id?: string;
           display_name?: string;
           body?: string;
+          created_at?: string | null;
+          reply_to_id?: string | null;
+          reply_to_body?: string | null;
+          reply_to_name?: string | null;
+          is_deleted?: boolean;
+          role?: 'admin' | 'moderator' | 'user' | 'system';
           image_url?: string | null;
+          image_path?: string | null;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+        };
+        Relationships: [];
+      };
+      conference_message_reactions: {
+        Row: {
+          id: string;
+          message_id: string;
+          room_id: string;
+          user_id: string;
+          emoji: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          message_id: string;
+          room_id: string;
+          user_id: string;
+          emoji: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          message_id?: string;
+          room_id?: string;
+          user_id?: string;
+          emoji?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      conference_message_mentions: {
+        Row: {
+          message_id: string;
+          room_id: string;
+          mentioned_user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          message_id: string;
+          room_id: string;
+          mentioned_user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          message_id?: string;
+          room_id?: string;
+          mentioned_user_id?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -3218,6 +3293,41 @@ export type Database = {
           reason?: string;
           role?: string;
           permissions?: string[];
+        };
+      };
+      authorize_conference_chat_action: {
+        Args: {
+          p_room_id: string;
+          p_action: string;
+          p_message_id?: string | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          moderator_delete?: boolean;
+        };
+      };
+      apply_conference_chat_action: {
+        Args: {
+          p_room_id: string;
+          p_actor_user_id: string;
+          p_action: string;
+          p_message_id?: string | null;
+          p_body?: string | null;
+          p_reply_to_id?: string | null;
+          p_emoji?: string | null;
+          p_mentioned_user_ids?: string[];
+          p_image_path?: string | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          message?: unknown;
+          mentions?: string[];
+          reaction?: unknown;
+          active?: boolean;
+          remaining?: number;
+          retry_after_ms?: number;
         };
       };
       get_conference_phase_snapshot: {
