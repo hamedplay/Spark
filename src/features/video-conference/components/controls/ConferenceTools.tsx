@@ -8,10 +8,12 @@ import { useConferencePrivateChat } from '../../hooks/useConferencePrivateChat';
 import { useConferenceRealtime } from '../../hooks/useConferenceRealtime';
 import { useMediaDevices } from '../../hooks/useMediaDevices';
 import type { ConferencePanel, ConferenceToolsProps } from '../../types/conference.types';
+import { hasConferencePermission } from '../../utils/conferencePermissions';
 import { ConferenceChatPanel } from '../chat/ConferenceChatPanel';
 import { ConferenceModeratorChatPanel } from '../chat/ConferenceModeratorChatPanel';
 import { ConferencePrivateChatPanel } from '../chat/ConferencePrivateChatPanel';
 import { ConferenceParticipantsPanel } from '../participants/ConferenceParticipantsPanel';
+import { ConferencePollPanel } from '../polls/ConferencePollPanel';
 import { ConferenceToolsBar } from './ConferenceToolsBar';
 import { MediaDevicesPanel } from './MediaDevicesPanel';
 
@@ -81,6 +83,11 @@ export function ConferenceTools({
         privateUnreadCount={privateChat.unreadCount}
         canPrivateChat={privateChat.canUse}
         canModeratorChat={moderatorChat.canUse}
+        canPolls={
+          hasConferencePermission(authorization, 'VOTE_POLL')
+          || hasConferencePermission(authorization, 'CREATE_POLL')
+          || hasConferencePermission(authorization, 'MANAGE_POLLS')
+        }
         raised={moderation.raised}
         raisedCount={moderation.raisedParticipants.length}
         busy={moderation.busy}
@@ -107,7 +114,9 @@ export function ConferenceTools({
                   ? 'پیام خصوصی'
                   : panel === 'moderator-chat'
                     ? 'گفتگوی مدیران'
-                    : panel === 'participants'
+                    : panel === 'polls'
+                      ? 'نظرسنجی'
+                      : panel === 'participants'
                     ? 'شرکت‌کنندگان'
                     : 'دستگاه‌های رسانه‌ای'}
             </strong>
@@ -175,6 +184,13 @@ export function ConferenceTools({
               onEdit={moderatorChat.beginEdit}
               onDelete={moderatorChat.deleteMessage}
               onCancelContext={moderatorChat.resetComposer}
+            />
+          )}
+          {panel === 'polls' && (
+            <ConferencePollPanel
+              roomId={roomId}
+              currentUserId={currentUserId}
+              authorization={authorization}
             />
           )}
           {panel === 'participants' && (

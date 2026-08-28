@@ -55,6 +55,7 @@ The same `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must be configured as server
 - `conference-private-chat-control`
 - `conference-moderator-chat-control`
 - `conference-reaction`
+- `conference-poll-control`
 - `livekit-webhook`
 
 Also configure:
@@ -107,8 +108,9 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 13. One-to-one private conference chat is persisted in `conference_private_messages`. Only sender and recipient can read through RLS; `conference-private-chat-control` handles send/edit/delete/read-receipt mutations.
 14. Moderator chat is persisted independently in `conference_moderator_messages`. Access is permission-gated through `ACCESS_MODERATOR_CHAT`, granted only to HOST, CO_HOST and MODERATOR; normal participants cannot read it through Data API or Realtime.
 15. Interactive meeting reactions stay transient. `conference-reaction` authenticates the participant, applies an atomic 5-per-5-seconds rate limit, enriches the event with identity/display name/avatar/timestamp, and broadcasts it through LiveKit RoomService SendData on topic `spark-reaction`.
-16. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-17. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+16. Polls are persisted in `conference_polls`, `conference_poll_options` and `conference_poll_votes`. `conference-poll-control` validates create/open/close/vote/delete mutations server-side, while clients consume RLS-safe aggregate snapshots and use Realtime changes only to refresh that snapshot.
+17. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+18. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 

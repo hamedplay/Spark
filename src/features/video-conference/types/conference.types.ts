@@ -3,7 +3,7 @@ import type { ConnectionQuality, LocalParticipant, RemoteParticipant, Room } fro
 export type ConferenceRole = 'host' | 'admin' | 'moderator' | 'member' | 'guest';
 export type HostAction = 'remove' | 'mute' | 'promote' | 'demote' | 'lock' | 'unlock' | 'end' | 'lower-hand';
 export type ConferenceUiState = 'joining' | 'waiting' | 'connected' | 'reconnecting' | 'failed';
-export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'participants' | 'devices' | null;
+export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'polls' | 'participants' | 'devices' | null;
 export type ConferenceParticipant = LocalParticipant | RemoteParticipant;
 
 export const CONFERENCE_RBAC_ROLES = [
@@ -94,6 +94,73 @@ export type ConferenceModeratorChatAction =
   | 'send'
   | 'edit'
   | 'delete';
+
+export type ConferencePollType =
+  | 'SINGLE_CHOICE'
+  | 'MULTIPLE_CHOICE'
+  | 'YES_NO'
+  | 'TRUE_FALSE';
+
+export type ConferencePollResultVisibility =
+  | 'LIVE'
+  | 'AFTER_VOTE'
+  | 'AFTER_CLOSE'
+  | 'HIDDEN';
+
+export type ConferencePollStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
+
+export type ConferencePollAction =
+  | 'create'
+  | 'open'
+  | 'close'
+  | 'vote'
+  | 'delete';
+
+export interface ConferencePollOption {
+  id: string;
+  label: string;
+  position: number;
+  voteCount: number | null;
+}
+
+export interface ConferencePollVoter {
+  userId: string;
+  displayName: string;
+  optionId: string;
+}
+
+export interface ConferencePollItem {
+  id: string;
+  roomId: string;
+  createdBy: string;
+  question: string;
+  pollType: ConferencePollType;
+  anonymous: boolean;
+  resultVisibility: ConferencePollResultVisibility;
+  status: ConferencePollStatus;
+  timeLimitSeconds: number | null;
+  openedAt: string | null;
+  closesAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+  revision: number;
+  canManage: boolean;
+  canVote: boolean;
+  hasVoted: boolean;
+  resultsVisible: boolean;
+  totalVoters: number | null;
+  mySelectedOptionIds: string[];
+  options: ConferencePollOption[];
+  voters: ConferencePollVoter[];
+}
+
+export interface ConferencePollSnapshot {
+  loaded: boolean;
+  serverTime: string;
+  canCreate: boolean;
+  canVote: boolean;
+  polls: ConferencePollItem[];
+}
 
 export type MeetingPhase =
   | 'SCHEDULED'

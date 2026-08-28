@@ -2346,8 +2346,17 @@ export type Database = {
           question: string;
           options: string[];
           is_active: boolean;
+          poll_type: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'YES_NO' | 'TRUE_FALSE';
+          is_anonymous: boolean;
+          result_visibility: 'LIVE' | 'AFTER_VOTE' | 'AFTER_CLOSE' | 'HIDDEN';
+          status: 'DRAFT' | 'OPEN' | 'CLOSED';
+          time_limit_seconds: number | null;
+          opened_at: string | null;
+          closes_at: string | null;
+          revision: number;
           created_at: string;
           ended_at: string | null;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -2356,8 +2365,17 @@ export type Database = {
           question: string;
           options: string[];
           is_active?: boolean;
+          poll_type?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'YES_NO' | 'TRUE_FALSE';
+          is_anonymous?: boolean;
+          result_visibility?: 'LIVE' | 'AFTER_VOTE' | 'AFTER_CLOSE' | 'HIDDEN';
+          status?: 'DRAFT' | 'OPEN' | 'CLOSED';
+          time_limit_seconds?: number | null;
+          opened_at?: string | null;
+          closes_at?: string | null;
+          revision?: number;
           created_at?: string;
           ended_at?: string | null;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -2366,37 +2384,99 @@ export type Database = {
           question?: string;
           options?: string[];
           is_active?: boolean;
+          poll_type?: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'YES_NO' | 'TRUE_FALSE';
+          is_anonymous?: boolean;
+          result_visibility?: 'LIVE' | 'AFTER_VOTE' | 'AFTER_CLOSE' | 'HIDDEN';
+          status?: 'DRAFT' | 'OPEN' | 'CLOSED';
+          time_limit_seconds?: number | null;
+          opened_at?: string | null;
+          closes_at?: string | null;
+          revision?: number;
           created_at?: string;
           ended_at?: string | null;
+          updated_at?: string;
         };
         Relationships: [];
+      };
+      conference_poll_options: {
+        Row: {
+          id: string;
+          poll_id: string;
+          room_id: string;
+          label: string;
+          position: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          poll_id: string;
+          room_id: string;
+          label: string;
+          position: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          poll_id?: string;
+          room_id?: string;
+          label?: string;
+          position?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'conference_poll_options_poll_id_fkey';
+            columns: ['poll_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_polls';
+            referencedColumns: ['id'];
+          }
+        ];
       };
       conference_poll_votes: {
         Row: {
           id: string;
           poll_id: string;
           user_id: string;
+          option_id: string;
           option_index: number;
-          room_id: string | null;
+          room_id: string;
           created_at: string | null;
         };
         Insert: {
           id?: string;
           poll_id: string;
           user_id: string;
+          option_id: string;
           option_index: number;
-          room_id?: string | null;
+          room_id: string;
           created_at?: string | null;
         };
         Update: {
           id?: string;
           poll_id?: string;
           user_id?: string;
+          option_id?: string;
           option_index?: number;
-          room_id?: string | null;
+          room_id?: string;
           created_at?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'conference_poll_votes_poll_id_fkey';
+            columns: ['poll_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_polls';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'conference_poll_votes_option_id_fkey';
+            columns: ['option_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_poll_options';
+            referencedColumns: ['id'];
+          }
+        ];
       };
       conference_waiting_room: {
         Row: {
@@ -3469,6 +3549,46 @@ export type Database = {
           active?: boolean;
           remaining?: number;
           retry_after_ms?: number;
+        };
+      };
+      get_conference_poll_snapshot: {
+        Args: {
+          p_room_id: string;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          serverTime?: string;
+          canCreate?: boolean;
+          canVote?: boolean;
+          polls?: unknown[];
+        };
+      };
+      authorize_conference_poll_action: {
+        Args: {
+          p_room_id: string;
+          p_action: string;
+          p_poll_id?: string | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+        };
+      };
+      apply_conference_poll_action: {
+        Args: {
+          p_room_id: string;
+          p_actor_user_id: string;
+          p_action: string;
+          p_poll_id?: string | null;
+          p_payload?: unknown;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          poll_id?: string;
+          already_closed?: boolean;
+          selected_option_ids?: string[];
         };
       };
       authorize_conference_reaction: {
