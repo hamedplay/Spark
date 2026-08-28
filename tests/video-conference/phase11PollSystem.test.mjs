@@ -89,7 +89,7 @@ test('anonymous polls hide raw voter identity even from poll managers', () => {
   assert.match(migration, /conference_poll_votes_authorized_select/);
   assert.match(migration, /p_vote_user_id=p_actor_user_id/);
   assert.match(migration, /not p\.is_anonymous[\s\S]*p\.created_by=p_actor_user_id[\s\S]*MANAGE_POLLS/);
-  assert.match(migration, /when not p\.is_anonymous[\s\S]*can_manage_conference_poll[\s\S]*'voters'/);
+  assert.match(migration, /'voters',[\s\S]*when not p\.is_anonymous[\s\S]*can_manage_conference_poll/);
 });
 
 test('multiple choice is one atomic submission while repeat submissions are rejected', () => {
