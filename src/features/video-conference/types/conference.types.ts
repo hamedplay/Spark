@@ -3,7 +3,7 @@ import type { ConnectionQuality, LocalParticipant, RemoteParticipant, Room } fro
 export type ConferenceRole = 'host' | 'admin' | 'moderator' | 'member' | 'guest';
 export type HostAction = 'remove' | 'mute' | 'promote' | 'demote' | 'lock' | 'unlock' | 'end' | 'lower-hand';
 export type ConferenceUiState = 'joining' | 'waiting' | 'connected' | 'reconnecting' | 'failed';
-export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'polls' | 'participants' | 'devices' | null;
+export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'polls' | 'whiteboard' | 'participants' | 'devices' | null;
 export type ConferenceParticipant = LocalParticipant | RemoteParticipant;
 
 export const CONFERENCE_RBAC_ROLES = [
@@ -160,6 +160,96 @@ export interface ConferencePollSnapshot {
   canCreate: boolean;
   canVote: boolean;
   polls: ConferencePollItem[];
+}
+
+export type ConferenceWhiteboardElementType =
+  | 'pen'
+  | 'marker'
+  | 'line'
+  | 'arrow'
+  | 'rectangle'
+  | 'circle'
+  | 'text'
+  | 'sticky'
+  | 'image';
+
+export type ConferenceWhiteboardTool =
+  | ConferenceWhiteboardElementType
+  | 'eraser'
+  | 'laser'
+  | 'pan';
+
+export interface ConferenceWhiteboardPoint {
+  x: number;
+  y: number;
+}
+
+export interface ConferenceWhiteboardElement {
+  id: string;
+  type: ConferenceWhiteboardElementType;
+  points: ConferenceWhiteboardPoint[];
+  color: string;
+  width: number;
+  text?: string;
+  assetPath?: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export interface ConferenceWhiteboardPage {
+  id: string;
+  title: string;
+  position: number;
+  revision: number;
+  snapshot: {
+    elements: ConferenceWhiteboardElement[];
+  };
+  updatedAt: string;
+}
+
+export interface ConferenceWhiteboardSnapshot {
+  loaded: boolean;
+  roomStatus: string;
+  boardLocked: boolean;
+  boardRevision: number;
+  canUse: boolean;
+  canManage: boolean;
+  pages: ConferenceWhiteboardPage[];
+  serverTime: string;
+}
+
+export interface ConferenceWhiteboardOperation {
+  id: string;
+  action:
+    | 'upsert_element'
+    | 'delete_element'
+    | 'add_page'
+    | 'delete_page'
+    | 'rename_page'
+    | 'clear_page'
+    | 'lock'
+    | 'unlock';
+  roomId: string;
+  pageId?: string;
+  elementId?: string;
+  element?: ConferenceWhiteboardElement;
+  title?: string;
+  position?: number;
+  revision?: number;
+  boardRevision?: number;
+  boardLocked?: boolean;
+  actorUserId: string;
+  timestamp: string;
+}
+
+export interface ConferenceWhiteboardPresence {
+  participantIdentity: string;
+  displayName: string;
+  pageId: string;
+  x: number;
+  y: number;
+  laser: boolean;
+  timestamp: number;
 }
 
 export type MeetingPhase =

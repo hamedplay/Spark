@@ -14,6 +14,7 @@ import { ConferenceModeratorChatPanel } from '../chat/ConferenceModeratorChatPan
 import { ConferencePrivateChatPanel } from '../chat/ConferencePrivateChatPanel';
 import { ConferenceParticipantsPanel } from '../participants/ConferenceParticipantsPanel';
 import { ConferencePollPanel } from '../polls/ConferencePollPanel';
+import { ConferenceWhiteboardPanel } from '../whiteboard/ConferenceWhiteboardPanel';
 import { ConferenceToolsBar } from './ConferenceToolsBar';
 import { MediaDevicesPanel } from './MediaDevicesPanel';
 
@@ -88,6 +89,7 @@ export function ConferenceTools({
           || hasConferencePermission(authorization, 'CREATE_POLL')
           || hasConferencePermission(authorization, 'MANAGE_POLLS')
         }
+        canWhiteboard={authorization.loaded && authorization.role !== null}
         raised={moderation.raised}
         raisedCount={moderation.raisedParticipants.length}
         busy={moderation.busy}
@@ -105,7 +107,14 @@ export function ConferenceTools({
       />
 
       {panel && (
-        <aside className="absolute inset-x-2 bottom-[146px] z-40 max-h-[55dvh] overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur sm:inset-x-auto sm:left-4 sm:w-[420px]" dir="rtl">
+        <aside
+          className={
+            panel === 'whiteboard'
+              ? 'absolute inset-x-2 bottom-[146px] top-16 z-40 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur sm:inset-x-4'
+              : 'absolute inset-x-2 bottom-[146px] z-40 max-h-[55dvh] overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur sm:inset-x-auto sm:left-4 sm:w-[420px]'
+          }
+          dir="rtl"
+        >
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <strong className="text-sm">
               {panel === 'chat'
@@ -116,7 +125,9 @@ export function ConferenceTools({
                     ? 'گفتگوی مدیران'
                     : panel === 'polls'
                       ? 'نظرسنجی'
-                      : panel === 'participants'
+                      : panel === 'whiteboard'
+                        ? 'تخته سفید'
+                        : panel === 'participants'
                     ? 'شرکت‌کنندگان'
                     : 'دستگاه‌های رسانه‌ای'}
             </strong>
@@ -190,6 +201,15 @@ export function ConferenceTools({
             <ConferencePollPanel
               roomId={roomId}
               currentUserId={currentUserId}
+              authorization={authorization}
+            />
+          )}
+          {panel === 'whiteboard' && (
+            <ConferenceWhiteboardPanel
+              room={room}
+              roomId={roomId}
+              currentUserId={currentUserId}
+              currentUserName={currentUserName}
               authorization={authorization}
             />
           )}

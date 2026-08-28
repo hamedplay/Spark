@@ -1,4 +1,4 @@
-import { BarChart3, Hand, Lock, MessageCircle, MessageSquare, Radio, Settings2, ShieldCheck, Square, Unlock, Users } from 'lucide-react';
+import { BarChart3, Hand, Lock, MessageCircle, MessageSquare, Pencil, Radio, Settings2, ShieldCheck, Square, Unlock, Users } from 'lucide-react';
 import type { ConferencePanel } from '../../types/conference.types';
 
 interface Props {
@@ -8,6 +8,7 @@ interface Props {
   canPrivateChat: boolean;
   canModeratorChat: boolean;
   canPolls: boolean;
+  canWhiteboard: boolean;
   raised: boolean;
   raisedCount: number;
   busy: string | null;
@@ -31,6 +32,7 @@ export function ConferenceToolsBar({
   canPrivateChat,
   canModeratorChat,
   canPolls,
+  canWhiteboard,
   raised,
   raisedCount,
   busy,
@@ -66,6 +68,11 @@ export function ConferenceToolsBar({
       {canPolls && (
         <button onClick={() => togglePanel('polls')} className="flex h-11 w-11 items-center justify-center rounded-xl text-cyan-300 hover:bg-white/10" aria-label="نظرسنجی‌ها">
           <BarChart3 className="h-5 w-5" />
+        </button>
+      )}
+      {canWhiteboard && (
+        <button onClick={() => togglePanel('whiteboard')} className="flex h-11 w-11 items-center justify-center rounded-xl text-emerald-300 hover:bg-white/10" aria-label="تخته سفید">
+          <Pencil className="h-5 w-5" />
         </button>
       )}
       <button onClick={() => void onToggleRaise()} disabled={busy === 'raise'} className={`flex h-11 w-11 items-center justify-center rounded-xl ${raised ? 'bg-amber-500 text-slate-950' : 'hover:bg-white/10'}`} aria-label={raised ? 'پایین آوردن دست' : 'بالا بردن دست'}><Hand className="h-5 w-5" /></button>

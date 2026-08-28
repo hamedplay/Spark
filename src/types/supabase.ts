@@ -2511,6 +2511,99 @@ export type Database = {
         };
         Relationships: [];
       };
+      conference_whiteboard_boards: {
+        Row: {
+          room_id: string;
+          is_locked: boolean;
+          revision: number;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          room_id: string;
+          is_locked?: boolean;
+          revision?: number;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          room_id?: string;
+          is_locked?: boolean;
+          revision?: number;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      conference_whiteboard_pages: {
+        Row: {
+          id: string;
+          room_id: string;
+          title: string;
+          position: number;
+          snapshot_data: unknown;
+          revision: number;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          title?: string;
+          position: number;
+          snapshot_data?: unknown;
+          revision?: number;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          title?: string;
+          position?: number;
+          snapshot_data?: unknown;
+          revision?: number;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      conference_whiteboard_snapshots: {
+        Row: {
+          id: string;
+          room_id: string;
+          page_id: string;
+          revision: number;
+          snapshot_data: unknown;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          page_id: string;
+          revision: number;
+          snapshot_data: unknown;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          page_id?: string;
+          revision?: number;
+          snapshot_data?: unknown;
+          created_by?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       conference_whiteboard: {
         Row: {
           id: string;
@@ -3549,6 +3642,49 @@ export type Database = {
           active?: boolean;
           remaining?: number;
           retry_after_ms?: number;
+        };
+      };
+      get_conference_whiteboard_snapshot_v2: {
+        Args: {
+          p_room_id: string;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          roomStatus?: string;
+          boardLocked?: boolean;
+          boardRevision?: number;
+          canUse?: boolean;
+          canManage?: boolean;
+          pages?: unknown[];
+          serverTime?: string;
+        };
+      };
+      authorize_conference_whiteboard_action_v2: {
+        Args: {
+          p_room_id: string;
+          p_action: string;
+          p_page_id?: string | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+        };
+      };
+      apply_conference_whiteboard_action_v2: {
+        Args: {
+          p_room_id: string;
+          p_actor_user_id: string;
+          p_action: string;
+          p_page_id?: string | null;
+          p_payload?: unknown;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          operation?: unknown;
+          livekit_room_name?: string | null;
+          already_deleted?: boolean;
         };
       };
       get_conference_poll_snapshot: {

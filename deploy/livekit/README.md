@@ -56,6 +56,7 @@ The same `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must be configured as server
 - `conference-moderator-chat-control`
 - `conference-reaction`
 - `conference-poll-control`
+- `conference-whiteboard-control`
 - `livekit-webhook`
 
 Also configure:
@@ -109,8 +110,9 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 14. Moderator chat is persisted independently in `conference_moderator_messages`. Access is permission-gated through `ACCESS_MODERATOR_CHAT`, granted only to HOST, CO_HOST and MODERATOR; normal participants cannot read it through Data API or Realtime.
 15. Interactive meeting reactions stay transient. `conference-reaction` authenticates the participant, applies an atomic 5-per-5-seconds rate limit, enriches the event with identity/display name/avatar/timestamp, and broadcasts it through LiveKit RoomService SendData on topic `spark-reaction`.
 16. Polls are persisted in `conference_polls`, `conference_poll_options` and `conference_poll_votes`. `conference-poll-control` validates create/open/close/vote/delete mutations server-side, while clients consume RLS-safe aggregate snapshots and use Realtime changes only to refresh that snapshot.
-17. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-18. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+17. Collaborative whiteboard state uses revisioned PostgreSQL page snapshots plus periodic checkpoint snapshots. `conference-whiteboard-control` validates persistent mutations server-side and broadcasts committed operations through LiveKit Reliable DataPackets on `spark-whiteboard-op`; cursors and laser pointers stay transient on `spark-whiteboard-presence`. Images live in the private `conference-whiteboard-assets` bucket and snapshots store only scoped object paths.
+18. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+19. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 

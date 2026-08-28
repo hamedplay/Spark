@@ -554,6 +554,7 @@ test_livekit_full_validation() {
   livekit_function_unauthorized_probe conference-moderator-chat-control || return 1
   livekit_function_unauthorized_probe conference-reaction || return 1
   livekit_function_unauthorized_probe conference-poll-control || return 1
+  livekit_function_unauthorized_probe conference-whiteboard-control || return 1
   livekit_function_unauthorized_probe livekit-webhook || return 1
   livekit_secret_leak_probe || return 1
   ! systemctl is-active --quiet coturn 2>/dev/null || return 1
