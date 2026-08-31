@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Video, X } from 'lucide-react';
+import { CheckCircle2, Loader2, Radio, ShieldAlert, Video, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getAuthenticatedRTCConfig } from '../../lib/authenticatedRtcConfig';
 import { ConferenceClientContext } from './conferenceClient';
@@ -17,6 +17,28 @@ import { ConferenceArchiveList } from './Page/ConferenceArchiveList';
 import { VideoConferenceLobby, type VideoConferenceRuntimeConfig } from './Page/VideoConferenceLobby';
 
 type LobbyRoom = ConferenceRoom & { participant_count?: number; meeting?: any };
+
+type PreJoinRecordingConsent = {
+  loading: boolean;
+  busy: boolean;
+  required: boolean;
+  recordingEnabled: boolean;
+  recordingActive: boolean;
+  accepted: boolean;
+  status: 'pending' | 'accepted' | 'declined';
+  errorMessage: string;
+};
+
+const EMPTY_PREJOIN_RECORDING_CONSENT: PreJoinRecordingConsent = {
+  loading: false,
+  busy: false,
+  required: false,
+  recordingEnabled: false,
+  recordingActive: false,
+  accepted: false,
+  status: 'pending',
+  errorMessage: '',
+};
 
 const JOIN_ERRORS: Record<string, string> = {
   room_full: 'ظرفیت اتاق پر شده است',
@@ -51,6 +73,8 @@ export function VideoConferencePage() {
   const [runtimeConfig, setRuntimeConfig] = useState<VideoConferenceRuntimeConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [preJoinRecordingConsent, setPreJoinRecordingConsent] =
+    useState<PreJoinRecordingConsent>(EMPTY_PREJOIN_RECORDING_CONSENT);
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const joiningRef = useRef(false);
@@ -114,7 +138,7 @@ export function VideoConferencePage() {
       // RLS already returns only rooms hosted by or joined by the current user.
       const { data: rd, error: rdErr } = await supabase
         .from('conference_rooms')
-        .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, chat_enabled, record_enabled, speaking_limit_enabled, require_approval, created_at, ended_at, expires_at, meeting_id, media_topology, ended_reason, meeting:meeting_id(request_date, start_time, end_time, subject)')
+        .select('id, name, code, host_id, status, max_participants, is_locked, waiting_room_enabled, allow_reactions, allow_screen_share, allow_chat, chat_enabled, record_enabled, recording_consent_required, speaking_limit_enabled, require_approval, created_at, ended_at, expires_at, meeting_id, media_topology, ended_reason, meeting:meeting_id(request_date, start_time, end_time, subject)')
         .neq('status', 'ended')
         .order('created_at', { ascending: false });
       if (rdErr) throw rdErr;
@@ -194,6 +218,102 @@ export function VideoConferencePage() {
     return () => { supabase.removeChannel(ch); };
   }, [userId, fetchRooms]);
 
+  const readRecordingConsentState = useCallback(async (roomId: string) => {
+    const { data, error } = await supabase.rpc(
+      'get_conference_recording_consent_state',
+      { p_room_id: roomId },
+    );
+    if (error) throw error;
+    if (!data?.ok) throw new Error(String(data?.reason || 'RECORDING_CONSENT_LOAD_FAILED'));
+    return {
+      required: data.required === true,
+      recordingEnabled: data.recordingEnabled === true,
+      recordingActive: data.recordingActive === true,
+      accepted: data.accepted === true,
+      status: data.myStatus === 'accepted' || data.myStatus === 'declined'
+        ? data.myStatus
+        : 'pending',
+    } as const;
+  }, []);
+
+  useEffect(() => {
+    if (!preJoinRoom) {
+      setPreJoinRecordingConsent(EMPTY_PREJOIN_RECORDING_CONSENT);
+      return;
+    }
+
+    let cancelled = false;
+    setPreJoinRecordingConsent((current) => ({
+      ...current,
+      loading: true,
+      errorMessage: '',
+    }));
+
+    void readRecordingConsentState(preJoinRoom.id)
+      .then((next) => {
+        if (!cancelled) {
+          setPreJoinRecordingConsent({
+            ...EMPTY_PREJOIN_RECORDING_CONSENT,
+            ...next,
+            loading: false,
+          });
+        }
+      })
+      .catch((error) => {
+        console.error('recording consent pre-join load failed', error);
+        if (!cancelled) {
+          setPreJoinRecordingConsent({
+            ...EMPTY_PREJOIN_RECORDING_CONSENT,
+            loading: false,
+            errorMessage: 'دریافت وضعیت رضایت ضبط ناموفق بود.',
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [preJoinRoom, readRecordingConsentState]);
+
+  const updatePreJoinRecordingConsent = useCallback(async (accepted: boolean) => {
+    if (!preJoinRoom || preJoinRecordingConsent.busy) return;
+
+    setPreJoinRecordingConsent((current) => ({
+      ...current,
+      busy: true,
+      errorMessage: '',
+    }));
+
+    try {
+      const { data, error } = await supabase.rpc(
+        'set_conference_recording_consent',
+        {
+          p_room_id: preJoinRoom.id,
+          p_consented: accepted,
+        },
+      );
+      if (error) throw error;
+      if (!data?.ok) throw new Error(String(data?.reason || 'RECORDING_CONSENT_SAVE_FAILED'));
+
+      const next = await readRecordingConsentState(preJoinRoom.id);
+      setPreJoinRecordingConsent({
+        ...EMPTY_PREJOIN_RECORDING_CONSENT,
+        ...next,
+      });
+    } catch (error) {
+      console.error('recording consent pre-join save failed', error);
+      setPreJoinRecordingConsent((current) => ({
+        ...current,
+        errorMessage: 'ثبت وضعیت رضایت ضبط ناموفق بود.',
+      }));
+    } finally {
+      setPreJoinRecordingConsent((current) => ({
+        ...current,
+        busy: false,
+      }));
+    }
+  }, [preJoinRecordingConsent.busy, preJoinRoom, readRecordingConsentState]);
+
   const enterRoom = async (room: ConferenceRoom, stream: MediaStream, muted: boolean, videoOff: boolean) => {
     if (!userId) return false;
     setJoiningRoomId(room.id);
@@ -203,6 +323,14 @@ export function VideoConferencePage() {
     stream.getAudioTracks().forEach(t => { t.enabled = !muted; });
     stream.getVideoTracks().forEach(t => { t.enabled = !videoOff; });
     try {
+      const consent = await readRecordingConsentState(room.id);
+      if (consent.required && consent.recordingActive && !consent.accepted) {
+        stream.getTracks().forEach(track => track.stop());
+        setPreJoinRoom(room);
+        toast.error('این جلسه در حال ضبط است؛ برای ورود ابتدا رضایت ضبط را تأیید کنید.');
+        return false;
+      }
+
       const { data: result, error } = await supabase.rpc('join_conference_room', {
         p_room_id: room.id,
         p_peer_id: peerId,
@@ -417,7 +545,82 @@ export function VideoConferencePage() {
         <div role="dialog" aria-modal="true" aria-label="تنظیم دستگاه قبل از ورود" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" dir="rtl">
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-gray-950 shadow-2xl">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-800 bg-gray-950 px-5 py-4"><div><h2 className="flex items-center gap-2 text-sm font-bold text-white"><Video className="h-4 w-4 text-teal-500" /> تنظیمات قبل از ورود</h2><p className="mt-0.5 text-xs text-gray-500">{preJoinRoom.name || 'جلسه ویدیویی'}</p></div><button onClick={() => setPreJoinRoom(null)} aria-label="بستن" className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-800"><X className="h-4 w-4" /></button></div>
-            <div className="p-5"><PreflightDeviceSelector onConfirm={(stream) => doJoin(preJoinRoom, stream)} loadRTCConfig={getAuthenticatedRTCConfig} client={supabase} roomId={preJoinRoom.id} userId={userId} submitLabel="ورود به جلسه" /></div>
+            <div className="p-5">
+              <PreflightDeviceSelector
+                onConfirm={(stream) => {
+                  if (
+                    preJoinRecordingConsent.required
+                    && preJoinRecordingConsent.recordingActive
+                    && !preJoinRecordingConsent.accepted
+                  ) {
+                    stream.getTracks().forEach(track => track.stop());
+                    toast.error('برای ورود به جلسه در حال ضبط، ابتدا رضایت ضبط را تأیید کنید.');
+                    return;
+                  }
+                  void doJoin(preJoinRoom, stream);
+                }}
+                loadRTCConfig={getAuthenticatedRTCConfig}
+                client={supabase}
+                roomId={preJoinRoom.id}
+                userId={userId}
+                mediaTopology={preJoinRoom.media_topology}
+                submitLabel="ورود به جلسه"
+                submitDisabled={
+                  preJoinRecordingConsent.loading
+                  || (
+                    preJoinRecordingConsent.required
+                    && preJoinRecordingConsent.recordingActive
+                    && !preJoinRecordingConsent.accepted
+                  )
+                }
+              >
+                {preJoinRecordingConsent.recordingEnabled && preJoinRecordingConsent.required && (
+                  <div className={`rounded-xl border p-3 text-xs ${preJoinRecordingConsent.recordingActive ? 'border-rose-400/30 bg-rose-500/10 text-rose-100' : 'border-amber-400/25 bg-amber-500/10 text-amber-100'}`}>
+                    <div className="flex items-start gap-2">
+                      {preJoinRecordingConsent.recordingActive
+                        ? <Radio className="mt-0.5 h-4 w-4 shrink-0" />
+                        : <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold">رضایت ضبط جلسه</div>
+                        <p className="mt-1 leading-5 opacity-90">
+                          {preJoinRecordingConsent.recordingActive
+                            ? 'این جلسه هم‌اکنون در حال ضبط سروری است. برای ورود باید رضایت ضبط صدا و تصویر خود را ثبت کنید.'
+                            : 'این جلسه قابلیت ضبط سروری دارد. می‌توانید اکنون وضعیت رضایت خود را ثبت کنید؛ تا رضایت همه افراد حاضر ثبت نشود، ضبط شروع نمی‌شود.'}
+                        </p>
+
+                        {preJoinRecordingConsent.errorMessage && (
+                          <div className="mt-2 text-rose-300">
+                            {preJoinRecordingConsent.errorMessage}
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            disabled={preJoinRecordingConsent.busy}
+                            onClick={() => void updatePreJoinRecordingConsent(true)}
+                            className={`flex min-h-9 items-center gap-1.5 rounded-lg px-3 font-bold ${preJoinRecordingConsent.accepted ? 'bg-emerald-600 text-white' : 'bg-white/10 hover:bg-white/15'} disabled:opacity-50`}
+                          >
+                            {preJoinRecordingConsent.busy
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            موافقم
+                          </button>
+                          <button
+                            type="button"
+                            disabled={preJoinRecordingConsent.busy}
+                            onClick={() => void updatePreJoinRecordingConsent(false)}
+                            className="min-h-9 rounded-lg border border-white/15 px-3 font-bold disabled:opacity-50"
+                          >
+                            موافق نیستم
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </PreflightDeviceSelector>
+            </div>
           </div>
         </div>
       )}
