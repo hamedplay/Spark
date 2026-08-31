@@ -118,8 +118,10 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 18. Presentation sharing stores PDF/images/slides/documents in the private `conference-presentations` bucket with PostgreSQL metadata and synchronized page state. `conference-presentation-control` authorizes create/finalize/activate/navigate/delete and annotation mutations. Office sources use self-hosted Gotenberg; laser pointers stay transient on `spark-presentation-laser`.
 19. Media quality profiles (`AUTO`, `DATA_SAVER`, `BALANCED`, `HIGH`) use LiveKit Adaptive Stream + Dynacast + camera simulcast. Small Grid tiles are capped below the high simulcast layer, while the active speaker or pinned tile can request a higher layer. Camera capture supports 180p/360p/540p/720p/1080p. Screen Share is configured independently at 720p or 1080p with its own simulcast ladder.
 20. Network diagnostics sample supported WebRTC sender/receiver stats through LiveKit track `getRTCStatsReport()` and combine them with LiveKit Connection Quality. The user sees only `Excellent/Good/Weak/Poor`; admins with `MANAGE_ROLES` can inspect RTT, packet loss, jitter, bitrate, codec, resolution, FPS, candidate type, ICE pair state, TURN relay usage and reconnect count. Candidate addresses, IPs, SDP, tokens and TURN credentials are never rendered.
-21. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-22. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+21. Audio/video controls keep local media preferences separate from server authorization. Participants can toggle microphone/camera/screen share, locally mute remote audio, select supported microphone/camera/speaker devices, cycle cameras, switch Grid/Speaker layout, pin locally, and use fullscreen/Picture-in-Picture/zoom. Screen share is rendered with display priority without discarding the participant strip.
+22. Host media moderation distinguishes `mute current microphone track` from `revoke publish permission`. Temporary mute uses LiveKit `MutePublishedTrack` only for the microphone source. Persistent microphone/camera/screen restrictions are stored in `conference_participants`, included in every generated LiveKit publish policy, and immediately synchronized with `UpdateParticipant`, so reconnect/token refresh cannot restore a revoked source.
+23. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+24. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 
@@ -134,6 +136,14 @@ Before production cutover validate all of the following from real client network
 - screen sharing works on desktop and supported mobile browsers
 - reconnect after Wi-Fi/mobile-network changes restores the session
 - host remove/mute/promote/lock/end actions are enforced server-side
+- host microphone mute changes only the current microphone track and does not silently revoke publish permission
+- disabling microphone/camera/screen publishing removes only the targeted LiveKit source and remains revoked after reconnect/token refresh
+- re-enabling a media source restores only the DB-authorized source set
+- browser-native Stop Sharing updates Spark screen-share state without requiring a page refresh
+- supported browsers can select microphone/camera/speaker devices and device-change events refresh the available list
+- local speaker mute affects only the current user's playback and does not change server/participant state
+- Grid and Speaker views work independently from local Pin; an active screen share receives focus priority
+- participant video supports fullscreen, Picture-in-Picture where the browser supports it, and local zoom
 - simultaneous waiting-room admit/reject actions resolve only once and cannot overwrite the first decision
 - admit-all preserves request order and never reserves more than the 20-participant room capacity
 - waiting requests become expired after five minutes even if a Realtime event is missed
