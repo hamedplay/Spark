@@ -9,6 +9,10 @@ import {
   setConferenceMicrophone,
 } from '../services/conferenceMedia';
 import type { ConferenceReactionEvent } from '../types/conference.types';
+import {
+  loadConferenceMediaQualitySettings,
+  roomMediaOptions,
+} from '../services/conferenceMediaQuality';
 import { useConferenceState } from './useConferenceState';
 
 const ERROR_LABELS: Record<string, string> = {
@@ -64,9 +68,9 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       if (!canPublishMic) setMicEnabled(false);
       if (!canPublishCamera) setCameraEnabled(false);
 
+      const mediaSettings = loadConferenceMediaQualitySettings();
       const nextRoom = new Room({
-        adaptiveStream: true,
-        dynacast: true,
+        ...roomMediaOptions(mediaSettings),
         stopLocalTrackOnUnpublish: true,
       });
       roomRef.current = nextRoom;
@@ -139,13 +143,10 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
         );
       }
       if (cameraEnabled && canPublishCamera) {
-        await nextRoom.localParticipant.setCameraEnabled(
+        await setConferenceCamera(
+          nextRoom,
           true,
-          videoSettings?.deviceId ? {
-            deviceId: videoSettings.deviceId,
-            resolution: { width: 1920, height: 1080, frameRate: 30 },
-          } : undefined,
-          { simulcast: true },
+          videoSettings?.deviceId,
         );
       }
       setUiState('connected');
