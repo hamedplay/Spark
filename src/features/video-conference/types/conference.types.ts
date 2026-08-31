@@ -3,7 +3,7 @@ import type { ConnectionQuality, LocalParticipant, RemoteParticipant, Room } fro
 export type ConferenceRole = 'host' | 'admin' | 'moderator' | 'member' | 'guest';
 export type HostAction = 'remove' | 'mute' | 'promote' | 'demote' | 'lock' | 'unlock' | 'end' | 'lower-hand';
 export type ConferenceUiState = 'joining' | 'waiting' | 'connected' | 'reconnecting' | 'failed';
-export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'polls' | 'whiteboard' | 'participants' | 'devices' | null;
+export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'polls' | 'whiteboard' | 'presentation' | 'participants' | 'devices' | null;
 export type ConferenceParticipant = LocalParticipant | RemoteParticipant;
 
 export const CONFERENCE_RBAC_ROLES = [
@@ -32,6 +32,7 @@ export const CONFERENCE_PERMISSIONS = [
   'MANAGE_CHAT',
   'MANAGE_POLLS',
   'MANAGE_PHASE',
+  'MANAGE_PRESENTATIONS',
   'MANAGE_ROLES',
   'MANAGE_TIMER',
   'MANAGE_WAITING_ROOM',
@@ -249,6 +250,86 @@ export interface ConferenceWhiteboardPresence {
   x: number;
   y: number;
   laser: boolean;
+  timestamp: number;
+}
+
+
+export type ConferencePresentationSourceKind = 'PDF' | 'IMAGE' | 'SLIDES' | 'DOCUMENT';
+export type ConferencePresentationStatus = 'UPLOADING' | 'CONVERTING' | 'READY' | 'FAILED' | 'DELETED';
+
+export interface ConferencePresentationItem {
+  id: string;
+  roomId: string;
+  createdBy: string;
+  title: string;
+  originalFileName: string;
+  sourceKind: ConferencePresentationSourceKind;
+  sourceMimeType: string;
+  sourcePath: string;
+  renderedPath: string | null;
+  renderedMimeType: string | null;
+  status: ConferencePresentationStatus;
+  fileSizeBytes: number;
+  pageCount: number | null;
+  conversionError: string | null;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  canDelete: boolean;
+}
+
+export interface ConferencePresentationState {
+  presentationId: string | null;
+  presenterUserId: string | null;
+  currentPage: number;
+  isActive: boolean;
+  revision: number;
+  activatedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ConferencePresentationSnapshot {
+  loaded: boolean;
+  serverTime: string;
+  canUpload: boolean;
+  canManage: boolean;
+  canAnnotate: boolean;
+  annotatorUserIds: string[];
+  state: ConferencePresentationState;
+  presentations: ConferencePresentationItem[];
+}
+
+export interface ConferencePresentationPoint {
+  x: number;
+  y: number;
+}
+
+export interface ConferencePresentationAnnotationElement {
+  id: string;
+  type: 'pen' | 'marker' | 'line' | 'arrow' | 'rectangle' | 'circle' | 'text' | 'sticky';
+  points: ConferencePresentationPoint[];
+  color: string;
+  width: number;
+  text?: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export interface ConferencePresentationAnnotationSnapshot {
+  loaded: boolean;
+  canAnnotate: boolean;
+  revision: number;
+  elements: ConferencePresentationAnnotationElement[];
+  updatedAt: string | null;
+}
+
+export interface ConferencePresentationLaser {
+  participantIdentity: string;
+  displayName: string;
+  presentationId: string;
+  page: number;
+  x: number;
+  y: number;
   timestamp: number;
 }
 
