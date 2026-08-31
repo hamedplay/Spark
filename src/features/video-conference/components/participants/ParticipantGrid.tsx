@@ -10,6 +10,7 @@ interface Props {
   activeSpeakerIdentity: string | null;
   pinnedIdentity: string | null;
   screenShareIdentity: string | null;
+  spotlightIdentities: string[];
   layoutMode: ConferenceLayoutMode;
   speakerMuted: boolean;
   onPinnedIdentityChange: (identity: string | null) => void;
@@ -21,6 +22,7 @@ export function ParticipantGrid({
   activeSpeakerIdentity,
   pinnedIdentity,
   screenShareIdentity,
+  spotlightIdentities,
   layoutMode,
   speakerMuted,
   onPinnedIdentityChange,
@@ -34,26 +36,41 @@ export function ParticipantGrid({
   const participantFocusIdentity =
     pinnedIdentity || activeSpeakerIdentity;
 
+  const spotlightFocusIdentity =
+    spotlightIdentities[0] || null;
+
   const focusIdentity =
     screenShareIdentity
+    || spotlightFocusIdentity
     || participantFocusIdentity
     || participants[0]?.identity
     || null;
 
-  const orderedParticipants = focusIdentity
-    ? [
-        ...participants.filter(
-          (participant) => participant.identity === focusIdentity,
-        ),
-        ...participants.filter(
-          (participant) => participant.identity !== focusIdentity,
-        ),
-      ]
-    : participants;
+  const priorityIdentities = [
+    screenShareIdentity,
+    ...spotlightIdentities,
+    participantFocusIdentity,
+  ].filter((identity, index, values): identity is string => (
+    Boolean(identity)
+    && values.indexOf(identity) === index
+  ));
+
+  const prioritySet = new Set(priorityIdentities);
+  const orderedParticipants = [
+    ...priorityIdentities.flatMap((identity) =>
+      participants.filter(
+        (participant) => participant.identity === identity,
+      ),
+    ),
+    ...participants.filter(
+      (participant) => !prioritySet.has(participant.identity),
+    ),
+  ];
 
   const speakerMode = (
     layoutMode === 'speaker'
     || screenShareIdentity !== null
+    || spotlightIdentities.length > 0
   );
 
   if (speakerMode && orderedParticipants.length > 0) {
@@ -69,6 +86,7 @@ export function ParticipantGrid({
             active={focus.identity === activeSpeakerIdentity}
             featured
             pinned={focus.identity === pinnedIdentity}
+            spotlighted={spotlightIdentities.includes(focus.identity)}
             preferScreenShare={focus.identity === screenShareIdentity}
             speakerMuted={speakerMuted}
             onTogglePin={() => onPinnedIdentityChange(
@@ -91,6 +109,9 @@ export function ParticipantGrid({
                     local={participant.identity === localIdentity}
                     active={participant.identity === activeSpeakerIdentity}
                     pinned={pinned}
+                    spotlighted={spotlightIdentities.includes(
+                      participant.identity,
+                    )}
                     preferScreenShare={
                       participant.identity === screenShareIdentity
                     }
@@ -129,6 +150,9 @@ export function ParticipantGrid({
               active={participant.identity === activeSpeakerIdentity}
               featured={featured}
               pinned={pinned}
+              spotlighted={spotlightIdentities.includes(
+                participant.identity,
+              )}
               preferScreenShare={
                 participant.identity === screenShareIdentity
               }
