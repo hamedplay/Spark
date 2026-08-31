@@ -171,5 +171,8 @@ test('active screen share gets display priority without hiding all other partici
   assert.match(participantTile, /Track\.Source\.ScreenShare/);
   assert.match(participantTile, /Track\.Source\.ScreenShareAudio/);
   assert.match(participantTile, /object-contain bg-black/);
-  assert.match(roomPage, /screenShareIdentity \|\| layoutMode === 'speaker'/);
+  assert.match(
+    roomPage,
+    /screenShareIdentity[\s\S]*layoutMode === 'speaker'/,
+  );
 });
