@@ -120,8 +120,9 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 20. Network diagnostics sample supported WebRTC sender/receiver stats through LiveKit track `getRTCStatsReport()` and combine them with LiveKit Connection Quality. The user sees only `Excellent/Good/Weak/Poor`; admins with `MANAGE_ROLES` can inspect RTT, packet loss, jitter, bitrate, codec, resolution, FPS, candidate type, ICE pair state, TURN relay usage and reconnect count. Candidate addresses, IPs, SDP, tokens and TURN credentials are never rendered.
 21. Audio/video controls keep local media preferences separate from server authorization. Participants can toggle microphone/camera/screen share, locally mute remote audio, select supported microphone/camera/speaker devices, cycle cameras, switch Grid/Speaker layout, pin locally, and use fullscreen/Picture-in-Picture/zoom. Screen share is rendered with display priority without discarding the participant strip.
 22. Host media moderation distinguishes `mute current microphone track` from `revoke publish permission`. Temporary mute uses LiveKit `MutePublishedTrack` only for the microphone source. Persistent microphone/camera/screen restrictions are stored in `conference_participants`, included in every generated LiveKit publish policy, and immediately synchronized with `UpdateParticipant`, so reconnect/token refresh cannot restore a revoked source.
-23. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-24. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+23. Pin and Spotlight are intentionally separate. Pin is a client-local preference only and is never written to PostgreSQL or Realtime. Spotlight is Host-controlled shared room state stored in `conference_spotlights`, supports multiple participants, is read-only to authenticated joined clients, synchronizes through Postgres Realtime, and is automatically removed when a spotlighted participant leaves. The legacy `conference_rooms.pinned_user_id` field is not used by the LiveKit SFU Pin/Spotlight path.
+24. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+25. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 
@@ -143,6 +144,10 @@ Before production cutover validate all of the following from real client network
 - supported browsers can select microphone/camera/speaker devices and device-change events refresh the available list
 - local speaker mute affects only the current user's playback and does not change server/participant state
 - Grid and Speaker views work independently from local Pin; an active screen share receives focus priority
+- Pin changes only the current browser layout and never mutate `conference_rooms.pinned_user_id` or any shared table
+- Host Spotlight changes are visible to every joined participant through `conference_spotlights` Realtime updates
+- multiple Spotlight participants can coexist; display priority is Screen Share → Spotlight → local Pin → Active Speaker
+- duplicate Spotlight add/remove requests are idempotent and leaving a room removes stale Spotlight state
 - participant video supports fullscreen, Picture-in-Picture where the browser supports it, and local zoom
 - simultaneous waiting-room admit/reject actions resolve only once and cannot overwrite the first decision
 - admit-all preserves request order and never reserves more than the 20-participant room capacity
