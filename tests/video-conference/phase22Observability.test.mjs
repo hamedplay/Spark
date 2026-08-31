@@ -44,7 +44,6 @@ test('observability HTTP surfaces bind only to loopback', () => {
   for (const binding of [
     '127.0.0.1:9090',
     '127.0.0.1:9093',
-    '127.0.0.1:3100',
     '127.0.0.1:12345',
     '127.0.0.1:9100',
     '127.0.0.1:9115',
@@ -52,6 +51,8 @@ test('observability HTTP surfaces bind only to loopback', () => {
     assert.match(compose, new RegExp(binding.replaceAll('.', '\\.')));
   }
 
+  assert.match(loki, /http_listen_address:\s*127\.0\.0\.1/);
+  assert.match(loki, /http_listen_port:\s*3100/);
   assert.match(compose, /GF_SERVER_HTTP_ADDR:\s*127\.0\.0\.1/);
   assert.match(compose, /GF_AUTH_ANONYMOUS_ENABLED:\s*"false"/);
   assert.doesNotMatch(compose, /ports:\s*\n\s*-\s*"?3000:3000/);
