@@ -199,6 +199,25 @@ Before production cutover validate all of the following from real client network
 - Grafana anonymous access and sign-up remain disabled and the generated admin password is stored only in the root-owned LiveKit `.env`
 - no secret appears in built frontend assets
 
+## Phase 23 deployment hardening
+
+The production single-host profile keeps the initial topology intentionally small: one LiveKit SFU node, one dedicated Egress worker, one Ingress worker, local Redis, local MinIO object storage, embedded TURN, and either Spark Nginx or standalone Caddy as the TLS reverse proxy.
+
+Exposure is split explicitly:
+
+- TCP `443` is the public TLS signaling/API/WebSocket entrypoint through Nginx/Caddy.
+- UDP `443`, TCP `5349`, TCP `7881`, UDP `50000-60000`, TCP `1935`, and UDP `7885` are media/TURN/Ingress ports required by the current topology.
+- LiveKit plaintext API/signaling port `7880` is an internal upstream only. Spark Manager installs an explicit UFW deny rule for remote TCP `7880`, verifies the host default inbound policy is deny, and still probes `127.0.0.1:7880` so the reverse proxy path remains functional.
+- Redis is bound to `127.0.0.1` with protected mode enabled. `LIVEKIT_REDIS_ADDRESS` is configurable so a later multi-node deployment can move LiveKit/Egress/Ingress to shared Redis without source changes.
+
+Core Docker health checks cover MinIO readiness, Redis PING, LiveKit signaling health, Egress health and Ingress health. Startup dependencies use `condition: service_healthy` so Egress/Ingress do not race Redis, SFU or object storage startup. Spark Manager still performs independent runtime probes and does not treat Docker health status alone as sufficient validation.
+
+All long-running services use `restart: unless-stopped`. CPU, memory and PID ceilings are explicit and environment-overridable. Defaults are sized for the initial 20-participant single-room target rather than maximum theoretical scale. LiveKit uses a configurable `LIVEKIT_STOP_GRACE_PERIOD` with a default of `5h` so SIGTERM can drain active rooms instead of immediately dropping participants; reduce it only if the operational policy accepts forced termination of long-running rooms.
+
+Secrets remain outside Git: the real `deploy/livekit/.env` is ignored, Spark Manager preserves it across asset sync, requires mode `0600`, and TURN private certificate material is copied as `0600`. The committed `.env.example` contains placeholders and tuning defaults only.
+
+For horizontal expansion, keep the API/WebSocket layer behind a load balancer, use a shared Redis endpoint, preserve direct per-node RTC connectivity, and drain a node before termination. A room still resides on one SFU node; horizontal scaling increases concurrent-room capacity rather than splitting one room across SFU nodes.
+
 ## Version pins
 
 - LiveKit Server: `v1.13.5`
@@ -219,7 +238,7 @@ Upgrade only after reviewing release notes and rerunning the production checks a
 
 ## Spark Manager single-host mode
 
-`deploy/spark-cli` uses `docker-compose.spark-cli.yml`; Caddy remains disabled because Spark Nginx already owns TCP 80/443. Manager steps 19–22 manage TLS/Nginx, secrets, runtime, firewall, validation and observability automatically.
+`deploy/spark-cli` uses `docker-compose.spark-cli.yml`; Caddy remains disabled because Spark Nginx already owns TCP 80/443. Manager steps 19–22 manage TLS/Nginx, secrets, runtime, firewall, validation and observability automatically. Phase 23 hardening is applied inside those existing lifecycle steps rather than adding another installer step: health checks, restart/resource policies, graceful shutdown and internal-port firewall validation are deployment invariants of the LiveKit runtime itself.
 
 Step 22 runs the `observability` Docker Compose profile after the LiveKit validation step. It generates Blackbox targets from the actual `API_DOMAIN`, `LIVEKIT_DOMAIN` and `LIVEKIT_INGRESS_DOMAIN`, creates a random Grafana admin password when needed, starts the pinned monitoring images, verifies every monitoring service, verifies Prometheus target health, and rejects any observability HTTP listener bound to `0.0.0.0` or `[::]`.
 
