@@ -124,8 +124,12 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 24. Conference API boundaries fail closed unless the current Supabase session has `FULL` authorization. Direct Data API insertion into `conference_participants` is disabled, LiveKit publish-restriction columns are server-authoritative, and legacy direct chat inserts are guarded in PostgreSQL with canonical identity, authorization, rate limits and attachment validation. Anonymous access to legacy `conference_signals` and `conference_reactions` is disabled.
 25. Conference chat attachments use a private bucket with a 5 MiB server limit and an exact JPEG/PNG/WebP/GIF MIME allowlist. Conference paths are scoped to `conf-chat/<room>/<user>/...`, require FULL authorization, joined-room membership and `SEND_CHAT`, and attached messages must reference an owned storage object. Presentation and whiteboard buckets remain private and enforce their own server-side size/MIME/path policies.
 26. LiveKit access tokens are generated only in the server-side token Edge Function, scoped to the authenticated identity and one room, have a 2-minute TTL, derive publish sources from PostgreSQL authorization and never grant `roomAdmin`. Token responses are explicitly `no-store`. While a client remains connected, the LiveKit SDK/server owns normal signal/media resume and in-session token refresh. If that recovery becomes terminal, Spark discards the dead Room and requests a fresh backend-authorized token only for retryable disconnect reasons with bounded backoff. `PARTICIPANT_REMOVED`, `ROOM_DELETED`, `ROOM_CLOSED` and `DUPLICATE_IDENTITY` never auto-rejoin. Moderator removal also creates a 2-minute server-authoritative fresh-token reissue cooldown, matching the short self-hosted replay window. LiveKit webhooks verify the signed raw body with `WebhookReceiver` and require an event ID before idempotent state mutation.
-27. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-28. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+27. Observability is self-hosted through Prometheus, Grafana, Loki, Alertmanager, Alloy, Node Exporter and Blackbox Exporter. LiveKit/Egress/Ingress native Prometheus endpoints remain the authoritative media metrics source. SFU CPU/RAM use the LiveKit process metrics directly, host CPU/RAM/network use Node Exporter, and public API latency/availability use HTTPS Blackbox probes. Docker logs are collected by Alloy into Loki so reconnects, ICE/RTC failures, Egress errors and PostgreSQL errors are queryable without exposing credentials.
+28. Monitoring HTTP surfaces are loopback-only: Grafana `127.0.0.1:3000`, Prometheus `127.0.0.1:9090`, Alertmanager `127.0.0.1:9093`, Loki `127.0.0.1:3100`, Alloy `127.0.0.1:12345`, Node Exporter `127.0.0.1:9100` and Blackbox Exporter `127.0.0.1:9115`. Access Grafana through an SSH tunnel or another explicitly authenticated internal access layer; do not publish these ports through Nginx or UFW.
+29. Prometheus keeps 15 days of metrics and Loki keeps 7 days of logs in the single-host profile. Alertmanager is provisioned with a local receiver only; add an internal webhook/email receiver explicitly if operations notifications are required.
+30. The Grafana folder `Spark LiveKit` is provisioned with `Spark LiveKit — Overview` and `Spark LiveKit — Operations & Logs`. Together they cover active rooms/participants, SFU CPU/RAM, media network in/out, packet loss, embedded TURN/relay connection telemetry, RTC join failures, Egress availability/errors, API latency, reconnect/ICE events and DB errors.
+31. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+32. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 
@@ -187,6 +191,12 @@ Before production cutover validate all of the following from real client network
 - RoomComposite Egress reaches object storage and webhook marks final state `ready`
 - RTMP and WHIP Ingress publish into an authorized room
 - webhook replay is idempotent
+- Prometheus scrapes LiveKit/Egress/Ingress plus host/exporter endpoints and all required targets report `up == 1`
+- active rooms/participants, SFU CPU/RAM, media network throughput, packet-loss p95, RTC join failures and Egress availability render in the Overview dashboard
+- reconnect/resume events, ICE/RTC failures, Egress errors and PostgreSQL errors are queryable through Loki
+- Blackbox probes report Spark API and LiveKit/Ingress HTTPS availability; Spark API latency is visible and alertable
+- Grafana, Prometheus, Alertmanager, Loki, Alloy and exporter HTTP ports listen on `127.0.0.1` only
+- Grafana anonymous access and sign-up remain disabled and the generated admin password is stored only in the root-owned LiveKit `.env`
 - no secret appears in built frontend assets
 
 ## Version pins
@@ -197,8 +207,20 @@ Before production cutover validate all of the following from real client network
 - JS client: `2.22.0`
 - JS server SDK in Edge Functions: `2.18.0`
 
+- Prometheus: `v3.14.0`
+- Alertmanager: `v0.34.0`
+- Grafana OSS: `13.2.0`
+- Loki: `3.7.0`
+- Grafana Alloy: `v1.19.0`
+- Node Exporter: `v1.12.1`
+- Blackbox Exporter: `v0.28.0`
+
 Upgrade only after reviewing release notes and rerunning the production checks above.
 
 ## Spark Manager single-host mode
 
-`deploy/spark-cli` uses `docker-compose.spark-cli.yml`; Caddy remains disabled because Spark Nginx already owns TCP 80/443. Manager steps 19–21 manage TLS/Nginx, secrets, runtime, firewall and validation automatically.
+`deploy/spark-cli` uses `docker-compose.spark-cli.yml`; Caddy remains disabled because Spark Nginx already owns TCP 80/443. Manager steps 19–22 manage TLS/Nginx, secrets, runtime, firewall, validation and observability automatically.
+
+Step 22 runs the `observability` Docker Compose profile after the LiveKit validation step. It generates Blackbox targets from the actual `API_DOMAIN`, `LIVEKIT_DOMAIN` and `LIVEKIT_INGRESS_DOMAIN`, creates a random Grafana admin password when needed, starts the pinned monitoring images, verifies every monitoring service, verifies Prometheus target health, and rejects any observability HTTP listener bound to `0.0.0.0` or `[::]`.
+
+For operator access without publishing Grafana, use a local tunnel such as `ssh -L 3000:127.0.0.1:3000 <server>`, then open `http://127.0.0.1:3000`. The Grafana username/password are the `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` values in the root-owned `/opt/spark-livekit/.env`. Do not copy that password into frontend source, Nginx config, dashboards or documentation.
