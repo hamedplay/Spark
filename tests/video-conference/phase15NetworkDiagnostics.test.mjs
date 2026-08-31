@@ -51,7 +51,9 @@ test('TURN usage is derived from relay candidates without exposing addresses', (
   assert.match(collector, /turnInUse: relay/);
   assert.doesNotMatch(panel, /candidateAddress/);
   assert.doesNotMatch(panel, /ipAddress/);
-  assert.doesNotMatch(panel, /SDP/);
+  assert.doesNotMatch(panel, /diagnostics\.sdp/i);
+  assert.doesNotMatch(panel, /candidate\.address/i);
+  assert.doesNotMatch(panel, /usernameFragment/i);
   assert.match(panel, /IP، candidate address، SDP، توکن‌ها و credentialهای TURN/);
 });
 
