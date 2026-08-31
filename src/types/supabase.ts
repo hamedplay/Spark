@@ -2485,34 +2485,42 @@ export type Database = {
         Row: {
           id: string;
           room_id: string;
-          user_id: string | null;
-          guest_id: string | null;
+          user_id: string;
           display_name: string;
-          status: 'waiting' | 'approved' | 'rejected';
+          status: 'waiting' | 'admitted' | 'rejected' | 'expired';
           requested_at: string;
-          approved_at: string | null;
+          resolved_at: string | null;
+          expires_at: string;
         };
         Insert: {
           id?: string;
           room_id: string;
-          user_id?: string | null;
-          guest_id?: string | null;
-          display_name: string;
-          status?: 'waiting' | 'approved' | 'rejected';
+          user_id: string;
+          display_name?: string;
+          status?: 'waiting' | 'admitted' | 'rejected' | 'expired';
           requested_at?: string;
-          approved_at?: string | null;
+          resolved_at?: string | null;
+          expires_at?: string;
         };
         Update: {
           id?: string;
           room_id?: string;
-          user_id?: string | null;
-          guest_id?: string | null;
+          user_id?: string;
           display_name?: string;
-          status?: 'waiting' | 'approved' | 'rejected';
+          status?: 'waiting' | 'admitted' | 'rejected' | 'expired';
           requested_at?: string;
-          approved_at?: string | null;
+          resolved_at?: string | null;
+          expires_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'conference_waiting_room_room_id_fkey';
+            columns: ['room_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_rooms';
+            referencedColumns: ['id'];
+          }
+        ];
       };
       conference_whiteboard_boards: {
         Row: {
@@ -3645,6 +3653,63 @@ export type Database = {
           active?: boolean;
           remaining?: number;
           retry_after_ms?: number;
+        };
+      };
+      get_livekit_waiting_room_state: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          status?: 'waiting' | 'admitted' | 'rejected' | 'expired' | null;
+          requestedAt?: string | null;
+          expiresAt?: string | null;
+          resolvedAt?: string | null;
+          serverTime?: string;
+        };
+      };
+      get_livekit_waiting_room_snapshot: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          rows?: Array<{
+            id: string;
+            user_id: string;
+            display_name: string;
+            status: 'waiting';
+            requested_at: string;
+            expires_at: string;
+            resolved_at: string | null;
+          }>;
+          serverTime?: string;
+        };
+      };
+      admit_livekit_conference_participant: {
+        Args: {
+          p_room_id: string;
+          p_target_user_id: string;
+          p_admit: boolean;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          status?: 'admitted' | 'rejected';
+          idempotent?: boolean;
+          capacity?: number;
+          joined?: number;
+          reserved?: number;
+        };
+      };
+      admit_all_livekit_conference_participants: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          admitted_count?: number;
+          remaining_waiting_count?: number;
+          capacity?: number;
+          joined?: number;
+          reserved_before?: number;
         };
       };
       get_conference_recording_consent_state: {
