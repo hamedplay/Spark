@@ -9,13 +9,24 @@ services:
     command: ["server", "/data", "--address", "127.0.0.1:9000", "--console-address", "127.0.0.1:9001"]
     volumes:
       - livekit_minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/ready >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    cpus: ${MINIO_CPU_LIMIT:-1.0}
+    mem_limit: ${MINIO_MEMORY_LIMIT:-1g}
+    pids_limit: 512
+    stop_grace_period: 2m
 
   minio-init:
     image: ${MINIO_MC_IMAGE}
     restart: "no"
     network_mode: host
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     environment:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
@@ -25,7 +36,10 @@ services:
       - -ec
       - |
         until mc alias set local http://127.0.0.1:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"; do sleep 2; done
-        mc mb --ignore-existing "local/$$S3_BUCKET"
+        mc mb --ignore-existing "local/$S3_BUCKET"
+    cpus: ${MINIO_INIT_CPU_LIMIT:-0.25}
+    mem_limit: ${MINIO_INIT_MEMORY_LIMIT:-128m}
+    pids_limit: 128
 
   redis:
     image: ${REDIS_IMAGE}
@@ -35,13 +49,24 @@ services:
     volumes:
       - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
       - livekit_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    cpus: ${REDIS_CPU_LIMIT:-0.5}
+    mem_limit: ${REDIS_MEMORY_LIMIT:-512m}
+    pids_limit: 256
+    stop_grace_period: 1m
 
   livekit:
     image: ${LIVEKIT_SERVER_IMAGE}
     restart: unless-stopped
     network_mode: host
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     environment:
       LIVEKIT_CONFIG: |
         port: 7880
@@ -52,7 +77,7 @@ services:
           port_range_end: 60000
           use_external_ip: true
         redis:
-          address: 127.0.0.1:6379
+          address: ${LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}
         keys:
           ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
         prometheus_port: 6789
@@ -77,15 +102,32 @@ services:
           max_participants: 20
     volumes:
       - ./certs/turn:/etc/livekit/turn-cert:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:7880/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    cpus: ${LIVEKIT_CPU_LIMIT:-4.0}
+    mem_limit: ${LIVEKIT_MEMORY_LIMIT:-4g}
+    pids_limit: 1024
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    stop_grace_period: ${LIVEKIT_STOP_GRACE_PERIOD:-5h}
 
   egress:
     image: ${LIVEKIT_EGRESS_IMAGE}
     restart: unless-stopped
     network_mode: host
     depends_on:
-      - redis
-      - livekit
-      - minio
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     cap_add:
       - SYS_ADMIN
     environment:
@@ -100,7 +142,7 @@ services:
         api_key: ${LIVEKIT_API_KEY}
         api_secret: ${LIVEKIT_API_SECRET}
         redis:
-          address: 127.0.0.1:6379
+          address: ${LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}
         health_port: 9091
         prometheus_port: 6788
         log_level: info
@@ -111,14 +153,30 @@ services:
           endpoint: ${S3_ENDPOINT}
           bucket: ${S3_BUCKET}
           force_path_style: true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9091/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    cpus: ${EGRESS_CPU_LIMIT:-4.0}
+    mem_limit: ${EGRESS_MEMORY_LIMIT:-4g}
+    pids_limit: 2048
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    stop_grace_period: ${EGRESS_STOP_GRACE_PERIOD:-15m}
 
   ingress:
     image: ${LIVEKIT_INGRESS_IMAGE}
     restart: unless-stopped
     network_mode: host
     depends_on:
-      - redis
-      - livekit
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_healthy
     environment:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
@@ -128,7 +186,7 @@ services:
         api_key: ${LIVEKIT_API_KEY}
         api_secret: ${LIVEKIT_API_SECRET}
         redis:
-          address: 127.0.0.1:6379
+          address: ${LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}
         health_port: 9092
         prometheus_port: 6787
         rtmp_port: 1935
@@ -137,14 +195,30 @@ services:
           udp_port: 7885
           use_external_ip: true
         log_level: info
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9092/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    cpus: ${INGRESS_CPU_LIMIT:-2.0}
+    mem_limit: ${INGRESS_MEMORY_LIMIT:-2g}
+    pids_limit: 1024
+    ulimits:
+      nofile:
+        soft: 131072
+        hard: 131072
+    stop_grace_period: ${INGRESS_STOP_GRACE_PERIOD:-2m}
 
   caddy:
     image: ${CADDY_IMAGE}
     restart: unless-stopped
     network_mode: host
     depends_on:
-      - livekit
-      - ingress
+      livekit:
+        condition: service_healthy
+      ingress:
+        condition: service_healthy
     environment:
       LIVEKIT_DOMAIN: ${LIVEKIT_DOMAIN}
       LIVEKIT_INGRESS_DOMAIN: ${LIVEKIT_INGRESS_DOMAIN}
@@ -152,6 +226,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - livekit_caddy_data:/data
       - livekit_caddy_config:/config
+    cpus: ${CADDY_CPU_LIMIT:-0.5}
+    mem_limit: ${CADDY_MEMORY_LIMIT:-256m}
+    pids_limit: 256
+    stop_grace_period: 30s
 
   prometheus:
     image: ${PROMETHEUS_IMAGE}
@@ -170,6 +248,10 @@ services:
       - ./monitoring/rules:/etc/prometheus/rules:ro
       - ./monitoring/targets:/etc/prometheus/targets:ro
       - livekit_prometheus_data:/prometheus
+    cpus: ${PROMETHEUS_CPU_LIMIT:-1.0}
+    mem_limit: ${PROMETHEUS_MEMORY_LIMIT:-1g}
+    pids_limit: 512
+    stop_grace_period: 30s
 
   alertmanager:
     image: ${ALERTMANAGER_IMAGE}
@@ -184,6 +266,10 @@ services:
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - livekit_alertmanager_data:/alertmanager
+    cpus: ${ALERTMANAGER_CPU_LIMIT:-0.25}
+    mem_limit: ${ALERTMANAGER_MEMORY_LIMIT:-256m}
+    pids_limit: 256
+    stop_grace_period: 30s
 
   loki:
     image: ${LOKI_IMAGE}
@@ -196,6 +282,10 @@ services:
     volumes:
       - ./monitoring/loki.yml:/etc/loki/loki.yml:ro
       - livekit_loki_data:/loki
+    cpus: ${LOKI_CPU_LIMIT:-1.0}
+    mem_limit: ${LOKI_MEMORY_LIMIT:-1g}
+    pids_limit: 512
+    stop_grace_period: 30s
 
   alloy:
     image: ${ALLOY_IMAGE}
@@ -219,6 +309,10 @@ services:
       - livekit_alloy_data:/var/lib/alloy
     depends_on:
       - loki
+    cpus: ${ALLOY_CPU_LIMIT:-0.5}
+    mem_limit: ${ALLOY_MEMORY_LIMIT:-512m}
+    pids_limit: 512
+    stop_grace_period: 30s
 
   node-exporter:
     image: ${NODE_EXPORTER_IMAGE}
@@ -242,6 +336,10 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro,rslave
+    cpus: ${NODE_EXPORTER_CPU_LIMIT:-0.25}
+    mem_limit: ${NODE_EXPORTER_MEMORY_LIMIT:-256m}
+    pids_limit: 256
+    stop_grace_period: 30s
 
   blackbox-exporter:
     image: ${BLACKBOX_EXPORTER_IMAGE}
@@ -259,6 +357,10 @@ services:
       - --web.listen-address=127.0.0.1:9115
     volumes:
       - ./monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    cpus: ${BLACKBOX_CPU_LIMIT:-0.25}
+    mem_limit: ${BLACKBOX_MEMORY_LIMIT:-128m}
+    pids_limit: 256
+    stop_grace_period: 30s
 
   grafana:
     image: ${GRAFANA_IMAGE}
@@ -283,6 +385,10 @@ services:
       - prometheus
       - loki
       - alertmanager
+    cpus: ${GRAFANA_CPU_LIMIT:-0.5}
+    mem_limit: ${GRAFANA_MEMORY_LIMIT:-512m}
+    pids_limit: 512
+    stop_grace_period: 30s
 
 volumes:
   livekit_minio_data:
