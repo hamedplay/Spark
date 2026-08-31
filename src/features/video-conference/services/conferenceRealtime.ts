@@ -2,6 +2,7 @@ import type { ConferenceSupabaseClient } from '../../../components/VideoConferen
 import type {
   ConferenceMessageReactionRow,
   ConferenceMessageRow,
+  ConferenceWaitingState,
   ParticipantRow,
   RecordingRow,
   WaitingRow,
@@ -88,11 +89,39 @@ export async function loadConferenceRoomState(client: ConferenceSupabaseClient, 
   };
 }
 
-export async function loadWaitingRows(client: ConferenceSupabaseClient, roomId: string): Promise<WaitingRow[]> {
-  const { data } = await client.from('conference_waiting_room')
-    .select('id,user_id,display_name,status,requested_at')
-    .eq('room_id', roomId)
-    .eq('status', 'waiting')
-    .order('requested_at', { ascending: true });
-  return (data || []) as WaitingRow[];
+export async function loadWaitingRows(
+  client: ConferenceSupabaseClient,
+  roomId: string,
+): Promise<WaitingRow[]> {
+  const { data, error } = await client.rpc(
+    'get_livekit_waiting_room_snapshot',
+    { p_room_id: roomId },
+  );
+  if (error) throw error;
+  if (!data?.ok) {
+    throw new Error(String(data?.reason || 'WAITING_ROOM_LOAD_FAILED'));
+  }
+  return (data.rows || []) as WaitingRow[];
+}
+
+export async function loadMyWaitingState(
+  client: ConferenceSupabaseClient,
+  roomId: string,
+): Promise<ConferenceWaitingState> {
+  const { data, error } = await client.rpc(
+    'get_livekit_waiting_room_state',
+    { p_room_id: roomId },
+  );
+  if (error) throw error;
+  if (!data?.ok) {
+    throw new Error(String(data?.reason || 'WAITING_ROOM_STATE_FAILED'));
+  }
+
+  return {
+    status: data.status ?? null,
+    requestedAt: data.requestedAt ?? null,
+    expiresAt: data.expiresAt ?? null,
+    resolvedAt: data.resolvedAt ?? null,
+    serverTime: data.serverTime || new Date().toISOString(),
+  };
 }
