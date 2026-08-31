@@ -100,7 +100,7 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 
 1. Spark authorizes the user against the Meeting and conference DB state.
 2. `conference-livekit-token` calls `prepare_livekit_conference_join`.
-3. Waiting-room users receive no media token until admitted.
+3. For SFU rooms, `conference_waiting_room` is the authoritative admission state. Each room/user has one request row with a five-minute TTL and lifecycle `waiting -> admitted/rejected/expired`. No media token is issued while `waiting`. Host actions `admit`, `reject`, and capacity-aware `admit all` are serialized in PostgreSQL. Locking a room blocks new waiting requests but preserves pre-existing waiting decisions and already-admitted reconnects.
 4. The token service provisions the opaque LiveKit room with `RoomServiceClient` and `maxParticipants <= 20`.
 5. The browser receives only a short-lived participant JWT and the public WSS URL.
 6. LiveKit Server handles SFU media routing, adaptive stream, dynacast and TURN fallback.
@@ -134,6 +134,11 @@ Before production cutover validate all of the following from real client network
 - screen sharing works on desktop and supported mobile browsers
 - reconnect after Wi-Fi/mobile-network changes restores the session
 - host remove/mute/promote/lock/end actions are enforced server-side
+- simultaneous waiting-room admit/reject actions resolve only once and cannot overwrite the first decision
+- admit-all preserves request order and never reserves more than the 20-participant room capacity
+- waiting requests become expired after five minutes even if a Realtime event is missed
+- locking an SFU room blocks new waiting requests while existing waiting requests remain manageable
+- an admitted participant keeps a reserved capacity slot until joining and can reconnect after the room is locked
 - persistent chat and ordered raise-hand state survive reconnects
 - device switching works without leaving the room
 - 20-person Grid does not request the 1080p camera layer for ordinary small tiles
