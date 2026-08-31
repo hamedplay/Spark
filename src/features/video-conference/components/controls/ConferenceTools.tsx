@@ -259,6 +259,9 @@ export function ConferenceTools({
               currentUserId={currentUserId}
               phase={phase}
               canMuteOthers={moderation.canMuteOthers}
+              canDisableMic={moderation.canDisableMic}
+              canDisableCamera={moderation.canDisableCamera}
+              canDisableScreen={moderation.canDisableScreen}
               canRemoveParticipants={moderation.canRemoveParticipants}
               canManageRoles={moderation.canManageRoles}
               canManageTimer={moderation.canManageTimer}
@@ -283,7 +286,11 @@ export function ConferenceTools({
               mediaProfile={mediaQuality.profile}
               cameraQuality={mediaQuality.cameraQuality}
               screenShareQuality={mediaQuality.screenShareQuality}
+              busy={devices.busy}
+              speakerSelectionSupported={devices.speakerSelectionSupported}
+              canSwitchCamera={devices.canSwitchCamera}
               onSwitchDevice={devices.switchDevice}
+              onSwitchCamera={devices.switchCamera}
               onMediaProfileChange={mediaQuality.setProfile}
               onCameraQualityChange={mediaQuality.setCameraQuality}
               onScreenShareQualityChange={mediaQuality.setScreenShareQuality}
