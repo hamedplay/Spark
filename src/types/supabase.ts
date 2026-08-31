@@ -2021,6 +2021,38 @@ export type Database = {
           }
         ];
       };
+      conference_spotlights: {
+        Row: {
+          id: string;
+          room_id: string;
+          user_id: string;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          user_id: string;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          user_id?: string;
+          created_by?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'conference_spotlights_room_id_fkey';
+            columns: ['room_id'];
+            isOneToOne: false;
+            referencedRelation: 'conference_rooms';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       conference_speaker_sessions: {
         Row: {
           id: string;
@@ -3622,6 +3654,37 @@ export type Database = {
           camera_publishing_disabled: boolean;
           screen_publishing_disabled: boolean;
         }[];
+      };
+      get_conference_spotlight_snapshot: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          serverTime?: string;
+          canManage?: boolean;
+          items?: Array<{
+            id: string;
+            userId: string;
+            createdBy: string;
+            createdAt: string;
+          }>;
+        };
+      };
+      manage_conference_spotlight: {
+        Args: {
+          p_room_id: string;
+          p_target_user_id: string | null;
+          p_action: 'add' | 'remove' | 'clear';
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          action?: 'add' | 'remove' | 'clear';
+          targetUserId?: string;
+          changed?: boolean;
+          idempotent?: boolean;
+          count?: number;
+        };
       };
       set_livekit_participant_media_permission: {
         Args: {
