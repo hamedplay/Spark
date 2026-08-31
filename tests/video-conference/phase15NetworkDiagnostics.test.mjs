@@ -46,7 +46,8 @@ test('RTC stats use supported LiveKit track getRTCStatsReport instead of private
 });
 
 test('TURN usage is derived from relay candidates without exposing addresses', () => {
-  assert.match(collector, /candidateType === 'relay'/);
+  assert.match(collector, /localCandidateType === 'relay'/);
+  assert.match(collector, /remoteCandidateType === 'relay'/);
   assert.match(collector, /turnInUse: relay/);
   assert.doesNotMatch(panel, /candidateAddress/);
   assert.doesNotMatch(panel, /ipAddress/);
