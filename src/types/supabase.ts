@@ -1957,6 +1957,7 @@ export type Database = {
           mic_publishing_disabled: boolean;
           camera_publishing_disabled: boolean;
           screen_publishing_disabled: boolean;
+          livekit_rejoin_blocked_until: string | null;
           speaking_seconds: number | null;
           network_quality: number | null;
           last_seen: string | null;
@@ -1980,6 +1981,7 @@ export type Database = {
           mic_publishing_disabled?: boolean;
           camera_publishing_disabled?: boolean;
           screen_publishing_disabled?: boolean;
+          livekit_rejoin_blocked_until?: string | null;
           speaking_seconds?: number | null;
           network_quality?: number | null;
           last_seen?: string | null;
@@ -2003,6 +2005,7 @@ export type Database = {
           mic_publishing_disabled?: boolean;
           camera_publishing_disabled?: boolean;
           screen_publishing_disabled?: boolean;
+          livekit_rejoin_blocked_until?: string | null;
           speaking_seconds?: number | null;
           network_quality?: number | null;
           last_seen?: string | null;
