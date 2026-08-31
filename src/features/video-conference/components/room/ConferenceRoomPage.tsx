@@ -6,6 +6,7 @@ import { useConferenceMediaQuality } from '../../hooks/useConferenceMediaQuality
 import { useConferencePhase } from '../../hooks/useConferencePhase';
 import { useConferenceSpeakerTimer } from '../../hooks/useConferenceSpeakerTimer';
 import { useLiveKitRoom } from '../../hooks/useLiveKitRoom';
+import { useNetworkDiagnostics } from '../../hooks/useNetworkDiagnostics';
 import { useNetworkQuality } from '../../hooks/useNetworkQuality';
 import { useParticipants } from '../../hooks/useParticipants';
 import { useScreenShare } from '../../hooks/useScreenShare';
@@ -70,6 +71,13 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
   );
   const screen = useScreenShare(livekit.room);
   const networkLabel = useNetworkQuality(livekit.uiState, livekit.quality);
+  const networkDiagnostics = useNetworkDiagnostics(
+    livekit.room,
+    livekit.uiState,
+    livekit.quality,
+    livekit.reconnectCount,
+    livekit.revision,
+  );
 
   useEffect(() => {
     if (
@@ -138,6 +146,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           phase={phase}
           speakerTimer={speakerTimer}
           mediaQuality={mediaQuality}
+          networkDiagnostics={networkDiagnostics}
           onEnded={() => void leave()}
         />
       )}
