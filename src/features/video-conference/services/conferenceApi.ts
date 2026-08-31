@@ -85,8 +85,34 @@ export async function runHostAction(roomId: string, action: HostAction, targetUs
   return data;
 }
 
-export async function setRecording(roomId: string, action: 'start' | 'stop', client: ConferenceClient = supabase) {
-  const { data, error } = await client.functions.invoke('conference-recording', { body: { roomId, action } });
-  if (error || !data?.ok) throw new Error(String(data?.error || error?.message || 'RECORDING_FAILED'));
+export class ConferenceRecordingActionError extends Error {
+  code: string;
+  missingConsentCount: number;
+
+  constructor(code: string, missingConsentCount = 0) {
+    super(code);
+    this.name = 'ConferenceRecordingActionError';
+    this.code = code;
+    this.missingConsentCount = missingConsentCount;
+  }
+}
+
+export async function setRecording(
+  roomId: string,
+  action: 'start' | 'stop',
+  client: ConferenceClient = supabase,
+) {
+  const { data, error } = await client.functions.invoke(
+    'conference-recording',
+    { body: { roomId, action } },
+  );
+
+  if (error || !data?.ok) {
+    throw new ConferenceRecordingActionError(
+      String(data?.error || error?.message || 'RECORDING_FAILED').toUpperCase(),
+      Number(data?.missingConsentCount || 0),
+    );
+  }
+
   return data;
 }
