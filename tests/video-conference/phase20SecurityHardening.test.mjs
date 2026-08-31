@@ -303,7 +303,8 @@ test('LiveKit token issuance is server-side, scoped and short lived', () => {
   assert.match(tokenEdge, /get_my_auth_access_state/);
   assert.match(tokenEdge, /accessState\.access_level !== "FULL"/);
   assert.match(tokenEdge, /identity: authUser\.id/);
-  assert.match(tokenEdge, /ttl: "2m"/);
+  assert.match(tokenEdge, /TOKEN_TTL_SECONDS\s*=\s*120/);
+  assert.match(tokenEdge, /ttl:\s*TOKEN_TTL_SECONDS/);
   assert.match(tokenEdge, /room: roomName/);
   assert.match(tokenEdge, /roomAdmin: false/);
   assert.match(tokenEdge, /LIVEKIT_API_SECRET/);
