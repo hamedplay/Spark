@@ -43,6 +43,7 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
   const [micEnabled, setMicEnabled] = useState(() => localStream.getAudioTracks().some((track) => track.enabled));
   const [cameraEnabled, setCameraEnabled] = useState(() => localStream.getVideoTracks().some((track) => track.enabled));
   const [reactionError, setReactionError] = useState('');
+  const [reconnectCount, setReconnectCount] = useState(0);
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;
@@ -89,7 +90,10 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
         setCameraEnabled(nextRoom.localParticipant.isCameraEnabled);
         refresh();
       });
-      nextRoom.on(RoomEvent.Reconnecting, () => setUiState('reconnecting'));
+      nextRoom.on(RoomEvent.Reconnecting, () => {
+        setReconnectCount((current) => current + 1);
+        setUiState('reconnecting');
+      });
       nextRoom.on(RoomEvent.Reconnected, () => setUiState('connected'));
       nextRoom.on(RoomEvent.Disconnected, () => setUiState((current) => current === 'failed' ? current : 'failed'));
       nextRoom.on(RoomEvent.ActiveSpeakersChanged, (participants) => {
@@ -255,6 +259,7 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
     activeSpeakerIdentity,
     reactions,
     reactionError,
+    reconnectCount,
     fail,
   };
 }
