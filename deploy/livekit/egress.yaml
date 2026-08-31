@@ -1,5 +1,5 @@
 redis:
-  address: 127.0.0.1:6379
+  address: ${LIVEKIT_REDIS_ADDRESS}
 health_port: 9091
 prometheus_port: 6788
 log_level: info
