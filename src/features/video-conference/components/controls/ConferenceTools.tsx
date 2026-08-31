@@ -30,6 +30,7 @@ export function ConferenceTools({
   speakerTimer,
   mediaQuality,
   networkDiagnostics,
+  recordingConsent,
   onEnded,
 }: ConferenceToolsProps) {
   const client = useConferenceClient();
@@ -78,7 +79,18 @@ export function ConferenceTools({
     <>
       {moderation.recording && (
         <div className="absolute left-3 top-[68px] z-30 flex items-center gap-2 rounded-full bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur" aria-live="polite">
-          <Circle className="h-3 w-3 fill-current" /> ضبط جلسه
+          <Circle className="h-3 w-3 fill-current" />
+          {moderation.recording.status === 'queued' || moderation.recording.status === 'starting'
+            ? 'در حال شروع ضبط'
+            : moderation.recording.status === 'stopping' || moderation.recording.status === 'processing'
+              ? 'در حال نهایی‌سازی ضبط'
+              : 'ضبط جلسه'}
+        </div>
+      )}
+
+      {moderation.recordingError && (
+        <div className="absolute left-3 top-[108px] z-30 max-w-sm rounded-xl border border-rose-400/30 bg-slate-900/95 px-3 py-2 text-[11px] leading-5 text-rose-100 shadow-lg backdrop-blur" aria-live="assertive">
+          {moderation.recordingError}
         </div>
       )}
 
@@ -107,7 +119,10 @@ export function ConferenceTools({
         canEndMeeting={moderation.canEndMeeting}
         onPanelChange={setPanel}
         onToggleRaise={moderation.toggleRaise}
-        onToggleRecording={moderation.toggleRecording}
+        onToggleRecording={async () => {
+          await recordingConsent.refresh();
+          await moderation.toggleRecording();
+        }}
         onToggleLock={() => moderation.hostAction(moderation.locked ? 'unlock' : 'lock')}
         onEnd={() => moderation.hostAction('end')}
       />
