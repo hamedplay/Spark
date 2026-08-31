@@ -3,6 +3,7 @@ import { Wifi } from 'lucide-react';
 import { useConferenceClient } from '../../../../components/VideoConference/conferenceClient';
 import { useConferenceAuthorization } from '../../hooks/useConferenceAuthorization';
 import { useConferenceMediaQuality } from '../../hooks/useConferenceMediaQuality';
+import { useConferenceRecordingConsent } from '../../hooks/useConferenceRecordingConsent';
 import { useConferencePhase } from '../../hooks/useConferencePhase';
 import { useConferenceSpeakerTimer } from '../../hooks/useConferenceSpeakerTimer';
 import { useLiveKitRoom } from '../../hooks/useLiveKitRoom';
@@ -21,6 +22,7 @@ import { WaitingRoomList } from '../waiting-room/WaitingRoomList';
 import { ConferenceRoomStatus } from './ConferenceRoomStatus';
 import { MeetingPhaseOverlay } from './MeetingPhaseOverlay';
 import { SpeakerTimerBanner } from './SpeakerTimerBanner';
+import { RecordingConsentBanner } from '../recording/RecordingConsentBanner';
 
 interface Props {
   room: ConferenceRoomShape;
@@ -70,6 +72,10 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
     focusIdentity,
   );
   const screen = useScreenShare(livekit.room);
+  const recordingConsent = useConferenceRecordingConsent(
+    conferenceClient,
+    sparkRoom.id,
+  );
   const networkLabel = useNetworkQuality(livekit.uiState, livekit.quality);
   const networkDiagnostics = useNetworkDiagnostics(
     livekit.room,
@@ -130,6 +136,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         />
       )}
       {!phase.mediaHidden && <ReactionOverlay reactions={livekit.reactions} />}
+      <RecordingConsentBanner consent={recordingConsent} />
       <SpeakerTimerBanner session={speakerTimer.ownSession} remainingSeconds={speakerTimer.ownRemainingSeconds} />
       <MeetingPhaseOverlay
         phase={phase.currentPhase}
@@ -147,6 +154,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           speakerTimer={speakerTimer}
           mediaQuality={mediaQuality}
           networkDiagnostics={networkDiagnostics}
+          recordingConsent={recordingConsent}
           onEnded={() => void leave()}
         />
       )}
