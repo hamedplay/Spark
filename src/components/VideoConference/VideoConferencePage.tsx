@@ -373,7 +373,11 @@ export function VideoConferencePage() {
         }
         return;
       }
-      if (room.require_approval && room.host_id !== userId) {
+      if (
+        room.require_approval
+        && room.host_id !== userId
+        && room.media_topology !== 'sfu'
+      ) {
         setWaitingApproval({ room, stream, isMuted, isVideoOff });
         setPreJoinRoom(null);
         return;
