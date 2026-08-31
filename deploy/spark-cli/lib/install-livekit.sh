@@ -662,7 +662,7 @@ livekit_observability_config_ready() {
 livekit_observability_ready() {
   local service state
   for service in prometheus alertmanager loki alloy node-exporter blackbox-exporter grafana; do
-    state="$(livekit_service_state "$service" 2>/dev/null || true)"
+    state="$(livekit_observability_service_state "$service" 2>/dev/null || true)"
     [[ "$state" == running* ]] || return 1
     [[ "$state" != *unhealthy* && "$state" != *restarting* ]] || return 1
   done
@@ -746,6 +746,9 @@ install_step_22() {
 livekit_status_report() {
   new_log "livekit-status"
   run_report "LiveKit Docker status" livekit_compose ps
+  if [[ -f "${STEP_DIR}/22.ok" ]]; then
+    run_report "LiveKit observability Docker status" livekit_observability_compose ps
+  fi
   run_report "LiveKit listening ports" bash -c "ss -lntup | grep -E ':(443|5349|7880|7881|1935|7885|6787|6788|6789|3000|9090|9093|3100|12345|9100|9115)\\b|:500[0-9]{2}\\b' || true"
   run_report "LiveKit full validation" test_livekit_full_validation
   if [[ -f "${STEP_DIR}/22.ok" ]]; then
@@ -757,13 +760,23 @@ livekit_restart() {
   new_log "livekit-restart"
   test_livekit_config || { fail "LiveKit config معتبر نیست."; return 1; }
   run_visible "Restart LiveKit media platform" livekit_compose up -d --force-recreate || return 1
+  if [[ -f "${STEP_DIR}/22.ok" ]]; then
+    run_logged "Restart LiveKit observability" livekit_observability_compose up -d --force-recreate || return 1
+  fi
   run_logged "Ensure local recording bucket" livekit_compose run --rm minio-init || return 1
   local deadline=$((SECONDS + 60))
   while (( SECONDS < deadline )); do
-    livekit_runtime_ready && { ok "LiveKit آماده است."; return 0; }
+    if livekit_runtime_ready; then
+      if [[ -f "${STEP_DIR}/22.ok" ]]; then
+        livekit_observability_ready || { sleep 2; continue; }
+      fi
+      ok "LiveKit آماده است."
+      return 0
+    fi
     sleep 2
   done
   livekit_report_start_failure
+  [[ -f "${STEP_DIR}/22.ok" ]] && livekit_report_observability_failure
   return 1
 }
 
@@ -798,7 +811,7 @@ PY
 }
 
 
-# Extend the established 18-step manager to 21 without rewriting Supabase modules.
+# Extend the established 18-step manager to 22 without rewriting Supabase modules.
 eval "$(declare -f installation_step_name | sed '1s/installation_step_name/installation_step_name_legacy/')"
 eval "$(declare -f installation_step_probe | sed '1s/installation_step_probe/installation_step_probe_legacy/')"
 eval "$(declare -f create_backup | sed '1s/create_backup/create_backup_legacy/')"
@@ -921,7 +934,7 @@ livekit_cleanup_internal() {
   local meet="" ingress=""
   if [[ -f "$LIVEKIT_ENV" ]]; then
     meet="$(livekit_env_value LIVEKIT_DOMAIN)"; ingress="$(livekit_env_value LIVEKIT_INGRESS_DOMAIN)"
-    livekit_compose down --volumes --remove-orphans >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
+    livekit_observability_compose down --volumes --remove-orphans >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
   fi
   livekit_unpatch_frontend_csp
   livekit_unpatch_frontend_csp
