@@ -30,7 +30,11 @@ export interface LiveKitTokenResponse {
 export type LiveKitJoinState =
   | { status: 'ready'; data: LiveKitTokenResponse }
   | { status: 'waiting' }
-  | { status: 'rejected'; reason: string };
+  | {
+      status: 'rejected';
+      reason: string;
+      retryAfterSeconds?: number;
+    };
 
 export async function requestLiveKitToken(roomId: string, client: ConferenceClient = supabase): Promise<LiveKitJoinState> {
   const { data, error } = await client.functions.invoke('conference-livekit-token', { body: { roomId } });
@@ -43,13 +47,21 @@ export async function requestLiveKitToken(roomId: string, client: ConferenceClie
     try {
       const payload = await context.clone().json();
       if (payload?.reason === 'waiting_for_admission' || payload?.error === 'WAITING_FOR_ADMISSION') return { status: 'waiting' };
-      return { status: 'rejected', reason: String(payload?.reason || payload?.error || 'TOKEN_FAILED') };
+      return {
+        status: 'rejected',
+        reason: String(payload?.reason || payload?.error || 'TOKEN_FAILED'),
+        retryAfterSeconds: Number(payload?.retryAfterSeconds || 0) || undefined,
+      };
     } catch {
       // Fall through to generic failure.
     }
   }
 
-  return { status: 'rejected', reason: String(data?.reason || data?.error || error?.message || 'TOKEN_FAILED') };
+  return {
+    status: 'rejected',
+    reason: String(data?.reason || data?.error || error?.message || 'TOKEN_FAILED'),
+    retryAfterSeconds: Number(data?.retryAfterSeconds || 0) || undefined,
+  };
 }
 
 export async function createMeetingConference(meetingId: string) {
