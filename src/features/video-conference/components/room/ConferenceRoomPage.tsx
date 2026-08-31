@@ -53,7 +53,14 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
 
   const canManageWaitingRoom = hasConferencePermission(authorization, 'MANAGE_WAITING_ROOM');
   const handleAdmitted = useCallback(() => { void livekit.connect(); }, [livekit.connect]);
-  const handleRejected = useCallback(() => livekit.fail('درخواست ورود شما توسط میزبان رد شد.'), [livekit.fail]);
+  const handleRejected = useCallback(
+    () => livekit.fail('درخواست ورود شما توسط میزبان رد شد.'),
+    [livekit.fail],
+  );
+  const handleExpired = useCallback(
+    () => livekit.fail('درخواست ورود منقضی شد. برای ارسال درخواست جدید دوباره تلاش کنید.'),
+    [livekit.fail],
+  );
   const waiting = useWaitingRoom({
     client: conferenceClient,
     roomId: sparkRoom.id,
@@ -62,6 +69,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
     uiState: livekit.uiState,
     onAdmitted: handleAdmitted,
     onRejected: handleRejected,
+    onExpired: handleExpired,
   });
   const { participants, screenSharer } = useParticipants(livekit.room, livekit.revision);
   const [pinnedIdentity, setPinnedIdentity] = useState<string | null>(null);
@@ -124,7 +132,13 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         {waiting.waitingRows.length > 0 && <span className="rounded-full bg-amber-400 px-2 py-1 text-xs font-bold text-slate-950">{waiting.waitingRows.length} در انتظار</span>}
       </header>
 
-      {waiting.waitingRows.length > 0 && canManageWaitingRoom && <WaitingRoomList roomId={sparkRoom.id} rows={waiting.waitingRows} />}
+      {waiting.waitingRows.length > 0 && canManageWaitingRoom && (
+        <WaitingRoomList
+          roomId={sparkRoom.id}
+          rows={waiting.waitingRows}
+          onChanged={waiting.refreshWaitingRows}
+        />
+      )}
 
       {!phase.mediaHidden && (
         <ParticipantGrid
