@@ -23,7 +23,7 @@ interface Params {
   currentUserId: string;
 }
 
-function remainingSeconds(
+export function calculateSpeakerRemainingSeconds(
   session: SpeakerSessionRow,
   synchronizedNowMs: number,
 ): number {
@@ -84,7 +84,7 @@ export function useConferenceSpeakerTimer({ client, roomId, currentUserId }: Par
   const remainingByUser = useMemo(() => {
     const result: Record<string, number> = {};
     for (const session of snapshot.sessions) {
-      result[session.user_id] = remainingSeconds(session, synchronizedNowMs);
+      result[session.user_id] = calculateSpeakerRemainingSeconds(session, synchronizedNowMs);
     }
     return result;
   }, [snapshot.sessions, synchronizedNowMs]);
