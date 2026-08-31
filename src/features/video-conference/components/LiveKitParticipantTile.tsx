@@ -5,6 +5,7 @@ import {
   PictureInPicture2,
   Pin,
   PinOff,
+  Star,
   UserRound,
   ZoomIn,
   ZoomOut,
@@ -35,6 +36,7 @@ export function LiveKitParticipantTile({
   local = false,
   featured = false,
   pinned = false,
+  spotlighted = false,
   preferScreenShare = false,
   speakerMuted = false,
   onTogglePin,
@@ -44,6 +46,7 @@ export function LiveKitParticipantTile({
   local?: boolean;
   featured?: boolean;
   pinned?: boolean;
+  spotlighted?: boolean;
   preferScreenShare?: boolean;
   speakerMuted?: boolean;
   onTogglePin?: () => void;
@@ -150,11 +153,13 @@ export function LiveKitParticipantTile({
       className={
         `relative min-h-0 overflow-hidden rounded-2xl bg-slate-900 shadow-sm ring-2 transition `
         + (featured ? 'lg:col-span-2 lg:row-span-2 ' : '')
-        + (active
-          ? 'ring-emerald-400'
-          : pinned
-            ? 'ring-sky-400'
-            : 'ring-transparent')
+        + (spotlighted
+          ? 'ring-amber-400'
+          : active
+            ? 'ring-emerald-400'
+            : pinned
+              ? 'ring-sky-400'
+              : 'ring-transparent')
       }
     >
       {videoMuted ? (
@@ -257,6 +262,13 @@ export function LiveKitParticipantTile({
           >
             <ZoomIn className="h-3.5 w-3.5" />
           </button>
+        </div>
+      )}
+
+      {spotlighted && (
+        <div className="absolute bottom-10 right-2 z-10 flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/90 px-2 py-1 text-[10px] font-bold text-slate-950 shadow">
+          <Star className="h-3 w-3 fill-current" />
+          Spotlight
         </div>
       )}
 
