@@ -175,7 +175,7 @@ test('internal LiveKit API stays behind the TLS reverse proxy', () => {
   );
   assert.match(
     manager,
-    /Default: deny \\(incoming\\\)/,
+    /Default: deny \\(incoming\\)/,
   );
   assert.match(
     manager,
