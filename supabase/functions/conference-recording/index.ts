@@ -134,15 +134,16 @@ Deno.serve(async (req: Request) => {
     return reply(403, { error: "NOT_AUTHORIZED" });
   }
 
-  const authorizationAction = body.action === "reconcile"
-    ? "stop"
-    : body.action;
-
   const { data: authz, error: authzError } =
-    await userClient.rpc("authorize_livekit_recording", {
-      p_room_id: body.roomId,
-      p_action: authorizationAction,
-    });
+    body.action === "reconcile"
+      ? await userClient.rpc("authorize_livekit_recording", {
+        p_room_id: body.roomId,
+        p_action: "stop",
+      })
+      : await userClient.rpc("authorize_livekit_recording", {
+        p_room_id: body.roomId,
+        p_action: body.action,
+      });
 
   if (authzError || !authz?.ok) {
     return reply(403, {
