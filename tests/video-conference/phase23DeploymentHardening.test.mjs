@@ -173,9 +173,8 @@ test('internal LiveKit API stays behind the TLS reverse proxy', () => {
     manager,
     /livekit_internal_api_exposure_probe/,
   );
-  assert.match(
-    manager,
-    /Default: deny \\(incoming\\)/,
+  assert.ok(
+    manager.includes("grep -Eq 'Default: deny \\(incoming\\)'"),
   );
   assert.match(
     manager,
@@ -206,9 +205,8 @@ test('secret files remain root-owned deployment state and real env is ignored', 
     existsSync(new URL('../../deploy/livekit/.env', import.meta.url)),
     false,
   );
-  assert.match(
-    manager,
-    /stat -c '%a' "\$LIVEKIT_ENV"\) == "600"/,
+  assert.ok(
+    manager.includes("[[ \"$(stat -c '%a' \"$LIVEKIT_ENV\")\" == \"600\" ]]"),
   );
   assert.match(
     manager,
