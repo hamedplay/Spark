@@ -1782,6 +1782,7 @@ export type Database = {
           chat_enabled: boolean;
           speaking_limit_enabled: boolean;
           record_enabled: boolean;
+          recording_consent_required: boolean;
           require_approval: boolean;
           meeting_id: string | null;
           expires_at: string | null;
@@ -1811,6 +1812,7 @@ export type Database = {
           chat_enabled?: boolean;
           speaking_limit_enabled?: boolean;
           record_enabled?: boolean;
+          recording_consent_required?: boolean;
           require_approval?: boolean;
           meeting_id?: string | null;
           expires_at?: string | null;
@@ -1840,6 +1842,7 @@ export type Database = {
           chat_enabled?: boolean;
           speaking_limit_enabled?: boolean;
           record_enabled?: boolean;
+          recording_consent_required?: boolean;
           require_approval?: boolean;
           meeting_id?: string | null;
           expires_at?: string | null;
@@ -3642,6 +3645,49 @@ export type Database = {
           active?: boolean;
           remaining?: number;
           retry_after_ms?: number;
+        };
+      };
+      get_conference_recording_consent_state: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          required?: boolean;
+          recordingEnabled?: boolean;
+          myStatus?: 'pending' | 'accepted' | 'declined';
+          accepted?: boolean;
+          recordingActive?: boolean;
+          policyVersion?: number;
+        };
+      };
+      set_conference_recording_consent: {
+        Args: {
+          p_room_id: string;
+          p_consented: boolean;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          roomId?: string;
+          userId?: string;
+          status?: 'accepted' | 'declined';
+          accepted?: boolean;
+          policyVersion?: number;
+        };
+      };
+      apply_livekit_recording_reconcile_v1: {
+        Args: {
+          p_room_name: string;
+          p_egress_id: string;
+          p_provider_status: number | null;
+          p_payload: unknown;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          status?: string;
+          recording_id?: string;
+          egress_id?: string;
         };
       };
       get_conference_presentation_snapshot: {
