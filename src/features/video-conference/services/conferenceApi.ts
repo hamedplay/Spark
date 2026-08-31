@@ -59,14 +59,39 @@ export async function createMeetingConference(meetingId: string) {
   return data.room;
 }
 
-export async function resolveWaitingParticipant(roomId: string, userId: string, admit: boolean) {
-  const { data, error } = await supabase.rpc('admit_livekit_conference_participant', {
-    p_room_id: roomId,
-    p_target_user_id: userId,
-    p_admit: admit,
-  });
+export async function resolveWaitingParticipant(
+  roomId: string,
+  userId: string,
+  admit: boolean,
+  client: ConferenceClient = supabase,
+) {
+  const { data, error } = await client.rpc(
+    'admit_livekit_conference_participant',
+    {
+      p_room_id: roomId,
+      p_target_user_id: userId,
+      p_admit: admit,
+    },
+  );
   if (error) throw error;
-  if (!data?.ok) throw new Error(String(data?.reason || 'WAITING_ROOM_UPDATE_FAILED'));
+  if (!data?.ok) {
+    throw new Error(String(data?.reason || 'WAITING_ROOM_UPDATE_FAILED'));
+  }
+  return data;
+}
+
+export async function admitAllWaitingParticipants(
+  roomId: string,
+  client: ConferenceClient = supabase,
+) {
+  const { data, error } = await client.rpc(
+    'admit_all_livekit_conference_participants',
+    { p_room_id: roomId },
+  );
+  if (error) throw error;
+  if (!data?.ok) {
+    throw new Error(String(data?.reason || 'WAITING_ROOM_BULK_UPDATE_FAILED'));
+  }
   return data;
 }
 
