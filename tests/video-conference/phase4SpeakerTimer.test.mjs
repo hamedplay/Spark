@@ -56,6 +56,8 @@ test('frontend countdown is display-only and derived from synchronized server ti
   assert.match(timerHook, /serverOffsetMs/);
   assert.match(timerHook, /new Date\(session\.expires_at\)/);
   assert.match(timerHook, /synchronizedNowMs/);
+  assert.match(timerHook, /calculateSpeakerRemainingSeconds\(ownSession, synchronizedNowMs\)/);
+  assert.doesNotMatch(timerHook, /\?\s*remainingSeconds\(ownSession/);
   assert.doesNotMatch(timerHook, /\.from\(['"]conference_speaker_sessions['"]\)\.update/);
   assert.match(roomPage, /speakerTimer\.microphoneBlocked/);
 });

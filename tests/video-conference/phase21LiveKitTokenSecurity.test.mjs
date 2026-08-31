@@ -175,6 +175,10 @@ test('moderator removal cannot trigger automatic fresh-token rejoin', () => {
   );
 });
 
+test('client does not mutate its own LiveKit name after connect', () => {
+  assert.doesNotMatch(liveKitHook, /localParticipant\.setName\(/);
+});
+
 test('fresh Room reconnect preserves the last selected media devices', () => {
   assert.match(liveKitHook, /audioDeviceIdRef/);
   assert.match(liveKitHook, /videoDeviceIdRef/);

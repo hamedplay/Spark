@@ -38,7 +38,7 @@ interface Props {
 
 export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUserName, localStream, onLeave }: Props) {
   const conferenceClient = useConferenceClient();
-  const livekit = useLiveKitRoom({ roomId: sparkRoom.id, currentUserName, localStream, client: conferenceClient });
+  const livekit = useLiveKitRoom({ roomId: sparkRoom.id, localStream, client: conferenceClient });
   const { authorization } = useConferenceAuthorization({
     client: conferenceClient,
     roomId: sparkRoom.id,

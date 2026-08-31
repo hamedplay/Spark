@@ -40,14 +40,12 @@ const ERROR_LABELS: Record<string, string> = {
 
 interface Params {
   roomId: string;
-  currentUserName: string;
   localStream: MediaStream;
   client: ConferenceSupabaseClient;
 }
 
 export function useLiveKitRoom({
   roomId,
-  currentUserName,
   localStream,
   client,
 }: Params) {
@@ -366,7 +364,6 @@ export function useLiveKitRoom({
         { autoSubscribe: true },
       );
 
-      nextRoom.localParticipant.setName(currentUserName);
 
       if (micEnabled && canPublishMic) {
         await nextRoom.localParticipant.setMicrophoneEnabled(
@@ -422,7 +419,6 @@ export function useLiveKitRoom({
     canPublishMic,
     clearFreshReconnectTimer,
     client,
-    currentUserName,
     fail,
     localStream,
     micEnabled,

@@ -91,7 +91,7 @@ export function useConferenceSpeakerTimer({ client, roomId, currentUserId }: Par
 
   const ownSession = sessionsByUser[currentUserId] ?? null;
   const ownRemainingSeconds = ownSession
-    ? remainingSeconds(ownSession, synchronizedNowMs)
+    ? calculateSpeakerRemainingSeconds(ownSession, synchronizedNowMs)
     : null;
   const microphoneBlocked = Boolean(
     ownSession && (
