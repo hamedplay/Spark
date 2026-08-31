@@ -105,8 +105,8 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 5. The browser receives only a short-lived participant JWT and the public WSS URL.
 6. LiveKit Server handles SFU media routing, adaptive stream, dynacast and TURN fallback.
 7. Host moderation uses `conference-host-control`; browser tokens never receive `roomAdmin`.
-8. Recording uses LiveKit RoomComposite Egress through `conference-recording` and transitions `queued -> recording -> processing -> ready/failed` through verified lifecycle events.
-9. LiveKit signed webhooks are verified by `livekit-webhook` and synchronize room, participant and egress lifecycle back into Postgres.
+8. Recording uses LiveKit RoomComposite Egress through `conference-recording` with the production lifecycle `queued -> starting -> recording -> stopping -> processing -> completed/failed`. One active recording per room is enforced in PostgreSQL. Start/stop uncertainty is reconciled against LiveKit Egress by Egress ID or the unique object-storage path instead of immediately marking an uncertain request failed.
+9. LiveKit signed webhooks are verified by `livekit-webhook`. Webhook `event.id` is the database idempotency key, Egress state transitions are monotonic, and final `duration_seconds`, `size_bytes`, `started_at`, `ended_at`, `provider_egress_id`, `status`, and `storage_path` are synchronized from verified Egress lifecycle payloads. Recording consent is stored per room/user; starting recording requires accepted consent from the host and every joined participant, and a participant cannot receive a LiveKit media token for an already-recording room until consent is accepted.
 10. Speaker timer and hand-raise queue state are authoritative in Postgres. `conference-speaker-queue-control` performs Host reorder/time/allow/remove actions, and the timer enforcer reconciles queued/paused/expired/completed microphone permissions with LiveKit.
 11. Meeting phase state is authoritative in `conference_rooms` with revisioned `conference_phase_events`. `conference-phase-control` applies Host transitions and `conference-phase-enforcer` synchronizes automatic Countdown/Break/Resuming transitions to every connected LiveKit participant.
 12. Public conference chat history is persisted in PostgreSQL. `conference-chat-control` handles SFU send/edit/delete/reaction mutations, while Realtime only refreshes persisted message/reaction/mention state.
@@ -139,6 +139,11 @@ Before production cutover validate all of the following from real client network
 - 20-person Grid does not request the 1080p camera layer for ordinary small tiles
 - active-speaker/pinned tile can step up to the high camera layer when bandwidth permits
 - changing Camera profile does not alter the independent Screen Share quality setting
+- recording start is rejected until every current participant has accepted the recording consent policy
+- joining an already-recording SFU room without accepted consent yields no LiveKit media token
+- duplicate/out-of-order Egress webhooks do not downgrade a terminal recording state
+- an uncertain start/stop request is reconciled with LiveKit before another Egress is created
+- completed recording metadata contains duration, size, timestamps, Egress ID and object-storage path
 - diagnostics shows Excellent/Good/Weak/Poor to normal users
 - admin diagnostics exposes RTC health metrics without IP/candidate addresses or credentials
 - restrictive-network test reports TURN relay usage without exposing TURN secrets
