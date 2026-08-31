@@ -15,6 +15,7 @@ import { ConferencePrivateChatPanel } from '../chat/ConferencePrivateChatPanel';
 import { ConferenceParticipantsPanel } from '../participants/ConferenceParticipantsPanel';
 import { ConferencePollPanel } from '../polls/ConferencePollPanel';
 import { ConferencePresentationPanel } from '../presentation/ConferencePresentationPanel';
+import { NetworkDiagnosticsPanel } from '../diagnostics/NetworkDiagnosticsPanel';
 import { ConferenceWhiteboardPanel } from '../whiteboard/ConferenceWhiteboardPanel';
 import { ConferenceToolsBar } from './ConferenceToolsBar';
 import { MediaDevicesPanel } from './MediaDevicesPanel';
@@ -28,6 +29,7 @@ export function ConferenceTools({
   phase,
   speakerTimer,
   mediaQuality,
+  networkDiagnostics,
   onEnded,
 }: ConferenceToolsProps) {
   const client = useConferenceClient();
@@ -93,6 +95,7 @@ export function ConferenceTools({
         }
         canWhiteboard={authorization.loaded && authorization.role !== null}
         canPresentations={authorization.loaded && authorization.role !== null}
+        canDiagnostics={hasConferencePermission(authorization, 'MANAGE_ROLES')}
         raised={moderation.raised}
         raisedCount={moderation.raisedParticipants.length}
         busy={moderation.busy}
@@ -132,9 +135,11 @@ export function ConferenceTools({
                         ? 'تخته سفید'
                         : panel === 'presentation'
                           ? 'ارائه و اشتراک فایل'
-                          : panel === 'participants'
-                    ? 'شرکت‌کنندگان'
-                    : 'دستگاه‌های رسانه‌ای'}
+                          : panel === 'diagnostics'
+                            ? 'تشخیص پیشرفته شبکه'
+                            : panel === 'participants'
+                              ? 'شرکت‌کنندگان'
+                              : 'دستگاه‌های رسانه‌ای'}
             </strong>
             <button onClick={() => setPanel(null)} className="h-9 rounded-lg px-3 text-xs text-slate-300 hover:bg-white/10">بستن</button>
           </div>
@@ -225,6 +230,12 @@ export function ConferenceTools({
               currentUserId={currentUserId}
               currentUserName={currentUserName}
               authorization={authorization}
+            />
+          )}
+          {panel === 'diagnostics' && hasConferencePermission(authorization, 'MANAGE_ROLES') && (
+            <NetworkDiagnosticsPanel
+              diagnostics={networkDiagnostics.diagnostics}
+              onRefresh={networkDiagnostics.refresh}
             />
           )}
           {panel === 'participants' && (
