@@ -31,6 +31,7 @@ export function ConferenceTools({
   mediaQuality,
   networkDiagnostics,
   recordingConsent,
+  spotlight,
   onEnded,
 }: ConferenceToolsProps) {
   const client = useConferenceClient();
@@ -265,6 +266,10 @@ export function ConferenceTools({
               canRemoveParticipants={moderation.canRemoveParticipants}
               canManageRoles={moderation.canManageRoles}
               canManageTimer={moderation.canManageTimer}
+              canSpotlight={spotlight.canManage}
+              spotlightedUserIds={spotlight.spotlightedUserIds}
+              spotlightBusy={spotlight.busy}
+              spotlightErrorMessage={spotlight.errorMessage}
               speakerQueue={moderation.speakerQueue}
               speakerSessionsByUser={moderation.speakerSessionsByUser}
               speakerRemainingByUser={moderation.speakerRemainingByUser}
@@ -273,6 +278,8 @@ export function ConferenceTools({
               onRoleChange={moderation.changeRole}
               onTimerAction={moderation.timerAction}
               onQueueAction={moderation.queueAction}
+              onToggleSpotlight={spotlight.toggle}
+              onClearSpotlights={spotlight.clear}
             />
           )}
           {panel === 'devices' && (
