@@ -78,6 +78,7 @@ test('direct authenticated role mutation is disabled so LiveKit sync cannot be b
 
 
 test('self-hosted join tokens use a short replay window', () => {
-  assert.match(tokenEdge, /ttl:\s*"2m"/);
-  assert.match(tokenEdge, /expiresInSeconds:\s*120/);
+  assert.match(tokenEdge, /TOKEN_TTL_SECONDS\s*=\s*120/);
+  assert.match(tokenEdge, /ttl:\s*TOKEN_TTL_SECONDS/);
+  assert.match(tokenEdge, /expiresInSeconds:\s*TOKEN_TTL_SECONDS/);
 });
