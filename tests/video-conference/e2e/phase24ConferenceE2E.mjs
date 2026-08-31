@@ -95,10 +95,32 @@ async function joinRoom(page) {
     .waitFor({ state: 'visible', timeout: 45_000 });
 }
 
+const PANEL_TITLES = {
+  'گفتگوی جلسه': 'گفتگوی جلسه',
+  'پیام خصوصی': 'پیام خصوصی',
+  'نظرسنجی‌ها': 'نظرسنجی',
+  'شرکت‌کنندگان': 'شرکت‌کنندگان',
+};
+
 async function openPanel(page, label) {
+  const title = PANEL_TITLES[label];
+  if (
+    title
+    && await page.getByText(title, { exact: true })
+      .isVisible()
+      .catch(() => false)
+  ) {
+    return;
+  }
+
   const button = page.getByRole('button', { name: label });
   await button.waitFor({ state: 'visible', timeout: 15_000 });
   await button.click();
+
+  if (title) {
+    await page.getByText(title, { exact: true })
+      .waitFor({ state: 'visible', timeout: 15_000 });
+  }
 }
 
 function participantRow(page, displayName) {
