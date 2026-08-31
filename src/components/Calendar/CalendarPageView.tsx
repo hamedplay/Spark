@@ -20,7 +20,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
   const {
     adjustSlotHeight, allDayDragEnd, allDayDragStart, allDayDragging, allDayFormDate, allDayFormEndDate,
     allDayFormTitle, allDayFormType, allUsers, calendarForm, calendarListSearch, calendars,
-    canHideOffHours, commitDrag, commitMove, commitResize, currentJm, currentJy,
+    canHideOffHours, commitDrag, commitMove, commitResize, currentJm, currentJy, isMoveCommitting,
     currentTime, currentUserId, dayGridRef, deleteMeetingDialog, detailMeeting, dragDate,
     dragEndSlot, dragMoveCurrentDeltaDay, dragMoveCurrentDeltaSlot, dragMoveMeeting, dragMoveOriginalEndSlot, dragMoveOriginalSlot,
     dragMovedRef, dragStartSlot, editingCalendar, enabledCalendarIds, expandedMeetingId, fetchAllDayEvents,
@@ -32,7 +32,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
     isInAllDayDragRange, isRefreshing, isSelected, isToday, jalaaliDatesBetween, listMeetings,
     listScrollRef, mainMonthDays, meetings, monthDayPopup, monthDayPopupRef, myGroupOpen,
     navigateNext, navigatePrev, navigateToMeeting, occasionsEnabled, onRegisterMinutes, onScheduleComplete,
-    openEditForm, pendingMove, pendingResize, prefillData, prefs, previewMeeting,
+    openEditForm, pendingMove, pendingResize, prefillData, prefs, previewMeeting, returnMoveToEdit,
     previewPos, previewRef, publicGroupOpen, reminderAlert, repeatEditDialog, resetCalendarForm,
     resizeCurrentDelta, resizeMeeting, resizeOriginalEndSlot, resolveName, searchInputRef, searchQuery,
     searchRef, searchResults, selectedJd, selectedJm, selectedJy, sendNotification,
@@ -579,8 +579,14 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
         </div>
       )}
 
-      {/* Move confirmation dialog */}
-      <MoveConfirmDialog pendingMove={pendingMove} onConfirm={commitMove} onCancel={() => setPendingMove(null)} />
+      {/* Move change decision dialog */}
+      <MoveConfirmDialog
+        pendingMove={pendingMove}
+        committing={isMoveCommitting}
+        onCommitWithNotify={() => commitMove(true)}
+        onCommitWithoutNotify={() => commitMove(false)}
+        onReturnToEdit={returnMoveToEdit}
+      />
 
       {/* Resize confirmation dialog */}
       <ResizeConfirmDialog pendingResize={pendingResize} onConfirm={commitResize} onCancel={() => setPendingResize(null)} />
