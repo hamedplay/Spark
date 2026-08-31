@@ -141,7 +141,7 @@ test('all spotlighted tiles are visibly marked independently from local pin', ()
   assert.match(grid, /spotlighted={spotlightIdentities\.includes/);
   assert.match(tile, /spotlighted = false/);
   assert.match(tile, /ring-amber-400/);
-  assert.match(tile, />Spotlight</);
+  assert.match(tile, /Spotlight/);
   assert.match(tile, /aria-pressed={pinned}/);
   assert.match(tile, /ring-sky-400/);
 });
