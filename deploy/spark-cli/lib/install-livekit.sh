@@ -22,6 +22,10 @@ livekit_compose() {
     --env-file "$LIVEKIT_ENV" "$@"
 }
 
+livekit_observability_compose() {
+  livekit_compose --profile observability "$@"
+}
+
 livekit_env_value() {
   env_get "$LIVEKIT_ENV" "$1"
 }
@@ -37,7 +41,9 @@ livekit_require_env() {
   for key in \
     LIVEKIT_DOMAIN LIVEKIT_TURN_DOMAIN LIVEKIT_INGRESS_DOMAIN LIVEKIT_API_KEY LIVEKIT_API_SECRET \
     LIVEKIT_WEBHOOK_URL S3_ACCESS_KEY S3_SECRET_KEY S3_REGION S3_BUCKET \
-    LIVEKIT_SERVER_IMAGE LIVEKIT_EGRESS_IMAGE LIVEKIT_INGRESS_IMAGE REDIS_IMAGE CADDY_IMAGE MINIO_IMAGE MINIO_MC_IMAGE; do
+    LIVEKIT_SERVER_IMAGE LIVEKIT_EGRESS_IMAGE LIVEKIT_INGRESS_IMAGE REDIS_IMAGE CADDY_IMAGE MINIO_IMAGE MINIO_MC_IMAGE \
+    PROMETHEUS_IMAGE ALERTMANAGER_IMAGE GRAFANA_IMAGE LOKI_IMAGE ALLOY_IMAGE NODE_EXPORTER_IMAGE BLACKBOX_EXPORTER_IMAGE \
+    GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD; do
     value="$(livekit_env_value "$key")"
     [[ -n "$value" ]] || { echo "Missing LiveKit env: $key" >>"$CURRENT_LOG"; return 1; }
     livekit_is_placeholder "$value" && { echo "Placeholder LiveKit env: $key" >>"$CURRENT_LOG"; return 1; }
@@ -254,6 +260,15 @@ install_step_19() {
   # Upgrade existing LiveKit env files created before local MinIO support.
   env_set "$LIVEKIT_ENV" MINIO_IMAGE "minio/minio:RELEASE.2025-04-22T22-12-26Z"
   env_set "$LIVEKIT_ENV" MINIO_MC_IMAGE "minio/mc:RELEASE.2025-08-13T08-35-41Z"
+  env_set "$LIVEKIT_ENV" PROMETHEUS_IMAGE "prom/prometheus:v3.14.0"
+  env_set "$LIVEKIT_ENV" ALERTMANAGER_IMAGE "prom/alertmanager:v0.34.0"
+  env_set "$LIVEKIT_ENV" GRAFANA_IMAGE "grafana/grafana:13.2.0"
+  env_set "$LIVEKIT_ENV" LOKI_IMAGE "grafana/loki:3.7.0"
+  env_set "$LIVEKIT_ENV" ALLOY_IMAGE "grafana/alloy:v1.19.0"
+  env_set "$LIVEKIT_ENV" NODE_EXPORTER_IMAGE "prom/node-exporter:v1.12.1"
+  env_set "$LIVEKIT_ENV" BLACKBOX_EXPORTER_IMAGE "prom/blackbox-exporter:v0.28.0"
+  env_set "$LIVEKIT_ENV" GRAFANA_ADMIN_USER "admin"
+  livekit_ensure_secret GRAFANA_ADMIN_PASSWORD "openssl rand -hex 24"
 
   local value
   env_set "$LIVEKIT_ENV" LIVEKIT_DOMAIN "meet.${APP_DOMAIN}"
@@ -579,11 +594,150 @@ install_step_21() {
   fi
 }
 
+
+livekit_write_observability_targets() {
+  local api_url meet_url ingress_url target_file
+  api_url="https://${API_DOMAIN}/auth/v1/health"
+  meet_url="https://$(livekit_env_value LIVEKIT_DOMAIN)"
+  ingress_url="https://$(livekit_env_value LIVEKIT_INGRESS_DOMAIN)"
+  target_file="${LIVEKIT_ROOT}/monitoring/targets/blackbox.json"
+
+  install -d -m 0755 "$(dirname "$target_file")"
+  cat >"$target_file" <<EOF
+[
+  {
+    "targets": ["${api_url}"],
+    "labels": {"probe": "spark-api"}
+  },
+  {
+    "targets": ["${meet_url}"],
+    "labels": {"probe": "livekit-public"}
+  },
+  {
+    "targets": ["${ingress_url}"],
+    "labels": {"probe": "ingress-public"}
+  }
+]
+EOF
+  chmod 0644 "$target_file"
+  python3 -m json.tool "$target_file" >/dev/null
+}
+
+livekit_observability_config_ready() {
+  local file
+  for file in \
+    monitoring/prometheus.yml \
+    monitoring/rules/livekit-alerts.yml \
+    monitoring/alertmanager.yml \
+    monitoring/blackbox.yml \
+    monitoring/loki.yml \
+    monitoring/alloy.alloy \
+    monitoring/grafana/provisioning/datasources/datasources.yml \
+    monitoring/grafana/provisioning/dashboards/dashboards.yml \
+    monitoring/grafana/dashboards/spark-livekit-overview.json \
+    monitoring/grafana/dashboards/spark-livekit-operations.json \
+    monitoring/targets/blackbox.json; do
+    require_file "${LIVEKIT_ROOT}/$file" || return 1
+  done
+
+  python3 -m json.tool "${LIVEKIT_ROOT}/monitoring/targets/blackbox.json" >/dev/null || return 1
+  python3 -m json.tool "${LIVEKIT_ROOT}/monitoring/grafana/dashboards/spark-livekit-overview.json" >/dev/null || return 1
+  python3 -m json.tool "${LIVEKIT_ROOT}/monitoring/grafana/dashboards/spark-livekit-operations.json" >/dev/null || return 1
+  livekit_observability_compose config --quiet >>"$CURRENT_LOG" 2>&1
+}
+
+livekit_observability_ready() {
+  local service state
+  for service in prometheus alertmanager loki alloy node-exporter blackbox-exporter grafana; do
+    state="$(livekit_service_state "$service" 2>/dev/null || true)"
+    [[ "$state" == running* ]] || return 1
+    [[ "$state" != *unhealthy* && "$state" != *restarting* ]] || return 1
+  done
+
+  curl -fsS --connect-timeout 3 http://127.0.0.1:9090/-/ready >/dev/null || return 1
+  curl -fsS --connect-timeout 3 http://127.0.0.1:9093/-/ready >/dev/null || return 1
+  curl -fsS --connect-timeout 3 http://127.0.0.1:3100/ready >/dev/null || return 1
+  curl -fsS --connect-timeout 3 http://127.0.0.1:12345/-/ready >/dev/null || return 1
+  curl -fsS --connect-timeout 3 http://127.0.0.1:9100/metrics >/dev/null || return 1
+  curl -fsS --connect-timeout 3 http://127.0.0.1:9115/metrics >/dev/null || return 1
+  curl -fsS --connect-timeout 3 http://127.0.0.1:3000/api/health >/dev/null || return 1
+
+  local listeners
+  listeners="$(ss -lnt)" || return 1
+  for port in 3000 9090 9093 3100 12345 9100 9115; do
+    grep -Eq "127\.0\.0\.1:${port}\b" <<<"$listeners" || return 1
+    ! grep -Eq "(0\.0\.0\.0|\[::\]):${port}\b" <<<"$listeners" || return 1
+  done
+
+  local result
+  result="$(curl -fsSG --connect-timeout 3     --data-urlencode 'query=min(up{job=~"livekit|livekit-egress|livekit-ingress|node|blackbox-exporter|alloy|loki"})'     http://127.0.0.1:9090/api/v1/query)" || return 1
+  python3 - <<'PY' <<<"$result"
+import json,sys
+payload=json.load(sys.stdin)
+if payload.get("status")!="success":
+    raise SystemExit(1)
+items=payload.get("data",{}).get("result",[])
+if not items or float(items[0].get("value",[0,"0"])[1]) < 1:
+    raise SystemExit(1)
+PY
+}
+
+livekit_report_observability_failure() {
+  local service
+  livekit_observability_compose ps 2>&1 | tee -a "$CURRENT_LOG" || true
+  for service in prometheus alertmanager loki alloy node-exporter blackbox-exporter grafana; do
+    printf '\n--- %s ---\n' "$service" | tee -a "$CURRENT_LOG"
+    livekit_observability_compose logs --no-color --tail=100 "$service" 2>&1 | tee -a "$CURRENT_LOG" || true
+  done
+}
+
+install_step_22() {
+  title
+  new_log "install-22-livekit-observability"
+  test_livekit_full_validation || {
+    fail "ابتدا مرحله 21 LiveKit validation را کامل کنید."
+    return 1
+  }
+
+  run_logged "Generate observability HTTP targets" livekit_write_observability_targets || return 1
+  livekit_observability_config_ready || {
+    fail "پیکربندی Observability معتبر نیست."
+    unmark_step 22
+    return 1
+  }
+
+  run_logged "Pull pinned observability images" livekit_observability_compose pull || return 1
+  if ! run_logged "Start Prometheus/Grafana/Loki/Alertmanager observability"     livekit_observability_compose up -d prometheus alertmanager loki alloy node-exporter blackbox-exporter grafana; then
+    livekit_report_observability_failure
+    unmark_step 22
+    return 1
+  fi
+
+  info "منتظر readiness Observability (حداکثر ۹۰ ثانیه)..."
+  local deadline=$((SECONDS + 90))
+  while (( SECONDS < deadline )); do
+    if livekit_observability_ready; then
+      mark_step 22
+      ok "Prometheus/Grafana/Loki/Alertmanager و exporterهای Phase 22 آماده هستند."
+      return 0
+    fi
+    sleep 3
+  done
+
+  unmark_step 22
+  warn "Observability در مهلت readiness آماده نشد."
+  livekit_report_observability_failure
+  return 1
+}
+
 livekit_status_report() {
   new_log "livekit-status"
   run_report "LiveKit Docker status" livekit_compose ps
-  run_report "LiveKit listening ports" bash -c "ss -lntup | grep -E ':(443|5349|7880|7881|1935|7885|6787|6788|6789)\\b|:500[0-9]{2}\\b' || true"
+  run_report "LiveKit listening ports" bash -c "ss -lntup | grep -E ':(443|5349|7880|7881|1935|7885|6787|6788|6789|3000|9090|9093|3100|12345|9100|9115)\\b|:500[0-9]{2}\\b' || true"
   run_report "LiveKit full validation" test_livekit_full_validation
+  if [[ -f "${STEP_DIR}/22.ok" ]]; then
+    run_report "LiveKit observability" livekit_observability_ready
+  fi
 }
 
 livekit_restart() {
@@ -641,6 +795,7 @@ installation_step_name() {
     19) printf 'LiveKit configuration / TLS / secrets' ;;
     20) printf 'LiveKit SFU / Redis / Egress / Ingress / TURN' ;;
     21) printf 'LiveKit end-to-end validation' ;;
+    22) printf 'LiveKit observability / dashboards / alerts' ;;
     *) installation_step_name_legacy "$1" ;;
   esac
 }
@@ -650,6 +805,7 @@ installation_step_probe() {
     19) test_livekit_config ;;
     20) livekit_runtime_ready ;;
     21) test_livekit_full_validation ;;
+    22) livekit_observability_ready ;;
     *) installation_step_probe_legacy "$1" ;;
   esac
 }
@@ -662,7 +818,7 @@ installation_status_report() {
   printf '%s\n' '----------------------------------------------------------------------------'
   printf '%-4s %-15s %-9s %s\n' 'No.' 'Actual' 'History' 'Component'
   printf '%s\n' '----------------------------------------------------------------------------'
-  for n in $(seq 1 21); do
+  for n in $(seq 1 22); do
     printf -v formatted '%02d' "$n"
     name="$(installation_step_name "$n")"
     if installation_step_probe "$n" >/dev/null 2>&1; then actual='INSTALLED'; installed+=("$formatted"); else actual='NOT INSTALLED'; missing+=("$formatted"); fi
@@ -672,15 +828,15 @@ installation_status_report() {
   printf '%s\n' '----------------------------------------------------------------------------'
   printf 'Installed     : %s\n' "${installed[*]:-none}"
   printf 'Not installed : %s\n' "${missing[*]:-none}"
-  printf 'Total         : %d/21\n' "${#installed[@]}"
+  printf 'Total         : %d/22\n' "${#installed[@]}"
 }
 
 run_all_install() {
   local n formatted
-  for n in $(seq 1 21); do
+  for n in $(seq 1 22); do
     if ! run_install_step "$n"; then printf -v formatted '%02d' "$n"; fail "اجرای زنجیره‌ای در مرحله ${formatted} متوقف شد."; return 1; fi
   done
-  ok "تمام ۲۱ مرحله نصب Spark + LiveKit با موفقیت اجرا شدند."
+  ok "تمام ۲۲ مرحله نصب Spark + LiveKit با موفقیت اجرا شدند."
 }
 
 test_full_validation() {
@@ -695,7 +851,14 @@ test_full_validation() {
   compose ps || return 1
   echo "== Scheduler =="
   test_schedulers || return 1
-  if [[ -f "$LIVEKIT_ENV" ]]; then echo "== LiveKit =="; test_livekit_full_validation || return 1; else echo "== Legacy TURN =="; test_turn || return 1; fi
+  if [[ -f "$LIVEKIT_ENV" ]]; then
+    echo "== LiveKit =="; test_livekit_full_validation || return 1
+    if [[ -f "${STEP_DIR}/22.ok" ]]; then
+      echo "== LiveKit Observability =="; livekit_observability_ready || return 1
+    fi
+  else
+    echo "== Legacy TURN =="; test_turn || return 1
+  fi
   echo "== DB / Studio exposure =="
   test_db_exposure || return 1
 }
@@ -708,6 +871,7 @@ create_backup() {
     [[ -f "$LIVEKIT_ENV" ]] && cp -a "$LIVEKIT_ENV" "${dest}/config/livekit/env"
     [[ -f "${LIVEKIT_ROOT}/docker-compose.yml" ]] && cp -a "${LIVEKIT_ROOT}/docker-compose.yml" "${dest}/config/livekit/docker-compose.yml"
     [[ -f "${LIVEKIT_ROOT}/docker-compose.spark-cli.yml" ]] && cp -a "${LIVEKIT_ROOT}/docker-compose.spark-cli.yml" "${dest}/config/livekit/docker-compose.spark-cli.yml"
+    [[ -d "${LIVEKIT_ROOT}/monitoring" ]] && cp -a "${LIVEKIT_ROOT}/monitoring" "${dest}/config/livekit/monitoring"
     [[ -f /etc/nginx/sites-available/spark-livekit ]] && cp -a /etc/nginx/sites-available/spark-livekit "${dest}/config/livekit/nginx-spark-livekit"
     chmod -R go-rwx "${dest}/config/livekit"
   fi
@@ -755,6 +919,6 @@ livekit_cleanup_internal() {
     [[ -n "$meet" ]] && certbot delete --cert-name "$meet" --non-interactive >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
     [[ -n "$ingress" ]] && certbot delete --cert-name "$ingress" --non-interactive >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
   fi
-  rm -f "${STEP_DIR}/19.ok" "${STEP_DIR}/20.ok" "${STEP_DIR}/21.ok"
+  rm -f "${STEP_DIR}/19.ok" "${STEP_DIR}/20.ok" "${STEP_DIR}/21.ok" "${STEP_DIR}/22.ok"
   if command -v nginx >/dev/null 2>&1 && nginx -t >>"${CURRENT_LOG:-/dev/null}" 2>&1; then systemctl reload nginx >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true; fi
 }
