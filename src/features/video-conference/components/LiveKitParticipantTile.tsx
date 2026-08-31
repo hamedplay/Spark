@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MicOff, UserRound } from 'lucide-react';
+import { MicOff, Pin, PinOff, UserRound } from 'lucide-react';
 import { Track } from 'livekit-client';
 
 type ParticipantLike = any;
@@ -13,7 +13,21 @@ function attachPublication(publication: any, element: HTMLMediaElement | null) {
   };
 }
 
-export function LiveKitParticipantTile({ participant, active, local = false }: { participant: ParticipantLike; active: boolean; local?: boolean }) {
+export function LiveKitParticipantTile({
+  participant,
+  active,
+  local = false,
+  featured = false,
+  pinned = false,
+  onTogglePin,
+}: {
+  participant: ParticipantLike;
+  active: boolean;
+  local?: boolean;
+  featured?: boolean;
+  pinned?: boolean;
+  onTogglePin?: () => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -27,7 +41,7 @@ export function LiveKitParticipantTile({ participant, active, local = false }: {
   useEffect(() => local ? undefined : attachPublication(microphonePublication, audioRef.current), [local, microphonePublication, microphonePublication?.track]);
 
   return (
-    <div className={`relative min-h-0 overflow-hidden rounded-2xl bg-slate-900 shadow-sm ring-2 transition ${active ? 'ring-emerald-400' : 'ring-transparent'}`}>
+    <div className={`relative min-h-0 overflow-hidden rounded-2xl bg-slate-900 shadow-sm ring-2 transition ${featured ? 'lg:col-span-2 lg:row-span-2' : ''} ${active ? 'ring-emerald-400' : pinned ? 'ring-sky-400' : 'ring-transparent'}`}>
       {cameraMuted ? (
         <div className="flex h-full min-h-[160px] items-center justify-center bg-slate-800 text-slate-300">
           <div className="flex flex-col items-center gap-3">
@@ -39,6 +53,17 @@ export function LiveKitParticipantTile({ participant, active, local = false }: {
         <video ref={videoRef} autoPlay playsInline muted={local} className="h-full min-h-[160px] w-full object-cover" />
       )}
       {!local && <audio ref={audioRef} autoPlay />}
+      {onTogglePin && (
+        <button
+          type="button"
+          onClick={onTogglePin}
+          className={`absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 ${pinned ? 'bg-sky-500 text-white' : 'bg-black/45 text-slate-200 hover:bg-black/70'}`}
+          aria-label={pinned ? 'برداشتن سنجاق' : 'سنجاق کردن تصویر'}
+          aria-pressed={pinned}
+        >
+          {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+        </button>
+      )}
       <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/75 to-transparent px-3 pb-2 pt-8 text-white">
         <span className="max-w-[75%] truncate text-xs font-semibold">{displayName}{local ? ' (شما)' : ''}</span>
         {microphoneMuted && <MicOff className="h-4 w-4" aria-label="میکروفون خاموش" />}
