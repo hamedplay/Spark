@@ -2,11 +2,16 @@ import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { AccessToken, RoomServiceClient, TrackSource } from "npm:livekit-server-sdk@2.18.0";
 
+const TOKEN_TTL_SECONDS = 120;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
+  "Cache-Control": "no-store, max-age=0",
+  "Pragma": "no-cache",
+  "X-Content-Type-Options": "nosniff",
 };
 
 const sourceMap: Record<string, TrackSource> = {
@@ -116,7 +121,11 @@ Deno.serve(async (req: Request) => {
       : reason === "room_full" ? 409
       : reason === "room_locked" ? 423
       : 403;
-    return json(status, { error: reason.toUpperCase(), reason });
+    return json(status, {
+      error: reason.toUpperCase(),
+      reason,
+      retryAfterSeconds: Number(join?.retry_after_seconds || 0) || undefined,
+    });
   }
 
   const { data: policyData, error: policyError } = await userClient.rpc(
@@ -155,7 +164,7 @@ Deno.serve(async (req: Request) => {
   const token = new AccessToken(livekitApiKey, livekitApiSecret, {
     identity: authUser.id,
     name: displayName,
-    ttl: "2m",
+    ttl: TOKEN_TTL_SECONDS,
     metadata: JSON.stringify({
       role,
       rbacRole: livekitPolicy.role,
@@ -187,6 +196,6 @@ Deno.serve(async (req: Request) => {
       publishSources: livekitPolicy.sourceNames,
     },
     maxParticipants,
-    expiresInSeconds: 120,
+    expiresInSeconds: TOKEN_TTL_SECONDS,
   });
 });
