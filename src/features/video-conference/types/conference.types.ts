@@ -333,6 +333,35 @@ export interface ConferencePresentationLaser {
   timestamp: number;
 }
 
+export type ConferenceMediaQualityProfile =
+  | 'AUTO'
+  | 'DATA_SAVER'
+  | 'BALANCED'
+  | 'HIGH';
+
+export type ConferenceCameraQuality =
+  | '180p'
+  | '360p'
+  | '540p'
+  | '720p'
+  | '1080p';
+
+export type ConferenceScreenShareQuality =
+  | '720p'
+  | '1080p';
+
+export interface ConferenceMediaQualitySettings {
+  profile: ConferenceMediaQualityProfile;
+  cameraQuality: ConferenceCameraQuality;
+  screenShareQuality: ConferenceScreenShareQuality;
+}
+
+export interface ConferenceMediaQualityController extends ConferenceMediaQualitySettings {
+  setProfile: (profile: ConferenceMediaQualityProfile) => void;
+  setCameraQuality: (quality: ConferenceCameraQuality) => void;
+  setScreenShareQuality: (quality: ConferenceScreenShareQuality) => void;
+}
+
 export type MeetingPhase =
   | 'SCHEDULED'
   | 'WAITING'
@@ -539,6 +568,7 @@ export interface ConferenceToolsProps {
   authorization: ConferenceAuthorization;
   phase: ConferencePhaseController;
   speakerTimer: ConferenceSpeakerTimerController;
+  mediaQuality: ConferenceMediaQualityController;
   onEnded: () => void;
 }
 
