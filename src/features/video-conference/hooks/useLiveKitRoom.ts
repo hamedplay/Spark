@@ -67,19 +67,19 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       }
 
       setRole(join.data.role);
-      const tokenCanPublishMic =
+      const canPublishMic =
         join.data.livekitPolicy.publishSources.includes('microphone');
-      const tokenCanPublishCamera =
+      const canPublishCamera =
         join.data.livekitPolicy.publishSources.includes('camera');
-      const tokenCanPublishScreen =
+      const canPublishScreen =
         join.data.livekitPolicy.publishSources.includes('screen_share');
 
-      setCanPublishMic(tokenCanPublishMic);
-      setCanPublishCamera(tokenCanPublishCamera);
-      setCanPublishScreen(tokenCanPublishScreen);
+      setCanPublishMic(canPublishMic);
+      setCanPublishCamera(canPublishCamera);
+      setCanPublishScreen(canPublishScreen);
 
-      if (!tokenCanPublishMic) setMicEnabled(false);
-      if (!tokenCanPublishCamera) setCameraEnabled(false);
+      if (!canPublishMic) setMicEnabled(false);
+      if (!canPublishCamera) setCameraEnabled(false);
 
       const mediaSettings = loadConferenceMediaQualitySettings();
       const nextRoom = new Room({
@@ -181,13 +181,13 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       await nextRoom.connect(join.data.serverUrl, join.data.token, { autoSubscribe: true });
       nextRoom.localParticipant.setName(currentUserName);
 
-      if (micEnabled && tokenCanPublishMic) {
+      if (micEnabled && canPublishMic) {
         await nextRoom.localParticipant.setMicrophoneEnabled(
           true,
           audioSettings?.deviceId ? { deviceId: audioSettings.deviceId } : undefined,
         );
       }
-      if (cameraEnabled && tokenCanPublishCamera) {
+      if (cameraEnabled && canPublishCamera) {
         await setConferenceCamera(
           nextRoom,
           true,
