@@ -76,9 +76,9 @@ export async function loadConferenceRoomState(client: ConferenceSupabaseClient, 
     .maybeSingle();
 
   const { data: recordingRows } = await client.from('conference_recordings')
-    .select('id,status,created_at')
+    .select('id,status,created_at,started_at,ended_at,duration_seconds,size_bytes,storage_path,provider_egress_id')
     .eq('room_id', roomId)
-    .in('status', ['queued', 'recording', 'processing'])
+    .in('status', ['queued', 'starting', 'recording', 'stopping', 'processing'])
     .order('created_at', { ascending: false })
     .limit(1);
 
