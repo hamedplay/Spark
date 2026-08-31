@@ -461,6 +461,8 @@ export interface ConferenceRoomShape {
   max_participants?: number;
   allow_reactions?: boolean;
   allow_screen_share?: boolean;
+  record_enabled?: boolean;
+  recording_consent_required?: boolean;
 }
 
 export interface WaitingRow {
@@ -550,10 +552,48 @@ export interface ParticipantRow {
   status: string;
 }
 
+export type ConferenceRecordingStatus =
+  | 'queued'
+  | 'starting'
+  | 'recording'
+  | 'stopping'
+  | 'processing'
+  | 'completed'
+  | 'failed';
+
 export interface RecordingRow {
   id: string;
-  status: string;
+  status: ConferenceRecordingStatus;
   created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  size_bytes: number | null;
+  storage_path: string | null;
+  provider_egress_id: string | null;
+}
+
+export type ConferenceRecordingConsentStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined';
+
+export interface ConferenceRecordingConsentState {
+  loaded: boolean;
+  required: boolean;
+  recordingEnabled: boolean;
+  myStatus: ConferenceRecordingConsentStatus;
+  accepted: boolean;
+  recordingActive: boolean;
+  policyVersion: number;
+  busy: boolean;
+  errorMessage: string;
+}
+
+export interface ConferenceRecordingConsentController
+  extends ConferenceRecordingConsentState {
+  refresh: () => Promise<void>;
+  setConsent: (accepted: boolean) => Promise<boolean>;
 }
 
 export interface SpeakerSessionRow {
@@ -625,6 +665,7 @@ export interface ConferenceToolsProps {
   speakerTimer: ConferenceSpeakerTimerController;
   mediaQuality: ConferenceMediaQualityController;
   networkDiagnostics: ConferenceNetworkDiagnosticsController;
+  recordingConsent: ConferenceRecordingConsentController;
   onEnded: () => void;
 }
 
