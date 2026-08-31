@@ -152,7 +152,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
 
         <div className="flex items-center gap-2">
           {!screenShareIdentity && (
-            <div className="hidden items-center gap-1 rounded-xl bg-slate-900 p-1 sm:flex">
+            <div className="flex items-center gap-1 rounded-xl bg-slate-900 p-1">
               <button
                 type="button"
                 onClick={() => setLayoutMode('grid')}
