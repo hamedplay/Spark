@@ -55,7 +55,8 @@ export function ParticipantGrid({
   );
 
   if (speakerMode && orderedParticipants.length > 0) {
-    const [focus, ...rest] = orderedParticipants;
+    const focus = orderedParticipants[0]!;
+    const rest = orderedParticipants.slice(1);
 
     return (
       <main className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2 sm:gap-3 sm:p-4">
