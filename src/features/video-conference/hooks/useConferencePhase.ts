@@ -8,6 +8,7 @@ import type {
   ConferencePhaseAction,
   ConferencePhasePolicy,
   ConferencePhaseSnapshot,
+  MeetingPhase,
 } from '../types/conference.types';
 
 const EMPTY_PHASE: ConferencePhaseSnapshot = {
@@ -27,6 +28,25 @@ interface Params {
   client: ConferenceSupabaseClient;
   roomId: string;
   currentUserId: string;
+}
+
+export function calculateConferencePhaseRemainingSeconds(
+  phaseEndsAt: string | null,
+  synchronizedNowMs: number,
+): number | null {
+  if (!phaseEndsAt) return null;
+  return Math.max(
+    0,
+    Math.ceil(
+      (new Date(phaseEndsAt).getTime() - synchronizedNowMs) / 1000,
+    ),
+  );
+}
+
+export function conferencePhaseHidesMedia(
+  phase: MeetingPhase,
+): boolean {
+  return phase === 'COUNTDOWN' || phase === 'RESUMING';
 }
 
 export function useConferencePhase({ client, roomId, currentUserId }: Params) {
@@ -67,20 +87,15 @@ export function useConferencePhase({ client, roomId, currentUserId }: Params) {
   }, []);
 
   const synchronizedNowMs = displayTick + serverOffsetMs;
-  const remainingSeconds = useMemo(() => {
-    if (!snapshot.phaseEndsAt) return null;
-    return Math.max(
-      0,
-      Math.ceil(
-        (new Date(snapshot.phaseEndsAt).getTime() - synchronizedNowMs) / 1000,
-      ),
-    );
-  }, [snapshot.phaseEndsAt, synchronizedNowMs]);
-
-  const mediaHidden = (
-    snapshot.currentPhase === 'COUNTDOWN'
-    || snapshot.currentPhase === 'RESUMING'
+  const remainingSeconds = useMemo(
+    () => calculateConferencePhaseRemainingSeconds(
+      snapshot.phaseEndsAt,
+      synchronizedNowMs,
+    ),
+    [snapshot.phaseEndsAt, synchronizedNowMs],
   );
+
+  const mediaHidden = conferencePhaseHidesMedia(snapshot.currentPhase);
 
   const runAction = useCallback(async (
     action: ConferencePhaseAction,
