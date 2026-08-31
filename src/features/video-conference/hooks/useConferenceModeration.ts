@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import { setConferenceParticipantRole } from '../services/conferenceAuthorization';
-import { runHostAction, setRaiseHand, setRecording } from '../services/conferenceApi';
+import { ConferenceRecordingActionError, runHostAction, setRaiseHand, setRecording } from '../services/conferenceApi';
 import { loadConferenceParticipants, loadConferenceRoomState } from '../services/conferenceRealtime';
 import { runConferenceSpeakerQueueAction } from '../services/conferenceSpeakerQueue';
 import type {
@@ -38,6 +38,7 @@ export function useConferenceModeration({
   const [raised, setRaised] = useState(false);
   const [locked, setLocked] = useState(false);
   const [recording, setRecordingState] = useState<RecordingRow | null>(null);
+  const [recordingError, setRecordingError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
 
   const refreshParticipants = useCallback(async () => {
@@ -189,11 +190,29 @@ export function useConferenceModeration({
 
   const toggleRecording = useCallback(async () => {
     setBusy('recording');
+    setRecordingError('');
     try {
       await setRecording(roomId, recording ? 'stop' : 'start', client);
       await refreshRoomState();
     } catch (error) {
       console.error('[VideoConference] recording action failed', error);
+      if (
+        error instanceof ConferenceRecordingActionError
+        && error.code === 'RECORDING_CONSENT_REQUIRED'
+      ) {
+        setRecordingError(
+          error.missingConsentCount > 0
+            ? `برای شروع ضبط، رضایت ${error.missingConsentCount} نفر از افراد حاضر هنوز ثبت نشده است.`
+            : 'برای شروع ضبط، رضایت همه افراد حاضر باید ثبت شود.',
+        );
+      } else if (
+        error instanceof ConferenceRecordingActionError
+        && error.code === 'RECORDING_DISABLED'
+      ) {
+        setRecordingError('ضبط برای این جلسه فعال نشده است.');
+      } else {
+        setRecordingError('عملیات ضبط انجام نشد. وضعیت Egress را دوباره بررسی کنید.');
+      }
     } finally {
       setBusy(null);
     }
@@ -204,6 +223,7 @@ export function useConferenceModeration({
     raised,
     locked,
     recording,
+    recordingError,
     busy,
     raisedParticipants,
     speakerQueue,
