@@ -1,7 +1,21 @@
 import type { ConnectionQuality, LocalParticipant, RemoteParticipant, Room } from 'livekit-client';
 
 export type ConferenceRole = 'host' | 'admin' | 'moderator' | 'member' | 'guest';
-export type HostAction = 'remove' | 'mute' | 'promote' | 'demote' | 'lock' | 'unlock' | 'end' | 'lower-hand';
+export type HostAction =
+  | 'remove'
+  | 'mute'
+  | 'promote'
+  | 'demote'
+  | 'disable-mic'
+  | 'enable-mic'
+  | 'disable-camera'
+  | 'enable-camera'
+  | 'disable-screen'
+  | 'enable-screen'
+  | 'lock'
+  | 'unlock'
+  | 'end'
+  | 'lower-hand';
 export type ConferenceUiState = 'joining' | 'waiting' | 'connected' | 'reconnecting' | 'failed';
 export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'polls' | 'whiteboard' | 'presentation' | 'participants' | 'devices' | 'diagnostics' | null;
 export type ConferenceParticipant = LocalParticipant | RemoteParticipant;
@@ -25,6 +39,7 @@ export const CONFERENCE_PERMISSIONS = [
   'DELETE_CHAT',
   'DISABLE_CAMERA',
   'DISABLE_MIC',
+  'DISABLE_SCREEN',
   'END_MEETING',
   'JOIN_ROOM',
   'LOCK_ROOM',
@@ -566,7 +581,12 @@ export interface ParticipantRow {
   is_hand_raised: boolean;
   hand_raised_at: string | null;
   status: string;
+  mic_publishing_disabled: boolean;
+  camera_publishing_disabled: boolean;
+  screen_publishing_disabled: boolean;
 }
+
+export type ConferenceLayoutMode = 'grid' | 'speaker';
 
 export type ConferenceRecordingStatus =
   | 'queued'
