@@ -26,6 +26,19 @@ livekit_observability_compose() {
   livekit_compose --profile observability "$@"
 }
 
+livekit_observability_service_state() {
+  local service="$1"
+  livekit_observability_compose ps --format json "$service" 2>/dev/null | python3 -c '
+import json,sys
+raw=sys.stdin.read().strip()
+if not raw: raise SystemExit(1)
+try: v=json.loads(raw)
+except json.JSONDecodeError: v=json.loads(raw.splitlines()[-1])
+if isinstance(v,list): v=v[0] if v else {}
+print(str(v.get("State","")).lower()+("/"+str(v.get("Health","")).lower() if v.get("Health") else ""))
+'
+}
+
 livekit_env_value() {
   env_get "$LIVEKIT_ENV" "$1"
 }
@@ -360,7 +373,7 @@ print(str(v.get("State","")).lower()+("/"+str(v.get("Health","")).lower() if v.g
 livekit_runtime_ready() {
   local service state
   for service in minio redis livekit egress ingress; do
-    state="$(livekit_service_state "$service" 2>/dev/null || true)"
+    state="$(livekit_observability_service_state "$service" 2>/dev/null || true)"
     [[ "$state" == running* ]] || return 1
     [[ "$state" != *unhealthy* && "$state" != *restarting* ]] || return 1
   done
@@ -671,7 +684,7 @@ livekit_observability_ready() {
 
   local result
   result="$(curl -fsSG --connect-timeout 3     --data-urlencode 'query=min(up{job=~"livekit|livekit-egress|livekit-ingress|node|blackbox-exporter|alloy|loki"})'     http://127.0.0.1:9090/api/v1/query)" || return 1
-  python3 - <<'PY' <<<"$result"
+  python3 -c '
 import json,sys
 payload=json.load(sys.stdin)
 if payload.get("status")!="success":
@@ -679,7 +692,7 @@ if payload.get("status")!="success":
 items=payload.get("data",{}).get("result",[])
 if not items or float(items[0].get("value",[0,"0"])[1]) < 1:
     raise SystemExit(1)
-PY
+' <<<"$result"
 }
 
 livekit_report_observability_failure() {
