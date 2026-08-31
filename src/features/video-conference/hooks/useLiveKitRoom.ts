@@ -535,11 +535,7 @@ export function useLiveKitRoom({
 
     setReactionError('');
     try {
-      const event = await publishConferenceReaction(
-        client,
-        roomId,
-        reaction,
-      );
+      const event = await publishConferenceReaction(client, roomId, reaction);
       showReaction(event);
     } catch (error) {
       console.error(
