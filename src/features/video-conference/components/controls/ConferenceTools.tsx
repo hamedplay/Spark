@@ -27,6 +27,7 @@ export function ConferenceTools({
   authorization,
   phase,
   speakerTimer,
+  mediaQuality,
   onEnded,
 }: ConferenceToolsProps) {
   const client = useConferenceClient();
@@ -253,7 +254,13 @@ export function ConferenceTools({
               selectedMic={devices.selectedMic}
               selectedCamera={devices.selectedCamera}
               selectedSpeaker={devices.selectedSpeaker}
+              mediaProfile={mediaQuality.profile}
+              cameraQuality={mediaQuality.cameraQuality}
+              screenShareQuality={mediaQuality.screenShareQuality}
               onSwitchDevice={devices.switchDevice}
+              onMediaProfileChange={mediaQuality.setProfile}
+              onCameraQualityChange={mediaQuality.setCameraQuality}
+              onScreenShareQualityChange={mediaQuality.setScreenShareQuality}
             />
           )}
         </aside>
