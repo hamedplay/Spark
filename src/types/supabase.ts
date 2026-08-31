@@ -1954,6 +1954,9 @@ export type Database = {
           is_video_off: boolean;
           is_hand_raised: boolean;
           is_screen_sharing: boolean;
+          mic_publishing_disabled: boolean;
+          camera_publishing_disabled: boolean;
+          screen_publishing_disabled: boolean;
           speaking_seconds: number | null;
           network_quality: number | null;
           last_seen: string | null;
@@ -1974,6 +1977,9 @@ export type Database = {
           is_video_off?: boolean;
           is_hand_raised?: boolean;
           is_screen_sharing?: boolean;
+          mic_publishing_disabled?: boolean;
+          camera_publishing_disabled?: boolean;
+          screen_publishing_disabled?: boolean;
           speaking_seconds?: number | null;
           network_quality?: number | null;
           last_seen?: string | null;
@@ -1994,6 +2000,9 @@ export type Database = {
           is_video_off?: boolean;
           is_hand_raised?: boolean;
           is_screen_sharing?: boolean;
+          mic_publishing_disabled?: boolean;
+          camera_publishing_disabled?: boolean;
+          screen_publishing_disabled?: boolean;
           speaking_seconds?: number | null;
           network_quality?: number | null;
           last_seen?: string | null;
@@ -3609,7 +3618,25 @@ export type Database = {
           is_hand_raised: boolean;
           hand_raised_at: string | null;
           status: string;
+          mic_publishing_disabled: boolean;
+          camera_publishing_disabled: boolean;
+          screen_publishing_disabled: boolean;
         }[];
+      };
+      set_livekit_participant_media_permission: {
+        Args: {
+          p_room_id: string;
+          p_target_user_id: string;
+          p_source: 'microphone' | 'camera' | 'screen_share';
+          p_disabled: boolean;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          source?: 'microphone' | 'camera' | 'screen_share';
+          disabled?: boolean;
+          livekit_policy?: unknown;
+        };
       };
       set_conference_participant_role: {
         Args: { p_room_id: string; p_target_user_id: string; p_role: string };
