@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Camera, CameraOff, LogOut, Mic, MicOff, MonitorUp } from 'lucide-react';
+import { Camera, CameraOff, LogOut, Mic, MicOff, MonitorUp, Volume2, VolumeX } from 'lucide-react';
 
 const REACTION_OPTIONS = ['👍', '❤️', '😂', '🎉', '👏', '😮'] as const;
 
@@ -7,6 +7,7 @@ interface Props {
   micEnabled: boolean;
   cameraEnabled: boolean;
   screenEnabled: boolean;
+  speakerMuted: boolean;
   allowMicrophone: boolean;
   allowCamera: boolean;
   allowScreenShare: boolean;
@@ -15,6 +16,7 @@ interface Props {
   onToggleMic: () => void;
   onToggleCamera: () => void;
   onToggleScreen: () => void;
+  onToggleSpeaker: () => void;
   onReaction: (reaction: string) => void;
   onLeave: () => void;
 }
@@ -23,6 +25,7 @@ export function RoomMediaControls({
   micEnabled,
   cameraEnabled,
   screenEnabled,
+  speakerMuted,
   allowMicrophone,
   allowCamera,
   allowScreenShare,
@@ -31,6 +34,7 @@ export function RoomMediaControls({
   onToggleMic,
   onToggleCamera,
   onToggleScreen,
+  onToggleSpeaker,
   onReaction,
   onLeave,
 }: Props) {
@@ -54,7 +58,25 @@ export function RoomMediaControls({
 
       {allowMicrophone && <button aria-label={micEnabled ? 'قطع میکروفون' : 'فعال کردن میکروفون'} onClick={onToggleMic} className={`flex h-12 w-12 items-center justify-center rounded-full ${micEnabled ? 'bg-slate-700' : 'bg-rose-600'}`}>{micEnabled ? <Mic /> : <MicOff />}</button>}
       {allowCamera && <button aria-label={cameraEnabled ? 'خاموش کردن دوربین' : 'فعال کردن دوربین'} onClick={onToggleCamera} className={`flex h-12 w-12 items-center justify-center rounded-full ${cameraEnabled ? 'bg-slate-700' : 'bg-rose-600'}`}>{cameraEnabled ? <Camera /> : <CameraOff />}</button>}
-      {allowScreenShare && <button aria-label="اشتراک صفحه" onClick={onToggleScreen} className={`hidden h-12 w-12 items-center justify-center rounded-full sm:flex ${screenEnabled ? 'bg-violet-600' : 'bg-slate-700'}`}><MonitorUp /></button>}
+      {allowScreenShare && (
+        <button
+          aria-label={screenEnabled ? 'توقف اشتراک صفحه' : 'اشتراک صفحه'}
+          onClick={onToggleScreen}
+          className={`flex h-12 w-12 items-center justify-center rounded-full ${screenEnabled ? 'bg-violet-600' : 'bg-slate-700'}`}
+        >
+          <MonitorUp />
+        </button>
+      )}
+
+      <button
+        type="button"
+        aria-label={speakerMuted ? 'فعال کردن صدای جلسه' : 'بی‌صدا کردن صدای جلسه'}
+        aria-pressed={speakerMuted}
+        onClick={onToggleSpeaker}
+        className={`flex h-12 w-12 items-center justify-center rounded-full ${speakerMuted ? 'bg-amber-600' : 'bg-slate-700'}`}
+      >
+        {speakerMuted ? <VolumeX /> : <Volume2 />}
+      </button>
 
       {allowReactions && (
         <div className="relative">
