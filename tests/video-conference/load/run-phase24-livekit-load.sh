@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for key in PHASE24_LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET; do
-  [[ -n "${!key:-}" ]] || {
-    echo "Missing required environment variable: ${key}" >&2
-    exit 2
-  }
-done
+dry_run="${PHASE24_LOAD_DRY_RUN:-0}"
+
+if [[ "$dry_run" != "1" ]]; then
+  for key in PHASE24_LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET; do
+    [[ -n "${!key:-}" ]] || {
+      echo "Missing required environment variable: ${key}" >&2
+      exit 2
+    }
+  done
+fi
 
 version="${PHASE24_LK_VERSION:-2.18.4}"
 duration="${PHASE24_LOAD_DURATION:-2m}"
@@ -68,6 +72,19 @@ grep -q "$version" <<<"$actual_version" || {
   echo "Unexpected LiveKit CLI version: $actual_version" >&2
   exit 2
 }
+
+if [[ "$dry_run" == "1" ]]; then
+  help="$("$lk_bin" perf load-test --help)"
+  for flag in     --video-publishers     --audio-publishers     --subscribers     --duration     --layout     --num-per-second     --simulate-speakers; do
+    grep -q -- "$flag" <<<"$help" || {
+      echo "Missing expected lk load-test flag: $flag" >&2
+      exit 2
+    }
+  done
+  echo "PASS LiveKit CLI v${version} load-test interface verified"
+  echo "PASS planned participant count: max(10 video,10 audio)+10 subscribers=20"
+  exit 0
+fi
 
 export HOME="$tmp/home"
 mkdir -p "$HOME/.livekit"
