@@ -121,8 +121,11 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 21. Audio/video controls keep local media preferences separate from server authorization. Participants can toggle microphone/camera/screen share, locally mute remote audio, select supported microphone/camera/speaker devices, cycle cameras, switch Grid/Speaker layout, pin locally, and use fullscreen/Picture-in-Picture/zoom. Screen share is rendered with display priority without discarding the participant strip.
 22. Host media moderation distinguishes `mute current microphone track` from `revoke publish permission`. Temporary mute uses LiveKit `MutePublishedTrack` only for the microphone source. Persistent microphone/camera/screen restrictions are stored in `conference_participants`, included in every generated LiveKit publish policy, and immediately synchronized with `UpdateParticipant`, so reconnect/token refresh cannot restore a revoked source.
 23. Pin and Spotlight are intentionally separate. Pin is a client-local preference only and is never written to PostgreSQL or Realtime. Spotlight is Host-controlled shared room state stored in `conference_spotlights`, supports multiple participants, is read-only to authenticated joined clients, synchronizes through Postgres Realtime, and is automatically removed when a spotlighted participant leaves. The legacy `conference_rooms.pinned_user_id` field is not used by the LiveKit SFU Pin/Spotlight path.
-24. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-25. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+24. Conference API boundaries fail closed unless the current Supabase session has `FULL` authorization. Direct Data API insertion into `conference_participants` is disabled, LiveKit publish-restriction columns are server-authoritative, and legacy direct chat inserts are guarded in PostgreSQL with canonical identity, authorization, rate limits and attachment validation. Anonymous access to legacy `conference_signals` and `conference_reactions` is disabled.
+25. Conference chat attachments use a private bucket with a 5 MiB server limit and an exact JPEG/PNG/WebP/GIF MIME allowlist. Conference paths are scoped to `conf-chat/<room>/<user>/...`, require FULL authorization, joined-room membership and `SEND_CHAT`, and attached messages must reference an owned storage object. Presentation and whiteboard buckets remain private and enforce their own server-side size/MIME/path policies.
+26. LiveKit access tokens are generated only in the server-side token Edge Function, scoped to the authenticated identity and one room, have a 2-minute TTL, derive publish sources from PostgreSQL authorization and never grant `roomAdmin`. LiveKit webhooks verify the signed raw body with `WebhookReceiver` and require an event ID before idempotent state mutation.
+27. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+28. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 
@@ -148,6 +151,16 @@ Before production cutover validate all of the following from real client network
 - Host Spotlight changes are visible to every joined participant through `conference_spotlights` Realtime updates
 - multiple Spotlight participants can coexist; display priority is Screen Share → Spotlight → local Pin → Active Speaker
 - duplicate Spotlight add/remove requests are idempotent and leaving a room removes stale Spotlight state
+- a RESTRICTED/expired application session cannot resolve, join, authorize or manage a Conference room
+- direct Data API participant insertion is denied; client updates cannot clear microphone/camera/screen publish restrictions
+- legacy mesh media-state updates remain limited to local mute/video/hand fields
+- anonymous clients cannot read or write legacy conference signaling/reaction tables
+- server-managed Conference audit, attendance, phase, speaker and message-index tables are not directly writable by authenticated clients
+- legacy direct chat cannot bypass backend room authorization, canonical sender identity or chat rate limits
+- conference chat attachment upload/read is room-scoped, FULL-auth gated and limited to the bucket MIME/size policy
+- a message cannot attach another user's Conference storage object or a fake/nonexistent Conference attachment path
+- LiveKit webhook requests with an invalid signature or missing event ID are rejected
+- LiveKit tokens remain identity-scoped, room-scoped, DB-permission-derived, non-admin and two minutes or shorter
 - participant video supports fullscreen, Picture-in-Picture where the browser supports it, and local zoom
 - simultaneous waiting-room admit/reject actions resolve only once and cannot overwrite the first decision
 - admit-all preserves request order and never reserves more than the 20-participant room capacity
