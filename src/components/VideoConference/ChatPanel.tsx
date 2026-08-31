@@ -22,6 +22,13 @@ interface TypingUser { userId: string; name: string; ts: number; }
 // How far from the bottom (px) counts as "near bottom"
 const SCROLL_THRESHOLD = 80;
 
+const CHAT_IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+
 export function ChatPanel({
   roomId, currentUserId, currentUserName,
   messages, chatEnabled, canToggleChat, onToggleChat, sendSignal, onOwnMessage,
@@ -188,21 +195,20 @@ export function ChatPanel({
     (e.target as HTMLInputElement).value = '';
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      toast.error('فقط فایل‌های تصویری مجاز هستند');
+    const ext = CHAT_IMAGE_EXTENSIONS[file.type];
+    if (!ext) {
+      toast.error('فقط JPG، PNG، WebP و GIF مجاز هستند');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('حجم تصویر نباید بیشتر از ۵ مگابایت باشد');
+    if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
+      toast.error('حجم تصویر باید بین ۱ بایت تا ۵ مگابایت باشد');
       return;
     }
 
-    // TODO (security): server-side MIME validation, magic-bytes check, and
-    // restricted bucket policy should be configured in Supabase Storage settings
-    // to prevent MIME-sniffing bypasses and limit public exposure.
+    // Storage bucket MIME/size limits and Phase 20 scoped RLS remain
+    // authoritative; this client allowlist only prevents avoidable uploads.
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop() || 'jpg';
       const path = `conf-chat/${roomId}/${currentUserId}/${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from('chat-attachments')
