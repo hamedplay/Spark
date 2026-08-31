@@ -221,7 +221,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=\"livekit\"}[5m])) * 100"
+          "expr": "sum(rate(process_cpu_seconds_total{job=\"livekit\"}[5m])) * 100"
         }
       ],
       "options": {
@@ -268,7 +268,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(container_memory_working_set_bytes{container_label_com_docker_compose_service=\"livekit\"})"
+          "expr": "sum(process_resident_memory_bytes{job=\"livekit\"})"
         }
       ],
       "options": {
