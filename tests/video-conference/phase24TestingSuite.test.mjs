@@ -267,6 +267,8 @@ test('load test is isolated to dedicated test rooms and enforces quality gates',
 });
 
 test('load test pins LiveKit CLI release and verifies its checksum', () => {
+  assert.match(load, /PHASE24_LOAD_DRY_RUN/);
+  assert.match(load, /planned participant count: max\(10 video,10 audio\)\+10 subscribers=20/);
   assert.match(load, /PHASE24_LK_VERSION:-2\.18\.4/);
   assert.match(
     load,
