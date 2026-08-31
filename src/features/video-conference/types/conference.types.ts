@@ -54,6 +54,7 @@ export const CONFERENCE_PERMISSIONS = [
   'MANAGE_WHITEBOARD',
   'MUTE_OTHERS',
   'PIN_PARTICIPANT',
+  'SPOTLIGHT_PARTICIPANT',
   'PUBLISH_CAMERA',
   'PUBLISH_MIC',
   'PUBLISH_SCREEN',
@@ -588,6 +589,30 @@ export interface ParticipantRow {
 
 export type ConferenceLayoutMode = 'grid' | 'speaker';
 
+export interface ConferenceSpotlightItem {
+  id: string;
+  userId: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ConferenceSpotlightSnapshot {
+  loaded: boolean;
+  serverTime: string;
+  canManage: boolean;
+  items: ConferenceSpotlightItem[];
+}
+
+export interface ConferenceSpotlightController
+  extends ConferenceSpotlightSnapshot {
+  spotlightedUserIds: string[];
+  busy: string | null;
+  errorMessage: string;
+  refresh: () => Promise<void>;
+  toggle: (userId: string) => Promise<boolean>;
+  clear: () => Promise<boolean>;
+}
+
 export type ConferenceRecordingStatus =
   | 'queued'
   | 'starting'
@@ -702,6 +727,7 @@ export interface ConferenceToolsProps {
   mediaQuality: ConferenceMediaQualityController;
   networkDiagnostics: ConferenceNetworkDiagnosticsController;
   recordingConsent: ConferenceRecordingConsentController;
+  spotlight: ConferenceSpotlightController;
   onEnded: () => void;
 }
 
