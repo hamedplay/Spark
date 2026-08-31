@@ -8,6 +8,9 @@ const read = (path) =>
 const migration = read(
   'supabase/migrations/20260831075550_video_conference_phase20_security_hardening.sql',
 );
+const runtimeBoundaryMigration = read(
+  'supabase/migrations/20260831080056_video_conference_phase20_runtime_config_boundary.sql',
+);
 const tokenEdge = read(
   'supabase/functions/conference-livekit-token/index.ts',
 );
@@ -274,6 +277,25 @@ test('legacy chat client mirrors the authoritative bucket MIME and size allowlis
   assert.match(legacyChat, /5 \* 1024 \* 1024/);
   assert.doesNotMatch(legacyChat, /file\.type\.startsWith\('image\/'\)/);
   assert.doesNotMatch(legacyChat, /file\.name\.split\('\.'\)/);
+});
+
+test('public runtime config is invoker-only while privileged reads stay private', () => {
+  assert.match(
+    runtimeBoundaryMigration,
+    /create or replace function private\.get_video_conference_runtime_config_v1\(\)[\s\S]*security definer/i,
+  );
+  assert.match(
+    runtimeBoundaryMigration,
+    /create or replace function public\.get_video_conference_runtime_config\(\)[\s\S]*security invoker/i,
+  );
+  assert.match(
+    runtimeBoundaryMigration,
+    /private\.conference_api_session_is_full\(\)/,
+  );
+  assert.match(
+    runtimeBoundaryMigration,
+    /revoke all[\s\S]*public\.get_video_conference_runtime_config\(\)[\s\S]*from public,anon/i,
+  );
 });
 
 test('LiveKit token issuance is server-side, scoped and short lived', () => {
