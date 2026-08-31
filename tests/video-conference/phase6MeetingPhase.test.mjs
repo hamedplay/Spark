@@ -71,13 +71,14 @@ test('countdown is server authoritative and restricts camera and microphone', ()
   assert.match(migration, /'1 second'/);
   assert.match(migration, /advance_conference_phase_timers/);
   assert.match(phaseHook, /serverOffsetMs/);
-  assert.match(phaseHook, /new Date\(snapshot\.phaseEndsAt\)/);
+  assert.match(phaseHook, /new Date\(phaseEndsAt\)/);
+  assert.match(phaseHook, /calculateConferencePhaseRemainingSeconds\([\s\S]*snapshot\.phaseEndsAt/);
   assert.doesNotMatch(phaseHook, /\.from\(['"]conference_rooms['"]\)\.update/);
 });
 
 test('countdown and resuming remove participant media DOM while the overlay is fullscreen', () => {
-  assert.match(phaseHook, /snapshot\.currentPhase === 'COUNTDOWN'/);
-  assert.match(phaseHook, /snapshot\.currentPhase === 'RESUMING'/);
+  assert.match(phaseHook, /conferencePhaseHidesMedia\([\s\S]*phase === 'COUNTDOWN'[\s\S]*phase === 'RESUMING'/);
+  assert.match(phaseHook, /mediaHidden = conferencePhaseHidesMedia\(snapshot\.currentPhase\)/);
   assert.match(roomPage, /!phase\.mediaHidden[\s\S]*<ParticipantGrid/);
   assert.match(overlay, /phase === 'COUNTDOWN'/);
   assert.match(overlay, /absolute inset-0 z-50/);
