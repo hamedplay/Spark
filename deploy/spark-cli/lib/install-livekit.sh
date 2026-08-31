@@ -1,5 +1,5 @@
 # LiveKit installation / lifecycle module for Spark Server Manager.
-# Loaded after the core platform modules. It adds install steps 19-21 and
+# Loaded after the core platform modules. It adds install steps 19-22 and
 # operational actions without changing the existing Supabase deployment model.
 
 LIVEKIT_ROOT="${LIVEKIT_ROOT:-/opt/spark-livekit}"
@@ -12,6 +12,7 @@ LIVEKIT_RTC_MAX_PORT="60000"
 LIVEKIT_TURN_UDP_PORT="443"
 LIVEKIT_TURN_TLS_PORT="5349"
 LIVEKIT_ICE_TCP_PORT="7881"
+LIVEKIT_INTERNAL_API_PORT="7880"
 LIVEKIT_RTMP_PORT="1935"
 LIVEKIT_WHIP_UDP_PORT="7885"
 
@@ -289,6 +290,7 @@ install_step_19() {
   env_set "$LIVEKIT_ENV" LIVEKIT_INGRESS_DOMAIN "ingress.${APP_DOMAIN}"
 
   env_set "$LIVEKIT_ENV" LIVEKIT_WEBHOOK_URL "https://${API_DOMAIN}/functions/v1/livekit-webhook"
+  [[ -n "$(livekit_env_value LIVEKIT_REDIS_ADDRESS)" ]] || env_set "$LIVEKIT_ENV" LIVEKIT_REDIS_ADDRESS "127.0.0.1:6379"
   livekit_ensure_secret LIVEKIT_API_KEY "printf 'LK%s' \"\$(openssl rand -hex 12)\""
   livekit_ensure_secret LIVEKIT_API_SECRET "openssl rand -hex 32"
   livekit_configure_local_recording_storage || return 1
@@ -347,6 +349,9 @@ EOF
 }
 
 livekit_firewall_rules() {
+  # Signaling/API is reached only through the TLS reverse proxy. Keep the
+  # plaintext internal API explicitly closed to remote clients.
+  ufw deny "${LIVEKIT_INTERNAL_API_PORT}/tcp"
   ufw allow 80/tcp
   ufw allow 443/tcp
   ufw allow "${LIVEKIT_TURN_UDP_PORT}/udp"
@@ -544,6 +549,24 @@ livekit_secret_leak_probe() {
   fi
 }
 
+livekit_internal_api_exposure_probe() {
+  local ufw_status
+  ufw_status="$(ufw status verbose 2>/dev/null || true)"
+  grep -q 'Status: active' <<<"$ufw_status" || return 1
+  grep -Eq 'Default: deny \(incoming\)' <<<"$ufw_status" || return 1
+  grep -Eq "^(${LIVEKIT_INTERNAL_API_PORT}/tcp|\${LIVEKIT_INTERNAL_API_PORT})[[:space:]]+DENY" <<<"$ufw_status" || return 1
+  ! grep -Eq "^(${LIVEKIT_INTERNAL_API_PORT}/tcp|\${LIVEKIT_INTERNAL_API_PORT})[[:space:]]+ALLOW" <<<"$ufw_status" || return 1
+
+  # The reverse proxy must still reach the internal API locally.
+  curl -fsS --connect-timeout 3 "http://127.0.0.1:${LIVEKIT_INTERNAL_API_PORT}/" >/dev/null || return 1
+}
+
+livekit_secret_file_permissions_probe() {
+  [[ "$(stat -c '%a' "$LIVEKIT_ENV")" == "600" ]] || return 1
+  [[ "$(stat -c '%a' "${LIVEKIT_TURN_CERT_DIR}/fullchain.pem")" == "600" ]] || return 1
+  [[ "$(stat -c '%a' "${LIVEKIT_TURN_CERT_DIR}/privkey.pem")" == "600" ]] || return 1
+}
+
 test_livekit_full_validation() {
   test_livekit_config || return 1
   if ! livekit_runtime_ready; then
@@ -586,6 +609,8 @@ test_livekit_full_validation() {
   livekit_function_unauthorized_probe conference-presentation-control || return 1
   livekit_function_unauthorized_probe livekit-webhook || return 1
   livekit_secret_leak_probe || return 1
+  livekit_secret_file_permissions_probe || return 1
+  livekit_internal_api_exposure_probe || return 1
   ! systemctl is-active --quiet coturn 2>/dev/null || return 1
 
   local ufw_status
@@ -907,6 +932,7 @@ create_backup() {
 livekit_cleanup_firewall_internal() {
   ufw status 2>/dev/null | grep -q 'Status: active' || return 0
   set +e
+  ufw --force delete deny 7880/tcp >/dev/null 2>&1
   ufw --force delete allow 443/udp >/dev/null 2>&1
   ufw --force delete allow 7881/tcp >/dev/null 2>&1
   ufw --force delete allow 50000:60000/udp >/dev/null 2>&1
