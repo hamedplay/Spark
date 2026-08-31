@@ -38,6 +38,7 @@ export interface ConferenceRoom {
   allow_chat: boolean;
   chat_enabled: boolean;
   record_enabled: boolean;
+  recording_consent_required?: boolean;
   speaking_limit_enabled: boolean;
   require_approval: boolean;
   meeting_id: string | null;
