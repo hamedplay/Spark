@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { Hand, MicOff, UserMinus } from 'lucide-react';
+import { Camera, CameraOff, Hand, Mic, MicOff, MonitorUp, MonitorX, UserMinus } from 'lucide-react';
 import type {
   ConferencePhaseController,
   ConferenceRbacRole,
@@ -20,6 +20,9 @@ interface Props {
   currentUserId: string;
   phase: ConferencePhaseController;
   canMuteOthers: boolean;
+  canDisableMic: boolean;
+  canDisableCamera: boolean;
+  canDisableScreen: boolean;
   canRemoveParticipants: boolean;
   canManageRoles: boolean;
   canManageTimer: boolean;
@@ -46,6 +49,9 @@ export function ConferenceParticipantsPanel({
   currentUserId,
   phase,
   canMuteOthers,
+  canDisableMic,
+  canDisableCamera,
+  canDisableScreen,
   canRemoveParticipants,
   canManageRoles,
   canManageTimer,
@@ -93,8 +99,6 @@ export function ConferenceParticipantsPanel({
 
               {canTarget && (
                 <div className="flex shrink-0 items-center gap-1">
-                  {canMuteOthers && <button onClick={() => void onHostAction('mute', participant.user_id)} className="h-9 rounded-lg bg-slate-800 px-2 text-[10px]">قطع صدا</button>}
-                  {canMuteOthers && participant.is_hand_raised && <button onClick={() => void onHostAction('lower-hand', participant.user_id)} className="h-9 rounded-lg bg-slate-800 px-2 text-[10px]">پایین دست</button>}
                   {canManageRoles && (
                     <select
                       value={participant.role}
@@ -102,13 +106,139 @@ export function ConferenceParticipantsPanel({
                       className="h-9 rounded-lg border border-white/10 bg-slate-800 px-2 text-[10px]"
                       aria-label="نقش شرکت‌کننده"
                     >
-                      {ASSIGNABLE_CONFERENCE_ROLES.map((role) => <option key={role} value={role}>{conferenceRoleLabel(role)}</option>)}
+                      {ASSIGNABLE_CONFERENCE_ROLES.map((role) => (
+                        <option key={role} value={role}>
+                          {conferenceRoleLabel(role)}
+                        </option>
+                      ))}
                     </select>
                   )}
-                  {canRemoveParticipants && <button onClick={() => void onHostAction('remove', participant.user_id)} className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-700" aria-label="حذف شرکت‌کننده"><UserMinus className="h-4 w-4" /></button>}
+                  {canRemoveParticipants && (
+                    <button
+                      onClick={() => void onHostAction('remove', participant.user_id)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-700"
+                      aria-label="حذف شرکت‌کننده"
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
+
+            {canTarget && (
+              canMuteOthers
+              || canDisableMic
+              || canDisableCamera
+              || canDisableScreen
+            ) && (
+              <div className="mt-2 flex flex-wrap gap-1.5 border-t border-white/5 pt-2">
+                {canMuteOthers && (
+                  <button
+                    type="button"
+                    disabled={timerBusy !== null}
+                    onClick={() => void onHostAction('mute', participant.user_id)}
+                    className="flex min-h-9 items-center gap-1 rounded-lg bg-slate-800 px-2 text-[10px] disabled:opacity-50"
+                    title="فقط Track میکروفون فعلی را mute می‌کند؛ مجوز انتشار را تغییر نمی‌دهد."
+                  >
+                    <MicOff className="h-3.5 w-3.5" />
+                    Mute فعلی
+                  </button>
+                )}
+
+                {canDisableMic && (
+                  <button
+                    type="button"
+                    disabled={timerBusy !== null}
+                    onClick={() => void onHostAction(
+                      participant.mic_publishing_disabled
+                        ? 'enable-mic'
+                        : 'disable-mic',
+                      participant.user_id,
+                    )}
+                    className={
+                      "flex min-h-9 items-center gap-1 rounded-lg px-2 text-[10px] disabled:opacity-50 "
+                      + (participant.mic_publishing_disabled
+                        ? "bg-rose-900/60 text-rose-100"
+                        : "bg-slate-800")
+                    }
+                  >
+                    {participant.mic_publishing_disabled
+                      ? <MicOff className="h-3.5 w-3.5" />
+                      : <Mic className="h-3.5 w-3.5" />}
+                    {participant.mic_publishing_disabled
+                      ? 'میکروفون ممنوع'
+                      : 'بستن میکروفون'}
+                  </button>
+                )}
+
+                {canDisableCamera && (
+                  <button
+                    type="button"
+                    disabled={timerBusy !== null}
+                    onClick={() => void onHostAction(
+                      participant.camera_publishing_disabled
+                        ? 'enable-camera'
+                        : 'disable-camera',
+                      participant.user_id,
+                    )}
+                    className={
+                      "flex min-h-9 items-center gap-1 rounded-lg px-2 text-[10px] disabled:opacity-50 "
+                      + (participant.camera_publishing_disabled
+                        ? "bg-rose-900/60 text-rose-100"
+                        : "bg-slate-800")
+                    }
+                  >
+                    {participant.camera_publishing_disabled
+                      ? <CameraOff className="h-3.5 w-3.5" />
+                      : <Camera className="h-3.5 w-3.5" />}
+                    {participant.camera_publishing_disabled
+                      ? 'دوربین ممنوع'
+                      : 'بستن دوربین'}
+                  </button>
+                )}
+
+                {canDisableScreen && (
+                  <button
+                    type="button"
+                    disabled={timerBusy !== null}
+                    onClick={() => void onHostAction(
+                      participant.screen_publishing_disabled
+                        ? 'enable-screen'
+                        : 'disable-screen',
+                      participant.user_id,
+                    )}
+                    className={
+                      "flex min-h-9 items-center gap-1 rounded-lg px-2 text-[10px] disabled:opacity-50 "
+                      + (participant.screen_publishing_disabled
+                        ? "bg-rose-900/60 text-rose-100"
+                        : "bg-slate-800")
+                    }
+                  >
+                    {participant.screen_publishing_disabled
+                      ? <MonitorX className="h-3.5 w-3.5" />
+                      : <MonitorUp className="h-3.5 w-3.5" />}
+                    {participant.screen_publishing_disabled
+                      ? 'اشتراک صفحه ممنوع'
+                      : 'بستن اشتراک صفحه'}
+                  </button>
+                )}
+
+                {canMuteOthers && participant.is_hand_raised && (
+                  <button
+                    type="button"
+                    disabled={timerBusy !== null}
+                    onClick={() => void onHostAction(
+                      'lower-hand',
+                      participant.user_id,
+                    )}
+                    className="min-h-9 rounded-lg bg-slate-800 px-2 text-[10px] disabled:opacity-50"
+                  >
+                    پایین دست
+                  </button>
+                )}
+              </div>
+            )}
 
             {canTimeSpeaker && (
               <SpeakerTimerControl
