@@ -3644,6 +3644,46 @@ export type Database = {
           retry_after_ms?: number;
         };
       };
+      get_conference_presentation_snapshot: {
+        Args: { p_room_id: string };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          serverTime?: string;
+          canUpload?: boolean;
+          canManage?: boolean;
+          canAnnotate?: boolean;
+          annotatorUserIds?: string[];
+          state?: unknown;
+          presentations?: unknown[];
+        };
+      };
+      get_conference_presentation_annotation_snapshot: {
+        Args: {
+          p_room_id: string;
+          p_presentation_id: string;
+          p_page_number: number;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+          canAnnotate?: boolean;
+          revision?: number;
+          snapshot?: unknown;
+          updatedAt?: string | null;
+        };
+      };
+      authorize_conference_presentation_action: {
+        Args: {
+          p_room_id: string;
+          p_action: string;
+          p_presentation_id?: string | null;
+        };
+        Returns: {
+          ok: boolean;
+          reason?: string;
+        };
+      };
       get_conference_whiteboard_snapshot_v2: {
         Args: {
           p_room_id: string;
