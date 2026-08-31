@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { Camera, Gauge, MicOff, MonitorUp, MoreVertical, RotateCcw, Video } from 'lucide-react';
+import { Gauge, MicOff, MonitorUp, MoreVertical, RotateCcw, Video } from 'lucide-react';
 import type {
   ConferenceCameraQuality,
   ConferenceMediaQualityProfile,
@@ -118,7 +118,9 @@ export function MediaDevicesPanel({
         </label>
       ) : (
         <div className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-[11px] leading-5 text-slate-400">
-          انتخاب خروجی صدا در این مرورگر پشتیبانی نمی‌شود.
+          {speakerSelectionSupported
+            ? 'خروجی صدای قابل انتخابی در دسترس نیست.'
+            : 'انتخاب خروجی صدا در این مرورگر پشتیبانی نمی‌شود.'}
         </div>
       )}
 
