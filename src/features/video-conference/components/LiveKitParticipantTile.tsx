@@ -50,7 +50,7 @@ export function LiveKitParticipantTile({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const microphoneAudioRef = useRef<HTMLAudioElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const screenAudioRef = useRef<HTMLAudioElement>(null);
   const [zoom, setZoom] = useState(1);
 
@@ -93,7 +93,7 @@ export function LiveKitParticipantTile({
       ? undefined
       : attachPublication(
         microphonePublication,
-        microphoneAudioRef.current,
+        audioRef.current,
       ),
     [local, microphonePublication, microphonePublication?.track],
   );
@@ -184,11 +184,7 @@ export function LiveKitParticipantTile({
 
       {!local && (
         <>
-          <audio
-            ref={microphoneAudioRef}
-            autoPlay
-            muted={speakerMuted}
-          />
+          <audio ref={audioRef} autoPlay muted={speakerMuted} />
           <audio
             ref={screenAudioRef}
             autoPlay
