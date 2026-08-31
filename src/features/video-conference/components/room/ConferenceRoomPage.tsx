@@ -1,7 +1,8 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Wifi } from 'lucide-react';
 import { useConferenceClient } from '../../../../components/VideoConference/conferenceClient';
 import { useConferenceAuthorization } from '../../hooks/useConferenceAuthorization';
+import { useConferenceMediaQuality } from '../../hooks/useConferenceMediaQuality';
 import { useConferencePhase } from '../../hooks/useConferencePhase';
 import { useConferenceSpeakerTimer } from '../../hooks/useConferenceSpeakerTimer';
 import { useLiveKitRoom } from '../../hooks/useLiveKitRoom';
@@ -60,8 +61,24 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
     onRejected: handleRejected,
   });
   const { participants, screenSharer } = useParticipants(livekit.room, livekit.revision);
+  const [pinnedIdentity, setPinnedIdentity] = useState<string | null>(null);
+  const focusIdentity = pinnedIdentity || livekit.activeSpeakerIdentity;
+  const mediaQuality = useConferenceMediaQuality(
+    livekit.room,
+    livekit.revision,
+    focusIdentity,
+  );
   const screen = useScreenShare(livekit.room);
   const networkLabel = useNetworkQuality(livekit.uiState, livekit.quality);
+
+  useEffect(() => {
+    if (
+      pinnedIdentity
+      && !participants.some((participant) => participant.identity === pinnedIdentity)
+    ) {
+      setPinnedIdentity(null);
+    }
+  }, [participants, pinnedIdentity]);
 
   const leave = async () => {
     livekit.disconnect();
@@ -100,6 +117,8 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           participants={visibleParticipants}
           localIdentity={livekit.room?.localParticipant.identity}
           activeSpeakerIdentity={livekit.activeSpeakerIdentity}
+          pinnedIdentity={pinnedIdentity}
+          onPinnedIdentityChange={setPinnedIdentity}
         />
       )}
       {!phase.mediaHidden && <ReactionOverlay reactions={livekit.reactions} />}
@@ -118,6 +137,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           authorization={authorization}
           phase={phase}
           speakerTimer={speakerTimer}
+          mediaQuality={mediaQuality}
           onEnded={() => void leave()}
         />
       )}
