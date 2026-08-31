@@ -465,12 +465,28 @@ export interface ConferenceRoomShape {
   recording_consent_required?: boolean;
 }
 
+export type ConferenceWaitingStatus =
+  | 'waiting'
+  | 'admitted'
+  | 'rejected'
+  | 'expired';
+
 export interface WaitingRow {
   id: string;
   user_id: string;
   display_name: string;
-  status: string;
+  status: ConferenceWaitingStatus;
   requested_at: string;
+  expires_at: string;
+  resolved_at: string | null;
+}
+
+export interface ConferenceWaitingState {
+  status: ConferenceWaitingStatus | null;
+  requestedAt: string | null;
+  expiresAt: string | null;
+  resolvedAt: string | null;
+  serverTime: string;
 }
 
 export interface ConferenceMessageReactionRow {
