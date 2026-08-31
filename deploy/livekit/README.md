@@ -116,8 +116,9 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 16. Polls are persisted in `conference_polls`, `conference_poll_options` and `conference_poll_votes`. `conference-poll-control` validates create/open/close/vote/delete mutations server-side, while clients consume RLS-safe aggregate snapshots and use Realtime changes only to refresh that snapshot.
 17. Collaborative whiteboard state uses revisioned PostgreSQL page snapshots plus periodic checkpoint snapshots. `conference-whiteboard-control` validates persistent mutations server-side and broadcasts committed operations through LiveKit Reliable DataPackets on `spark-whiteboard-op`; cursors and laser pointers stay transient on `spark-whiteboard-presence`. Images live in the private `conference-whiteboard-assets` bucket and snapshots store only scoped object paths.
 18. Presentation sharing stores PDF/images/slides/documents in the private `conference-presentations` bucket with PostgreSQL metadata and synchronized page state. `conference-presentation-control` authorizes create/finalize/activate/navigate/delete and annotation mutations. Office sources use self-hosted Gotenberg; laser pointers stay transient on `spark-presentation-laser`.
-19. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-20. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+19. Media quality profiles (`AUTO`, `DATA_SAVER`, `BALANCED`, `HIGH`) use LiveKit Adaptive Stream + Dynacast + camera simulcast. Small Grid tiles are capped below the high simulcast layer, while the active speaker or pinned tile can request a higher layer. Camera capture supports 180p/360p/540p/720p/1080p. Screen Share is configured independently at 720p or 1080p with its own simulcast ladder.
+20. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+21. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 
@@ -134,6 +135,9 @@ Before production cutover validate all of the following from real client network
 - host remove/mute/promote/lock/end actions are enforced server-side
 - persistent chat and ordered raise-hand state survive reconnects
 - device switching works without leaving the room
+- 20-person Grid does not request the 1080p camera layer for ordinary small tiles
+- active-speaker/pinned tile can step up to the high camera layer when bandwidth permits
+- changing Camera profile does not alter the independent Screen Share quality setting
 - RoomComposite Egress reaches object storage and webhook marks final state `ready`
 - RTMP and WHIP Ingress publish into an authorized room
 - webhook replay is idempotent
