@@ -31,10 +31,12 @@ export function ParticipantGrid({
       ? 'grid-cols-2'
       : 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
+  const participantFocusIdentity =
+    pinnedIdentity || activeSpeakerIdentity;
+
   const focusIdentity =
     screenShareIdentity
-    || pinnedIdentity
-    || activeSpeakerIdentity
+    || participantFocusIdentity
     || participants[0]?.identity
     || null;
 
