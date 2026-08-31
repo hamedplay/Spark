@@ -3,7 +3,7 @@ import type { ConnectionQuality, LocalParticipant, RemoteParticipant, Room } fro
 export type ConferenceRole = 'host' | 'admin' | 'moderator' | 'member' | 'guest';
 export type HostAction = 'remove' | 'mute' | 'promote' | 'demote' | 'lock' | 'unlock' | 'end' | 'lower-hand';
 export type ConferenceUiState = 'joining' | 'waiting' | 'connected' | 'reconnecting' | 'failed';
-export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'polls' | 'whiteboard' | 'presentation' | 'participants' | 'devices' | null;
+export type ConferencePanel = 'chat' | 'private-chat' | 'moderator-chat' | 'polls' | 'whiteboard' | 'presentation' | 'participants' | 'devices' | 'diagnostics' | null;
 export type ConferenceParticipant = LocalParticipant | RemoteParticipant;
 
 export const CONFERENCE_RBAC_ROLES = [
@@ -333,6 +333,61 @@ export interface ConferencePresentationLaser {
   timestamp: number;
 }
 
+export type ConferenceDiagnosticsHealth =
+  | 'EXCELLENT'
+  | 'GOOD'
+  | 'WEAK'
+  | 'POOR';
+
+export type ConferenceDiagnosticsCandidateType =
+  | 'host'
+  | 'srflx'
+  | 'prflx'
+  | 'relay'
+  | 'unknown';
+
+export interface ConferenceRtcTrackDiagnostics {
+  participantIdentity: string;
+  local: boolean;
+  source: 'camera' | 'microphone' | 'screen_share' | 'screen_share_audio' | 'unknown';
+  kind: 'audio' | 'video';
+  bitrateKbps: number;
+  codec: string | null;
+  resolution: string | null;
+  fps: number | null;
+  packetsLost: number;
+  packetsReceived: number;
+  packetLossPercent: number | null;
+  jitterMs: number | null;
+  rttMs: number | null;
+}
+
+export interface ConferenceNetworkDiagnostics {
+  sampledAt: string;
+  health: ConferenceDiagnosticsHealth;
+  connectionQuality: ConnectionQuality | 'unknown';
+  rttMs: number | null;
+  packetLossPercent: number | null;
+  jitterMs: number | null;
+  bitrateKbps: number;
+  codecs: string[];
+  resolution: string | null;
+  fps: number | null;
+  iceState: string;
+  candidateType: ConferenceDiagnosticsCandidateType;
+  remoteCandidateType: ConferenceDiagnosticsCandidateType;
+  transportProtocol: string | null;
+  relayProtocol: string | null;
+  turnInUse: boolean;
+  reconnectCount: number;
+  tracks: ConferenceRtcTrackDiagnostics[];
+}
+
+export interface ConferenceNetworkDiagnosticsController {
+  diagnostics: ConferenceNetworkDiagnostics;
+  refresh: () => Promise<void>;
+}
+
 export type ConferenceMediaQualityProfile =
   | 'AUTO'
   | 'DATA_SAVER'
@@ -569,6 +624,7 @@ export interface ConferenceToolsProps {
   phase: ConferencePhaseController;
   speakerTimer: ConferenceSpeakerTimerController;
   mediaQuality: ConferenceMediaQualityController;
+  networkDiagnostics: ConferenceNetworkDiagnosticsController;
   onEnded: () => void;
 }
 
