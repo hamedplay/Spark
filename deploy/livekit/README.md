@@ -57,6 +57,7 @@ The same `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must be configured as server
 - `conference-reaction`
 - `conference-poll-control`
 - `conference-whiteboard-control`
+- `conference-presentation-control`
 - `livekit-webhook`
 
 Also configure:
@@ -68,6 +69,9 @@ Also configure:
 - `RECORDING_STORAGE_ACCESS_KEY`
 - `RECORDING_STORAGE_SECRET_KEY`
 - `RECORDING_STORAGE_ENDPOINT` when using a custom S3-compatible endpoint
+- `PRESENTATION_CONVERTER_URL` for a self-hosted Gotenberg LibreOffice endpoint reachable from the Edge Functions runtime (for example `http://gotenberg:3000` on a private service network)
+
+Keep the converter internal; do not expose it directly to the public Internet. PDF/image presentations need no conversion. PowerPoint/OpenDocument/Word sources are converted to PDF before activation.
 
 No LiveKit API secret or service-role key may be exposed through Vite/client environment variables.
 
@@ -111,8 +115,9 @@ curl -fsS http://127.0.0.1:6789/metrics >/dev/null
 15. Interactive meeting reactions stay transient. `conference-reaction` authenticates the participant, applies an atomic 5-per-5-seconds rate limit, enriches the event with identity/display name/avatar/timestamp, and broadcasts it through LiveKit RoomService SendData on topic `spark-reaction`.
 16. Polls are persisted in `conference_polls`, `conference_poll_options` and `conference_poll_votes`. `conference-poll-control` validates create/open/close/vote/delete mutations server-side, while clients consume RLS-safe aggregate snapshots and use Realtime changes only to refresh that snapshot.
 17. Collaborative whiteboard state uses revisioned PostgreSQL page snapshots plus periodic checkpoint snapshots. `conference-whiteboard-control` validates persistent mutations server-side and broadcasts committed operations through LiveKit Reliable DataPackets on `spark-whiteboard-op`; cursors and laser pointers stay transient on `spark-whiteboard-presence`. Images live in the private `conference-whiteboard-assets` bucket and snapshots store only scoped object paths.
-18. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
-19. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
+18. Presentation sharing stores PDF/images/slides/documents in the private `conference-presentations` bucket with PostgreSQL metadata and synchronized page state. `conference-presentation-control` authorizes create/finalize/activate/navigate/delete and annotation mutations. Office sources use self-hosted Gotenberg; laser pointers stay transient on `spark-presentation-laser`.
+19. Spark Manager configures both server-side worker endpoints used for timer/queue and meeting-phase reconciliation.
+20. Ingress exposes RTMP on `ingress.shahrmeeting.ir:1935` and WHIP over `https://ingress.shahrmeeting.ir/whip` for external sources.
 
 ## 6. Production checks
 
