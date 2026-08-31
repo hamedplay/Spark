@@ -10,7 +10,22 @@ const headers = {
 };
 const reply = (status: number, body: Record<string, unknown>) => new Response(JSON.stringify(body), { status, headers });
 
-type HostAction = "remove" | "mute" | "promote" | "demote" | "set-role" | "lock" | "unlock" | "end" | "lower-hand";
+type HostAction =
+  | "remove"
+  | "mute"
+  | "promote"
+  | "demote"
+  | "set-role"
+  | "disable-mic"
+  | "enable-mic"
+  | "disable-camera"
+  | "enable-camera"
+  | "disable-screen"
+  | "enable-screen"
+  | "lock"
+  | "unlock"
+  | "end"
+  | "lower-hand";
 type AssignableRole = "HOST" | "CO_HOST" | "MODERATOR" | "PRESENTER" | "PARTICIPANT" | "VIEWER";
 
 const assignableRoles = new Set<AssignableRole>(["HOST", "CO_HOST", "MODERATOR", "PRESENTER", "PARTICIPANT", "VIEWER"]);
@@ -80,7 +95,20 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!body.roomId || !body.action) return reply(400, { error: "ROOM_ID_AND_ACTION_REQUIRED" });
-  const targetRequired = ["remove", "mute", "promote", "demote", "set-role", "lower-hand"].includes(body.action);
+  const targetRequired = [
+    "remove",
+    "mute",
+    "promote",
+    "demote",
+    "set-role",
+    "lower-hand",
+    "disable-mic",
+    "enable-mic",
+    "disable-camera",
+    "enable-camera",
+    "disable-screen",
+    "enable-screen",
+  ].includes(body.action);
   if (targetRequired && !body.targetUserId) return reply(400, { error: "TARGET_USER_ID_REQUIRED" });
   if (body.action === "set-role" && (!body.targetRole || !assignableRoles.has(body.targetRole))) {
     return reply(400, { error: "VALID_TARGET_ROLE_REQUIRED" });
@@ -142,9 +170,16 @@ Deno.serve(async (req: Request) => {
 
     if (body.action === "mute") {
       const participant = await roomService.getParticipant(roomName, body.targetUserId!);
-      const audioTracks = participant.tracks.filter((track) => String(track.mimeType || "").startsWith("audio/"));
-      for (const track of audioTracks) {
-        await roomService.mutePublishedTrack(roomName, body.targetUserId!, track.sid, true);
+      const microphoneTracks = participant.tracks.filter(
+        (track) => track.source === TrackSource.MICROPHONE,
+      );
+      for (const track of microphoneTracks) {
+        await roomService.mutePublishedTrack(
+          roomName,
+          body.targetUserId!,
+          track.sid,
+          true,
+        );
       }
       const { data, error } = await userClient.rpc("moderate_conference_participant", {
         p_room_id: body.roomId,
@@ -157,8 +192,116 @@ Deno.serve(async (req: Request) => {
         actor_user_id: accessState.user_id,
         target_user_id: body.targetUserId,
         event_type: "participant_muted",
+        metadata: { mode: "current_microphone_track" },
       });
-      return reply(200, { ok: true, mutedTracks: audioTracks.length });
+      return reply(200, { ok: true, mutedTracks: microphoneTracks.length });
+    }
+
+    if (
+      body.action === "disable-mic"
+      || body.action === "enable-mic"
+      || body.action === "disable-camera"
+      || body.action === "enable-camera"
+      || body.action === "disable-screen"
+      || body.action === "enable-screen"
+    ) {
+      const source = body.action.includes("mic")
+        ? "microphone"
+        : body.action.includes("camera")
+          ? "camera"
+          : "screen_share";
+      const disabled = body.action.startsWith("disable-");
+
+      const { data, error } = await userClient.rpc(
+        "set_livekit_participant_media_permission",
+        {
+          p_room_id: body.roomId,
+          p_target_user_id: body.targetUserId,
+          p_source: source,
+          p_disabled: disabled,
+        },
+      );
+      if (error || !data?.ok) {
+        return reply(403, {
+          error: String(data?.reason || "MEDIA_PERMISSION_UPDATE_FAILED").toUpperCase(),
+        });
+      }
+
+      const policy = parseLiveKitPolicy(data.livekit_policy);
+      if (!policy.ok) {
+        return reply(500, { error: "LIVEKIT_POLICY_MISSING" });
+      }
+
+      const desiredPermission = {
+        canPublish: policy.canPublish,
+        canSubscribe: policy.canSubscribe,
+        canPublishData: policy.canPublishData,
+        canPublishSources: policy.publishSources,
+      };
+
+      try {
+        await roomService.updateParticipant(roomName, body.targetUserId!, {
+          permission: desiredPermission,
+        });
+      } catch (runtimeError) {
+        if (isParticipantMissing(runtimeError)) {
+          return reply(200, {
+            ok: true,
+            source,
+            disabled,
+            runtimeUpdated: false,
+            participantOffline: true,
+          });
+        }
+
+        console.error(
+          "conference-host-control: media permission update returned error",
+          runtimeError,
+        );
+
+        try {
+          const participant = await roomService.getParticipant(
+            roomName,
+            body.targetUserId!,
+          );
+          const current = participant.permission;
+          const runtimeUpdated = Boolean(
+            current
+            && current.canPublish === desiredPermission.canPublish
+            && current.canSubscribe === desiredPermission.canSubscribe
+            && current.canPublishData === desiredPermission.canPublishData
+            && sameSources(
+              current.canPublishSources,
+              desiredPermission.canPublishSources,
+            )
+          );
+
+          if (!runtimeUpdated) {
+            return reply(502, { error: "LIVEKIT_PERMISSION_SYNC_FAILED" });
+          }
+        } catch {
+          return reply(502, { error: "LIVEKIT_PERMISSION_SYNC_FAILED" });
+        }
+      }
+
+      await service.from("conference_audit_events").insert({
+        room_id: body.roomId,
+        actor_user_id: accessState.user_id,
+        target_user_id: body.targetUserId,
+        event_type: "livekit_permission_synchronized",
+        metadata: {
+          source,
+          disabled,
+          mode: "publish_permission",
+        },
+      });
+
+      return reply(200, {
+        ok: true,
+        source,
+        disabled,
+        runtimeUpdated: true,
+      });
     }
 
     if (body.action === "lower-hand") {
