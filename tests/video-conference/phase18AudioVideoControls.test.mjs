@@ -161,7 +161,11 @@ test('pin remains local while grid and speaker views are independent local layou
 test('active screen share gets display priority without hiding all other participants', () => {
   assert.match(
     participantGrid,
-    /screenShareIdentity[\s\S]*\|\| pinnedIdentity[\s\S]*\|\| activeSpeakerIdentity/,
+    /participantFocusIdentity =[\s\S]*pinnedIdentity \|\| activeSpeakerIdentity/,
+  );
+  assert.match(
+    participantGrid,
+    /focusIdentity =[\s\S]*screenShareIdentity[\s\S]*\|\| participantFocusIdentity/,
   );
   assert.match(participantGrid, /preferScreenShare/);
   assert.match(participantTile, /Track\.Source\.ScreenShare/);
