@@ -29,7 +29,7 @@ interface IncomingNotificationToastProps {
   notification: AppNotification;
   toastId: string;
   visible: boolean;
-  targetPage: PageId | null;
+  targetPage: PageId | undefined;
   onNavigate?: (
     page: PageId
   ) => void;
