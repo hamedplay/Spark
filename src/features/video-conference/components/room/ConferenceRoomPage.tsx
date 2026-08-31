@@ -6,6 +6,7 @@ import { useConferenceMediaQuality } from '../../hooks/useConferenceMediaQuality
 import { useConferenceRecordingConsent } from '../../hooks/useConferenceRecordingConsent';
 import { useConferencePhase } from '../../hooks/useConferencePhase';
 import { useConferenceSpeakerTimer } from '../../hooks/useConferenceSpeakerTimer';
+import { useConferenceSpotlights } from '../../hooks/useConferenceSpotlights';
 import { useLiveKitRoom } from '../../hooks/useLiveKitRoom';
 import { useNetworkDiagnostics } from '../../hooks/useNetworkDiagnostics';
 import { useNetworkQuality } from '../../hooks/useNetworkQuality';
@@ -74,6 +75,12 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
     onRejected: handleRejected,
     onExpired: handleExpired,
   });
+  const spotlight = useConferenceSpotlights({
+    client: conferenceClient,
+    roomId: sparkRoom.id,
+    currentUserId,
+    authorization,
+  });
   const { participants, screenSharer } = useParticipants(
     livekit.room,
     livekit.revision,
@@ -83,8 +90,11 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
     useState<ConferenceLayoutMode>('grid');
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const screenShareIdentity = screenSharer?.identity ?? null;
+  const spotlightFocusIdentity =
+    spotlight.spotlightedUserIds[0] || null;
   const focusIdentity =
     screenShareIdentity
+    || spotlightFocusIdentity
     || pinnedIdentity
     || livekit.activeSpeakerIdentity;
   const mediaQuality = useConferenceMediaQuality(
@@ -132,7 +142,9 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
   }
 
   const visibleParticipants = (
-    screenShareIdentity || layoutMode === 'speaker'
+    screenShareIdentity
+    || spotlight.spotlightedUserIds.length > 0
+    || layoutMode === 'speaker'
       ? participants.slice(0, 20)
       : participants.slice(0, window.innerWidth < 768 ? 4 : 20)
   );
@@ -207,6 +219,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           activeSpeakerIdentity={livekit.activeSpeakerIdentity}
           pinnedIdentity={pinnedIdentity}
           screenShareIdentity={screenShareIdentity}
+          spotlightIdentities={spotlight.spotlightedUserIds}
           layoutMode={layoutMode}
           speakerMuted={speakerMuted}
           onPinnedIdentityChange={setPinnedIdentity}
@@ -232,6 +245,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
           mediaQuality={mediaQuality}
           networkDiagnostics={networkDiagnostics}
           recordingConsent={recordingConsent}
+          spotlight={spotlight}
           onEnded={() => void leave()}
         />
       )}
