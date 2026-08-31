@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { Camera, CameraOff, Hand, Mic, MicOff, MonitorUp, MonitorX, UserMinus } from 'lucide-react';
+import { Camera, CameraOff, Hand, Mic, MicOff, MonitorUp, MonitorX, Star, StarOff, UserMinus } from 'lucide-react';
 import type {
   ConferencePhaseController,
   ConferenceRbacRole,
@@ -26,6 +26,10 @@ interface Props {
   canRemoveParticipants: boolean;
   canManageRoles: boolean;
   canManageTimer: boolean;
+  canSpotlight: boolean;
+  spotlightedUserIds: string[];
+  spotlightBusy: string | null;
+  spotlightErrorMessage: string;
   speakerQueue: SpeakerQueueItem[];
   speakerSessionsByUser: Record<string, SpeakerSessionRow>;
   speakerRemainingByUser: Record<string, number>;
@@ -42,6 +46,8 @@ interface Props {
     action: SpeakerQueueAction,
     seconds?: number,
   ) => Promise<void>;
+  onToggleSpotlight: (targetUserId: string) => Promise<boolean>;
+  onClearSpotlights: () => Promise<boolean>;
 }
 
 export function ConferenceParticipantsPanel({
@@ -55,6 +61,10 @@ export function ConferenceParticipantsPanel({
   canRemoveParticipants,
   canManageRoles,
   canManageTimer,
+  canSpotlight,
+  spotlightedUserIds,
+  spotlightBusy,
+  spotlightErrorMessage,
   speakerQueue,
   speakerSessionsByUser,
   speakerRemainingByUser,
@@ -63,6 +73,8 @@ export function ConferenceParticipantsPanel({
   onRoleChange,
   onTimerAction,
   onQueueAction,
+  onToggleSpotlight,
+  onClearSpotlights,
 }: Props) {
   return (
     <div className="max-h-[48dvh] overflow-y-auto p-2">
@@ -75,8 +87,35 @@ export function ConferenceParticipantsPanel({
         onAction={onQueueAction}
       />
 
+      {(spotlightedUserIds.length > 0 || spotlightErrorMessage) && (
+        <div className="mx-2 mb-2 rounded-xl border border-amber-400/20 bg-amber-400/5 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-100">
+              <Star className="h-4 w-4 fill-current" />
+              {spotlightedUserIds.length} Spotlight فعال
+            </div>
+            {canSpotlight && spotlightedUserIds.length > 0 && (
+              <button
+                type="button"
+                disabled={spotlightBusy !== null}
+                onClick={() => void onClearSpotlights()}
+                className="rounded-lg bg-slate-800 px-2 py-1.5 text-[10px] text-slate-100 disabled:opacity-50"
+              >
+                حذف همه
+              </button>
+            )}
+          </div>
+          {spotlightErrorMessage && (
+            <div className="mt-2 text-[10px] leading-5 text-rose-200">
+              {spotlightErrorMessage}
+            </div>
+          )}
+        </div>
+      )}
+
       {participants.map((participant) => {
         const canTarget = participant.user_id !== currentUserId && participant.role !== 'OWNER';
+        const spotlighted = spotlightedUserIds.includes(participant.user_id);
         const speakerSession = speakerSessionsByUser[participant.user_id];
         const canTimeSpeaker = (
           canTarget
@@ -93,9 +132,31 @@ export function ConferenceParticipantsPanel({
                   <span className="truncate text-sm font-semibold">{participant.display_name || 'شرکت‌کننده'}</span>
                   {participant.is_hand_raised && <Hand className="h-4 w-4 text-amber-400" />}
                   {participant.is_muted && <MicOff className="h-4 w-4 text-slate-400" />}
+                  {spotlighted && <Star className="h-4 w-4 fill-amber-300 text-amber-300" aria-label="Spotlight" />}
                 </div>
                 <span className="text-[10px] text-slate-400">{conferenceRoleLabel(participant.role)}</span>
               </div>
+
+              {canSpotlight && (
+                <button
+                  type="button"
+                  disabled={spotlightBusy !== null}
+                  onClick={() => void onToggleSpotlight(participant.user_id)}
+                  aria-label={spotlighted ? 'حذف Spotlight' : 'Spotlight کردن'}
+                  aria-pressed={spotlighted}
+                  className={
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg disabled:opacity-50 "
+                    + (spotlighted
+                      ? "bg-amber-500 text-slate-950"
+                      : "bg-slate-800 text-amber-200")
+                  }
+                  title="Spotlight برای همه شرکت‌کنندگان جلسه اعمال می‌شود."
+                >
+                  {spotlighted
+                    ? <StarOff className="h-4 w-4" />
+                    : <Star className="h-4 w-4" />}
+                </button>
+              )}
 
               {canTarget && (
                 <div className="flex shrink-0 items-center gap-1">
