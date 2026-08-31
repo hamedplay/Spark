@@ -20,6 +20,9 @@ import {
   conferencePhaseHidesMedia,
 } from '../../src/features/video-conference/hooks/useConferencePhase';
 import {
+  runConferencePhaseAction,
+} from '../../src/features/video-conference/services/conferencePhase';
+import {
   ConferencePollActionError,
   loadConferencePollSnapshot,
   runConferencePollAction,
@@ -193,6 +196,83 @@ test('Phase 24 unit: phase countdown and media hiding are deterministic', () => 
   assert.equal(conferencePhaseHidesMedia('RESUMING'), true);
   assert.equal(conferencePhaseHidesMedia('LIVE'), false);
   assert.equal(conferencePhaseHidesMedia('BREAK'), false);
+});
+
+test('Phase 24 unit: phase transition intents preserve duration and break policy', async () => {
+  const calls: unknown[] = [];
+  const client = {
+    functions: {
+      invoke: async (name: string, options: unknown) => {
+        calls.push([name, options]);
+        return { data: { ok: true }, error: null };
+      },
+    },
+  } as any;
+
+  await runConferencePhaseAction(
+    client,
+    'room-1',
+    'start_countdown',
+    30,
+  );
+  await runConferencePhaseAction(
+    client,
+    'room-1',
+    'start_break',
+    600,
+    {
+      allowMic: false,
+      allowCamera: false,
+      allowChat: true,
+    },
+  );
+  await runConferencePhaseAction(
+    client,
+    'room-1',
+    'resume',
+  );
+
+  assert.deepEqual(calls, [
+    [
+      'conference-phase-control',
+      {
+        body: {
+          roomId: 'room-1',
+          action: 'start_countdown',
+          durationSeconds: 30,
+          allowMic: undefined,
+          allowCamera: undefined,
+          allowChat: undefined,
+        },
+      },
+    ],
+    [
+      'conference-phase-control',
+      {
+        body: {
+          roomId: 'room-1',
+          action: 'start_break',
+          durationSeconds: 600,
+          allowMic: false,
+          allowCamera: false,
+          allowChat: true,
+        },
+      },
+    ],
+    [
+      'conference-phase-control',
+      {
+        body: {
+          roomId: 'room-1',
+          action: 'resume',
+          durationSeconds: undefined,
+          allowMic: undefined,
+          allowCamera: undefined,
+          allowChat: undefined,
+        },
+      },
+    ],
+  ]);
 });
 
 test('Phase 24 unit: authorization parser rejects unknown roles and permissions', async () => {
