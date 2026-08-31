@@ -24,6 +24,7 @@ const ERROR_LABELS: Record<string, string> = {
   CONFERENCE_NOT_CONFIGURED: 'زیرساخت ویدیوکنفرانس هنوز پیکربندی نشده است.',
   TOKEN_FAILED: 'دریافت مجوز اتصال ناموفق بود.',
   LIVEKIT_PERMISSION_DENIED: 'مجوز رسانه‌ای جلسه قابل دریافت نیست.',
+  RECORDING_CONSENT_REQUIRED: 'این جلسه در حال ضبط است؛ برای اتصال رسانه‌ای ابتدا رضایت ضبط را تأیید کنید.',
 };
 
 interface Params {
