@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Room, RoomEvent } from 'livekit-client';
+import { Room, RoomEvent, Track } from 'livekit-client';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import { requestLiveKitToken } from '../services/conferenceApi';
 import {
@@ -43,6 +43,9 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
   } = useConferenceState();
   const [micEnabled, setMicEnabled] = useState(() => localStream.getAudioTracks().some((track) => track.enabled));
   const [cameraEnabled, setCameraEnabled] = useState(() => localStream.getVideoTracks().some((track) => track.enabled));
+  const [canPublishMic, setCanPublishMic] = useState(true);
+  const [canPublishCamera, setCanPublishCamera] = useState(true);
+  const [canPublishScreen, setCanPublishScreen] = useState(true);
   const [reactionError, setReactionError] = useState('');
   const [reconnectCount, setReconnectCount] = useState(0);
 
@@ -64,11 +67,19 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       }
 
       setRole(join.data.role);
-      const canPublishMic = join.data.livekitPolicy.publishSources.includes('microphone');
-      const canPublishCamera = join.data.livekitPolicy.publishSources.includes('camera');
+      const tokenCanPublishMic =
+        join.data.livekitPolicy.publishSources.includes('microphone');
+      const tokenCanPublishCamera =
+        join.data.livekitPolicy.publishSources.includes('camera');
+      const tokenCanPublishScreen =
+        join.data.livekitPolicy.publishSources.includes('screen_share');
 
-      if (!canPublishMic) setMicEnabled(false);
-      if (!canPublishCamera) setCameraEnabled(false);
+      setCanPublishMic(tokenCanPublishMic);
+      setCanPublishCamera(tokenCanPublishCamera);
+      setCanPublishScreen(tokenCanPublishScreen);
+
+      if (!tokenCanPublishMic) setMicEnabled(false);
+      if (!tokenCanPublishCamera) setCameraEnabled(false);
 
       const mediaSettings = loadConferenceMediaQualitySettings();
       const nextRoom = new Room({
@@ -85,12 +96,41 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       nextRoom.on(RoomEvent.TrackUnsubscribed, refresh);
       nextRoom.on(RoomEvent.TrackMuted, refresh);
       nextRoom.on(RoomEvent.TrackUnmuted, refresh);
-      nextRoom.on(RoomEvent.ParticipantPermissionsChanged, (_previous, participant) => {
-        if (participant.identity !== nextRoom.localParticipant.identity) return;
-        setMicEnabled(nextRoom.localParticipant.isMicrophoneEnabled);
-        setCameraEnabled(nextRoom.localParticipant.isCameraEnabled);
-        refresh();
-      });
+      nextRoom.on(
+        RoomEvent.ParticipantPermissionsChanged,
+        (_previous, participant) => {
+          if (participant.identity !== nextRoom.localParticipant.identity) {
+            return;
+          }
+
+          const permissions = participant.permissions;
+          const sources = permissions?.canPublishSources || [];
+          const publishingAllowed = permissions?.canPublish !== false;
+          const micAllowed = (
+            publishingAllowed
+            && sources.includes(Track.Source.Microphone)
+          );
+          const cameraAllowed = (
+            publishingAllowed
+            && sources.includes(Track.Source.Camera)
+          );
+          const screenAllowed = (
+            publishingAllowed
+            && sources.includes(Track.Source.ScreenShare)
+          );
+
+          setCanPublishMic(micAllowed);
+          setCanPublishCamera(cameraAllowed);
+          setCanPublishScreen(screenAllowed);
+          setMicEnabled(
+            micAllowed && nextRoom.localParticipant.isMicrophoneEnabled,
+          );
+          setCameraEnabled(
+            cameraAllowed && nextRoom.localParticipant.isCameraEnabled,
+          );
+          refresh();
+        },
+      );
       nextRoom.on(RoomEvent.Reconnecting, () => {
         setReconnectCount((current) => current + 1);
         setUiState('reconnecting');
@@ -141,13 +181,13 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
       await nextRoom.connect(join.data.serverUrl, join.data.token, { autoSubscribe: true });
       nextRoom.localParticipant.setName(currentUserName);
 
-      if (micEnabled && canPublishMic) {
+      if (micEnabled && tokenCanPublishMic) {
         await nextRoom.localParticipant.setMicrophoneEnabled(
           true,
           audioSettings?.deviceId ? { deviceId: audioSettings.deviceId } : undefined,
         );
       }
-      if (cameraEnabled && canPublishCamera) {
+      if (cameraEnabled && tokenCanPublishCamera) {
         await setConferenceCamera(
           nextRoom,
           true,
@@ -249,6 +289,9 @@ export function useLiveKitRoom({ roomId, currentUserName, localStream, client }:
     disconnect,
     micEnabled,
     cameraEnabled,
+    canPublishMic,
+    canPublishCamera,
+    canPublishScreen,
     toggleMic,
     toggleCamera,
     sendReaction,
