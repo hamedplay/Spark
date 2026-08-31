@@ -378,7 +378,7 @@ print(str(v.get("State","")).lower()+("/"+str(v.get("Health","")).lower() if v.g
 livekit_runtime_ready() {
   local service state
   for service in minio redis livekit egress ingress; do
-    state="$(livekit_observability_service_state "$service" 2>/dev/null || true)"
+    state="$(livekit_service_state "$service" 2>/dev/null || true)"
     [[ "$state" == running* ]] || return 1
     [[ "$state" != *unhealthy* && "$state" != *restarting* ]] || return 1
   done
@@ -554,8 +554,8 @@ livekit_internal_api_exposure_probe() {
   ufw_status="$(ufw status verbose 2>/dev/null || true)"
   grep -q 'Status: active' <<<"$ufw_status" || return 1
   grep -Eq 'Default: deny \(incoming\)' <<<"$ufw_status" || return 1
-  grep -Eq "^(${LIVEKIT_INTERNAL_API_PORT}/tcp|\${LIVEKIT_INTERNAL_API_PORT})[[:space:]]+DENY" <<<"$ufw_status" || return 1
-  ! grep -Eq "^(${LIVEKIT_INTERNAL_API_PORT}/tcp|\${LIVEKIT_INTERNAL_API_PORT})[[:space:]]+ALLOW" <<<"$ufw_status" || return 1
+  grep -Eq "^${LIVEKIT_INTERNAL_API_PORT}(/tcp)?[[:space:]]+DENY" <<<"$ufw_status" || return 1
+  ! grep -Eq "^${LIVEKIT_INTERNAL_API_PORT}(/tcp)?[[:space:]]+ALLOW" <<<"$ufw_status" || return 1
 
   # The reverse proxy must still reach the internal API locally.
   curl -fsS --connect-timeout 3 "http://127.0.0.1:${LIVEKIT_INTERNAL_API_PORT}/" >/dev/null || return 1
