@@ -1,6 +1,7 @@
 import {
   useState,
   useEffect,
+  useRef,
 } from 'react';
 import toast from 'react-hot-toast';
 
@@ -68,6 +69,13 @@ export function useNotificationBell(
     useState(true);
   const [currentUserId, setCurrentUserId] =
     useState<string | null>(null);
+  const onNavigateRef =
+    useRef(onNavigate);
+
+  useEffect(() => {
+    onNavigateRef.current =
+      onNavigate;
+  }, [onNavigate]);
 
   useEffect(() => {
     return () => {
@@ -133,7 +141,10 @@ export function useNotificationBell(
 
           showIncomingNotification(
             notification,
-            onNavigate
+            (page) =>
+              onNavigateRef.current?.(
+                page
+              )
           );
         },
         onNotificationUpdated: (
@@ -155,6 +166,43 @@ export function useNotificationBell(
             }
           );
         },
+        onRealtimeSubscribed: (
+          reconnected
+        ) => {
+          if (!reconnected) {
+            return;
+          }
+
+          void (async () => {
+            try {
+              const loaded =
+                await fetchUserNotifications(
+                  currentUserId
+                );
+              setNotifications(
+                loaded
+              );
+              setUnreadCount(
+                countUnreadNotifications(
+                  loaded
+                )
+              );
+            } catch (error: unknown) {
+              console.error(
+                'NotificationBell realtime resync error:',
+                error
+              );
+            }
+          })();
+        },
+        onRealtimeError: (
+          error
+        ) => {
+          console.error(
+            'NotificationBell realtime error:',
+            error
+          );
+        },
         onLoadError: (error) => {
           console.error(
             'NotificationBell fetch error:',
@@ -164,7 +212,7 @@ export function useNotificationBell(
       });
 
     return cleanup;
-  }, [currentUserId, onNavigate]);
+  }, [currentUserId]);
 
   const markAsRead = async (
     id: string
