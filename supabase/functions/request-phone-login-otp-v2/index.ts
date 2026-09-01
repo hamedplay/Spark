@@ -231,6 +231,215 @@ async function checkEligibility(
   return { eligible: true };
 }
 
+
+interface PhoneSyncDiagnosis {
+  status?: string | null;
+  orphan_auth_user_id?: string | null;
+}
+
+interface PhoneOnlyOrphanRow {
+  auth_user_id?: string | null;
+  has_profile?: boolean | null;
+  has_identity?: boolean | null;
+  has_sessions?: boolean | null;
+  has_dependent_records?: boolean | null;
+  primary_profile_user_id?: string | null;
+}
+
+function authUserIsBlocked(user: unknown): boolean {
+  const row = user as Record<string, unknown>;
+  const deletedAt = typeof row.deleted_at === "string" ? row.deleted_at : "";
+  if (deletedAt) return true;
+
+  const bannedUntil = typeof row.banned_until === "string" ? row.banned_until : "";
+  if (!bannedUntil) return false;
+
+  const bannedDate = new Date(bannedUntil);
+  return Number.isFinite(bannedDate.getTime()) && bannedDate.getTime() > Date.now();
+}
+
+/**
+ * Repairs only a provably safe profiles → auth.users phone drift.
+ *
+ * Security invariants:
+ * - the resolver has already matched exactly one active, profile-verified phone;
+ * - profile phone must still equal the requested canonical phone;
+ * - an existing different Auth phone is never overwritten;
+ * - a conflicting phone-only Auth user is deleted only when it has no profile,
+ *   identity, session, or dependent application records and points back to the
+ *   same primary profile;
+ * - the canonical Auth phone is written through the GoTrue Admin API and then
+ *   re-read before eligibility continues.
+ */
+async function ensureCanonicalAuthPhone(
+  admin: ReturnType<typeof adminClient>,
+  userId: string,
+  canonicalPhone: string,
+): Promise<boolean> {
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("phone, phone_verified_at, is_active, account_status")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (profileError) throw new Error("PROFILE_UNAVAILABLE");
+  if (
+    !profile ||
+    profile.is_active !== true ||
+    profile.account_status !== "ACTIVE" ||
+    !profile.phone_verified_at
+  ) {
+    return false;
+  }
+
+  const profilePhone = canonicalizeIranPhone(String(profile.phone ?? ""));
+  if (profilePhone !== canonicalPhone) return false;
+
+  const { data: authData, error: authError } = await admin.auth.admin.getUserById(userId);
+  if (authError) throw new Error("AUTH_UNAVAILABLE");
+
+  const authUser = authData?.user;
+  if (!authUser || !authUser.email || authUserIsBlocked(authUser)) return false;
+
+  const currentAuthPhone = authUser.phone
+    ? canonicalizeIranPhone(authUser.phone)
+    : null;
+
+  if (currentAuthPhone === canonicalPhone && authUser.phone_confirmed_at) {
+    return true;
+  }
+
+  // Never overwrite a different canonical Auth phone.
+  if (currentAuthPhone && currentAuthPhone !== canonicalPhone) {
+    return false;
+  }
+
+  const { data: diagnosisData, error: diagnosisError } = await admin.rpc(
+    "diagnose_phone_auth_sync_status",
+    { p_target_user_id: userId },
+  );
+  if (diagnosisError) throw new Error("AUTH_SYNC_DIAGNOSIS_UNAVAILABLE");
+
+  const diagnosis = (
+    Array.isArray(diagnosisData) ? diagnosisData[0] : diagnosisData
+  ) as PhoneSyncDiagnosis | null;
+
+  const diagnosisStatus = String(diagnosis?.status ?? "");
+
+  if (diagnosisStatus === "PHONE_ONLY_AUTH_ORPHAN") {
+    const orphanUserId = diagnosis?.orphan_auth_user_id;
+    if (!orphanUserId || !isValidUuid(orphanUserId)) return false;
+
+    const { data: orphanRows, error: orphanError } = await admin.rpc(
+      "diagnose_phone_only_orphans",
+    );
+    if (orphanError || !Array.isArray(orphanRows)) {
+      throw new Error("AUTH_ORPHAN_DIAGNOSIS_UNAVAILABLE");
+    }
+
+    const orphan = (orphanRows as PhoneOnlyOrphanRow[]).find(
+      (row) =>
+        row.auth_user_id === orphanUserId &&
+        row.primary_profile_user_id === userId,
+    );
+
+    if (
+      !orphan ||
+      orphan.has_profile === true ||
+      orphan.has_identity === true ||
+      orphan.has_sessions === true ||
+      orphan.has_dependent_records === true
+    ) {
+      return false;
+    }
+
+    const { data: orphanAuthData, error: orphanAuthError } =
+      await admin.auth.admin.getUserById(orphanUserId);
+    if (orphanAuthError || !orphanAuthData?.user) {
+      throw new Error("AUTH_ORPHAN_UNAVAILABLE");
+    }
+
+    const orphanAuthUser = orphanAuthData.user;
+    const orphanPhone = orphanAuthUser.phone
+      ? canonicalizeIranPhone(orphanAuthUser.phone)
+      : null;
+
+    if (orphanAuthUser.email || orphanPhone !== canonicalPhone) {
+      return false;
+    }
+
+    const { error: deleteError } =
+      await admin.auth.admin.deleteUser(orphanUserId);
+
+    if (deleteError) {
+      throw new Error("AUTH_ORPHAN_DELETE_FAILED");
+    }
+  } else if (
+    diagnosisStatus !== "AUTH_PHONE_MISSING" &&
+    diagnosisStatus !== "SYNCED"
+  ) {
+    return false;
+  }
+
+  const authBaseUrl =
+    Deno.env.get("SUPABASE_INTERNAL_URL") ??
+    Deno.env.get("SUPABASE_URL") ??
+    "http://kong:8000";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) throw new Error("AUTH_ADMIN_CONFIG_UNAVAILABLE");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+
+  let syncResponse: Response;
+  try {
+    syncResponse = await fetch(
+      `${authBaseUrl}/auth/v1/admin/users/${userId}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          phone: `+${canonicalPhone}`,
+          phone_confirm: true,
+        }),
+        signal: controller.signal,
+      },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!syncResponse.ok) {
+    // A conflict or invalid target is an eligibility failure; server failures
+    // are operational and must not be disguised as an unknown phone.
+    if (syncResponse.status >= 500) {
+      throw new Error("AUTH_PHONE_SYNC_UNAVAILABLE");
+    }
+    return false;
+  }
+
+  const { data: verifiedAuthData, error: verifyAuthError } =
+    await admin.auth.admin.getUserById(userId);
+
+  if (verifyAuthError) throw new Error("AUTH_UNAVAILABLE");
+
+  const verifiedUser = verifiedAuthData?.user;
+  if (!verifiedUser || authUserIsBlocked(verifiedUser)) return false;
+
+  const verifiedPhone = verifiedUser.phone
+    ? canonicalizeIranPhone(verifiedUser.phone)
+    : null;
+
+  return (
+    verifiedPhone === canonicalPhone &&
+    Boolean(verifiedUser.phone_confirmed_at)
+  );
+}
+
 interface ChallengeCreationResult {
   created: boolean;
   idempotent: boolean;
@@ -633,6 +842,42 @@ Deno.serve(async (req: Request) => {
       error_text: "AUTH_TARGET_NOT_ELIGIBLE",
     });
     // Decoy path — no challenge, no SMS, same response shape
+    await minimumResponseDelay(startedAt);
+    return jsonResponse(
+      {
+        ok: true,
+        challenge_id: crypto.randomUUID(),
+        retry_after_seconds: sysConfig.resendSeconds,
+        expires_in_seconds: sysConfig.ttlSeconds,
+      },
+      200,
+      allowedOrigin,
+    );
+  }
+
+  // ── Repair canonical Auth phone drift before eligibility ───────────
+  let authPhoneReady: boolean;
+  try {
+    authPhoneReady = await ensureCanonicalAuthPhone(
+      admin,
+      resolved.userId,
+      canonicalPhone,
+    );
+  } catch {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      target_user_id: resolved.userId,
+      status: "failed",
+      error_text: "AUTH_PHONE_SYNC_UNAVAILABLE",
+    });
+    return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
+  }
+
+  if (!authPhoneReady) {
+    await updateOtpDispatchLog(admin, dispatchLogId, {
+      target_user_id: resolved.userId,
+      status: "skipped",
+      error_text: "AUTH_TARGET_NOT_ELIGIBLE",
+    });
     await minimumResponseDelay(startedAt);
     return jsonResponse(
       {
