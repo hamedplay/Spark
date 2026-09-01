@@ -9,6 +9,7 @@ import {
 import {
   countUnreadNotifications,
   prependIncomingNotification,
+  reconcileNotificationSnapshot,
   replaceUpdatedNotification,
   markNotificationReadLocally,
   markAllNotificationsReadLocally,
@@ -197,6 +198,50 @@ test('prepends an incoming notification and retains only fifty rows', () => {
   assert.equal(
     result[49].id,
     'existing-48'
+  );
+});
+
+test('reconciles a server snapshot without dropping a realtime item', () => {
+  const snapshot = [
+    makeNotification({
+      id: 'server-1',
+      created_at:
+        '2024-01-15T10:00:00.000Z',
+    }),
+  ];
+
+  const current = [
+    makeNotification({
+      id: 'realtime-1',
+      created_at:
+        '2024-01-15T10:01:00.000Z',
+    }),
+    makeNotification({
+      id: 'server-1',
+      read: true,
+      created_at:
+        '2024-01-15T10:00:00.000Z',
+    }),
+  ];
+
+  const result =
+    reconcileNotificationSnapshot(
+      current,
+      snapshot
+    );
+
+  assert.equal(result.length, 2);
+  assert.equal(
+    result[0].id,
+    'realtime-1'
+  );
+  assert.equal(
+    result[1].id,
+    'server-1'
+  );
+  assert.equal(
+    result[1].read,
+    true
   );
 });
 
