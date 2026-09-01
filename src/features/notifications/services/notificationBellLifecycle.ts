@@ -42,6 +42,14 @@ export interface StartNotificationBellLifecycleInput {
         AppNotification
     ) => void;
 
+  onRealtimeSubscribed?:
+    (
+      reconnected: boolean
+    ) => void;
+
+  onRealtimeError?:
+    (error: unknown) => void;
+
   onLoadError:
     (error: unknown) => void;
 }
@@ -97,6 +105,24 @@ export function startNotificationBellLifecycle(
           if (!disposed) {
             input.onNotificationUpdated(
               notification
+            );
+          }
+        },
+
+        onSubscribed: (
+          reconnected
+        ) => {
+          if (!disposed) {
+            input.onRealtimeSubscribed?.(
+              reconnected
+            );
+          }
+        },
+
+        onError: (error) => {
+          if (!disposed) {
+            input.onRealtimeError?.(
+              error
             );
           }
         },
