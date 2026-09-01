@@ -35,6 +35,61 @@ export function prependIncomingNotification(
   ].slice(0, 50);
 }
 
+export function reconcileNotificationSnapshot(
+  current:
+    readonly AppNotification[],
+  snapshot:
+    readonly AppNotification[]
+): AppNotification[] {
+  const byId =
+    new Map<string, AppNotification>();
+
+  snapshot.forEach((notification) => {
+    byId.set(
+      notification.id,
+      notification
+    );
+  });
+
+  current.forEach((notification) => {
+    const serverVersion =
+      byId.get(notification.id);
+
+    if (!serverVersion) {
+      byId.set(
+        notification.id,
+        notification
+      );
+      return;
+    }
+
+    byId.set(
+      notification.id,
+      {
+        ...serverVersion,
+        ...notification,
+        read:
+          serverVersion.read ||
+          notification.read,
+      }
+    );
+  });
+
+  return Array.from(
+    byId.values()
+  )
+    .sort(
+      (a, b) =>
+        new Date(
+          b.created_at
+        ).getTime() -
+        new Date(
+          a.created_at
+        ).getTime()
+    )
+    .slice(0, 50);
+}
+
 export function replaceUpdatedNotification(
   notifications:
     readonly AppNotification[],
