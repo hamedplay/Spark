@@ -48,6 +48,8 @@ interface BellHarness {
   loadedNotifications: AppNotification[][];
   insertedNotifications: AppNotification[];
   updatedNotifications: AppNotification[];
+  realtimeSubscriptions: boolean[];
+  realtimeErrors: unknown[];
   loadErrors: unknown[];
 }
 
@@ -80,6 +82,9 @@ function createHarness(): BellHarness {
     [];
   const updatedNotifications: AppNotification[] =
     [];
+  const realtimeSubscriptions: boolean[] =
+    [];
+  const realtimeErrors: unknown[] = [];
   const loadErrors: unknown[] = [];
 
   const input: StartNotificationBellLifecycleInput =
@@ -116,6 +121,14 @@ function createHarness(): BellHarness {
         updatedNotifications.push(
           notification
         ),
+      onRealtimeSubscribed: (
+        reconnected
+      ) =>
+        realtimeSubscriptions.push(
+          reconnected
+        ),
+      onRealtimeError: (error) =>
+        realtimeErrors.push(error),
       onLoadError: (error) =>
         loadErrors.push(error),
     };
@@ -135,6 +148,8 @@ function createHarness(): BellHarness {
     loadedNotifications,
     insertedNotifications,
     updatedNotifications,
+    realtimeSubscriptions,
+    realtimeErrors,
     loadErrors,
   };
 }
@@ -240,6 +255,40 @@ test('forwards Realtime insert and update events', () => {
   assert.equal(
     h.updatedNotifications[0].id,
     '1'
+  );
+
+  h.cleanup();
+});
+
+test('forwards Realtime subscription status and errors', () => {
+  const h = createHarness();
+
+  assert.ok(h.capturedHandlers);
+
+  h.capturedHandlers!.onSubscribed?.(
+    false
+  );
+  h.capturedHandlers!.onSubscribed?.(
+    true
+  );
+
+  const error =
+    new Error('channel failed');
+  h.capturedHandlers!.onError?.(
+    error
+  );
+
+  assert.deepEqual(
+    h.realtimeSubscriptions,
+    [false, true]
+  );
+  assert.equal(
+    h.realtimeErrors.length,
+    1
+  );
+  assert.equal(
+    h.realtimeErrors[0],
+    error
   );
 
   h.cleanup();
