@@ -6,6 +6,9 @@ import {
 } from 'react';
 import toast from 'react-hot-toast';
 
+const UNREAD_COUNT_RECONCILE_INTERVAL_MS =
+  5_000;
+
 import type {
   PageId,
 } from '../../../app/layout/types';
@@ -73,17 +76,27 @@ export function useNotificationBell(
     useState<string | null>(null);
   const onNavigateRef =
     useRef(onNavigate);
+  const unreadCountRef =
+    useRef(0);
 
   useEffect(() => {
     onNavigateRef.current =
       onNavigate;
   }, [onNavigate]);
 
+  useEffect(() => {
+    unreadCountRef.current =
+      unreadCount;
+  }, [unreadCount]);
+
   const refreshUnreadCount =
-    useCallback(async () => {
+    useCallback(async (): Promise<
+      number | null
+    > => {
       if (!currentUserId) {
+        unreadCountRef.current = 0;
         setUnreadCount(0);
-        return;
+        return 0;
       }
 
       try {
@@ -91,14 +104,111 @@ export function useNotificationBell(
           await fetchUnreadNotificationCount(
             currentUserId
           );
+
+        unreadCountRef.current =
+          count;
         setUnreadCount(count);
+        return count;
       } catch (error: unknown) {
         console.error(
           'NotificationBell unread count error:',
           error
         );
+        return null;
       }
     }, [currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    let disposed = false;
+    let running = false;
+
+    const reconcileUnreadCount =
+      async () => {
+        if (
+          disposed ||
+          running ||
+          document.visibilityState !==
+            'visible'
+        ) {
+          return;
+        }
+
+        running = true;
+        const previousCount =
+          unreadCountRef.current;
+
+        try {
+          const count =
+            await refreshUnreadCount();
+
+          if (
+            count !== null &&
+            count !== previousCount
+          ) {
+            const loaded =
+              await fetchUserNotifications(
+                currentUserId
+              );
+
+            if (!disposed) {
+              setNotifications(
+                (previous) =>
+                  reconcileNotificationSnapshot(
+                    previous,
+                    loaded
+                  )
+              );
+            }
+          }
+        } catch (error: unknown) {
+          console.error(
+            'NotificationBell reconciliation error:',
+            error
+          );
+        } finally {
+          running = false;
+        }
+      };
+
+    const intervalId =
+      window.setInterval(
+        () => {
+          void reconcileUnreadCount();
+        },
+        UNREAD_COUNT_RECONCILE_INTERVAL_MS
+      );
+
+    const handleVisibilityChange =
+      () => {
+        if (
+          document.visibilityState ===
+          'visible'
+        ) {
+          void reconcileUnreadCount();
+        }
+      };
+
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange
+    );
+
+    return () => {
+      disposed = true;
+      window.clearInterval(
+        intervalId
+      );
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange
+      );
+    };
+  }, [
+    currentUserId,
+    refreshUnreadCount,
+  ]);
 
   useEffect(() => {
     return () => {
