@@ -457,7 +457,11 @@ export function CalendarMeetingFormView({
           committing={committing}
           onCommitWithNotify={commitEdit}
           onCommitWithoutNotify={commitEdit}
-          onCancel={() => setEditDecision(null)}
+          onReturnToEdit={() => setEditDecision(null)}
+          onExit={() => {
+            setEditDecision(null);
+            onCancel();
+          }}
         />
       )}
     </form>
