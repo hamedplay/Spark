@@ -217,8 +217,25 @@ export function subscribeToUserNotificationChanges(
     scheduleReconnect(true);
   };
 
+  const refreshRealtimeAuthAndConnection =
+    async () => {
+      if (disposed) return;
+
+      try {
+        await supabase.realtime.setAuth();
+      } catch (error: unknown) {
+        if (!disposed) {
+          handlers.onError?.(error);
+        }
+      }
+
+      if (!isSubscribed) {
+        ensureConnected();
+      }
+    };
+
   const handleOnline = () => {
-    ensureConnected();
+    void refreshRealtimeAuthAndConnection();
   };
 
   const handleVisibilityChange = () => {
@@ -226,7 +243,7 @@ export function subscribeToUserNotificationChanges(
       document.visibilityState ===
       'visible'
     ) {
-      ensureConnected();
+      void refreshRealtimeAuthAndConnection();
     }
   };
 
