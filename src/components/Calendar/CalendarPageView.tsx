@@ -586,6 +586,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
         onCommitWithNotify={() => commitMove(true)}
         onCommitWithoutNotify={() => commitMove(false)}
         onReturnToEdit={returnMoveToEdit}
+        onCancel={() => setPendingMove(null)}
       />
 
       {/* Resize change decision dialog */}
@@ -595,6 +596,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
         onCommitWithNotify={() => commitResize(true)}
         onCommitWithoutNotify={() => commitResize(false)}
         onReturnToEdit={returnResizeToEdit}
+        onCancel={() => setPendingResize(null)}
       />
 
       {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}
