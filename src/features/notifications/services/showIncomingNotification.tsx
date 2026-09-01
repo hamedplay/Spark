@@ -29,6 +29,8 @@ const SWIPE_AXIS_START_PX = 6;
 const HORIZONTAL_AXIS_RATIO = 1.05;
 const VERTICAL_AXIS_RATIO = 1.15;
 const DISMISS_ANIMATION_MS = 160;
+const IN_APP_NOTIFICATION_DURATION_MS = 6000;
+const NEXT_TOAST_DELAY_MS = 180;
 
 type GestureAxis =
   | 'pending'
@@ -45,8 +47,8 @@ interface GestureState {
 
 interface IncomingNotificationToastProps {
   notification: AppNotification;
-  toastId: string;
   visible: boolean;
+  onDismiss: () => void;
   targetPage: PageId | undefined;
   onNavigate?: (
     page: PageId
@@ -55,8 +57,8 @@ interface IncomingNotificationToastProps {
 
 function IncomingNotificationToast({
   notification,
-  toastId,
   visible,
+  onDismiss,
   targetPage,
   onNavigate,
 }: IncomingNotificationToastProps) {
@@ -238,7 +240,7 @@ function IncomingNotificationToast({
 
     dismissTimerRef.current =
       window.setTimeout(() => {
-        toast.dismiss(toastId);
+        onDismiss();
       }, DISMISS_ANIMATION_MS);
   };
 
@@ -338,7 +340,7 @@ function IncomingNotificationToast({
           return;
         }
 
-        toast.dismiss(toastId);
+        onDismiss();
         if (onNavigate && targetPage) {
           onNavigate(targetPage);
         }
@@ -415,7 +417,7 @@ function IncomingNotificationToast({
         }}
         onClick={(event) => {
           event.stopPropagation();
-          toast.dismiss(toastId);
+          onDismiss();
         }}
         className="p-1 text-gray-300 hover:text-gray-500 dark:hover:text-gray-200 flex-shrink-0"
         aria-label="بستن اعلان"
@@ -426,9 +428,184 @@ function IncomingNotificationToast({
   );
 }
 
-export function showIncomingNotification(
-  notification:
-    AppNotification,
+interface QueuedIncomingNotification {
+  notification: AppNotification;
+  onNavigate?: (
+    page: PageId
+  ) => void;
+}
+
+const incomingNotificationQueue:
+  QueuedIncomingNotification[] = [];
+const queuedNotificationIds =
+  new Set<string>();
+
+let activeIncomingNotificationId:
+  string | null = null;
+let activeIncomingToastId:
+  string | null = null;
+let activeAutoDismissTimer:
+  number | null = null;
+let nextToastTimer:
+  number | null = null;
+
+function clearActiveAutoDismissTimer(): void {
+  if (
+    activeAutoDismissTimer !== null &&
+    typeof window !== 'undefined'
+  ) {
+    window.clearTimeout(
+      activeAutoDismissTimer
+    );
+  }
+  activeAutoDismissTimer = null;
+}
+
+function scheduleNextIncomingNotification(
+  delayMs = 0
+): void {
+  if (
+    activeIncomingNotificationId ||
+    nextToastTimer !== null ||
+    incomingNotificationQueue.length === 0 ||
+    typeof window === 'undefined'
+  ) {
+    return;
+  }
+
+  const showNext = () => {
+    nextToastTimer = null;
+
+    if (
+      activeIncomingNotificationId ||
+      incomingNotificationQueue.length === 0
+    ) {
+      return;
+    }
+
+    const queued =
+      incomingNotificationQueue.shift();
+    if (!queued) return;
+
+    const { notification, onNavigate } =
+      queued;
+    const targetPage =
+      resolveNotificationToastPage(
+        notification
+      );
+
+    activeIncomingNotificationId =
+      notification.id;
+
+    const toastId = toast.custom(
+      (t) => (
+        <IncomingNotificationToast
+          notification={notification}
+          visible={t.visible}
+          onDismiss={() =>
+            completeIncomingNotification(
+              notification.id,
+              t.id
+            )
+          }
+          targetPage={targetPage}
+          onNavigate={onNavigate}
+        />
+      ),
+      {
+        duration:
+          IN_APP_NOTIFICATION_DURATION_MS +
+          60_000,
+      }
+    );
+
+    activeIncomingToastId = toastId;
+
+    activeAutoDismissTimer =
+      window.setTimeout(() => {
+        completeIncomingNotification(
+          notification.id,
+          toastId
+        );
+      }, IN_APP_NOTIFICATION_DURATION_MS);
+  };
+
+  if (delayMs > 0) {
+    nextToastTimer =
+      window.setTimeout(
+        showNext,
+        delayMs
+      );
+  } else {
+    showNext();
+  }
+}
+
+function completeIncomingNotification(
+  notificationId: string,
+  toastId: string
+): void {
+  if (
+    activeIncomingNotificationId !==
+      notificationId ||
+    activeIncomingToastId !== toastId
+  ) {
+    return;
+  }
+
+  clearActiveAutoDismissTimer();
+  toast.dismiss(toastId);
+
+  const finalize = () => {
+    toast.remove(toastId);
+    queuedNotificationIds.delete(
+      notificationId
+    );
+    activeIncomingNotificationId = null;
+    activeIncomingToastId = null;
+    scheduleNextIncomingNotification();
+  };
+
+  if (typeof window === 'undefined') {
+    finalize();
+    return;
+  }
+
+  nextToastTimer = window.setTimeout(
+    () => {
+      nextToastTimer = null;
+      finalize();
+    },
+    NEXT_TOAST_DELAY_MS
+  );
+}
+
+function enqueueIncomingNotification(
+  notification: AppNotification,
+  onNavigate?: (
+    page: PageId
+  ) => void
+): void {
+  if (
+    queuedNotificationIds.has(
+      notification.id
+    )
+  ) {
+    return;
+  }
+
+  queuedNotificationIds.add(
+    notification.id
+  );
+  incomingNotificationQueue.push({
+    notification,
+    onNavigate,
+  });
+  scheduleNextIncomingNotification();
+}
+
+function showNativeBrowserNotification(
+  notification: AppNotification,
   onNavigate?: (
     page: PageId
   ) => void
@@ -438,42 +615,54 @@ export function showIncomingNotification(
       notification
     );
 
-  toast.custom(
-    (t) => (
-      <IncomingNotificationToast
-        notification={notification}
-        toastId={t.id}
-        visible={t.visible}
-        targetPage={targetPage}
-        onNavigate={onNavigate}
-      />
-    ),
-    { duration: 6000 }
-  );
-
   if (
-    typeof window !== 'undefined' &&
-    'Notification' in window &&
-    Notification.permission ===
-      'granted' &&
-    document.visibilityState !==
+    typeof window === 'undefined' ||
+    !('Notification' in window) ||
+    Notification.permission !==
+      'granted' ||
+    document.visibilityState ===
       'visible'
   ) {
-    const browserNotification =
-      new window.Notification(
-        notification.title,
-        {
-          body: notification.message,
-          icon: '/logo_spark.png',
-        }
-      );
-
-    browserNotification.onclick = () => {
-      window.focus();
-      if (onNavigate && targetPage) {
-        onNavigate(targetPage);
-      }
-      browserNotification.close();
-    };
+    return;
   }
+
+  const browserNotification =
+    new window.Notification(
+      notification.title,
+      {
+        body: notification.message,
+        icon: '/logo_spark.png',
+      }
+    );
+
+  browserNotification.onclick = () => {
+    window.focus();
+    if (onNavigate && targetPage) {
+      onNavigate(targetPage);
+    }
+    browserNotification.close();
+  };
+}
+
+export function showIncomingNotification(
+  notification:
+    AppNotification,
+  onNavigate?: (
+    page: PageId
+  ) => void
+): void {
+  // Native/background delivery remains immediate and independent from the
+  // in-app presentation queue, so queueing never delays or drops the actual
+  // notification signal.
+  showNativeBrowserNotification(
+    notification,
+    onNavigate
+  );
+
+  // Foreground presentation is serialized: only one rich notification is
+  // visible at a time while every distinct notification remains queued FIFO.
+  enqueueIncomingNotification(
+    notification,
+    onNavigate
+  );
 }
