@@ -644,6 +644,27 @@ function showNativeBrowserNotification(
   };
 }
 
+export function resetIncomingNotificationQueue(): void {
+  clearActiveAutoDismissTimer();
+
+  if (
+    nextToastTimer !== null &&
+    typeof window !== 'undefined'
+  ) {
+    window.clearTimeout(nextToastTimer);
+  }
+  nextToastTimer = null;
+
+  if (activeIncomingToastId) {
+    toast.remove(activeIncomingToastId);
+  }
+
+  incomingNotificationQueue.length = 0;
+  queuedNotificationIds.clear();
+  activeIncomingNotificationId = null;
+  activeIncomingToastId = null;
+}
+
 export function showIncomingNotification(
   notification:
     AppNotification,
