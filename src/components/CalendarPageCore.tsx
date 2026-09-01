@@ -962,6 +962,7 @@ export function CalendarPage({
             placeholders: buildMeetingPlaceholders(movedMtg, currentUserId),
             senderId: currentUserId,
             actionUrl: 'calendar',
+            channels: { inApp: true, sms: false, bale: false },
           });
         }
 
@@ -1060,6 +1061,7 @@ export function CalendarPage({
             placeholders: buildMeetingPlaceholders(resizedMtg, currentUserId),
             senderId: currentUserId,
             actionUrl: 'calendar',
+            channels: { inApp: true, sms: false, bale: false },
           });
         }
 
