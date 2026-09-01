@@ -20,7 +20,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
   const {
     adjustSlotHeight, allDayDragEnd, allDayDragStart, allDayDragging, allDayFormDate, allDayFormEndDate,
     allDayFormTitle, allDayFormType, allUsers, calendarForm, calendarListSearch, calendars,
-    canHideOffHours, commitDrag, commitMove, commitResize, currentJm, currentJy, isMoveCommitting,
+    canHideOffHours, commitDrag, commitMove, commitResize, currentJm, currentJy, isMoveCommitting, isResizeCommitting,
     currentTime, currentUserId, dayGridRef, deleteMeetingDialog, detailMeeting, dragDate,
     dragEndSlot, dragMoveCurrentDeltaDay, dragMoveCurrentDeltaSlot, dragMoveMeeting, dragMoveOriginalEndSlot, dragMoveOriginalSlot,
     dragMovedRef, dragStartSlot, editingCalendar, enabledCalendarIds, expandedMeetingId, fetchAllDayEvents,
@@ -32,7 +32,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
     isInAllDayDragRange, isRefreshing, isSelected, isToday, jalaaliDatesBetween, listMeetings,
     listScrollRef, mainMonthDays, meetings, monthDayPopup, monthDayPopupRef, myGroupOpen,
     navigateNext, navigatePrev, navigateToMeeting, occasionsEnabled, onRegisterMinutes, onScheduleComplete,
-    openEditForm, pendingMove, pendingResize, prefillData, prefs, previewMeeting, returnMoveToEdit,
+    openEditForm, pendingMove, pendingResize, prefillData, prefs, previewMeeting, returnMoveToEdit, returnResizeToEdit,
     previewPos, previewRef, publicGroupOpen, reminderAlert, repeatEditDialog, resetCalendarForm,
     resizeCurrentDelta, resizeMeeting, resizeOriginalEndSlot, resolveName, searchInputRef, searchQuery,
     searchRef, searchResults, selectedJd, selectedJm, selectedJy, sendNotification,
@@ -588,8 +588,14 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
         onReturnToEdit={returnMoveToEdit}
       />
 
-      {/* Resize confirmation dialog */}
-      <ResizeConfirmDialog pendingResize={pendingResize} onConfirm={commitResize} onCancel={() => setPendingResize(null)} />
+      {/* Resize change decision dialog */}
+      <ResizeConfirmDialog
+        pendingResize={pendingResize}
+        committing={isResizeCommitting}
+        onCommitWithNotify={() => commitResize(true)}
+        onCommitWithoutNotify={() => commitResize(false)}
+        onReturnToEdit={returnResizeToEdit}
+      />
 
       {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}
       <MeetingInboxButton />
