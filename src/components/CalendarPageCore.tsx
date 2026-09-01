@@ -132,6 +132,7 @@ export function CalendarPage({
     meeting: MeetingData;
     newEndTime: string;
   } | null>(null);
+  const [isResizeCommitting, setIsResizeCommitting] = useState(false);
 
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -1014,28 +1015,108 @@ export function CalendarPage({
     openEditForm(proposedMeeting);
   };
 
-  const commitResize = async () => {
+  const commitResize = async (withNotify: boolean) => {
     const snap = pendingResize;
-    if (!snap) return;
-    setPendingResize(null);
+    if (!snap || isResizeCommitting) return;
+
+    setIsResizeCommitting(true);
     const { meeting, newEndTime } = snap;
-    const { error } = await supabase.from('meetings').update({ end_time: newEndTime, duration: `${meeting.start_time} - ${newEndTime}` }).eq('id', meeting.id);
-    if (!error) {
-      toast.success('مدت جلسه تغییر کرد');
+    const updates = {
+      end_time: newEndTime,
+      duration: `${meeting.start_time} - ${newEndTime}`,
+    };
+
+    try {
+      const { error } = await supabase
+        .from('meetings')
+        .update(updates)
+        .eq('id', meeting.id);
+
+      if (error) throw error;
+
+      const resizedMtg = {
+        ...meeting,
+        ...updates,
+      };
+
+      setPendingResize(null);
       fetchMeetings();
-      sendNotification('زمان جلسه تغییر کرد', meeting.subject);
-      const resizedMtg = { ...meeting, end_time: newEndTime };
-      if (currentUserId) await insertNotificationFromTemplate({ userId: currentUserId, category: 'meeting', eventType: 'change', fallbackTitle: 'مدت جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, currentUserId), senderId: currentUserId, actionUrl: 'calendar' });
-      const resizePIds = (meeting.participant_user_ids || []);
-      const resizeParticipants = [...resizePIds, ...((meeting.notify_users || []) as string[])].filter(id => id !== currentUserId);
-      if (resizeParticipants.length) await Promise.all(resizeParticipants.map(uid => insertNotificationFromTemplate({ userId: uid, category: 'meeting', eventType: 'change', audience: resizePIds.includes(uid) ? 'participants' : 'observers', fallbackTitle: 'زمان جلسه تغییر کرد', fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`, placeholders: buildMeetingPlaceholders(resizedMtg, uid), senderId: currentUserId, actionUrl: 'calendar' })));
-    } else toast.error('خطا');
+
+      if (!withNotify) {
+        toast.success('تغییرات جلسه بدون اطلاع‌رسانی ذخیره شد');
+        return;
+      }
+
+      try {
+        sendNotification('زمان جلسه تغییر کرد', meeting.subject);
+
+        if (currentUserId) {
+          await insertNotificationFromTemplate({
+            userId: currentUserId,
+            category: 'meeting',
+            eventType: 'change',
+            fallbackTitle: 'مدت جلسه تغییر کرد',
+            fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`,
+            placeholders: buildMeetingPlaceholders(resizedMtg, currentUserId),
+            senderId: currentUserId,
+            actionUrl: 'calendar',
+          });
+        }
+
+        const participantIds = meeting.participant_user_ids || [];
+        const recipientIds = Array.from(new Set([
+          ...participantIds,
+          ...((meeting.notify_users || []) as string[]),
+        ])).filter(id => id !== currentUserId);
+
+        if (recipientIds.length > 0) {
+          await Promise.all(recipientIds.map(uid =>
+            insertNotificationFromTemplate({
+              userId: uid,
+              category: 'meeting',
+              eventType: 'change',
+              audience: participantIds.includes(uid) ? 'participants' : 'observers',
+              fallbackTitle: 'زمان جلسه تغییر کرد',
+              fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`,
+              placeholders: buildMeetingPlaceholders(resizedMtg, uid),
+              senderId: currentUserId,
+              actionUrl: 'calendar',
+            })
+          ));
+        }
+
+        toast.success('تغییرات جلسه ذخیره شد و اطلاع‌رسانی انجام شد');
+      } catch (notificationError) {
+        console.error('Meeting resize notification error:', notificationError);
+        toast.error('تغییرات جلسه ذخیره شد، اما اطلاع‌رسانی به‌طور کامل انجام نشد');
+      }
+    } catch (error) {
+      console.error('Meeting resize update error:', error);
+      toast.error('خطا در ذخیره تغییرات جلسه');
+    } finally {
+      setIsResizeCommitting(false);
+    }
   };
+
+  const returnResizeToEdit = () => {
+    const snap = pendingResize;
+    if (!snap || isResizeCommitting) return;
+
+    const proposedMeeting = {
+      ...snap.meeting,
+      end_time: snap.newEndTime,
+      duration: `${snap.meeting.start_time} - ${snap.newEndTime}`,
+    } as MeetingData;
+
+    setPendingResize(null);
+    openEditForm(proposedMeeting);
+  };
+
 
   return <CalendarPageView model={{
       adjustSlotHeight, allDayDragEnd, allDayDragStart, allDayDragging, allDayFormDate, allDayFormEndDate,
       allDayFormTitle, allDayFormType, allUsers, calendarForm, calendarListSearch, calendars,
-      canHideOffHours, commitDrag, commitMove, commitResize, currentJm, currentJy, isMoveCommitting,
+      canHideOffHours, commitDrag, commitMove, commitResize, currentJm, currentJy, isMoveCommitting, isResizeCommitting,
       currentTime, currentUserId, dayGridRef, deleteMeetingDialog, detailMeeting, dragDate,
       dragEndSlot, dragMoveCurrentDeltaDay, dragMoveCurrentDeltaSlot, dragMoveMeeting, dragMoveOriginalEndSlot, dragMoveOriginalSlot,
       dragMovedRef, dragStartSlot, editingCalendar, enabledCalendarIds, expandedMeetingId, fetchAllDayEvents,
@@ -1047,7 +1128,7 @@ export function CalendarPage({
       isInAllDayDragRange, isRefreshing, isSelected, isToday, jalaaliDatesBetween, listMeetings,
       listScrollRef, mainMonthDays, meetings, monthDayPopup, monthDayPopupRef, myGroupOpen,
       navigateNext, navigatePrev, navigateToMeeting, occasionsEnabled, onRegisterMinutes, onScheduleComplete,
-      openEditForm, pendingMove, pendingResize, prefillData, prefs, previewMeeting, returnMoveToEdit,
+      openEditForm, pendingMove, pendingResize, prefillData, prefs, previewMeeting, returnMoveToEdit, returnResizeToEdit,
       previewPos, previewRef, publicGroupOpen, reminderAlert, repeatEditDialog, resetCalendarForm,
       resizeCurrentDelta, resizeMeeting, resizeOriginalEndSlot, resolveName, searchInputRef, searchQuery,
       searchRef, searchResults, selectedJd, selectedJm, selectedJy, sendNotification,
