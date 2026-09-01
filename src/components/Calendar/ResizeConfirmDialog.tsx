@@ -1,47 +1,73 @@
+import { Bell, Loader as Loader2 } from 'lucide-react';
 import type { MeetingData } from './types';
 
 export function ResizeConfirmDialog({
   pendingResize,
-  onConfirm,
-  onCancel,
+  committing,
+  onCommitWithNotify,
+  onCommitWithoutNotify,
+  onReturnToEdit,
 }: {
   pendingResize: { meeting: MeetingData; newEndTime: string } | null;
-  onConfirm: () => void;
-  onCancel: () => void;
+  committing: boolean;
+  onCommitWithNotify: () => void;
+  onCommitWithoutNotify: () => void;
+  onReturnToEdit: () => void;
 }) {
   if (!pendingResize) return null;
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" dir="rtl">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 mx-4 w-full max-w-sm">
-        <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">تأیید تغییر مدت جلسه</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">آیا از تغییر زمان پایان این جلسه اطمینان دارید؟</p>
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mb-5 space-y-2">
-          <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{pendingResize.meeting.subject}</p>
-          <div className="flex items-start gap-2 text-sm">
-            <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">قبل:</span>
-            <span className="text-gray-600 dark:text-gray-300" dir="ltr">
-              {pendingResize.meeting.start_time} تا {pendingResize.meeting.end_time}
-            </span>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" dir="rtl">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-2xl overflow-hidden">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/20">
+          <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+            <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
           </div>
-          <div className="flex items-start gap-2 text-sm">
-            <span className="text-gray-400 w-10 flex-shrink-0 mt-0.5">بعد:</span>
-            <span className="text-teal-600 dark:text-teal-400 font-medium" dir="ltr">
-              {pendingResize.meeting.start_time} تا {pendingResize.newEndTime}
-            </span>
+          <div>
+            <p className="text-sm font-bold text-gray-800 dark:text-white">ثبت تغییرات جلسه</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              تغییراتی در اطلاعات یا اعضای جلسه ایجاد شده است. نحوه ثبت تغییرات را انتخاب کنید.
+            </p>
           </div>
         </div>
-        <div className="flex gap-3">
+
+        <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+          <div>
+            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">تغییرات مهم</p>
+            <ul className="text-xs text-gray-700 dark:text-gray-300 list-disc pr-4 space-y-0.5">
+              <li>ساعت پایان</li>
+            </ul>
+          </div>
+
+          <p className="text-xs text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-100 dark:border-gray-700">
+            در حالت ثبت با اطلاع‌رسانی، افراد اضافه‌شده دعوت‌نامه، افراد حذف‌شده پیام لغو دعوت و اعضای باقی‌مانده در صورت تغییر اطلاعات جلسه پیام تغییر دریافت می‌کنند. در حالت ثبت بدون اطلاع‌رسانی، تغییرات فقط در سامانه ذخیره می‌شوند و هیچ پیامی ارسال نخواهد شد.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-700">
           <button
-            onClick={onCancel}
-            className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            onClick={onCommitWithNotify}
+            disabled={committing}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 bg-teal-600 text-white hover:bg-teal-700"
           >
-            انصراف
+            {committing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+            ثبت تغییرات با اطلاع‌رسانی
           </button>
+
           <button
-            onClick={onConfirm}
-            className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
+            onClick={onCommitWithoutNotify}
+            disabled={committing}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
           >
-            تأیید تغییر
+            ثبت تغییرات بدون اطلاع‌رسانی
+          </button>
+
+          <button
+            onClick={onReturnToEdit}
+            disabled={committing}
+            className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            بازگشت به ویرایش
           </button>
         </div>
       </div>
