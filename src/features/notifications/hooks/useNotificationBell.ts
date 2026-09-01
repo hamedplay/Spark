@@ -16,6 +16,7 @@ import type {
 import {
   countUnreadNotifications,
   prependIncomingNotification,
+  reconcileNotificationSnapshot,
   replaceUpdatedNotification,
   markNotificationReadLocally,
   markAllNotificationsReadLocally,
@@ -166,26 +167,28 @@ export function useNotificationBell(
             }
           );
         },
-        onRealtimeSubscribed: (
-          reconnected
-        ) => {
-          if (!reconnected) {
-            return;
-          }
-
+        onRealtimeSubscribed: () => {
           void (async () => {
             try {
               const loaded =
                 await fetchUserNotifications(
                   currentUserId
                 );
+
               setNotifications(
-                loaded
-              );
-              setUnreadCount(
-                countUnreadNotifications(
-                  loaded
-                )
+                (previous) => {
+                  const reconciled =
+                    reconcileNotificationSnapshot(
+                      previous,
+                      loaded
+                    );
+                  setUnreadCount(
+                    countUnreadNotifications(
+                      reconciled
+                    )
+                  );
+                  return reconciled;
+                }
               );
             } catch (error: unknown) {
               console.error(
