@@ -7,12 +7,14 @@ export function ResizeConfirmDialog({
   onCommitWithNotify,
   onCommitWithoutNotify,
   onReturnToEdit,
+  onCancel,
 }: {
   pendingResize: { meeting: MeetingData; newEndTime: string } | null;
   committing: boolean;
   onCommitWithNotify: () => void;
   onCommitWithoutNotify: () => void;
   onReturnToEdit: () => void;
+  onCancel: () => void;
 }) {
   if (!pendingResize) return null;
 
@@ -46,6 +48,7 @@ export function ResizeConfirmDialog({
 
         <div className="flex flex-col gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-700">
           <button
+            type="button"
             onClick={onCommitWithNotify}
             disabled={committing}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 bg-teal-600 text-white hover:bg-teal-700"
@@ -55,6 +58,7 @@ export function ResizeConfirmDialog({
           </button>
 
           <button
+            type="button"
             onClick={onCommitWithoutNotify}
             disabled={committing}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 active:scale-95 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
@@ -63,11 +67,21 @@ export function ResizeConfirmDialog({
           </button>
 
           <button
+            type="button"
             onClick={onReturnToEdit}
             disabled={committing}
             className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
             بازگشت به ویرایش
+          </button>
+
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={committing}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50"
+          >
+            انصراف
           </button>
         </div>
       </div>
