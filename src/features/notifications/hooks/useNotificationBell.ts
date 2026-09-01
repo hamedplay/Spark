@@ -34,6 +34,7 @@ import {
   startNotificationBellLifecycle,
 } from '../services/notificationBellLifecycle';
 import {
+  resetIncomingNotificationQueue,
   showIncomingNotification,
 } from '../services/showIncomingNotification';
 
@@ -67,6 +68,12 @@ export function useNotificationBell(
     useState(true);
   const [currentUserId, setCurrentUserId] =
     useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      resetIncomingNotificationQueue();
+    };
+  }, []);
 
   useEffect(() => {
     let disposed = false;
