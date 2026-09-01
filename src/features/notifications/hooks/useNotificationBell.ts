@@ -2,6 +2,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useCallback,
 } from 'react';
 import toast from 'react-hot-toast';
 
@@ -14,7 +15,6 @@ import type {
   AppNotification,
 } from '../types/appNotification';
 import {
-  countUnreadNotifications,
   prependIncomingNotification,
   reconcileNotificationSnapshot,
   replaceUpdatedNotification,
@@ -26,6 +26,7 @@ import {
 } from '../navigation/notificationNavigation';
 import {
   fetchUserNotifications,
+  fetchUnreadNotificationCount,
   markNotificationAsRead,
   markAllUserNotificationsAsRead,
 } from '../repositories/notificationRepository';
@@ -78,6 +79,27 @@ export function useNotificationBell(
       onNavigate;
   }, [onNavigate]);
 
+  const refreshUnreadCount =
+    useCallback(async () => {
+      if (!currentUserId) {
+        setUnreadCount(0);
+        return;
+      }
+
+      try {
+        const count =
+          await fetchUnreadNotificationCount(
+            currentUserId
+          );
+        setUnreadCount(count);
+      } catch (error: unknown) {
+        console.error(
+          'NotificationBell unread count error:',
+          error
+        );
+      }
+    }, [currentUserId]);
+
   useEffect(() => {
     return () => {
       resetIncomingNotificationQueue();
@@ -103,6 +125,31 @@ export function useNotificationBell(
   useEffect(() => {
     if (!currentUserId) return;
 
+    let disposed = false;
+    let unreadSyncTimer:
+      number | null = null;
+
+    const scheduleUnreadCountSync =
+      () => {
+        if (
+          disposed ||
+          unreadSyncTimer !== null
+        ) {
+          return;
+        }
+
+        unreadSyncTimer =
+          window.setTimeout(
+            () => {
+              unreadSyncTimer = null;
+              if (!disposed) {
+                void refreshUnreadCount();
+              }
+            },
+            80
+          );
+      };
+
     const cleanup =
       startNotificationBellLifecycle({
         userId: currentUserId,
@@ -115,30 +162,19 @@ export function useNotificationBell(
           loaded
         ) => {
           setNotifications(loaded);
-          setUnreadCount(
-            countUnreadNotifications(
-              loaded
-            )
-          );
+          scheduleUnreadCountSync();
         },
         onNotificationInserted: (
           notification
         ) => {
           setNotifications(
-            (previous) => {
-              const updated =
-                prependIncomingNotification(
-                  previous,
-                  notification
-                );
-              setUnreadCount(
-                countUnreadNotifications(
-                  updated
-                )
-              );
-              return updated;
-            }
+            (previous) =>
+              prependIncomingNotification(
+                previous,
+                notification
+              )
           );
+          scheduleUnreadCountSync();
 
           showIncomingNotification(
             notification,
@@ -152,20 +188,13 @@ export function useNotificationBell(
           notification
         ) => {
           setNotifications(
-            (previous) => {
-              const updated =
-                replaceUpdatedNotification(
-                  previous,
-                  notification
-                );
-              setUnreadCount(
-                countUnreadNotifications(
-                  updated
-                )
-              );
-              return updated;
-            }
+            (previous) =>
+              replaceUpdatedNotification(
+                previous,
+                notification
+              )
           );
+          scheduleUnreadCountSync();
         },
         onRealtimeSubscribed: () => {
           void (async () => {
@@ -176,20 +205,13 @@ export function useNotificationBell(
                 );
 
               setNotifications(
-                (previous) => {
-                  const reconciled =
-                    reconcileNotificationSnapshot(
-                      previous,
-                      loaded
-                    );
-                  setUnreadCount(
-                    countUnreadNotifications(
-                      reconciled
-                    )
-                  );
-                  return reconciled;
-                }
+                (previous) =>
+                  reconcileNotificationSnapshot(
+                    previous,
+                    loaded
+                  )
               );
+              scheduleUnreadCountSync();
             } catch (error: unknown) {
               console.error(
                 'NotificationBell realtime resync error:',
@@ -214,8 +236,23 @@ export function useNotificationBell(
         },
       });
 
-    return cleanup;
-  }, [currentUserId]);
+    return () => {
+      disposed = true;
+
+      if (
+        unreadSyncTimer !== null
+      ) {
+        window.clearTimeout(
+          unreadSyncTimer
+        );
+      }
+
+      cleanup();
+    };
+  }, [
+    currentUserId,
+    refreshUnreadCount,
+  ]);
 
   const markAsRead = async (
     id: string
@@ -223,32 +260,22 @@ export function useNotificationBell(
     const prevNotifications =
       notifications;
 
-    setNotifications((prev) => {
-      const updated =
-        markNotificationReadLocally(
-          prev,
-          id
-        );
-      setUnreadCount(
-        countUnreadNotifications(
-          updated
-        )
-      );
-      return updated;
-    });
+    setNotifications((prev) =>
+      markNotificationReadLocally(
+        prev,
+        id
+      )
+    );
 
     try {
       await markNotificationAsRead(
         id,
         currentUserId
       );
+      void refreshUnreadCount();
     } catch {
       setNotifications(prevNotifications);
-      setUnreadCount(
-        countUnreadNotifications(
-          prevNotifications
-        )
-      );
+      void refreshUnreadCount();
       toast.error(
         'خطا در بروزرسانی اعلان'
       );
@@ -301,16 +328,13 @@ export function useNotificationBell(
       await markAllUserNotificationsAsRead(
         currentUserId
       );
+      void refreshUnreadCount();
       toast.success(
         'همه اعلان‌ها خوانده شد'
       );
     } catch {
       setNotifications(prevNotifications);
-      setUnreadCount(
-        countUnreadNotifications(
-          prevNotifications
-        )
-      );
+      void refreshUnreadCount();
       toast.error(
         'خطا در بروزرسانی اعلان‌ها'
       );
