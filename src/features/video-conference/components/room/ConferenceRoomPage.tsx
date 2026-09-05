@@ -13,6 +13,7 @@ import { useNetworkQuality } from '../../hooks/useNetworkQuality';
 import { useParticipants } from '../../hooks/useParticipants';
 import { useScreenShare } from '../../hooks/useScreenShare';
 import { useWaitingRoom } from '../../hooks/useWaitingRoom';
+import { runHostAction } from '../../services/conferenceApi';
 import type {
   ConferenceLayoutMode,
   ConferenceRoomShape,
@@ -56,6 +57,7 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
   });
 
   const canManageWaitingRoom = hasConferencePermission(authorization, 'MANAGE_WAITING_ROOM');
+  const canEndMeeting = hasConferencePermission(authorization, 'END_MEETING');
   const handleAdmitted = useCallback(() => { void livekit.connect(); }, [livekit.connect]);
   const handleRejected = useCallback(
     () => livekit.fail('درخواست ورود شما توسط میزبان رد شد.'),
@@ -130,8 +132,15 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
     try {
       await conferenceClient.rpc('leave_conference_room', { p_room_id: sparkRoom.id });
     } catch {
-      // UI leave still proceeds, matching the previous behavior.
+      // خروج کاربر نباید وضعیت اتاق را ended کند؛ جلسه برای سایر افراد ادامه دارد.
     }
+    onLeave();
+  };
+
+  const endForAll = async () => {
+    if (!canEndMeeting) return;
+    await runHostAction(sparkRoom.id, 'end', undefined, conferenceClient);
+    livekit.disconnect();
     onLeave();
   };
 
@@ -163,6 +172,8 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         </div>
 
         <div className="flex items-center gap-2">
+          <RecordingConsentBanner consent={recordingConsent} />
+
           {!screenShareIdentity && (
             <div className="flex items-center gap-1 rounded-xl bg-slate-900 p-1">
               <button
@@ -226,7 +237,6 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         />
       )}
       {!phase.mediaHidden && <ReactionOverlay reactions={livekit.reactions} />}
-      <RecordingConsentBanner consent={recordingConsent} />
       <SpeakerTimerBanner session={speakerTimer.ownSession} remainingSeconds={speakerTimer.ownRemainingSeconds} />
       <MeetingPhaseOverlay
         phase={phase.currentPhase}
@@ -274,12 +284,14 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         }
         allowReactions={sparkRoom.allow_reactions !== false}
         reactionError={livekit.reactionError}
+        canEndMeeting={canEndMeeting}
         onToggleMic={() => void livekit.toggleMic()}
         onToggleCamera={() => void livekit.toggleCamera()}
         onToggleScreen={() => void screen.toggleScreen()}
         onToggleSpeaker={() => setSpeakerMuted((current) => !current)}
         onReaction={(reaction) => void livekit.sendReaction(reaction)}
         onLeave={() => void leave()}
+        onEndMeeting={() => void endForAll()}
       />
     </div>
   );
