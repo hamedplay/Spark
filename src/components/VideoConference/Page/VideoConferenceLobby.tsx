@@ -25,7 +25,6 @@ import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import type { ConferenceRoom } from '../types';
-import { RoomCard } from './RoomCard';
 
 export type VideoConferenceRuntimeConfig = {
   ok: boolean;
@@ -245,7 +244,7 @@ export function VideoConferenceLobby({
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(310px,0.72fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(560px,1fr)]">
         <section className="rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 sm:p-5">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
             <div>
@@ -264,22 +263,10 @@ export function VideoConferenceLobby({
 
             <div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-xl bg-blue-50/80 px-3 py-2.5 dark:bg-blue-500/10">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"><Sparkles className="h-3.5 w-3.5 text-violet-500" /> معماری فعال</div>
-                  <div className="mt-1 text-sm font-black text-slate-950 dark:text-white">{configLoading ? '—' : topologyTitle}</div>
-                </div>
-                <div className="rounded-xl bg-sky-50/80 px-3 py-2.5 dark:bg-sky-500/10">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"><Gauge className="h-3.5 w-3.5 text-blue-500" /> ظرفیت هر اتاق</div>
-                  <div className="mt-1 text-sm font-black text-slate-950 dark:text-white">{configLoading ? '—' : configError ? 'خطا' : `${capacity ?? '—'} نفر`}</div>
-                </div>
-                <div className="rounded-xl bg-violet-50/80 px-3 py-2.5 dark:bg-violet-500/10">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"><Radio className="h-3.5 w-3.5 text-violet-500" /> اتاق‌های فعال</div>
-                  <div className="mt-1 text-sm font-black text-slate-950 dark:text-white">{loading ? '—' : rooms.length}</div>
-                </div>
-                <div className="rounded-xl bg-emerald-50/80 px-3 py-2.5 dark:bg-emerald-500/10">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"><Users className="h-3.5 w-3.5 text-emerald-500" /> حاضر در جلسات</div>
-                  <div className="mt-1 text-sm font-black text-slate-950 dark:text-white">{loading ? '—' : onlineParticipants}</div>
-                </div>
+                <div className="rounded-xl bg-blue-50/80 px-3 py-2.5 dark:bg-blue-500/10"><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"><Sparkles className="h-3.5 w-3.5 text-violet-500" /> معماری فعال</div><div className="mt-1 text-sm font-black text-slate-950 dark:text-white">{configLoading ? '—' : topologyTitle}</div></div>
+                <div className="rounded-xl bg-sky-50/80 px-3 py-2.5 dark:bg-sky-500/10"><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"><Gauge className="h-3.5 w-3.5 text-blue-500" /> ظرفیت هر اتاق</div><div className="mt-1 text-sm font-black text-slate-950 dark:text-white">{configLoading ? '—' : configError ? 'خطا' : `${capacity ?? '—'} نفر`}</div></div>
+                <div className="rounded-xl bg-violet-50/80 px-3 py-2.5 dark:bg-violet-500/10"><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"><Radio className="h-3.5 w-3.5 text-violet-500" /> اتاق‌های فعال</div><div className="mt-1 text-sm font-black text-slate-950 dark:text-white">{loading ? '—' : rooms.length}</div></div>
+                <div className="rounded-xl bg-emerald-50/80 px-3 py-2.5 dark:bg-emerald-500/10"><div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"><Users className="h-3.5 w-3.5 text-emerald-500" /> حاضر در جلسات</div><div className="mt-1 text-sm font-black text-slate-950 dark:text-white">{loading ? '—' : onlineParticipants}</div></div>
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -298,41 +285,44 @@ export function VideoConferenceLobby({
           )}
         </section>
 
-        <section className="rounded-[22px] border border-blue-200/80 bg-gradient-to-b from-blue-50/80 to-white p-4 shadow-[0_8px_24px_rgba(37,99,235,0.06)] dark:border-blue-500/20 dark:from-blue-950/20 dark:to-slate-950 sm:p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/20"><LogIn className="h-5 w-5" /></div>
-            <div>
-              <h2 className="text-base font-black text-slate-950 dark:text-white">ورود با کد اتاق</h2>
-              <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">برای پیوستن به یک جلسه، کد اتاق را وارد کنید.</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <section className="rounded-[22px] border border-blue-200/80 bg-gradient-to-b from-blue-50/80 to-white p-4 shadow-[0_8px_24px_rgba(37,99,235,0.06)] dark:border-blue-500/20 dark:from-blue-950/20 dark:to-slate-950 sm:p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/20"><LogIn className="h-5 w-5" /></div>
+              <div><h2 className="text-base font-black text-slate-950 dark:text-white">ورود با کد اتاق</h2><p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">برای پیوستن به یک جلسه، کد اتاق را وارد کنید.</p></div>
             </div>
-          </div>
-          <div className="mt-4 flex items-center rounded-xl border border-slate-200 bg-white px-3 shadow-inner dark:border-slate-700 dark:bg-slate-900">
-            <Hash className="h-4 w-4 shrink-0 text-slate-300" />
-            <input
-              value={joinCode}
-              onChange={event => onJoinCodeChange(event.target.value.toUpperCase())}
-              onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); handleJoinByCode(); } }}
-              placeholder="XXX-XXX-XXX"
-              maxLength={11}
-              dir="ltr"
-              aria-label="کد اتاق"
-              className="w-full border-0 bg-transparent px-3 py-3 text-center font-mono text-base font-black tracking-[0.15em] text-slate-900 outline-none placeholder:text-slate-300 dark:text-white dark:placeholder:text-slate-600"
-            />
-          </div>
-          <button type="button" onClick={handleJoinByCode} disabled={joining} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-            {joining ? <RefreshCw className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />} ورود به جلسه
-          </button>
-        </section>
+            <div className="mt-4 flex items-center rounded-xl border border-slate-200 bg-white px-3 shadow-inner dark:border-slate-700 dark:bg-slate-900">
+              <Hash className="h-4 w-4 shrink-0 text-slate-300" />
+              <input value={joinCode} onChange={event => onJoinCodeChange(event.target.value.toUpperCase())} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); handleJoinByCode(); } }} placeholder="XXX-XXX-XXX" maxLength={11} dir="ltr" aria-label="کد اتاق" className="w-full border-0 bg-transparent px-3 py-3 text-center font-mono text-base font-black tracking-[0.15em] text-slate-900 outline-none placeholder:text-slate-300 dark:text-white dark:placeholder:text-slate-600" />
+            </div>
+            <button type="button" onClick={handleJoinByCode} disabled={joining} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{joining ? <RefreshCw className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />} ورود به جلسه</button>
+          </section>
+
+          <section className="rounded-[22px] border border-blue-100 bg-blue-50/45 p-4 shadow-[0_8px_24px_rgba(37,99,235,0.04)] dark:border-blue-500/15 dark:bg-blue-500/5 sm:p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"><Plus className="h-5 w-5" /></div>
+              <div><h3 className="text-base font-black text-slate-950 dark:text-white">ایجاد جلسه جدید</h3><p className="mt-0.5 text-[10px] text-slate-400">یک جلسه جدید ایجاد کنید و دیگران را دعوت نمایید.</p></div>
+            </div>
+
+            {!showCreate ? (
+              <button type="button" onClick={onOpenCreate} disabled={configLoading || !!configError || !config} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white py-2.5 text-xs font-extrabold text-blue-600 transition hover:bg-blue-50 disabled:opacity-50 dark:border-blue-500/20 dark:bg-slate-950 dark:text-blue-300 dark:hover:bg-blue-500/10"><Plus className="h-4 w-4" /> ایجاد جلسه</button>
+            ) : (
+              <form onSubmit={onCreate} className="mt-4 space-y-2.5">
+                <div className="flex items-center justify-between"><span className="text-[10px] font-bold text-slate-500">تنظیمات جلسه</span><button type="button" onClick={onCloseCreate} aria-label="انصراف" className="rounded-lg p-1.5 text-slate-400 hover:bg-white dark:hover:bg-slate-900"><X className="h-4 w-4" /></button></div>
+                <input value={createName} onChange={event => onCreateNameChange(event.target.value)} placeholder="نام جلسه (اختیاری)" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/70"><input type="checkbox" checked={requireApproval} onChange={event => onRequireApprovalChange(event.target.checked)} className="h-4 w-4 accent-blue-600" /><span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">تأیید میزبان برای ورود</span></label>
+                <button type="submit" disabled={creating || configLoading || !config?.ok} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{creating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} ایجاد اتاق</button>
+              </form>
+            )}
+          </section>
+        </div>
       </div>
 
       <section className="overflow-hidden rounded-[22px] border border-slate-200/80 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950">
         <button type="button" onClick={() => setShowMyMeetings(value => !value)} aria-expanded={showMyMeetings} className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-right transition hover:bg-slate-50/70 dark:hover:bg-slate-900/60 sm:px-5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300"><CalendarDays className="h-5 w-5" /></div>
-            <div>
-              <h2 className="text-base font-black text-slate-950 dark:text-white">جلسات آنلاین من</h2>
-              <p className="mt-0.5 text-[10px] text-slate-400">جلسات شما در حال برگزاری یا برنامه‌ریزی‌شده</p>
-            </div>
+            <div><h2 className="text-base font-black text-slate-950 dark:text-white">جلسات آنلاین من</h2><p className="mt-0.5 text-[10px] text-slate-400">جلسات شما در حال برگزاری یا برنامه‌ریزی‌شده</p></div>
           </div>
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400">{showMyMeetings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</div>
         </button>
@@ -346,9 +336,7 @@ export function VideoConferenceLobby({
             ) : (
               <div className="overflow-x-auto pt-3">
                 <div className="min-w-[900px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-                  <div className="grid grid-cols-[1.55fr_1fr_.85fr_.8fr_.75fr_.85fr_150px] bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-400 dark:bg-slate-900/80">
-                    <div>موضوع جلسه</div><div>زمان</div><div>وضعیت</div><div>نقش من</div><div>تعداد شرکت‌کنندگان</div><div>کد اتاق</div><div>اقدامات</div>
-                  </div>
+                  <div className="grid grid-cols-[1.55fr_1fr_.85fr_.8fr_.75fr_.85fr_150px] bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-400 dark:bg-slate-900/80"><div>موضوع جلسه</div><div>زمان</div><div>وضعیت</div><div>نقش من</div><div>تعداد شرکت‌کنندگان</div><div>کد اتاق</div><div>اقدامات</div></div>
                   <div className="divide-y divide-slate-100 dark:divide-slate-800">
                     {rooms.map(room => {
                       const status = roomStatus(room);
@@ -375,46 +363,6 @@ export function VideoConferenceLobby({
           </div>
         )}
       </section>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_285px]">
-        <section className="rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 sm:p-5">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300"><Users className="h-5 w-5" /></div>
-              <div><h2 className="text-base font-black text-slate-950 dark:text-white">جلسات در دسترس</h2><p className="mt-0.5 text-[10px] text-slate-400">جلسات عمومی و فعال سازمان که می‌توانید به آن‌ها بپیوندید.</p></div>
-            </div>
-            {!loading && rooms.length > 0 && <span className="text-[10px] font-bold text-blue-600 dark:text-blue-300">{rooms.length} جلسه فعال</span>}
-          </div>
-
-          {loading ? (
-            <div className="flex min-h-32 items-center justify-center gap-2 text-xs text-slate-400"><RefreshCw className="h-4 w-4 animate-spin" /> در حال دریافت اتاق‌ها...</div>
-          ) : rooms.length === 0 ? (
-            <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/40 px-4 text-center dark:border-slate-800 dark:bg-slate-900/30"><Video className="h-6 w-6 text-slate-300" /><p className="mt-2 text-xs font-bold text-slate-500">جلسه فعالی برای شما وجود ندارد</p></div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-              {rooms.map(room => <RoomCard key={room.id} room={room} currentUserId={currentUserId} onJoin={() => openStandaloneConferenceSession(room.code)} onInvite={() => onInviteRoom(room)} joining={joiningRoomId === room.id} />)}
-            </div>
-          )}
-        </section>
-
-        <aside className="rounded-[22px] border border-blue-100 bg-blue-50/45 p-4 shadow-[0_8px_24px_rgba(37,99,235,0.04)] dark:border-blue-500/15 dark:bg-blue-500/5 sm:p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"><Plus className="h-5 w-5" /></div>
-            <div><h3 className="text-base font-black text-slate-950 dark:text-white">ایجاد جلسه جدید</h3><p className="mt-0.5 text-[10px] text-slate-400">به‌راحتی یک جلسه جدید ایجاد کنید و دیگران را دعوت نمایید.</p></div>
-          </div>
-
-          {!showCreate ? (
-            <button type="button" onClick={onOpenCreate} disabled={configLoading || !!configError || !config} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white py-2.5 text-xs font-extrabold text-blue-600 transition hover:bg-blue-50 disabled:opacity-50 dark:border-blue-500/20 dark:bg-slate-950 dark:text-blue-300 dark:hover:bg-blue-500/10"><Plus className="h-4 w-4" /> ایجاد جلسه</button>
-          ) : (
-            <form onSubmit={onCreate} className="mt-4 space-y-2.5">
-              <div className="flex items-center justify-between"><span className="text-[10px] font-bold text-slate-500">تنظیمات جلسه</span><button type="button" onClick={onCloseCreate} aria-label="انصراف" className="rounded-lg p-1.5 text-slate-400 hover:bg-white dark:hover:bg-slate-900"><X className="h-4 w-4" /></button></div>
-              <input value={createName} onChange={event => onCreateNameChange(event.target.value)} placeholder="نام جلسه (اختیاری)" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/70"><input type="checkbox" checked={requireApproval} onChange={event => onRequireApprovalChange(event.target.checked)} className="h-4 w-4 accent-blue-600" /><span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">تأیید میزبان برای ورود</span></label>
-              <button type="submit" disabled={creating || configLoading || !config?.ok} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{creating ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} ایجاد اتاق</button>
-            </form>
-          )}
-        </aside>
-      </div>
     </div>
   );
 }
