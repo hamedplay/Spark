@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Archive, ChevronDown, ChevronUp, Clock, MessageSquare, BarChart3, PenLine, Users, Loader as Loader2, RefreshCw, WifiOff, UserX, CalendarDays } from 'lucide-react';
 import moment from 'moment-jalaali';
 import { supabase } from '../../../lib/supabase';
+import { useConferenceTooltips } from '../useConferenceTooltips';
 
 interface AttendanceSummaryItem {
   user_id: string; display_name: string; role: string; first_join: string | null; last_leave: string | null;
@@ -24,6 +25,7 @@ function durationLabel(seconds?:number|null){
 }
 
 export function ConferenceArchiveList(){
+  useConferenceTooltips();
   const [items,setItems]=useState<ConferenceArchive[]>([]); const [loading,setLoading]=useState(true); const [expanded,setExpanded]=useState<string|null>(null);
   const load=useCallback(async()=>{ setLoading(true); try{
     const {data,error}=await supabase.from('conference_archives')
