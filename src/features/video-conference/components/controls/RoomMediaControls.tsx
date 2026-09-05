@@ -165,7 +165,7 @@ export function RoomMediaControls({
 
       <div className="relative shrink-0">
         {exitMenuOpen && (
-          <div className="absolute bottom-14 right-0 z-[70] w-64 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/98 p-2 shadow-2xl backdrop-blur" dir="rtl">
+          <div className="absolute bottom-14 right-0 z-[70] w-64 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl backdrop-blur" dir="rtl">
             <div className="mb-1 flex items-center justify-between px-2 py-1">
               <span className="text-xs font-bold text-white">خروج از جلسه</span>
               <button type="button" onClick={() => setExitMenuOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-white/10" aria-label="بستن"><X className="h-4 w-4" /></button>
