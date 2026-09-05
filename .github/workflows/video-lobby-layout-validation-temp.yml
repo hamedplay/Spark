@@ -1,0 +1,40 @@
+name: video-lobby-layout-validation-temp
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - run: npm ci
+      - name: Verify lobby layout
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = fs.readFileSync('src/components/VideoConference/Page/VideoConferenceLobby.tsx', 'utf8');
+          if (file.includes('جلسات در دسترس')) throw new Error('available meetings section still exists');
+          if (file.includes("import { RoomCard }")) throw new Error('RoomCard dependency still exists');
+          const joinIndex = file.indexOf('ورود با کد اتاق');
+          const createIndex = file.indexOf('ایجاد جلسه جدید');
+          const myMeetingsIndex = file.indexOf('جلسات آنلاین من');
+          if (joinIndex < 0 || createIndex < 0) throw new Error('join/create cards missing');
+          if (!(joinIndex < createIndex && createIndex < myMeetingsIndex)) throw new Error('create card is not beside/above my meetings as required');
+          if (!file.includes('md:grid-cols-2')) throw new Error('join/create sibling grid missing');
+          console.log('video conference lobby layout verified');
+          NODE
+      - name: Build
+        run: npm run build
+      - name: Video conference unit tests
+        run: npm run test:video-conference:unit
