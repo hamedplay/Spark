@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, Radio, ShieldAlert, Video, X } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Loader2, Radio, ShieldAlert, ShieldCheck, Video } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getAuthenticatedRTCConfig } from '../../lib/authenticatedRtcConfig';
@@ -104,6 +104,14 @@ export default function StandaloneConferencePage() {
     } catch { /* sessionStorage is best effort */ }
   }, [sessionKey]);
 
+  const closeOrReturnToSpark = useCallback(() => {
+    clearSessionMarker();
+    window.close();
+    window.setTimeout(() => {
+      if (!window.closed) window.location.replace('/');
+    }, 120);
+  }, [clearSessionMarker]);
+
   const finishSession = useCallback((message: string) => {
     if (closingRef.current) return;
     closingRef.current = true;
@@ -154,7 +162,7 @@ export default function StandaloneConferencePage() {
       return;
     }
 
-    try { sessionStorage.setItem(sessionKey, sessionIdRef.current); } catch { /* best effort */ }
+    try { sessionStorage.setItem(sessionKey, sessionIdRef.current); } catch { /* sessionStorage is best effort */ }
 
     let cancelled = false;
     void (async () => {
@@ -352,7 +360,7 @@ export default function StandaloneConferencePage() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400"><Video className="h-7 w-7" /></div>
           <h1 className="mt-4 text-lg font-black">{finishedMessage || 'امکان ورود به جلسه وجود ندارد'}</h1>
           <p className="mt-2 text-sm leading-6 text-slate-400">{errorMessage || 'این صفحه مربوط به Session مستقل جلسه است و پس از پایان دیگر قابل استفاده نیست.'}</p>
-          <button type="button" onClick={() => window.close()} className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-extrabold text-white hover:bg-blue-700">بستن صفحه</button>
+          <button type="button" onClick={closeOrReturnToSpark} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-extrabold text-white hover:bg-blue-700"><ArrowRight className="h-4 w-4" /> بازگشت به اسپارک</button>
         </div>
         {banDetail && <BanDetailModal banDetail={banDetail} onClose={() => setBanDetail(null)} />}
       </div>
@@ -408,18 +416,44 @@ export default function StandaloneConferencePage() {
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center overflow-y-auto bg-slate-950 p-4" dir="rtl">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-gray-950 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
-          <div>
-            <h1 className="flex items-center gap-2 text-sm font-bold text-white"><Video className="h-4 w-4 text-teal-500" /> تنظیمات قبل از ورود</h1>
-            <p className="mt-0.5 text-xs text-gray-500">{room.name || 'جلسه ویدیویی'} · {room.code}</p>
-          </div>
-          <button type="button" onClick={() => finishSession('ورود به جلسه لغو شد.')} aria-label="بستن" className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-800"><X className="h-4 w-4" /></button>
-        </div>
+    <div className="fixed inset-0 overflow-y-auto bg-slate-950 text-white" dir="rtl">
+      <div className="pointer-events-none fixed inset-0 opacity-70 [background-image:radial-gradient(circle_at_18%_18%,rgba(59,130,246,.10),transparent_30%),radial-gradient(circle_at_82%_12%,rgba(20,184,166,.08),transparent_28%)]" />
 
-        <div className="p-5">
+      <div className="relative mx-auto flex min-h-full w-full max-w-[1480px] flex-col px-3 py-3 sm:px-5 sm:py-5 lg:px-8 lg:py-7">
+        <header className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-900/70 px-3 py-3 shadow-xl backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-4 lg:mb-5 lg:px-5 lg:py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={closeOrReturnToSpark}
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-bold text-slate-200 transition hover:bg-white/10"
+              aria-label="بازگشت به اسپارک"
+            >
+              <ArrowRight className="h-4 w-4" />
+              <span className="hidden sm:inline">بازگشت به اسپارک</span>
+            </button>
+
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-400/10 text-teal-300"><Video className="h-4 w-4" /></div>
+                <div className="min-w-0">
+                  <h1 className="truncate text-sm font-black text-white sm:text-base">آماده ورود به {room.name || 'جلسه ویدیویی'}</h1>
+                  <p className="mt-0.5 truncate text-[10px] text-slate-400 sm:text-[11px]">دوربین، میکروفون و تنظیمات ورود را قبل از پیوستن بررسی کنید.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 font-mono text-[10px] font-bold text-slate-300" dir="ltr">{room.code}</span>
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-400/15 bg-emerald-400/5 px-2.5 text-[10px] font-bold text-emerald-200">
+              <ShieldCheck className="h-3.5 w-3.5" /> صفحه مستقل و امن جلسه
+            </span>
+          </div>
+        </header>
+
+        <main className="flex-1 rounded-3xl border border-white/10 bg-slate-900/35 p-2.5 shadow-2xl backdrop-blur sm:p-4 lg:p-5">
           <PreflightDeviceSelector
+            compactViewport
             onConfirm={stream => {
               if (recordingConsent.required && recordingConsent.recordingActive && !recordingConsent.accepted) {
                 stream.getTracks().forEach(track => track.stop());
@@ -437,29 +471,31 @@ export default function StandaloneConferencePage() {
             submitDisabled={recordingConsent.loading || (recordingConsent.required && recordingConsent.recordingActive && !recordingConsent.accepted)}
           >
             {recordingConsent.recordingEnabled && recordingConsent.required && (
-              <div className={`rounded-xl border p-3 text-xs ${recordingConsent.recordingActive ? 'border-rose-400/30 bg-rose-500/10 text-rose-100' : 'border-amber-400/25 bg-amber-500/10 text-amber-100'}`}>
-                <div className="flex items-start gap-2">
-                  {recordingConsent.recordingActive ? <Radio className="mt-0.5 h-4 w-4 shrink-0" /> : <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />}
+              <div className={`rounded-2xl border p-3.5 text-xs sm:p-4 ${recordingConsent.recordingActive ? 'border-rose-400/30 bg-rose-500/10 text-rose-100' : 'border-amber-400/25 bg-amber-500/10 text-amber-100'}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${recordingConsent.recordingActive ? 'bg-rose-400/10' : 'bg-amber-400/10'}`}>
+                    {recordingConsent.recordingActive ? <Radio className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
+                  </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold">رضایت ضبط جلسه</div>
-                    <p className="mt-1 leading-5 opacity-90">
+                    <div className="font-black">رضایت ضبط جلسه</div>
+                    <p className="mt-1.5 leading-5 opacity-90">
                       {recordingConsent.recordingActive
                         ? 'این جلسه هم‌اکنون در حال ضبط سروری است. برای ورود باید رضایت ضبط صدا و تصویر خود را ثبت کنید.'
                         : 'این جلسه قابلیت ضبط سروری دارد. می‌توانید اکنون وضعیت رضایت خود را ثبت کنید.'}
                     </p>
-                    {recordingConsent.errorMessage && <div className="mt-2 text-rose-300">{recordingConsent.errorMessage}</div>}
-                    <div className="mt-3 flex gap-2">
-                      <button type="button" disabled={recordingConsent.busy} onClick={() => void updateRecordingConsent(true)} className={`flex min-h-9 items-center gap-1.5 rounded-lg px-3 font-bold ${recordingConsent.accepted ? 'bg-emerald-600 text-white' : 'bg-white/10 hover:bg-white/15'} disabled:opacity-50`}>
+                    {recordingConsent.errorMessage && <div className="mt-2 rounded-lg bg-rose-500/10 px-2.5 py-2 text-rose-200">{recordingConsent.errorMessage}</div>}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" disabled={recordingConsent.busy} onClick={() => void updateRecordingConsent(true)} className={`flex min-h-10 items-center gap-1.5 rounded-xl px-4 font-bold transition ${recordingConsent.accepted ? 'bg-emerald-600 text-white' : 'bg-white/10 hover:bg-white/15'} disabled:opacity-50`}>
                         {recordingConsent.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} موافقم
                       </button>
-                      <button type="button" disabled={recordingConsent.busy} onClick={() => void updateRecordingConsent(false)} className="min-h-9 rounded-lg border border-white/15 px-3 font-bold disabled:opacity-50">موافق نیستم</button>
+                      <button type="button" disabled={recordingConsent.busy} onClick={() => void updateRecordingConsent(false)} className="min-h-10 rounded-xl border border-white/15 px-4 font-bold transition hover:bg-white/5 disabled:opacity-50">موافق نیستم</button>
                     </div>
                   </div>
                 </div>
               </div>
             )}
           </PreflightDeviceSelector>
-        </div>
+        </main>
       </div>
       {banDetail && <BanDetailModal banDetail={banDetail} onClose={() => setBanDetail(null)} />}
     </div>
