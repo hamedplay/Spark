@@ -1,5 +1,6 @@
 import { Activity, BarChart3, Hand, Lock, MessageCircle, MessageSquare, Pencil, Presentation, Radio, Settings2, ShieldCheck, Square, Unlock, Users } from 'lucide-react';
 import type { ConferencePanel } from '../../types/conference.types';
+import { useConferenceTooltips } from '../../../../components/VideoConference/useConferenceTooltips';
 
 interface Props {
   panel: ConferencePanel;
@@ -50,6 +51,7 @@ export function ConferenceToolsBar({
   onToggleRecording,
   onToggleLock,
 }: Props) {
+  useConferenceTooltips();
   const togglePanel = (next: Exclude<ConferencePanel, null>) => onPanelChange(panel === next ? null : next);
   const canToggleRecording = recording ? canStopRecording : canStartRecording;
 
