@@ -290,8 +290,8 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
         onToggleScreen={() => void screen.toggleScreen()}
         onToggleSpeaker={() => setSpeakerMuted((current) => !current)}
         onReaction={(reaction) => void livekit.sendReaction(reaction)}
-        onLeave={() => void leave()}
-        onEndMeeting={() => void endForAll()}
+        onLeave={leave}
+        onEndMeeting={endForAll}
       />
     </div>
   );
