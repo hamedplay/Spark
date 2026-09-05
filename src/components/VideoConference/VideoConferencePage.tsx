@@ -394,8 +394,6 @@ export function VideoConferencePage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
-    const conferenceWindow = window.open('about:blank', '_blank');
-    if (conferenceWindow) conferenceWindow.opener = null;
     setCreating(true);
     try {
       const fallbackName = `جلسه ${moment().format('jYYYY/jMM/jDD HH:mm')}`;
@@ -405,20 +403,16 @@ export function VideoConferencePage() {
       });
       if (error) throw error;
       if (!result?.ok || !result?.room) throw new Error(result?.reason || 'ROOM_CREATE_FAILED');
+
       const room = result.room as ConferenceRoom;
-      setCreateName(''); setRequireApproval(false); setShowCreate(false);
-      const url = new URL(window.location.href);
-      url.search = '';
-      url.hash = '';
-      url.searchParams.set('conference', room.code);
-      if (conferenceWindow && !conferenceWindow.closed) {
-        conferenceWindow.location.replace(url.toString());
-      } else {
-        const opened = window.open(url.toString(), '_blank', 'noopener,noreferrer');
-        if (!opened) window.location.assign(url.toString());
-      }
+      setRooms(current => current.some(item => item.id === room.id)
+        ? current
+        : [{ ...room, participant_count: 0 }, ...current]);
+      setCreateName('');
+      setRequireApproval(false);
+      setShowCreate(false);
+      toast.success('اتاق با موفقیت ایجاد شد');
     } catch (e: any) {
-      conferenceWindow?.close();
       toast.error('خطا در ایجاد اتاق: ' + (e.message || ''));
     } finally {
       setCreating(false);
