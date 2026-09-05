@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import toast from 'react-hot-toast';
 import type { ConferenceRoom } from '../types';
 import { RoomCard } from './RoomCard';
 
@@ -148,6 +149,34 @@ function formatRoomTime(room: LobbyRoom): string {
   return 'زمان نامشخص';
 }
 
+function normalizeConferenceCode(value: string): string | null {
+  const stripped = value.trim().replace(/[-\s]/g, '').toUpperCase();
+  if (stripped.length !== 9) return null;
+  return stripped.replace(/(.{3})(.{3})(.{3})/, '$1-$2-$3');
+}
+
+function openStandaloneConferenceSession(code: string): boolean {
+  const normalized = normalizeConferenceCode(code);
+  if (!normalized) {
+    toast.error('کد اتاق باید ۹ کاراکتر باشد (مثلاً XXX-XXX-XXX)');
+    return false;
+  }
+
+  const url = new URL(`/conference/${encodeURIComponent(normalized)}`, window.location.origin);
+  const target = `spark-conference-${normalized.replace(/[^A-Z0-9]/g, '')}`;
+  const sessionWindow = window.open(url.toString(), target);
+  if (!sessionWindow) {
+    toast.error('مرورگر اجازه باز کردن صفحه مستقل جلسه را نداد. Pop-up را برای Spark مجاز کنید.');
+    return false;
+  }
+
+  try {
+    sessionWindow.opener = null;
+    sessionWindow.focus();
+  } catch { /* best effort */ }
+  return true;
+}
+
 export function VideoConferenceLobby({
   config,
   configLoading,
@@ -164,13 +193,11 @@ export function VideoConferenceLobby({
   requireApproval,
   onRefresh,
   onJoinCodeChange,
-  onJoinByCode,
   onOpenCreate,
   onCloseCreate,
   onCreateNameChange,
   onRequireApprovalChange,
   onCreate,
-  onJoinRoom,
   onInviteRoom,
 }: Props) {
   const [showMyMeetings, setShowMyMeetings] = useState(true);
@@ -179,6 +206,10 @@ export function VideoConferenceLobby({
   const isSfu = topology === 'sfu';
   const topologyTitle = configError ? 'پیکربندی در دسترس نیست' : topology ? (isSfu ? 'LiveKit SFU' : 'WebRTC Mesh') : 'در حال دریافت';
   const capacity = config?.max_participants ?? null;
+
+  const handleJoinByCode = () => {
+    if (openStandaloneConferenceSession(joinCode)) onJoinCodeChange('');
+  };
 
   return (
     <div className="space-y-4 pb-4" dir="rtl">
@@ -280,7 +311,7 @@ export function VideoConferenceLobby({
             <input
               value={joinCode}
               onChange={event => onJoinCodeChange(event.target.value.toUpperCase())}
-              onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); onJoinByCode(); } }}
+              onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); handleJoinByCode(); } }}
               placeholder="XXX-XXX-XXX"
               maxLength={11}
               dir="ltr"
@@ -288,7 +319,7 @@ export function VideoConferenceLobby({
               className="w-full border-0 bg-transparent px-3 py-3 text-center font-mono text-base font-black tracking-[0.15em] text-slate-900 outline-none placeholder:text-slate-300 dark:text-white dark:placeholder:text-slate-600"
             />
           </div>
-          <button type="button" onClick={onJoinByCode} disabled={joining} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={handleJoinByCode} disabled={joining} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-extrabold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
             {joining ? <RefreshCw className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />} ورود به جلسه
           </button>
         </section>
@@ -331,7 +362,7 @@ export function VideoConferenceLobby({
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-300"><Users className="h-3.5 w-3.5" /> {room.participant_count ?? 0} نفر</div>
                           <div className="font-mono text-[10px] font-bold tracking-wider text-slate-500 dark:text-slate-300">{room.code}</div>
                           <div className="flex items-center gap-1.5">
-                            <button type="button" onClick={() => onJoinRoom(room)} disabled={joiningRoomId === room.id} className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-blue-600 px-2.5 text-[10px] font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{joiningRoomId === room.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />} ورود</button>
+                            <button type="button" onClick={() => openStandaloneConferenceSession(room.code)} disabled={joiningRoomId === room.id} className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-blue-600 px-2.5 text-[10px] font-extrabold text-white hover:bg-blue-700 disabled:opacity-50">{joiningRoomId === room.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />} ورود</button>
                             <button type="button" onClick={() => onInviteRoom(room)} className="inline-flex h-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-[10px] font-extrabold text-blue-600 hover:bg-blue-100 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300">دعوت</button>
                           </div>
                         </div>
@@ -361,7 +392,7 @@ export function VideoConferenceLobby({
             <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/40 px-4 text-center dark:border-slate-800 dark:bg-slate-900/30"><Video className="h-6 w-6 text-slate-300" /><p className="mt-2 text-xs font-bold text-slate-500">جلسه فعالی برای شما وجود ندارد</p></div>
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-              {rooms.map(room => <RoomCard key={room.id} room={room} currentUserId={currentUserId} onJoin={() => onJoinRoom(room)} onInvite={() => onInviteRoom(room)} joining={joiningRoomId === room.id} />)}
+              {rooms.map(room => <RoomCard key={room.id} room={room} currentUserId={currentUserId} onJoin={() => openStandaloneConferenceSession(room.code)} onInvite={() => onInviteRoom(room)} joining={joiningRoomId === room.id} />)}
             </div>
           )}
         </section>
