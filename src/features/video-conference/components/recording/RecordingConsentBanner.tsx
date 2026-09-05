@@ -12,9 +12,9 @@ export function RecordingConsentBanner({
 
   if (consent.accepted) {
     return (
-      <div className="absolute right-3 top-[68px] z-30 flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/15 px-3 py-1.5 text-[11px] text-emerald-100 backdrop-blur">
+      <div className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-2.5 text-[10px] font-bold text-emerald-200" aria-live="polite" title="رضایت ضبط ثبت شده">
         <CheckCircle2 className="h-3.5 w-3.5" />
-        رضایت ضبط ثبت شده
+        <span className="hidden lg:inline">رضایت ضبط ثبت شده</span>
       </div>
     );
   }
