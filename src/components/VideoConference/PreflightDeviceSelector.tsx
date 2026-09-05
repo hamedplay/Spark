@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, Loader2, Network, RotateCcw } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DeviceSelector, type DevicePrefs } from './DeviceSelector';
+import { useConferenceTooltips } from './useConferenceTooltips';
 import {
   preflightMessage,
   runConferencePreflight,
@@ -23,6 +24,7 @@ type Props = {
 };
 
 export function PreflightDeviceSelector(props: Props) {
+  useConferenceTooltips();
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<ConferencePreflightResult | null>(null);
   const [pending, setPending] = useState<{ stream: MediaStream; prefs: DevicePrefs } | null>(null);
