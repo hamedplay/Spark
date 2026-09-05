@@ -1,0 +1,35 @@
+name: livekit-self-view-mirror-validation-temp
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - run: npm ci
+      - name: Verify local camera mirror behavior
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = fs.readFileSync('src/features/video-conference/components/LiveKitParticipantTile.tsx', 'utf8');
+          if (!file.includes('const mirrorLocalCamera = local && !renderingScreenShare;')) throw new Error('local-only mirror guard missing');
+          if (!file.includes('scaleX(${mirrorLocalCamera ? -1 : 1}) scale(${zoom})')) throw new Error('mirror + zoom transform missing');
+          if (!file.includes('renderingScreenShare')) throw new Error('screen share guard missing');
+          console.log('LiveKit local camera mirror behavior verified');
+          NODE
+      - name: Build
+        run: npm run build
+      - name: Video conference unit tests
+        run: npm run test:video-conference:unit
