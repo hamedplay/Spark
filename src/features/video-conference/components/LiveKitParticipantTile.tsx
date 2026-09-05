@@ -79,6 +79,7 @@ export function LiveKitParticipantTile({
       : cameraPublication
   );
   const renderingScreenShare = videoPublication === screenPublication;
+  const mirrorLocalCamera = local && !renderingScreenShare;
 
   const displayName =
     participant?.name || (local ? 'شما' : 'شرکت‌کننده');
@@ -183,7 +184,7 @@ export function LiveKitParticipantTile({
             `h-full min-h-[160px] w-full transition-transform duration-200 `
             + (renderingScreenShare ? 'object-contain bg-black' : 'object-cover')
           }
-          style={{ transform: `scale(${zoom})` }}
+          style={{ transform: `scaleX(${mirrorLocalCamera ? -1 : 1}) scale(${zoom})` }}
         />
       )}
 
