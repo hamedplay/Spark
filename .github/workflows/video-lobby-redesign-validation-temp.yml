@@ -19,7 +19,7 @@ jobs:
           node-version: '24.18.1'
           cache: npm
       - run: npm ci
-      - name: Video conference tests
-        run: npm run test:video-conference
       - name: Build
         run: npm run build
+      - name: Video conference unit tests
+        run: npm run test:video-conference:unit
