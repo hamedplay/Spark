@@ -50,8 +50,9 @@ export function RoomMediaControls({
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    setPortalTarget(document.getElementById('conference-media-controls-slot'));
-  }, []);
+    const nextTarget = document.getElementById('conference-media-controls-slot');
+    if (nextTarget !== portalTarget) setPortalTarget(nextTarget);
+  });
 
   const chooseReaction = (reaction: string) => {
     setReactionPickerOpen(false);
