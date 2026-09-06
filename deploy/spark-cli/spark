@@ -184,12 +184,56 @@ spark_backend_docker_logs() {
   run_report "Docker logs: ${service}" compose logs --tail=250 --timestamps "$service"
 }
 
+spark_prepare_livekit_step_20() {
+  new_log "install-20-livekit-assets"
+  run_logged "Sync latest LiveKit deployment assets" livekit_sync_assets || return 1
+
+  if ! python3 - "${LIVEKIT_ROOT}/docker-compose.yml" "${LIVEKIT_ROOT}/egress.yaml" <<'PY' >>"$CURRENT_LOG" 2>&1
+import sys
+from pathlib import Path
+import yaml
+
+compose = yaml.safe_load(Path(sys.argv[1]).read_text()) or {}
+environment = compose.get('services', {}).get('egress', {}).get('environment', {})
+body = environment.get('EGRESS_CONFIG_BODY')
+if not isinstance(body, str):
+    raise SystemExit('EGRESS_CONFIG_BODY is missing')
+config = yaml.safe_load(body) or {}
+if config.get('ws_url') != 'ws://127.0.0.1:7880':
+    raise SystemExit('Egress internal ws_url is invalid')
+if config.get('insecure') is not True:
+    raise SystemExit('Egress internal ws:// requires insecure: true')
+
+egress = yaml.safe_load(Path(sys.argv[2]).read_text()) or {}
+if egress.get('ws_url') != 'ws://127.0.0.1:7880':
+    raise SystemExit('egress.yaml internal ws_url is invalid')
+if egress.get('insecure') is not True:
+    raise SystemExit('egress.yaml internal ws:// requires insecure: true')
+PY
+  then
+    fail "LiveKit Egress config is not safe for internal ws://; expected insecure: true."
+    return 1
+  fi
+
+  local egress_id
+  egress_id="$(livekit_compose ps -q egress 2>/dev/null || true)"
+  if [[ -n "$egress_id" ]]; then
+    run_logged "Force-recreate existing LiveKit Egress" \
+      livekit_compose up -d --force-recreate --no-deps egress || return 1
+  fi
+}
+
 spark_backend_dispatch_inner() {
   local action="$1"
   shift || true
   case "$action" in
     install-01|install-02|install-03|install-04|install-05|install-06|install-07|install-08|install-09|install-10|install-11|install-12|install-13|install-14|install-15|install-16|install-17|install-18|install-19|install-20|install-21)
-      run_install_step "$((10#${action##*-}))"
+      local install_step
+      install_step="$((10#${action##*-}))"
+      if (( install_step == 20 )); then
+        spark_prepare_livekit_step_20 || return 1
+      fi
+      run_install_step "$install_step"
       ;;
     install-all) run_all_install ;;
 
