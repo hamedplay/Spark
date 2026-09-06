@@ -336,7 +336,9 @@ export function useConferenceModeration({
     canManageRoles: hasConferencePermission(authorization, 'MANAGE_ROLES'),
     canManageTimer: hasConferencePermission(authorization, 'MANAGE_TIMER'),
     canStartRecording: hasConferencePermission(authorization, 'START_RECORDING'),
-    canStopRecording: hasConferencePermission(authorization, 'STOP_RECORDING'),
+    canStopRecording:
+      hasConferencePermission(authorization, 'STOP_RECORDING')
+      && recording?.status === 'recording',
     canLockRoom: hasConferencePermission(authorization, 'LOCK_ROOM'),
     canEndMeeting: hasConferencePermission(authorization, 'END_MEETING'),
   };
