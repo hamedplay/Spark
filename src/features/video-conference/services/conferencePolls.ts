@@ -51,6 +51,23 @@ function asPolls(value: unknown): ConferencePollItem[] {
   return Array.isArray(value) ? value as ConferencePollItem[] : [];
 }
 
+async function readFunctionErrorPayload(
+  error: unknown,
+  data: unknown,
+): Promise<Record<string, unknown> | null> {
+  const direct = asObject(data);
+  if (direct) return direct;
+
+  const context = (error as { context?: Response } | null)?.context;
+  if (!context) return null;
+
+  try {
+    return asObject(await context.clone().json());
+  } catch {
+    return null;
+  }
+}
+
 export async function loadConferencePollSnapshot(
   client: ConferenceSupabaseClient,
   roomId: string,
@@ -80,14 +97,24 @@ export async function runConferencePollAction(
   client: ConferenceSupabaseClient,
   input: CreatePollInput | PollActionInput | VotePollInput,
 ) {
+  const body = 'action' in input
+    ? input
+    : { ...input, action: 'create' as const };
+
   const { data, error } = await client.functions.invoke(
     'conference-poll-control',
-    { body: input },
+    { body },
   );
 
   if (error || !data?.ok) {
+    const payload = await readFunctionErrorPayload(error, data);
     throw new ConferencePollActionError(
-      String(data?.error || error?.message || 'POLL_ACTION_FAILED'),
+      String(
+        payload?.error
+        || data?.error
+        || error?.message
+        || 'POLL_ACTION_FAILED',
+      ).toUpperCase(),
     );
   }
 
