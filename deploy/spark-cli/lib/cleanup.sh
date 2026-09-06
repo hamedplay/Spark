@@ -147,16 +147,147 @@ cleanup_manager_logs() {
   ok "Spark Manager logها حذف شدند."
 }
 
-cleanup_backups() {
-  new_log "cleanup-backups"
-  if ! confirm_word "تمام Backupهای Spark در ${BACKUP_DIR} به‌صورت غیرقابل بازگشت حذف می‌شوند." "DELETE-BACKUPS"; then
-    warn "حذف Backupها لغو شد."
-    return 1
-  fi
-  find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true
+cleanup_prune_backups() {
+  local days="${1:-7}" candidates_file path bytes total_bytes=0 count=0
+  local -a candidates=()
+
+  [[ "$days" =~ ^[0-9]+$ ]] && (( days >= 1 && days <= 3650 )) || {
+    fail "Retention باید یک عدد بین 1 تا 3650 روز باشد."
+    return 2
+  }
+
   mkdir -p "$BACKUP_DIR"
   chmod 700 "$BACKUP_DIR"
-  ok "تمام Backupهای Spark حذف شدند."
+  candidates_file="$(mktemp)"
+  if ! python3 - "$BACKUP_DIR" "$days" >"$candidates_file" <<'PY'
+import os
+import sys
+import time
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+days = int(sys.argv[2])
+cutoff = time.time() - (days * 86400)
+
+if not root.is_dir():
+    raise SystemExit(0)
+
+children = [p for p in root.iterdir() if not p.is_symlink()]
+groups = [
+    [p for p in children if p.is_dir()],
+    [p for p in children if p.is_file() and p.match("postgres-*.dump")],
+    [p for p in children if p.is_file() and p.match("storage-*.tar.gz")],
+]
+
+candidates = []
+for group in groups:
+    if not group:
+        continue
+    newest = max(group, key=lambda p: p.stat().st_mtime)
+    for path in group:
+        if path == newest:
+            continue
+        try:
+            old = path.stat().st_mtime < cutoff
+        except OSError:
+            continue
+        if old:
+            candidates.append(path)
+
+for path in sorted(candidates, key=lambda p: p.stat().st_mtime):
+    raw = os.fsencode(str(path))
+    sys.stdout.buffer.write(raw + b"\0")
+PY
+  then
+    rm -f "$candidates_file"
+    fail "تحلیل Backupها برای سبک‌سازی ناموفق بود."
+    return 1
+  fi
+
+  mapfile -d '' -t candidates <"$candidates_file" || true
+  rm -f "$candidates_file"
+
+  if (( ${#candidates[@]} == 0 )); then
+    ok "Backup قابل حذف با Retention ${days} روز پیدا نشد."
+    info "جدیدترین Backup پوشه‌ای، جدیدترین PostgreSQL dump و جدیدترین Storage archive همیشه محافظت می‌شوند."
+    return 0
+  fi
+
+  printf '\nBackupهای قابل حذف (قدیمی‌تر از %s روز):\n\n' "$days"
+  for path in "${candidates[@]}"; do
+    [[ "$path" == "$BACKUP_DIR/"* && "$path" != "$BACKUP_DIR" ]] || {
+      fail "مسیر Backup ناامن تشخیص داده شد؛ چیزی حذف نشد: $path"
+      return 1
+    }
+    bytes="$(du -sb -- "$path" 2>/dev/null | awk '{print $1}')"
+    [[ "$bytes" =~ ^[0-9]+$ ]] || bytes=0
+    total_bytes=$((total_bytes + bytes))
+    count=$((count + 1))
+    printf '  %-10s %s\n' "$(du -sh -- "$path" 2>/dev/null | awk '{print $1}')" "$path"
+  done
+
+  printf '\nتعداد: %d\n' "$count"
+  printf 'فضای قابل آزادسازی: %s\n' "$(numfmt --to=iec-i --suffix=B "$total_bytes" 2>/dev/null || printf '%s bytes' "$total_bytes")"
+  info "فقط Backupهای داخل ${BACKUP_DIR} بررسی می‌شوند؛ دیتای زنده Supabase/PostgreSQL دست‌کاری نمی‌شود."
+  info "جدیدترین Backup از هر گروه (پوشه‌ای، PostgreSQL dump، Storage archive) حتی اگر قدیمی باشد نگه داشته می‌شود."
+
+  if ! confirm_word "Backupهای فهرست‌شده حذف شوند؟" "PRUNE-BACKUPS"; then
+    warn "سبک‌سازی Backupها لغو شد."
+    return 1
+  fi
+
+  for path in "${candidates[@]}"; do
+    [[ "$path" == "$BACKUP_DIR/"* && "$path" != "$BACKUP_DIR" ]] || {
+      fail "مسیر Backup ناامن است؛ حذف متوقف شد: $path"
+      return 1
+    }
+    rm -rf -- "$path"
+  done
+
+  ok "${count} Backup قدیمی حذف شد."
+  info "فضای آزادشده تقریبی: $(numfmt --to=iec-i --suffix=B "$total_bytes" 2>/dev/null || printf '%s bytes' "$total_bytes")"
+}
+
+cleanup_backups() {
+  local choice days
+  new_log "cleanup-backups"
+  mkdir -p "$BACKUP_DIR"
+  chmod 700 "$BACKUP_DIR"
+
+  printf '\nBackup cleanup / free space\n\n'
+  printf 'مسیر: %s\n' "$BACKUP_DIR"
+  printf 'حجم فعلی: %s\n\n' "$(du -sh -- "$BACKUP_DIR" 2>/dev/null | awk '{print $1}')"
+  printf '  0) لغو\n'
+  printf '  1) سبک‌سازی امن: حذف Backupهای قدیمی با Retention دلخواه\n'
+  printf '  2) حذف تمام Backupها\n\n'
+  read -r -p "انتخاب [1]: " choice
+  choice="${choice:-1}"
+
+  case "$choice" in
+    0)
+      warn "Cleanup لغو شد."
+      return 1
+      ;;
+    1)
+      read -r -p "چند روز آخر نگه داشته شود؟ [7]: " days
+      days="${days:-7}"
+      cleanup_prune_backups "$days"
+      ;;
+    2)
+      if ! confirm_word "تمام Backupهای Spark در ${BACKUP_DIR} به‌صورت غیرقابل بازگشت حذف می‌شوند." "DELETE-BACKUPS"; then
+        warn "حذف Backupها لغو شد."
+        return 1
+      fi
+      find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true
+      mkdir -p "$BACKUP_DIR"
+      chmod 700 "$BACKUP_DIR"
+      ok "تمام Backupهای Spark حذف شدند."
+      ;;
+    *)
+      fail "گزینه نامعتبر است."
+      return 2
+      ;;
+  esac
 }
 
 cleanup_install_history() {
