@@ -1,5 +1,6 @@
 redis:
   address: ${LIVEKIT_REDIS_ADDRESS}
+insecure: true
 health_port: 9091
 prometheus_port: 6788
 log_level: info
