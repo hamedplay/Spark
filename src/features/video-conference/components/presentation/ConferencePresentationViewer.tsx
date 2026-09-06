@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { ChevronLeft, ChevronRight, Crosshair, Eraser, Expand, Minus, MousePointer2, PenLine, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Crosshair, Eraser, Expand, Loader2, Minus, MousePointer2, PenLine, Plus } from 'lucide-react';
 import type {
   ConferencePresentationAnnotationElement,
   ConferencePresentationItem,
@@ -124,16 +124,84 @@ export function ConferencePresentationViewer({
   const [mode, setMode] = useState<'view' | 'annotate' | 'laser'>('view');
   const [draft, setDraft] = useState<ConferencePresentationPoint[] | null>(null);
   const [pageInput, setPageInput] = useState(String(page));
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [documentError, setDocumentError] = useState('');
+  const [localLaser, setLocalLaser] = useState<ConferencePresentationPoint | null>(null);
   const maxPage = presentation.pageCount || 1000;
 
   useEffect(() => {
     setPageInput(String(page));
+    setDraft(null);
+    setLocalLaser(null);
   }, [page]);
+
+  useEffect(() => {
+    if (mode !== 'laser') setLocalLaser(null);
+    if (mode !== 'annotate') setDraft(null);
+  }, [mode]);
+
+  useEffect(() => {
+    if (presentation.sourceKind === 'IMAGE') {
+      setDocumentUrl(null);
+      setDocumentError('');
+      return undefined;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setDocumentUrl(null);
+    setDocumentError('');
+
+    void fetch(url)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`PRESENTATION_FETCH_${response.status}`);
+        }
+        const blob = await response.blob();
+        if (blob.size <= 0) throw new Error('PRESENTATION_EMPTY_FILE');
+        return blob;
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setDocumentUrl(objectUrl);
+      })
+      .catch((error) => {
+        console.error('[VideoConference] presentation document load failed', error);
+        if (!cancelled) {
+          setDocumentError('نمایش فایل ارائه ناموفق بود. فایل را دوباره انتخاب کنید.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [presentation.sourceKind, url]);
 
   const mediaUrl = useMemo(() => {
     if (presentation.sourceKind === 'IMAGE') return url;
-    return `${url}#page=${page}&toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
-  }, [page, presentation.sourceKind, url]);
+    if (!documentUrl) return '';
+    return `${documentUrl}#page=${page}&toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
+  }, [documentUrl, page, presentation.sourceKind, url]);
+
+  const toggleFullscreen = async () => {
+    const element = rootRef.current;
+    if (!element?.requestFullscreen) return;
+
+    try {
+      if (document.fullscreenElement === element) {
+        await document.exitFullscreen();
+        return;
+      }
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
+      await element.requestFullscreen();
+    } catch (error) {
+      console.error('[VideoConference] presentation fullscreen toggle failed', error);
+    }
+  };
 
   const pointFromEvent = (event: ReactPointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -149,6 +217,7 @@ export function ConferencePresentationViewer({
       event.currentTarget.setPointerCapture(event.pointerId);
       setDraft([point]);
     } else if (mode === 'laser' && canAnnotate) {
+      setLocalLaser(point);
       onLaser(point.x, point.y);
     }
   };
@@ -156,6 +225,7 @@ export function ConferencePresentationViewer({
   const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     const point = pointFromEvent(event);
     if (mode === 'laser' && canAnnotate) {
+      setLocalLaser(point);
       onLaser(point.x, point.y);
       return;
     }
@@ -199,7 +269,7 @@ export function ConferencePresentationViewer({
         <button onClick={() => setZoom((value) => Math.max(50, value - 10))} className="rounded-lg p-2 hover:bg-white/10" aria-label="کاهش بزرگنمایی"><Minus className="h-4 w-4" /></button>
         <span className="min-w-10 text-center">{zoom}%</span>
         <button onClick={() => setZoom((value) => Math.min(200, value + 10))} className="rounded-lg p-2 hover:bg-white/10" aria-label="افزایش بزرگنمایی"><Plus className="h-4 w-4" /></button>
-        <button onClick={() => void rootRef.current?.requestFullscreen()} className="rounded-lg p-2 hover:bg-white/10" aria-label="تمام صفحه"><Expand className="h-4 w-4" /></button>
+        <button onClick={() => void toggleFullscreen()} className="rounded-lg p-2 hover:bg-white/10" aria-label="تغییر حالت تمام صفحه"><Expand className="h-4 w-4" /></button>
 
         {canAnnotate && (
           <>
@@ -217,16 +287,32 @@ export function ConferencePresentationViewer({
           <div className="relative h-full w-full origin-center" style={{ transform: `scale(${zoom / 100})` }}>
             {presentation.sourceKind === 'IMAGE'
               ? <img src={mediaUrl} alt={presentation.title} className="h-full w-full object-contain" draggable={false} />
-              : <iframe key={mediaUrl} src={mediaUrl} title={presentation.title} className="h-full w-full border-0 bg-white" allow="fullscreen" />}
+              : documentError
+                ? <div className="flex h-full w-full items-center justify-center bg-slate-900 p-6 text-center text-sm text-rose-200">{documentError}</div>
+                : !mediaUrl
+                  ? <div className="flex h-full w-full items-center justify-center bg-slate-900 text-slate-300"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                  : <iframe key={mediaUrl} src={mediaUrl} title={presentation.title} className="h-full w-full border-0 bg-white" allow="fullscreen" />}
 
             <svg
               viewBox="0 0 1000 1000"
               preserveAspectRatio="none"
-              className={`absolute inset-0 h-full w-full ${mode === 'view' ? 'pointer-events-none' : 'cursor-crosshair'}`}
+              className={`absolute inset-0 z-10 h-full w-full touch-none ${mode === 'view' ? 'pointer-events-none' : 'cursor-crosshair'}`}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
-              onPointerUp={() => void finishStroke()}
-              onPointerCancel={() => setDraft(null)}
+              onPointerUp={() => {
+                if (mode === 'laser') {
+                  setLocalLaser(null);
+                } else {
+                  void finishStroke();
+                }
+              }}
+              onPointerCancel={() => {
+                setDraft(null);
+                setLocalLaser(null);
+              }}
+              onPointerLeave={() => {
+                if (mode === 'laser') setLocalLaser(null);
+              }}
             >
               <defs>
                 <marker id="presentation-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
@@ -241,6 +327,7 @@ export function ConferencePresentationViewer({
                   <text x="18" y="-14" fill="white" fontSize="24" stroke="black" strokeWidth="3" paintOrder="stroke">{laser.displayName}</text>
                 </g>
               ))}
+              {localLaser && <circle cx={localLaser.x} cy={localLaser.y} r="12" fill="#ef4444" />}
             </svg>
           </div>
         </div>
