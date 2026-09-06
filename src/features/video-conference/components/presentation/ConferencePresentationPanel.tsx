@@ -45,7 +45,7 @@ export function ConferencePresentationPanel({
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 gap-3 p-3 lg:grid-cols-[280px_minmax(0,1fr)]">
+    <div className="grid h-[calc(100%-61px)] min-h-0 grid-cols-1 gap-3 overflow-hidden p-3 lg:grid-cols-[280px_minmax(0,1fr)]">
       <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-slate-950/70">
         <div className="flex items-center justify-between border-b border-white/10 p-3">
           <div>
