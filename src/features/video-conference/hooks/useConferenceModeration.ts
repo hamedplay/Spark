@@ -26,6 +26,13 @@ interface Params {
   onEnded: () => void;
 }
 
+const TRANSITIONAL_RECORDING_STATUSES = new Set([
+  'queued',
+  'starting',
+  'stopping',
+  'processing',
+]);
+
 export function useConferenceModeration({
   client,
   roomId,
@@ -65,6 +72,46 @@ export function useConferenceModeration({
     void refreshParticipants();
     void refreshRoomState();
   }, [refreshParticipants, refreshRoomState]);
+
+  const canReconcileRecording = hasConferencePermission(
+    authorization,
+    'STOP_RECORDING',
+  );
+
+  useEffect(() => {
+    if (
+      !recording
+      || !canReconcileRecording
+      || !TRANSITIONAL_RECORDING_STATUSES.has(recording.status)
+    ) {
+      return undefined;
+    }
+
+    let running = false;
+    const reconcile = async () => {
+      if (running) return;
+      running = true;
+      try {
+        await setRecording(roomId, 'reconcile', client);
+      } catch (error) {
+        console.debug('[VideoConference] recording reconcile pending', error);
+      } finally {
+        await refreshRoomState();
+        running = false;
+      }
+    };
+
+    void reconcile();
+    const timer = window.setInterval(() => void reconcile(), 2000);
+    return () => window.clearInterval(timer);
+  }, [
+    canReconcileRecording,
+    client,
+    recording?.id,
+    recording?.status,
+    refreshRoomState,
+    roomId,
+  ]);
 
   const speakerQueue = useMemo<SpeakerQueueItem[]>(
     () => participants
@@ -189,13 +236,30 @@ export function useConferenceModeration({
   }, [client, refreshParticipants, roomId, speakerTimer]);
 
   const toggleRecording = useCallback(async () => {
+    const action = recording ? 'stop' : 'start';
     setBusy('recording');
     setRecordingError('');
     try {
-      await setRecording(roomId, recording ? 'stop' : 'start', client);
+      await setRecording(roomId, action, client);
       await refreshRoomState();
     } catch (error) {
       console.error('[VideoConference] recording action failed', error);
+
+      try {
+        await setRecording(roomId, 'reconcile', client);
+      } catch (reconcileError) {
+        console.debug('[VideoConference] recording reconcile after failure pending', reconcileError);
+      }
+      await refreshRoomState();
+
+      if (
+        error instanceof ConferenceRecordingActionError
+        && error.code === 'ACTIVE_RECORDING_NOT_FOUND'
+        && action === 'stop'
+      ) {
+        return;
+      }
+
       if (
         error instanceof ConferenceRecordingActionError
         && error.code === 'RECORDING_CONSENT_REQUIRED'
@@ -210,6 +274,33 @@ export function useConferenceModeration({
         && error.code === 'RECORDING_DISABLED'
       ) {
         setRecordingError('ضبط برای این جلسه فعال نشده است.');
+      } else if (
+        error instanceof ConferenceRecordingActionError
+        && error.code === 'RECORDING_START_PENDING'
+      ) {
+        setRecordingError('ضبط در LiveKit Egress هنوز در حال شروع است؛ پس از آماده‌شدن وضعیت، توقف دوباره فعال می‌شود.');
+      } else if (
+        error instanceof ConferenceRecordingActionError
+        && error.code === 'RECORDING_STORAGE_NOT_CONFIGURED'
+      ) {
+        setRecordingError('فضای ذخیره‌سازی ضبط روی سرور پیکربندی نشده است.');
+      } else if (
+        error instanceof ConferenceRecordingActionError
+        && error.code === 'CONFERENCE_NOT_CONFIGURED'
+      ) {
+        setRecordingError('تنظیمات LiveKit/Egress روی سرور کامل نیست.');
+      } else if (
+        error instanceof ConferenceRecordingActionError
+        && error.code === 'RECORDING_RECONCILE_FAILED'
+      ) {
+        setRecordingError('همگام‌سازی وضعیت با LiveKit Egress ناموفق بود.');
+      } else if (
+        error instanceof ConferenceRecordingActionError
+        && error.code === 'RECORDING_FAILED'
+      ) {
+        setRecordingError('LiveKit Egress نتوانست عملیات ضبط را انجام دهد؛ سرویس Egress و Storage را بررسی کنید.');
+      } else if (error instanceof ConferenceRecordingActionError) {
+        setRecordingError(`عملیات ضبط انجام نشد (${error.code}).`);
       } else {
         setRecordingError('عملیات ضبط انجام نشد. وضعیت Egress را دوباره بررسی کنید.');
       }
