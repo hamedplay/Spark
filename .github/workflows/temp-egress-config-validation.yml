@@ -1,0 +1,29 @@
+name: Temporary Egress Config Validation
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Spark CLI Egress config
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          compose = yaml.safe_load(Path('deploy/livekit/docker-compose.yml').read_text()) or {}
+          env = compose.get('services', {}).get('egress', {}).get('environment', {})
+          body = env.get('EGRESS_CONFIG_BODY')
+          assert isinstance(body, str)
+          cfg = yaml.safe_load(body) or {}
+          assert cfg.get('ws_url') == 'ws://127.0.0.1:7880'
+          assert cfg.get('insecure') is True
+          egress = yaml.safe_load(Path('deploy/livekit/egress.yaml').read_text()) or {}
+          assert egress.get('ws_url') == 'ws://127.0.0.1:7880'
+          assert egress.get('insecure') is True
+          PY
+          bash -n deploy/spark-cli/spark
