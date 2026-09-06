@@ -380,6 +380,7 @@ test('Phase 24 unit: poll transport preserves create and vote rules', async () =
       {
         body: {
           roomId: 'room-1',
+          action: 'create',
           question: 'Q?',
           pollType: 'MULTIPLE_CHOICE',
           options: ['A', 'B', 'C'],
