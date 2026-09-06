@@ -215,6 +215,8 @@ export function useLiveKitRoom({
       nextRoom.on(RoomEvent.TrackUnsubscribed, refresh);
       nextRoom.on(RoomEvent.TrackMuted, refresh);
       nextRoom.on(RoomEvent.TrackUnmuted, refresh);
+      nextRoom.on(RoomEvent.LocalTrackPublished, refresh);
+      nextRoom.on(RoomEvent.LocalTrackUnpublished, refresh);
 
       nextRoom.on(
         RoomEvent.ParticipantPermissionsChanged,
@@ -364,7 +366,6 @@ export function useLiveKitRoom({
         { autoSubscribe: true },
       );
 
-
       if (micEnabled && canPublishMic) {
         await nextRoom.localParticipant.setMicrophoneEnabled(
           true,
@@ -502,13 +503,14 @@ export function useLiveKitRoom({
     try {
       await setConferenceMicrophone(current, next);
       setMicEnabled(next);
+      refresh();
     } catch (error) {
       console.error(
         '[VideoConference] microphone toggle failed',
         error,
       );
     }
-  }, [micEnabled]);
+  }, [micEnabled, refresh]);
 
   const toggleCamera = useCallback(async () => {
     const current = roomRef.current;
@@ -516,15 +518,35 @@ export function useLiveKitRoom({
 
     const next = !cameraEnabled;
     try {
-      await setConferenceCamera(current, next);
-      setCameraEnabled(next);
+      if (!next) {
+        videoDeviceIdRef.current =
+          current.getActiveDevice('videoinput')
+          || videoDeviceIdRef.current;
+      }
+
+      await setConferenceCamera(
+        current,
+        next,
+        next ? videoDeviceIdRef.current : undefined,
+      );
+
+      if (next) {
+        videoDeviceIdRef.current =
+          current.getActiveDevice('videoinput')
+          || videoDeviceIdRef.current;
+      }
+
+      setCameraEnabled(current.localParticipant.isCameraEnabled);
+      refresh();
     } catch (error) {
       console.error(
         '[VideoConference] camera toggle failed',
         error,
       );
+      setCameraEnabled(current.localParticipant.isCameraEnabled);
+      refresh();
     }
-  }, [cameraEnabled]);
+  }, [cameraEnabled, refresh]);
 
   const sendReaction = useCallback(async (reaction: string) => {
     if (!roomRef.current) return;
