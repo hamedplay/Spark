@@ -50,7 +50,7 @@ export function ConferenceWhiteboardPanel({
 
   if (!whiteboard.snapshot.loaded || !whiteboard.currentPage) {
     return (
-      <div className="flex min-h-[50dvh] items-center justify-center">
+      <div className="flex h-[calc(100%-61px)] min-h-0 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
       </div>
     );
@@ -83,7 +83,7 @@ export function ConferenceWhiteboardPanel({
   };
 
   return (
-    <div className="flex h-[min(72dvh,760px)] min-h-[480px] flex-col overflow-hidden bg-slate-900">
+    <div className="flex h-[calc(100%-61px)] min-h-0 flex-col overflow-hidden bg-slate-900">
       <ConferenceWhiteboardToolbar
         pages={whiteboard.snapshot.pages}
         selectedPageId={whiteboard.selectedPageId}
@@ -130,7 +130,7 @@ export function ConferenceWhiteboardPanel({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 p-2">
+      <div className="flex min-h-0 flex-1 p-2">
         <ConferenceWhiteboardCanvas
           page={whiteboard.currentPage}
           tool={tool}
