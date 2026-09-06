@@ -1,7 +1,21 @@
 # Single-host override used by deploy/spark-cli.
 # Spark Manager already owns TCP 80/443 through Nginx, so the standalone Caddy
 # proxy is deliberately placed behind an inactive profile in this mode.
+#
+# The Spark CLI must also remain deployable on the minimum supported small-host
+# topology. Docker rejects a per-container CPU quota larger than the host CPU
+# count, so the CLI override caps the media services at 2 CPUs by default.
+# Larger hosts can explicitly raise these three SPARK_* values when needed.
 services:
+  livekit:
+    cpus: ${SPARK_LIVEKIT_CPU_LIMIT:-2.0}
+
+  egress:
+    cpus: ${SPARK_EGRESS_CPU_LIMIT:-2.0}
+
+  ingress:
+    cpus: ${SPARK_INGRESS_CPU_LIMIT:-2.0}
+
   caddy:
     profiles:
       - standalone-proxy
