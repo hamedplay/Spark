@@ -139,6 +139,7 @@ services:
       AWS_DEFAULT_REGION: ${S3_REGION}
       EGRESS_CONFIG_BODY: |
         ws_url: ws://127.0.0.1:7880
+        insecure: true
         api_key: ${LIVEKIT_API_KEY}
         api_secret: ${LIVEKIT_API_SECRET}
         redis:
