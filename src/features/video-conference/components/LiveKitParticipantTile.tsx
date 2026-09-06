@@ -116,13 +116,22 @@ export function LiveKitParticipantTile({
     setZoom(1);
   }, [participant?.identity, renderingScreenShare]);
 
-  const requestFullscreen = async () => {
+  const toggleFullscreen = async () => {
     const element = rootRef.current;
     if (!element?.requestFullscreen) return;
+
     try {
+      if (document.fullscreenElement === element) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
       await element.requestFullscreen();
     } catch (error) {
-      console.error('[VideoConference] fullscreen failed', error);
+      console.error('[VideoConference] fullscreen toggle failed', error);
     }
   };
 
@@ -221,9 +230,9 @@ export function LiveKitParticipantTile({
 
         <button
           type="button"
-          onClick={() => void requestFullscreen()}
+          onClick={() => void toggleFullscreen()}
           className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/45 text-slate-200 hover:bg-black/70"
-          aria-label="نمایش تمام‌صفحه"
+          aria-label="تغییر حالت تمام‌صفحه"
         >
           <Expand className="h-4 w-4" />
         </button>
