@@ -134,9 +134,30 @@ export class ConferenceRecordingActionError extends Error {
   }
 }
 
+async function recordingErrorPayload(
+  error: unknown,
+  data: unknown,
+): Promise<Record<string, unknown> | null> {
+  if (data && typeof data === 'object') {
+    return data as Record<string, unknown>;
+  }
+
+  const context = (error as { context?: Response } | null)?.context;
+  if (!context) return null;
+
+  try {
+    const payload = await context.clone().json();
+    return payload && typeof payload === 'object'
+      ? payload as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function setRecording(
   roomId: string,
-  action: 'start' | 'stop',
+  action: 'start' | 'stop' | 'reconcile',
   client: ConferenceClient = supabase,
 ) {
   const { data, error } = await client.functions.invoke(
@@ -145,9 +166,15 @@ export async function setRecording(
   );
 
   if (error || !data?.ok) {
+    const payload = await recordingErrorPayload(error, data);
     throw new ConferenceRecordingActionError(
-      String(data?.error || error?.message || 'RECORDING_FAILED').toUpperCase(),
-      Number(data?.missingConsentCount || 0),
+      String(
+        payload?.error
+        || data?.error
+        || error?.message
+        || 'RECORDING_FAILED',
+      ).toUpperCase(),
+      Number(payload?.missingConsentCount || data?.missingConsentCount || 0),
     );
   }
 
