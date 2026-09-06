@@ -81,6 +81,9 @@ def patch_categories() -> None:
             if action.action_id == "install-all":
                 label = "Run all 21 install steps"
                 description = "Execute the complete Spark + LiveKit guided installation sequence."
+            if action.action_id == "cleanup-backups":
+                label = "Backup cleanup / free space"
+                description = "Prune old Spark backups with configurable retention, or explicitly delete all retained backups."
             new_actions.append(core.Action(action.action_id, label, description, action.risk, action.special))
         if category == "Installation":
             idx = next((i for i, a in enumerate(new_actions) if a.action_id == "install-all"), len(new_actions))
@@ -97,6 +100,14 @@ def patch_categories() -> None:
                     new_actions[i] = core.Action(a.action_id, "Installation status (21 steps)", "Probe the actual server state for all Spark + LiveKit install steps.", a.risk, a.special)
         elif category == "Services":
             new_actions.append(core.Action("service-livekit", "Restart LiveKit platform", "Recreate and validate LiveKit SFU, Redis, Egress and Ingress.", "controlled"))
+        elif category == "Backups":
+            idx = next((i for i, a in enumerate(new_actions) if a.special == "logs"), len(new_actions))
+            new_actions.insert(idx, core.Action(
+                "cleanup-backups",
+                "Backup cleanup / free space",
+                "Prune old Spark backups with configurable retention while protecting the newest recovery point of each known backup type.",
+                "confirm",
+            ))
         elif category == "Cleanup / Remove":
             idx = next((i for i, a in enumerate(new_actions) if a.action_id == "cleanup-full"), len(new_actions))
             new_actions.insert(idx, core.Action("cleanup-livekit", "Delete LiveKit runtime", "Remove only LiveKit runtime and secrets; restore legacy Coturn.", "confirm"))
@@ -119,6 +130,14 @@ def logical_collect_status():
                 completed.add(n)
     status["steps"] = f"{len(completed)}/21"
     status["step_set"] = ",".join(str(n) for n in sorted(completed))
+
+    try:
+        status["backups"] = str(sum(
+            1 for path in core.BACKUP_DIR.iterdir()
+            if path.is_file() or path.is_dir()
+        ))
+    except OSError:
+        status["backups"] = "0"
 
     # Studio no longer owns a dedicated listener. Access is controlled by the
     # persisted root-route flag while all Supabase API routes continue on 443.
@@ -178,6 +197,7 @@ def logical_self_test() -> int:
         "security-report",
         "security-account-unlock",
         "cleanup-database",
+        "cleanup-backups",
         "cleanup-full",
         "cleanup-manager",
         "diagnostic-livekit",
@@ -190,6 +210,12 @@ def logical_self_test() -> int:
     if not required.issubset(ids):
         missing = ", ".join(sorted(required - ids))
         raise RuntimeError(f"action registry is incomplete: {missing}")
+    backup_sections = [
+        a for category, actions in core.CATEGORIES if category == "Backups"
+        for a in actions if a.action_id == "cleanup-backups"
+    ]
+    if len(backup_sections) != 1:
+        raise RuntimeError("backup cleanup action is missing from Backups")
     import curses as _curses
     import pty as _pty
     return 0
