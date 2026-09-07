@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { supportsAudioOutputSelection } from 'livekit-client';
 import { LayoutGrid, Rows3, Wifi } from 'lucide-react';
 import { useConferenceClient } from '../../../../components/VideoConference/conferenceClient';
 import { useConferenceAuthorization } from '../../hooks/useConferenceAuthorization';
@@ -117,6 +118,27 @@ export function ConferenceRoomPage({ room: sparkRoom, currentUserId, currentUser
     livekit.reconnectCount,
     livekit.revision,
   );
+
+  useEffect(() => {
+    if (!livekit.room || !supportsAudioOutputSelection()) return;
+
+    let audioOutputId = '';
+    try {
+      const saved = JSON.parse(localStorage.getItem('conf_device_prefs') || '{}') as { audioOutputId?: unknown };
+      if (typeof saved.audioOutputId === 'string') {
+        audioOutputId = saved.audioOutputId;
+      }
+    } catch {
+      // Device preferences are best effort; browser default remains the fallback.
+    }
+
+    if (!audioOutputId) return;
+    void livekit.room
+      .switchActiveDevice('audiooutput', audioOutputId, true)
+      .catch((error) => {
+        console.warn('[VideoConference] initial audio output restore failed', error);
+      });
+  }, [livekit.room]);
 
   useEffect(() => {
     if (
