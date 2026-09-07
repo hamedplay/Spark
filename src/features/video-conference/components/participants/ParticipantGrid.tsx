@@ -29,9 +29,11 @@ export function ParticipantGrid({
 }: Props) {
   const gridClass = participants.length <= 1
     ? 'grid-cols-1'
-    : participants.length <= 4
-      ? 'grid-cols-2'
-      : 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+    : participants.length === 2
+      ? 'grid-cols-1 sm:grid-cols-2'
+      : participants.length <= 4
+        ? 'grid-cols-2'
+        : 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
   const participantFocusIdentity =
     pinnedIdentity || activeSpeakerIdentity;
@@ -78,7 +80,7 @@ export function ParticipantGrid({
     const rest = orderedParticipants.slice(1);
 
     return (
-      <main className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2 sm:gap-3 sm:p-4">
+      <main className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-1.5 sm:gap-3 sm:p-4">
         <div className="min-h-0 flex-1">
           <LiveKitParticipantTile
             participant={focus}
@@ -96,13 +98,13 @@ export function ParticipantGrid({
         </div>
 
         {rest.length > 0 && (
-          <div className="flex min-h-[168px] max-h-[190px] gap-2 overflow-x-auto pb-1">
+          <div className="flex min-h-[104px] max-h-[112px] gap-2 overflow-x-auto pb-1 sm:min-h-[168px] sm:max-h-[190px]">
             {rest.map((participant) => {
               const pinned = participant.identity === pinnedIdentity;
               return (
                 <div
                   key={participant.identity}
-                  className="h-[168px] min-w-[220px] max-w-[280px] flex-1"
+                  className="h-[104px] min-w-[138px] max-w-[180px] flex-1 sm:h-[168px] sm:min-w-[220px] sm:max-w-[280px]"
                 >
                   <LiveKitParticipantTile
                     participant={participant}
@@ -130,10 +132,10 @@ export function ParticipantGrid({
   }
 
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto p-2 sm:p-4">
+    <main className="min-h-0 flex-1 overflow-y-auto p-1.5 sm:p-4">
       <div
         className={
-          `mx-auto grid h-full max-w-[1600px] auto-rows-[minmax(160px,1fr)] gap-2 sm:gap-3 ${gridClass}`
+          `mx-auto grid h-full max-w-[1600px] auto-rows-[minmax(148px,1fr)] gap-1.5 sm:auto-rows-[minmax(160px,1fr)] sm:gap-3 ${gridClass}`
         }
       >
         {orderedParticipants.map((participant) => {
