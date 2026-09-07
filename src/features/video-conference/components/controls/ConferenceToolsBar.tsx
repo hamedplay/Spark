@@ -54,6 +54,7 @@ export function ConferenceToolsBar({
   useConferenceTooltips();
   const togglePanel = (next: Exclude<ConferencePanel, null>) => onPanelChange(panel === next ? null : next);
   const canToggleRecording = recording ? canStopRecording : canStartRecording;
+  const lockBusy = busy === 'lock:' || busy === 'unlock:';
 
   return (
     <div
@@ -104,7 +105,24 @@ export function ConferenceToolsBar({
         <button onClick={() => togglePanel('participants')} className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl hover:bg-white/10" aria-label="شرکت‌کنندگان"><Users className="h-5 w-5" />{raisedCount > 0 && <span className="absolute -left-1 -top-1 rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-slate-950">{raisedCount}</span>}</button>
         <button onClick={() => togglePanel('devices')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl hover:bg-white/10" aria-label="انتخاب دستگاه"><Settings2 className="h-5 w-5" /></button>
         {canToggleRecording && <button onClick={() => void onToggleRecording()} disabled={busy === 'recording'} className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${recording ? 'bg-rose-600' : 'hover:bg-white/10'}`} aria-label={recording ? 'توقف ضبط' : 'شروع ضبط'}>{recording ? <Square className="h-4 w-4 fill-current" /> : <Radio className="h-5 w-5" />}</button>}
-        {canLockRoom && <button onClick={() => void onToggleLock()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl hover:bg-white/10" aria-label={locked ? 'باز کردن قفل جلسه' : 'قفل جلسه'}>{locked ? <Unlock className="h-5 w-5" /> : <Lock className="h-5 w-5" />}</button>}
+        {canLockRoom && (
+          <button
+            onClick={() => void onToggleLock()}
+            disabled={lockBusy}
+            aria-label={locked ? 'باز کردن قفل جلسه' : 'قفل جلسه'}
+            aria-pressed={locked}
+            className={
+              `flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-bold transition `
+              + (locked
+                ? 'border-amber-300/70 bg-amber-400 text-slate-950 shadow-[0_0_0_1px_rgba(251,191,36,.18)]'
+                : 'border-white/15 bg-white/5 text-slate-200 hover:border-white/25 hover:bg-white/10')
+              + ' disabled:cursor-wait disabled:opacity-60'
+            }
+          >
+            {locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+            <span>{locked ? 'قفل فعال' : 'قفل جلسه'}</span>
+          </button>
+        )}
       </div>
     </div>
   );
