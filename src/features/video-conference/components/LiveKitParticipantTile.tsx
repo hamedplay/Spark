@@ -83,6 +83,9 @@ export function LiveKitParticipantTile({
 
   const displayName =
     participant?.name || (local ? 'شما' : 'شرکت‌کننده');
+  const displayLabel = local && String(displayName).trim() !== 'شما'
+    ? `${displayName} (شما)`
+    : displayName;
   const videoMuted = !videoPublication || videoPublication.isMuted;
   const microphoneMuted =
     !microphonePublication || microphonePublication.isMuted;
@@ -161,7 +164,7 @@ export function LiveKitParticipantTile({
     <div
       ref={rootRef}
       className={
-        `relative min-h-0 overflow-hidden rounded-2xl bg-slate-900 shadow-sm ring-2 transition `
+        `relative min-h-0 overflow-hidden rounded-xl bg-slate-900 shadow-sm ring-2 transition sm:rounded-2xl `
         + (featured ? 'lg:col-span-2 lg:row-span-2 ' : '')
         + (spotlighted
           ? 'ring-amber-400'
@@ -173,13 +176,13 @@ export function LiveKitParticipantTile({
       }
     >
       {videoMuted ? (
-        <div className="flex h-full min-h-[160px] items-center justify-center bg-slate-800 text-slate-300">
-          <div className="flex flex-col items-center gap-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-700">
-              <UserRound className="h-8 w-8" />
+        <div className="flex h-full min-h-[148px] items-center justify-center bg-slate-800 text-slate-300 sm:min-h-[160px]">
+          <div className="flex flex-col items-center gap-2 sm:gap-3">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-700 sm:h-16 sm:w-16">
+              <UserRound className="h-7 w-7 sm:h-8 sm:w-8" />
             </div>
-            <span className="max-w-[18rem] truncate px-3 text-sm font-semibold">
-              {displayName}
+            <span className="max-w-[18rem] truncate px-3 text-xs font-semibold sm:text-sm">
+              {displayLabel}
             </span>
           </div>
         </div>
@@ -190,7 +193,7 @@ export function LiveKitParticipantTile({
           playsInline
           muted={local}
           className={
-            `h-full min-h-[160px] w-full transition-transform duration-200 `
+            `h-full min-h-[148px] w-full transition-transform duration-200 sm:min-h-[160px] `
             + (renderingScreenShare ? 'object-contain bg-black' : 'object-cover')
           }
           style={{ transform: `scaleX(${mirrorLocalCamera ? -1 : 1}) scale(${zoom})` }}
@@ -208,7 +211,7 @@ export function LiveKitParticipantTile({
         </>
       )}
 
-      <div className="absolute left-2 top-2 z-10 flex flex-wrap gap-1">
+      <div className="absolute left-1.5 top-1.5 z-10 flex gap-1 sm:left-2 sm:top-2">
         {onTogglePin && (
           <button
             type="button"
@@ -217,7 +220,7 @@ export function LiveKitParticipantTile({
               `flex h-8 w-8 items-center justify-center rounded-full border border-white/10 `
               + (pinned
                 ? 'bg-sky-500 text-white'
-                : 'bg-black/45 text-slate-200 hover:bg-black/70')
+                : 'bg-black/55 text-slate-100 hover:bg-black/75')
             }
             aria-label={pinned ? 'برداشتن سنجاق' : 'سنجاق کردن تصویر'}
             aria-pressed={pinned}
@@ -231,7 +234,7 @@ export function LiveKitParticipantTile({
         <button
           type="button"
           onClick={() => void toggleFullscreen()}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/45 text-slate-200 hover:bg-black/70"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/55 text-slate-100 hover:bg-black/75"
           aria-label="تغییر حالت تمام‌صفحه"
         >
           <Expand className="h-4 w-4" />
@@ -241,7 +244,7 @@ export function LiveKitParticipantTile({
           <button
             type="button"
             onClick={() => void togglePictureInPicture()}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/45 text-slate-200 hover:bg-black/70"
+            className="hidden h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/55 text-slate-100 hover:bg-black/75 sm:flex"
             aria-label="تصویر در تصویر"
           >
             <PictureInPicture2 className="h-4 w-4" />
@@ -250,7 +253,7 @@ export function LiveKitParticipantTile({
       </div>
 
       {!videoMuted && (
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-full border border-white/10 bg-black/45 p-1">
+        <div className="absolute right-2 top-2 z-10 hidden items-center gap-1 rounded-full border border-white/10 bg-black/55 p-1 sm:flex">
           <button
             type="button"
             onClick={zoomOut}
@@ -276,16 +279,15 @@ export function LiveKitParticipantTile({
       )}
 
       {spotlighted && (
-        <div className="absolute bottom-10 right-2 z-10 flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/90 px-2 py-1 text-[10px] font-bold text-slate-950 shadow">
+        <div className="absolute bottom-9 right-1.5 z-10 flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/90 px-2 py-1 text-[9px] font-bold text-slate-950 shadow sm:bottom-10 sm:right-2 sm:text-[10px]">
           <Star className="h-3 w-3 fill-current" />
           Spotlight
         </div>
       )}
 
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/75 to-transparent px-3 pb-2 pt-8 text-white">
-        <span className="max-w-[75%] truncate text-xs font-semibold">
-          {displayName}
-          {local ? ' (شما)' : ''}
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-2.5 pb-2 pt-7 text-white sm:px-3 sm:pt-8">
+        <span className="max-w-[80%] truncate text-[11px] font-semibold sm:max-w-[75%] sm:text-xs">
+          {displayLabel}
           {renderingScreenShare ? ' · اشتراک صفحه' : ''}
         </span>
         {microphoneMuted && (
