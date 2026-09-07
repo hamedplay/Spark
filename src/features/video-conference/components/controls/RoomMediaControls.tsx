@@ -105,7 +105,7 @@ export function RoomMediaControls({
           onClick={onToggleMic}
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${micEnabled ? 'bg-slate-700 hover:bg-slate-600' : 'bg-rose-600 hover:bg-rose-500'}`}
         >
-          {micEnabled ? <Mic className="h-4.5 w-4.5 sm:h-5 sm:w-5" /> : <MicOff className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
+          {micEnabled ? <Mic className="h-4 w-4 sm:h-5 sm:w-5" /> : <MicOff className="h-4 w-4 sm:h-5 sm:w-5" />}
         </button>
       )}
       {allowCamera && (
@@ -114,7 +114,7 @@ export function RoomMediaControls({
           onClick={onToggleCamera}
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${cameraEnabled ? 'bg-slate-700 hover:bg-slate-600' : 'bg-rose-600 hover:bg-rose-500'}`}
         >
-          {cameraEnabled ? <Camera className="h-4.5 w-4.5 sm:h-5 sm:w-5" /> : <CameraOff className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
+          {cameraEnabled ? <Camera className="h-4 w-4 sm:h-5 sm:w-5" /> : <CameraOff className="h-4 w-4 sm:h-5 sm:w-5" />}
         </button>
       )}
       {allowScreenShare && (
@@ -134,7 +134,7 @@ export function RoomMediaControls({
         onClick={onToggleSpeaker}
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${speakerMuted ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'}`}
       >
-        {speakerMuted ? <VolumeX className="h-4.5 w-4.5 sm:h-5 sm:w-5" /> : <Volume2 className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
+        {speakerMuted ? <VolumeX className="h-4 w-4 sm:h-5 sm:w-5" /> : <Volume2 className="h-4 w-4 sm:h-5 sm:w-5" />}
       </button>
 
       {allowReactions && (
@@ -212,7 +212,7 @@ export function RoomMediaControls({
           onClick={() => { setExitError(''); setExitMenuOpen((current) => !current); }}
           className="flex h-9 min-w-10 items-center justify-center gap-0.5 rounded-full bg-rose-600 px-2 transition hover:bg-rose-500 sm:h-11 sm:min-w-12 sm:gap-1 sm:px-3"
         >
-          <LogOut className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+          <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
           <ChevronUp className={`h-3 w-3 transition-transform sm:h-3.5 sm:w-3.5 ${exitMenuOpen ? 'rotate-180' : ''}`} />
         </button>
       </div>
