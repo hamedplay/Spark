@@ -98,13 +98,13 @@ export function ParticipantGrid({
         </div>
 
         {rest.length > 0 && (
-          <div className="flex min-h-[104px] max-h-[112px] gap-2 overflow-x-auto pb-1 sm:min-h-[168px] sm:max-h-[190px]">
+          <div className="flex min-h-[148px] max-h-[156px] gap-2 overflow-x-auto pb-1 sm:min-h-[168px] sm:max-h-[190px]">
             {rest.map((participant) => {
               const pinned = participant.identity === pinnedIdentity;
               return (
                 <div
                   key={participant.identity}
-                  className="h-[104px] min-w-[138px] max-w-[180px] flex-1 sm:h-[168px] sm:min-w-[220px] sm:max-w-[280px]"
+                  className="h-[148px] min-w-[180px] max-w-[220px] flex-1 sm:h-[168px] sm:min-w-[220px] sm:max-w-[280px]"
                 >
                   <LiveKitParticipantTile
                     participant={participant}
