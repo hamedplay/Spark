@@ -216,7 +216,6 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   // ── Device change handlers ─────────────────────────────────────────────────
   const handleVideoChange = async (deviceId: string) => {
     setSelectedVideo(deviceId);
@@ -254,37 +253,52 @@ export function DeviceSelector({ onConfirm, submitLabel = 'ادامه', children
     setIsVideoOff(next);
   };
 
-  // ── Speaker test — uses a hidden <audio> element so setSinkId works ─────────
+  // ── Speaker test — route the generated tone through the selected sink ──────
   const playTestSound = async () => {
     if (testingSound) return;
     setTestingSound(true);
     setSoundTestDone(false);
+
+    const el = speakerTestRef.current as (HTMLAudioElement & { setSinkId?: (deviceId: string) => Promise<void> }) | null;
+    let ctx: AudioContext | null = null;
+
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
+      const destination = ctx.createMediaStreamDestination();
+
       osc.frequency.value = 880;
       osc.type = 'sine';
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(destination);
+
+      if (!el) throw new Error('SPEAKER_TEST_ELEMENT_MISSING');
+      el.srcObject = destination.stream;
+      if (selectedAudioOutput && el.setSinkId) {
+        await el.setSinkId(selectedAudioOutput);
+      }
+      await el.play();
+
       osc.start();
       osc.stop(ctx.currentTime + 0.8);
 
-      // Route to selected output via the hidden <audio> element if supported
-      const el = speakerTestRef.current as any;
-      if (el && selectedAudioOutput && el.setSinkId) {
-        el.setSinkId(selectedAudioOutput).catch(() => {});
-      }
-
       osc.onended = () => {
-        ctx.close();
+        el.pause();
+        el.srcObject = null;
+        void ctx?.close();
         setTestingSound(false);
         setSoundTestDone(true);
         setTimeout(() => setSoundTestDone(false), 2000);
       };
     } catch {
+      if (el) {
+        el.pause();
+        el.srcObject = null;
+      }
+      await ctx?.close().catch(() => {});
       setTestingSound(false);
     }
   };
