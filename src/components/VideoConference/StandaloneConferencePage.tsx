@@ -74,8 +74,6 @@ export default function StandaloneConferencePage() {
   const [activeRoom, setActiveRoom] = useState<ConferenceRoom | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [myPeerId, setMyPeerId] = useState('');
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
   const [waitingApproval, setWaitingApproval] = useState<{
     room: ConferenceRoom;
     stream: MediaStream;
@@ -314,6 +312,9 @@ export default function StandaloneConferencePage() {
       return;
     }
 
+    const muted = !stream.getAudioTracks().some(track => track.enabled);
+    const videoOff = !stream.getVideoTracks().some(track => track.enabled);
+
     try {
       const { data: validation, error } = await supabase.rpc('check_conference_join', { p_room_id: room.id });
       if (error) throw error;
@@ -326,16 +327,16 @@ export default function StandaloneConferencePage() {
       }
 
       if (room.require_approval && room.host_id !== userId && room.media_topology !== 'sfu') {
-        setWaitingApproval({ room, stream, isMuted, isVideoOff });
+        setWaitingApproval({ room, stream, isMuted: muted, isVideoOff: videoOff });
         return;
       }
 
-      await enterRoom(room, stream, isMuted, isVideoOff);
+      await enterRoom(room, stream, muted, videoOff);
     } catch (error: any) {
       stream.getTracks().forEach(track => track.stop());
       toast.error(error?.message || 'بررسی دسترسی جلسه ناموفق بود.');
     }
-  }, [enterRoom, isMuted, isVideoOff, room, userId]);
+  }, [enterRoom, room, userId]);
 
   const handleConferenceLeave = useCallback(() => {
     localStreamRef.current?.getTracks().forEach(track => track.stop());
