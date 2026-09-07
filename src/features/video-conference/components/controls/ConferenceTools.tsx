@@ -132,8 +132,8 @@ export function ConferenceTools({
         <aside
           className={
             panel === 'whiteboard' || panel === 'presentation'
-              ? 'absolute inset-x-2 bottom-[146px] top-16 z-40 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur sm:inset-x-4'
-              : 'absolute inset-x-2 bottom-[146px] z-40 max-h-[55dvh] overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur sm:inset-x-auto sm:left-4 sm:w-[420px]'
+              ? 'absolute inset-x-2 bottom-[68px] top-16 z-40 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur sm:inset-x-4 sm:bottom-[84px]'
+              : 'absolute inset-x-2 bottom-[68px] z-40 max-h-[70dvh] overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur sm:inset-x-auto sm:bottom-[84px] sm:left-4 sm:max-h-[55dvh] sm:w-[420px]'
           }
           dir="rtl"
         >
