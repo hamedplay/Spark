@@ -95,6 +95,51 @@ export function useConferencePhase({ client, roomId, currentUserId }: Params) {
     [snapshot.phaseEndsAt, synchronizedNowMs],
   );
 
+  useEffect(() => {
+    const timerExpired = remainingSeconds === 0
+      && snapshot.phaseEndsAt !== null
+      && (
+        snapshot.currentPhase === 'COUNTDOWN'
+        || snapshot.currentPhase === 'BREAK'
+        || snapshot.currentPhase === 'RESUMING'
+      );
+
+    if (!timerExpired) return;
+
+    let cancelled = false;
+    let timeout: number | null = null;
+    let attempts = 0;
+
+    const reconcile = async () => {
+      if (cancelled) return;
+
+      await refresh();
+      attempts += 1;
+
+      if (!cancelled && attempts < 10) {
+        timeout = window.setTimeout(() => {
+          void reconcile();
+        }, 1000);
+      }
+    };
+
+    timeout = window.setTimeout(() => {
+      void reconcile();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      if (timeout !== null) {
+        window.clearTimeout(timeout);
+      }
+    };
+  }, [
+    refresh,
+    remainingSeconds,
+    snapshot.currentPhase,
+    snapshot.phaseEndsAt,
+  ]);
+
   const mediaHidden = conferencePhaseHidesMedia(snapshot.currentPhase);
 
   const runAction = useCallback(async (
