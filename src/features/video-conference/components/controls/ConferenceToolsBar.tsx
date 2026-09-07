@@ -77,7 +77,7 @@ export function ConferenceToolsBar({
 
       <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:hidden">
         <button
-          onClick={() => togglePanel('chat')}
+          onClick={() => openMobilePanel('chat')}
           className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${panel === 'chat' ? 'bg-white/10' : 'hover:bg-white/10'}`}
           aria-label="گفتگوی جلسه"
           aria-pressed={panel === 'chat'}
@@ -87,7 +87,7 @@ export function ConferenceToolsBar({
         </button>
 
         <button
-          onClick={() => togglePanel('participants')}
+          onClick={() => openMobilePanel('participants')}
           className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${panel === 'participants' ? 'bg-white/10' : 'hover:bg-white/10'}`}
           aria-label="شرکت‌کنندگان"
           aria-pressed={panel === 'participants'}
@@ -115,7 +115,7 @@ export function ConferenceToolsBar({
       <div
         className={
           mobileMoreOpen
-            ? 'absolute inset-x-2 bottom-full mb-2 grid max-h-[52dvh] grid-cols-3 gap-1.5 overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/98 p-2 shadow-2xl backdrop-blur sm:hidden'
+            ? 'absolute inset-x-2 bottom-full mb-2 grid max-h-[52dvh] grid-cols-3 gap-1.5 overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl backdrop-blur sm:hidden'
             : 'hidden'
         }
         aria-label="ابزارهای بیشتر جلسه"
