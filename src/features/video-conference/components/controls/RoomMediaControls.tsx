@@ -48,10 +48,13 @@ export function RoomMediaControls({
   const [exitBusy, setExitBusy] = useState<'leave' | 'end' | null>(null);
   const [exitError, setExitError] = useState('');
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const [mobileMoreTarget, setMobileMoreTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     const nextTarget = document.getElementById('conference-media-controls-slot');
+    const nextMobileMoreTarget = document.getElementById('conference-mobile-media-more-slot');
     if (nextTarget !== portalTarget) setPortalTarget(nextTarget);
+    if (nextMobileMoreTarget !== mobileMoreTarget) setMobileMoreTarget(nextMobileMoreTarget);
   });
 
   const chooseReaction = (reaction: string) => {
@@ -89,7 +92,7 @@ export function RoomMediaControls({
     <>
       {reactionError && (
         <div
-          className="absolute bottom-14 right-0 z-50 max-w-64 rounded-lg bg-rose-950/95 px-3 py-2 text-center text-[10px] text-rose-100 shadow-lg"
+          className="absolute bottom-12 right-0 z-50 max-w-64 rounded-lg bg-rose-950/95 px-3 py-2 text-center text-[10px] text-rose-100 shadow-lg sm:bottom-14"
           role="status"
         >
           {reactionError}
@@ -100,25 +103,25 @@ export function RoomMediaControls({
         <button
           aria-label={micEnabled ? 'قطع میکروفون' : 'فعال کردن میکروفون'}
           onClick={onToggleMic}
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition ${micEnabled ? 'bg-slate-700 hover:bg-slate-600' : 'bg-rose-600 hover:bg-rose-500'}`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${micEnabled ? 'bg-slate-700 hover:bg-slate-600' : 'bg-rose-600 hover:bg-rose-500'}`}
         >
-          {micEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+          {micEnabled ? <Mic className="h-4.5 w-4.5 sm:h-5 sm:w-5" /> : <MicOff className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
         </button>
       )}
       {allowCamera && (
         <button
           aria-label={cameraEnabled ? 'خاموش کردن دوربین' : 'فعال کردن دوربین'}
           onClick={onToggleCamera}
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition ${cameraEnabled ? 'bg-slate-700 hover:bg-slate-600' : 'bg-rose-600 hover:bg-rose-500'}`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${cameraEnabled ? 'bg-slate-700 hover:bg-slate-600' : 'bg-rose-600 hover:bg-rose-500'}`}
         >
-          {cameraEnabled ? <Camera className="h-5 w-5" /> : <CameraOff className="h-5 w-5" />}
+          {cameraEnabled ? <Camera className="h-4.5 w-4.5 sm:h-5 sm:w-5" /> : <CameraOff className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
         </button>
       )}
       {allowScreenShare && (
         <button
           aria-label={screenEnabled ? 'توقف اشتراک صفحه' : 'اشتراک صفحه'}
           onClick={onToggleScreen}
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition ${screenEnabled ? 'bg-violet-600 hover:bg-violet-500' : 'bg-slate-700 hover:bg-slate-600'}`}
+          className={`hidden h-11 w-11 shrink-0 items-center justify-center rounded-full transition sm:flex ${screenEnabled ? 'bg-violet-600 hover:bg-violet-500' : 'bg-slate-700 hover:bg-slate-600'}`}
         >
           <MonitorUp className="h-5 w-5" />
         </button>
@@ -129,21 +132,21 @@ export function RoomMediaControls({
         aria-label={speakerMuted ? 'فعال کردن صدای جلسه' : 'بی‌صدا کردن صدای جلسه'}
         aria-pressed={speakerMuted}
         onClick={onToggleSpeaker}
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition ${speakerMuted ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'}`}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${speakerMuted ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'}`}
       >
-        {speakerMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+        {speakerMuted ? <VolumeX className="h-4.5 w-4.5 sm:h-5 sm:w-5" /> : <Volume2 className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
       </button>
 
       {allowReactions && (
         <div className="relative shrink-0">
           {reactionPickerOpen && (
-            <div className="absolute bottom-14 right-0 z-50 flex gap-1 rounded-2xl border border-white/10 bg-slate-900/95 p-1.5 shadow-2xl backdrop-blur">
+            <div className="absolute bottom-12 right-0 z-50 flex max-w-[calc(100vw-1rem)] gap-1 rounded-2xl border border-white/10 bg-slate-900/95 p-1.5 shadow-2xl backdrop-blur sm:bottom-14">
               {REACTION_OPTIONS.map((reaction) => (
                 <button
                   key={reaction}
                   type="button"
                   onClick={() => chooseReaction(reaction)}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-xl hover:bg-white/10"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-lg hover:bg-white/10 sm:h-10 sm:w-10 sm:text-xl"
                   aria-label={`ارسال واکنش ${reaction}`}
                 >
                   {reaction}
@@ -156,7 +159,7 @@ export function RoomMediaControls({
             aria-label={reactionPickerOpen ? 'بستن واکنش‌ها' : 'نمایش واکنش‌ها'}
             aria-expanded={reactionPickerOpen}
             onClick={() => setReactionPickerOpen((current) => !current)}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-700 text-xl transition hover:bg-slate-600"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-700 text-lg transition hover:bg-slate-600 sm:h-11 sm:w-11 sm:text-xl"
           >
             👏
           </button>
@@ -165,7 +168,7 @@ export function RoomMediaControls({
 
       <div className="relative shrink-0">
         {exitMenuOpen && (
-          <div className="absolute bottom-14 right-0 z-[70] w-64 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl backdrop-blur" dir="rtl">
+          <div className="absolute bottom-12 right-0 z-[70] w-[min(16rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl backdrop-blur sm:bottom-14" dir="rtl">
             <div className="mb-1 flex items-center justify-between px-2 py-1">
               <span className="text-xs font-bold text-white">خروج از جلسه</span>
               <button type="button" onClick={() => setExitMenuOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-white/10" aria-label="بستن"><X className="h-4 w-4" /></button>
@@ -207,23 +210,38 @@ export function RoomMediaControls({
           aria-label="خروج یا اتمام جلسه"
           aria-expanded={exitMenuOpen}
           onClick={() => { setExitError(''); setExitMenuOpen((current) => !current); }}
-          className="flex h-11 min-w-12 items-center justify-center gap-1 rounded-full bg-rose-600 px-3 transition hover:bg-rose-500"
+          className="flex h-9 min-w-10 items-center justify-center gap-0.5 rounded-full bg-rose-600 px-2 transition hover:bg-rose-500 sm:h-11 sm:min-w-12 sm:gap-1 sm:px-3"
         >
-          <LogOut className="h-5 w-5" />
-          <ChevronUp className={`h-3.5 w-3.5 transition-transform ${exitMenuOpen ? 'rotate-180' : ''}`} />
+          <LogOut className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+          <ChevronUp className={`h-3 w-3 transition-transform sm:h-3.5 sm:w-3.5 ${exitMenuOpen ? 'rotate-180' : ''}`} />
         </button>
       </div>
     </>
   );
 
+  const mobileScreenShareControl = allowScreenShare ? (
+    <button
+      type="button"
+      aria-label={screenEnabled ? 'توقف اشتراک صفحه' : 'اشتراک صفحه'}
+      onClick={onToggleScreen}
+      className={`relative flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-medium transition ${screenEnabled ? 'bg-violet-600 text-white' : 'text-slate-200 hover:bg-white/10'}`}
+    >
+      <MonitorUp className="h-5 w-5" />
+      <span>{screenEnabled ? 'توقف اشتراک' : 'اشتراک صفحه'}</span>
+    </button>
+  ) : null;
+
   if (!portalTarget) {
-    return <div className="h-[76px] shrink-0" aria-hidden="true" />;
+    return <div className="h-[60px] shrink-0 sm:h-[76px]" aria-hidden="true" />;
   }
 
   return (
     <>
-      <div className="h-[76px] shrink-0" aria-hidden="true" />
+      <div className="h-[60px] shrink-0 sm:h-[76px]" aria-hidden="true" />
       {createPortal(controls, portalTarget)}
+      {mobileMoreTarget && mobileScreenShareControl
+        ? createPortal(mobileScreenShareControl, mobileMoreTarget)
+        : null}
     </>
   );
 }
