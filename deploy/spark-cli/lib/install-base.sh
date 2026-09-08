@@ -1,7 +1,18 @@
-check_ubuntu_2404() {
+check_supported_ubuntu() {
   . /etc/os-release
-  [[ "${ID:-}" == "ubuntu" && "${VERSION_ID:-}" == "24.04" ]] || {
-    echo "Expected Ubuntu 24.04; got ID=${ID:-?} VERSION_ID=${VERSION_ID:-?}" >>"$CURRENT_LOG"
+  [[ "${ID:-}" == "ubuntu" ]] || {
+    echo "Expected Ubuntu; got ID=${ID:-?} VERSION_ID=${VERSION_ID:-?}" >>"$CURRENT_LOG"
+    return 1
+  }
+  case "${VERSION_ID:-}" in
+    24.04|26.04) ;;
+    *)
+      echo "Expected Ubuntu 24.04 or 26.04; got ID=${ID:-?} VERSION_ID=${VERSION_ID:-?}" >>"$CURRENT_LOG"
+      return 1
+      ;;
+  esac
+  [[ -n "${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}" ]] || {
+    echo "Ubuntu release codename is missing from /etc/os-release" >>"$CURRENT_LOG"
     return 1
   }
   [[ "$(dpkg --print-architecture)" == "amd64" ]] || {
@@ -61,17 +72,20 @@ test_base_packages() {
 install_step_2() {
   title
   new_log "install-02-packages"
-  run_logged "بررسی Ubuntu 24.04 x86_64" check_ubuntu_2404 || return 1
+  run_logged "بررسی Ubuntu 24.04/26.04 x86_64" check_supported_ubuntu || return 1
   run_logged "apt update" apt update || return 1
   run_logged "apt upgrade" apt upgrade -y || return 1
   run_logged "نصب packageهای پایه" apt install -y ca-certificates curl git gnupg jq openssl ufw rsync python3 python3-yaml nginx certbot coturn || return 1
 
   run_logged "تنظیم repository رسمی Docker" bash -c '
+    . /etc/os-release
+    codename="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
+    [[ -n "$codename" ]] || { echo "Ubuntu codename is missing" >&2; exit 1; }
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
     chmod a+r /etc/apt/keyrings/docker.gpg
     cat >/etc/apt/sources.list.d/docker.list <<EOF
-deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu noble stable
+deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${codename} stable
 EOF
   ' || return 1
 
@@ -164,7 +178,7 @@ install_step_4() {
     fail "${SUPABASE_SOURCE} وجود دارد ولی Git repository نیست."
     return 1
   else
-    run_logged "Clone آخرین Supabase رسمی" git clone --branch main --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
+    run_logged "Clone آخرین Supabase main" git clone --branch main --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
   fi
 
   if [[ -f "${SUPABASE_ROOT}/.env" ]]; then
@@ -227,7 +241,7 @@ ensure_internal_identifier() {
   current="$(env_get "${SUPABASE_ROOT}/.env" "$key")"
   sample="$(env_get "${SUPABASE_ROOT}/.env.example" "$key")"
   if [[ -z "$current" || "$current" == "$sample" ]] || is_placeholder_value "$current"; then
-    env_set "${SUPABASE_ROOT}/.env" "$key" "${prefix}$(openssl rand -hex 8)"
+    env_set "$file" "$key" "${prefix}$(openssl rand -hex 8)"
   fi
 }
 
