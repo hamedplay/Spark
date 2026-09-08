@@ -103,7 +103,7 @@ console.log('SUPABASE_SECRET_KEY=' + opaque('sb_secret_'));
 console.log('ANON_KEY_ASYMMETRIC=' + signES256({ role:'anon', iss:'supabase', iat, exp }));
 console.log('SERVICE_ROLE_KEY_ASYMMETRIC=' + signES256({ role:'service_role', iss:'supabase', iat, exp }));
 console.log('JWT_KEYS=' + JSON.stringify(jwtKeys.keys));
-console.log('JWT_JWKS=' + JSON.stringify(jwtJwks));
+console.log('JWT_JWKS=' + JSON.stringify(jwtJwks.keys));
 NODE
 )" || return 1
 
@@ -183,8 +183,10 @@ test_extended_supabase_env() {
 # Replace the silent validator with one that logs the exact failing key.
 test_supabase_env() {
   if [[ "${SPARK_BASE_ENV_VALIDATION:-0}" == "1" ]]; then
-    test_supabase_env_base
-    return
+    # The base step is still mutating/normalizing .env here. Validating this
+    # transient state is incorrect; the complete validator runs after defaults
+    # and modern auth keys have been applied below.
+    return 0
   fi
   local file="${SUPABASE_ROOT}/.env" key
   env_expect_exact "$file" COMPOSE_FILE "docker-compose.yml" || return 1
@@ -203,6 +205,12 @@ test_supabase_env() {
     env_require_real "$file" "$key" || return 1
   done
   return 0
+}
+
+test_complete_supabase_env() {
+  local SPARK_BASE_ENV_VALIDATION=0
+  test_supabase_env || return 1
+  test_extended_supabase_env
 }
 
 install_step_5() {
@@ -233,7 +241,7 @@ install_step_6() {
   SPARK_BASE_ENV_VALIDATION=1 install_step_7_base || return 1
   complete_reference_env_defaults || return 1
   ensure_modern_auth_keys || return 1
-  if run_logged "Validate complete .env including modern auth/JWKS" test_extended_supabase_env; then
+  if run_logged "Validate complete .env including modern auth/JWKS" test_complete_supabase_env; then
     mark_step 6
   else
     unmark_step 6
