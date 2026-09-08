@@ -103,7 +103,7 @@ console.log('SUPABASE_SECRET_KEY=' + opaque('sb_secret_'));
 console.log('ANON_KEY_ASYMMETRIC=' + signES256({ role:'anon', iss:'supabase', iat, exp }));
 console.log('SERVICE_ROLE_KEY_ASYMMETRIC=' + signES256({ role:'service_role', iss:'supabase', iat, exp }));
 console.log('JWT_KEYS=' + JSON.stringify(jwtKeys.keys));
-console.log('JWT_JWKS=' + JSON.stringify(jwtJwks.keys));
+console.log('JWT_JWKS=' + JSON.stringify(jwtJwks));
 NODE
 )" || return 1
 
