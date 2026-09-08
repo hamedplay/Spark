@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -50,7 +51,45 @@ INSTALL_LABELS = {
     "install-19": ("19  LiveKit configuration", "Provision LiveKit domains, TLS, secrets and recording storage."),
     "install-20": ("20  LiveKit runtime", "Install/start LiveKit SFU, Redis, Egress, Ingress and embedded TURN."),
     "install-21": ("21  LiveKit validation", "Run end-to-end server validation for the complete media platform."),
+    "install-22": ("22  LiveKit observability", "Start and validate Prometheus, Grafana, Loki, Alertmanager and exporters."),
 }
+
+AIRGAP_ACTIONS = [
+    core.Action(
+        "airgap-build",
+        "01  Build complete offline bundle",
+        "On a connected staging host, build a checksum-verified Ubuntu/Spark/Supabase/npm/Docker/TLS bundle.",
+        "controlled",
+    ),
+    core.Action(
+        "airgap-validate",
+        "02  Validate offline bundle",
+        "Validate bundle structure, SHA256 integrity, Git bundles and target compatibility without installing it.",
+    ),
+    core.Action(
+        "airgap-import",
+        "03  Import / activate offline bundle",
+        "Copy a verified bundle under /opt/spark-airgap, activate it and load all Docker images locally.",
+        "controlled",
+    ),
+    core.Action(
+        "airgap-step",
+        "04  Run one offline install step",
+        "Run one of the normal 22 production installation steps with network-dependent operations bound to the active bundle.",
+        "confirm",
+    ),
+    core.Action(
+        "airgap-install-all",
+        "05  Run complete offline installation",
+        "Run all 22 production installation steps with local packages, sources, npm payload, images and TLS certificates only.",
+        "confirm",
+    ),
+    core.Action(
+        "airgap-status",
+        "06  Air-gap bundle status",
+        "Show the active bundle revision, target platform, checksum status, TLS pack and imported Docker image readiness.",
+    ),
+]
 
 
 def patch_categories() -> None:
@@ -75,31 +114,53 @@ def patch_categories() -> None:
         new_actions = []
         for action in actions:
             label = action.label
-            description = action.description.replace("pinned Supabase", "Supabase").replace("the pinned main router", "the official Supabase main router")
+            description = action.description.replace("pinned Supabase", "Supabase").replace(
+                "the pinned main router", "the official Supabase main router"
+            )
             if action.action_id in INSTALL_LABELS:
                 label, description = INSTALL_LABELS[action.action_id]
             if action.action_id == "install-all":
-                label = "Run all 21 install steps"
+                label = "Run all 22 install steps"
                 description = "Execute the complete Spark + LiveKit guided installation sequence."
             if action.action_id == "cleanup-backups":
                 label = "Backup cleanup / free space"
                 description = "Prune old Spark backups with configurable retention, or explicitly delete all retained backups."
             new_actions.append(core.Action(action.action_id, label, description, action.risk, action.special))
+
         if category == "Installation":
             idx = next((i for i, a in enumerate(new_actions) if a.action_id == "install-all"), len(new_actions))
             new_actions[idx:idx] = [
                 core.Action("install-19", *INSTALL_LABELS["install-19"], "controlled"),
                 core.Action("install-20", *INSTALL_LABELS["install-20"], "controlled"),
                 core.Action("install-21", *INSTALL_LABELS["install-21"], "controlled"),
+                core.Action("install-22", *INSTALL_LABELS["install-22"], "controlled"),
             ]
+            rebuilt.append((category, new_actions))
+            rebuilt.append(("Installation Air-Gapped", AIRGAP_ACTIONS))
+            continue
         elif category == "Diagnostics":
             idx = next((i + 1 for i, a in enumerate(new_actions) if a.action_id == "diagnostic-turn"), len(new_actions))
-            new_actions.insert(idx, core.Action("diagnostic-livekit", "LiveKit full validation", "Validate SFU, Redis, TURN, Egress, Ingress, TLS, functions and firewall."))
-            for i, a in enumerate(new_actions):
-                if a.action_id == "diagnostic-installation-status":
-                    new_actions[i] = core.Action(a.action_id, "Installation status (21 steps)", "Probe the actual server state for all Spark + LiveKit install steps.", a.risk, a.special)
+            new_actions.insert(idx, core.Action(
+                "diagnostic-livekit",
+                "LiveKit full validation",
+                "Validate SFU, Redis, TURN, Egress, Ingress, TLS, functions and firewall.",
+            ))
+            for i, action in enumerate(new_actions):
+                if action.action_id == "diagnostic-installation-status":
+                    new_actions[i] = core.Action(
+                        action.action_id,
+                        "Installation status (22 steps)",
+                        "Probe the actual server state for all Spark + LiveKit install steps.",
+                        action.risk,
+                        action.special,
+                    )
         elif category == "Services":
-            new_actions.append(core.Action("service-livekit", "Restart LiveKit platform", "Recreate and validate LiveKit SFU, Redis, Egress and Ingress.", "controlled"))
+            new_actions.append(core.Action(
+                "service-livekit",
+                "Restart LiveKit platform",
+                "Recreate and validate LiveKit SFU, Redis, Egress and Ingress.",
+                "controlled",
+            ))
         elif category == "Backups":
             idx = next((i for i, a in enumerate(new_actions) if a.special == "logs"), len(new_actions))
             new_actions.insert(idx, core.Action(
@@ -110,12 +171,18 @@ def patch_categories() -> None:
             ))
         elif category == "Cleanup / Remove":
             idx = next((i for i, a in enumerate(new_actions) if a.action_id == "cleanup-full"), len(new_actions))
-            new_actions.insert(idx, core.Action("cleanup-livekit", "Delete LiveKit runtime", "Remove only LiveKit runtime and secrets; restore legacy Coturn.", "confirm"))
+            new_actions.insert(idx, core.Action(
+                "cleanup-livekit",
+                "Delete LiveKit runtime",
+                "Remove only LiveKit runtime and secrets; restore legacy Coturn.",
+                "confirm",
+            ))
         rebuilt.append((category, new_actions))
     core.CATEGORIES[:] = rebuilt
 
 
 _original_collect_status = core.collect_status
+
 
 def logical_collect_status():
     status = _original_collect_status()
@@ -126,9 +193,9 @@ def logical_collect_status():
                 n = int(path.stem)
             except ValueError:
                 continue
-            if 1 <= n <= 21:
+            if 1 <= n <= 22:
                 completed.add(n)
-    status["steps"] = f"{len(completed)}/21"
+    status["steps"] = f"{len(completed)}/22"
     status["step_set"] = ",".join(str(n) for n in sorted(completed))
 
     try:
@@ -139,8 +206,6 @@ def logical_collect_status():
     except OSError:
         status["backups"] = "0"
 
-    # Studio no longer owns a dedicated listener. Access is controlled by the
-    # persisted root-route flag while all Supabase API routes continue on 443.
     studio_flag = Path("/etc/spark/studio-access.enabled")
     status["studio"] = "ENABLED" if studio_flag.is_file() else "DISABLED"
     status["admin"] = status["studio"]
@@ -148,6 +213,7 @@ def logical_collect_status():
 
 
 _original_action_badge = core.SparkUI.action_badge
+
 
 def install_action_badge(self, action):
     if action.action_id.startswith("install-") and action.action_id != "install-all":
@@ -161,6 +227,7 @@ def install_action_badge(self, action):
 
 
 _original_draw_details = core.SparkUI.draw_details
+
 
 def logical_draw_details(self):
     original_safe_add = self.safe_add
@@ -177,9 +244,27 @@ def logical_draw_details(self):
         self.safe_add = original_safe_add
 
 
+_original_task_process_init = core.TaskProcess.__init__
+
+
+def routed_task_process_init(self, spark_path, action_id, args, rows, cols):
+    if action_id.startswith("airgap-"):
+        candidates = [
+            Path("/usr/local/bin/spark-airgap"),
+            core.SPARK_ROOT / "deploy/spark-cli/spark-airgap",
+        ]
+        airgap_path = next((path for path in candidates if path.is_file() and os.access(path, os.X_OK)), None)
+        if airgap_path is None:
+            raise FileNotFoundError(
+                "spark-airgap is not installed and the Spark repository copy is unavailable; update the Spark repository/manager first"
+            )
+        spark_path = str(airgap_path)
+    return _original_task_process_init(self, spark_path, action_id, args, rows, cols)
+
+
 def logical_self_test() -> int:
     assert SPARK_UI_VERSION == "3.0.0"
-    assert len(core.CATEGORIES) >= 9
+    assert len(core.CATEGORIES) >= 10
     ids = {a.action_id for _, actions in core.CATEGORIES for a in actions if not a.special}
     required = {
         "diagnostic-full",
@@ -206,10 +291,20 @@ def logical_self_test() -> int:
         "install-19",
         "install-20",
         "install-21",
+        "install-22",
+        "airgap-build",
+        "airgap-validate",
+        "airgap-import",
+        "airgap-step",
+        "airgap-install-all",
+        "airgap-status",
     }
     if not required.issubset(ids):
         missing = ", ".join(sorted(required - ids))
         raise RuntimeError(f"action registry is incomplete: {missing}")
+    airgap_sections = [category for category, _ in core.CATEGORIES if category == "Installation Air-Gapped"]
+    if len(airgap_sections) != 1:
+        raise RuntimeError("Installation Air-Gapped category is missing or duplicated")
     backup_sections = [
         a for category, actions in core.CATEGORIES if category == "Backups"
         for a in actions if a.action_id == "cleanup-backups"
@@ -225,6 +320,7 @@ patch_categories()
 core.collect_status = logical_collect_status
 core.SparkUI.action_badge = install_action_badge
 core.SparkUI.draw_details = logical_draw_details
+core.TaskProcess.__init__ = routed_task_process_init
 core.self_test = logical_self_test
 
 

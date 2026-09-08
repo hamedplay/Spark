@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SPARK_MANAGER_VERSION="3.0.0"
+REPO_URL="https://github.com/hamedplay/Spark.git"
+SPARK_ROOT="/opt/spark"
+SUPABASE_SOURCE="/opt/supabase-source"
+SUPABASE_ROOT="/opt/spark-supabase"
+CONFIG_DIR="/etc/spark"
+MANAGER_CONF="${CONFIG_DIR}/manager.conf"
+STATE_DIR="/var/lib/spark-manager"
+STEP_DIR="${STATE_DIR}/steps"
+LOG_DIR="/var/log/spark-manager"
+BACKUP_DIR="/var/backups/spark"
+
+C_RESET=$'\033[0m'
+C_GREEN=$'\033[32m'
+C_RED=$'\033[31m'
+C_YELLOW=$'\033[33m'
+C_BLUE=$'\033[34m'
+C_CYAN=$'\033[36m'
+C_WHITE=$'\033[37m'
+C_BOLD=$'\033[1m'
+C_DIM=$'\033[2m'
+CURRENT_LOG=""
+
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  exec sudo -E "$0" "$@"
+fi
+
+mkdir -p "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
+chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  TARGET="$(readlink -- "$SOURCE")"
+  if [[ "$TARGET" == /* ]]; then SOURCE="$TARGET"; else SOURCE="${SOURCE_DIR}/${TARGET}"; fi
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
+unset SOURCE SOURCE_DIR TARGET
+
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit airgap; do
+  module_path="${SCRIPT_DIR}/lib/${module}.sh"
+  if [[ ! -r "$module_path" ]]; then
+    printf 'Spark Air-Gap module missing: %s\n' "$module_path" >&2
+    exit 1
+  fi
+  source "$module_path"
+done
+unset module module_path
+
+spark_airgap_backend_prepare() {
+  clear_screen() { :; }
+  title() {
+    printf '\n%s%s== Spark Air-Gapped task ==%s %s\n' "$C_BOLD" "$C_CYAN" "$C_RESET" "$(date -Is)"
+  }
+  pause() { :; }
+}
+
+spark_airgap_validate_action() {
+  title
+  new_log "airgap-validate"
+  local input="${1:-}" staging="" root
+  [[ -n "$input" ]] || read -r -p "Path to Spark air-gap .tar.gz or extracted bundle directory: " input
+  [[ -n "$input" ]] || { fail "Bundle path is required."; return 1; }
+  if [[ -d "$input" ]]; then
+    root="$(readlink -f "$input")"
+  else
+    staging="$(mktemp -d)"
+    root="$(airgap_extract_bundle_archive "$input" "$staging")" || { rm -rf "$staging"; return 1; }
+  fi
+  if ! airgap_validate_bundle_dir "$root"; then
+    [[ -n "$staging" ]] && rm -rf "$staging"
+    return 1
+  fi
+  printf 'Bundle target: Ubuntu %s / %s\n' "$(airgap_meta_from "$root" UBUNTU_VERSION)" "$(airgap_meta_from "$root" ARCH)"
+  if airgap_validate_target_compatibility "$root" >/dev/null 2>&1; then
+    ok "Air-gap bundle integrity is valid and this host matches the target platform."
+  else
+    warn "Bundle integrity is valid; this host does not match the bundle target, so target compatibility will be enforced during import/bootstrap."
+  fi
+  [[ -n "$staging" ]] && rm -rf "$staging"
+}
+
+spark_airgap_dispatch_inner() {
+  local action="$1"
+  shift || true
+  case "$action" in
+    airgap-build) airgap_build_bundle ;;
+    airgap-validate) spark_airgap_validate_action "${1:-}" ;;
+    airgap-import) airgap_import_bundle "${1:-}" ;;
+    airgap-step) airgap_install_one_step "${1:-}" ;;
+    airgap-install-all) airgap_install_all ;;
+    airgap-status) airgap_status ;;
+    *) fail "Unknown Spark Air-Gap backend action: $action"; return 2 ;;
+  esac
+}
+
+spark_airgap_backend_action() {
+  local action="${1:-}"
+  shift || true
+  [[ -n "$action" ]] || { printf 'Air-gap backend action is required.\n' >&2; return 2; }
+  spark_airgap_backend_prepare
+  printf 'SPARK_ACTION_BEGIN %s %s\n' "$action" "$(date -Is)"
+  local rc=0
+  set +e
+  ( set -Eeuo pipefail; spark_airgap_dispatch_inner "$action" "$@" )
+  rc=$?
+  set -e
+  printf 'SPARK_ACTION_END %s rc=%d %s\n' "$action" "$rc" "$(date -Is)"
+  return "$rc"
+}
+
+case "${1:-}" in
+  --version|-V)
+    printf 'Spark Air-Gapped Installer %s\n' "$SPARK_MANAGER_VERSION"
+    ;;
+  --backend-action)
+    shift
+    spark_airgap_backend_action "$@"
+    ;;
+  --build)
+    spark_airgap_backend_action airgap-build
+    ;;
+  --validate)
+    shift
+    spark_airgap_backend_action airgap-validate "${1:-}"
+    ;;
+  --import)
+    shift
+    spark_airgap_backend_action airgap-import "${1:-}"
+    ;;
+  --step)
+    shift
+    spark_airgap_backend_action airgap-step "${1:-}"
+    ;;
+  --install-all)
+    spark_airgap_backend_action airgap-install-all
+    ;;
+  --status)
+    spark_airgap_backend_action airgap-status
+    ;;
+  --help|-h|"")
+    cat <<'EOF_HELP'
+Usage: spark-airgap [option]
+
+  --build                 Build a complete offline bundle on a connected staging host
+  --validate [bundle]     Validate archive checksums and report target compatibility
+  --import [bundle]       Import bundle and load all Docker images locally
+  --step [1-22]           Run one installation step in offline mode
+  --install-all           Run the complete 22-step offline installation
+  --status                Show active offline bundle status
+  --version               Show air-gap installer version
+EOF_HELP
+    ;;
+  *)
+    printf 'Unknown option: %s\n' "$1" >&2
+    exit 2
+    ;;
+esac
