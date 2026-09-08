@@ -178,7 +178,7 @@ install_step_4() {
     fail "${SUPABASE_SOURCE} وجود دارد ولی Git repository نیست."
     return 1
   else
-    run_logged "Clone آخرین Supabase main" git clone --branch main --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
+    run_logged "Clone آخرین Supabase رسمی" git clone --branch main --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
   fi
 
   if [[ -f "${SUPABASE_ROOT}/.env" ]]; then
@@ -241,7 +241,7 @@ ensure_internal_identifier() {
   current="$(env_get "${SUPABASE_ROOT}/.env" "$key")"
   sample="$(env_get "${SUPABASE_ROOT}/.env.example" "$key")"
   if [[ -z "$current" || "$current" == "$sample" ]] || is_placeholder_value "$current"; then
-    env_set "$file" "$key" "${prefix}$(openssl rand -hex 8)"
+    env_set "${SUPABASE_ROOT}/.env" "$key" "${prefix}$(openssl rand -hex 8)"
   fi
 }
 
