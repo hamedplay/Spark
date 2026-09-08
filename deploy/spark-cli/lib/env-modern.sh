@@ -5,6 +5,7 @@
 # Preserve the base implementations that we extend below.
 eval "$(declare -f install_step_5 | sed '1s/install_step_5/install_step_6_base/')"
 eval "$(declare -f install_step_6 | sed '1s/install_step_6/install_step_7_base/')"
+eval "$(declare -f test_supabase_env | sed '1s/test_supabase_env/test_supabase_env_base/')"
 eval "$(declare -f patch_compose | sed '1s/patch_compose/patch_compose_base/')"
 
 env_validation_error() {
@@ -181,6 +182,10 @@ test_extended_supabase_env() {
 
 # Replace the silent validator with one that logs the exact failing key.
 test_supabase_env() {
+  if [[ "${SPARK_BASE_ENV_VALIDATION:-0}" == "1" ]]; then
+    test_supabase_env_base
+    return
+  fi
   local file="${SUPABASE_ROOT}/.env" key
   env_expect_exact "$file" COMPOSE_FILE "docker-compose.yml" || return 1
   env_expect_exact "$file" SUPABASE_PUBLIC_URL "https://${API_DOMAIN}" || return 1
@@ -225,7 +230,7 @@ install_step_6() {
   # Self-heal internal identifiers even when Environment is run directly.
   ensure_internal_identifier POOLER_TENANT_ID "spark-"
   ensure_internal_identifier STORAGE_TENANT_ID "spark-"
-  install_step_7_base || return 1
+  SPARK_BASE_ENV_VALIDATION=1 install_step_7_base || return 1
   complete_reference_env_defaults || return 1
   ensure_modern_auth_keys || return 1
   if run_logged "Validate complete .env including modern auth/JWKS" test_extended_supabase_env; then
