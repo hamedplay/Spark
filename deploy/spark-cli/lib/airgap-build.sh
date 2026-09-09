@@ -7,20 +7,33 @@ airgap_prompt_default() {
 }
 
 airgap_build_apt_payload() {
-  local output="$1" target_release="$2" count
+  local output="$1" target_release="$2" count container rc
   mkdir -p "$output"
   find "$output" -maxdepth 1 -type f -name '*.deb' -delete
   rm -f "${output}/requested-packages.txt"
-  mkdir -p "${output}/partial"
 
-  docker run --rm --platform linux/amd64 \
+  # Do not rely on an APT cache bind-mount. Ubuntu/Docker APT cleanup hooks and
+  # _apt sandbox permissions can make a successful download disappear from the
+  # host mount. Build the complete payload inside a retained container, then
+  # copy the verified payload to the host with `docker cp`.
+  container="spark-airgap-apt-${target_release//./-}-$$-${RANDOM}"
+  docker rm -f "$container" >/dev/null 2>&1 || true
+  trap 'docker rm -f "$container" >/dev/null 2>&1 || true' RETURN
+
+  set +e
+  docker run --name "$container" --platform linux/amd64 \
     -e TARGET_RELEASE="$target_release" \
-    -v "${output}:/out" \
     "ubuntu:${target_release}" bash -s <<'BUNDLE_APT'
 set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
+
+# Keep every .deb downloaded while bootstrapping repository tooling as well as
+# the final Spark package set. This preserves transitive dependencies needed on
+# a bare target host.
+rm -f /etc/apt/apt.conf.d/docker-clean
 apt-get update
 apt-get install -y ca-certificates curl gnupg
+
 . /etc/os-release
 codename="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
 [[ -n "$codename" ]]
@@ -41,21 +54,39 @@ packages=(
   nginx certbot coturn docker-ce docker-ce-cli containerd.io
   docker-buildx-plugin docker-compose-plugin nodejs
 )
-# Force APT's archive directory onto the host-mounted /out path. This avoids
-# Docker image apt-clean hooks or cache semantics discarding the downloaded .deb
-# files before the bundle builder can collect them.
-mkdir -p /out/partial
-apt-get \
-  -o Dir::Cache::archives=/out \
-  -o APT::Keep-Downloaded-Packages=true \
-  install -y --download-only --reinstall "${packages[@]}"
-printf '%s\n' "${packages[@]}" >/out/requested-packages.txt
-find /out -maxdepth 1 -type f -name '*.deb' -printf '%f\n' | sort
+
+# --reinstall guarantees the requested packages themselves are present in the
+# cache; packages downloaded during the bootstrap install above remain there
+# because docker-clean was disabled before the first install.
+apt-get install -y --download-only --reinstall "${packages[@]}"
+mkdir -p /payload
+cp -a /var/cache/apt/archives/*.deb /payload/
+printf '%s\n' "${packages[@]}" >/payload/requested-packages.txt
+count="$(find /payload -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d '[:space:]')"
+[[ "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]]
+printf 'Prepared %s offline .deb files inside container.\n' "$count"
 BUNDLE_APT
+  rc=$?
+  set -e
+  if (( rc != 0 )); then
+    fail "Offline APT payload container build failed (exit=${rc})."
+    return "$rc"
+  fi
+
+  if ! docker cp "${container}:/payload/." "$output/"; then
+    fail "Unable to copy offline APT payload from builder container."
+    return 1
+  fi
+  docker rm -f "$container" >/dev/null 2>&1 || true
+  trap - RETURN
 
   count="$(find "$output" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d '[:space:]')"
   [[ "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]] || {
     fail "Offline APT payload build returned success but produced no .deb files in ${output}."
+    return 1
+  }
+  [[ -s "${output}/requested-packages.txt" ]] || {
+    fail "Offline APT requested package manifest is missing from ${output}."
     return 1
   }
   info "Offline APT payload contains ${count} .deb files."
