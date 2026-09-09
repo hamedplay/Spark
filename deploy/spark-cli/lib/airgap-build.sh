@@ -21,7 +21,10 @@ airgap_build_apt_payload() {
   trap 'docker rm -f "$container" >/dev/null 2>&1 || true' RETURN
 
   set +e
-  docker run --name "$container" --platform linux/amd64 \
+  # -i is required because the builder script is supplied to `bash -s` on stdin.
+  # Without it Docker detaches container stdin and bash exits successfully
+  # without executing the heredoc, leaving /payload absent.
+  docker run -i --name "$container" --platform linux/amd64 \
     -e TARGET_RELEASE="$target_release" \
     "ubuntu:${target_release}" bash -s <<'BUNDLE_APT'
 set -Eeuo pipefail
@@ -95,7 +98,9 @@ BUNDLE_APT
 airgap_build_npm_payload() {
   local output="$1" target_release="$2"
   mkdir -p "$output"
-  docker run --rm --platform linux/amd64 \
+  rm -f "${output}/frontend-node-modules.tar.gz" "${output}"/npm-*.tgz
+  # The npm builder also receives its script over stdin, so keep stdin attached.
+  docker run --rm -i --platform linux/amd64 \
     -e TARGET_RELEASE="$target_release" \
     -v "${SPARK_ROOT}:/src:ro" \
     -v "${output}:/out" \
@@ -121,6 +126,14 @@ tar -czf /out/frontend-node-modules.tar.gz node_modules
 cd /work
 npm pack --pack-destination /out 'npm@^11.6.2' >/dev/null
 BUNDLE_NPM
+  [[ -s "${output}/frontend-node-modules.tar.gz" ]] || {
+    fail "Offline frontend node_modules archive was not produced in ${output}."
+    return 1
+  }
+  compgen -G "${output}/npm-*.tgz" >/dev/null || {
+    fail "Offline npm package was not produced in ${output}."
+    return 1
+  }
 }
 
 airgap_collect_compose_images() {
