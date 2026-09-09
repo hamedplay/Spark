@@ -25,6 +25,19 @@ for cmd in tar sha256sum sed grep find dpkg apt-get; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Required bootstrap command is missing: $cmd" >&2; exit 1; }
 done
 
+# When target-patching an older transferred bundle, the connected Manager may
+# already contain newer Air-Gap control-plane fixes than the application commit
+# embedded in that bundle. Preserve that validated control plane instead of
+# downgrading /usr/local/lib/spark-manager to the older bundled spark-cli.
+preserve_control_plane=0
+if [[ -f "$TARGET/lib/airgap-auto.sh" && -f "$TARGET/bootstrap-airgap.sh" \
+      && -x "$CLI_PATH" && -x "$AIRGAP_CLI_PATH" && -x "$MIGRATE_PATH" ]]; then
+  if [[ "$($CLI_PATH --version 2>/dev/null || true)" == "Spark Server Manager ${EXPECTED_VERSION}" \
+        && "$($AIRGAP_CLI_PATH --version 2>/dev/null || true)" == "Spark Air-Gapped Installer ${EXPECTED_VERSION}" ]]; then
+    preserve_control_plane=1
+  fi
+fi
+
 work=""
 root=""
 if [[ -d "$input" ]]; then
@@ -117,23 +130,27 @@ for value in sys.argv[1:]:
 PY
 python3 "$source_dir/spark-ui.py" --self-test
 
-stage="$(mktemp -d /usr/local/lib/spark-manager.airgap.XXXXXX)"
-mkdir -p "$stage/lib" "$stage/livekit"
-install -m 0755 "$source_dir/spark" "$stage/spark"
-install -m 0755 "$source_dir/spark-airgap" "$stage/spark-airgap"
-install -m 0644 "$source_dir/spark-ui.py" "$stage/spark-ui.py"
-install -m 0644 "$source_dir/spark-ui-core.py" "$stage/spark-ui-core.py"
-for file in "$source_dir"/lib/*.sh; do install -m 0644 "$file" "$stage/lib/$(basename "$file")"; done
-rsync -a --delete "$SPARK_ROOT/deploy/livekit/" "$stage/livekit/"
-rm -rf "$TARGET"
-mv "$stage" "$TARGET"
-ln -sfn "$TARGET/spark" "$CLI_PATH"
-ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
+if (( preserve_control_plane == 1 )); then
+  printf 'Preserving newer installed Spark Air-Gap Manager control plane; bundle application source remains pinned to %s.\n' "${spark_commit:0:12}"
+else
+  stage="$(mktemp -d /usr/local/lib/spark-manager.airgap.XXXXXX)"
+  mkdir -p "$stage/lib" "$stage/livekit"
+  install -m 0755 "$source_dir/spark" "$stage/spark"
+  install -m 0755 "$source_dir/spark-airgap" "$stage/spark-airgap"
+  install -m 0644 "$source_dir/spark-ui.py" "$stage/spark-ui.py"
+  install -m 0644 "$source_dir/spark-ui-core.py" "$stage/spark-ui-core.py"
+  for file in "$source_dir"/lib/*.sh; do install -m 0644 "$file" "$stage/lib/$(basename "$file")"; done
+  rsync -a --delete "$SPARK_ROOT/deploy/livekit/" "$stage/livekit/"
+  rm -rf "$TARGET"
+  mv "$stage" "$TARGET"
+  ln -sfn "$TARGET/spark" "$CLI_PATH"
+  ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
 
-rm -rf "$MIGRATE_TARGET"
-mkdir -p "$MIGRATE_TARGET"
-install -m 0755 "$source_dir/spark-migrate" "$MIGRATE_TARGET/spark-migrate"
-ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
+  rm -rf "$MIGRATE_TARGET"
+  mkdir -p "$MIGRATE_TARGET"
+  install -m 0755 "$source_dir/spark-migrate" "$MIGRATE_TARGET/spark-migrate"
+  ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
+fi
 
 version_output="$($CLI_PATH --version)"
 [[ "$version_output" == "Spark Server Manager ${EXPECTED_VERSION}" ]] || {
