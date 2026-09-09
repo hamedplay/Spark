@@ -41,7 +41,7 @@ done
 SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
 unset SOURCE SOURCE_DIR TARGET
 
-for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit airgap airgap-target-patch; do
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit airgap airgap-target-patch airgap-auto; do
   module_path="${SCRIPT_DIR}/lib/${module}.sh"
   if [[ ! -r "$module_path" ]]; then
     printf 'Spark Air-Gap module missing: %s\n' "$module_path" >&2
@@ -96,6 +96,7 @@ spark_airgap_dispatch_inner() {
     airgap-status) airgap_status ;;
     airgap-build-target-patch) airgap_build_target_patch "${1:-}" "${2:-}" "${3:-}" ;;
     airgap-apply-target-patch) airgap_apply_target_patch "${1:-}" "${2:-}" ;;
+    airgap-auto-target-bootstrap) airgap_auto_apply_and_bootstrap "${1:-}" "${2:-}" ;;
     *) fail "Unknown Spark Air-Gap backend action: $action"; return 2 ;;
   esac
 }
@@ -152,6 +153,10 @@ case "${1:-}" in
     shift
     spark_airgap_backend_action airgap-apply-target-patch "${1:-}" "${2:-}"
     ;;
+  --auto-target-bootstrap)
+    shift
+    spark_airgap_backend_action airgap-auto-target-bootstrap "${1:-}" "${2:-}"
+    ;;
   --help|-h|"")
     cat <<'EOF_HELP'
 Usage: spark-airgap [option]
@@ -164,6 +169,8 @@ Usage: spark-airgap [option]
   --status                             Show active offline bundle status
   --build-target-patch [base] [os]     Build a small Ubuntu target patch that reuses the large bundle
   --apply-target-patch [base] [patch]  Apply a target patch and create a prepared local bundle directory
+  --auto-target-bootstrap [base] [patch]
+                                       Auto-discover/match artifacts, apply the target patch and run offline bootstrap
   --version                            Show air-gap installer version
 EOF_HELP
     ;;
