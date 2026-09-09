@@ -97,6 +97,7 @@ spark_airgap_dispatch_inner() {
     airgap-build-target-patch) airgap_build_target_patch "${1:-}" "${2:-}" "${3:-}" ;;
     airgap-apply-target-patch) airgap_apply_target_patch "${1:-}" "${2:-}" ;;
     airgap-auto-target-bootstrap) airgap_auto_apply_and_bootstrap "${1:-}" "${2:-}" ;;
+    airgap-waf-enable) airgap_waf_enable_explicit ;;
     *) fail "Unknown Spark Air-Gap backend action: $action"; return 2 ;;
   esac
 }
@@ -157,6 +158,9 @@ case "${1:-}" in
     shift
     spark_airgap_backend_action airgap-auto-target-bootstrap "${1:-}" "${2:-}"
     ;;
+  --waf-external)
+    spark_airgap_backend_action airgap-waf-enable
+    ;;
   --help|-h|"")
     cat <<'EOF_HELP'
 Usage: spark-airgap [option]
@@ -171,6 +175,7 @@ Usage: spark-airgap [option]
   --apply-target-patch [base] [patch]  Apply a target patch and create a prepared local bundle directory
   --auto-target-bootstrap [base] [patch]
                                        Auto-discover/match artifacts, apply the target patch and run offline bootstrap
+  --waf-external                       Explicitly use Bank WAF for public HTTPS termination
   --version                            Show air-gap installer version
 EOF_HELP
     ;;
