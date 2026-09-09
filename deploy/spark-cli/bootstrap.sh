@@ -81,6 +81,7 @@ files=(
   lib/airgap-runtime.sh
   lib/airgap-target-patch.sh
   lib/airgap-auto.sh
+  lib/airgap-waf.sh
 )
 
 for file in "${files[@]}"; do
@@ -141,6 +142,14 @@ grep -q 'airgap-build-target-patch' "$tmp/spark-airgap" || {
 }
 grep -q 'airgap-auto-target-bootstrap' "$tmp/spark-airgap" || {
   echo "Spark Air-Gap automatic target bootstrap action is missing." >&2
+  exit 1
+}
+grep -q 'airgap-waf' "$tmp/spark-airgap" || {
+  echo "Spark Air-Gap external WAF module is not loaded." >&2
+  exit 1
+}
+grep -q 'airgap_waf_enabled' "$tmp/lib/airgap-waf.sh" || {
+  echo "Spark Air-Gap external WAF mode is incomplete." >&2
   exit 1
 }
 grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$tmp/spark-ui.py" || {
