@@ -19,6 +19,34 @@ airgap_target_bundle_meta_from() {
   sed -n "s/^${key}=//p" "$file" | tail -n1
 }
 
+# A retarget operation intentionally replaces apt/ and npm/.  Older bundles can
+# therefore be reused even when one of those target-dependent payloads is absent.
+# The invariant/heavy payload (identity, sources, Docker images and checksums)
+# must still be complete and checksum-valid before a target patch is built/applied.
+airgap_validate_retarget_base_dir() {
+  local root="$1" format arch path
+  [[ -d "$root" ]] || { fail "Retarget base bundle directory not found: $root"; return 1; }
+  for path in \
+    metadata/manifest.env \
+    manifest.json \
+    sources/spark.git.bundle \
+    sources/supabase.git.bundle \
+    docker/docker-images.tar.gz \
+    docker/images.txt \
+    docker/image-ids.txt \
+    SHA256SUMS; do
+    [[ -f "${root}/${path}" ]] || { fail "Retarget base artifact missing: ${root}/${path}"; return 1; }
+  done
+  format="$(airgap_target_bundle_meta_from "$root" FORMAT_VERSION)"
+  [[ "$format" == "$AIRGAP_FORMAT_VERSION" ]] || {
+    fail "Unsupported base air-gap bundle format: ${format:-missing}"
+    return 1
+  }
+  arch="$(airgap_target_bundle_meta_from "$root" ARCH)"
+  [[ "$arch" == "amd64" ]] || { fail "Only amd64 base bundles can be target-patched."; return 1; }
+  run_logged "Validate reusable base bundle SHA256 manifest" airgap_validate_checksum_manifest "$root"
+}
+
 airgap_target_patch_validate_checksums() {
   local root="$1"
   [[ -f "${root}/SHA256SUMS" ]] || { fail "Target patch SHA256SUMS is missing."; return 1; }
@@ -106,7 +134,7 @@ airgap_build_target_patch() {
   base_stage="${work}/base"
   mkdir -p "$base_stage"
   base_root="$(airgap_target_patch_open_base "$base_input" "$base_stage")" || return 1
-  airgap_validate_bundle_dir "$base_root" || return 1
+  airgap_validate_retarget_base_dir "$base_root" || return 1
 
   base_id="$(airgap_target_bundle_meta_from "$base_root" BUNDLE_ID)"
   base_commit="$(airgap_target_bundle_meta_from "$base_root" SPARK_COMMIT)"
@@ -133,7 +161,7 @@ airgap_build_target_patch() {
   saved_spark_root="$SPARK_ROOT"
   SPARK_ROOT="$source"
   run_visible "Build Ubuntu ${target_release} frontend/npm replacement payload" \
-    airgap_build_npm_payload "${patch}/npm" "$target_release" || return 1
+    airgap_build_npm_payload "${patch}/npm" "$target_release" || { SPARK_ROOT="$saved_spark_root"; return 1; }
   SPARK_ROOT="$saved_spark_root"
 
   cat >"${patch}/metadata/patch.env" <<EOF_META
@@ -188,7 +216,7 @@ airgap_apply_target_patch() {
 
   base_root="$(airgap_target_patch_open_base "$base_input" "$base_stage")" || return 1
   patch_root="$(airgap_target_patch_open_patch "$patch_input" "$patch_stage")" || return 1
-  airgap_validate_bundle_dir "$base_root" || return 1
+  airgap_validate_retarget_base_dir "$base_root" || return 1
   airgap_target_patch_validate_dir "$patch_root" || return 1
 
   base_id="$(airgap_target_bundle_meta_from "$base_root" BUNDLE_ID)"
