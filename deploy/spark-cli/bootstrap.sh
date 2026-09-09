@@ -5,6 +5,7 @@ IFS=$'\n\t'
 REPO_API="https://api.github.com/repos/hamedplay/Spark"
 TARGET="/usr/local/lib/spark-manager"
 CLI_PATH="/usr/local/bin/spark"
+AIRGAP_CLI_PATH="/usr/local/bin/spark-airgap"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
 EXPECTED_VERSION="3.0.0"
@@ -56,6 +57,7 @@ mkdir -p "$tmp/lib" "$tmp/livekit"
 
 files=(
   spark
+  spark-airgap
   spark-ui.py
   spark-ui-core.py
   spark-migrate
@@ -73,6 +75,10 @@ files=(
   lib/runtime-fixes.sh
   lib/studio-session.sh
   lib/install-livekit.sh
+  lib/airgap.sh
+  lib/airgap-build.sh
+  lib/airgap-runtime.sh
+  lib/airgap-target-patch.sh
 )
 
 for file in "${files[@]}"; do
@@ -106,6 +112,7 @@ grep -q '^  minio-init:' "$tmp/livekit/docker-compose.yml" || {
 }
 
 bash -n "$tmp/spark"
+bash -n "$tmp/spark-airgap"
 bash -n "$tmp/spark-migrate"
 for file in "$tmp"/lib/*.sh; do bash -n "$file"; done
 python3 - "$tmp/spark-ui.py" "$tmp/spark-ui-core.py" <<'PY'
@@ -119,6 +126,14 @@ python3 "$tmp/spark-ui.py" --self-test
 
 grep -Fq "SPARK_MANAGER_VERSION=\"${EXPECTED_VERSION}\"" "$tmp/spark" || {
   echo "Spark Manager version validation failed." >&2
+  exit 1
+}
+grep -Fq "SPARK_MANAGER_VERSION=\"${EXPECTED_VERSION}\"" "$tmp/spark-airgap" || {
+  echo "Spark Air-Gap backend version validation failed." >&2
+  exit 1
+}
+grep -q 'airgap-build-target-patch' "$tmp/spark-airgap" || {
+  echo "Spark Air-Gap target patch action is missing." >&2
   exit 1
 }
 grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$tmp/spark-ui.py" || {
@@ -180,6 +195,7 @@ backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
 install -d -m 0755 "$stage/lib" "$stage/livekit"
 install -m 0755 "$tmp/spark" "$stage/spark"
+install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
 install -m 0644 "$tmp/spark-ui.py" "$stage/spark-ui.py"
 install -m 0644 "$tmp/spark-ui-core.py" "$stage/spark-ui-core.py"
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
@@ -196,11 +212,12 @@ if [[ -d "$MIGRATE_TARGET" ]]; then
 fi
 
 rollback_install() {
-  rm -f "$CLI_PATH" "$MIGRATE_PATH"
+  rm -f "$CLI_PATH" "$AIRGAP_CLI_PATH" "$MIGRATE_PATH"
   rm -rf "$TARGET" "$MIGRATE_TARGET"
   if [[ -d "$backup" ]]; then
     mv "$backup" "$TARGET"
     ln -sfn "$TARGET/spark" "$CLI_PATH"
+    [[ -x "$TARGET/spark-airgap" ]] && ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
   fi
   if [[ -d "$migrate_backup" ]]; then
     mv "$migrate_backup" "$MIGRATE_TARGET"
@@ -219,6 +236,7 @@ if ! mv "$migrate_stage" "$MIGRATE_TARGET"; then
   exit 1
 fi
 ln -sfn "$TARGET/spark" "$CLI_PATH"
+ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
 ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
 
 if ! version_output="$($CLI_PATH --version 2>/dev/null)"; then
@@ -228,6 +246,16 @@ if ! version_output="$($CLI_PATH --version 2>/dev/null)"; then
 fi
 if [[ "$version_output" != "Spark Server Manager ${EXPECTED_VERSION}" ]]; then
   echo "Unexpected Spark Server Manager version: ${version_output}" >&2
+  rollback_install
+  exit 1
+fi
+if ! airgap_version_output="$($AIRGAP_CLI_PATH --version 2>/dev/null)"; then
+  echo "Spark Air-Gap backend smoke test failed; rolling back." >&2
+  rollback_install
+  exit 1
+fi
+if [[ "$airgap_version_output" != "Spark Air-Gapped Installer ${EXPECTED_VERSION}" ]]; then
+  echo "Unexpected Spark Air-Gap backend version: ${airgap_version_output}" >&2
   rollback_install
   exit 1
 fi
@@ -250,4 +278,5 @@ fi
 rm -rf "$backup" "$migrate_backup"
 rm -rf /usr/local/share/spark-manager 2>/dev/null || true
 printf 'Spark Server Manager %s installed from %s. Run: spark\n' "$EXPECTED_VERSION" "${MAIN_SHA:0:12}"
+printf 'Spark Air-Gapped Installer %s installed. Run: spark-airgap --help\n' "$EXPECTED_VERSION"
 printf 'Spark Supabase Cloud Migration %s installed. Run: spark-migrate\n' "$EXPECTED_MIGRATE_VERSION"
