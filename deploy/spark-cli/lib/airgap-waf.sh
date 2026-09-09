@@ -35,13 +35,32 @@ airgap_waf_https_probe() {
 }
 
 airgap_waf_persist_external_mode() {
+  local reason="${1:-auto-detected}"
   install -d -m 0700 "$CONFIG_DIR"
   cat >"$AIRGAP_WAF_CONF" <<EOF
 TLS_MODE=external_waf
 TURN_TLS_MODE=disabled
+MODE_REASON=${reason}
 DETECTED_AT=$(date -Is)
 EOF
   chmod 0600 "$AIRGAP_WAF_CONF"
+}
+
+airgap_waf_enable_explicit() {
+  title
+  new_log "airgap-enable-bank-waf"
+  require_manager_values || return 1
+  airgap_waf_persist_external_mode "operator-selected"
+  systemctl disable --now certbot.timer >/dev/null 2>&1 || true
+
+  printf 'Frontend WAF HTTPS : '
+  if airgap_waf_https_probe "$APP_DOMAIN"; then printf 'VALID\n'; else printf 'NOT VERIFIED YET\n'; fi
+  printf 'API WAF HTTPS      : '
+  if airgap_waf_https_probe "$API_DOMAIN"; then printf 'VALID\n'; else printf 'NOT VERIFIED YET\n'; fi
+
+  ok "Bank WAF TLS termination mode is now explicit and persistent."
+  info "Steps 13/14 will not request or require local web/API certificates."
+  info "Public URLs remain HTTPS; the Spark backend listens on HTTP behind the WAF."
 }
 
 airgap_waf_enabled() {
@@ -52,16 +71,15 @@ airgap_waf_enabled() {
     local) return 1 ;;
   esac
 
-  # Auto-detect only when the current domains do not already have usable local
-  # certificates and the bank edge presents a publicly trusted certificate for
-  # both frontend and API hostnames. This prevents silently weakening a normal
-  # local-TLS deployment.
+  # Conservative auto-detection remains as a convenience, but the explicit UI
+  # action is authoritative for managed bank deployments where the WAF may not
+  # return an application response until the backend has finished installing.
   if cert_live_dir_for_domain "${APP_DOMAIN:-}" >/dev/null 2>&1 \
       && cert_live_dir_for_domain "${API_DOMAIN:-}" >/dev/null 2>&1; then
     return 1
   fi
   if airgap_waf_https_probe "${APP_DOMAIN:-}" && airgap_waf_https_probe "${API_DOMAIN:-}"; then
-    airgap_waf_persist_external_mode
+    airgap_waf_persist_external_mode "auto-detected"
     info "Detected valid external HTTPS termination for ${APP_DOMAIN} and ${API_DOMAIN}; using Bank WAF TLS mode."
     return 0
   fi
