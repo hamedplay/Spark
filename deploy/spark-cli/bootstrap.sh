@@ -58,6 +58,7 @@ mkdir -p "$tmp/lib" "$tmp/livekit"
 files=(
   spark
   spark-airgap
+  bootstrap-airgap.sh
   spark-ui.py
   spark-ui-core.py
   spark-migrate
@@ -79,6 +80,7 @@ files=(
   lib/airgap-build.sh
   lib/airgap-runtime.sh
   lib/airgap-target-patch.sh
+  lib/airgap-auto.sh
 )
 
 for file in "${files[@]}"; do
@@ -113,6 +115,7 @@ grep -q '^  minio-init:' "$tmp/livekit/docker-compose.yml" || {
 
 bash -n "$tmp/spark"
 bash -n "$tmp/spark-airgap"
+bash -n "$tmp/bootstrap-airgap.sh"
 bash -n "$tmp/spark-migrate"
 for file in "$tmp"/lib/*.sh; do bash -n "$file"; done
 python3 - "$tmp/spark-ui.py" "$tmp/spark-ui-core.py" <<'PY'
@@ -134,6 +137,10 @@ grep -Fq "SPARK_MANAGER_VERSION=\"${EXPECTED_VERSION}\"" "$tmp/spark-airgap" || 
 }
 grep -q 'airgap-build-target-patch' "$tmp/spark-airgap" || {
   echo "Spark Air-Gap target patch action is missing." >&2
+  exit 1
+}
+grep -q 'airgap-auto-target-bootstrap' "$tmp/spark-airgap" || {
+  echo "Spark Air-Gap automatic target bootstrap action is missing." >&2
   exit 1
 }
 grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$tmp/spark-ui.py" || {
@@ -196,6 +203,7 @@ migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
 install -d -m 0755 "$stage/lib" "$stage/livekit"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
+install -m 0755 "$tmp/bootstrap-airgap.sh" "$stage/bootstrap-airgap.sh"
 install -m 0644 "$tmp/spark-ui.py" "$stage/spark-ui.py"
 install -m 0644 "$tmp/spark-ui-core.py" "$stage/spark-ui-core.py"
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
