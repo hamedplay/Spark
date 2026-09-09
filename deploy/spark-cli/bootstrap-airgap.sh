@@ -14,39 +14,44 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
 fi
 
-archive="${1:-}"
-if [[ -z "$archive" || ! -f "$archive" ]]; then
-  printf 'Usage: %s /path/to/spark-airgap-*.tar.gz\n' "$0" >&2
+input="${1:-}"
+if [[ -z "$input" || ( ! -f "$input" && ! -d "$input" ) ]]; then
+  printf 'Usage: %s /path/to/spark-airgap-*.tar.gz|/path/to/extracted-bundle\n' "$0" >&2
   exit 2
 fi
-archive="$(readlink -f "$archive")"
+input="$(readlink -f "$input")"
 
 for cmd in tar sha256sum sed grep find dpkg apt-get; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Required bootstrap command is missing: $cmd" >&2; exit 1; }
 done
 
-work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
-
-while IFS= read -r entry; do
-  [[ -n "$entry" ]] || continue
-  case "$entry" in
-    /*|../*|*/../*|*'/..')
-      echo "Unsafe path in air-gap archive: $entry" >&2
-      exit 1
-      ;;
-  esac
-done < <(tar -tzf "$archive")
-if tar -tvzf "$archive" | awk '$1 ~ /^[lh]/ {found=1} END{exit !found}'; then
-  echo 'Air-gap archive contains symlink/hardlink entries; bootstrap refused.' >&2
-  exit 1
+work=""
+root=""
+if [[ -d "$input" ]]; then
+  root="$input"
+else
+  work="$(mktemp -d)"
+  trap '[[ -n "${work:-}" ]] && rm -rf "$work"' EXIT
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] || continue
+    case "$entry" in
+      /*|../*|*/../*|*'/..')
+        echo "Unsafe path in air-gap archive: $entry" >&2
+        exit 1
+        ;;
+    esac
+  done < <(tar -tzf "$input")
+  if tar -tvzf "$input" | awk '$1 ~ /^[lh]/ {found=1} END{exit !found}'; then
+    echo 'Air-gap archive contains symlink/hardlink entries; bootstrap refused.' >&2
+    exit 1
+  fi
+  tar -xzf "$input" -C "$work"
+  root="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'spark-airgap-*' | head -n1)"
 fi
 
-tar -xzf "$archive" -C "$work"
-root="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'spark-airgap-*' | head -n1)"
-[[ -n "$root" ]] || { echo 'Invalid Spark air-gap archive: bundle root missing.' >&2; exit 1; }
+[[ -n "$root" && -d "$root" ]] || { echo 'Invalid Spark air-gap input: bundle root missing.' >&2; exit 1; }
 [[ -f "$root/SHA256SUMS" && -f "$root/metadata/manifest.env" ]] || {
-  echo 'Invalid Spark air-gap archive: manifest files missing.' >&2
+  echo 'Invalid Spark air-gap bundle: manifest files missing.' >&2
   exit 1
 }
 (cd "$root" && sha256sum -c SHA256SUMS)
