@@ -81,13 +81,13 @@ AIRGAP_ACTIONS = [
     core.Action(
         "airgap-install-all",
         "05  Run complete offline installation",
-        "Run all 22 production installation steps with local packages, sources, npm payload, images and TLS certificates only.",
+        "Run all 22 production installation steps with local packages, sources, npm payload and images. TLS can be local or terminated by a Bank WAF.",
         "confirm",
     ),
     core.Action(
         "airgap-status",
         "06  Air-gap bundle status",
-        "Show the active bundle revision, target platform, checksum status, TLS pack and imported Docker image readiness.",
+        "Show the active bundle revision, target platform, checksum status, TLS mode and imported Docker image readiness.",
     ),
     core.Action(
         "airgap-build-target-patch",
@@ -105,6 +105,12 @@ AIRGAP_ACTIONS = [
         "airgap-auto-target-bootstrap",
         "09  Auto prepare + bootstrap offline target",
         "Automatically find the matching base bundle and Ubuntu patch in /opt/install, verify them, prepare the corrected bundle, install local Docker/Node packages and import all images.",
+        "controlled",
+    ),
+    core.Action(
+        "airgap-waf-enable",
+        "10  Use Bank WAF for HTTPS",
+        "Explicitly declare that the Bank WAF owns the public TLS certificate. Spark will not request or require local web/API certificates.",
         "controlled",
     ),
 ]
@@ -319,6 +325,7 @@ def logical_self_test() -> int:
         "airgap-build-target-patch",
         "airgap-apply-target-patch",
         "airgap-auto-target-bootstrap",
+        "airgap-waf-enable",
     }
     if not required.issubset(ids):
         missing = ", ".join(sorted(required - ids))
