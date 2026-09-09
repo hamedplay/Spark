@@ -7,8 +7,12 @@ airgap_prompt_default() {
 }
 
 airgap_build_apt_payload() {
-  local output="$1" target_release="$2"
+  local output="$1" target_release="$2" count
   mkdir -p "$output"
+  find "$output" -maxdepth 1 -type f -name '*.deb' -delete
+  rm -f "${output}/requested-packages.txt"
+  mkdir -p "${output}/partial"
+
   docker run --rm --platform linux/amd64 \
     -e TARGET_RELEASE="$target_release" \
     -v "${output}:/out" \
@@ -37,11 +41,24 @@ packages=(
   nginx certbot coturn docker-ce docker-ce-cli containerd.io
   docker-buildx-plugin docker-compose-plugin nodejs
 )
-rm -f /var/cache/apt/archives/*.deb
-apt-get install -y --download-only --reinstall "${packages[@]}"
-cp -a /var/cache/apt/archives/*.deb /out/
+# Force APT's archive directory onto the host-mounted /out path. This avoids
+# Docker image apt-clean hooks or cache semantics discarding the downloaded .deb
+# files before the bundle builder can collect them.
+mkdir -p /out/partial
+apt-get \
+  -o Dir::Cache::archives=/out \
+  -o APT::Keep-Downloaded-Packages=true \
+  install -y --download-only --reinstall "${packages[@]}"
 printf '%s\n' "${packages[@]}" >/out/requested-packages.txt
+find /out -maxdepth 1 -type f -name '*.deb' -printf '%f\n' | sort
 BUNDLE_APT
+
+  count="$(find "$output" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d '[:space:]')"
+  [[ "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]] || {
+    fail "Offline APT payload build returned success but produced no .deb files in ${output}."
+    return 1
+  }
+  info "Offline APT payload contains ${count} .deb files."
 }
 
 airgap_build_npm_payload() {
