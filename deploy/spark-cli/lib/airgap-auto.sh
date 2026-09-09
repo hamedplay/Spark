@@ -179,3 +179,87 @@ airgap_auto_apply_and_bootstrap() {
   printf 'Target          : Ubuntu %s / %s\n' "$target_release" "$(dpkg --print-architecture)"
   printf 'Next            : run spark and use Installation Air-Gapped -> 04 or 05.\n'
 }
+
+# The bundle source is authoritative during an offline installation. Previous
+# bootstrap/manager runs can legitimately leave generated or temporary files in
+# /opt/spark. Back them up before reconciling instead of forcing the operator to
+# inspect/reset the repository manually.
+airgap_backup_dirty_source() {
+  local destination="$1" stamp backup head
+  local -a untracked=()
+  [[ -d "${destination}/.git" ]] || return 0
+  [[ -n "$(git -C "$destination" status --porcelain)" ]] || return 0
+
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  backup="${BACKUP_DIR}/airgap-source-reconcile-${stamp}"
+  mkdir -p "$backup"
+  chmod 0700 "$backup"
+  head="$(git -C "$destination" rev-parse HEAD 2>/dev/null || true)"
+  printf 'SOURCE=%s\nHEAD=%s\nCREATED_AT=%s\n' "$destination" "$head" "$stamp" >"${backup}/metadata.txt"
+  git -C "$destination" status --porcelain=v1 >"${backup}/status.txt" || true
+  git -C "$destination" diff --binary >"${backup}/tracked.patch" || true
+  git -C "$destination" diff --cached --binary >"${backup}/staged.patch" || true
+  mapfile -d '' -t untracked < <(git -C "$destination" ls-files --others --exclude-standard -z)
+  if ((${#untracked[@]} > 0)); then
+    printf '%s\0' "${untracked[@]}" | (cd "$destination" && tar -czf "${backup}/untracked.tar.gz" --null -T -)
+  fi
+  chmod -R go-rwx "$backup"
+  info "Dirty Spark source preserved before offline reconciliation: $backup"
+}
+
+# Override the generic restore helper for the air-gapped control plane. The
+# requested bundle commit is exact and authoritative, so after a safety backup
+# we reset/clean the working tree and force the local branch to that commit.
+airgap_restore_git_bundle() {
+  local bundle="$1" destination="$2" branch="$3" commit="$4" origin_url="$5"
+  if [[ -d "${destination}/.git" ]]; then
+    airgap_backup_dirty_source "$destination" || return 1
+    git -C "$destination" reset --hard >/dev/null || return 1
+    git -C "$destination" clean -fd >/dev/null || return 1
+    git -C "$destination" fetch "$bundle" "$branch" || return 1
+    git -C "$destination" checkout -B "$branch" "$commit" || return 1
+  elif [[ -e "$destination" ]]; then
+    fail "$destination exists but is not a Git repository."
+    return 1
+  else
+    git clone --branch "$branch" "$bundle" "$destination" || return 1
+    git -C "$destination" checkout "$commit" || return 1
+    git -C "$destination" branch -f "$branch" "$commit" || return 1
+    git -C "$destination" checkout "$branch" || return 1
+  fi
+  if git -C "$destination" remote get-url origin >/dev/null 2>&1; then
+    git -C "$destination" remote set-url origin "$origin_url"
+  else
+    git -C "$destination" remote add origin "$origin_url"
+  fi
+  git -C "$destination" update-ref "refs/remotes/origin/${branch}" "$commit"
+}
+
+airgap_current_control_plane_is_newer() {
+  [[ -f /usr/local/lib/spark-manager/lib/airgap-auto.sh ]] || return 1
+  [[ -f /usr/local/lib/spark-manager/bootstrap-airgap.sh ]] || return 1
+  [[ -x /usr/local/bin/spark-airgap ]] || return 1
+  /usr/local/bin/spark-airgap --version >/dev/null 2>&1
+}
+
+# Override step 03 so a newer Manager installed from main is not downgraded to
+# the older application commit embedded in a previously transferred bundle.
+# Application source still remains pinned exactly to the verified bundle commit.
+install_step_3() {
+  airgap_is_active || { install_step_3_online; return; }
+  title
+  new_log "install-03-spark-repo-airgap"
+  local root commit
+  root="$(airgap_current_root)" || { fail "No active air-gap bundle."; return 1; }
+  commit="$(airgap_meta_from "$root" SPARK_COMMIT)"
+  run_logged "Restore Spark source from local Git bundle" airgap_restore_git_bundle \
+    "${root}/sources/spark.git.bundle" "$SPARK_ROOT" main "$commit" "$REPO_URL" || return 1
+  [[ "$(git -C "$SPARK_ROOT" rev-parse HEAD)" == "$commit" ]] || return 1
+
+  if airgap_current_control_plane_is_newer; then
+    ok "Preserved current Air-Gap Manager control plane; application source remains pinned to bundle commit ${commit:0:12}."
+  else
+    run_logged "Install Spark Manager from local source" airgap_install_manager_local || return 1
+  fi
+  mark_step 3
+}
