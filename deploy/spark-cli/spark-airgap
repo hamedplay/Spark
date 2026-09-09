@@ -41,7 +41,7 @@ done
 SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
 unset SOURCE SOURCE_DIR TARGET
 
-for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit airgap; do
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit airgap airgap-target-patch; do
   module_path="${SCRIPT_DIR}/lib/${module}.sh"
   if [[ ! -r "$module_path" ]]; then
     printf 'Spark Air-Gap module missing: %s\n' "$module_path" >&2
@@ -94,6 +94,8 @@ spark_airgap_dispatch_inner() {
     airgap-step) airgap_install_one_step "${1:-}" ;;
     airgap-install-all) airgap_install_all ;;
     airgap-status) airgap_status ;;
+    airgap-build-target-patch) airgap_build_target_patch "${1:-}" "${2:-}" "${3:-}" ;;
+    airgap-apply-target-patch) airgap_apply_target_patch "${1:-}" "${2:-}" ;;
     *) fail "Unknown Spark Air-Gap backend action: $action"; return 2 ;;
   esac
 }
@@ -142,17 +144,27 @@ case "${1:-}" in
   --status)
     spark_airgap_backend_action airgap-status
     ;;
+  --build-target-patch)
+    shift
+    spark_airgap_backend_action airgap-build-target-patch "${1:-}" "${2:-}" "${3:-}"
+    ;;
+  --apply-target-patch)
+    shift
+    spark_airgap_backend_action airgap-apply-target-patch "${1:-}" "${2:-}"
+    ;;
   --help|-h|"")
     cat <<'EOF_HELP'
 Usage: spark-airgap [option]
 
-  --build                 Build a complete offline bundle on a connected staging host
-  --validate [bundle]     Validate archive checksums and report target compatibility
-  --import [bundle]       Import bundle and load all Docker images locally
-  --step [1-22]           Run one installation step in offline mode
-  --install-all           Run the complete 22-step offline installation
-  --status                Show active offline bundle status
-  --version               Show air-gap installer version
+  --build                              Build a complete offline bundle on a connected staging host
+  --validate [bundle]                  Validate archive checksums and report target compatibility
+  --import [bundle]                    Import bundle and load all Docker images locally
+  --step [1-22]                        Run one installation step in offline mode
+  --install-all                        Run the complete 22-step offline installation
+  --status                             Show active offline bundle status
+  --build-target-patch [base] [os]     Build a small Ubuntu target patch that reuses the large bundle
+  --apply-target-patch [base] [patch]  Apply a target patch and create a prepared local bundle directory
+  --version                            Show air-gap installer version
 EOF_HELP
     ;;
   *)
