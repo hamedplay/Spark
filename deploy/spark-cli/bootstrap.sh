@@ -82,6 +82,7 @@ files=(
   lib/airgap-target-patch.sh
   lib/airgap-auto.sh
   lib/airgap-waf.sh
+  lib/airgap-waf-nginx-fix.sh
 )
 
 for file in "${files[@]}"; do
@@ -150,6 +151,10 @@ grep -q 'airgap-waf' "$tmp/spark-airgap" || {
 }
 grep -q 'airgap_waf_enabled' "$tmp/lib/airgap-waf.sh" || {
   echo "Spark Air-Gap external WAF mode is incomplete." >&2
+  exit 1
+}
+grep -q 'airgap_waf_write_nginx_production_with_duplicate_server_tokens' "$tmp/lib/airgap-waf-nginx-fix.sh" || {
+  echo "Spark Air-Gap WAF Nginx compatibility fix is missing." >&2
   exit 1
 }
 grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$tmp/spark-ui.py" || {
@@ -277,7 +282,7 @@ if [[ "$airgap_version_output" != "Spark Air-Gapped Installer ${EXPECTED_VERSION
   exit 1
 fi
 if ! migrate_version_output="$($MIGRATE_PATH --version 2>/dev/null)"; then
-  echo "Spark Cloud migration companion smoke test failed; rolling back." >&2
+  echo "Spark Cloud migration companion version smoke test failed; rolling back." >&2
   rollback_install
   exit 1
 fi
