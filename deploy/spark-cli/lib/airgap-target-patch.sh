@@ -80,7 +80,7 @@ airgap_build_target_patch() {
   new_log "airgap-build-target-patch"
   local base_input="${1:-}" target_release="${2:-}" output_root="${3:-}"
   local work base_root base_stage source patch patch_id base_id base_commit created_at
-  local base_target base_arch
+  local base_target base_arch saved_spark_root
 
   for cmd in docker git tar gzip sha256sum python3; do
     command -v "$cmd" >/dev/null 2>&1 || { fail "Target patch builder requires: $cmd"; return 1; }
@@ -95,7 +95,6 @@ airgap_build_target_patch() {
   mkdir -p "$output_root"
 
   work="$(mktemp -d)"
-  trap 'rm -rf "$work"' RETURN
   base_stage="${work}/base"
   mkdir -p "$base_stage"
   base_root="$(airgap_target_patch_open_base "$base_input" "$base_stage")" || return 1
@@ -107,6 +106,7 @@ airgap_build_target_patch() {
   base_arch="$(airgap_meta_from "$base_root" ARCH)"
   [[ "$base_arch" == "amd64" ]] || { fail "Only amd64 base bundles can be target-patched."; return 1; }
   [[ "$base_commit" =~ ^[0-9a-f]{40}$ ]] || { fail "Base bundle Spark commit is invalid."; return 1; }
+  [[ "$base_target" != "$target_release" ]] || { fail "Base bundle already targets Ubuntu ${target_release}; no target patch is needed."; return 1; }
 
   source="${work}/spark-source"
   git clone --branch main "${base_root}/sources/spark.git.bundle" "$source" >/dev/null 2>&1 || return 1
@@ -119,10 +119,12 @@ airgap_build_target_patch() {
 
   run_visible "Build Ubuntu ${target_release} APT replacement payload" \
     airgap_build_apt_payload "${patch}/apt" "$target_release" || return 1
+
+  saved_spark_root="$SPARK_ROOT"
+  SPARK_ROOT="$source"
   run_visible "Build Ubuntu ${target_release} frontend/npm replacement payload" \
-    env SPARK_ROOT="$source" bash -c 'source /dev/stdin' <<'EOF_NOOP'
-EOF_NOOP
-  SPARK_ROOT="$source" airgap_build_npm_payload "${patch}/npm" "$target_release" || return 1
+    airgap_build_npm_payload "${patch}/npm" "$target_release" || return 1
+  SPARK_ROOT="$saved_spark_root"
 
   cat >"${patch}/metadata/patch.env" <<EOF_META
 PATCH_FORMAT_VERSION=${AIRGAP_TARGET_PATCH_FORMAT_VERSION}
@@ -150,6 +152,7 @@ PY
   airgap_target_patch_validate_dir "$patch" || return 1
   tar -C "$work" -czf "${output_root}/${patch_id}.tar.gz" "$patch_id" || return 1
   (cd "$output_root" && sha256sum "${patch_id}.tar.gz" >"${patch_id}.tar.gz.sha256")
+  rm -rf "$work"
 
   ok "Ubuntu target patch created: ${output_root}/${patch_id}.tar.gz"
   printf 'Base bundle : %s\n' "$base_id"
@@ -170,7 +173,6 @@ airgap_apply_target_patch() {
   [[ -n "$base_input" && -n "$patch_input" ]] || { fail "Both base bundle and target patch paths are required."; return 1; }
 
   work="$(mktemp -d)"
-  trap 'rm -rf "$work"' RETURN
   base_stage="${work}/base"; patch_stage="${work}/patch"
   mkdir -p "$base_stage" "$patch_stage" "$AIRGAP_PREPARED_DIR"
 
@@ -201,14 +203,15 @@ airgap_apply_target_patch() {
   patched_at="$(date -u +%Y%m%dT%H%M%SZ)"
   new_id="${base_id}-retargeted-ubuntu${target_release}-${patched_at}"
   prepared_work="${AIRGAP_PREPARED_DIR}/.${new_id}.work"
-  prepared_root="${AIRGAP_PREPARED_DIR}/${new_id}"
-  rm -rf "$prepared_work" "$prepared_root"
+  rm -rf "$prepared_work" "${AIRGAP_PREPARED_DIR}/${new_id}"
   mkdir -p "$prepared_work"
 
   if [[ -f "$base_input" ]]; then
-    # Avoid a second 5GB copy: move the already verified extraction into the prepared area.
+    # The 5GB archive was already extracted for validation; move that extraction
+    # into the prepared area instead of copying or rebuilding the Docker payload.
     mv "$base_root" "$prepared_work/bundle"
   else
+    mkdir -p "$prepared_work/bundle"
     cp -a --reflink=auto "$base_root/." "$prepared_work/bundle/" 2>/dev/null || cp -a "$base_root/." "$prepared_work/bundle/"
   fi
   prepared_root="$prepared_work/bundle"
@@ -239,10 +242,10 @@ PY
   airgap_validate_target_compatibility "$prepared_root" || return 1
 
   mv "$prepared_root" "$AIRGAP_PREPARED_DIR/$new_id"
-  rm -rf "$prepared_work"
+  rm -rf "$prepared_work" "$work"
   prepared_root="$AIRGAP_PREPARED_DIR/$new_id"
 
-  ok "Base bundle retargeted without duplicating Docker images in transfer."
+  ok "Base bundle retargeted without retransferring or rebuilding the Docker image payload."
   printf 'Prepared bundle: %s\n' "$prepared_root"
   printf 'New target     : Ubuntu %s / %s\n' "$target_release" "$target_arch"
   printf '\nNext command:\n  sudo bash /opt/spark/deploy/spark-cli/bootstrap-airgap.sh %q\n' "$prepared_root"
