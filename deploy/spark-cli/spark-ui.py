@@ -97,8 +97,14 @@ AIRGAP_ACTIONS = [
     ),
     core.Action(
         "airgap-apply-target-patch",
-        "08  Apply Ubuntu target patch",
-        "Apply a verified target patch to the existing large bundle and prepare a local bundle directory for bootstrap without retransferring images.",
+        "08  Apply Ubuntu target patch (manual)",
+        "Manually apply a verified target patch to a selected base bundle and prepare a local bundle directory.",
+        "controlled",
+    ),
+    core.Action(
+        "airgap-auto-target-bootstrap",
+        "09  Auto prepare + bootstrap offline target",
+        "Automatically find the matching base bundle and Ubuntu patch in /opt/install, verify them, prepare the corrected bundle, install local Docker/Node packages and import all images.",
         "controlled",
     ),
 ]
@@ -312,6 +318,7 @@ def logical_self_test() -> int:
         "airgap-status",
         "airgap-build-target-patch",
         "airgap-apply-target-patch",
+        "airgap-auto-target-bootstrap",
     }
     if not required.issubset(ids):
         missing = ", ".join(sorted(required - ids))
