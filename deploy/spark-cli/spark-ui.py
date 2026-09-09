@@ -89,6 +89,18 @@ AIRGAP_ACTIONS = [
         "06  Air-gap bundle status",
         "Show the active bundle revision, target platform, checksum status, TLS pack and imported Docker image readiness.",
     ),
+    core.Action(
+        "airgap-build-target-patch",
+        "07  Build Ubuntu target patch",
+        "Build only Ubuntu-dependent APT/npm payloads for a new target release while reusing the existing large Docker/source bundle.",
+        "controlled",
+    ),
+    core.Action(
+        "airgap-apply-target-patch",
+        "08  Apply Ubuntu target patch",
+        "Apply a verified target patch to the existing large bundle and prepare a local bundle directory for bootstrap without retransferring images.",
+        "controlled",
+    ),
 ]
 
 
@@ -298,6 +310,8 @@ def logical_self_test() -> int:
         "airgap-step",
         "airgap-install-all",
         "airgap-status",
+        "airgap-build-target-patch",
+        "airgap-apply-target-patch",
     }
     if not required.issubset(ids):
         missing = ", ".join(sorted(required - ids))
