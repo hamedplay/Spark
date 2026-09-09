@@ -19,7 +19,7 @@ airgap_target_bundle_meta_from() {
   sed -n "s/^${key}=//p" "$file" | tail -n1
 }
 
-# A retarget operation intentionally replaces apt/ and npm/.  Older bundles can
+# A retarget operation intentionally replaces apt/ and npm/. Older bundles can
 # therefore be reused even when one of those target-dependent payloads is absent.
 # The invariant/heavy payload (identity, sources, Docker images and checksums)
 # must still be complete and checksum-valid before a target patch is built/applied.
@@ -131,6 +131,9 @@ airgap_build_target_patch() {
   mkdir -p "$output_root"
 
   work="$(mktemp -d)"
+  # Every failed attempt extracts the multi-GB base bundle into this workspace.
+  # Keep an EXIT cleanup armed so backend failures cannot silently fill /tmp.
+  trap '[[ -n "${work:-}" ]] && rm -rf -- "$work"' EXIT
   base_stage="${work}/base"
   mkdir -p "$base_stage"
   base_root="$(airgap_target_patch_open_base "$base_input" "$base_stage")" || return 1
@@ -191,6 +194,8 @@ PY
   tar -C "$work" -czf "${output_root}/${patch_id}.tar.gz" "$patch_id" || return 1
   (cd "$output_root" && sha256sum "${patch_id}.tar.gz" >"${patch_id}.tar.gz.sha256")
   rm -rf "$work"
+  work=""
+  trap - EXIT
 
   ok "Ubuntu target patch created: ${output_root}/${patch_id}.tar.gz"
   printf 'Base bundle : %s\n' "$base_id"
