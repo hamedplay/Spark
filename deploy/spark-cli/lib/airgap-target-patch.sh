@@ -6,7 +6,15 @@ AIRGAP_TARGET_PATCH_FORMAT_VERSION="1"
 AIRGAP_PREPARED_DIR="${AIRGAP_HOME}/prepared"
 
 airgap_target_patch_meta_from() {
-  local root="$1" key="$2" file="${root}/metadata/patch.env"
+  local root="$1" key="$2" file
+  file="${root}/metadata/patch.env"
+  [[ -f "$file" ]] || return 1
+  sed -n "s/^${key}=//p" "$file" | tail -n1
+}
+
+airgap_target_bundle_meta_from() {
+  local root="$1" key="$2" file
+  file="${root}/metadata/manifest.env"
   [[ -f "$file" ]] || return 1
   sed -n "s/^${key}=//p" "$file" | tail -n1
 }
@@ -100,12 +108,14 @@ airgap_build_target_patch() {
   base_root="$(airgap_target_patch_open_base "$base_input" "$base_stage")" || return 1
   airgap_validate_bundle_dir "$base_root" || return 1
 
-  base_id="$(airgap_meta_from "$base_root" BUNDLE_ID)"
-  base_commit="$(airgap_meta_from "$base_root" SPARK_COMMIT)"
-  base_target="$(airgap_meta_from "$base_root" UBUNTU_VERSION)"
-  base_arch="$(airgap_meta_from "$base_root" ARCH)"
+  base_id="$(airgap_target_bundle_meta_from "$base_root" BUNDLE_ID)"
+  base_commit="$(airgap_target_bundle_meta_from "$base_root" SPARK_COMMIT)"
+  base_target="$(airgap_target_bundle_meta_from "$base_root" UBUNTU_VERSION)"
+  base_arch="$(airgap_target_bundle_meta_from "$base_root" ARCH)"
+  [[ -n "$base_id" ]] || { fail "Base bundle ID is missing."; return 1; }
   [[ "$base_arch" == "amd64" ]] || { fail "Only amd64 base bundles can be target-patched."; return 1; }
   [[ "$base_commit" =~ ^[0-9a-f]{40}$ ]] || { fail "Base bundle Spark commit is invalid."; return 1; }
+  case "$base_target" in 24.04|26.04) ;; *) fail "Base bundle Ubuntu release is invalid: ${base_target:-missing}"; return 1 ;; esac
   [[ "$base_target" != "$target_release" ]] || { fail "Base bundle already targets Ubuntu ${target_release}; no target patch is needed."; return 1; }
 
   source="${work}/spark-source"
@@ -165,7 +175,7 @@ airgap_apply_target_patch() {
   title
   new_log "airgap-apply-target-patch"
   local base_input="${1:-}" patch_input="${2:-}" work base_stage patch_stage base_root patch_root
-  local base_id base_commit patch_base_id patch_commit target_release target_arch actual_arch
+  local base_id base_commit base_target patch_base_id patch_commit patch_source_target target_release target_arch actual_arch
   local prepared_work prepared_root new_id patched_at
 
   [[ -n "$base_input" ]] || read -r -p "Path to existing large Spark bundle (.tar.gz or directory): " base_input
@@ -181,15 +191,19 @@ airgap_apply_target_patch() {
   airgap_validate_bundle_dir "$base_root" || return 1
   airgap_target_patch_validate_dir "$patch_root" || return 1
 
-  base_id="$(airgap_meta_from "$base_root" BUNDLE_ID)"
-  base_commit="$(airgap_meta_from "$base_root" SPARK_COMMIT)"
+  base_id="$(airgap_target_bundle_meta_from "$base_root" BUNDLE_ID)"
+  base_commit="$(airgap_target_bundle_meta_from "$base_root" SPARK_COMMIT)"
+  base_target="$(airgap_target_bundle_meta_from "$base_root" UBUNTU_VERSION)"
   patch_base_id="$(airgap_target_patch_meta_from "$patch_root" BASE_BUNDLE_ID)"
   patch_commit="$(airgap_target_patch_meta_from "$patch_root" BASE_SPARK_COMMIT)"
+  patch_source_target="$(airgap_target_patch_meta_from "$patch_root" SOURCE_UBUNTU_VERSION)"
   target_release="$(airgap_target_patch_meta_from "$patch_root" TARGET_UBUNTU_VERSION)"
   target_arch="$(airgap_target_patch_meta_from "$patch_root" ARCH)"
 
+  [[ -n "$base_id" && -n "$patch_base_id" ]] || { fail "Bundle/patch identity metadata is missing."; return 1; }
   [[ "$base_id" == "$patch_base_id" ]] || { fail "Target patch belongs to bundle ${patch_base_id}, not ${base_id}."; return 1; }
   [[ "$base_commit" == "$patch_commit" ]] || { fail "Target patch Spark commit does not match the base bundle."; return 1; }
+  [[ "$base_target" == "$patch_source_target" ]] || { fail "Target patch source Ubuntu release does not match the base bundle."; return 1; }
 
   . /etc/os-release
   actual_arch="$(dpkg --print-architecture)"
@@ -207,7 +221,7 @@ airgap_apply_target_patch() {
   mkdir -p "$prepared_work"
 
   if [[ -f "$base_input" ]]; then
-    # The 5GB archive was already extracted for validation; move that extraction
+    # The large archive was already extracted for validation; move that extraction
     # into the prepared area instead of copying or rebuilding the Docker payload.
     mv "$base_root" "$prepared_work/bundle"
   else
