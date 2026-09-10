@@ -19,8 +19,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           curl -fsSL -H 'Cache-Control: no-cache' "https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli/bootstrap.sh?nocache=$(date +%s)" | sudo bash
-          spark --version
-          spark-airgap --version
-          spark --ui-self-test
-          test "$(spark --version)" = 'Spark Server Manager 3.1.0+20260910.1'
-          test "$(spark-airgap --version)" = 'Spark Air-Gapped Installer 3.1.0+20260910.1'
+          /usr/local/bin/spark --version
+          /usr/local/bin/spark-airgap --version
+          /usr/local/bin/spark --ui-self-test
+          test "$(/usr/local/bin/spark --version)" = 'Spark Server Manager 3.1.0+20260910.1'
+          test "$(/usr/local/bin/spark-airgap --version)" = 'Spark Air-Gapped Installer 3.1.0+20260910.1'
