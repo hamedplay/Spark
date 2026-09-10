@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'deploy/spark-cli/bootstrap.sh'
+      - '.github/workflows/tmp-bootstrap-smoke.yml'
   workflow_dispatch:
 
 permissions:
