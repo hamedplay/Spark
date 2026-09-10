@@ -185,6 +185,70 @@ AIRGAP_ACTIONS = [
 ]
 
 
+CLEANUP_ACTIONS = [
+    core.Action(
+        "cleanup-database",
+        "Delete Database data",
+        "Stop Supabase and delete only the detected PostgreSQL data bind. The operation refuses to guess the data path.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-supabase",
+        "Delete Supabase runtime",
+        "Delete the complete local Supabase runtime, volumes/data, runtime configuration and runtime secrets.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-frontend",
+        "Delete deployed Frontend",
+        "Delete /var/www/spark only; the local Spark source repository remains.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-source",
+        "Delete Spark source",
+        "Delete the local /opt/spark repository; GitHub and the installed Spark Manager remain.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-logs",
+        "Delete Manager logs",
+        "Delete Spark Manager logs only; system journal and Docker logs are not changed.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-backups",
+        "Backup cleanup / free space",
+        "Safely prune old Spark backups with a configurable retention period, or explicitly delete all retained backups.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-history",
+        "Reset install history",
+        "Clear installation-step DONE markers only. Runtime data and live service state are not changed.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-livekit",
+        "Delete LiveKit runtime",
+        "Remove only the LiveKit runtime and secrets, then restore the legacy Coturn fallback.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-full",
+        "Delete complete Spark project",
+        "Remove Spark-specific runtime, data, configuration, certificates, schedulers, TURN, source, logs and backups while keeping the Manager and shared OS packages.",
+        "confirm",
+    ),
+    core.Action(
+        "cleanup-manager",
+        "Uninstall Spark Manager",
+        "Remove the installed Spark Manager and /usr/local/bin/spark only; the project runtime is left untouched.",
+        "confirm",
+    ),
+]
+
+
 def patch_categories() -> None:
     rebuilt = []
     for category, actions in core.CATEGORIES:
@@ -263,13 +327,8 @@ def patch_categories() -> None:
                 "confirm",
             ))
         elif category == "Cleanup / Remove":
-            idx = next((i for i, a in enumerate(new_actions) if a.action_id == "cleanup-full"), len(new_actions))
-            new_actions.insert(idx, core.Action(
-                "cleanup-livekit",
-                "Delete LiveKit runtime",
-                "Remove only LiveKit runtime and secrets; restore legacy Coturn.",
-                "confirm",
-            ))
+            rebuilt.append(("Cleanup / Remove", list(CLEANUP_ACTIONS)))
+            continue
         rebuilt.append((category, new_actions))
     core.CATEGORIES[:] = rebuilt
 
