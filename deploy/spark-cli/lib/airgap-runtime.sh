@@ -110,6 +110,8 @@ install_step_4() {
 
 install_step_10() {
   airgap_is_active || { install_step_10_online; return; }
+  title
+  new_log "install-10-airgap-runtime"
   local root
   root="$(airgap_current_root)" || { fail "No active air-gap bundle."; return 1; }
   airgap_verify_images "$root" || { fail "Bundled Docker image set is incomplete."; return 1; }

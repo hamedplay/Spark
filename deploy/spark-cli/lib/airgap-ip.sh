@@ -346,6 +346,20 @@ airgap_ip_provision_database_access() {
   airgap_ip_database_login_test || return 1
 }
 
+airgap_ip_gateway_bind_present() {
+  local cid
+  cid="$(cd "$SUPABASE_ROOT" && docker compose ps -q api-gw 2>/dev/null)"
+  [[ -n "$cid" ]] || return 1
+  AIRGAP_IP="$AIRGAP_SERVER_IP" docker inspect "$cid" | python3 -c '
+import json,os,sys
+d=json.load(sys.stdin)
+ports=((d[0].get("NetworkSettings") or {}).get("Ports") or {}).get("8000/tcp") or []
+hosts={(str(x.get("HostIp","")),str(x.get("HostPort",""))) for x in ports}
+ip=os.environ["AIRGAP_IP"]
+raise SystemExit(0 if ("127.0.0.1","8000") in hosts and (ip,"8000") in hosts else 1)
+'
+}
+
 airgap_ip_ensure_gateway_bind() {
   local compose_file="${SUPABASE_ROOT}/docker-compose.yml" deadline
   require_file "$compose_file" || return 1
@@ -367,15 +381,28 @@ p.write_text(yaml.safe_dump(d,sort_keys=False,default_flow_style=False),encoding
 PY
 
   (cd "$SUPABASE_ROOT" && docker compose config --quiet) || return 1
-  (cd "$SUPABASE_ROOT" && docker compose up -d --no-deps api-gw) || return 1
 
-  deadline=$((SECONDS + 30))
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -Fq 'Status: active'; then
+    ufw allow to "$AIRGAP_SERVER_IP" port 8000 proto tcp >/dev/null || return 1
+  fi
+
+  (cd "$SUPABASE_ROOT" && docker compose up -d --no-deps --force-recreate api-gw) || return 1
+  airgap_ip_gateway_bind_present || {
+    echo "ERROR: api-gw container does not publish both 127.0.0.1:8000 and ${AIRGAP_SERVER_IP}:8000" >>"$CURRENT_LOG"
+    (cd "$SUPABASE_ROOT" && docker compose ps api-gw) >>"$CURRENT_LOG" 2>&1 || true
+    return 1
+  }
+
+  deadline=$((SECONDS + 45))
   while (( SECONDS < deadline )); do
     if curl --noproxy '*' -fsS --connect-timeout 3 "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
   done
+  echo "ERROR: api-gw is published on ${AIRGAP_SERVER_IP}:8000 but its health endpoint did not become reachable." >>"$CURRENT_LOG"
+  (cd "$SUPABASE_ROOT" && docker compose ps api-gw) >>"$CURRENT_LOG" 2>&1 || true
+  ss -lntp >>"$CURRENT_LOG" 2>&1 || true
   return 1
 }
 
