@@ -1,0 +1,91 @@
+name: Temporary Fix Envoy Health
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-envoy-health.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Envoy-aware Supabase health probes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deploy/spark-cli/lib/airgap-ip.sh')
+          text=p.read_text(encoding='utf-8')
+
+          marker='''airgap_ip_gateway_bind_present() {\n'''
+          helper='''airgap_ip_supabase_health() {\n  local url="${1:-}" timeout_s="${2:-5}" anon\n  [[ -n "$url" ]] || return 1\n  anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"\n  [[ -n "$anon" ]] || return 1\n  curl --noproxy '*' -fsS --connect-timeout "$timeout_s" -H "apikey: ${anon}" "$url" >/dev/null\n}\n\n'''
+          if helper not in text:
+              if marker not in text:
+                  raise SystemExit('gateway bind marker not found')
+              text=text.replace(marker, helper+marker, 1)
+
+          old='''    if curl --noproxy '*' -fsS --connect-timeout 3 "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" >/dev/null 2>&1; then\n'''
+          new='''    if airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" 3 >/dev/null 2>&1; then\n'''
+          if old not in text:
+              raise SystemExit('gateway wait health probe not found')
+          text=text.replace(old,new,1)
+
+          old='''    run_logged "Validate direct Supabase gateway on ${AIRGAP_SERVER_IP}:8000" \\\n      curl --noproxy '*' -fsS --connect-timeout 5 "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" >/dev/null || { unmark_step 10; return 1; }\n'''
+          new='''    run_logged "Validate direct Supabase gateway on ${AIRGAP_SERVER_IP}:8000" \\\n      airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" 5 || { unmark_step 10; return 1; }\n'''
+          if old not in text:
+              raise SystemExit('Step 10 direct health probe not found')
+          text=text.replace(old,new,1)
+
+          old='''  local app_headers api_code\n'''
+          new='''  local app_headers\n'''
+          if old not in text:
+              raise SystemExit('nginx test local declaration not found')
+          text=text.replace(old,new,1)
+
+          old='''  api_code="$(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 "http://${AIRGAP_SERVER_IP}/auth/v1/health" || true)"\n  [[ "$api_code" =~ ^2[0-9][0-9]$ ]]\n'''
+          new='''  airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}/auth/v1/health" 5\n'''
+          if old not in text:
+              raise SystemExit('Nginx health probe not found')
+          text=text.replace(old,new,1)
+
+          # Blackbox exporter cannot inject a per-target apikey with the current fixed
+          # http_2xx module. Probe the public JWKS route instead; Envoy explicitly
+          # exempts this route and it still traverses the auth upstream.
+          text=text.replace('"targets": ["http://${AIRGAP_SERVER_IP}/auth/v1/health"]',
+                            '"targets": ["http://${AIRGAP_SERVER_IP}/auth/v1/.well-known/jwks.json"]',1)
+
+          p.write_text(text,encoding='utf-8')
+          PY
+
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'airgap_ip_supabase_health() {' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq -- '-H "apikey: ${anon}"' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" 3' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" 5' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}/auth/v1/health" 5' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'auth/v1/.well-known/jwks.json' deploy/spark-cli/lib/airgap-ip.sh
+
+          if grep -F 'curl --noproxy' deploy/spark-cli/lib/airgap-ip.sh | grep -F '/auth/v1/health'; then
+            echo 'Unauthenticated Envoy auth health curl remains' >&2
+            exit 1
+          fi
+
+          git diff --check
+
+      - name: Commit minimal fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap-ip.sh
+          git commit -m 'fix(airgap): authenticate Supabase Envoy health probes'
+          git push origin HEAD:main
