@@ -1,0 +1,25 @@
+name: Temporary Bootstrap Smoke
+
+on:
+  push:
+    paths:
+      - 'deploy/spark-cli/bootstrap.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Run public bootstrap exactly as documented
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fsSL -H 'Cache-Control: no-cache' "https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli/bootstrap.sh?nocache=$(date +%s)" | sudo bash
+          spark --version
+          spark-airgap --version
+          spark --ui-self-test
+          test "$(spark --version)" = 'Spark Server Manager 3.1.0+20260910.1'
+          test "$(spark-airgap --version)" = 'Spark Air-Gapped Installer 3.1.0+20260910.1'
