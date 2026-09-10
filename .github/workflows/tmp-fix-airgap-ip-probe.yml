@@ -1,0 +1,57 @@
+name: Temporary Fix AirGap IP Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-ip-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch and validate gateway bind probe
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deploy/spark-cli/lib/airgap-ip.sh')
+          text=p.read_text(encoding='utf-8')
+          old='  AIRGAP_IP="$AIRGAP_SERVER_IP" docker inspect "$cid" | python3 -c \'\n'
+          new='  docker inspect "$cid" | AIRGAP_IP="$AIRGAP_SERVER_IP" python3 -c \'\n'
+          if old not in text:
+              raise SystemExit('expected gateway probe pipeline not found')
+          p.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'docker inspect "$cid" | AIRGAP_IP="$AIRGAP_SERVER_IP" python3 -c' deploy/spark-cli/lib/airgap-ip.sh
+
+          printf '%s\n' '[{"NetworkSettings":{"Ports":{"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8000"},{"HostIp":"10.211.36.178","HostPort":"8000"}]}}}]' \
+            | AIRGAP_IP='10.211.36.178' python3 -c '
+          import json,os,sys
+          d=json.load(sys.stdin)
+          ports=((d[0].get("NetworkSettings") or {}).get("Ports") or {}).get("8000/tcp") or []
+          hosts={(str(x.get("HostIp","")),str(x.get("HostPort",""))) for x in ports}
+          ip=os.environ["AIRGAP_IP"]
+          raise SystemExit(0 if ("127.0.0.1","8000") in hosts and (ip,"8000") in hosts else 1)
+          '
+
+          git diff --check
+
+      - name: Commit minimal fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap-ip.sh
+          git commit -m 'fix(airgap): pass internal IP to gateway bind validator'
+          git push origin HEAD:main
