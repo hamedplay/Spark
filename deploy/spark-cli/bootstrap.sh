@@ -81,8 +81,7 @@ files=(
   lib/airgap-runtime.sh
   lib/airgap-target-patch.sh
   lib/airgap-auto.sh
-  lib/airgap-waf.sh
-  lib/airgap-waf-nginx-fix.sh
+  lib/airgap-ip.sh
 )
 
 for file in "${files[@]}"; do
@@ -145,16 +144,12 @@ grep -q 'airgap-auto-target-bootstrap' "$tmp/spark-airgap" || {
   echo "Spark Air-Gap automatic target bootstrap action is missing." >&2
   exit 1
 }
-grep -q 'airgap-waf' "$tmp/spark-airgap" || {
-  echo "Spark Air-Gap external WAF module is not loaded." >&2
+grep -q 'airgap-ip' "$tmp/spark-airgap" || {
+  echo "Spark Air-Gap internal-IP module is not loaded." >&2
   exit 1
 }
-grep -q 'airgap_waf_enabled' "$tmp/lib/airgap-waf.sh" || {
-  echo "Spark Air-Gap external WAF mode is incomplete." >&2
-  exit 1
-}
-grep -q 'airgap_waf_write_nginx_production_with_duplicate_server_tokens' "$tmp/lib/airgap-waf-nginx-fix.sh" || {
-  echo "Spark Air-Gap WAF Nginx compatibility fix is missing." >&2
+grep -Fq 'AIRGAP_IP_MODE="internal_ip"' "$tmp/lib/airgap-ip.sh" || {
+  echo "Spark Air-Gap internal-IP deployment mode is incomplete." >&2
   exit 1
 }
 grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$tmp/spark-ui.py" || {
