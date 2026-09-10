@@ -46,7 +46,7 @@ install_step_1() {
   title
   new_log "install-01-values"
   configure_values_interactive || return 1
-  if run_logged "اعتبارسنجی مقادیر نصب" test_values; then
+  if run_logged "Validation of installation values" test_values; then
     mark_step 1
   else
     unmark_step 1
@@ -72,12 +72,12 @@ test_base_packages() {
 install_step_2() {
   title
   new_log "install-02-packages"
-  run_logged "بررسی Ubuntu 24.04/26.04 x86_64" check_supported_ubuntu || return 1
+  run_logged "check Ubuntu 24.04/26.04 x86_64" check_supported_ubuntu || return 1
   run_logged "apt update" apt update || return 1
   run_logged "apt upgrade" apt upgrade -y || return 1
-  run_logged "نصب packageهای پایه" apt install -y ca-certificates curl git gnupg jq openssl ufw rsync python3 python3-yaml nginx certbot coturn || return 1
+  run_logged "Installation packageBasics" apt install -y ca-certificates curl git gnupg jq openssl ufw rsync python3 python3-yaml nginx certbot coturn || return 1
 
-  run_logged "تنظیم repository رسمی Docker" bash -c '
+  run_logged "setting repository official Docker" bash -c '
     . /etc/os-release
     codename="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
     [[ -n "$codename" ]] || { echo "Ubuntu codename is missing" >&2; exit 1; }
@@ -89,7 +89,7 @@ deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.
 EOF
   ' || return 1
 
-  run_logged "تنظیم NodeSource Node 24" bash -c '
+  run_logged "setting NodeSource Node 24" bash -c '
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
     chmod a+r /etc/apt/keyrings/nodesource.gpg
@@ -98,10 +98,10 @@ deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node
 EOF
   ' || return 1
 
-  run_logged "نصب Docker و Node.js" bash -c 'apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin nodejs' || return 1
-  run_logged "نصب npm 11" npm install -g 'npm@^11.6.2' || return 1
-  run_logged "فعال‌سازی Docker و Nginx" systemctl enable --now docker nginx || return 1
-  if run_logged "تست packageها و versionها" test_base_packages; then
+  run_logged "Installation Docker and Node.js" bash -c 'apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin nodejs' || return 1
+  run_logged "Installation npm 11" npm install -g 'npm@^11.6.2' || return 1
+  run_logged "Activation Docker and Nginx" systemctl enable --now docker nginx || return 1
+  if run_logged "test packageha and versions" test_base_packages; then
     mark_step 2
   else
     unmark_step 2
@@ -124,23 +124,23 @@ install_step_3() {
   mkdir -p /opt
   if [[ -d "${SPARK_ROOT}/.git" ]]; then
     if [[ -n "$(git -C "$SPARK_ROOT" status --porcelain)" ]]; then
-      fail "${SPARK_ROOT} تغییرات commit نشده دارد؛ برای جلوگیری از overwrite مرحله متوقف شد."
+      fail "${SPARK_ROOT} changes commit has not to prevent overwrite The stage stopped."
       git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
       return 1
     fi
-    run_logged "Fetch آخرین Spark main" git -C "$SPARK_ROOT" fetch origin main || return 1
+    run_logged "Fetch last Spark main" git -C "$SPARK_ROOT" fetch origin main || return 1
     run_logged "Checkout Spark main" git -C "$SPARK_ROOT" checkout main || return 1
     run_logged "Fast-forward Spark main" git -C "$SPARK_ROOT" pull --ff-only origin main || return 1
   elif [[ -e "$SPARK_ROOT" ]]; then
-    fail "${SPARK_ROOT} وجود دارد ولی Git repository نیست."
+    fail "${SPARK_ROOT} There is but Git repository is not."
     return 1
   else
-    run_logged "Clone آخرین Spark main" git clone --branch main --single-branch "$REPO_URL" "$SPARK_ROOT" || return 1
+    run_logged "Clone last Spark main" git clone --branch main --single-branch "$REPO_URL" "$SPARK_ROOT" || return 1
   fi
   if [[ -f "${SPARK_ROOT}/deploy/spark-cli/spark" ]]; then
-    run_logged "نصب/به‌روزرسانی Spark Manager" install_manager_from_dir "${SPARK_ROOT}/deploy/spark-cli" || return 1
+    run_logged "Installation/Update Spark Manager" install_manager_from_dir "${SPARK_ROOT}/deploy/spark-cli" || return 1
   fi
-  if run_logged "تست repository" test_spark_repo; then
+  if run_logged "test repository" test_spark_repo; then
     mark_step 3
   else
     unmark_step 3
@@ -167,33 +167,33 @@ install_step_4() {
 
   if [[ -d "${SUPABASE_SOURCE}/.git" ]]; then
     if [[ -n "$(git -C "$SUPABASE_SOURCE" status --porcelain)" ]]; then
-      fail "${SUPABASE_SOURCE} تغییرات commit نشده دارد؛ برای جلوگیری از overwrite مرحله متوقف شد."
+      fail "${SUPABASE_SOURCE} changes commit has not to prevent overwrite The stage stopped."
       git -C "$SUPABASE_SOURCE" status --short | tee -a "$CURRENT_LOG"
       return 1
     fi
-    run_logged "Fetch آخرین Supabase main" git -C "$SUPABASE_SOURCE" fetch origin main || return 1
+    run_logged "Fetch last Supabase main" git -C "$SUPABASE_SOURCE" fetch origin main || return 1
     run_logged "Checkout Supabase main" git -C "$SUPABASE_SOURCE" checkout main || return 1
     run_logged "Fast-forward Supabase main" git -C "$SUPABASE_SOURCE" pull --ff-only origin main || return 1
   elif [[ -e "$SUPABASE_SOURCE" ]]; then
-    fail "${SUPABASE_SOURCE} وجود دارد ولی Git repository نیست."
+    fail "${SUPABASE_SOURCE} There is but Git repository is not."
     return 1
   else
-    run_logged "Clone آخرین Supabase رسمی" git clone --branch main --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
+    run_logged "Clone last Supabase official" git clone --branch main --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
   fi
 
   if [[ -f "${SUPABASE_ROOT}/.env" ]]; then
-    warn "${SUPABASE_ROOT} از قبل فعال است؛ Source رسمی به آخرین main به‌روزرسانی شد ولی runtime/config زنده overwrite نمی‌شود."
+    warn "${SUPABASE_ROOT} It is already active; Source Official to the last main Updated but runtime/config alive overwrite can't."
     rm -f "${SUPABASE_ROOT}/.spark-supabase-source-commit"
   else
     rm -rf "$SUPABASE_ROOT"
     mkdir -p "$SUPABASE_ROOT"
-    run_logged "کپی آخرین Docker snapshot رسمی Supabase" cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/" || return 1
-    run_logged "ایجاد .env اولیه" cp "${SUPABASE_ROOT}/.env.example" "${SUPABASE_ROOT}/.env" || return 1
+    run_logged "Last copy Docker snapshot official Supabase" cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/" || return 1
+    run_logged "create .env primary" cp "${SUPABASE_ROOT}/.env.example" "${SUPABASE_ROOT}/.env" || return 1
     chmod 600 "${SUPABASE_ROOT}/.env"
     rm -f "${SUPABASE_ROOT}/.spark-supabase-source-commit"
   fi
 
-  if run_logged "تست آخرین Supabase source و runtime" test_supabase_source; then
+  if run_logged "The last test Supabase source and runtime" test_supabase_source; then
     mark_step 4
   else
     unmark_step 4
@@ -270,7 +270,7 @@ install_step_5() {
   require_file "${SUPABASE_ROOT}/.env" || return 1
   require_file "${SUPABASE_ROOT}/.env.example" || return 1
 
-  info "Secretها و شناسه‌های داخلی موجود حفظ می‌شوند؛ فقط empty/default/placeholderها جایگزین می‌شوند."
+  info "SecretExisting internal identifiers are preserved; only empty/default/placeholderare replaced."
   ensure_fresh_secret POSTGRES_PASSWORD "openssl rand -hex 16"
   ensure_fresh_secret JWT_SECRET "openssl rand -base64 30 | tr -d '\n'"
   ensure_fresh_secret SECRET_KEY_BASE "openssl rand -base64 48 | tr -d '\n'"
@@ -300,7 +300,7 @@ install_step_5() {
   fi
   chmod 600 "${SUPABASE_ROOT}/.env"
 
-  if run_logged "اعتبارسنجی Secretها و شناسه‌های داخلی بدون نمایش مقدار" test_supabase_secrets; then
+  if run_logged "Validation SecretInternal IDs and IDs without displaying the value" test_supabase_secrets; then
     mark_step 5
   else
     unmark_step 5
@@ -404,7 +404,7 @@ install_step_6() {
     info "Asymmetric/JWKS variables are optional in this runtime; empty values are retained and legacy JWT_SECRET remains active."
   fi
 
-  if run_logged "تست کامل تنظیمات .env و عدم وجود placeholder فعال" test_supabase_env; then
+  if run_logged "Full test settings .env and non-existence placeholder active" test_supabase_env; then
     mark_step 6
   else
     unmark_step 6
@@ -423,10 +423,10 @@ install_step_7() {
   require_dir "${SPARK_ROOT}/supabase/functions" || return 1
   require_dir "${SUPABASE_SOURCE}/docker/volumes/functions/main" || return 1
   mkdir -p "${SUPABASE_ROOT}/volumes/functions"
-  run_logged "Sync تمام Edge Functions" rsync -a --delete "${SPARK_ROOT}/supabase/functions/" "${SUPABASE_ROOT}/volumes/functions/" || return 1
+  run_logged "Sync all Edge Functions" rsync -a --delete "${SPARK_ROOT}/supabase/functions/" "${SUPABASE_ROOT}/volumes/functions/" || return 1
   rm -rf "${SUPABASE_ROOT}/volumes/functions/main"
-  run_logged "Restore رسمی Main Router از Supabase رسمی" cp -a "${SUPABASE_SOURCE}/docker/volumes/functions/main" "${SUPABASE_ROOT}/volumes/functions/main" || return 1
-  if run_logged "تست تطابق Edge Functions و Main Router" test_function_sync; then
+  run_logged "Restore official Main Router from Supabase official" cp -a "${SUPABASE_SOURCE}/docker/volumes/functions/main" "${SUPABASE_ROOT}/volumes/functions/main" || return 1
+  if run_logged "Compatibility test Edge Functions and Main Router" test_function_sync; then
     mark_step 7
   else
     unmark_step 7
@@ -464,10 +464,10 @@ configure_optional_function_env() {
   local key existing base_value answer
   mapfile -t detected < <(scan_function_env_names)
   if ((${#detected[@]} == 0)); then
-    warn "متغیر provider مشخصی با الگوهای شناخته‌شده پیدا نشد؛ فایل extra env خالی/موجود حفظ شد."
+    warn "Variable provider No matches with known patterns found; file extra env vacant/Inventory saved."
     return 0
   fi
-  info "Provider envهای موردنیاز از source فعلی scan شدند. برای موارد اختیاری می‌توانید Enter بزنید."
+  info "Provider envThe requirements of source current scan became. For optional items you can Enter press."
   for key in "${detected[@]}"; do
     [[ "$key" =~ $core ]] && continue
     existing="$(env_get "$extra" "$key")"
@@ -497,7 +497,7 @@ install_step_8() {
   chmod 700 "$CONFIG_DIR"
   local service_role
   service_role="$(env_get "${SUPABASE_ROOT}/.env" SERVICE_ROLE_KEY)"
-  [[ -n "$service_role" ]] || { fail "SERVICE_ROLE_KEY موجود نیست؛ ابتدا مرحله 6 را اجرا کنید."; return 1; }
+  [[ -n "$service_role" ]] || { fail "SERVICE_ROLE_KEY not available; First step 6 run the."; return 1; }
   env_set "${CONFIG_DIR}/avatar-worker.env" SUPABASE_URL "http://kong:8000"
   env_set "${CONFIG_DIR}/avatar-worker.env" SUPABASE_SERVICE_ROLE_KEY "$service_role"
   env_set "${CONFIG_DIR}/avatar-worker.env" AVATAR_WORKER_ID "avatar-worker-single"
@@ -505,7 +505,7 @@ install_step_8() {
   configure_optional_function_env
   chmod 600 "${CONFIG_DIR}/functions-extra.env"
 
-  if run_logged "تست Provider/Worker env" test_provider_env; then
+  if run_logged "test Provider/Worker env" test_provider_env; then
     mark_step 8
   else
     unmark_step 8

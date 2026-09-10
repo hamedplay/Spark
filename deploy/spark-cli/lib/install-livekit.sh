@@ -296,21 +296,21 @@ install_step_19() {
   livekit_configure_local_recording_storage || return 1
   chmod 600 "$LIVEKIT_ENV"
 
-  info "DNS هر سه دامنه LiveKit باید قبل از ادامه به ${TURN_PUBLIC_IP} اشاره کند."
+  info "DNS All three domains LiveKit must before proceeding to ${TURN_PUBLIC_IP} point out."
   run_logged "Validate LiveKit DNS" livekit_test_dns || {
-    fail "DNS مربوط به meet/turn/ingress هنوز به Public IP این سرور اشاره نمی‌کند."
+    fail "DNS related to meet/turn/ingress still to Public IP This server does not point."
     unmark_step 19
     return 1
   }
 
   run_logged "Provision LiveKit Nginx + TLS" livekit_prepare_nginx_tls || {
-    fail "TLS/Nginx مربوط به LiveKit آماده نشد."
+    fail "TLS/Nginx related to LiveKit not ready."
     unmark_step 19
     return 1
   }
 
   run_logged "Copy TURN TLS certificate for embedded LiveKit TURN" livekit_copy_turn_certificate || {
-    fail "Certificate معتبر برای LiveKit TURN domain پیدا نشد."
+    fail "Certificate Valid for LiveKit TURN domain not found."
     unmark_step 19
     return 1
   }
@@ -399,12 +399,12 @@ livekit_report_start_failure() {
 install_step_20() {
   title
   new_log "install-20-livekit-runtime"
-  test_livekit_config || { fail "ابتدا مرحله 19 LiveKit configuration را کامل کنید."; return 1; }
+  test_livekit_config || { fail "First step 19 LiveKit configuration complete the."; return 1; }
 
   local coturn_was_active=0
   systemctl is-active --quiet coturn 2>/dev/null && coturn_was_active=1
   if (( coturn_was_active )); then
-    info "Coturn legacy برای جلوگیری از conflict روی TURN/TLS متوقف می‌شود؛ LiveKit embedded TURN جایگزین آن است."
+    info "Coturn legacy to prevent conflict on TURN/TLS It stops; LiveKit embedded TURN It is an alternative."
     run_logged "Stop legacy Coturn" systemctl disable --now coturn || return 1
   fi
 
@@ -425,20 +425,20 @@ install_step_20() {
 
   run_logged "Ensure local recording bucket" livekit_compose run --rm minio-init || return 1
 
-  info "منتظر readiness سرویس‌های LiveKit + MinIO (حداکثر ۹۰ ثانیه)..."
+  info "waiting readiness services LiveKit + MinIO (Max 90 seconds)..."
   local deadline=$((SECONDS + 90))
   while (( SECONDS < deadline )); do
     if livekit_runtime_ready; then
       run_logged "Reload Supabase Functions with LiveKit secrets" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate functions" || return 1
       mark_step 20
-      ok "LiveKit Server/Redis/Egress/Ingress و Local MinIO آماده هستند."
+      ok "LiveKit Server/Redis/Egress/Ingress and Local MinIO are ready."
       return 0
     fi
     sleep 3
   done
 
   unmark_step 20
-  warn "LiveKit در مهلت readiness آماده نشد."
+  warn "LiveKit within the deadline readiness not ready."
   livekit_report_start_failure
   livekit_compose down >/dev/null 2>&1 || true
   (( coturn_was_active )) && systemctl enable --now coturn >/dev/null 2>&1 || true
@@ -733,13 +733,13 @@ install_step_22() {
   title
   new_log "install-22-livekit-observability"
   test_livekit_full_validation || {
-    fail "ابتدا مرحله 21 LiveKit validation را کامل کنید."
+    fail "First step 21 LiveKit validation complete the."
     return 1
   }
 
   run_logged "Generate observability HTTP targets" livekit_write_observability_targets || return 1
   livekit_observability_config_ready || {
-    fail "پیکربندی Observability معتبر نیست."
+    fail "Configuration Observability not valid."
     unmark_step 22
     return 1
   }
@@ -751,19 +751,19 @@ install_step_22() {
     return 1
   fi
 
-  info "منتظر readiness Observability (حداکثر ۹۰ ثانیه)..."
+  info "waiting readiness Observability (Max 90 seconds)..."
   local deadline=$((SECONDS + 90))
   while (( SECONDS < deadline )); do
     if livekit_observability_ready; then
       mark_step 22
-      ok "Prometheus/Grafana/Loki/Alertmanager و exporterهای Phase 22 آماده هستند."
+      ok "Prometheus/Grafana/Loki/Alertmanager and exporters Phase 22 are ready."
       return 0
     fi
     sleep 3
   done
 
   unmark_step 22
-  warn "Observability در مهلت readiness آماده نشد."
+  warn "Observability within the deadline readiness not ready."
   livekit_report_observability_failure
   return 1
 }
@@ -783,7 +783,7 @@ livekit_status_report() {
 
 livekit_restart() {
   new_log "livekit-restart"
-  test_livekit_config || { fail "LiveKit config معتبر نیست."; return 1; }
+  test_livekit_config || { fail "LiveKit config not valid."; return 1; }
   run_visible "Restart LiveKit media platform" livekit_compose up -d --force-recreate || return 1
   if [[ -f "${STEP_DIR}/22.ok" ]]; then
     run_logged "Restart LiveKit observability" livekit_observability_compose up -d --force-recreate || return 1
@@ -795,7 +795,7 @@ livekit_restart() {
       if [[ -f "${STEP_DIR}/22.ok" ]]; then
         livekit_observability_ready || { sleep 2; continue; }
       fi
-      ok "LiveKit آماده است."
+      ok "LiveKit is ready."
       return 0
     fi
     sleep 2
@@ -807,8 +807,8 @@ livekit_restart() {
 
 cleanup_livekit_runtime() {
   new_log "cleanup-livekit"
-  if ! confirm_word "کل LiveKit runtime شامل Redis volume، فایل‌های Recording در MinIO، media state و Secretهای /opt/spark-livekit حذف می‌شود. Spark/Supabase data حذف نمی‌شود." "DELETE-LIVEKIT"; then
-    warn "حذف LiveKit لغو شد."
+  if ! confirm_word "all LiveKit runtime including Redis volume, files Recording in MinIO, media state and Secrets /opt/spark-livekit is deleted. Spark/Supabase data It is not deleted." "DELETE-LIVEKIT"; then
+    warn "delete LiveKit canceled."
     return 1
   fi
   livekit_cleanup_internal
@@ -832,7 +832,7 @@ PY
     (cd "$SUPABASE_ROOT" && docker compose up -d --force-recreate functions) >>"$CURRENT_LOG" 2>&1 || true
   fi
   systemctl enable --now coturn >/dev/null 2>&1 || true
-  ok "LiveKit runtime حذف شد و Coturn legacy در صورت موجود بودن دوباره فعال شد."
+  ok "LiveKit runtime was deleted and Coturn legacy Reactivated if available."
 }
 
 
@@ -885,9 +885,9 @@ installation_status_report() {
 run_all_install() {
   local n formatted
   for n in $(seq 1 22); do
-    if ! run_install_step "$n"; then printf -v formatted '%02d' "$n"; fail "اجرای زنجیره‌ای در مرحله ${formatted} متوقف شد."; return 1; fi
+    if ! run_install_step "$n"; then printf -v formatted '%02d' "$n"; fail "Chain execution in step ${formatted} it stopped."; return 1; fi
   done
-  ok "تمام ۲۲ مرحله نصب Spark + LiveKit با موفقیت اجرا شدند."
+  ok "all 22 Installation step Spark + LiveKit were successfully implemented."
 }
 
 test_full_validation() {

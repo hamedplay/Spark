@@ -48,15 +48,15 @@ sync_official_envoy_gateway_assets() {
   local source_dir="${SUPABASE_SOURCE}/docker/volumes/api/envoy"
   local target_dir="${SUPABASE_ROOT}/volumes/api/envoy"
   [[ -d "$source_dir" ]] || {
-    fail "Envoy assets در Source رسمی Supabase پیدا نشد: ${source_dir}"
+    fail "Envoy assets in Source official Supabase not found: ${source_dir}"
     return 1
   }
   [[ -f "${source_dir}/lds.template.yaml" ]] || {
-    fail "lds.template.yaml رسمی Supabase پیدا نشد؛ از sync ناقص جلوگیری شد."
+    fail "lds.template.yaml official Supabase not found from sync Incompletely prevented."
     return 1
   }
   [[ -f "${source_dir}/cds.yaml" ]] || {
-    fail "cds.yaml رسمی Supabase پیدا نشد؛ از sync ناقص جلوگیری شد."
+    fail "cds.yaml official Supabase not found from sync Incompletely prevented."
     return 1
   }
   mkdir -p "$target_dir"
@@ -72,12 +72,12 @@ repair_studio_gateway_route() {
   local i
   for i in {1..20}; do
     if studio_gateway_direct_probe; then
-      ok "Envoy catch-all Studio route روی 127.0.0.1:8000 تأیید شد."
+      ok "Envoy catch-all Studio route on 127.0.0.1:8000 Confirmed."
       return 0
     fi
     sleep 1
   done
-  fail "Envoy بعد از sync رسمی هنوز root Studio را پاسخ نمی‌دهد."
+  fail "Envoy after sync Official yet root Studio does not answer."
   return 1
 }
 
@@ -100,7 +100,7 @@ show_studio_connection_info() {
   dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
   dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
   dashboard_user="${dashboard_user:-supabase}"
-  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD پیدا نشد."; return 1; }
+  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD not found."; return 1; }
   state="DISABLED"; studio_external_is_open && state="ENABLED / VERIFIED"
   printf '\n%s%sSupabase Studio access%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
   printf '%s\n' '────────────────────────────────────────────────────────────'
@@ -111,7 +111,7 @@ show_studio_connection_info() {
   printf 'Password : %s\n' "$dashboard_password"
   printf '%s\n' '────────────────────────────────────────────────────────────'
   if ! studio_access_enabled; then
-    warn "Studio access غیرفعال است؛ APIهای Supabase روی HTTPS/443 فعال باقی می‌مانند."
+    warn "Studio access It is disabled; APIs Supabase on HTTPS/443 remain active."
   fi
 }
 
@@ -155,32 +155,32 @@ apply_studio_access_state() {
 open_supabase_studio_access() {
   external_access_requirements || return 1
   [[ -e /etc/nginx/sites-enabled/spark ]] || {
-    fail "Production Nginx فعال نیست؛ ابتدا مرحله Production Nginx را اجرا کنید."
+    fail "Production Nginx not active; First step Production Nginx run the."
     return 1
   }
   if studio_external_is_open; then
-    ok "Supabase Studio از قبل روی HTTPS/443 فعال و پاسخ آن تأیید شده است."
+    ok "Supabase Studio already on HTTPS/443 Active and its response is confirmed."
     show_studio_connection_info
     return 0
   fi
-  if ! confirm_word "دسترسی Supabase Studio روی https://${API_DOMAIN} (HTTPS/443) فعال می‌شود. APIهای Supabase بدون تغییر باقی می‌مانند." "OPEN"; then
-    warn "لغو شد."
+  if ! confirm_word "access Supabase Studio on https://${API_DOMAIN} (HTTPS/443) It is activated. APIs Supabase They remain unchanged." "OPEN"; then
+    warn "canceled."
     return 1
   fi
 
   local code_direct code_host code_https
   code_direct="$(studio_probe_code 'http://127.0.0.1:8000/')"
   code_host="$(studio_probe_code 'http://127.0.0.1:8000/' "$API_DOMAIN")"
-  info "Studio probe قبل از Enable: Envoy-direct=${code_direct} Envoy-Host(${API_DOMAIN})=${code_host}"
+  info "Studio probe before Enable: Envoy-direct=${code_direct} Envoy-Host(${API_DOMAIN})=${code_host}"
 
   # Validate the actual upstream before touching public Nginx state. A stale
   # runtime can keep old Envoy assets even after the official source was updated.
   if ! studio_gateway_direct_probe; then
-    warn "Envoy root route آماده نیست؛ assetهای رسمی gateway بدون تغییر .env/data sync می‌شوند."
+    warn "Envoy root route not ready; assetofficial gateway No change .env/data sync will be."
     repair_studio_gateway_route || return 1
     code_direct="$(studio_probe_code 'http://127.0.0.1:8000/')"
     code_host="$(studio_probe_code 'http://127.0.0.1:8000/' "$API_DOMAIN")"
-    info "Studio probe بعد از Envoy repair: Envoy-direct=${code_direct} Envoy-Host(${API_DOMAIN})=${code_host}"
+    info "Studio probe after Envoy repair: Envoy-direct=${code_direct} Envoy-Host(${API_DOMAIN})=${code_host}"
   fi
 
   mkdir -p "$CONFIG_DIR"
@@ -189,19 +189,19 @@ open_supabase_studio_access() {
   if ! apply_studio_access_state; then
     rm -f "$STUDIO_ACCESS_FLAG"
     apply_studio_access_state >/dev/null 2>&1 || true
-    fail "فعال‌سازی Studio شکست خورد و state قبلی restore شد."
+    fail "Activation Studio failed and state previous restore completed."
     return 1
   fi
 
   code_https="$(studio_probe_code "https://${API_DOMAIN}/")"
-  info "Studio probe روی Nginx/443: HTTP=${code_https}"
+  info "Studio probe on Nginx/443: HTTP=${code_https}"
   if [[ ! "$code_https" =~ ^2[0-9][0-9]$|^3[0-9][0-9]$ ]]; then
     rm -f "$STUDIO_ACCESS_FLAG"
     apply_studio_access_state >/dev/null 2>&1 || true
-    fail "Studio روی HTTPS/443 پاسخ معتبر نداد (HTTP ${code_https})؛ دسترسی دوباره غیرفعال شد."
+    fail "Studio on HTTPS/443 He did not give a valid answer (HTTP ${code_https}); Access disabled again."
     return 1
   fi
-  ok "Supabase Studio روی HTTPS/443 فعال و پاسخ آن تأیید شد."
+  ok "Supabase Studio on HTTPS/443 Active and its response was confirmed."
   show_studio_connection_info
 }
 
@@ -209,15 +209,15 @@ close_supabase_studio_access() {
   external_access_requirements || return 1
   rm -f "$STUDIO_ACCESS_FLAG"
   if ! apply_studio_access_state; then
-    fail "غیرفعال‌سازی Studio در Nginx اعمال نشد."
+    fail "Deactivation Studio in Nginx Not applied."
     return 1
   fi
   if curl -fsSk --connect-timeout 3 --max-time 8 --resolve "${API_DOMAIN}:443:127.0.0.1" \
       "https://${API_DOMAIN}/" -o /dev/null 2>/dev/null; then
-    fail "Root route دامنه API هنوز پاسخ موفق می‌دهد؛ Studio access بسته نشده است."
+    fail "Root route domain API It still responds successfully; Studio access not closed."
     return 1
   fi
-  ok "دسترسی Supabase Studio روی HTTPS/443 غیرفعال شد؛ REST/Auth/Storage/Functions روی 443 فعال باقی ماندند."
+  ok "access Supabase Studio on HTTPS/443 It was disabled; REST/Auth/Storage/Functions on 443 remained active."
 }
 
 security_status_report() {
@@ -249,27 +249,27 @@ open_supabase_admin_access() {
     printf '%s%sSecurity Center%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
     printf '%s\n' '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     printf 'Database : %-24s  Studio/443 : %s\n\n' "$db_state" "$studio_state"
-    printf '0) بازگشت\n'
-    printf '1) اطلاعات اتصال PostgreSQL / pgAdmin\n'
-    printf '2) تست واقعی Login دیتابیس (Local Supavisor)\n'
-    printf '3) باز کردن Database روی TCP/5432\n'
-    printf '4) بستن Database روی TCP/5432\n'
-    printf '5) اطلاعات اتصال Supabase Studio\n'
-    printf '6) فعال‌کردن دسترسی Supabase Studio روی HTTPS/443\n'
-    printf '7) غیرفعال‌کردن دسترسی Supabase Studio روی HTTPS/443\n'
-    printf '8) گزارش وضعیت Security / Firewall\n\n'
-    read -r -p "انتخاب: " choice
+    printf '0) back\n'
+    printf '1) Connection information PostgreSQL / pgAdmin\n'
+    printf '2) Real test Login database (Local Supavisor)\n'
+    printf '3) open Database on TCP/5432\n'
+    printf '4) to close Database on TCP/5432\n'
+    printf '5) Connection information Supabase Studio\n'
+    printf '6) Enable access Supabase Studio on HTTPS/443\n'
+    printf '7) Disable access Supabase Studio on HTTPS/443\n'
+    printf '8) Status report Security / Firewall\n\n'
+    read -r -p "selection: " choice
     case "$choice" in
       0) return 0 ;;
       1) show_database_connection_info || true; security_access_wait ;;
-      2) new_log "database-login-test"; if run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433; then ok "Login واقعی دیتابیس موفق است."; fi; security_access_wait ;;
+      2) new_log "database-login-test"; if run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433; then ok "Login The actual database is successful."; fi; security_access_wait ;;
       3) new_log "database-access-open"; open_database_external_access || true; security_access_wait ;;
       4) new_log "database-access-close"; close_database_external_access || true; security_access_wait ;;
       5) show_studio_connection_info || true; security_access_wait ;;
       6) new_log "supabase-studio-open"; open_supabase_studio_access || true; security_access_wait ;;
       7) new_log "supabase-studio-close"; close_supabase_studio_access || true; security_access_wait ;;
       8) security_status_report; security_access_wait ;;
-      *) fail "گزینه نامعتبر"; sleep 1 ;;
+      *) fail "Invalid option"; sleep 1 ;;
     esac
   done
 }

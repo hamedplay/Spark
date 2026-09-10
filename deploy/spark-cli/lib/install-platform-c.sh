@@ -70,7 +70,7 @@ EOF
   fi
 
   if functions_reference_turn_secret; then
-    info "Source فعلی TURN_SHARED_SECRET را مصرف می‌کند؛ همان Secret به functions-extra.env اضافه می‌شود."
+    info "Source current TURN_SHARED_SECRET consumes the same Secret to functions-extra.env is added."
     env_set "${CONFIG_DIR}/functions-extra.env" TURN_DOMAIN "$TURN_DOMAIN"
     env_set "${CONFIG_DIR}/functions-extra.env" TURN_SHARED_SECRET "$secret"
     env_set "${CONFIG_DIR}/functions-extra.env" TURN_URL "turn:${TURN_DOMAIN}:3478?transport=udp"
@@ -78,12 +78,12 @@ EOF
     env_set "${CONFIG_DIR}/functions-extra.env" TURNS_URL "turns:${TURN_DOMAIN}:5349?transport=tcp"
     chmod 600 "${CONFIG_DIR}/functions-extra.env"
     if [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]]; then
-      run_logged "Reload Functions برای TURN env" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate functions" || return 1
+      run_logged "Reload Functions for TURN env" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate functions" || return 1
     fi
   fi
 
-  run_logged "فعال‌سازی coturn" systemctl enable --now coturn || return 1
-  if run_logged "تست TURN/STUN" test_turn; then
+  run_logged "Activation coturn" systemctl enable --now coturn || return 1
+  if run_logged "test TURN/STUN" test_turn; then
     mark_step 16
   else
     unmark_step 16
@@ -109,9 +109,9 @@ ExecStartPost=/usr/bin/install -m 0640 -o turnserver -g turnserver /etc/letsencr
 ExecStartPost=/usr/bin/systemctl try-restart coturn.service
 EOF
   run_logged "systemd daemon-reload" systemctl daemon-reload || return 1
-  run_logged "فعال‌سازی certbot.timer" systemctl enable --now certbot.timer || return 1
+  run_logged "Activation certbot.timer" systemctl enable --now certbot.timer || return 1
   run_visible "Certbot renewal dry-run" certbot renew --dry-run || return 1
-  if run_logged "تست Certbot hook/timer" test_certbot_hook; then
+  if run_logged "test Certbot hook/timer" test_certbot_hook; then
     mark_step 17
   else
     unmark_step 17
@@ -144,8 +144,8 @@ install_step_18() {
   database_external_is_open 2>/dev/null && db_was_open=1
   studio_external_is_open 2>/dev/null && studio_was_open=1
 
-  if ! confirm_word "این مرحله UFW را reset می‌کند؛ SSH/HTTP/HTTPS/TURN باز می‌مانند و وضعیت فعلی Database 5432 / Studio 8443 حفظ می‌شود." "FIREWALL"; then
-    warn "تغییر Firewall لغو شد."
+  if ! confirm_word "This step UFW  reset does; SSH/HTTP/HTTPS/TURN They remain open and the current situation Database 5432 / Studio 8443 is maintained." "FIREWALL"; then
+    warn "change Firewall canceled."
     return 1
   fi
   run_logged "Reset UFW" ufw --force reset || return 1
@@ -165,7 +165,7 @@ install_step_18() {
     run_logged "Preserve Supabase Studio TCP/8443 access" ufw allow 8443/tcp || return 1
   fi
   run_logged "Enable UFW" ufw --force enable || return 1
-  if run_logged "تست Firewall و exposure مدیریت‌شده" test_firewall; then
+  if run_logged "test Firewall and exposure managed" test_firewall; then
     mark_step 18
   else
     unmark_step 18
@@ -193,33 +193,33 @@ install_step_4() {
 
   if [[ -d "${SUPABASE_SOURCE}/.git" ]]; then
     if [[ -n "$(git -C "$SUPABASE_SOURCE" status --porcelain)" ]]; then
-      fail "${SUPABASE_SOURCE} تغییرات commit نشده دارد؛ برای جلوگیری از overwrite مرحله متوقف شد."
+      fail "${SUPABASE_SOURCE} changes commit has not to prevent overwrite The stage stopped."
       git -C "$SUPABASE_SOURCE" status --short | tee -a "$CURRENT_LOG"
       return 1
     fi
-    run_logged "Fetch آخرین Supabase master" git -C "$SUPABASE_SOURCE" fetch origin master || return 1
+    run_logged "Fetch last Supabase master" git -C "$SUPABASE_SOURCE" fetch origin master || return 1
     run_logged "Checkout Supabase master" git -C "$SUPABASE_SOURCE" checkout master || return 1
     run_logged "Fast-forward Supabase master" git -C "$SUPABASE_SOURCE" pull --ff-only origin master || return 1
   elif [[ -e "$SUPABASE_SOURCE" ]]; then
-    fail "${SUPABASE_SOURCE} وجود دارد ولی Git repository نیست."
+    fail "${SUPABASE_SOURCE} There is but Git repository is not."
     return 1
   else
-    run_logged "Clone آخرین Supabase رسمی" git clone --branch master --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
+    run_logged "Clone last Supabase official" git clone --branch master --single-branch https://github.com/supabase/supabase.git "$SUPABASE_SOURCE" || return 1
   fi
 
   if [[ -f "${SUPABASE_ROOT}/.env" ]]; then
-    warn "${SUPABASE_ROOT} از قبل فعال است؛ Source رسمی به آخرین master به‌روزرسانی شد ولی runtime/config زنده overwrite نمی‌شود."
+    warn "${SUPABASE_ROOT} It is already active; Source Official to the last master Updated but runtime/config alive overwrite can't."
     rm -f "${SUPABASE_ROOT}/.spark-supabase-source-commit"
   else
     rm -rf "$SUPABASE_ROOT"
     mkdir -p "$SUPABASE_ROOT"
-    run_logged "کپی آخرین Docker snapshot رسمی Supabase" cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/" || return 1
-    run_logged "ایجاد .env اولیه" cp "${SUPABASE_ROOT}/.env.example" "${SUPABASE_ROOT}/.env" || return 1
+    run_logged "Last copy Docker snapshot official Supabase" cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/" || return 1
+    run_logged "create .env primary" cp "${SUPABASE_ROOT}/.env.example" "${SUPABASE_ROOT}/.env" || return 1
     chmod 600 "${SUPABASE_ROOT}/.env"
     rm -f "${SUPABASE_ROOT}/.spark-supabase-source-commit"
   fi
 
-  if run_logged "تست آخرین Supabase source و runtime" test_supabase_source; then
+  if run_logged "The last test Supabase source and runtime" test_supabase_source; then
     mark_step 4
   else
     unmark_step 4
@@ -237,38 +237,38 @@ run_all_install() {
   for n in $(seq 1 18); do
     if ! run_install_step "$n"; then
       printf -v n '%02d' "$n"
-      fail "اجرای زنجیره‌ای در مرحله ${n} متوقف شد."
+      fail "Chain execution in step ${n} it stopped."
       return 1
     fi
   done
-  ok "تمام ۱۸ مرحله نصب با موفقیت اجرا شدند."
+  ok "all 18 The installation phase was executed successfully."
 }
 
 install_menu() {
   while true; do
     title
-    printf '%sمنوی نصب Single Host — ۱۸ مرحله%s\n\n' "$C_BOLD" "$C_RESET"
-    printf '  0) بازگشت\n'
-    printf '  1) %s مقادیر نصب و Configuration\n' "$(step_badge 1)"
-    printf '  2) %s Packageهای پایه + Docker + Node 24\n' "$(step_badge 2)"
-    printf '  3) %s دریافت آخرین Spark main\n' "$(step_badge 3)"
-    printf '  4) %s دریافت آخرین Supabase رسمی\n' "$(step_badge 4)"
-    printf '  5) %s تولید Secretهای Supabase\n' "$(step_badge 5)"
-    printf '  6) %s تکمیل Supabase .env\n' "$(step_badge 6)"
+    printf '%sInstallation menu Single Host — 18 step%s\n\n' "$C_BOLD" "$C_RESET"
+    printf '  0) back\n'
+    printf '  1) %s Installation values ​​and Configuration\n' "$(step_badge 1)"
+    printf '  2) %s PackageBasics + Docker + Node 24\n' "$(step_badge 2)"
+    printf '  3) %s Get the latest Spark main\n' "$(step_badge 3)"
+    printf '  4) %s Get the latest Supabase official\n' "$(step_badge 4)"
+    printf '  5) %s production Secrets Supabase\n' "$(step_badge 5)"
+    printf '  6) %s complete Supabase .env\n' "$(step_badge 6)"
     printf '  7) %s Sync Edge Functions + Main Router\n' "$(step_badge 7)"
     printf '  8) %s Provider / Worker Environment\n' "$(step_badge 8)"
     printf '  9) %s Docker Compose hardening/config\n' "$(step_badge 9)"
-    printf ' 10) %s Validate و Start Supabase\n' "$(step_badge 10)"
-    printf ' 11) %s Build و Deploy Frontend\n' "$(step_badge 11)"
+    printf ' 10) %s Validate and Start Supabase\n' "$(step_badge 10)"
+    printf ' 11) %s Build and Deploy Frontend\n' "$(step_badge 11)"
     printf ' 12) %s Nginx Bootstrap\n' "$(step_badge 12)"
-    printf ' 13) %s Certificateها\n' "$(step_badge 13)"
+    printf ' 13) %s Certificates\n' "$(step_badge 13)"
     printf ' 14) %s Nginx Production\n' "$(step_badge 14)"
-    printf ' 15) %s Schedulerهای Local\n' "$(step_badge 15)"
+    printf ' 15) %s Schedulers Local\n' "$(step_badge 15)"
     printf ' 16) %s TURN/Coturn\n' "$(step_badge 16)"
     printf ' 17) %s Certbot Renewal Hook\n' "$(step_badge 17)"
     printf ' 18) %s Firewall\n' "$(step_badge 18)"
-    printf ' 19) اجرای همه ۱۸ مرحله نصب به‌ترتیب\n\n'
-    read -r -p "انتخاب: " choice
+    printf ' 19) Run all 18 Installation step respectively\n\n'
+    read -r -p "selection: " choice
     case "$choice" in
       0) return ;;
       1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18)
@@ -276,7 +276,7 @@ install_menu() {
         pause
         ;;
       19) run_all_install || true; pause ;;
-      *) fail "گزینه نامعتبر"; sleep 1 ;;
+      *) fail "Invalid option"; sleep 1 ;;
     esac
   done
 }

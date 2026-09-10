@@ -1,6 +1,6 @@
 update_rollback_runtime() {
   local old_sha="$1" backup="$2"
-  warn "Rollback runtime شروع شد."
+  warn "Rollback runtime it started."
   if [[ -d "${backup}/frontend" ]]; then
     rsync -a --delete "${backup}/frontend/" /var/www/spark/ || true
     chown -R www-data:www-data /var/www/spark || true
@@ -20,8 +20,8 @@ update_rollback_runtime() {
 prepare_frontend_production_env() {
   local root="$1" anon
   anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"
-  [[ -n "$anon" ]] || { fail "ANON_KEY موجود نیست؛ build Frontend متوقف شد."; return 1; }
-  [[ -n "${API_DOMAIN:-}" ]] || { fail "API_DOMAIN تنظیم نشده؛ build Frontend متوقف شد."; return 1; }
+  [[ -n "$anon" ]] || { fail "ANON_KEY not available; build Frontend it stopped."; return 1; }
+  [[ -n "${API_DOMAIN:-}" ]] || { fail "API_DOMAIN not set; build Frontend it stopped."; return 1; }
   env_set "${root}/.env.production" VITE_SUPABASE_URL "https://${API_DOMAIN}"
   env_set "${root}/.env.production" VITE_SUPABASE_ANON_KEY "$anon"
   chmod 600 "${root}/.env.production"
@@ -31,7 +31,7 @@ validate_frontend_production_build() {
   local root="$1" expected="https://${API_DOMAIN}"
   [[ -f "${root}/dist/index.html" ]] || return 1
   grep -R -F -q -- "$expected" "${root}/dist" || {
-    fail "Frontend build شامل SUPABASE URL مورد انتظار نیست: ${expected}"
+    fail "Frontend build including SUPABASE URL Not expected: ${expected}"
     return 1
   }
 }
@@ -69,10 +69,10 @@ update_spark() (
   title
   new_log "update-spark"
   require_manager_values || return 1
-  test_spark_repo >>"$CURRENT_LOG" 2>&1 || { fail "Spark repository سالم نیست."; return 1; }
-  test_supabase_source >>"$CURRENT_LOG" 2>&1 || { fail "Supabase pin/runtime provenance معتبر نیست؛ ابتدا مرحله 5 نصب را بررسی کنید."; return 1; }
+  test_spark_repo >>"$CURRENT_LOG" 2>&1 || { fail "Spark repository not healthy."; return 1; }
+  test_supabase_source >>"$CURRENT_LOG" 2>&1 || { fail "Supabase pin/runtime provenance not valid; First step 5 Check the installation."; return 1; }
   [[ -z "$(git -C "$SPARK_ROOT" status --porcelain)" ]] || {
-    fail "Repository تغییرات commit نشده دارد؛ Update متوقف شد."
+    fail "Repository changes commit has not; Update it stopped."
     git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
     return 1
   }
@@ -88,12 +88,12 @@ update_spark() (
   info "Target : ${target_sha}"
 
   if ! git -C "$SPARK_ROOT" merge-base --is-ancestor "$old_sha" "$target_sha"; then
-    fail "origin/main نسبت به نسخه فعلی fast-forward نیست؛ Update خودکار برای جلوگیری از rewrite متوقف شد."
+    fail "origin/main Compared to the current version fast-forward is not; Update Automatic to avoid rewrite it stopped."
     return 1
   fi
 
   if [[ "$old_sha" == "$target_sha" ]]; then
-    ok "Source از قبل روی آخرین commit است."
+    ok "Source Already on the last commit is."
   fi
 
   stage="/opt/spark-update-${target_sha:0:12}-$$"
@@ -104,7 +104,7 @@ update_spark() (
   validation_image="spark-avatar-worker-validation:${target_sha:0:12}"
 
   rollback_after_switch() {
-    warn "Rollback runtime شروع شد."
+    warn "Rollback runtime it started."
     if [[ -d "$frontend_prev" ]]; then
       rm -rf /var/www/spark
       mv "$frontend_prev" /var/www/spark
@@ -143,19 +143,19 @@ update_spark() (
   trap handle_update_signal INT TERM
 
   rm -rf "$stage" "$functions_next" "$functions_prev" "$frontend_next" "$frontend_prev"
-  run_logged "ساخت worktree موقت برای validation" git -C "$SPARK_ROOT" worktree add --detach "$stage" "$target_sha" || return 1
+  run_logged "made worktree temporary for validation" git -C "$SPARK_ROOT" worktree add --detach "$stage" "$target_sha" || return 1
 
-  run_logged "ساخت env تولید Frontend در worktree" prepare_frontend_production_env "$stage" || return 1
-  run_logged "npm ci در worktree موقت" bash -c "cd '$stage' && npm ci" || return 1
-  run_logged "Production build قبل از deploy" bash -c "cd '$stage' && npm run build" || return 1
+  run_logged "made env production Frontend in worktree" prepare_frontend_production_env "$stage" || return 1
+  run_logged "npm ci in worktree temporary" bash -c "cd '$stage' && npm ci" || return 1
+  run_logged "Production build before deploy" bash -c "cd '$stage' && npm run build" || return 1
   run_logged "Validate production Frontend environment" validate_frontend_production_build "$stage" || return 1
 
   if [[ -f "$stage/worker/Dockerfile" ]]; then
-    run_logged "Validation build Avatar Worker از source جدید" docker build -t "$validation_image" -f "$stage/worker/Dockerfile" "$stage/worker" || return 1
+    run_logged "Validation build Avatar Worker from source new" docker build -t "$validation_image" -f "$stage/worker/Dockerfile" "$stage/worker" || return 1
   fi
-  run_logged "Validate Docker Compose فعلی" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet" || return 1
+  run_logged "Validate Docker Compose current" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet" || return 1
 
-  info "آماده‌سازی Edge Functions جدید خارج از مسیر live..."
+  info "prepare Edge Functions New off the beaten path live..."
   mkdir -p "$functions_next"
   rsync -a --delete "${stage}/supabase/functions/" "${functions_next}/" >>"$CURRENT_LOG" 2>&1 || return 1
   rm -rf "${functions_next}/main"
@@ -164,21 +164,21 @@ update_spark() (
   diff -qr "${SUPABASE_SOURCE}/docker/volumes/functions/main" "${functions_next}/main" >>"$CURRENT_LOG" 2>&1 || return 1
   ok "Edge Functions staging validated"
 
-  info "آماده‌سازی Frontend جدید خارج از مسیر live..."
+  info "prepare Frontend New off the beaten path live..."
   mkdir -p "$frontend_next"
   rsync -a --delete "${stage}/dist/" "${frontend_next}/" >>"$CURRENT_LOG" 2>&1 || return 1
-  [[ -f "${frontend_next}/index.html" ]] || { fail "Frontend staging فاقد index.html است."; return 1; }
+  [[ -f "${frontend_next}/index.html" ]] || { fail "Frontend staging lacking index.html is."; return 1; }
   chown -R www-data:www-data "$frontend_next"
   ok "Frontend staging validated"
 
   if ! backup="$(create_update_runtime_backup "$old_sha" "$target_sha")"; then
-    fail "Backup runtime قبل از Update شکست خورد؛ هیچ deploy انجام نشد."
+    fail "Backup runtime before Update failed; none deploy not done."
     return 1
   fi
   ok "Runtime backup: ${backup}"
 
   if [[ "$old_sha" != "$target_sha" ]]; then
-    run_logged "Fast-forward /opt/spark به origin/main" git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
+    run_logged "Fast-forward /opt/spark to origin/main" git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
     source_advanced=1
   fi
 
@@ -188,13 +188,13 @@ update_spark() (
 
   if [[ -d "${SUPABASE_ROOT}/volumes/functions" ]]; then
     if ! mv "${SUPABASE_ROOT}/volumes/functions" "$functions_prev"; then
-      fail "انتقال runtime قبلی Functions شکست خورد."
+      fail "transmission runtime previous Functions failed."
       return 1
     fi
   fi
   if ! mv "$functions_next" "${SUPABASE_ROOT}/volumes/functions"; then
     [[ -d "$functions_prev" ]] && mv "$functions_prev" "${SUPABASE_ROOT}/volumes/functions" || true
-    fail "فعال‌سازی tree جدید Functions شکست خورد."
+    fail "Activation tree new Functions failed."
     return 1
   fi
   runtime_switched=1
@@ -203,19 +203,19 @@ update_spark() (
   if [[ -d /var/www/spark ]]; then
     if ! mv /var/www/spark "$frontend_prev"; then
       rollback_after_switch
-      fail "انتقال Frontend قبلی شکست خورد."
+      fail "transmission Frontend The previous one failed."
       return 1
     fi
   fi
   if ! mv "$frontend_next" /var/www/spark; then
     [[ -d "$frontend_prev" ]] && mv "$frontend_prev" /var/www/spark || true
     rollback_after_switch
-    fail "فعال‌سازی Frontend جدید شکست خورد."
+    fail "Activation Frontend New failed."
     return 1
   fi
   if ! chown -R www-data:www-data /var/www/spark; then
     rollback_after_switch
-    fail "تنظیم ownership Frontend شکست خورد."
+    fail "setting ownership Frontend failed."
     return 1
   fi
   ok "Frontend runtime tree switched atomically"
@@ -237,7 +237,7 @@ update_spark() (
     return 1
   fi
   if ! run_logged "Post-update core health validation" test_update_spark_validation; then
-    fail "Health validation شکست خورد."
+    fail "Health validation failed."
     rollback_after_switch
     return 1
   fi
@@ -245,11 +245,11 @@ update_spark() (
   update_success=1
   rm -rf "$functions_prev" "$frontend_prev"
   if [[ -f "${SPARK_ROOT}/deploy/spark-cli/spark" ]]; then
-    run_logged "به‌روزرسانی Spark Manager" install_manager_from_dir "${SPARK_ROOT}/deploy/spark-cli" || warn "برنامه Update شد ولی Spark Manager خودکار به‌روزرسانی نشد؛ log را بررسی کنید."
+    run_logged "Update Spark Manager" install_manager_from_dir "${SPARK_ROOT}/deploy/spark-cli" || warn "application Update but Spark Manager Auto update failed; log Check out."
   fi
 
-  ok "Update کامل شد."
-  printf 'Commit فعال: %s\n' "$(git -C "$SPARK_ROOT" rev-parse HEAD)"
+  ok "Update completed."
+  printf 'Commit active: %s\n' "$(git -C "$SPARK_ROOT" rev-parse HEAD)"
   printf 'Runtime backup: %s\n' "$backup"
   printf 'Log: %s\n' "$CURRENT_LOG"
 )

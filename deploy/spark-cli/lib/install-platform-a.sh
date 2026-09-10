@@ -130,20 +130,20 @@ install_step_9() {
   cp -a "${SUPABASE_ROOT}/docker-compose.yml" "$safety"
   [[ -f "$backup" ]] || cp -a "${SUPABASE_ROOT}/docker-compose.yml" "$backup"
 
-  if ! run_logged "اعمال تغییرات کنترل‌شده Docker Compose" patch_compose; then
+  if ! run_logged "Implement controlled changes Docker Compose" patch_compose; then
     cp -a "$safety" "${SUPABASE_ROOT}/docker-compose.yml"
     return 1
   fi
   if ! run_logged "docker compose config" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet"; then
-    warn "Compose نامعتبر شد؛ فایل قبلی restore شد."
+    warn "Compose became invalid; Previous file restore completed."
     cp -a "$safety" "${SUPABASE_ROOT}/docker-compose.yml"
     return 1
   fi
-  if run_logged "تست bindهای Loopback و Avatar Worker" test_compose_security; then
+  if run_logged "test binds Loopback and Avatar Worker" test_compose_security; then
     rm -f "$safety"
     mark_step 9
   else
-    warn "Security validation شکست خورد؛ فایل قبلی restore شد."
+    warn "Security validation failed; Previous file restore completed."
     cp -a "$safety" "${SUPABASE_ROOT}/docker-compose.yml"
     rm -f "$safety"
     unmark_step 9
@@ -234,7 +234,7 @@ install_step_10() {
   title
   new_log "install-10-supabase-start"
   run_logged "Validate Docker Compose" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet" || return 1
-  run_logged "Pull imageهای Supabase" bash -c "cd '$SUPABASE_ROOT' && docker compose pull" || return 1
+  run_logged "Pull images Supabase" bash -c "cd '$SUPABASE_ROOT' && docker compose pull" || return 1
   run_logged "Build Avatar Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose build --no-cache avatar-worker" || return 1
 
   run_logged "Start Supabase database preflight" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d db" || return 1
@@ -246,7 +246,7 @@ install_step_10() {
     sleep 2
   done
   if ! run_logged "Verify configured PostgreSQL password against active database" supabase_db_password_preflight; then
-    fail "Database volume با POSTGRES_PASSWORD فعلی سازگار نیست. برای ایمنی هیچ data volume ای حذف یا reset نشد."
+    fail "Database volume with POSTGRES_PASSWORD Current is not compatible. For safety none data volume O delete or reset failed."
     run_visible "Database status" bash -c "cd '$SUPABASE_ROOT' && docker compose ps db" || true
     run_visible "Database logs" bash -c "cd '$SUPABASE_ROOT' && docker compose logs --no-color --tail=80 db" || true
     unmark_step 10
@@ -254,7 +254,7 @@ install_step_10() {
   fi
 
   if ! supabase_bootstrap_ready; then
-    warn "Bootstrap داخلی Supabase ناقص است؛ فقط init scriptهای رسمی لازم برای service roles و Supavisor بازپخش می‌شوند."
+    warn "Bootstrap internal Supabase is incomplete; only init scriptOfficials required for service roles and Supavisor are replayed."
     run_logged "Repair interrupted Supabase bootstrap" repair_supabase_bootstrap || {
       unmark_step 10
       return 1
@@ -273,19 +273,19 @@ install_step_10() {
   }
 
   run_logged "Start Supabase stack" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d" || return 1
-  info "منتظر آماده‌شدن سرویس‌های اصلی Supabase (حداکثر ۹۰ ثانیه)..."
+  info "Waiting for main services to be ready Supabase (Max 90 seconds)..."
   local deadline=$((SECONDS + 90))
   while (( SECONDS < deadline )); do
     if supabase_core_ready; then
       mark_step 10
-      ok "سرویس‌های اصلی Supabase آماده هستند."
+      ok "Main services Supabase are ready."
       return 0
     fi
     sleep 3
   done
 
   unmark_step 10
-  warn "Supabase در مهلت readiness آماده نشد؛ وضعیت و log سرویس‌های مشکل‌دار ثبت می‌شود."
+  warn "Supabase within the deadline readiness was not prepared; status and log Problematic services are logged."
   report_supabase_start_failure
   return 1
 }
@@ -337,17 +337,17 @@ install_step_11() {
   require_manager_values || return 1
   local anon
   anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"
-  [[ -n "$anon" ]] || { fail "ANON_KEY موجود نیست."; return 1; }
+  [[ -n "$anon" ]] || { fail "ANON_KEY not available."; return 1; }
   env_set "${SPARK_ROOT}/.env.production" VITE_SUPABASE_URL "https://${API_DOMAIN}"
   env_set "${SPARK_ROOT}/.env.production" VITE_SUPABASE_ANON_KEY "$anon"
   chmod 600 "${SPARK_ROOT}/.env.production"
   run_logged "npm ci" bash -c "cd '$SPARK_ROOT' && npm ci" || return 1
   run_logged "Production build" bash -c "cd '$SPARK_ROOT' && npm run build" || return 1
-  run_logged "بررسی عدم افشای Secret و artifactهای امنیتی Frontend" test_frontend_build_security || return 1
+  run_logged "Non-disclosure check Secret and artifactSecurity Frontend" test_frontend_build_security || return 1
   mkdir -p /var/www/spark /var/www/acme
-  run_logged "Deploy frontend به /var/www/spark" rsync -a --delete "${SPARK_ROOT}/dist/" /var/www/spark/ || return 1
-  run_logged "تنظیم ownership وب" chown -R www-data:www-data /var/www/spark /var/www/acme || return 1
-  if run_logged "تست Frontend artifact و Nginx syntax" test_frontend_deploy; then
+  run_logged "Deploy frontend to /var/www/spark" rsync -a --delete "${SPARK_ROOT}/dist/" /var/www/spark/ || return 1
+  run_logged "setting ownership Web" chown -R www-data:www-data /var/www/spark /var/www/acme || return 1
+  if run_logged "test Frontend artifact and Nginx syntax" test_frontend_deploy; then
     mark_step 11
   else
     unmark_step 11

@@ -5,10 +5,10 @@ linux_update() {
   run_visible "apt upgrade" apt upgrade -y || return 1
   run_report "dpkg audit" dpkg --audit
   if [[ -f /var/run/reboot-required ]]; then
-    warn "برای تکمیل update، reboot لازم است."
+    warn "to complete update, reboot is required."
     cat /var/run/reboot-required.pkgs 2>/dev/null || true
   else
-    ok "Reboot اجباری گزارش نشده است."
+    ok "Reboot Mandatory not reported."
   fi
 }
 
@@ -16,8 +16,8 @@ npm_menu() {
   while true; do
     title
     printf '%sNode / npm Maintenance%s\n\n' "$C_BOLD" "$C_RESET"
-    printf '0) بازگشت\n1) نمایش Node/npm version\n2) Update npm global به شاخه 11\n3) npm ci\n4) npm audit کامل\n5) npm audit --omit=dev\n6) npm outdated\n7) npm audit fix --dry-run (بدون تغییر فایل)\n\n'
-    read -r -p "انتخاب: " c
+    printf '0) back\n1) show Node/npm version\n2) Update npm global to branch 11\n3) npm ci\n4) npm audit complete\n5) npm audit --omit=dev\n6) npm outdated\n7) npm audit fix --dry-run (without changing the file)\n\n'
+    read -r -p "selection: " c
     new_log "npm-maintenance"
     case "$c" in
       0) return ;;
@@ -28,7 +28,7 @@ npm_menu() {
       5) run_report "npm audit production" bash -c "cd '$SPARK_ROOT' && npm audit --omit=dev"; pause ;;
       6) run_report "npm outdated" bash -c "cd '$SPARK_ROOT' && npm outdated"; pause ;;
       7) run_report "npm audit fix dry-run" bash -c "cd '$SPARK_ROOT' && npm audit fix --dry-run"; pause ;;
-      *) fail "گزینه نامعتبر"; sleep 1 ;;
+      *) fail "Invalid option"; sleep 1 ;;
     esac
   done
 }
@@ -52,7 +52,7 @@ firewall_optional_allow_port() {
   if ufw_is_active; then
     run_logged "UFW allow TCP/${port}" ufw allow "${port}/tcp"
   else
-    warn "UFW فعال نیست؛ listener باز می‌شود اما محدودسازی شبکه بر عهده Firewall/ACL بیرونی سرور است."
+    warn "UFW not active; listener It opens, but the network is limited Firewall/ACL It is external to the server."
   fi
 }
 
@@ -156,9 +156,9 @@ show_database_connection_info() {
   public_ip="${TURN_PUBLIC_IP:-}"
   state="$(database_security_state)"
 
-  [[ -n "$password" ]] || { fail "POSTGRES_PASSWORD پیدا نشد."; return 1; }
+  [[ -n "$password" ]] || { fail "POSTGRES_PASSWORD not found."; return 1; }
   [[ -n "$tenant" && -n "$username" ]] || {
-    fail "POOLER_TENANT_ID در Supabase .env موجود نیست؛ اطلاعات اتصال Supavisor ناقص است."
+    fail "POOLER_TENANT_ID in Supabase .env not available; Connection information Supavisor It is incomplete."
     return 1
   }
 
@@ -176,13 +176,13 @@ show_database_connection_info() {
   printf 'SSL mode   : Disable (this managed TCP proxy is not TLS terminated)\n'
   printf '%s\n' '────────────────────────────────────────────────────────────'
   if database_external_is_open; then
-    info "برای pgAdmin از Public host، Port=5432 و Username بالا استفاده کنید."
+    info "for pgAdmin from Public host, Port=5432 and Username Use above."
   else
-    warn "Public DB access بسته است. برای اتصال مستقیم pgAdmin ابتدا گزینه Open Database access را اجرا کنید."
-    info "روش امن‌تر بدون بازکردن 5432: SSH tunnel به سرور و اتصال به 127.0.0.1:5433 با همین Username."
+    warn "Public DB access is closed. For direct connection pgAdmin First the option Open Database access run the."
+    info "Safer method without opening 5432: SSH tunnel to the server and connect to 127.0.0.1:5433 with that Username."
   fi
-  warn "Supavisor به tenant-aware username نیاز دارد؛ Username ساده postgres برای این مسیر صحیح نیست."
-  info "JWT_SECRET و SERVICE_ROLE_KEY نمایش داده نمی‌شوند و این خروجی در log نوشته نمی‌شود."
+  warn "Supavisor to tenant-aware username needs; Username simple postgres It is not correct for this path."
+  info "JWT_SECRET and SERVICE_ROLE_KEY are not displayed and this output in log It is not written."
 }
 
 show_studio_connection_info() {
@@ -191,7 +191,7 @@ show_studio_connection_info() {
   dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
   dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
   dashboard_user="${dashboard_user:-supabase}"
-  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD پیدا نشد."; return 1; }
+  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD not found."; return 1; }
   state="CLOSED"; studio_external_is_open && state="OPEN"
   printf '\n%s%sSupabase Studio access%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
   printf '%s\n' '────────────────────────────────────────────────────────────'
@@ -252,28 +252,28 @@ open_database_external_access() {
   local proxyd username
   external_access_requirements || return 1
   username="$(database_pooler_username)" || {
-    fail "POOLER_TENANT_ID موجود نیست؛ اتصال Supavisor قابل پیکربندی نیست."
+    fail "POOLER_TENANT_ID not available; Connection Supavisor Cannot be configured."
     return 1
   }
 
   if ! timeout 3 bash -c '</dev/tcp/127.0.0.1/5433' >/dev/null 2>&1; then
-    fail "Supavisor session endpoint روی 127.0.0.1:5433 در دسترس نیست."
+    fail "Supavisor session endpoint on 127.0.0.1:5433 not available."
     return 1
   fi
   if ! run_logged "Verify local Supavisor login" database_pooler_login_test 5433; then
-    fail "Supavisor پاسخ TCP دارد ولی authentication با Username=${username} شکست خورد؛ دسترسی عمومی باز نشد."
+    fail "Supavisor response TCP Yes, but authentication with Username=${username} failed; Public access was not opened."
     return 1
   fi
 
   if database_external_is_open && database_pooler_login_test 5432 >/dev/null 2>&1; then
-    ok "Database access از قبل باز و login آن تأیید شده است."
+    ok "Database access Already open and login It is confirmed."
     show_database_connection_info
     return 0
   fi
 
-  proxyd="$(find_systemd_socket_proxyd)" || { fail "systemd-socket-proxyd پیدا نشد."; return 1; }
-  if ! confirm_word "Database session access روی ${TURN_PUBLIC_IP:-<server-ip>}:5432 باز می‌شود. این پورت را پس از پایان کار ببندید." "OPEN"; then
-    warn "لغو شد."
+  proxyd="$(find_systemd_socket_proxyd)" || { fail "systemd-socket-proxyd not found."; return 1; }
+  if ! confirm_word "Database session access on ${TURN_PUBLIC_IP:-<server-ip>}:5432 opens. Close this port when finished." "OPEN"; then
+    warn "canceled."
     return 1
   fi
 
@@ -284,28 +284,28 @@ open_database_external_access() {
   run_logged "Open managed PostgreSQL TCP/5432" systemctl enable --now spark-db-access.socket || { cleanup_database_access_runtime; return 1; }
 
   if ! database_external_is_open; then
-    fail "Listener مدیریت‌شده 5432 ایجاد نشد؛ rollback انجام شد."
+    fail "Listener managed 5432 not created; rollback done."
     cleanup_database_access_runtime
     return 1
   fi
   if ! run_logged "Verify PostgreSQL login through public listener" database_pooler_login_test 5432; then
-    fail "Listener 5432 باز شد ولی login واقعی PostgreSQL شکست خورد؛ rollback انجام شد."
+    fail "Listener 5432 It opened but login actual PostgreSQL failed; rollback done."
     cleanup_database_access_runtime
     return 1
   fi
 
-  ok "Database access باز و authentication تأیید شد."
+  ok "Database access open and authentication Confirmed."
   show_database_connection_info
 }
 
 close_database_external_access() {
   cleanup_database_access_runtime
   if ss -lnt 2>/dev/null | grep -Eq '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):5432[[:space:]]'; then
-    fail "هنوز listener دیگری روی TCP/5432 وجود دارد."
+    fail "still listener the other on TCP/5432 there is."
     ss -lntp | grep ':5432' | tee -a "$CURRENT_LOG" || true
     return 1
   fi
-  ok "دسترسی خارجی Database بسته شد؛ Supavisor داخلی 127.0.0.1:5433 فعال باقی ماند."
+  ok "External access Database closed; Supavisor internal 127.0.0.1:5433 remained active."
 }
 
 resolve_cert_live_dir() {
@@ -353,23 +353,23 @@ open_supabase_studio_access() {
   local dashboard_user dashboard_password backup="" had_previous=0 cert_dir
   external_access_requirements || return 1
   cert_dir="$(resolve_cert_live_dir "$API_DOMAIN")" || {
-    fail "Certificate معتبر برای ${API_DOMAIN} پیدا نشد."
+    fail "Certificate Valid for ${API_DOMAIN} not found."
     return 1
   }
-  [[ -e /etc/nginx/sites-enabled/spark ]] || { fail "Production Nginx فعال نیست؛ ابتدا مرحله 14 را اجرا کنید."; return 1; }
+  [[ -e /etc/nginx/sites-enabled/spark ]] || { fail "Production Nginx not active; First step 14 run the."; return 1; }
 
   dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
   dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
   dashboard_user="${dashboard_user:-supabase}"
-  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD موجود نیست."; return 1; }
+  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD not available."; return 1; }
 
   if studio_external_is_open; then
-    ok "Supabase Studio از قبل روی HTTPS/8443 باز است."
+    ok "Supabase Studio already on HTTPS/8443 is open."
     show_studio_connection_info
     return 0
   fi
-  if ! confirm_word "Supabase Studio روی https://${API_DOMAIN}:8443 باز می‌شود." "OPEN"; then
-    warn "لغو شد."
+  if ! confirm_word "Supabase Studio on https://${API_DOMAIN}:8443 opens." "OPEN"; then
+    warn "canceled."
     return 1
   fi
 
@@ -391,7 +391,7 @@ open_supabase_studio_access() {
 
   if ! curl -fsSkL --connect-timeout 5 --max-time 15 --resolve "${API_DOMAIN}:8443:127.0.0.1" \
       -u "${dashboard_user}:${dashboard_password}" "https://${API_DOMAIN}:8443/" -o /dev/null; then
-    fail "Studio listener ایجاد شد ولی authentication/response معتبر نبود؛ rollback انجام می‌شود."
+    fail "Studio listener was created but authentication/response It was not valid; rollback is done."
     firewall_optional_close_port 8443
     rm -f /etc/nginx/sites-enabled/spark-supabase-admin
     if (( had_previous )); then cp -a "$backup" /etc/nginx/sites-available/spark-supabase-admin; else rm -f /etc/nginx/sites-available/spark-supabase-admin; fi
@@ -400,7 +400,7 @@ open_supabase_studio_access() {
     return 1
   fi
   rm -f "$backup"
-  ok "Supabase Studio باز و پاسخ آن تأیید شد."
+  ok "Supabase Studio Open and the answer is confirmed."
   show_studio_connection_info
 }
 
@@ -410,10 +410,10 @@ close_supabase_studio_access() {
   run_logged "Nginx config test" nginx -t || return 1
   run_logged "Reload Nginx" systemctl reload nginx || return 1
   if studio_external_is_open; then
-    fail "listener مدیریتی 8443 همچنان فعال است."
+    fail "listener managerial 8443 It is still active."
     return 1
   fi
-  ok "دسترسی خارجی Supabase Studio بسته شد."
+  ok "External access Supabase Studio closed."
 }
 
 security_status_report() {
@@ -439,7 +439,7 @@ security_status_report() {
 security_access_wait() {
   local _
   printf '\n'
-  read -r -p "برای بازگشت به Security Center Enter بزنید..." _
+  read -r -p "to return to Security Center Enter press..." _
 }
 
 open_supabase_admin_access() {
@@ -451,27 +451,27 @@ open_supabase_admin_access() {
     printf '%s%sSecurity Center%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
     printf '%s\n' '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     printf 'Database : %-24s  Studio : %s\n\n' "$db_state" "$studio_state"
-    printf '0) بازگشت\n'
-    printf '1) اطلاعات اتصال PostgreSQL / pgAdmin\n'
-    printf '2) تست واقعی Login دیتابیس (Local Supavisor)\n'
-    printf '3) باز کردن Database روی TCP/5432\n'
-    printf '4) بستن Database روی TCP/5432\n'
-    printf '5) اطلاعات اتصال Supabase Studio\n'
-    printf '6) باز کردن Supabase Studio روی HTTPS/8443\n'
-    printf '7) بستن Supabase Studio روی HTTPS/8443\n'
-    printf '8) گزارش وضعیت Security / Firewall\n\n'
-    read -r -p "انتخاب: " choice
+    printf '0) back\n'
+    printf '1) Connection information PostgreSQL / pgAdmin\n'
+    printf '2) Real test Login database (Local Supavisor)\n'
+    printf '3) open Database on TCP/5432\n'
+    printf '4) to close Database on TCP/5432\n'
+    printf '5) Connection information Supabase Studio\n'
+    printf '6) open Supabase Studio on HTTPS/8443\n'
+    printf '7) to close Supabase Studio on HTTPS/8443\n'
+    printf '8) Status report Security / Firewall\n\n'
+    read -r -p "selection: " choice
     case "$choice" in
       0) return 0 ;;
       1) show_database_connection_info || true; security_access_wait ;;
-      2) new_log "database-login-test"; if run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433; then ok "Login واقعی دیتابیس موفق است."; fi; security_access_wait ;;
+      2) new_log "database-login-test"; if run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433; then ok "Login The actual database is successful."; fi; security_access_wait ;;
       3) new_log "database-access-open"; open_database_external_access || true; security_access_wait ;;
       4) new_log "database-access-close"; close_database_external_access || true; security_access_wait ;;
       5) show_studio_connection_info || true; security_access_wait ;;
       6) new_log "supabase-studio-open"; open_supabase_studio_access || true; security_access_wait ;;
       7) new_log "supabase-studio-close"; close_supabase_studio_access || true; security_access_wait ;;
       8) security_status_report; security_access_wait ;;
-      *) fail "گزینه نامعتبر"; sleep 1 ;;
+      *) fail "Invalid option"; sleep 1 ;;
     esac
   done
 }
@@ -501,8 +501,8 @@ service_menu() {
   while true; do
     title
     printf '%sService Management%s\n\n' "$C_BOLD" "$C_RESET"
-    printf '0) بازگشت\n1) Status همه سرویس‌ها\n2) Restart Functions + Worker\n3) Reload Nginx\n4) Restart Coturn\n5) Restart Supabase stack\n6) Restart Scheduler timers\n\n'
-    read -r -p "انتخاب: " c
+    printf '0) back\n1) Status All services\n2) Restart Functions + Worker\n3) Reload Nginx\n4) Restart Coturn\n5) Restart Supabase stack\n6) Restart Scheduler timers\n\n'
+    read -r -p "selection: " c
     new_log "service-management"
     case "$c" in
       0) return ;;
@@ -510,9 +510,9 @@ service_menu() {
       2) run_visible "Restart Functions + Worker" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate functions avatar-worker" || true; pause ;;
       3) run_visible "Nginx test/reload" bash -c 'nginx -t && systemctl reload nginx' || true; pause ;;
       4) run_visible "Restart Coturn" systemctl restart coturn || true; pause ;;
-      5) if confirm_word "کل Supabase stack recreate/restart می‌شود و ممکن است چند لحظه اختلال ایجاد کند." "RESTART"; then run_visible "Restart Supabase stack" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate" || true; fi; pause ;;
+      5) if confirm_word "all Supabase stack recreate/restart It can and may cause disruption for a few moments." "RESTART"; then run_visible "Restart Supabase stack" bash -c "cd '$SUPABASE_ROOT' && docker compose up -d --force-recreate" || true; fi; pause ;;
       6) run_visible "Restart timers" bash -c 'systemctl restart spark-daily-report.timer spark-minutes-reminder.timer spark-decision-due.timer spark-notification-outbox.timer' || true; pause ;;
-      *) fail "گزینه نامعتبر"; sleep 1 ;;
+      *) fail "Invalid option"; sleep 1 ;;
     esac
   done
 }
@@ -521,15 +521,15 @@ certificate_menu() {
   while true; do
     title
     printf '%sCertificate Management%s\n\n' "$C_BOLD" "$C_RESET"
-    printf '0) بازگشت\n1) نمایش Certificateها\n2) Renewal dry-run\n3) اجرای certbot renew\n\n'
-    read -r -p "انتخاب: " c
+    printf '0) back\n1) show Certificates\n2) Renewal dry-run\n3) execution certbot renew\n\n'
+    read -r -p "selection: " c
     new_log "certificate-management"
     case "$c" in
       0) return ;;
       1) run_report "Certificates" certbot certificates; pause ;;
       2) run_visible "Renewal dry-run" certbot renew --dry-run || true; pause ;;
       3) run_visible "Certbot renew" certbot renew || true; pause ;;
-      *) fail "گزینه نامعتبر"; sleep 1 ;;
+      *) fail "Invalid option"; sleep 1 ;;
     esac
   done
 }

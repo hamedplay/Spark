@@ -12,7 +12,7 @@ ensure_studio_session_material() {
   dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
   dashboard_user="${dashboard_user:-supabase}"
   [[ -n "$dashboard_password" ]] || {
-    fail "DASHBOARD_PASSWORD برای Studio پیدا نشد."
+    fail "DASHBOARD_PASSWORD for Studio not found."
     return 1
   }
 
@@ -97,7 +97,7 @@ eval "$(declare -f close_supabase_studio_access | sed '1s/close_supabase_studio_
 close_supabase_studio_access() {
   close_supabase_studio_access_session_base || return 1
   remove_studio_session_material
-  ok "Sessionهای قبلی Supabase Studio باطل شدند."
+  ok "SessionThe previous ones Supabase Studio were invalidated."
 }
 
 # -----------------------------------------------------------------------------
@@ -259,16 +259,16 @@ spark_account_unlock() {
   local identifier candidate count user_id username email phone account_status locked_until events result
   require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
   if ! docker inspect -f '{{.State.Running}}' supabase-db 2>/dev/null | grep -qx true; then
-    fail "کانتینر supabase-db در حال اجرا نیست."
+    fail "Container supabase-db Not running."
     return 1
   fi
 
-  printf '\nشناسه کاربر را وارد کنید (username / email / phone): '
+  printf '\nEnter the user ID (username / email / phone): '
   IFS= read -r identifier
   identifier="${identifier#"${identifier%%[![:space:]]*}"}"
   identifier="${identifier%"${identifier##*[![:space:]]}"}"
-  [[ -n "$identifier" ]] || { fail "شناسه خالی است."; return 1; }
-  (( ${#identifier} <= 256 )) || { fail "شناسه بیش از حد طولانی است."; return 1; }
+  [[ -n "$identifier" ]] || { fail "ID is empty."; return 1; }
+  (( ${#identifier} <= 256 )) || { fail "ID is too long."; return 1; }
 
   candidate="$(docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -v identifier="$identifier" -AtF $'\t' <<'SQL'
 WITH input AS (
@@ -315,15 +315,15 @@ FROM candidates
 ORDER BY user_id
 LIMIT 3;
 SQL
-)" || { fail "جستجوی حساب در دیتابیس شکست خورد."; return 1; }
+)" || { fail "The account search in the database failed."; return 1; }
 
   count="$(printf '%s\n' "$candidate" | sed '/^$/d' | wc -l | tr -d ' ')"
   if [[ "$count" == "0" ]]; then
-    fail "کاربری با این username/email/phone پیدا نشد."
+    fail "User with this username/email/phone not found."
     return 1
   fi
   if [[ "$count" != "1" ]]; then
-    fail "این شناسه به بیش از یک حساب match شد؛ برای ایمنی هیچ تغییری انجام نشد."
+    fail "This ID belongs to more than one account match became; No changes were made for safety."
     printf '%s\n' "$candidate"
     return 1
   fi
@@ -332,7 +332,7 @@ SQL
   events="$(docker exec supabase-db psql -U postgres -d postgres -Atqc \
     "select count(*) from public.auth_lock_events where user_id = '${user_id}'::uuid" 2>/dev/null || true)"
 
-  printf '\n%s%sحساب پیدا شد%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+  printf '\n%s%sAccount found%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
   printf '%s\n' '────────────────────────────────────────────────────────────'
   printf 'User ID       : %s\n' "$user_id"
   printf 'Username      : %s\n' "${username:-—}"
@@ -342,10 +342,10 @@ SQL
   printf 'Locked until  : %s\n' "${locked_until:-—}"
   printf 'Lock events   : %s\n' "${events:-?}"
   printf '%s\n' '────────────────────────────────────────────────────────────'
-  info "اگر status برابر SUSPENDED یا RETIRED باشد، این ابزار آن را ACTIVE نمی‌کند؛ فقط lock ناشی از تلاش ورود را پاک می‌کند."
+  info "if status equal to SUSPENDED or RETIRED Well, this tool does it ACTIVE does not only lock Clears the result of a login attempt."
 
-  if ! confirm_word "قفل ورود و شمارنده تلاش‌های ناموفق این حساب reset شود؟" "UNLOCK"; then
-    warn "لغو شد؛ هیچ تغییری انجام نشد."
+  if ! confirm_word "Login lock and failed attempt counter for this account reset becomes?" "UNLOCK"; then
+    warn "canceled; No changes were made."
     return 1
   fi
 
@@ -365,17 +365,17 @@ SELECT count(*)::text
 FROM public.auth_lock_events
 WHERE user_id = :'user_id'::uuid;
 SQL
-)" || { fail "Unlock دیتابیس شکست خورد؛ transaction اعمال نشد."; return 1; }
+)" || { fail "Unlock The database failed; transaction Not applied."; return 1; }
 
   account_status="$(printf '%s\n' "$result" | sed -n '1p')"
   events="$(printf '%s\n' "$result" | sed -n '2p')"
   if [[ "$events" != "0" ]] || [[ "$account_status" == *$'\t'* && "$account_status" != *$'\tNULL' ]]; then
-    fail "Validation نهایی unlock موفق نبود."
+    fail "Validation final unlock It was not successful."
     printf '%s\n' "$result"
     return 1
   fi
 
-  ok "قفل ورود حساب با موفقیت reset شد."
+  ok "Account login lock successfully reset completed."
   printf 'Final state: %s | lock events: %s\n' "$account_status" "$events"
 }
 
@@ -390,21 +390,21 @@ open_supabase_admin_access() {
     printf '%s%sSecurity Center%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
     printf '%s\n' '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     printf 'Database : %-24s  Studio : %s\n\n' "$db_state" "$studio_state"
-    printf '0) بازگشت\n'
-    printf '1) اطلاعات اتصال PostgreSQL / pgAdmin\n'
-    printf '2) تست واقعی Login دیتابیس (Local Supavisor)\n'
-    printf '3) باز کردن Database روی TCP/5432\n'
-    printf '4) بستن Database روی TCP/5432\n'
-    printf '5) اطلاعات اتصال Supabase Studio\n'
-    printf '6) باز کردن Supabase Studio\n'
-    printf '7) بستن Supabase Studio\n'
-    printf '8) گزارش وضعیت Security / Firewall\n'
-    printf '9) رفع قفل حساب کاربری (username / email / phone)\n\n'
-    read -r -p "انتخاب: " choice
+    printf '0) back\n'
+    printf '1) Connection information PostgreSQL / pgAdmin\n'
+    printf '2) Real test Login database (Local Supavisor)\n'
+    printf '3) open Database on TCP/5432\n'
+    printf '4) to close Database on TCP/5432\n'
+    printf '5) Connection information Supabase Studio\n'
+    printf '6) open Supabase Studio\n'
+    printf '7) to close Supabase Studio\n'
+    printf '8) Status report Security / Firewall\n'
+    printf '9) Remove user account lock (username / email / phone)\n\n'
+    read -r -p "selection: " choice
     case "$choice" in
       0) return 0 ;;
       1) show_database_connection_info || true; security_access_wait ;;
-      2) new_log "database-login-test"; if run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433; then ok "Login واقعی دیتابیس موفق است."; fi; security_access_wait ;;
+      2) new_log "database-login-test"; if run_visible "PostgreSQL login through local Supavisor" database_pooler_login_test 5433; then ok "Login The actual database is successful."; fi; security_access_wait ;;
       3) new_log "database-access-open"; open_database_external_access || true; security_access_wait ;;
       4) new_log "database-access-close"; close_database_external_access || true; security_access_wait ;;
       5) show_studio_connection_info || true; security_access_wait ;;
@@ -412,7 +412,7 @@ open_supabase_admin_access() {
       7) new_log "supabase-studio-close"; close_supabase_studio_access || true; security_access_wait ;;
       8) security_status_report; security_access_wait ;;
       9) new_log "account-unlock"; spark_account_unlock || true; security_access_wait ;;
-      *) fail "گزینه نامعتبر"; sleep 1 ;;
+      *) fail "Invalid option"; sleep 1 ;;
     esac
   done
 }

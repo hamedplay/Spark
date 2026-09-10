@@ -22,7 +22,7 @@ install_step_12() {
   mkdir -p /var/www/acme
   chown -R www-data:www-data /var/www/acme
   if [[ -L /etc/nginx/sites-enabled/spark ]]; then
-    warn "Nginx Production از قبل فعال است؛ Bootstrap جایگزین نمی‌شود."
+    warn "Nginx Production It is already active; Bootstrap It is not replaced."
     if run_logged "Nginx syntax" nginx -t; then mark_step 12; return 0; else return 1; fi
   fi
   write_nginx_bootstrap
@@ -30,7 +30,7 @@ install_step_12() {
   rm -f /etc/nginx/sites-enabled/default
   run_logged "Nginx syntax" nginx -t || return 1
   run_logged "Reload Nginx" systemctl reload nginx || return 1
-  if systemctl is-active --quiet nginx; then mark_step 12; ok "Bootstrap Nginx فعال است."; else return 1; fi
+  if systemctl is-active --quiet nginx; then mark_step 12; ok "Bootstrap Nginx is active."; else return 1; fi
 }
 
 cert_live_dir_for_domain() {
@@ -59,11 +59,11 @@ install_step_13() {
   title
   new_log "install-13-certificates"
   require_manager_values || return 1
-  test_values || { fail "تنظیمات دامنه معتبر نیست؛ ابتدا مرحله 01 – Configuration را اصلاح کنید."; return 1; }
-  run_logged "Certificate دامنه Frontend" certbot certonly --webroot -w /var/www/acme -d "$APP_DOMAIN" -d "$WWW_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
-  run_logged "Certificate دامنه API" certbot certonly --webroot -w /var/www/acme -d "$API_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
-  run_logged "Certificate دامنه TURN" certbot certonly --webroot -w /var/www/acme -d "$TURN_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
-  if run_logged "تست Certificateها" test_certificates; then
+  test_values || { fail "Domain settings are not valid; First step 01 – Configuration correct the."; return 1; }
+  run_logged "Certificate domain Frontend" certbot certonly --webroot -w /var/www/acme -d "$APP_DOMAIN" -d "$WWW_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
+  run_logged "Certificate domain API" certbot certonly --webroot -w /var/www/acme -d "$API_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
+  run_logged "Certificate domain TURN" certbot certonly --webroot -w /var/www/acme -d "$TURN_DOMAIN" --email "$LE_EMAIL" --agree-tos --non-interactive --keep-until-expiring || return 1
+  if run_logged "test Certificates" test_certificates; then
     mark_step 13
   else
     unmark_step 13
@@ -74,11 +74,11 @@ install_step_13() {
 write_nginx_production() {
   local app_cert_dir api_cert_dir
   app_cert_dir="$(cert_live_dir_for_domain "$APP_DOMAIN")" || {
-    fail "Certificate معتبر برای ${APP_DOMAIN} پیدا نشد."
+    fail "Certificate Valid for ${APP_DOMAIN} not found."
     return 1
   }
   api_cert_dir="$(cert_live_dir_for_domain "$API_DOMAIN")" || {
-    fail "Certificate معتبر برای ${API_DOMAIN} پیدا نشد."
+    fail "Certificate Valid for ${API_DOMAIN} not found."
     return 1
   }
 
@@ -305,7 +305,7 @@ install_step_14() {
   title
   new_log "install-14-nginx-production"
   require_manager_values || return 1
-  test_certificates >>"$CURRENT_LOG" 2>&1 || { fail "Certificateها آماده نیستند؛ مرحله 13 – TLS certificates را اجرا کنید."; return 1; }
+  test_certificates >>"$CURRENT_LOG" 2>&1 || { fail "Certificateare not ready; stage 13 – TLS certificates run the."; return 1; }
   local old=""
   if [[ -f /etc/nginx/sites-available/spark ]]; then
     old="$(mktemp)"
@@ -333,11 +333,11 @@ install_step_14() {
     return 1
   fi
 
-  if run_logged "تست Nginx Production" wait_for_nginx_production; then
+  if run_logged "test Nginx Production" wait_for_nginx_production; then
     rm -f "$old"
     mark_step 14
   else
-    warn "Validation نسخه جدید Nginx ناموفق بود؛ config قبلی restore می‌شود."
+    warn "Validation New version Nginx It was unsuccessful; config previous restore will be."
     restore_previous_nginx_production "$old"
     rm -f "$old"
     unmark_step 14
@@ -482,17 +482,17 @@ install_step_15() {
   title
   new_log "install-15-schedulers"
 
-  run_logged "حذف Schedulerهای قبلی" remove_scheduler_units || return 1
-  run_logged "ایجاد مجدد Schedulerها" write_scheduler_units || return 1
+  run_logged "delete SchedulerThe previous ones" remove_scheduler_units || return 1
+  run_logged "recreate Schedulers" write_scheduler_units || return 1
   run_logged "systemd daemon-reload" systemctl daemon-reload || return 1
 
   local t
   while IFS= read -r t; do
     [[ -n "$t" ]] || continue
-    run_logged "فعال‌سازی ${t}" systemctl enable --now "$t" || return 1
+    run_logged "Activation ${t}" systemctl enable --now "$t" || return 1
   done < <(scheduler_timer_units)
 
-  if run_logged "تست Schedulerها" test_schedulers; then
+  if run_logged "test Schedulers" test_schedulers; then
     mark_step 15
   else
     unmark_step 15

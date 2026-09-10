@@ -305,25 +305,25 @@ install_step_3() {
   new_log "install-03-spark-repo"
   mkdir -p /opt
   if [[ -d "${SPARK_ROOT}/.git" ]]; then
-    run_logged "پاک‌سازی artifactهای runtime پروژه" cleanup_repository_runtime_artifacts || return 1
+    run_logged "clean up artifacts runtime project" cleanup_repository_runtime_artifacts || return 1
     if [[ -n "$(git -C "$SPARK_ROOT" status --porcelain)" ]]; then
-      fail "${SPARK_ROOT} تغییرات commit نشده در source دارد؛ برای جلوگیری از overwrite مرحله متوقف شد."
+      fail "${SPARK_ROOT} changes commit not in source has to prevent overwrite The stage stopped."
       git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
       return 1
     fi
-    run_logged "Fetch آخرین Spark main" git -C "$SPARK_ROOT" fetch origin main || return 1
+    run_logged "Fetch last Spark main" git -C "$SPARK_ROOT" fetch origin main || return 1
     run_logged "Checkout Spark main" git -C "$SPARK_ROOT" checkout main || return 1
     run_logged "Fast-forward Spark main" git -C "$SPARK_ROOT" pull --ff-only origin main || return 1
   elif [[ -e "$SPARK_ROOT" ]]; then
-    fail "${SPARK_ROOT} وجود دارد ولی Git repository نیست."
+    fail "${SPARK_ROOT} There is but Git repository is not."
     return 1
   else
-    run_logged "Clone آخرین Spark main" git clone --branch main --single-branch "$REPO_URL" "$SPARK_ROOT" || return 1
+    run_logged "Clone last Spark main" git clone --branch main --single-branch "$REPO_URL" "$SPARK_ROOT" || return 1
   fi
   if [[ -f "${SPARK_ROOT}/deploy/spark-cli/spark" ]]; then
-    run_logged "نصب/به‌روزرسانی Spark Manager" install_manager_from_dir "${SPARK_ROOT}/deploy/spark-cli" || return 1
+    run_logged "Installation/Update Spark Manager" install_manager_from_dir "${SPARK_ROOT}/deploy/spark-cli" || return 1
   fi
-  if run_logged "تست repository" test_spark_repo; then
+  if run_logged "test repository" test_spark_repo; then
     mark_step 3
   else
     unmark_step 3
