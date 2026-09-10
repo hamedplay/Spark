@@ -80,6 +80,7 @@ PY
 
   install -d -m 0755 /usr/local/lib
   stage="$(mktemp -d /usr/local/lib/spark-manager.new.XXXXXX)"
+  chmod 0755 "$stage"
   backup="/usr/local/lib/spark-manager.previous.$$"
   install -d -m 0755 "${stage}/lib" "${stage}/livekit"
   [[ -d "${source_dir}/../livekit" ]] || { fail "Spark LiveKit deployment assets not found next to manager source."; rm -rf "$stage"; return 1; }
@@ -99,6 +100,7 @@ PY
     rm -rf "$stage"
     return 1
   fi
+  chmod 0755 /usr/local/lib/spark-manager
   ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
 
   if ! version_output="$($CLI_PATH --version 2>/dev/null)" || [[ "$version_output" != "Spark Server Manager ${SPARK_MANAGER_VERSION}" ]]; then

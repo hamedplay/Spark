@@ -137,7 +137,8 @@ if (( preserve_control_plane == 1 )); then
   printf 'Preserving newer installed Spark Air-Gap Manager control plane; bundle application source remains pinned to %s.\n' "${spark_commit:0:12}"
 else
   stage="$(mktemp -d /usr/local/lib/spark-manager.airgap.XXXXXX)"
-  mkdir -p "$stage/lib" "$stage/livekit"
+  chmod 0755 "$stage"
+  install -d -m 0755 "$stage/lib" "$stage/livekit"
   install -m 0755 "$source_dir/spark" "$stage/spark"
   install -m 0755 "$source_dir/spark-airgap" "$stage/spark-airgap"
   install -m 0644 "$source_dir/spark-ui.py" "$stage/spark-ui.py"
@@ -146,11 +147,12 @@ else
   rsync -a --delete "$SPARK_ROOT/deploy/livekit/" "$stage/livekit/"
   rm -rf "$TARGET"
   mv "$stage" "$TARGET"
+  chmod 0755 "$TARGET"
   ln -sfn "$TARGET/spark" "$CLI_PATH"
   ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
 
   rm -rf "$MIGRATE_TARGET"
-  mkdir -p "$MIGRATE_TARGET"
+  install -d -m 0755 "$MIGRATE_TARGET"
   install -m 0755 "$source_dir/spark-migrate" "$MIGRATE_TARGET/spark-migrate"
   ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
 fi

@@ -211,6 +211,7 @@ fi
 
 stage="$(mktemp -d /usr/local/lib/spark-manager.new.XXXXXX)"
 migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
+chmod 0755 "$stage" "$migrate_stage"
 backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
 install -d -m 0755 "$stage/lib" "$stage/livekit"
@@ -256,6 +257,7 @@ if ! mv "$migrate_stage" "$MIGRATE_TARGET"; then
   rm -rf "$migrate_stage"
   exit 1
 fi
+chmod 0755 "$TARGET" "$MIGRATE_TARGET"
 ln -sfn "$TARGET/spark" "$CLI_PATH"
 ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
 ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
