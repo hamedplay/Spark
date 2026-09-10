@@ -79,6 +79,8 @@ def segment_translation(core):
     while core and core[-1] in '،؛؟':
         punctuation = core[-1].translate(PUNCT_TRANS) + punctuation
         core = core[:-1].rstrip()
+    if not core:
+        return punctuation
     if core in CACHE:
         return CACHE[core] + punctuation
     if core in MANUAL:
