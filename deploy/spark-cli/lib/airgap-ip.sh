@@ -593,40 +593,35 @@ install_step_14() {
 }
 
 test_turn() {
-  local escaped_ip probe_log deadline
+  local escaped_ip deadline
   escaped_ip="${AIRGAP_SERVER_IP//./\\.}"
-  probe_log="$(mktemp)"
 
   deadline=$((SECONDS + 10))
   while (( SECONDS < deadline )); do
     if systemctl is-active --quiet coturn \
       && ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)" \
       && ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
-      break
+      return 0
     fi
     sleep 1
   done
 
   if ! systemctl is-active --quiet coturn; then
     echo "ERROR: coturn.service is not active." >>"$CURRENT_LOG"
-    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
-    rm -f "$probe_log"
-    return 1
-  fi
-  if ! ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
+  elif ! ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
     echo "ERROR: Coturn UDP listener is not bound to ${AIRGAP_SERVER_IP}:3478." >>"$CURRENT_LOG"
-    ss -lunp >>"$CURRENT_LOG" 2>&1 || true
-    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
-    rm -f "$probe_log"
-    return 1
-  fi
-  if ! ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
+  elif ! ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
     echo "ERROR: Coturn TCP listener is not bound to ${AIRGAP_SERVER_IP}:3478." >>"$CURRENT_LOG"
-    ss -ltnp >>"$CURRENT_LOG" 2>&1 || true
-    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
-    rm -f "$probe_log"
-    return 1
   fi
+  ss -lunp >>"$CURRENT_LOG" 2>&1 || true
+  ss -ltnp >>"$CURRENT_LOG" 2>&1 || true
+  journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
+  return 1
+}
+
+test_turn_stun_probe() {
+  local probe_log
+  probe_log="$(mktemp)"
   if ! command -v turnutils_stunclient >/dev/null 2>&1; then
     echo "ERROR: turnutils_stunclient is not installed." >>"$CURRENT_LOG"
     rm -f "$probe_log"
@@ -637,8 +632,10 @@ test_turn() {
     rm -f "$probe_log"
     return 0
   fi
-  echo "ERROR: STUN binding request to ${AIRGAP_SERVER_IP}:3478 failed." >>"$CURRENT_LOG"
+  echo "ERROR: STUN binding request through the active firewall to ${AIRGAP_SERVER_IP}:3478 failed." >>"$CURRENT_LOG"
   cat "$probe_log" >>"$CURRENT_LOG" 2>&1 || true
+  ufw status verbose >>"$CURRENT_LOG" 2>&1 || true
+  ss -lunp >>"$CURRENT_LOG" 2>&1 || true
   journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
   rm -f "$probe_log"
   return 1
@@ -700,7 +697,7 @@ EOF_TURN
     journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
     return 1
   }
-  if run_logged "Validate internal TURN/STUN" test_turn; then mark_step 16; else unmark_step 16; return 1; fi
+  if run_logged "Validate internal TURN listeners" test_turn; then mark_step 16; else unmark_step 16; return 1; fi
 }
 
 test_certbot_hook() {
@@ -752,7 +749,13 @@ install_step_18() {
   run_logged "Allow TURN UDP" airgap_ip_ufw_allow 3478 udp || return 1
   run_logged "Allow TURN relay UDP" airgap_ip_ufw_allow "${TURN_MIN_PORT}:${TURN_MAX_PORT}" udp || return 1
   run_logged "Enable UFW" ufw --force enable || return 1
-  if run_logged "Validate internal-IP firewall/exposure" test_firewall; then mark_step 18; else unmark_step 18; return 1; fi
+  run_logged "Validate internal-IP firewall/exposure" test_firewall || { unmark_step 18; return 1; }
+  if run_logged "Validate STUN through internal-IP firewall" test_turn_stun_probe; then
+    mark_step 18
+  else
+    unmark_step 18
+    return 1
+  fi
 }
 
 airgap_full_preflight() {
