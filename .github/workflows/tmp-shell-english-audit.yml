@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/tmp-shell-english-audit.yml'
+      - '.github/scripts/tmp_translate_shells.py'
       - 'deploy/spark-cli/**'
   workflow_dispatch:
 
