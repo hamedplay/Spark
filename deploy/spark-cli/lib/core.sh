@@ -30,7 +30,7 @@ load_config
 
 pause() {
   printf '\n'
-  read -r -p "برای ادامه Enter بزنید..." _
+  read -r -p "Press Enter to continue..." _
 }
 
 clear_screen() {
@@ -58,7 +58,7 @@ new_log() {
 show_failure_log() {
   local log="${1:-$CURRENT_LOG}"
   [[ -f "$log" ]] || return 0
-  printf '\n%sآخرین خروجی خطا:%s\n' "$C_RED" "$C_RESET"
+  printf '\n%sLast error output:%s\n' "$C_RED" "$C_RESET"
   tail -n 80 "$log" || true
   printf '\nLog: %s\n' "$log"
 }
@@ -103,7 +103,7 @@ run_report() {
   if (( rc == 0 )); then
     ok "$label"
   else
-    warn "$label نتیجه هشدار/یافته دارد (exit=$rc)"
+    warn "$label completed with findings (exit=$rc)"
   fi
   return 0
 }
@@ -236,15 +236,15 @@ installation_status_report() {
   printf 'Installed     : %s\n' "${installed[*]:-none}"
   printf 'Not installed : %s\n' "${missing[*]:-none}"
   printf 'Total         : %d/18\n' "${#installed[@]}"
-  printf '\nActual = وضعیت واقعی همین سرور. History = این مرحله قبلاً توسط Manager با موفقیت ثبت شده است.\n'
+  printf '\nActual = current state detected on this server. History = the Manager previously recorded this step as successful.\n'
 }
 
 confirm_word() {
   local message="$1" _legacy_word="${2:-}" answer
   printf '%s\n' "$message"
-  printf '%s\n' '0) تأیید و ادامه'
-  printf '%s\n' 'Enter یا هر مقدار دیگر) لغو'
-  read -r -p "انتخاب: " answer
+  printf '%s\n' '0) Confirm and continue'
+  printf '%s\n' 'Press Enter or enter any other value to cancel'
+  read -r -p "Selection: " answer
   [[ "$answer" == "0" ]]
 }
 
@@ -301,52 +301,52 @@ configure_values_interactive() {
   ensure_values
   local v
   while true; do
-    prompt_default v "دامنه اصلی" "${APP_DOMAIN:-shahrmeeting.ir}"
+    prompt_default v "Primary domain" "${APP_DOMAIN:-shahrmeeting.ir}"
     valid_domain "$v" && { APP_DOMAIN="$v"; break; }
-    fail "دامنه معتبر نیست."
+    fail "The domain is invalid."
   done
   while true; do
-    prompt_default v "دامنه www" "${WWW_DOMAIN:-www.$APP_DOMAIN}"
+    prompt_default v "www domain" "${WWW_DOMAIN:-www.$APP_DOMAIN}"
     valid_domain "$v" && { WWW_DOMAIN="$v"; break; }
-    fail "دامنه معتبر نیست."
+    fail "The domain is invalid."
   done
   while true; do
-    prompt_default v "دامنه API" "${API_DOMAIN:-api.$APP_DOMAIN}"
+    prompt_default v "API domain" "${API_DOMAIN:-api.$APP_DOMAIN}"
     valid_domain "$v" && { API_DOMAIN="$v"; break; }
-    fail "دامنه معتبر نیست."
+    fail "The domain is invalid."
   done
   while true; do
-    prompt_default v "دامنه TURN" "${TURN_DOMAIN:-turn.$APP_DOMAIN}"
+    prompt_default v "TURN domain" "${TURN_DOMAIN:-turn.$APP_DOMAIN}"
     valid_domain "$v" && { TURN_DOMAIN="$v"; break; }
-    fail "دامنه معتبر نیست."
+    fail "The domain is invalid."
   done
   while true; do
-    prompt_default v "Public IPv4 سرور" "${TURN_PUBLIC_IP:-}"
+    prompt_default v "Server public IPv4" "${TURN_PUBLIC_IP:-}"
     valid_ipv4 "$v" && { TURN_PUBLIC_IP="$v"; break; }
-    fail "IPv4 معتبر نیست."
+    fail "The IPv4 address is invalid."
   done
   while true; do
-    prompt_default v "Private IPv4 سرور (اگر NAT ندارید همان Public IP)" "${TURN_PRIVATE_IP:-$TURN_PUBLIC_IP}"
+    prompt_default v "Server private IPv4 (use the public IPv4 when NAT is not used)" "${TURN_PRIVATE_IP:-$TURN_PUBLIC_IP}"
     valid_ipv4 "$v" && { TURN_PRIVATE_IP="$v"; break; }
-    fail "IPv4 معتبر نیست."
+    fail "The IPv4 address is invalid."
   done
   while true; do
-    prompt_default v "Email برای Let's Encrypt" "${LE_EMAIL:-}"
+    prompt_default v "Let's Encrypt email" "${LE_EMAIL:-}"
     valid_email "$v" && { LE_EMAIL="$v"; break; }
-    fail "Email معتبر نیست."
+    fail "The email address is invalid."
   done
   prompt_default TURN_MIN_PORT "TURN minimum relay port" "${TURN_MIN_PORT:-49160}"
   prompt_default TURN_MAX_PORT "TURN maximum relay port" "${TURN_MAX_PORT:-49200}"
   [[ "$TURN_MIN_PORT" =~ ^[0-9]+$ && "$TURN_MAX_PORT" =~ ^[0-9]+$ ]] || {
-    fail "پورت TURN باید عددی باشد."
+    fail "TURN ports must be numeric."
     return 1
   }
   (( TURN_MIN_PORT < TURN_MAX_PORT && TURN_MIN_PORT >= 1024 && TURN_MAX_PORT <= 65535 )) || {
-    fail "بازه TURN نامعتبر است."
+    fail "The TURN relay port range is invalid."
     return 1
   }
   save_config
-  ok "تنظیمات در ${MANAGER_CONF} ذخیره شد (mode 600)."
+  ok "Configuration saved to ${MANAGER_CONF} (mode 600)."
 }
 
 env_get() {
@@ -407,8 +407,8 @@ require_manager_values() {
     [[ -n "${!key:-}" ]] || missing+=("$key")
   done
   if ((${#missing[@]})); then
-    fail "این مقادیر تنظیم نشده‌اند: ${missing[*]}"
-    info "ابتدا مرحله 2 نصب را اجرا کنید."
+    fail "Required configuration values are missing: ${missing[*]}"
+    info "Run installation step 01 first."
     return 1
   fi
 }
@@ -417,9 +417,9 @@ require_manager_values() {
 install_manager_from_dir() {
   local source_dir="$1"
   local stage backup module
-  [[ -f "${source_dir}/spark" ]] || { fail "Spark Manager entrypoint پیدا نشد: ${source_dir}/spark"; return 1; }
+  [[ -f "${source_dir}/spark" ]] || { fail "Spark Manager entrypoint was not found: ${source_dir}/spark"; return 1; }
   for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin; do
-    [[ -f "${source_dir}/lib/${module}.sh" ]] || { fail "Spark Manager module پیدا نشد: ${module}.sh"; return 1; }
+    [[ -f "${source_dir}/lib/${module}.sh" ]] || { fail "Spark Manager module was not found: ${module}.sh"; return 1; }
   done
   bash -n "${source_dir}/spark" || return 1
   for module in "${source_dir}"/lib/*.sh; do bash -n "$module" || return 1; done
@@ -462,3 +462,10 @@ db_url() {
   encoded="$(db_password_encoded)" || return 1
   printf 'postgresql://postgres:%s@127.0.0.1:5433/postgres\n' "$encoded"
 }
+
+# Apply the English-only policy after the base helpers are defined. This keeps
+# all operational modules on the same shared prompts/status helpers while the
+# Python UI provides a final rendering guard for direct legacy output.
+if [[ -r "${SCRIPT_DIR}/lib/english-ui.sh" ]]; then
+  source "${SCRIPT_DIR}/lib/english-ui.sh"
+fi
