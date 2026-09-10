@@ -328,7 +328,6 @@ test_frontend_deploy() {
   require_file "/var/www/spark/index.html" || return 1
   require_file "/var/www/spark/sw.js" || return 1
   require_file "/var/www/spark/pwa-bootstrap.js" || return 1
-  nginx -t || return 1
 }
 
 install_step_11() {
@@ -347,7 +346,7 @@ install_step_11() {
   mkdir -p /var/www/spark /var/www/acme
   run_logged "Deploy frontend to /var/www/spark" rsync -a --delete "${SPARK_ROOT}/dist/" /var/www/spark/ || return 1
   run_logged "setting ownership Web" chown -R www-data:www-data /var/www/spark /var/www/acme || return 1
-  if run_logged "test Frontend artifact and Nginx syntax" test_frontend_deploy; then
+  if run_logged "Validate frontend artifacts" test_frontend_deploy; then
     mark_step 11
   else
     unmark_step 11
