@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Spark Server Manager v2 single-screen curses UI.
+"""Spark Server Manager v3.1 single-screen curses UI.
 
 The renderer owns the terminal for the entire session. Operational Bash functions
 run in a child PTY so their output and interactive prompts stay inside the lower
@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-SPARK_UI_VERSION = "2.1.0+20260821.1"
+SPARK_UI_VERSION = "3.1.0+20260910.1"
 STATE_DIR = Path("/var/lib/spark-manager")
 STEP_DIR = STATE_DIR / "steps"
 LOG_DIR = Path("/var/log/spark-manager")
@@ -129,17 +129,18 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
         Action("@recent-logs", "Recent manager logs", "Browse manager logs in the dashboard.", special="logs"),
     ]),
     ("Cleanup / Remove", [
-        Action("cleanup-database", "Delete Database data", "Stop Supabase and delete only the detected PostgreSQL data bind. Refuses to guess the data path.", "confirm"),
-        Action("cleanup-supabase", "Delete Supabase runtime", "Delete the complete local Supabase runtime, volumes/data, runtime config and runtime secrets.", "confirm"),
-        Action("cleanup-frontend", "Delete deployed Frontend", "Delete /var/www/spark only; the local source repository remains.", "confirm"),
-        Action("cleanup-source", "Delete Spark source", "Delete the local /opt/spark repository; GitHub and the installed Manager remain.", "confirm"),
-        Action("cleanup-logs", "Delete Manager logs", "Delete Spark Manager logs only; system journal and Docker logs are not touched.", "confirm"),
-        Action("cleanup-backups", "Delete all Backups", "Delete every retained Spark backup under /var/backups/spark.", "confirm"),
-        Action("cleanup-history", "Reset install History", "Clear install-step DONE markers. Actual probes and runtime data are not changed.", "confirm"),
-        Action("cleanup-full", "Delete complete Spark project", "Remove all Spark-specific runtime/data/config/certs/schedulers/TURN/source/logs/backups while keeping Manager and shared OS packages.", "confirm"),
-        Action("cleanup-manager", "Uninstall Spark Manager", "Remove /usr/local/bin/spark and the installed Manager only; project/runtime is left untouched.", "confirm"),
-    ]),
-    ("Certificates", [
+    Action("cleanup-database", "Delete Database data", "Stop Supabase and delete only the detected PostgreSQL data bind. The operation refuses to guess the data path.", "confirm"),
+    Action("cleanup-supabase", "Delete Supabase runtime", "Delete the complete local Supabase runtime, volumes/data, runtime configuration and runtime secrets.", "confirm"),
+    Action("cleanup-frontend", "Delete deployed Frontend", "Delete /var/www/spark only; the local Spark source repository remains.", "confirm"),
+    Action("cleanup-source", "Delete Spark source", "Delete the local /opt/spark repository; GitHub and the installed Spark Manager remain.", "confirm"),
+    Action("cleanup-logs", "Delete Manager logs", "Delete Spark Manager logs only; system journal and Docker logs are not changed.", "confirm"),
+    Action("cleanup-backups", "Backup cleanup / free space", "Safely prune old Spark backups with a configurable retention period, or explicitly delete all retained backups.", "confirm"),
+    Action("cleanup-history", "Reset install history", "Clear installation-step DONE markers only. Runtime data and live service state are not changed.", "confirm"),
+    Action("cleanup-livekit", "Delete LiveKit runtime", "Remove only the LiveKit runtime and secrets, then restore the legacy Coturn fallback.", "confirm"),
+    Action("cleanup-full", "Delete complete Spark project", "Remove Spark-specific runtime, data, configuration, certificates, schedulers, TURN, source, logs and backups while keeping the Manager and shared OS packages.", "confirm"),
+    Action("cleanup-manager", "Uninstall Spark Manager", "Remove the installed Spark Manager and /usr/local/bin/spark only; the project runtime is left untouched.", "confirm"),
+]),
+("Certificates", [
         Action("cert-list", "List certificates", "Show Certbot-managed certificates."),
         Action("cert-dry-run", "Renewal dry-run", "Validate certificate renewal without changing certificates."),
         Action("cert-renew", "Run certbot renew", "Run the production certificate renewal command.", "controlled"),
@@ -854,7 +855,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def self_test() -> int:
-    assert SPARK_UI_VERSION == "2.1.0+20260821.1"
+    assert SPARK_UI_VERSION == "3.1.0+20260910.1"
     assert len(CATEGORIES) >= 9
     ids = {a.action_id for _, actions in CATEGORIES for a in actions if not a.special}
     required = {"diagnostic-full", "diagnostic-installation-status", "app-update", "install-all", "manager-update", "admin-open", "cleanup-database", "cleanup-full", "cleanup-manager"}

@@ -8,8 +8,8 @@ CLI_PATH="/usr/local/bin/spark"
 AIRGAP_CLI_PATH="/usr/local/bin/spark-airgap"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
-EXPECTED_VERSION="3.0.0"
-EXPECTED_UI_VERSION="3.0.0"
+EXPECTED_VERSION="3.1.0+20260910.1"
+EXPECTED_UI_VERSION="3.1.0+20260910.1"
 EXPECTED_MIGRATE_VERSION="1.1.0+20260822.2"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
@@ -159,6 +159,10 @@ grep -q 'airgap_waf_write_nginx_production_with_duplicate_server_tokens' "$tmp/l
 }
 grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$tmp/spark-ui.py" || {
   echo "Spark UI version validation failed." >&2
+  exit 1
+}
+grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$tmp/spark-ui-core.py" || {
+  echo "Spark UI core version validation failed." >&2
   exit 1
 }
 grep -q 'SPARK_MIGRATE_VERSION="1.1.0+20260822.2"' "$tmp/spark-migrate" || {

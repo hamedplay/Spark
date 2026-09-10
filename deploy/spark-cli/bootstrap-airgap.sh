@@ -8,7 +8,8 @@ CLI_PATH=/usr/local/bin/spark
 AIRGAP_CLI_PATH=/usr/local/bin/spark-airgap
 MIGRATE_PATH=/usr/local/bin/spark-migrate
 SPARK_ROOT=/opt/spark
-EXPECTED_VERSION="3.0.0"
+EXPECTED_VERSION="3.1.0+20260910.1"
+EXPECTED_UI_VERSION="3.1.0+20260910.1"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
@@ -129,6 +130,8 @@ for value in sys.argv[1:]:
     compile(Path(value).read_text(encoding='utf-8'), value, 'exec')
 PY
 python3 "$source_dir/spark-ui.py" --self-test
+grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$source_dir/spark-ui.py" || { echo "Unexpected Spark UI adapter version." >&2; exit 1; }
+grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$source_dir/spark-ui-core.py" || { echo "Unexpected Spark UI core version." >&2; exit 1; }
 
 if (( preserve_control_plane == 1 )); then
   printf 'Preserving newer installed Spark Air-Gap Manager control plane; bundle application source remains pinned to %s.\n' "${spark_commit:0:12}"

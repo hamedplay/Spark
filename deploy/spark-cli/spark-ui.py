@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-SPARK_UI_VERSION = "3.0.0"
+SPARK_UI_VERSION = "3.1.0+20260910.1"
 # Compatibility strings used by the existing manager self-test:
 # pty.openpty()
 # curses.doupdate()
@@ -422,7 +422,8 @@ def english_only_task_process_read_available(self):
 
 
 def logical_self_test() -> int:
-    assert SPARK_UI_VERSION == "3.0.0"
+    assert SPARK_UI_VERSION == "3.1.0+20260910.1"
+    assert core.SPARK_UI_VERSION == SPARK_UI_VERSION
     assert len(core.CATEGORIES) >= 10
     ids = {a.action_id for _, actions in core.CATEGORIES for a in actions if not a.special}
     required = {
