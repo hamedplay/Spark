@@ -1,0 +1,61 @@
+name: Temporary Fix Bootstrap AirGap IP
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-bootstrap-airgap-ip.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch bootstrap for Internal-IP Air-Gap architecture
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('deploy/spark-cli/bootstrap.sh')
+          text = path.read_text(encoding='utf-8')
+
+          old_files = '''  lib/airgap-target-patch.sh\n  lib/airgap-auto.sh\n  lib/airgap-waf.sh\n  lib/airgap-waf-nginx-fix.sh\n'''
+          new_files = '''  lib/airgap-target-patch.sh\n  lib/airgap-auto.sh\n  lib/airgap-ip.sh\n'''
+          if old_files not in text:
+              raise SystemExit('Old Air-Gap bootstrap file list not found')
+          text = text.replace(old_files, new_files, 1)
+
+          old_checks = '''grep -q 'airgap-waf' "$tmp/spark-airgap" || {\n  echo "Spark Air-Gap external WAF module is not loaded." >&2\n  exit 1\n}\ngrep -q 'airgap_waf_enabled' "$tmp/lib/airgap-waf.sh" || {\n  echo "Spark Air-Gap external WAF mode is incomplete." >&2\n  exit 1\n}\ngrep -q 'airgap_waf_write_nginx_production_with_duplicate_server_tokens' "$tmp/lib/airgap-waf-nginx-fix.sh" || {\n  echo "Spark Air-Gap WAF Nginx compatibility fix is missing." >&2\n  exit 1\n}\n'''
+          new_checks = '''grep -q 'airgap-ip' "$tmp/spark-airgap" || {\n  echo "Spark Air-Gap internal-IP module is not loaded." >&2\n  exit 1\n}\ngrep -Fq 'AIRGAP_IP_MODE="internal_ip"' "$tmp/lib/airgap-ip.sh" || {\n  echo "Spark Air-Gap internal-IP deployment mode is incomplete." >&2\n  exit 1\n}\n'''
+          if old_checks not in text:
+              raise SystemExit('Old WAF validation block not found')
+          text = text.replace(old_checks, new_checks, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate patched bootstrap
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n deploy/spark-cli/bootstrap.sh
+          grep -Fq 'lib/airgap-ip.sh' deploy/spark-cli/bootstrap.sh
+          ! grep -Fq 'lib/airgap-waf.sh' deploy/spark-cli/bootstrap.sh
+          ! grep -Fq 'lib/airgap-waf-nginx-fix.sh' deploy/spark-cli/bootstrap.sh
+          grep -Fq 'Spark Air-Gap internal-IP module is not loaded.' deploy/spark-cli/bootstrap.sh
+          git diff --check
+
+      - name: Commit minimal fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/bootstrap.sh
+          git commit -m 'fix(manager): align bootstrap with internal-IP Air-Gap mode'
+          git push origin HEAD:main
