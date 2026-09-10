@@ -190,6 +190,7 @@ test_supabase_env() {
     value="$(env_get "$file" "$key")"
     is_placeholder_value "$value" && return 1
   done
+  return 0
 }
 
 install_step_6() {
