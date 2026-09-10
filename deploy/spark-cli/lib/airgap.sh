@@ -228,6 +228,19 @@ for item in sys.argv[1:]: compile(Path(item).read_text(encoding='utf-8'), item, 
 PY
   python3 "${source_dir}/spark-ui.py" --self-test >/dev/null || return 1
 
+  # The installed Manager is the Air-Gap control plane. Do not downgrade it to
+  # the application snapshot embedded in an older offline bundle during step 03.
+  if [[ -x /usr/local/bin/spark && -x /usr/local/bin/spark-airgap && -x /usr/local/bin/spark-migrate ]]; then
+    local installed_manager_version installed_airgap_version
+    installed_manager_version="$(/usr/local/bin/spark --version 2>/dev/null || true)"
+    installed_airgap_version="$(/usr/local/bin/spark-airgap --version 2>/dev/null || true)"
+    if [[ "$installed_manager_version" == "Spark Server Manager ${SPARK_MANAGER_VERSION}" \
+          && "$installed_airgap_version" == "Spark Air-Gapped Installer ${SPARK_MANAGER_VERSION}" ]]; then
+      info "Preserving current Spark Manager control plane ${SPARK_MANAGER_VERSION}; bundled Spark application source remains pinned to its verified snapshot."
+      return 0
+    fi
+  fi
+
   stage="$(mktemp -d /usr/local/lib/spark-manager.airgap.XXXXXX)"
   chmod 0755 "$stage"
   install -d -m 0755 "$stage/lib" "$stage/livekit"
