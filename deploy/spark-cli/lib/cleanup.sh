@@ -8,13 +8,13 @@ cleanup_unmark_steps() {
 cleanup_find_database_data_bind() {
   local rendered output rc
   [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || {
-    fail "docker-compose.yml not available; path Database Not recognizable." >&2
+    fail "docker-compose.yml is missing; the database data path cannot be determined." >&2
     return 1
   }
   rendered="$(mktemp)"
   if ! compose config --format json >"$rendered" 2>>"$CURRENT_LOG"; then
     rm -f "$rendered"
-    fail "Compose The current cannot be analyzed; remove Database Stopped to avoid guesswork." >&2
+    fail "The current Compose configuration cannot be analyzed; database deletion was stopped to avoid guessing." >&2
     return 1
   fi
 
@@ -63,7 +63,7 @@ PY
   set -e
   rm -f "$rendered"
   if (( rc != 0 )) || [[ -z "$output" ]]; then
-    fail "Mount The database cannot be identified with certainty; Nothing was deleted." >&2
+    fail "The database mount cannot be identified with certainty; nothing was deleted." >&2
     return 1
   fi
   printf '%s\n' "$output"
@@ -74,29 +74,29 @@ cleanup_database_data() {
   new_log "cleanup-database"
   db_data="$(cleanup_find_database_data_bind)" || return 1
   info "PostgreSQL data path: ${db_data}"
-  if ! confirm_word "This operation all the data PostgreSQL deletes and Supabase stops. To rebuild Runtime Must step 11 Run it again; migration Database only from the independent path spark-migrate is done." "DELETE-DATABASE"; then
-    warn "delete Database canceled."
+  if ! confirm_word "This operation deletes all PostgreSQL data and stops Supabase. To rebuild the runtime, run installation step 11 again. Database migrations are handled separately through spark-migrate." "DELETE-DATABASE"; then
+    warn "Database deletion cancelled."
     return 1
   fi
 
   close_database_external_access >/dev/null 2>&1 || true
   close_supabase_studio_access >/dev/null 2>&1 || true
-  run_logged "Stop Supabase before Database wipe" compose down --remove-orphans || return 1
-  [[ -n "$db_data" && "$db_data" != "/" ]] || { fail "path Database It is unsafe; Delete stopped."; return 1; }
+  run_logged "Stop Supabase before database wipe" compose down --remove-orphans || return 1
+  [[ -n "$db_data" && "$db_data" != "/" ]] || { fail "The database path is unsafe; deletion was stopped."; return 1; }
   rm -rf -- "$db_data"
   if [[ -e "$db_data" ]]; then
-    fail "Database data path Not deleted."
+    fail "The database data path could not be deleted."
     return 1
   fi
   cleanup_unmark_steps 11
   rm -f "${STEP_DIR}/12.ok"  # legacy marker from removed install step
-  ok "Database PostgreSQL Completely deleted. Runtime is stopped; To rebuild the steps 11 and 12 run the."
+  ok "PostgreSQL database data was completely deleted. The runtime is stopped; run installation steps 11 and 12 to rebuild it."
 }
 
 cleanup_supabase_runtime() {
   new_log "cleanup-supabase-runtime"
-  if ! confirm_word "This whole operation Runtime local Supabase including Database, Storage/runtime data, Compose config and Secretinside /opt/spark-supabase deletes." "DELETE-SUPABASE"; then
-    warn "delete Supabase Runtime canceled."
+  if ! confirm_word "This operation deletes the complete local Supabase runtime, including the database, Storage/runtime data, Compose configuration, and secrets under /opt/spark-supabase." "DELETE-SUPABASE"; then
+    warn "Supabase runtime deletion cancelled."
     return 1
   fi
 
@@ -106,45 +106,45 @@ cleanup_supabase_runtime() {
     compose down --volumes --remove-orphans >>"$CURRENT_LOG" 2>&1 || true
   fi
   rm -rf -- "$SUPABASE_ROOT"
-  [[ ! -e "$SUPABASE_ROOT" ]] || { fail "${SUPABASE_ROOT} Not deleted."; return 1; }
+  [[ ! -e "$SUPABASE_ROOT" ]] || { fail "${SUPABASE_ROOT} could not be deleted."; return 1; }
   cleanup_unmark_steps 5 6 7 8 9 10 11 12
-  ok "Supabase Runtime deleted. Source pin in ${SUPABASE_SOURCE} was kept."
+  ok "Supabase runtime was deleted. The source pin at ${SUPABASE_SOURCE} was preserved."
 }
 
 cleanup_frontend_deploy() {
   new_log "cleanup-frontend"
-  if ! confirm_word "This operation only Frontend deploy been in /var/www/spark deletes; Source repository remains." "DELETE-FRONTEND"; then
-    warn "delete Frontend canceled."
+  if ! confirm_word "This operation deletes only the deployed frontend at /var/www/spark. The source repository will remain intact." "DELETE-FRONTEND"; then
+    warn "Frontend deletion cancelled."
     return 1
   fi
   rm -rf -- /var/www/spark
   cleanup_unmark_steps 13
-  [[ ! -e /var/www/spark ]] || { fail "Frontend deploy Not deleted."; return 1; }
-  ok "Frontend deploy deleted."
+  [[ ! -e /var/www/spark ]] || { fail "The frontend deployment could not be deleted."; return 1; }
+  ok "Frontend deployment was deleted."
 }
 
 cleanup_spark_source() {
   new_log "cleanup-spark-source"
-  if ! confirm_word "This operation Source repository local Spark in /opt/spark completely removes. GitHub and Spark Manager are not deleted." "DELETE-SOURCE"; then
-    warn "delete Source canceled."
+  if ! confirm_word "This operation completely deletes the local Spark source repository at /opt/spark. GitHub and Spark Manager are not affected." "DELETE-SOURCE"; then
+    warn "Spark source deletion cancelled."
     return 1
   fi
   rm -rf -- "$SPARK_ROOT"
   cleanup_unmark_steps 4 8 12 13
-  [[ ! -e "$SPARK_ROOT" ]] || { fail "${SPARK_ROOT} Not deleted."; return 1; }
-  ok "Spark source repository Locally deleted."
+  [[ ! -e "$SPARK_ROOT" ]] || { fail "${SPARK_ROOT} could not be deleted."; return 1; }
+  ok "The local Spark source repository was deleted."
 }
 
 cleanup_manager_logs() {
   new_log "cleanup-logs"
-  if ! confirm_word "all logs Spark Manager in ${LOG_DIR} are deleted. Journal system and Docker logThey are not manipulated." "DELETE-LOGS"; then
-    warn "delete Logwas canceled."
+  if ! confirm_word "All Spark Manager logs under ${LOG_DIR} will be deleted. System journal entries and Docker logs will not be modified." "DELETE-LOGS"; then
+    warn "Log deletion cancelled."
     return 1
   fi
   find "$LOG_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true
   mkdir -p "$LOG_DIR"
   chmod 700 "$LOG_DIR"
-  ok "Spark Manager logwere deleted."
+  ok "Spark Manager logs were deleted."
 }
 
 cleanup_prune_backups() {
@@ -152,7 +152,7 @@ cleanup_prune_backups() {
   local -a candidates=()
 
   [[ "$days" =~ ^[0-9]+$ ]] && (( days >= 1 && days <= 3650 )) || {
-    fail "Retention Must be a number between 1 until 3650 be day."
+    fail "Retention must be a number between 1 and 3650 days."
     return 2
   }
 
@@ -200,7 +200,7 @@ for path in sorted(candidates, key=lambda p: p.stat().st_mtime):
 PY
   then
     rm -f "$candidates_file"
-    fail "analysis Backupfailed for styling."
+    fail "Backup analysis failed; no backups were deleted."
     return 1
   fi
 
@@ -208,15 +208,15 @@ PY
   rm -f "$candidates_file"
 
   if (( ${#candidates[@]} == 0 )); then
-    ok "Backup Can be deleted with Retention ${days} The day was not found."
-    info "latest Backup folder, latest PostgreSQL dump And the latest Storage archive They are always protected."
+    ok "No backups older than ${days} days are eligible for deletion."
+    info "The newest directory backup, newest PostgreSQL dump, and newest Storage archive are always protected."
     return 0
   fi
 
-  printf '\nBackupcan be removed (older than %s days):\n\n' "$days"
+  printf '\nBackups eligible for deletion (older than %s days):\n\n' "$days"
   for path in "${candidates[@]}"; do
     [[ "$path" == "$BACKUP_DIR/"* && "$path" != "$BACKUP_DIR" ]] || {
-      fail "path Backup was found to be unsafe; Nothing was deleted: $path"
+      fail "Unsafe backup path detected; nothing was deleted: $path"
       return 1
     }
     bytes="$(du -sb -- "$path" 2>/dev/null | awk '{print $1}')"
@@ -226,26 +226,26 @@ PY
     printf '  %-10s %s\n' "$(du -sh -- "$path" 2>/dev/null | awk '{print $1}')" "$path"
   done
 
-  printf '\nnumber: %d\n' "$count"
-  printf 'Free space: %s\n' "$(numfmt --to=iec-i --suffix=B "$total_bytes" 2>/dev/null || printf '%s bytes' "$total_bytes")"
-  info "only Backupinside ${BACKUP_DIR} are checked; live data Supabase/PostgreSQL It cannot be manipulated."
-  info "latest Backup from each group (directory, PostgreSQL dump, Storage archive) Even if it is old, it is kept."
+  printf '\nCount: %d\n' "$count"
+  printf 'Reclaimable space: %s\n' "$(numfmt --to=iec-i --suffix=B "$total_bytes" 2>/dev/null || printf '%s bytes' "$total_bytes")"
+  info "Only backups under ${BACKUP_DIR} are inspected; live Supabase/PostgreSQL data is never modified by this action."
+  info "The newest backup from each group (directory, PostgreSQL dump, Storage archive) is preserved even when it is old."
 
-  if ! confirm_word "BackupDelete the listed ones?" "PRUNE-BACKUPS"; then
-    warn "stylization Backupwas canceled."
+  if ! confirm_word "Delete the listed backups?" "PRUNE-BACKUPS"; then
+    warn "Backup cleanup cancelled."
     return 1
   fi
 
   for path in "${candidates[@]}"; do
     [[ "$path" == "$BACKUP_DIR/"* && "$path" != "$BACKUP_DIR" ]] || {
-      fail "path Backup It is unsafe; Delete stopped: $path"
+      fail "Unsafe backup path detected; deletion was stopped: $path"
       return 1
     }
     rm -rf -- "$path"
   done
 
-  ok "${count} Backup The old one was deleted."
-  info "Approximate freed space: $(numfmt --to=iec-i --suffix=B "$total_bytes" 2>/dev/null || printf '%s bytes' "$total_bytes")"
+  ok "${count} old backup(s) were deleted."
+  info "Approximate reclaimed space: $(numfmt --to=iec-i --suffix=B "$total_bytes" 2>/dev/null || printf '%s bytes' "$total_bytes")"
 }
 
 cleanup_backups() {
@@ -255,36 +255,36 @@ cleanup_backups() {
   chmod 700 "$BACKUP_DIR"
 
   printf '\nBackup cleanup / free space\n\n'
-  printf 'path: %s\n' "$BACKUP_DIR"
-  printf 'current volume: %s\n\n' "$(du -sh -- "$BACKUP_DIR" 2>/dev/null | awk '{print $1}')"
-  printf '  0) cancelled\n'
-  printf '  1) Safe styling: delete Backupold ones with Retention desired\n'
-  printf '  2) Remove all Backups\n\n'
-  read -r -p "selection [1]: " choice
+  printf 'Path: %s\n' "$BACKUP_DIR"
+  printf 'Current size: %s\n\n' "$(du -sh -- "$BACKUP_DIR" 2>/dev/null | awk '{print $1}')"
+  printf '  0) Cancel\n'
+  printf '  1) Safe cleanup: delete old backups using a custom retention period\n'
+  printf '  2) Delete all backups\n\n'
+  read -r -p "Selection [1]: " choice
   choice="${choice:-1}"
 
   case "$choice" in
     0)
-      warn "Cleanup canceled."
+      warn "Cleanup cancelled."
       return 1
       ;;
     1)
-      read -r -p "be kept for the last few days? [7]: " days
+      read -r -p "How many recent days should be retained? [7]: " days
       days="${days:-7}"
       cleanup_prune_backups "$days"
       ;;
     2)
-      if ! confirm_word "all Backups Spark in ${BACKUP_DIR} They are irreversibly deleted." "DELETE-BACKUPS"; then
-        warn "delete Backupwas canceled."
+      if ! confirm_word "All Spark backups under ${BACKUP_DIR} will be permanently deleted." "DELETE-BACKUPS"; then
+        warn "Backup deletion cancelled."
         return 1
       fi
       find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true
       mkdir -p "$BACKUP_DIR"
       chmod 700 "$BACKUP_DIR"
-      ok "all Backups Spark were deleted."
+      ok "All Spark backups were deleted."
       ;;
     *)
-      fail "The option is invalid."
+      fail "Invalid option."
       return 2
       ;;
   esac
@@ -292,12 +292,12 @@ cleanup_backups() {
 
 cleanup_install_history() {
   new_log "cleanup-install-history"
-  if ! confirm_word "History The installation process will be cleared. No service or data will be deleted; only markers DONE are deleted." "RESET-HISTORY"; then
-    warn "Reset History canceled."
+  if ! confirm_word "Installation history will be cleared. No services or data will be deleted; only DONE markers will be removed." "RESET-HISTORY"; then
+    warn "Installation history reset cancelled."
     return 1
   fi
   find "$STEP_DIR" -maxdepth 1 -type f -name '*.ok' -delete 2>/dev/null || true
-  ok "Installation History cleared. status Actual It is still calculated from the actual server test."
+  ok "Installation history was cleared. Actual status is still calculated from live server checks."
 }
 
 cleanup_stop_schedulers_internal() {
@@ -325,7 +325,7 @@ cleanup_nginx_internal() {
     if nginx -t >>"$CURRENT_LOG" 2>&1; then
       systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
     else
-      warn "Nginx After deletion configs Spark error syntax has another; reload not done."
+      warn "Nginx still has a syntax error after removing Spark configuration; reload was skipped."
     fi
   fi
 }
@@ -370,14 +370,14 @@ cleanup_firewall_runtime_rules_internal() {
 
 cleanup_full_project() {
   new_log "cleanup-full-project"
-  warn "This operation of all components Spark Deletes this server: Source, Supabase Runtime/Data, Frontend, Spark config/secrets, Nginx config, Schedulers, TURN config, Certificatedomains Spark, Backupha and Logs."
-  info "Docker/Nginx/Node/Certbot packages, SSH/HTTP/HTTPS public UFW and himself Spark Manager are kept to allow for re-installation."
-  if ! confirm_word "The first step is to confirm the complete deletion of the project." "DELETE-SPARK"; then
-    warn "The complete removal of the project was cancelled."
+  warn "This operation removes all Spark components from this server: source, Supabase runtime/data, frontend, Spark configuration/secrets, Nginx configuration, schedulers, TURN configuration, Spark-domain certificates, backups, and logs."
+  info "Docker/Nginx/Node/Certbot packages, public SSH/HTTP/HTTPS UFW rules, and Spark Manager itself are preserved so the platform can be installed again."
+  if ! confirm_word "First confirmation: completely remove the Spark project from this server." "DELETE-SPARK"; then
+    warn "Complete project removal cancelled."
     return 1
   fi
-  if ! confirm_word "This is the last confirmation; data Database and Backup They are not returnable." "CONFIRM-ALL-DATA"; then
-    warn "The complete removal of the project was cancelled."
+  if ! confirm_word "Final confirmation: database data and backups cannot be recovered after deletion." "CONFIRM-ALL-DATA"; then
+    warn "Complete project removal cancelled."
     return 1
   fi
 
@@ -407,18 +407,18 @@ cleanup_full_project() {
   mkdir -p "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
   chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
 
-  ok "All project components Spark They were removed from the server. Spark Manager and packageThe common ones of the system remain."
-  info "To reinstall, Spark Manager Open and 21 Installation step Spark + LiveKit run the."
+  ok "All Spark project components were removed from the server. Spark Manager and shared system packages remain installed."
+  info "To reinstall, open Spark Manager and run the Spark + LiveKit installation sequence."
 }
 
 cleanup_uninstall_manager() {
   new_log "cleanup-manager"
-  if ! confirm_word "Spark Manager from /usr/local/lib/spark-manager and command /usr/local/bin/spark is deleted. project/runtime It cannot be manipulated." "UNINSTALL-MANAGER"; then
-    warn "delete Manager canceled."
+  if ! confirm_word "Spark Manager will be removed from /usr/local/lib/spark-manager and /usr/local/bin/spark. The deployed project/runtime will not be modified." "UNINSTALL-MANAGER"; then
+    warn "Spark Manager removal cancelled."
     return 1
   fi
   rm -f "$CLI_PATH"
   rm -rf /usr/local/lib/spark-manager /usr/local/share/spark-manager
-  ok "Spark Manager deleted. After this is over Action from UI get out."
-  info "To reinstall, bootstrap.sh Run it again."
+  ok "Spark Manager was removed. Exit the UI after this action completes."
+  info "To reinstall Spark Manager, run bootstrap.sh again."
 }
