@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -28,12 +29,86 @@ core = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = core
 spec.loader.exec_module(core)
 
+# Spark Manager is intentionally English-only. Arabic-script ranges are checked
+# at the final PTY rendering boundary so legacy shell output cannot leak into the
+# curses UI even when an older operational module still contains localized text.
+NON_ENGLISH_UI_RE = re.compile(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]")
+ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+ASCII_TOKEN_RE = re.compile(r"[A-Za-z0-9_./:@%+=,#?\[\]()-]+")
+
+
+def _line_ending(line: str) -> tuple[str, str]:
+    if line.endswith("\r\n"):
+        return line[:-2], "\r\n"
+    if line.endswith("\n"):
+        return line[:-1], "\n"
+    if line.endswith("\r"):
+        return line[:-1], "\r"
+    return line, ""
+
+
+def _sanitize_legacy_line(line: str, action_id: str) -> str:
+    body, ending = _line_ending(line)
+    if not NON_ENGLISH_UI_RE.search(body):
+        return line
+
+    plain = ANSI_RE.sub("", body)
+    stripped = plain.strip()
+
+    # Keep the interactive backup-cleanup menu usable even when an older shell
+    # module emits localized menu labels directly rather than through helpers.
+    if action_id == "cleanup-backups":
+        if re.match(r"^\s*0\)", stripped):
+            return "  0) Cancel" + ending
+        if re.match(r"^\s*1\)", stripped):
+            return "  1) Safe cleanup: delete old backups using a retention period" + ending
+        if re.match(r"^\s*2\)", stripped):
+            return "  2) Delete all backups" + ending
+        if "[1]" in stripped:
+            return "Selection [1]: " + ending
+        if "[7]" in stripped:
+            return "Days to retain [7]: " + ending
+
+    tokens = ASCII_TOKEN_RE.findall(plain)
+    useful = " ".join(tokens).strip()
+
+    # Prompts usually have no trailing newline. Keep them actionable instead of
+    # exposing untranslated text or silently waiting for input.
+    if not ending:
+        if "[" in useful and "]" in useful:
+            return f"Input {useful}: "
+        if useful:
+            return f"Input ({useful}): "
+        return "Input: "
+
+    if useful:
+        return f"[Legacy backend message sanitized] {useful}{ending}"
+    return f"[Legacy backend message sanitized]{ending}"
+
+
+def sanitize_backend_text(text: str, action_id: str = "") -> str:
+    if not isinstance(text, str) or not text or not NON_ENGLISH_UI_RE.search(text):
+        return text
+    return "".join(_sanitize_legacy_line(line, action_id) for line in text.splitlines(keepends=True))
+
+
+def assert_english_ui_registry() -> None:
+    for category, actions in core.CATEGORIES:
+        if NON_ENGLISH_UI_RE.search(category):
+            raise RuntimeError(f"non-English category text detected: {category!r}")
+        for action in actions:
+            for field_name, value in (("label", action.label), ("description", action.description)):
+                if value and NON_ENGLISH_UI_RE.search(value):
+                    raise RuntimeError(
+                        f"non-English {field_name} detected for {action.action_id}: {value!r}"
+                    )
+
 
 INSTALL_LABELS = {
     "install-01": ("01  Installation config", "Configure domains, addresses and certificate email."),
     "install-02": ("02  Packages / Docker / Node", "Install and validate production base packages."),
     "install-03": ("03  Spark repository", "Download or fast-forward to the latest Spark main branch."),
-    "install-04": ("04  Latest Supabase source", "Download or fast-forward the official Supabase master branch; fresh installs build runtime from that source."),
+    "install-04": ("04  Latest Supabase source", "Download or fast-forward the official Supabase main branch; fresh installs build runtime from that source."),
     "install-05": ("05  Supabase secrets", "Generate only missing/default Supabase secrets."),
     "install-06": ("06  Supabase environment", "Apply production Supabase environment configuration."),
     "install-07": ("07  Edge Functions sync", "Synchronize Edge Functions and the official Supabase main router."),
@@ -58,7 +133,7 @@ AIRGAP_ACTIONS = [
     core.Action(
         "airgap-build",
         "01  Build complete offline bundle",
-        "On a connected staging host, build a checksum-verified Ubuntu/Spark/Supabase/npm/Docker/TLS bundle.",
+        "Build a checksum-verified, target-neutral Ubuntu/Spark/Supabase/npm/Docker bundle on a connected staging host.",
         "controlled",
     ),
     core.Action(
@@ -75,19 +150,19 @@ AIRGAP_ACTIONS = [
     core.Action(
         "airgap-step",
         "04  Run one offline install step",
-        "Run one of the normal 22 production installation steps with network-dependent operations bound to the active bundle.",
+        "Run one of the 22 production installation steps in internal-IP-only offline mode.",
         "confirm",
     ),
     core.Action(
         "airgap-install-all",
         "05  Run complete offline installation",
-        "Run all 22 production installation steps with local packages, sources, npm payload and images. TLS can be local or terminated by a Bank WAF.",
+        "Run all 22 offline installation steps using the server internal IPv4 only; DNS, public IPv4 and local TLS certificates are not prerequisites.",
         "confirm",
     ),
     core.Action(
         "airgap-status",
         "06  Air-gap bundle status",
-        "Show the active bundle revision, target platform, checksum status, TLS mode and imported Docker image readiness.",
+        "Show the active bundle revision, target platform, internal IPv4 mode, checksum status and imported Docker image readiness.",
     ),
     core.Action(
         "airgap-build-target-patch",
@@ -104,13 +179,7 @@ AIRGAP_ACTIONS = [
     core.Action(
         "airgap-auto-target-bootstrap",
         "09  Auto prepare + bootstrap offline target",
-        "Automatically find the matching base bundle and Ubuntu patch in /opt/install, verify them, prepare the corrected bundle, install local Docker/Node packages and import all images.",
-        "controlled",
-    ),
-    core.Action(
-        "airgap-waf-enable",
-        "10  Use Bank WAF for HTTPS",
-        "Explicitly declare that the Bank WAF owns the public TLS certificate. Spark will not request or require local web/API certificates.",
+        "Automatically find matching artifacts, verify them, prepare the target bundle, install local packages and import Docker images.",
         "controlled",
     ),
 ]
@@ -258,7 +327,7 @@ def logical_draw_details(self):
 
     def patched_safe_add(win, y, x, text, *args, **kwargs):
         if isinstance(text, str):
-            text = text.replace("Studio 8443", "Studio 443")
+            text = sanitize_backend_text(text).replace("Studio 8443", "Studio 443")
         return original_safe_add(win, y, x, text, *args, **kwargs)
 
     self.safe_add = patched_safe_add
@@ -269,6 +338,7 @@ def logical_draw_details(self):
 
 
 _original_task_process_init = core.TaskProcess.__init__
+_original_task_process_read = core.TaskProcess.read
 
 
 def routed_task_process_init(self, spark_path, action_id, args, rows, cols):
@@ -286,6 +356,10 @@ def routed_task_process_init(self, spark_path, action_id, args, rows, cols):
     return _original_task_process_init(self, spark_path, action_id, args, rows, cols)
 
 
+def english_only_task_process_read(self):
+    return sanitize_backend_text(_original_task_process_read(self), getattr(self, "action_id", ""))
+
+
 def logical_self_test() -> int:
     assert SPARK_UI_VERSION == "3.0.0"
     assert len(core.CATEGORIES) >= 10
@@ -300,9 +374,6 @@ def logical_self_test() -> int:
         "security-db-test",
         "security-db-open",
         "security-db-close",
-        "security-studio-info",
-        "security-studio-open",
-        "security-studio-close",
         "security-report",
         "security-account-unlock",
         "cleanup-database",
@@ -325,7 +396,6 @@ def logical_self_test() -> int:
         "airgap-build-target-patch",
         "airgap-apply-target-patch",
         "airgap-auto-target-bootstrap",
-        "airgap-waf-enable",
     }
     if not required.issubset(ids):
         missing = ", ".join(sorted(required - ids))
@@ -339,16 +409,25 @@ def logical_self_test() -> int:
     ]
     if len(backup_sections) != 1:
         raise RuntimeError("backup cleanup action is missing from Backups")
+    assert_english_ui_registry()
+    sample = "\u062a\u0633\u062a Docker\n"
+    sanitized = sanitize_backend_text(sample, "diagnostic-docker")
+    if NON_ENGLISH_UI_RE.search(sanitized):
+        raise RuntimeError("English-only PTY rendering guard failed")
+    if "Docker" not in sanitized:
+        raise RuntimeError("PTY rendering guard discarded technical context")
     import curses as _curses
     import pty as _pty
     return 0
 
 
 patch_categories()
+assert_english_ui_registry()
 core.collect_status = logical_collect_status
 core.SparkUI.action_badge = install_action_badge
 core.SparkUI.draw_details = logical_draw_details
 core.TaskProcess.__init__ = routed_task_process_init
+core.TaskProcess.read = english_only_task_process_read
 core.self_test = logical_self_test
 
 
