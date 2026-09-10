@@ -350,7 +350,7 @@ airgap_ip_gateway_bind_present() {
   local cid
   cid="$(cd "$SUPABASE_ROOT" && docker compose ps -q api-gw 2>/dev/null)"
   [[ -n "$cid" ]] || return 1
-  AIRGAP_IP="$AIRGAP_SERVER_IP" docker inspect "$cid" | python3 -c '
+  docker inspect "$cid" | AIRGAP_IP="$AIRGAP_SERVER_IP" python3 -c '
 import json,os,sys
 d=json.load(sys.stdin)
 ports=((d[0].get("NetworkSettings") or {}).get("Ports") or {}).get("8000/tcp") or []
