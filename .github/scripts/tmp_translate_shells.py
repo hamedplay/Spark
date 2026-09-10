@@ -22,24 +22,22 @@ MANUAL = {
     'مرحله': 'step', 'مراحل': 'steps', 'تنظیمات': 'configuration', 'دامنه': 'domain',
     'سرور': 'server', 'داده': 'data', 'دیتابیس': 'database', 'ذخیره': 'save', 'حذف': 'delete',
     'نمایش': 'show', 'اطلاعات': 'information', 'اتصال': 'connection', 'ورود': 'login',
-    'خروجی': 'output', 'خطا': 'error', 'آماده': 'ready', 'آماده‌سازی': 'prepare',
+    'خروجی': 'output', 'خطا': 'error', 'آماده': 'ready', 'آماده‌سازی': 'prepare', 'تکمیل': 'complete',
     'سرویس': 'service', 'سرویس‌ها': 'services', 'بررسی': 'check', 'تأیید': 'confirm',
     'ادامه': 'continue', 'بازگشت': 'back', 'تغییر': 'change', 'تغییرات': 'changes',
     'کامل': 'complete', 'اصلی': 'primary', 'داخلی': 'internal', 'خارجی': 'external',
     'عمومی': 'public', 'خصوصی': 'private', 'امن': 'safe', 'ایمن': 'safe', 'ناموفق': 'failed',
     'موفق': 'successful', 'موفقیت': 'success', 'اجباری': 'required', 'گزارش': 'report',
-    'گزارش نشده است': 'was not reported', 'لازم است': 'is required', 'قابل': 'can be',
-    'قابل نیست': 'cannot be', 'پاسخ': 'response', 'واقعی': 'actual', 'همه': 'all',
-    'هیچ': 'no', 'چیزی': 'item', 'مقدار': 'value', 'مقادیر': 'values', 'فایل': 'file',
+    'لازم': 'required', 'لازم است': 'is required', 'قابل': 'can be', 'پاسخ': 'response', 'واقعی': 'actual',
+    'همه': 'all', 'هیچ': 'no', 'چیزی': 'item', 'مقدار': 'value', 'مقادیر': 'values', 'فایل': 'file',
     'فایل‌ها': 'files', 'مسیر': 'path', 'پوشه': 'directory', 'پوشه‌ای': 'directory',
     'دوباره': 'again', 'اول': 'first', 'آخر': 'last', 'آخرین': 'last', 'پایان': 'end',
     'پس': 'after', 'تا': 'until', 'هم': 'also', 'را': '', 'می‌کند': 'does', 'می‌کنند': 'do',
-    'می‌ماند': 'remains', 'باقی': 'remaining', 'باقی می‌ماند': 'remains', 'باقی می‌مانند': 'remain',
-    'کرد': 'did', 'کنید': 'do', 'بزنید': 'press', 'وارد': 'enter', 'انتخاب': 'selection',
-    'شناسه': 'identifier', 'کاربر': 'user', 'کاربری': 'user', 'حساب': 'account',
-    'قفل': 'lock', 'تلاش': 'attempt', 'تلاش‌های': 'attempts', 'نام': 'name', 'عدد': 'number',
-    'عددی': 'numeric', 'روز': 'days', 'ثانیه': 'seconds', 'دقیقه': 'minutes', 'قدیمی': 'old',
-    'قدیمی‌تر': 'older', 'موقت': 'temporary', 'مربوط': 'related', 'پیشنهادی': 'recommended',
+    'می‌ماند': 'remains', 'باقی': 'remaining', 'کرد': 'did', 'کنید': 'do', 'بزنید': 'press',
+    'وارد': 'enter', 'انتخاب': 'selection', 'شناسه': 'identifier', 'کاربر': 'user', 'کاربری': 'user',
+    'حساب': 'account', 'قفل': 'lock', 'تلاش': 'attempt', 'تلاش‌های': 'attempts', 'نام': 'name',
+    'عدد': 'number', 'عددی': 'numeric', 'روز': 'days', 'ثانیه': 'seconds', 'دقیقه': 'minutes',
+    'قدیمی': 'old', 'قدیمی‌تر': 'older', 'موقت': 'temporary', 'مربوط': 'related', 'پیشنهادی': 'recommended',
     'صحیح': 'correct', 'ناقص': 'incomplete', 'مستقل': 'independent', 'خودکار': 'automatic',
     'تقریبی': 'approximate', 'حفظ': 'preserved', 'نگه': 'keep', 'دسترسی': 'access',
     'وضعیت': 'status', 'عملیات': 'operation', 'برنامه': 'application', 'پروژه': 'project',
@@ -56,6 +54,23 @@ def candidates():
         if p.is_file(): items.append(p)
     return sorted(set(items))
 
+def translate_atom(word):
+    if word in MANUAL:
+        return MANUAL[word]
+    if word in CACHE:
+        return CACHE[word]
+    translated = None
+    for attempt in range(3):
+        try:
+            translated = FA.translate(word)
+            if translated and not ARABIC.search(translated):
+                CACHE[word] = translated
+                return translated
+        except Exception:
+            translated = None
+        time.sleep(0.6 * (attempt + 1))
+    raise RuntimeError(f'Unable to translate Persian word {word!r}')
+
 def segment_translation(core):
     core = core.strip().translate(DIGIT_TRANS)
     if not ARABIC.search(core):
@@ -69,7 +84,7 @@ def segment_translation(core):
     if core in MANUAL:
         return MANUAL[core] + punctuation
     translated = None
-    for attempt in range(4):
+    for attempt in range(2):
         try:
             translated = FA.translate(core)
             if translated and not ARABIC.search(translated):
@@ -77,12 +92,13 @@ def segment_translation(core):
                 return translated.translate(PUNCT_TRANS) + punctuation
         except Exception:
             translated = None
-        time.sleep(0.8 * (attempt + 1))
+        time.sleep(0.6 * (attempt + 1))
     words = core.split()
-    if words and all(word in MANUAL for word in words):
-        translated = ' '.join(MANUAL[word] for word in words if MANUAL[word]).strip()
-        CACHE[core] = translated
-        return translated + punctuation
+    if words:
+        translated = ' '.join(part for part in (translate_atom(word) for word in words) if part).strip()
+        if translated and not ARABIC.search(translated):
+            CACHE[core] = translated
+            return translated + punctuation
     raise RuntimeError(f'Unable to translate Persian segment {core!r}')
 
 def translate_line(line):
