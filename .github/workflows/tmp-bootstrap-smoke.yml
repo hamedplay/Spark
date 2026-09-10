@@ -19,6 +19,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           curl -fsSL -H 'Cache-Control: no-cache' "https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli/bootstrap.sh?nocache=$(date +%s)" | sudo bash
+          test -x /usr/local/bin/spark
+          test -x /usr/local/bin/spark-airgap
+          test "$(stat -c '%a' /usr/local/lib/spark-manager)" = '755'
           /usr/local/bin/spark --version
           /usr/local/bin/spark-airgap --version
           /usr/local/bin/spark --ui-self-test
