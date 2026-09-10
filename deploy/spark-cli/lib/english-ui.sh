@@ -11,10 +11,9 @@ manager_contains_arabic_script() {
 
 manager_ascii_tokens() {
   local text="${1:-}"
-  printf '%s' "$text" \
-    | LC_ALL=C sed 's/[^A-Za-z0-9_./:@%+=,#?()\[\] -]/ /g' \
-    | tr -s ' ' \
-    | sed 's/^ //;s/ $//'
+  printf '%s\n' "$text" \
+    | LC_ALL=C grep -oE '[A-Za-z0-9_./:@%+=,#?()-]+' \
+    | paste -sd ' ' -
 }
 
 manager_english_message() {
