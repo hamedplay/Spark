@@ -1,0 +1,187 @@
+name: Temporary Manager Release Refresh
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-manager-release-refresh.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Align Spark Manager release and Cleanup registry
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          NEW = "3.1.0+20260910.1"
+          root = Path("deploy/spark-cli")
+
+          def update(path, fn):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              new = fn(text)
+              if new == text:
+                  print(f"UNCHANGED {p}")
+              else:
+                  p.write_text(new, encoding="utf-8")
+                  print(f"UPDATED {p}")
+
+          def one_sub(text, pattern, replacement, label):
+              new, count = re.subn(pattern, replacement, text, count=1, flags=re.M)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, got {count}")
+              return new
+
+          update(root / "spark", lambda t: one_sub(t, r'^SPARK_MANAGER_VERSION="[^"]+"$', f'SPARK_MANAGER_VERSION="{NEW}"', 'spark manager version'))
+          update(root / "spark-airgap", lambda t: one_sub(t, r'^SPARK_MANAGER_VERSION="[^"]+"$', f'SPARK_MANAGER_VERSION="{NEW}"', 'airgap manager version'))
+
+          def patch_bootstrap(t):
+              t = one_sub(t, r'^EXPECTED_VERSION="[^"]+"$', f'EXPECTED_VERSION="{NEW}"', 'bootstrap expected version')
+              t = one_sub(t, r'^EXPECTED_UI_VERSION="[^"]+"$', f'EXPECTED_UI_VERSION="{NEW}"', 'bootstrap expected UI version')
+              marker = '''grep -Fq "SPARK_UI_VERSION = \\"${EXPECTED_UI_VERSION}\\"" "$tmp/spark-ui.py" || {\n  echo "Spark UI version validation failed." >&2\n  exit 1\n}\n'''
+              extra = marker + '''grep -Fq "SPARK_UI_VERSION = \\"${EXPECTED_UI_VERSION}\\"" "$tmp/spark-ui-core.py" || {\n  echo "Spark UI core version validation failed." >&2\n  exit 1\n}\n'''
+              if 'Spark UI core version validation failed.' not in t:
+                  if marker not in t:
+                      raise SystemExit('bootstrap UI validation marker not found')
+                  t = t.replace(marker, extra, 1)
+              return t
+          update(root / "bootstrap.sh", patch_bootstrap)
+
+          def patch_airgap_bootstrap(t):
+              t = one_sub(t, r'^EXPECTED_VERSION="[^"]+"$', f'EXPECTED_VERSION="{NEW}"', 'airgap bootstrap expected version')
+              if 'EXPECTED_UI_VERSION=' not in t:
+                  t = t.replace(f'EXPECTED_VERSION="{NEW}"\n', f'EXPECTED_VERSION="{NEW}"\nEXPECTED_UI_VERSION="{NEW}"\n', 1)
+              else:
+                  t = one_sub(t, r'^EXPECTED_UI_VERSION="[^"]+"$', f'EXPECTED_UI_VERSION="{NEW}"', 'airgap bootstrap expected UI version')
+              marker = 'python3 "$source_dir/spark-ui.py" --self-test\n'
+              checks = marker + '''grep -Fq "SPARK_UI_VERSION = \\"${EXPECTED_UI_VERSION}\\"" "$source_dir/spark-ui.py" || { echo "Unexpected Spark UI adapter version." >&2; exit 1; }\ngrep -Fq "SPARK_UI_VERSION = \\"${EXPECTED_UI_VERSION}\\"" "$source_dir/spark-ui-core.py" || { echo "Unexpected Spark UI core version." >&2; exit 1; }\n'''
+              if 'Unexpected Spark UI core version.' not in t:
+                  if marker not in t:
+                      raise SystemExit('airgap bootstrap self-test marker not found')
+                  t = t.replace(marker, checks, 1)
+              return t
+          update(root / "bootstrap-airgap.sh", patch_airgap_bootstrap)
+
+          def patch_adapter(t):
+              t = one_sub(t, r'^SPARK_UI_VERSION = "[^"]+"$', f'SPARK_UI_VERSION = "{NEW}"', 'adapter UI version')
+              # The adapter self-test owns the canonical UI release and now also
+              # rejects a stale core, preventing the header from regressing.
+              t, count = re.subn(
+                  r'(?m)^\s*assert SPARK_UI_VERSION == "[^"]+"\s*$',
+                  f'    assert SPARK_UI_VERSION == "{NEW}"\n    assert core.SPARK_UI_VERSION == SPARK_UI_VERSION',
+                  t,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(f'adapter self-test version assertion: expected one match, got {count}')
+              return t
+          update(root / "spark-ui.py", patch_adapter)
+
+          CLEANUP = '''    ("Cleanup / Remove", [
+              Action("cleanup-database", "Delete Database data", "Stop Supabase and delete only the detected PostgreSQL data bind. The operation refuses to guess the data path.", "confirm"),
+              Action("cleanup-supabase", "Delete Supabase runtime", "Delete the complete local Supabase runtime, volumes/data, runtime configuration and runtime secrets.", "confirm"),
+              Action("cleanup-frontend", "Delete deployed Frontend", "Delete /var/www/spark only; the local Spark source repository remains.", "confirm"),
+              Action("cleanup-source", "Delete Spark source", "Delete the local /opt/spark repository; GitHub and the installed Spark Manager remain.", "confirm"),
+              Action("cleanup-logs", "Delete Manager logs", "Delete Spark Manager logs only; system journal and Docker logs are not changed.", "confirm"),
+              Action("cleanup-backups", "Backup cleanup / free space", "Safely prune old Spark backups with a configurable retention period, or explicitly delete all retained backups.", "confirm"),
+              Action("cleanup-history", "Reset install history", "Clear installation-step DONE markers only. Runtime data and live service state are not changed.", "confirm"),
+              Action("cleanup-livekit", "Delete LiveKit runtime", "Remove only the LiveKit runtime and secrets, then restore the legacy Coturn fallback.", "confirm"),
+              Action("cleanup-full", "Delete complete Spark project", "Remove Spark-specific runtime, data, configuration, certificates, schedulers, TURN, source, logs and backups while keeping the Manager and shared OS packages.", "confirm"),
+              Action("cleanup-manager", "Uninstall Spark Manager", "Remove the installed Spark Manager and /usr/local/bin/spark only; the project runtime is left untouched.", "confirm"),
+          ]),
+          ("Certificates", ['''
+
+          def patch_core(t):
+              t = one_sub(t, r'^SPARK_UI_VERSION = "[^"]+"$', f'SPARK_UI_VERSION = "{NEW}"', 'core UI version')
+              t = t.replace('"""Spark Server Manager v2 single-screen curses UI.', '"""Spark Server Manager v3.1 single-screen curses UI.', 1)
+              pattern = re.compile(r'    \("Cleanup / Remove", \[\n.*?\n    \]\),\n    \("Certificates", \[', re.S)
+              t, count = pattern.subn(CLEANUP, t, count=1)
+              if count != 1:
+                  raise SystemExit(f'core Cleanup registry: expected one match, got {count}')
+              return t
+          update(root / "spark-ui-core.py", patch_core)
+          PY
+
+      - name: Validate release consistency and Cleanup UI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          NEW='3.1.0+20260910.1'
+
+          bash -n deploy/spark-cli/spark
+          bash -n deploy/spark-cli/spark-airgap
+          bash -n deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/bootstrap-airgap.sh
+          for file in deploy/spark-cli/lib/*.sh; do bash -n "$file"; done
+
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          from pathlib import Path
+          for value in ['deploy/spark-cli/spark-ui.py', 'deploy/spark-cli/spark-ui-core.py']:
+              compile(Path(value).read_text(encoding='utf-8'), value, 'exec')
+          PY
+          PYTHONDONTWRITEBYTECODE=1 python3 deploy/spark-cli/spark-ui.py --self-test
+
+          python3 - <<'PY'
+          import importlib.util, re, sys
+          from pathlib import Path
+          NEW = '3.1.0+20260910.1'
+          p = Path('deploy/spark-cli/spark-ui.py')
+          spec = importlib.util.spec_from_file_location('spark_ui_release_validation', p)
+          m = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = m
+          spec.loader.exec_module(m)
+          m.patch_categories()
+          assert m.SPARK_UI_VERSION == NEW
+          assert m.core.SPARK_UI_VERSION == NEW
+          categories = [(name, actions) for name, actions in m.core.CATEGORIES if name == 'Cleanup / Remove']
+          assert len(categories) == 1
+          actions = categories[0][1]
+          assert len(actions) == 10, len(actions)
+          expected = [
+              'cleanup-database','cleanup-supabase','cleanup-frontend','cleanup-source','cleanup-logs',
+              'cleanup-backups','cleanup-history','cleanup-livekit','cleanup-full','cleanup-manager'
+          ]
+          assert [a.action_id for a in actions] == expected
+          bad = re.compile(r'[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]')
+          for a in actions:
+              assert not bad.search(a.label + a.description), (a.action_id, a.label, a.description)
+          print('CLEANUP_RELEASE_VALIDATION=PASS')
+          print('UI_VERSION=' + m.SPARK_UI_VERSION)
+          PY
+
+          grep -Fq "SPARK_MANAGER_VERSION=\"${NEW}\"" deploy/spark-cli/spark
+          grep -Fq "SPARK_MANAGER_VERSION=\"${NEW}\"" deploy/spark-cli/spark-airgap
+          grep -Fq "EXPECTED_VERSION=\"${NEW}\"" deploy/spark-cli/bootstrap.sh
+          grep -Fq "EXPECTED_UI_VERSION=\"${NEW}\"" deploy/spark-cli/bootstrap.sh
+          grep -Fq "EXPECTED_VERSION=\"${NEW}\"" deploy/spark-cli/bootstrap-airgap.sh
+          grep -Fq "EXPECTED_UI_VERSION=\"${NEW}\"" deploy/spark-cli/bootstrap-airgap.sh
+          grep -Fq "SPARK_UI_VERSION = \"${NEW}\"" deploy/spark-cli/spark-ui.py
+          grep -Fq "SPARK_UI_VERSION = \"${NEW}\"" deploy/spark-cli/spark-ui-core.py
+
+          if grep -R -n -E '2\.1\.0\+20260821\.1|SPARK_MANAGER_VERSION="3\.0\.0"|SPARK_UI_VERSION = "3\.0\.0"|EXPECTED_VERSION="3\.0\.0"|EXPECTED_UI_VERSION="3\.0\.0"' deploy/spark-cli --exclude='spark-migrate'; then
+            echo 'Stale Spark Manager version marker remains.' >&2
+            exit 1
+          fi
+
+          rm -rf deploy/spark-cli/__pycache__
+
+      - name: Commit release refresh
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/spark deploy/spark-cli/spark-airgap deploy/spark-cli/bootstrap.sh deploy/spark-cli/bootstrap-airgap.sh deploy/spark-cli/spark-ui.py deploy/spark-cli/spark-ui-core.py
+          git diff --cached --check
+          git commit -m 'release(manager): align v3.1.0 and finalize Cleanup UI'
+          git push origin HEAD:main
