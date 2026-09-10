@@ -42,14 +42,13 @@ jobs:
           else:
               text = text.replace(old, new, 1)
 
-          text = text.replace('SPARK_UI_VERSION = "3.0.0"', 'SPARK_UI_VERSION = "3.0.1"', 1)
           path.write_text(text, encoding='utf-8')
           PY
 
       - name: Validate Cleanup registry and UI
         shell: bash
         run: |
-          python3 -m py_compile deploy/spark-cli/spark-ui.py deploy/spark-cli/spark-ui-core.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile deploy/spark-cli/spark-ui.py deploy/spark-cli/spark-ui-core.py
           PYTHONDONTWRITEBYTECODE=1 python3 deploy/spark-cli/spark-ui.py --self-test
           python3 - <<'PY'
           import importlib.util
