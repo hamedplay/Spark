@@ -20,7 +20,7 @@ jobs:
       - name: Patch Step 10 gateway reconciliation
         shell: bash
         run: |
-          python3 - <<'PY'
+          python3 - <<'PY_PATCH'
           from pathlib import Path
 
           p = Path('deploy/spark-cli/lib/airgap-ip.sh')
@@ -67,7 +67,7 @@ PY
           replacement = '''install_step_10() {\n  install_step_10_airgap_base || return 1\n  new_log "install-10-airgap-ip-access"\n  run_logged "Ensure Supabase gateway bind on ${AIRGAP_SERVER_IP}:8000" airgap_ip_ensure_gateway_bind || { unmark_step 10; return 1; }\n  if run_logged "Expose PostgreSQL session endpoint only on ${AIRGAP_SERVER_IP}:5432" airgap_ip_provision_database_access; then\n'''
           text = text.replace(marker, helper + replacement, 1)
           p.write_text(text, encoding='utf-8')
-          PY
+          PY_PATCH
 
       - name: Validate syntax and reconciliation semantics
         shell: bash
@@ -80,7 +80,7 @@ PY
           work="$(mktemp -d)"
           trap 'rm -rf "$work"' EXIT
           mkdir -p "$work/supabase"
-          cat >"$work/supabase/docker-compose.yml" <<'EOF'
+          cat >"$work/supabase/docker-compose.yml" <<'EOF_COMPOSE'
           services:
             api-gw:
               image: example.invalid/api-gw:test
@@ -88,18 +88,18 @@ PY
                 - 127.0.0.1:8000:8000/tcp
             db:
               image: example.invalid/db:test
-          EOF
+          EOF_COMPOSE
 
-          python3 - "$work/helper.sh" <<'PY'
+          python3 - "$work/helper.sh" <<'PY_EXTRACT'
           from pathlib import Path
           import sys
           text=Path('deploy/spark-cli/lib/airgap-ip.sh').read_text(encoding='utf-8')
           start=text.index('airgap_ip_ensure_gateway_bind() {')
           end=text.index('\n}\n\ninstall_step_10() {', start)+2
           Path(sys.argv[1]).write_text(text[start:end]+'\n', encoding='utf-8')
-          PY
+          PY_EXTRACT
 
-          cat >"$work/run.sh" <<'EOF'
+          cat >"$work/run.sh" <<'EOF_RUN'
           #!/usr/bin/env bash
           set -Eeuo pipefail
           SUPABASE_ROOT="$1"
@@ -109,16 +109,16 @@ PY
           curl() { return 0; }
           source "$2"
           airgap_ip_ensure_gateway_bind
-          EOF
+          EOF_RUN
           chmod +x "$work/run.sh"
           "$work/run.sh" "$work/supabase" "$work/helper.sh"
 
-          python3 - "$work/supabase/docker-compose.yml" <<'PY'
+          python3 - "$work/supabase/docker-compose.yml" <<'PY_CHECK'
           import sys,yaml
           d=yaml.safe_load(open(sys.argv[1],encoding='utf-8'))
           ports=d['services']['api-gw']['ports']
           assert ports == ['127.0.0.1:8000:8000/tcp','10.211.36.178:8000:8000/tcp'], ports
-          PY
+          PY_CHECK
 
           git diff --check
 
