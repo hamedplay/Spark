@@ -15,6 +15,8 @@ TOKEN_RE = re.compile(
     r'(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?|'
     r'\b[A-Z][A-Z0-9_]{2,}\b'
 )
+DIGIT_TRANS = str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')
+PUNCT_TRANS = str.maketrans({'،': ',', '؛': ';', '؟': '?'})
 MANUAL = {
     'به': 'to', 'در': 'in', 'از': 'from', 'و': 'and', 'با': 'with', 'برای': 'for',
     'روی': 'on', 'یا': 'or', 'که': 'that', 'اگر': 'if', 'این': 'this', 'آن': 'that',
@@ -50,6 +52,7 @@ MANUAL = {
     'تقریبی': 'approximate', 'حفظ': 'preserved', 'نگه': 'keep', 'دسترسی': 'access',
     'وضعیت': 'status', 'عملیات': 'operation', 'برنامه': 'application', 'پروژه': 'project',
     'منو': 'menu', 'محلی': 'local', 'رسمی': 'official', 'موردنیاز': 'required',
+    'ها': 's', 'های': 's', 'هایی': 's', 'تر': 'more', 'ترین': 'most',
 }
 AUTO = GoogleTranslator(source='auto', target='en')
 FA = GoogleTranslator(source='fa', target='en')
@@ -73,19 +76,27 @@ def restore(text,tokens):
     return re.sub(r' {2,}',' ',text).strip()
 
 def segment_translation(core):
-    core = core.strip()
-    if core in MANUAL: return MANUAL[core]
+    core = core.strip().translate(DIGIT_TRANS)
+    if not ARABIC.search(core):
+        return core.translate(PUNCT_TRANS)
+    punctuation = ''
+    while core and core[-1] in '،؛؟':
+        punctuation = core[-1].translate(PUNCT_TRANS) + punctuation
+        core = core[:-1].rstrip()
+    if core in MANUAL:
+        return MANUAL[core] + punctuation
     translated=None
     for attempt in range(3):
         try:
             translated=FA.translate(core)
-            if translated and not ARABIC.search(translated): return translated
+            if translated and not ARABIC.search(translated):
+                return translated.translate(PUNCT_TRANS) + punctuation
         except Exception:
             translated=None
         time.sleep(0.8*(attempt+1))
     words=core.split()
     if words and all(word in MANUAL for word in words):
-        return ' '.join(MANUAL[word] for word in words if MANUAL[word]).strip()
+        return ' '.join(MANUAL[word] for word in words if MANUAL[word]).strip() + punctuation
     raise RuntimeError(f'Unable to translate Persian segment {core!r}')
 
 def translate_segments(text):
@@ -110,8 +121,9 @@ def translate_text(text):
             translated=None
         time.sleep(0.8*(attempt+1))
     if translated is None: translated=protected
-    translated=restore(translated,tokens)
+    translated=restore(translated,tokens).translate(DIGIT_TRANS)
     if ARABIC.search(translated): translated=translate_segments(translated)
+    translated=translated.translate(PUNCT_TRANS)
     if ARABIC.search(translated):
         raise RuntimeError(f'Arabic-script text remained: {text!r} -> {translated!r}')
     CACHE[text]=translated
