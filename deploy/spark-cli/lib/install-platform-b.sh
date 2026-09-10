@@ -3,6 +3,7 @@ write_nginx_bootstrap() {
 server {
     listen 80;
     server_name ${APP_DOMAIN} ${WWW_DOMAIN} ${API_DOMAIN} ${TURN_DOMAIN};
+    server_tokens off;
 
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/acme;
@@ -83,8 +84,6 @@ write_nginx_production() {
   }
 
   cat >/etc/nginx/sites-available/spark <<EOF
-server_tokens off;
-
 # Per-IP protection for authentication endpoints. The burst is intentionally
 # generous for corporate NATs while still bounding brute-force floods.
 limit_req_zone \$binary_remote_addr zone=spark_auth_limit:10m rate=10r/s;
@@ -111,6 +110,7 @@ server {
 server {
     listen 443 ssl http2;
     server_name ${APP_DOMAIN} ${WWW_DOMAIN};
+    server_tokens off;
 
     ssl_certificate ${app_cert_dir}/fullchain.pem;
     ssl_certificate_key ${app_cert_dir}/privkey.pem;
@@ -153,6 +153,7 @@ server {
 server {
     listen 443 ssl http2;
     server_name ${API_DOMAIN};
+    server_tokens off;
 
     ssl_certificate ${api_cert_dir}/fullchain.pem;
     ssl_certificate_key ${api_cert_dir}/privkey.pem;

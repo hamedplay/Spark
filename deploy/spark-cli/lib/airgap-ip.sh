@@ -451,7 +451,6 @@ install_step_11() {
 airgap_ip_write_nginx() {
   local ip="$AIRGAP_SERVER_IP"
   cat >/etc/nginx/sites-available/spark <<EOF_NGINX
-server_tokens off;
 limit_req_zone \$binary_remote_addr zone=spark_auth_limit:10m rate=10r/s;
 map \$http_upgrade \$spark_connection_upgrade {
     default upgrade;
@@ -463,6 +462,7 @@ map \$http_upgrade \$spark_connection_upgrade {
 server {
     listen ${ip}:80 default_server;
     server_name _;
+    server_tokens off;
     root /var/www/spark;
     index index.html;
     client_max_body_size 50m;
