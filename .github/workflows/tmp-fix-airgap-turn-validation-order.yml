@@ -1,0 +1,163 @@
+name: Temporary Fix AirGap TURN Validation Order
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-turn-validation-order.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch TURN validation responsibility
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('deploy/spark-cli/lib/airgap-ip.sh')
+          text = p.read_text(encoding='utf-8')
+
+          start = text.index('test_turn() {\n')
+          end = text.index('\n}\n\ninstall_step_16() {', start) + 3
+          old = text[start:end]
+          new = r'''test_turn() {
+  local escaped_ip deadline
+  escaped_ip="${AIRGAP_SERVER_IP//./\\.}"
+
+  deadline=$((SECONDS + 10))
+  while (( SECONDS < deadline )); do
+    if systemctl is-active --quiet coturn \
+      && ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)" \
+      && ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  if ! systemctl is-active --quiet coturn; then
+    echo "ERROR: coturn.service is not active." >>"$CURRENT_LOG"
+  elif ! ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
+    echo "ERROR: Coturn UDP listener is not bound to ${AIRGAP_SERVER_IP}:3478." >>"$CURRENT_LOG"
+  elif ! ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
+    echo "ERROR: Coturn TCP listener is not bound to ${AIRGAP_SERVER_IP}:3478." >>"$CURRENT_LOG"
+  fi
+  ss -lunp >>"$CURRENT_LOG" 2>&1 || true
+  ss -ltnp >>"$CURRENT_LOG" 2>&1 || true
+  journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
+  return 1
+}
+
+test_turn_stun_probe() {
+  local probe_log
+  probe_log="$(mktemp)"
+  if ! command -v turnutils_stunclient >/dev/null 2>&1; then
+    echo "ERROR: turnutils_stunclient is not installed." >>"$CURRENT_LOG"
+    rm -f "$probe_log"
+    return 1
+  fi
+  if timeout 8s turnutils_stunclient -L "$AIRGAP_SERVER_IP" -p 3478 "$AIRGAP_SERVER_IP" >"$probe_log" 2>&1; then
+    cat "$probe_log" >>"$CURRENT_LOG"
+    rm -f "$probe_log"
+    return 0
+  fi
+  echo "ERROR: STUN binding request through the active firewall to ${AIRGAP_SERVER_IP}:3478 failed." >>"$CURRENT_LOG"
+  cat "$probe_log" >>"$CURRENT_LOG" 2>&1 || true
+  ufw status verbose >>"$CURRENT_LOG" 2>&1 || true
+  ss -lunp >>"$CURRENT_LOG" 2>&1 || true
+  journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
+  rm -f "$probe_log"
+  return 1
+}
+'''
+          text = text[:start] + new + text[end:]
+
+          text = text.replace(
+              'if run_logged "Validate internal TURN/STUN" test_turn; then mark_step 16; else unmark_step 16; return 1; fi',
+              'if run_logged "Validate internal TURN listeners" test_turn; then mark_step 16; else unmark_step 16; return 1; fi',
+              1,
+          )
+
+          old18 = '  if run_logged "Validate internal-IP firewall/exposure" test_firewall; then mark_step 18; else unmark_step 18; return 1; fi\n'
+          new18 = '''  run_logged "Validate internal-IP firewall/exposure" test_firewall || { unmark_step 18; return 1; }\n  if run_logged "Validate STUN through internal-IP firewall" test_turn_stun_probe; then\n    mark_step 18\n  else\n    unmark_step 18\n    return 1\n  fi\n'''
+          if old18 not in text:
+              raise SystemExit('Step 18 validation marker not found')
+          text = text.replace(old18, new18, 1)
+
+          p.write_text(text, encoding='utf-8')
+          PY
+
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('deploy/spark-cli/lib/airgap-ip.sh').read_text(encoding='utf-8')
+          a=s.index('test_turn() {')
+          b=s.index('test_turn_stun_probe() {')
+          service=s[a:b]
+          assert 'turnutils_stunclient' not in service
+          assert 'Validate internal TURN listeners' in s
+          assert 'Validate STUN through internal-IP firewall' in s
+          i16=s.index('install_step_16() {')
+          i17=s.index('install_step_17() {')
+          i18=s.index('install_step_18() {')
+          block16=s[i16:i17]
+          block18=s[i18:s.index('airgap_full_preflight() {', i18)]
+          assert 'test_turn_stun_probe' not in block16
+          assert 'test_turn_stun_probe' in block18
+          assert block18.index('ufw --force enable') < block18.index('test_turn_stun_probe')
+          print('TURN validation ordering: PASS')
+          PY
+
+          # Real Coturn listener + STUN probe smoke test on a local RFC1918-style address.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq coturn >/dev/null
+          sudo ip addr add 10.255.255.1/32 dev lo
+          secret="$(openssl rand -base64 32 | tr -d '\n')"
+          sudo tee /etc/turnserver.conf >/dev/null <<EOF
+          listening-port=3478
+          listening-ip=10.255.255.1
+          relay-ip=10.255.255.1
+          fingerprint
+          use-auth-secret
+          static-auth-secret=${secret}
+          realm=10.255.255.1
+          server-name=10.255.255.1
+          min-port=49160
+          max-port=49200
+          no-tls
+          no-dtls
+          no-cli
+          no-loopback-peers
+          no-multicast-peers
+          stale-nonce=600
+          EOF
+          if sudo grep -q '^TURNSERVER_ENABLED=' /etc/default/coturn 2>/dev/null; then
+            sudo sed -i 's/^TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
+          else
+            echo 'TURNSERVER_ENABLED=1' | sudo tee -a /etc/default/coturn >/dev/null
+          fi
+          sudo systemctl restart coturn
+          sleep 1
+          sudo ss -lunp | grep -E '10\.255\.255\.1:3478([[:space:]]|$)'
+          sudo ss -ltnp | grep -E '10\.255\.255\.1:3478([[:space:]]|$)'
+          timeout 8s turnutils_stunclient -L 10.255.255.1 -p 3478 10.255.255.1 | tee /tmp/stun.out
+          grep -Eq 'reflexive addr|UDP reflexive addr' /tmp/stun.out
+          git diff --check
+
+      - name: Commit minimal fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap-ip.sh
+          git commit -m 'fix(airgap): validate STUN after firewall setup'
+          git push origin HEAD:main
