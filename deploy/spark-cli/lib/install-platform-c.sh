@@ -62,7 +62,8 @@ stale-nonce=600
 no-tlsv1
 no-tlsv1_1
 EOF
-  chmod 600 /etc/turnserver.conf
+  chown root:turnserver /etc/turnserver.conf
+  chmod 0640 /etc/turnserver.conf
   if grep -q '^TURNSERVER_ENABLED=' /etc/default/coturn 2>/dev/null; then
     sed -i 's/^TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
   else
