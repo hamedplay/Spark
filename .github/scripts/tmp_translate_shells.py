@@ -7,14 +7,6 @@ from deep_translator import GoogleTranslator
 ROOT = Path('deploy/spark-cli')
 ARABIC = re.compile(r'[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]')
 ARABIC_SEGMENT = re.compile(r'[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\u200c\s،؛؟]+')
-QUOTED = re.compile(r'(["\'])(.*?)(?<!\\)\1')
-TOKEN_RE = re.compile(
-    r'\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|\\[nrt\\]|'
-    r'https?://[^\s"\']+|'
-    r'(?<![A-Za-z0-9_])/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+|'
-    r'(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?|'
-    r'\b[A-Z][A-Z0-9_]{2,}\b'
-)
 DIGIT_TRANS = str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')
 PUNCT_TRANS = str.maketrans({'،': ',', '؛': ';', '؟': '?'})
 MANUAL = {
@@ -54,7 +46,6 @@ MANUAL = {
     'منو': 'menu', 'محلی': 'local', 'رسمی': 'official', 'موردنیاز': 'required',
     'ها': 's', 'های': 's', 'هایی': 's', 'تر': 'more', 'ترین': 'most',
 }
-AUTO = GoogleTranslator(source='auto', target='en')
 FA = GoogleTranslator(source='fa', target='en')
 CACHE = {}
 
@@ -65,16 +56,6 @@ def candidates():
         if p.is_file(): items.append(p)
     return sorted(set(items))
 
-def protect(text):
-    tokens=[]
-    def repl(match):
-        marker=f'ZXQ{len(tokens)}QXZ'; tokens.append(match.group(0)); return marker
-    return TOKEN_RE.sub(repl,text),tokens
-
-def restore(text,tokens):
-    for i,token in enumerate(tokens): text=text.replace(f'ZXQ{i}QXZ',token)
-    return re.sub(r' {2,}',' ',text).strip()
-
 def segment_translation(core):
     core = core.strip().translate(DIGIT_TRANS)
     if not ARABIC.search(core):
@@ -83,95 +64,59 @@ def segment_translation(core):
     while core and core[-1] in '،؛؟':
         punctuation = core[-1].translate(PUNCT_TRANS) + punctuation
         core = core[:-1].rstrip()
+    if core in CACHE:
+        return CACHE[core] + punctuation
     if core in MANUAL:
         return MANUAL[core] + punctuation
-    translated=None
-    for attempt in range(3):
+    translated = None
+    for attempt in range(4):
         try:
-            translated=FA.translate(core)
+            translated = FA.translate(core)
             if translated and not ARABIC.search(translated):
+                CACHE[core] = translated
                 return translated.translate(PUNCT_TRANS) + punctuation
         except Exception:
-            translated=None
-        time.sleep(0.8*(attempt+1))
-    words=core.split()
+            translated = None
+        time.sleep(0.8 * (attempt + 1))
+    words = core.split()
     if words and all(word in MANUAL for word in words):
-        return ' '.join(MANUAL[word] for word in words if MANUAL[word]).strip() + punctuation
+        translated = ' '.join(MANUAL[word] for word in words if MANUAL[word]).strip()
+        CACHE[core] = translated
+        return translated + punctuation
     raise RuntimeError(f'Unable to translate Persian segment {core!r}')
 
-def translate_segments(text):
-    def repl(match):
-        segment=match.group(0)
-        if not ARABIC.search(segment): return segment
-        leading=segment[:len(segment)-len(segment.lstrip())]
-        trailing=segment[len(segment.rstrip()):]
-        return leading+segment_translation(segment.strip())+trailing
-    return ARABIC_SEGMENT.sub(repl,text)
-
-def translate_text(text):
-    if not ARABIC.search(text): return text
-    if text in CACHE: return CACHE[text]
-    protected,tokens=protect(text)
-    translated=None
-    for attempt in range(2):
-        try:
-            translated=AUTO.translate(protected)
-            if translated: break
-        except Exception:
-            translated=None
-        time.sleep(0.8*(attempt+1))
-    if translated is None: translated=protected
-    translated=restore(translated,tokens).translate(DIGIT_TRANS)
-    if ARABIC.search(translated): translated=translate_segments(translated)
-    translated=translated.translate(PUNCT_TRANS)
-    if ARABIC.search(translated):
-        raise RuntimeError(f'Arabic-script text remained: {text!r} -> {translated!r}')
-    CACHE[text]=translated
-    return translated
-
 def translate_line(line):
-    if not ARABIC.search(line): return line
-    matches=list(QUOTED.finditer(line))
-    if matches:
-        out=[]; pos=0
-        for match in matches:
-            out.append(line[pos:match.start()])
-            quote=match.group(1); body=match.group(2)
-            if ARABIC.search(body):
-                body=translate_text(body)
-                if quote=='"': body=body.replace('"','\\"')
-                else: body=body.replace("'",'’')
-            out.append(quote+body+quote); pos=match.end()
-        out.append(line[pos:])
-        result=''.join(out)
-        if ARABIC.search(result):
-            hash_pos=result.find('#')
-            if hash_pos>=0 and ARABIC.search(result[hash_pos+1:]):
-                result=result[:hash_pos+1]+' '+translate_text(result[hash_pos+1:].strip())
-        if ARABIC.search(result): raise RuntimeError(f'Untranslated shell line: {result!r}')
-        return result
-    hash_pos=line.find('#')
-    if hash_pos>=0:
-        result=line[:hash_pos+1]+' '+translate_text(line[hash_pos+1:].strip())
-        if ARABIC.search(result): raise RuntimeError(f'Untranslated comment: {result!r}')
-        return result
-    raise RuntimeError(f'Arabic-script text is outside a quoted string/comment: {line!r}')
+    if not ARABIC.search(line):
+        return line
+    line = line.translate(DIGIT_TRANS)
+    def repl(match):
+        segment = match.group(0)
+        if not ARABIC.search(segment):
+            return segment
+        leading = segment[:len(segment) - len(segment.lstrip())]
+        trailing = segment[len(segment.rstrip()):]
+        return leading + segment_translation(segment.strip()) + trailing
+    result = ARABIC_SEGMENT.sub(repl, line).translate(PUNCT_TRANS)
+    if ARABIC.search(result):
+        raise RuntimeError(f'Arabic-script text remained in shell line: {result!r}')
+    return result
 
 def main():
-    changed=[]
+    changed = []
     for path in candidates():
-        original=path.read_text(encoding='utf-8')
-        output=[]
+        original = path.read_text(encoding='utf-8')
+        output = []
         for line in original.splitlines(keepends=True):
-            ending='\n' if line.endswith('\n') else ''
-            body=line[:-1] if ending else line
-            output.append(translate_line(body)+ending)
-        updated=''.join(output)
-        if updated!=original:
-            path.write_text(updated,encoding='utf-8')
+            ending = '\n' if line.endswith('\n') else ''
+            body = line[:-1] if ending else line
+            output.append(translate_line(body) + ending)
+        updated = ''.join(output)
+        if updated != original:
+            path.write_text(updated, encoding='utf-8')
             changed.append(str(path))
     print(f'TRANSLATED_FILES={len(changed)}')
-    for path in changed: print(path)
+    for path in changed:
+        print(path)
 
 if __name__ == '__main__':
     main()
