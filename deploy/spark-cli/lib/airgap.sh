@@ -189,15 +189,23 @@ airgap_import_bundle() {
 }
 
 airgap_install_local_debs() {
-  local root="$1"
+  local root="$1" apt_guard rc=0
   local -a debs=()
   mapfile -t debs < <(find "${root}/apt" -maxdepth 1 -type f -name '*.deb' -print | sort)
   ((${#debs[@]} > 0)) || { fail "No .deb packages found in bundle."; return 1; }
+
+  apt_guard="$(mktemp -d /run/spark-airgap-apt.XXXXXX)"
+  install -d -m 0755 "${apt_guard}/sources.list.d"
+  : >"${apt_guard}/sources.list"
+
   DEBIAN_FRONTEND=noninteractive apt-get \
-    -o Dir::Etc::sourcelist=/dev/null \
-    -o Dir::Etc::sourceparts=- \
+    -o "Dir::Etc::sourcelist=${apt_guard}/sources.list" \
+    -o "Dir::Etc::sourceparts=${apt_guard}/sources.list.d" \
     -o APT::Get::List-Cleanup=0 \
-    install -y "${debs[@]}"
+    install -y --allow-downgrades "${debs[@]}" || rc=$?
+
+  rm -rf "$apt_guard"
+  return "$rc"
 }
 
 airgap_install_manager_local() {
@@ -221,7 +229,8 @@ PY
   python3 "${source_dir}/spark-ui.py" --self-test >/dev/null || return 1
 
   stage="$(mktemp -d /usr/local/lib/spark-manager.airgap.XXXXXX)"
-  mkdir -p "$stage/lib" "$stage/livekit"
+  chmod 0755 "$stage"
+  install -d -m 0755 "$stage/lib" "$stage/livekit"
   install -m 0755 "${source_dir}/spark" "$stage/spark"
   install -m 0755 "${source_dir}/spark-airgap" "$stage/spark-airgap"
   install -m 0644 "${source_dir}/spark-ui.py" "$stage/spark-ui.py"
@@ -230,11 +239,12 @@ PY
   cp -a "${SPARK_ROOT}/deploy/livekit/." "$stage/livekit/"
   rm -rf "$target"
   mv "$stage" "$target"
+  chmod 0755 "$target"
   ln -sfn "$target/spark" /usr/local/bin/spark
   ln -sfn "$target/spark-airgap" /usr/local/bin/spark-airgap
 
   rm -rf "$migrate_target"
-  mkdir -p "$migrate_target"
+  install -d -m 0755 "$migrate_target"
   install -m 0755 "${source_dir}/spark-migrate" "$migrate_target/spark-migrate"
   ln -sfn "$migrate_target/spark-migrate" /usr/local/bin/spark-migrate
 }
