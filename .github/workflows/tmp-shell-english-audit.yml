@@ -1,0 +1,45 @@
+name: Temporary Shell English Audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-shell-english-audit.yml'
+      - 'deploy/spark-cli/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory Arabic-script text in shell sources
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('deploy/spark-cli')
+          candidates = sorted(root.rglob('*.sh'))
+          for name in ('spark', 'spark-airgap', 'spark-migrate'):
+              path = root / name
+              if path.is_file():
+                  candidates.append(path)
+          candidates = sorted(set(candidates))
+          pattern = re.compile(r'[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]')
+          hits = []
+          for path in candidates:
+              text = path.read_text(encoding='utf-8')
+              for number, line in enumerate(text.splitlines(), 1):
+                  if pattern.search(line):
+                      hits.append((str(path), number, line))
+          print(f'SHELL_FILES={len(candidates)}')
+          print(f'NON_ENGLISH_LINES={len(hits)}')
+          for path, number, line in hits:
+              print(f'{path}:{number}: {line}')
+          if hits:
+              raise SystemExit(2)
+          PY
