@@ -1,0 +1,100 @@
+name: Temporary Fix AirGap Coturn
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-coturn.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Coturn lifecycle and validation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deploy/spark-cli/lib/airgap-ip.sh')
+          text=p.read_text(encoding='utf-8')
+
+          old='''test_turn() {\n  systemctl is-active --quiet coturn || return 1\n  ss -lntup | grep -Eq ':(3478)\\b' || return 1\n  turnutils_stunclient "$AIRGAP_SERVER_IP" -p 3478 >/dev/null 2>&1\n}\n'''
+          new='''test_turn() {\n  local escaped_ip probe_log deadline\n  escaped_ip="${AIRGAP_SERVER_IP//./\\\\.}"\n  probe_log="$(mktemp)"\n\n  deadline=$((SECONDS + 10))\n  while (( SECONDS < deadline )); do\n    if systemctl is-active --quiet coturn \\\n      && ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)" \\\n      && ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then\n      break\n    fi\n    sleep 1\n  done\n\n  if ! systemctl is-active --quiet coturn; then\n    echo "ERROR: coturn.service is not active." >>"$CURRENT_LOG"\n    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true\n    rm -f "$probe_log"\n    return 1\n  fi\n  if ! ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then\n    echo "ERROR: Coturn UDP listener is not bound to ${AIRGAP_SERVER_IP}:3478." >>"$CURRENT_LOG"\n    ss -lunp >>"$CURRENT_LOG" 2>&1 || true\n    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true\n    rm -f "$probe_log"\n    return 1\n  fi\n  if ! ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then\n    echo "ERROR: Coturn TCP listener is not bound to ${AIRGAP_SERVER_IP}:3478." >>"$CURRENT_LOG"\n    ss -ltnp >>"$CURRENT_LOG" 2>&1 || true\n    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true\n    rm -f "$probe_log"\n    return 1\n  fi\n  if ! command -v turnutils_stunclient >/dev/null 2>&1; then\n    echo "ERROR: turnutils_stunclient is not installed." >>"$CURRENT_LOG"\n    rm -f "$probe_log"\n    return 1\n  fi\n  if timeout 8s turnutils_stunclient -L "$AIRGAP_SERVER_IP" -p 3478 "$AIRGAP_SERVER_IP" >"$probe_log" 2>&1; then\n    cat "$probe_log" >>"$CURRENT_LOG"\n    rm -f "$probe_log"\n    return 0\n  fi\n  echo "ERROR: STUN binding request to ${AIRGAP_SERVER_IP}:3478 failed." >>"$CURRENT_LOG"\n  cat "$probe_log" >>"$CURRENT_LOG" 2>&1 || true\n  journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true\n  rm -f "$probe_log"\n  return 1\n}\n'''
+          if old not in text:
+              raise SystemExit('test_turn block not found')
+          text=text.replace(old,new,1)
+
+          text=text.replace('''external-ip=${AIRGAP_SERVER_IP}\n''','',1)
+
+          old='''  run_logged "Enable Coturn on internal IPv4" systemctl enable --now coturn || return 1\n  if run_logged "Validate internal TURN/STUN" test_turn; then mark_step 16; else unmark_step 16; return 1; fi\n'''
+          new='''  run_logged "Enable Coturn service" systemctl enable coturn || return 1\n  run_logged "Restart Coturn with internal-IP configuration" systemctl restart coturn || {\n    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true\n    return 1\n  }\n  if run_logged "Validate internal TURN/STUN" test_turn; then mark_step 16; else unmark_step 16; return 1; fi\n'''
+          if old not in text:
+              raise SystemExit('Coturn enable block not found')
+          text=text.replace(old,new,1)
+          p.write_text(text,encoding='utf-8')
+          PY
+
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'Restart Coturn with internal-IP configuration' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'turnutils_stunclient -L "$AIRGAP_SERVER_IP" -p 3478 "$AIRGAP_SERVER_IP"' deploy/spark-cli/lib/airgap-ip.sh
+          if grep -Fq 'external-ip=${AIRGAP_SERVER_IP}' deploy/spark-cli/lib/airgap-ip.sh; then
+            echo 'Air-Gap Coturn still configures external-ip' >&2
+            exit 1
+          fi
+
+          # Real Coturn/STUN fixture on an isolated loopback address.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq coturn >/dev/null
+          sudo ip addr add 10.255.255.1/32 dev lo
+          secret="$(openssl rand -base64 32 | tr -d '\n')"
+          sudo tee /etc/turnserver.conf >/dev/null <<EOF
+          listening-port=3478
+          listening-ip=10.255.255.1
+          relay-ip=10.255.255.1
+          fingerprint
+          use-auth-secret
+          static-auth-secret=${secret}
+          realm=10.255.255.1
+          server-name=10.255.255.1
+          min-port=49160
+          max-port=49200
+          no-tls
+          no-dtls
+          no-cli
+          no-loopback-peers
+          no-multicast-peers
+          stale-nonce=600
+          EOF
+          if sudo test -f /etc/default/coturn; then
+            if sudo grep -q '^TURNSERVER_ENABLED=' /etc/default/coturn; then
+              sudo sed -i 's/^TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
+            else
+              echo 'TURNSERVER_ENABLED=1' | sudo tee -a /etc/default/coturn >/dev/null
+            fi
+          fi
+          sudo systemctl enable coturn >/dev/null
+          sudo systemctl restart coturn
+          sleep 1
+          sudo systemctl is-active --quiet coturn
+          sudo ss -lunp | grep -E '10\.255\.255\.1:3478([[:space:]]|$)'
+          sudo ss -ltnp | grep -E '10\.255\.255\.1:3478([[:space:]]|$)'
+          timeout 8s turnutils_stunclient -L 10.255.255.1 -p 3478 10.255.255.1 | tee /tmp/stun.out
+          grep -Eq 'reflexive addr|UDP reflexive addr' /tmp/stun.out
+          git diff --check
+
+      - name: Commit minimal fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap-ip.sh
+          git commit -m 'fix(airgap): restart and validate internal Coturn'
+          git push origin HEAD:main
