@@ -338,7 +338,7 @@ def logical_draw_details(self):
 
 
 _original_task_process_init = core.TaskProcess.__init__
-_original_task_process_read = core.TaskProcess.read
+_original_task_process_read_available = core.TaskProcess.read_available
 
 
 def routed_task_process_init(self, spark_path, action_id, args, rows, cols):
@@ -356,8 +356,10 @@ def routed_task_process_init(self, spark_path, action_id, args, rows, cols):
     return _original_task_process_init(self, spark_path, action_id, args, rows, cols)
 
 
-def english_only_task_process_read(self):
-    return sanitize_backend_text(_original_task_process_read(self), getattr(self, "action_id", ""))
+def english_only_task_process_read_available(self):
+    return sanitize_backend_text(
+        _original_task_process_read_available(self), getattr(self, "action_id", "")
+    )
 
 
 def logical_self_test() -> int:
@@ -374,6 +376,9 @@ def logical_self_test() -> int:
         "security-db-test",
         "security-db-open",
         "security-db-close",
+        "security-studio-info",
+        "security-studio-open",
+        "security-studio-close",
         "security-report",
         "security-account-unlock",
         "cleanup-database",
@@ -427,7 +432,7 @@ core.collect_status = logical_collect_status
 core.SparkUI.action_badge = install_action_badge
 core.SparkUI.draw_details = logical_draw_details
 core.TaskProcess.__init__ = routed_task_process_init
-core.TaskProcess.read = english_only_task_process_read
+core.TaskProcess.read_available = english_only_task_process_read_available
 core.self_test = logical_self_test
 
 
