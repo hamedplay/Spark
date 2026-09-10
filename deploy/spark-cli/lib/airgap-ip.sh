@@ -346,6 +346,14 @@ airgap_ip_provision_database_access() {
   airgap_ip_database_login_test || return 1
 }
 
+airgap_ip_supabase_health() {
+  local url="${1:-}" timeout_s="${2:-5}" anon
+  [[ -n "$url" ]] || return 1
+  anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"
+  [[ -n "$anon" ]] || return 1
+  curl --noproxy '*' -fsS --connect-timeout "$timeout_s" -H "apikey: ${anon}" "$url" >/dev/null
+}
+
 airgap_ip_gateway_bind_present() {
   local cid
   cid="$(cd "$SUPABASE_ROOT" && docker compose ps -q api-gw 2>/dev/null)"
@@ -395,7 +403,7 @@ PY
 
   deadline=$((SECONDS + 45))
   while (( SECONDS < deadline )); do
-    if curl --noproxy '*' -fsS --connect-timeout 3 "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" >/dev/null 2>&1; then
+    if airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" 3 >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -412,7 +420,7 @@ install_step_10() {
   run_logged "Ensure Supabase gateway bind on ${AIRGAP_SERVER_IP}:8000" airgap_ip_ensure_gateway_bind || { unmark_step 10; return 1; }
   if run_logged "Expose PostgreSQL session endpoint only on ${AIRGAP_SERVER_IP}:5432" airgap_ip_provision_database_access; then
     run_logged "Validate direct Supabase gateway on ${AIRGAP_SERVER_IP}:8000" \
-      curl --noproxy '*' -fsS --connect-timeout 5 "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" >/dev/null || { unmark_step 10; return 1; }
+      airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}:8000/auth/v1/health" 5 || { unmark_step 10; return 1; }
     mark_step 10
   else
     unmark_step 10
@@ -534,7 +542,7 @@ EOF_NGINX
 }
 
 airgap_ip_test_nginx() {
-  local app_headers api_code
+  local app_headers
   nginx -t || return 1
   systemctl is-active --quiet nginx || return 1
   ss -lnt | awk -v endpoint="${AIRGAP_SERVER_IP}:80" '$4==endpoint {found=1} END{exit !found}' || return 1
@@ -542,8 +550,7 @@ airgap_ip_test_nginx() {
   grep -Eqi '^X-Content-Type-Options:[[:space:]]*nosniff' <<<"$app_headers" || return 1
   grep -Eqi '^X-Frame-Options:[[:space:]]*SAMEORIGIN' <<<"$app_headers" || return 1
   grep -Eqi '^Content-Security-Policy:' <<<"$app_headers" || return 1
-  api_code="$(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 "http://${AIRGAP_SERVER_IP}/auth/v1/health" || true)"
-  [[ "$api_code" =~ ^2[0-9][0-9]$ ]]
+  airgap_ip_supabase_health "http://${AIRGAP_SERVER_IP}/auth/v1/health" 5
 }
 
 install_step_12() {
@@ -1004,7 +1011,7 @@ EOF_BLACKBOX
   cat >"$target_file" <<EOF_TARGETS
 [
   {
-    "targets": ["http://${AIRGAP_SERVER_IP}/auth/v1/health"],
+    "targets": ["http://${AIRGAP_SERVER_IP}/auth/v1/.well-known/jwks.json"],
     "labels": {"probe": "spark-api"}
   },
   {
