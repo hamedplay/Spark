@@ -593,9 +593,55 @@ install_step_14() {
 }
 
 test_turn() {
-  systemctl is-active --quiet coturn || return 1
-  ss -lntup | grep -Eq ':(3478)\b' || return 1
-  turnutils_stunclient "$AIRGAP_SERVER_IP" -p 3478 >/dev/null 2>&1
+  local escaped_ip probe_log deadline
+  escaped_ip="${AIRGAP_SERVER_IP//./\\.}"
+  probe_log="$(mktemp)"
+
+  deadline=$((SECONDS + 10))
+  while (( SECONDS < deadline )); do
+    if systemctl is-active --quiet coturn \
+      && ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)" \
+      && ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
+      break
+    fi
+    sleep 1
+  done
+
+  if ! systemctl is-active --quiet coturn; then
+    echo "ERROR: coturn.service is not active." >>"$CURRENT_LOG"
+    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
+    rm -f "$probe_log"
+    return 1
+  fi
+  if ! ss -lunp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
+    echo "ERROR: Coturn UDP listener is not bound to ${AIRGAP_SERVER_IP}:3478." >>"$CURRENT_LOG"
+    ss -lunp >>"$CURRENT_LOG" 2>&1 || true
+    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
+    rm -f "$probe_log"
+    return 1
+  fi
+  if ! ss -ltnp 2>/dev/null | grep -Eq "${escaped_ip}:3478([[:space:]]|$)"; then
+    echo "ERROR: Coturn TCP listener is not bound to ${AIRGAP_SERVER_IP}:3478." >>"$CURRENT_LOG"
+    ss -ltnp >>"$CURRENT_LOG" 2>&1 || true
+    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
+    rm -f "$probe_log"
+    return 1
+  fi
+  if ! command -v turnutils_stunclient >/dev/null 2>&1; then
+    echo "ERROR: turnutils_stunclient is not installed." >>"$CURRENT_LOG"
+    rm -f "$probe_log"
+    return 1
+  fi
+  if timeout 8s turnutils_stunclient -L "$AIRGAP_SERVER_IP" -p 3478 "$AIRGAP_SERVER_IP" >"$probe_log" 2>&1; then
+    cat "$probe_log" >>"$CURRENT_LOG"
+    rm -f "$probe_log"
+    return 0
+  fi
+  echo "ERROR: STUN binding request to ${AIRGAP_SERVER_IP}:3478 failed." >>"$CURRENT_LOG"
+  cat "$probe_log" >>"$CURRENT_LOG" 2>&1 || true
+  journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
+  rm -f "$probe_log"
+  return 1
 }
 
 install_step_16() {
@@ -616,7 +662,6 @@ install_step_16() {
 listening-port=3478
 listening-ip=${AIRGAP_SERVER_IP}
 relay-ip=${AIRGAP_SERVER_IP}
-external-ip=${AIRGAP_SERVER_IP}
 fingerprint
 use-auth-secret
 static-auth-secret=${secret}
@@ -650,7 +695,11 @@ EOF_TURN
     fi
   fi
 
-  run_logged "Enable Coturn on internal IPv4" systemctl enable --now coturn || return 1
+  run_logged "Enable Coturn service" systemctl enable coturn || return 1
+  run_logged "Restart Coturn with internal-IP configuration" systemctl restart coturn || {
+    journalctl -u coturn --no-pager -n 80 >>"$CURRENT_LOG" 2>&1 || true
+    return 1
+  }
   if run_logged "Validate internal TURN/STUN" test_turn; then mark_step 16; else unmark_step 16; return 1; fi
 }
 
