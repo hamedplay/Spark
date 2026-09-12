@@ -40,6 +40,9 @@ jobs:
           printf '%s %s\n' 'busybox:1.36' "$(docker image inspect --format '{{.Id}}' busybox:1.36)" >"$root/docker/image-ids.txt"
 
           export CONFIG_DIR="$(mktemp -d)"
+          export SCRIPT_DIR="$PWD/deploy/spark-cli"
+          export SPARK_ROOT="$PWD"
+          export MANAGER_CONF="$CONFIG_DIR/manager.conf"
           export AIRGAP_REAL_DOCKER="$(command -v docker)"
           export AIRGAP_REAL_NPM="$(command -v npm || true)"
           CURRENT_LOG="$(mktemp)"
