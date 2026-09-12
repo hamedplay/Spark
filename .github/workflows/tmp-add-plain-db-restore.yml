@@ -1,0 +1,130 @@
+name: Temporary Add Plain DB Restore
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-add-plain-db-restore.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tmp_add_plain_db_restore.py
+          bash -n deploy/spark-cli/lib/tests-backup.sh
+          bash -n deploy/spark-cli/spark
+          python3 -m py_compile deploy/spark-cli/spark-ui.py
+          git diff --check
+
+      - name: Validate plain restore and automatic rollback with real PostgreSQL
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker pull postgres:15 >/dev/null
+          docker run -d --name spark-restore-test -e POSTGRES_PASSWORD=testpass postgres:15 >/dev/null
+          for i in $(seq 1 40); do
+            if docker exec spark-restore-test pg_isready -U postgres >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          docker exec spark-restore-test pg_isready -U postgres >/dev/null
+
+          # Existing target state.
+          docker exec -i spark-restore-test psql -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE TABLE restore_marker(value text);
+          INSERT INTO restore_marker VALUES ('current');
+          SQL
+
+          # Source database for the plain dump, including standard Supabase schemas.
+          docker exec spark-restore-test createdb -U postgres source_db
+          docker exec -i spark-restore-test psql -U postgres -d source_db -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA auth;
+          CREATE SCHEMA storage;
+          CREATE TABLE restore_marker(value text);
+          INSERT INTO restore_marker VALUES ('restored');
+          SQL
+          docker exec spark-restore-test pg_dump -U postgres -d source_db -Fp > /tmp/source-plain.sql
+
+          export BACKUP_DIR=/tmp/spark-backups
+          export STATE_DIR=/tmp/spark-state
+          export STEP_DIR=/tmp/spark-state/steps
+          export SUPABASE_ROOT=/tmp/spark-supabase
+          export CONFIG_DIR=/tmp/nonexistent-spark-config
+          export CURRENT_LOG=/tmp/plain-restore.log
+          mkdir -p "$BACKUP_DIR" "$STATE_DIR" "$STEP_DIR" "$SUPABASE_ROOT"
+          : > "$SUPABASE_ROOT/docker-compose.yml"
+
+          info(){ printf 'INFO: %s\n' "$*"; }
+          warn(){ printf 'WARN: %s\n' "$*"; }
+          ok(){ printf 'OK: %s\n' "$*"; }
+          fail(){ printf 'FAIL: %s\n' "$*" >&2; }
+          unmark_step(){ rm -f "$STEP_DIR/$1.ok"; }
+          compose(){
+            local cmd="$1"; shift
+            case "$cmd" in
+              config)
+                if [[ "${1:-}" == '--services' ]]; then printf 'db\nrest\nauth\n'; return 0; fi
+                return 0
+                ;;
+              ps)
+                if [[ "$*" == *'--status running --services'* ]]; then printf 'db\n'; return 0; fi
+                return 0
+                ;;
+              exec)
+                [[ "${1:-}" == '-T' ]] && shift
+                [[ "${1:-}" == 'db' ]] || return 2
+                shift
+                docker exec -i spark-restore-test "$@"
+                ;;
+              stop|up) return 0 ;;
+              *) echo "unsupported compose stub: $cmd $*" >&2; return 2 ;;
+            esac
+          }
+          source deploy/spark-cli/lib/tests-backup.sh
+
+          restore_plain_database_from_file /tmp/source-plain.sql
+          value="$(docker exec spark-restore-test psql -U postgres -d postgres -Atqc 'select value from restore_marker')"
+          [[ "$value" == 'restored' ]]
+
+          # Prove a later SQL error triggers rollback to the immediately previous DB.
+          docker exec spark-restore-test psql -U postgres -d postgres -c "UPDATE restore_marker SET value='before_bad';" >/dev/null
+          cp /tmp/source-plain.sql /tmp/bad-plain.sql
+          printf '\nTHIS IS INVALID SQL;\n' >> /tmp/bad-plain.sql
+          if restore_plain_database_from_file /tmp/bad-plain.sql; then
+            echo 'Expected corrupted restore to fail.' >&2
+            exit 1
+          fi
+          value="$(docker exec spark-restore-test psql -U postgres -d postgres -Atqc 'select value from restore_marker')"
+          [[ "$value" == 'before_bad' ]]
+          echo 'Plain restore + automatic rollback: PASS'
+
+      - name: Validate UI and dispatch wiring
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -Fq 'backup-restore-plain' deploy/spark-cli/spark
+          grep -Fq 'Restore PostgreSQL from plain backup' deploy/spark-cli/spark-ui.py
+          grep -Fq 'restore_plain_database_interactive' deploy/spark-cli/lib/tests-backup.sh
+          python3 deploy/spark-cli/spark-ui.py --self-test
+          echo 'Restore UI/dispatch wiring: PASS'
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/tests-backup.sh deploy/spark-cli/spark deploy/spark-cli/spark-ui.py
+          git commit -m 'feat(manager): restore PostgreSQL from plain backup safely'
+          git pull --rebase origin main
+          git push origin HEAD:main
