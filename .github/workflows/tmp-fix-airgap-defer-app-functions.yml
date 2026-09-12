@@ -1,0 +1,115 @@
+name: Temporary Fix Air-Gap Deferred App Integration
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-defer-app-functions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Step 21 app integration deferral
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tmp_fix_airgap_defer_app_functions.py
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+          git diff --check
+
+      - name: Validate Step 21 defer semantics
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('deploy/spark-cli/lib/airgap-ip.sh').read_text()
+          start=s.index('test_livekit_full_validation() {')
+          end=s.index('\nlivekit_write_observability_targets()', start)
+          block=s[start:end]
+          db_if=block.index('if spark_application_database_provisioned; then')
+          loop=block.index('for function in \\\n      conference-livekit-token')
+          else_pos=block.index('  else\n    livekit_defer_database_integration', db_if)
+          defer=block.index('[DEFER] Spark application Edge Function guards are deferred until database restore.', else_pos)
+          clear=block.index('livekit_clear_database_integration_pending', loop)
+          assert db_if < loop < clear < else_pos < defer
+          assert block.count('Edge Function unauthorized guard: ${function}') == 1
+          print('Static Step 21 branch ordering: PASS')
+          PY
+
+      - name: Validate runtime branch behavior
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          f='deploy/spark-cli/lib/airgap-ip.sh'
+          python3 - "$f" <<'PY' > /tmp/test-livekit-validation.sh
+          from pathlib import Path
+          import sys
+          s=Path(sys.argv[1]).read_text()
+          start=s.index('test_livekit_full_validation() {')
+          end=s.index('\nlivekit_write_observability_targets()', start)
+          print(s[start:end])
+          PY
+          cat >/tmp/harness.sh <<'SH'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          CURRENT_LOG="$(mktemp)"
+          STATE_DIR="$(mktemp -d)"
+          function_calls=0
+          stub_ok(){ return 0; }
+          livekit_airgap_validation_check(){ local label="$1"; shift; "$@"; }
+          test_livekit_config(){ :; }
+          livekit_runtime_ready(){ :; }
+          livekit_airgap_listener_probe(){ :; }
+          livekit_airgap_minio_listener_probe(){ :; }
+          curl(){ :; }
+          livekit_public_tls_probe(){ :; }
+          livekit_turn_tls_probe(){ :; }
+          livekit_api_smoke(){ :; }
+          livekit_worker_config_contracts_ready(){ :; }
+          livekit_configure_speaker_timer_worker(){ :; }
+          livekit_configure_phase_worker(){ :; }
+          livekit_secret_leak_probe(){ :; }
+          livekit_secret_file_permissions_probe(){ :; }
+          livekit_internal_api_exposure_probe(){ :; }
+          systemctl(){ return 1; }
+          livekit_airgap_ufw_probe(){ :; }
+          livekit_airgap_validation_report_failure(){ :; }
+          livekit_report_start_failure(){ :; }
+          livekit_clear_database_integration_pending(){ rm -f "$STATE_DIR/airgap-db-integration.pending"; }
+          livekit_defer_database_integration(){ printf x >"$STATE_DIR/airgap-db-integration.pending"; }
+          livekit_function_unauthorized_probe(){ function_calls=$((function_calls+1)); return 0; }
+          source /tmp/test-livekit-validation.sh
+
+          spark_application_database_provisioned(){ return 1; }
+          test_livekit_full_validation
+          [[ "$function_calls" -eq 0 ]]
+          [[ -f "$STATE_DIR/airgap-db-integration.pending" ]]
+
+          function_calls=0
+          spark_application_database_provisioned(){ return 0; }
+          test_livekit_full_validation
+          [[ "$function_calls" -eq 16 ]]
+          [[ ! -f "$STATE_DIR/airgap-db-integration.pending" ]]
+          echo 'Runtime DB-deferred/application-guard branching: PASS'
+          SH
+          bash /tmp/harness.sh
+
+      - name: Commit minimal Step 21 fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap-ip.sh
+          git commit -m 'fix(airgap): defer app function guards until DB restore'
+          git pull --rebase origin main
+          git push origin HEAD:main
