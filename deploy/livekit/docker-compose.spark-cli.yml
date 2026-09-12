@@ -6,7 +6,17 @@
 # topology. Docker rejects a per-container CPU quota larger than the host CPU
 # count, so the CLI override caps the media services at 2 CPUs by default.
 # Larger hosts can explicitly raise these three SPARK_* values when needed.
+#
+# MinIO's Docker Hub repositories are archived. Keep the exact reviewed release
+# tags but use MinIO's official Quay registry so online and Air-Gap image pulls
+# do not depend on the archived Docker Hub namespace.
 services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+
   livekit:
     cpus: ${SPARK_LIVEKIT_CPU_LIMIT:-2.0}
 
