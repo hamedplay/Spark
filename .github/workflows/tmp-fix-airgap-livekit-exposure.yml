@@ -35,8 +35,9 @@ jobs:
           start=s.index('livekit_internal_api_exposure_probe() {')
           end=s.index('\nlivekit_secret_file_permissions_probe()', start)
           block=s[start:end]
-          assert '\\*):${LIVEKIT_INTERNAL_API_PORT}\\b' in block
+          assert 'LiveKit uses host networking and may report a wildcard listener as *:7880.' in block
           assert 'index($0, ip) && index($0, port) && $0 ~ /ALLOW/' in block
+          assert 'Do not accept a broad 7880/tcp ALLOW rule.' in block
           print('Static LiveKit exposure probe semantics: PASS')
           PY
 
@@ -101,5 +102,3 @@ jobs:
           git commit -m 'fix(airgap): accept LiveKit wildcard listener with scoped UFW'
           git pull --rebase origin main
           git push origin HEAD:main
-
-# rerun after robust function-boundary patching
