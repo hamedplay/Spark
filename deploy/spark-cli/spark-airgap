@@ -97,6 +97,8 @@ spark_airgap_dispatch_inner() {
     airgap-build-target-patch) airgap_build_target_patch "${1:-}" "${2:-}" "${3:-}" ;;
     airgap-apply-target-patch) airgap_apply_target_patch "${1:-}" "${2:-}" ;;
     airgap-auto-target-bootstrap) airgap_auto_apply_and_bootstrap "${1:-}" "${2:-}" ;;
+    airgap-build-observability-pack) airgap_build_observability_pack "${1:-}" ;;
+    airgap-import-observability-pack) airgap_import_observability_pack "${1:-}" ;;
     *) fail "Unknown Spark Air-Gap backend action: $action"; return 2 ;;
   esac
 }
@@ -157,6 +159,14 @@ case "${1:-}" in
     shift
     spark_airgap_backend_action airgap-auto-target-bootstrap "${1:-}" "${2:-}"
     ;;
+  --build-observability-pack)
+    shift
+    spark_airgap_backend_action airgap-build-observability-pack "${1:-}"
+    ;;
+  --import-observability-pack)
+    shift
+    spark_airgap_backend_action airgap-import-observability-pack "${1:-}"
+    ;;
   --help|-h|"")
     cat <<'EOF_HELP'
 Usage: spark-airgap [option]
@@ -171,6 +181,8 @@ Usage: spark-airgap [option]
   --apply-target-patch [base] [patch]  Apply a target patch and create a prepared local bundle directory
   --auto-target-bootstrap [base] [patch]
                                        Auto-discover/match artifacts, apply the target patch and run offline bootstrap
+  --build-observability-pack [output] Build only the seven Step 22 observability images on a connected host
+  --import-observability-pack [pack]  Verify/load a local observability image supplement on the target
   --version                            Show air-gap installer version
 EOF_HELP
     ;;

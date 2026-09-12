@@ -182,6 +182,18 @@ AIRGAP_ACTIONS = [
         "Automatically find matching artifacts, verify them, prepare the target bundle, install local packages and import Docker images.",
         "controlled",
     ),
+    core.Action(
+        "airgap-build-observability-pack",
+        "10  Build observability image supplement",
+        "Build only the seven pinned linux/amd64 Docker images required by Step 22 on a connected staging host.",
+        "controlled",
+    ),
+    core.Action(
+        "airgap-import-observability-pack",
+        "11  Import observability image supplement",
+        "Verify and load a checksum-protected Step 22 observability image supplement without replacing the active Air-Gap bundle.",
+        "controlled",
+    ),
 ]
 
 
@@ -461,6 +473,8 @@ def logical_self_test() -> int:
         "airgap-build-target-patch",
         "airgap-apply-target-patch",
         "airgap-auto-target-bootstrap",
+        "airgap-build-observability-pack",
+        "airgap-import-observability-pack",
     }
     if not required.issubset(ids):
         missing = ", ".join(sorted(required - ids))
