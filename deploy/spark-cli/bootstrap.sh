@@ -50,12 +50,11 @@ MAIN_SHA="$(resolve_main_sha)"
 RAW_ROOT="https://raw.githubusercontent.com/hamedplay/Spark/${MAIN_SHA}"
 RAW_BASE="${RAW_ROOT}/deploy/spark-cli"
 LIVEKIT_RAW_BASE="${RAW_ROOT}/deploy/livekit"
-MIGRATION_RAW_BASE="${RAW_ROOT}/supabase/migrations"
 printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/migrations"
+mkdir -p "$tmp/lib" "$tmp/livekit"
 
 files=(
   spark
@@ -89,14 +88,6 @@ files=(
 for file in "${files[@]}"; do
   echo "Downloading ${file}..."
   curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/${file}" -o "${tmp}/${file}"
-done
-
-manager_migrations=(
-  20260912075003_sync_conference_worker_config_contracts.sql
-)
-for file in "${manager_migrations[@]}"; do
-  echo "Downloading Manager compatibility migration ${file}..."
-  curl -fsSL -H 'Cache-Control: no-cache' "${MIGRATION_RAW_BASE}/${file}" -o "${tmp}/migrations/${file}"
 done
 
 livekit_files=(
@@ -162,10 +153,6 @@ grep -Fq 'AIRGAP_IP_MODE="internal_ip"' "$tmp/lib/airgap-ip.sh" || {
   echo "Spark Air-Gap internal-IP deployment mode is incomplete." >&2
   exit 1
 }
-grep -Fq 'configure_conference_speaker_timer_worker' "$tmp/migrations/20260912075003_sync_conference_worker_config_contracts.sql" || {
-  echo "Spark Air-Gap conference worker compatibility migration is incomplete." >&2
-  exit 1
-}
 grep -Fq "SPARK_UI_VERSION = \"${EXPECTED_UI_VERSION}\"" "$tmp/spark-ui.py" || {
   echo "Spark UI version validation failed." >&2
   exit 1
@@ -228,7 +215,7 @@ migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
 chmod 0755 "$stage" "$migrate_stage"
 backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
-install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/migrations"
+install -d -m 0755 "$stage/lib" "$stage/livekit"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
 install -m 0755 "$tmp/bootstrap-airgap.sh" "$stage/bootstrap-airgap.sh"
@@ -237,9 +224,6 @@ install -m 0644 "$tmp/spark-ui-core.py" "$stage/spark-ui-core.py"
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
-done
-for file in "$tmp"/migrations/*.sql; do
-  install -m 0644 "$file" "$stage/migrations/$(basename "$file")"
 done
 rsync -a --delete "$tmp/livekit/" "$stage/livekit/"
 

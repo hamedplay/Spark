@@ -5,9 +5,6 @@
 
 AIRGAP_IP_CONF="${CONFIG_DIR}/airgap-ip.conf"
 AIRGAP_IP_MODE="internal_ip"
-AIRGAP_WORKER_CONTRACT_MIGRATION_VERSION="20260912075003"
-AIRGAP_WORKER_CONTRACT_MIGRATION_NAME="sync_conference_worker_config_contracts"
-AIRGAP_WORKER_CONTRACT_MIGRATION_FILE="${SCRIPT_DIR}/migrations/20260912075003_sync_conference_worker_config_contracts.sql"
 
 # Preserve the generic implementations we intentionally extend.
 eval "$(declare -f save_config | sed '1s/save_config/save_config_standard/')"
@@ -977,6 +974,19 @@ livekit_secret_file_permissions_probe() {
   [[ "$(stat -c '%a' "$AIRGAP_LIVEKIT_OVERRIDE")" == "600" ]] || return 1
 }
 
+spark_application_database_provisioned() {
+  (
+    cd "$SUPABASE_ROOT"
+    docker compose exec -T db psql -U postgres -d postgres -Atq <<'SQL'
+select case when
+  to_regclass('public.meetings') is not null
+  and to_regclass('public.profiles') is not null
+  and to_regclass('public.participants') is not null
+then 1 else 0 end;
+SQL
+  ) 2>>"$CURRENT_LOG" | grep -qx '1'
+}
+
 livekit_worker_config_contracts_ready() {
   (
     cd "$SUPABASE_ROOT"
@@ -991,46 +1001,15 @@ SQL
   ) 2>>"$CURRENT_LOG" | grep -qx '1'
 }
 
-livekit_record_worker_contract_migration() {
-  (
-    cd "$SUPABASE_ROOT"
-    docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
-DO $spark$
-BEGIN
-  IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-    EXECUTE $migration$
-      insert into supabase_migrations.schema_migrations(version, statements, name)
-      values ('20260912075003', array[]::text[], 'sync_conference_worker_config_contracts')
-      on conflict (version) do nothing
-    $migration$;
-  END IF;
-END
-$spark$;
-SQL
-  ) >>"$CURRENT_LOG" 2>&1
+livekit_defer_database_integration() {
+  install -d -m 0700 "$STATE_DIR"
+  printf '%s\n' "$(date -Is)" >"${STATE_DIR}/airgap-db-integration.pending"
+  chmod 0600 "${STATE_DIR}/airgap-db-integration.pending"
+  printf '[DEFER] Spark application database is not provisioned yet; conference DB contracts and worker URL configuration are deferred until database restore.\n' | tee -a "$CURRENT_LOG"
 }
 
-livekit_apply_worker_contract_migration() {
-  [[ -f "$AIRGAP_WORKER_CONTRACT_MIGRATION_FILE" ]] || {
-    printf 'Required Air-Gap compatibility migration is missing: %s\n' "$AIRGAP_WORKER_CONTRACT_MIGRATION_FILE" >>"$CURRENT_LOG"
-    return 1
-  }
-  printf 'Applying Air-Gap compatibility migration %s (%s) sha256=%s\n' \
-    "$AIRGAP_WORKER_CONTRACT_MIGRATION_VERSION" "$AIRGAP_WORKER_CONTRACT_MIGRATION_NAME" \
-    "$(sha256sum "$AIRGAP_WORKER_CONTRACT_MIGRATION_FILE" | awk '{print $1}')" >>"$CURRENT_LOG"
-  (
-    cd "$SUPABASE_ROOT"
-    docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
-      <"$AIRGAP_WORKER_CONTRACT_MIGRATION_FILE"
-  ) >>"$CURRENT_LOG" 2>&1 || return 1
-  livekit_record_worker_contract_migration || return 1
-}
-
-livekit_ensure_worker_config_contracts() {
-  livekit_worker_config_contracts_ready && return 0
-  printf 'Conference worker DB contracts are missing; applying the Manager compatibility migration.\n' >>"$CURRENT_LOG"
-  livekit_apply_worker_contract_migration || return 1
-  livekit_worker_config_contracts_ready
+livekit_clear_database_integration_pending() {
+  rm -f "${STATE_DIR}/airgap-db-integration.pending"
 }
 
 livekit_configure_speaker_timer_worker() {
@@ -1147,9 +1126,15 @@ test_livekit_full_validation() {
   livekit_airgap_validation_check "LiveKit internal HTTP reachability" livekit_public_tls_probe "$AIRGAP_SERVER_IP" || { livekit_airgap_validation_report_failure; return 1; }
   livekit_airgap_validation_check "LiveKit embedded TURN STUN UDP 443" livekit_turn_tls_probe || { livekit_airgap_validation_report_failure; return 1; }
   livekit_airgap_validation_check "LiveKit RoomService API smoke test" livekit_api_smoke || { livekit_airgap_validation_report_failure; return 1; }
-  livekit_airgap_validation_check "Conference worker DB contracts" livekit_ensure_worker_config_contracts || { livekit_airgap_validation_report_failure; return 1; }
-  livekit_airgap_validation_check "Configure speaker timer worker" livekit_configure_speaker_timer_worker || { livekit_airgap_validation_report_failure; return 1; }
-  livekit_airgap_validation_check "Configure conference phase worker" livekit_configure_phase_worker || { livekit_airgap_validation_report_failure; return 1; }
+
+  if spark_application_database_provisioned; then
+    livekit_airgap_validation_check "Conference worker DB contracts" livekit_worker_config_contracts_ready || { livekit_airgap_validation_report_failure; return 1; }
+    livekit_airgap_validation_check "Configure speaker timer worker" livekit_configure_speaker_timer_worker || { livekit_airgap_validation_report_failure; return 1; }
+    livekit_airgap_validation_check "Configure conference phase worker" livekit_configure_phase_worker || { livekit_airgap_validation_report_failure; return 1; }
+    livekit_clear_database_integration_pending
+  else
+    livekit_defer_database_integration
+  fi
 
   for function in \
     conference-livekit-token conference-host-control conference-recording \

@@ -296,15 +296,12 @@ PY
 
   stage="$(mktemp -d /usr/local/lib/spark-manager.airgap.XXXXXX)"
   chmod 0755 "$stage"
-  install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/migrations"
+  install -d -m 0755 "$stage/lib" "$stage/livekit"
   install -m 0755 "${source_dir}/spark" "$stage/spark"
   install -m 0755 "${source_dir}/spark-airgap" "$stage/spark-airgap"
   install -m 0644 "${source_dir}/spark-ui.py" "$stage/spark-ui.py"
   install -m 0644 "${source_dir}/spark-ui-core.py" "$stage/spark-ui-core.py"
   for file in "${source_dir}"/lib/*.sh; do install -m 0644 "$file" "$stage/lib/$(basename "$file")"; done
-  if [[ -f "${SPARK_ROOT}/supabase/migrations/20260912075003_sync_conference_worker_config_contracts.sql" ]]; then
-    install -m 0644 "${SPARK_ROOT}/supabase/migrations/20260912075003_sync_conference_worker_config_contracts.sql" "$stage/migrations/20260912075003_sync_conference_worker_config_contracts.sql"
-  fi
   cp -a "${SPARK_ROOT}/deploy/livekit/." "$stage/livekit/"
   rm -rf "$target"
   mv "$stage" "$target"
