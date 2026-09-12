@@ -337,6 +337,10 @@ spark_backend_dispatch_inner() {
       new_log "backup-manual"
       run_visible "Create DB + config backup" create_backup manual
       ;;
+    backup-restore-plain)
+      new_log "database-restore-plain"
+      restore_plain_database_interactive
+      ;;
     backup-list) new_log "backup-list"; run_report "Backups" list_backups ;;
 
     manager-update) self_update ;;

@@ -229,6 +229,7 @@ CLEANUP_ACTIONS = [
         "confirm",
     ),
     core.Action(
+        "backup-restore-plain",
         "cleanup-backups",
         "Backup cleanup / free space",
         "Safely prune old Spark backups with a configurable retention period, or explicitly delete all retained backups.",
@@ -331,6 +332,13 @@ def patch_categories() -> None:
                 "controlled",
             ))
         elif category == "Backups":
+            idx = next((i for i, a in enumerate(new_actions) if a.special == "logs"), len(new_actions))
+            new_actions.insert(idx, core.Action(
+                "backup-restore-plain",
+                "Restore PostgreSQL from plain backup",
+                "Replace the postgres database from a full pg_dump/pgAdmin Plain SQL backup. A safety backup is created first and rollback is automatic on restore failure.",
+                "confirm",
+            ))
             idx = next((i for i, a in enumerate(new_actions) if a.special == "logs"), len(new_actions))
             new_actions.insert(idx, core.Action(
                 "cleanup-backups",
