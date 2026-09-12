@@ -2,15 +2,8 @@ from pathlib import Path
 
 p = Path('deploy/spark-cli/lib/airgap-ip.sh')
 s = p.read_text(encoding='utf-8')
-old = r'''livekit_internal_api_exposure_probe() {
-  local ufw_status
-  ufw_status="$(ufw status verbose 2>/dev/null || true)"
-  grep -q 'Status: active' <<<"$ufw_status" || return 1
-  ss -lnt | grep -Eq "${AIRGAP_SERVER_IP//./\\.}:${LIVEKIT_INTERNAL_API_PORT}\\b|0\\.0\\.0\\.0:${LIVEKIT_INTERNAL_API_PORT}\\b|\\[::\\]:${LIVEKIT_INTERNAL_API_PORT}\\b" || return 1
-  livekit_airgap_http_reachable "http://${AIRGAP_SERVER_IP}:${LIVEKIT_INTERNAL_API_PORT}/" || return 1
-  ufw status | grep -Eq "${LIVEKIT_INTERNAL_API_PORT}/tcp|${LIVEKIT_INTERNAL_API_PORT}[[:space:]]" || return 1
-}
-'''
+start = s.index('livekit_internal_api_exposure_probe() {')
+end = s.index('\nlivekit_secret_file_permissions_probe()', start)
 new = r'''livekit_internal_api_exposure_probe() {
   local ufw_status sockets
   ufw_status="$(ufw status verbose 2>/dev/null || true)"
@@ -31,8 +24,6 @@ new = r'''livekit_internal_api_exposure_probe() {
   '
 }
 '''
-if s.count(old) != 1:
-    raise SystemExit(f'expected exactly one exposure probe block, found {s.count(old)}')
-s = s.replace(old, new, 1)
+s = s[:start] + new + s[end:]
 p.write_text(s, encoding='utf-8')
 print('Air-Gap LiveKit exposure probe patch: PASS')
