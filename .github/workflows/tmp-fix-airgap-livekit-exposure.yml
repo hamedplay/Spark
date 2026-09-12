@@ -101,3 +101,5 @@ jobs:
           git commit -m 'fix(airgap): accept LiveKit wildcard listener with scoped UFW'
           git pull --rebase origin main
           git push origin HEAD:main
+
+# rerun after robust function-boundary patching
