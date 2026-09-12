@@ -1,5 +1,9 @@
 # Air-gap installation overrides. Sourced by lib/airgap.sh.
 
+# Preserve the standard LiveKit runtime step before Air-Gap adds content-store
+# integrity checks. The online installer remains unchanged.
+eval "$(declare -f install_step_20 | sed '1s/install_step_20/install_step_20_online/')"
+
 airgap_cert_source_dir() {
   local root="$1" domain="$2" src="${root}/certificates/${domain}"
   [[ -f "${src}/fullchain.pem" && -f "${src}/privkey.pem" ]] || return 1
@@ -202,6 +206,40 @@ livekit_turn_tls_probe() {
     return
   fi
   livekit_turn_tls_probe_online "$@"
+}
+
+airgap_livekit_image_list() {
+  local output="$1"
+  livekit_compose config --images 2>>"${CURRENT_LOG:-/dev/null}" \
+    | sed '/^[[:space:]]*$/d' | sort -u >"$output"
+  [[ -s "$output" ]]
+}
+
+install_step_20() {
+  airgap_is_active || { install_step_20_online; return; }
+  local root list
+  root="$(airgap_current_root)" || { fail "No active air-gap bundle."; return 1; }
+  list="$(mktemp)"
+  new_log "install-20-livekit-image-preflight"
+
+  if ! airgap_livekit_image_list "$list"; then
+    rm -f "$list"
+    fail "Unable to resolve LiveKit Docker image list from the offline Compose configuration."
+    return 1
+  fi
+
+  if ! airgap_verify_image_list_content "$list"; then
+    warn "One or more LiveKit images have unreadable Docker content; reloading them from the verified Air-Gap archive."
+    livekit_compose down --remove-orphans >>"$CURRENT_LOG" 2>&1 || true
+    if ! run_logged "Repair bundled LiveKit Docker image content" airgap_repair_image_list_content "$root" "$list"; then
+      rm -f "$list"
+      fail "LiveKit Docker image content remains unreadable after offline reload. Rebuild/import the Air-Gap bundle."
+      return 1
+    fi
+  fi
+
+  rm -f "$list"
+  install_step_20_online
 }
 
 airgap_install_one_step() {

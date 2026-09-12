@@ -127,6 +127,55 @@ airgap_extract_bundle_archive() {
   printf '%s\n' "$root"
 }
 
+airgap_verify_image_content() {
+  local image="$1"
+  "$AIRGAP_REAL_DOCKER" image inspect "$image" >/dev/null 2>&1 || return 1
+  if [[ -n "${CURRENT_LOG:-}" ]]; then
+    "$AIRGAP_REAL_DOCKER" image save "$image" >/dev/null 2>>"$CURRENT_LOG"
+  else
+    "$AIRGAP_REAL_DOCKER" image save "$image" >/dev/null 2>&1
+  fi
+}
+
+airgap_verify_image_list_content() {
+  local list_file="$1" image failed=0
+  [[ -f "$list_file" ]] || return 1
+  while IFS= read -r image; do
+    [[ -n "$image" ]] || continue
+    if ! airgap_verify_image_content "$image"; then
+      [[ -n "${CURRENT_LOG:-}" ]] && echo "Unreadable Docker image content: $image" >>"$CURRENT_LOG"
+      failed=1
+    fi
+  done <"$list_file"
+  (( failed == 0 ))
+}
+
+airgap_reload_image_archive() {
+  local root="$1" archive="${root}/docker/docker-images.tar.gz"
+  [[ -s "$archive" ]] || return 1
+  gzip -dc "$archive" | "$AIRGAP_REAL_DOCKER" load
+}
+
+airgap_repair_image_list_content() {
+  local root="$1" list_file="$2" image
+  airgap_verify_image_list_content "$list_file" && return 0
+
+  [[ -n "${CURRENT_LOG:-}" ]] && echo "Docker image content is incomplete; reloading verified Air-Gap image archive." >>"$CURRENT_LOG"
+  airgap_reload_image_archive "$root" || return 1
+  airgap_verify_image_list_content "$list_file" && return 0
+
+  # A stale tag can keep pointing at metadata whose config/layer blobs were lost.
+  # Remove only unreadable tags, reload the verified archive, and validate again.
+  while IFS= read -r image; do
+    [[ -n "$image" ]] || continue
+    airgap_verify_image_content "$image" && continue
+    "$AIRGAP_REAL_DOCKER" image rm -f "$image" >/dev/null 2>&1 || true
+  done <"$list_file"
+
+  airgap_reload_image_archive "$root" || return 1
+  airgap_verify_image_list_content "$list_file"
+}
+
 airgap_verify_images() {
   local root="$1" image expected_id actual_id failed=0
   while read -r image expected_id; do
@@ -185,6 +234,10 @@ airgap_import_bundle() {
   [[ -x "$AIRGAP_REAL_DOCKER" ]] || { fail "Docker is not installed yet. Run bootstrap-airgap.sh first."; return 1; }
   run_visible "Load offline Docker images" bash -c "gzip -dc '$final/docker/docker-images.tar.gz' | '$AIRGAP_REAL_DOCKER' load" || return 1
   run_logged "Verify every bundled Docker image locally" airgap_verify_images "$final" || return 1
+  run_logged "Validate bundled Docker image content" airgap_repair_image_list_content "$final" "${final}/docker/images.txt" || {
+    fail "Bundled Docker image content is unreadable after offline reload. Rebuild the Air-Gap bundle on a healthy Docker host."
+    return 1
+  }
   ok "Air-gap bundle imported and activated: $bundle_id"
 }
 
