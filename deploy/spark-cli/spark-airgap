@@ -110,6 +110,56 @@ git() {
   command git "$@"
 }
 
+# The manager and /opt/spark are updated independently. A current manager can
+# otherwise build a bundle from stale deployment assets in /opt/spark (for
+# example old Docker image references). Before a connected Air-Gap build, only
+# fast-forward a clean local main branch; never reset, rebase, or overwrite
+# local work.
+spark_airgap_sync_source_main() {
+  local branch local_head remote_head origin_url
+
+  [[ -d "${SPARK_ROOT}/.git" ]] || {
+    fail "Spark source repository is required at ${SPARK_ROOT}."
+    return 1
+  }
+  branch="$(command git -C "$SPARK_ROOT" branch --show-current 2>/dev/null || true)"
+  [[ "$branch" == "main" ]] || {
+    fail "Spark source must be on branch main before building an Air-Gap bundle."
+    return 1
+  }
+  [[ -z "$(command git -C "$SPARK_ROOT" status --porcelain 2>/dev/null)" ]] || {
+    fail "Spark source has uncommitted changes; refusing to update or build the bundle."
+    return 1
+  }
+  origin_url="$(command git -C "$SPARK_ROOT" remote get-url origin 2>/dev/null || true)"
+  [[ "$origin_url" == "https://github.com/hamedplay/Spark.git" || "$origin_url" == "git@github.com:hamedplay/Spark.git" ]] || {
+    fail "Unexpected Spark origin remote: ${origin_url:-missing}"
+    return 1
+  }
+
+  info "Synchronizing clean Spark main before Air-Gap bundle generation."
+  GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --prune origin main || {
+    fail "Unable to fetch the latest Spark main branch."
+    return 1
+  }
+
+  local_head="$(command git -C "$SPARK_ROOT" rev-parse HEAD)"
+  remote_head="$(command git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)"
+  if [[ "$local_head" == "$remote_head" ]]; then
+    ok "Spark source is already current at ${local_head:0:12}."
+    return 0
+  fi
+  if ! command git -C "$SPARK_ROOT" merge-base --is-ancestor "$local_head" "$remote_head"; then
+    fail "Local Spark main has diverged from origin/main; refusing to reset it automatically."
+    return 1
+  fi
+  command git -C "$SPARK_ROOT" merge --ff-only "$remote_head" >/dev/null || {
+    fail "Unable to fast-forward Spark main to the fetched revision."
+    return 1
+  }
+  ok "Spark source fast-forwarded to ${remote_head:0:12}."
+}
+
 spark_airgap_backend_prepare() {
   clear_screen() { :; }
   title() {
@@ -147,7 +197,7 @@ spark_airgap_dispatch_inner() {
   local action="$1"
   shift || true
   case "$action" in
-    airgap-build) airgap_build_bundle ;;
+    airgap-build) spark_airgap_sync_source_main && airgap_build_bundle ;;
     airgap-validate) spark_airgap_validate_action "${1:-}" ;;
     airgap-import) airgap_import_bundle "${1:-}" ;;
     airgap-step) airgap_install_one_step "${1:-}" ;;
