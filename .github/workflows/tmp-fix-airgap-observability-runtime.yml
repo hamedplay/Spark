@@ -1,0 +1,85 @@
+name: Temporary Fix Air-Gap Observability Runtime
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-observability-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply Step 22 runtime patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tmp_fix_airgap_observability_runtime.py
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+          git diff --check
+
+      - name: Validate Prometheus collision avoidance
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 9090 --bind 127.0.0.1 >/tmp/existing-9090.log 2>&1 &
+          echo $! >/tmp/existing-9090.pid
+          sleep 1
+          ss -H -lnt | grep -q '127.0.0.1:9090'
+          grep -Fq -- '--web.listen-address=127.0.0.1:\${SPARK_OBSERVABILITY_PROMETHEUS_PORT:-19090}' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'SPARK_OBSERVABILITY_PROMETHEUS_PORT' deploy/spark-cli/lib/airgap-ip.sh
+          echo 'Prometheus collision avoidance markers: PASS'
+
+      - name: Validate Alloy non-root storage and Docker socket access
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo systemctl start docker
+          docker pull grafana/alloy:v1.19.0 >/dev/null
+          vol="spark-alloy-permission-test-$RANDOM"
+          docker volume create "$vol" >/dev/null
+          gid="$(stat -c '%g' /var/run/docker.sock)"
+          docker run --rm \
+            --user 473:473 \
+            --group-add "$gid" \
+            -v "$vol:/var/lib/alloy" \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            --entrypoint /bin/sh \
+            grafana/alloy:v1.19.0 \
+            -ec 'mkdir -p /var/lib/alloy/remotecfg && test -w /var/lib/alloy && test -S /var/run/docker.sock'
+          docker volume rm "$vol" >/dev/null
+          echo 'Alloy uid/gid storage test: PASS'
+
+      - name: Validate asset rewrites and Grafana directories
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tmp="$(mktemp -d)"
+          mkdir -p "$tmp/monitoring/grafana/provisioning/datasources"
+          cp deploy/livekit/monitoring/prometheus.yml "$tmp/monitoring/prometheus.yml"
+          cp deploy/livekit/monitoring/grafana/provisioning/datasources/datasources.yml "$tmp/monitoring/grafana/provisioning/datasources/datasources.yml"
+          sed -i 's#127\.0\.0\.1:9090#127.0.0.1:19090#g' "$tmp/monitoring/prometheus.yml" "$tmp/monitoring/grafana/provisioning/datasources/datasources.yml"
+          grep -Fq '127.0.0.1:19090' "$tmp/monitoring/prometheus.yml"
+          grep -Fq 'http://127.0.0.1:19090' "$tmp/monitoring/grafana/provisioning/datasources/datasources.yml"
+          mkdir -p "$tmp/monitoring/grafana/provisioning/plugins" "$tmp/monitoring/grafana/provisioning/alerting"
+          test -d "$tmp/monitoring/grafana/provisioning/plugins"
+          test -d "$tmp/monitoring/grafana/provisioning/alerting"
+          echo 'Observability asset rewrite test: PASS'
+
+      - name: Commit minimal Step 22 fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap-ip.sh
+          git commit -m 'fix(airgap): isolate observability runtime ports and permissions'
+          git pull --rebase origin main
+          git push origin HEAD:main
