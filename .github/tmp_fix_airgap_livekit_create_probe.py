@@ -90,7 +90,6 @@ airgap_livekit_create_failure_is_content_store() {
 airgap_repair_livekit_container_create() {
   local root="$1" list_file="$2" image removed=0
 
-  # Remove only image tags that fail a real daemon container-create request.
   while IFS= read -r image; do
     [[ -n "$image" ]] || continue
     if ! airgap_probe_image_container_create "$image"; then
@@ -99,8 +98,6 @@ airgap_repair_livekit_container_create() {
     fi
   done <"$list_file"
 
-  # Some daemon/content-store failures surface only through Compose. In that
-  # case force-refresh the exact LiveKit image set from the verified bundle.
   if (( removed == 0 )); then
     while IFS= read -r image; do
       [[ -n "$image" ]] || continue
@@ -137,9 +134,6 @@ install_step_20() {
     fi
   fi
 
-  # The daemon can retain image metadata while the config blob needed by
-  # container creation is gone. Test the exact Compose create path that Step 20
-  # uses before starting any LiveKit service.
   livekit_compose down --remove-orphans >>"$CURRENT_LOG" 2>&1 || true
   if ! airgap_livekit_compose_create_probe "$report"; then
     if airgap_livekit_create_failure_is_content_store "$report"; then
@@ -173,7 +167,7 @@ P.write_text(s, encoding='utf-8')
 out = P.read_text(encoding='utf-8')
 for needle in (
     'airgap_livekit_compose_create_probe()',
-    'docker container-create probe failed for image',
+    'Docker container-create probe failed for image',
     'Repair LiveKit images after container-create failure',
     'create --no-build --pull never',
 ):
