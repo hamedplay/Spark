@@ -1,0 +1,56 @@
+name: Temporary Fix Air-Gap Worker Contracts
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-worker-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Air-Gap worker contract repair
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tmp_fix_airgap_worker_contracts.py
+          bash -n deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/lib/airgap.sh
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+          git diff --check
+
+      - name: Validate migration contract and installer wiring
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          migration='supabase/migrations/20260912075003_sync_conference_worker_config_contracts.sql'
+          test -s "$migration"
+          grep -Fq 'create table if not exists private.conference_speaker_timer_worker_config' "$migration"
+          grep -Fq 'create table if not exists private.conference_phase_worker_config' "$migration"
+          grep -Fq 'create or replace function private.configure_conference_speaker_timer_worker' "$migration"
+          grep -Fq 'create or replace function private.configure_conference_phase_worker' "$migration"
+          grep -Fq '20260912075003_sync_conference_worker_config_contracts.sql' deploy/spark-cli/bootstrap.sh
+          grep -Fq '20260912075003_sync_conference_worker_config_contracts.sql' deploy/spark-cli/lib/airgap.sh
+          grep -Fq 'livekit_ensure_worker_config_contracts' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'Conference worker DB contracts' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'supabase_migrations.schema_migrations' deploy/spark-cli/lib/airgap-ip.sh
+          echo 'Air-Gap worker contract wiring: PASS'
+
+      - name: Commit minimal Air-Gap fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/bootstrap.sh deploy/spark-cli/lib/airgap.sh deploy/spark-cli/lib/airgap-ip.sh
+          git commit -m 'fix(airgap): repair conference worker DB contracts'
+          git pull --rebase origin main
+          git push origin HEAD:main
