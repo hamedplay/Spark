@@ -1,0 +1,86 @@
+name: Temporary Fix Restore Recovery
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-restore-recovery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tmp_fix_restore_recovery.py
+          bash -n deploy/spark-cli/lib/tests-backup.sh
+          git diff --check
+
+      - name: Validate writable wait with real PostgreSQL restart
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker pull postgres:15 >/dev/null
+          docker run -d --name spark-restore-wait -e POSTGRES_PASSWORD=testpass postgres:15 >/dev/null
+          for i in $(seq 1 40); do
+            docker exec spark-restore-wait pg_isready -U postgres >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker exec spark-restore-wait pg_isready -U postgres >/dev/null
+
+          export CURRENT_LOG=/tmp/restore-wait.log
+          fail(){ printf 'FAIL: %s\n' "$*" >&2; }
+          compose(){
+            local cmd="$1"; shift
+            case "$cmd" in
+              exec)
+                [[ "${1:-}" == '-T' ]] && shift
+                [[ "${1:-}" == 'db' ]] || return 2
+                shift
+                docker exec spark-restore-wait "$@"
+                ;;
+              up)
+                [[ "${1:-}" == '-d' ]] && shift
+                [[ "${1:-}" == 'db' ]] || return 2
+                docker start spark-restore-wait >/dev/null 2>&1 || true
+                ;;
+              *) return 0 ;;
+            esac
+          }
+          source deploy/spark-cli/lib/tests-backup.sh
+          restore_wait_postgres_writable 20
+          docker stop spark-restore-wait >/dev/null
+          ( sleep 4; docker start spark-restore-wait >/dev/null ) &
+          restore_ensure_db_writable 30
+          state="$(docker exec spark-restore-wait psql -U postgres -d template1 -Atqc "SELECT CASE WHEN pg_is_in_recovery() THEN 'recovery' ELSE 'ready' END")"
+          [[ "$state" == 'ready' ]]
+          echo 'Writable wait after PostgreSQL restart: PASS'
+
+      - name: Validate rollback traffic guard
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -Fq 'Waiting for PostgreSQL recovery to finish before automatic rollback.' deploy/spark-cli/lib/tests-backup.sh
+          grep -Fq 'Non-database Supabase services remain stopped to prevent writes.' deploy/spark-cli/lib/tests-backup.sh
+          grep -Fq 'restore_ensure_db_writable 180' deploy/spark-cli/lib/tests-backup.sh
+          echo 'Rollback traffic guard: PASS'
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/tests-backup.sh
+          git commit -m 'fix(manager): wait for PostgreSQL recovery during restore'
+          git pull --rebase origin main
+          git push origin HEAD:main
