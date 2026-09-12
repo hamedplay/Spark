@@ -30,6 +30,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           export CONFIG_DIR="$(mktemp -d)"
+          export LIVEKIT_ROOT="$(mktemp -d)"
+          export SUPABASE_ROOT="$(mktemp -d)"
           export AIRGAP_SERVER_IP='10.211.36.178'
           export LIVEKIT_TURN_UDP_PORT=443
           export LIVEKIT_INTERNAL_API_PORT=7880
@@ -88,3 +90,5 @@ jobs:
           git commit -m 'fix(airgap): make LiveKit validation diagnostic and IP-aware'
           git pull --rebase origin main
           git push origin HEAD:main
+
+# rerun with complete source environment
