@@ -1,0 +1,79 @@
+name: Temporary Fix Air-Gap Child Digest Export
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-child-digest-export.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Air-Gap builder
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tmp_fix_airgap_child_digest_export.py
+          bash -n deploy/spark-cli/lib/airgap-build.sh
+          git diff --check
+
+      - name: Validate exact LiveKit ingress child-digest round-trip
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo systemctl start docker
+          fail(){ echo "FAIL: $*" >&2; return 1; }
+          source deploy/spark-cli/lib/airgap-build.sh
+
+          image='livekit/ingress:v1.5.0'
+          docker image rm -f "$image" >/dev/null 2>&1 || true
+          airgap_prepare_linux_amd64_image "$image"
+
+          platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
+          [[ "$platform" == 'linux/amd64' ]]
+          expected_id="$(docker image inspect --format '{{.Id}}' "$image")"
+
+          list="$(mktemp)"
+          archive="$(mktemp --suffix=.tar.gz)"
+          printf '%s\n' "$image" >"$list"
+          airgap_export_linux_amd64_images "$list" "$archive"
+          gzip -t "$archive"
+
+          docker image rm -f "$expected_id" >/dev/null 2>&1 || true
+          gzip -dc "$archive" | docker image load
+          actual_id="$(docker image inspect --format '{{.Id}}' "$image")"
+          [[ "$actual_id" == "$expected_id" ]]
+          [[ "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")" == 'linux/amd64' ]]
+
+          cid="$(docker create --pull=never --entrypoint /bin/true "$image")"
+          [[ -n "$cid" ]]
+          docker rm -f "$cid" >/dev/null
+          echo "LiveKit ingress child-digest archive round-trip: PASS ($actual_id)"
+
+      - name: Validate builder no longer depends on save --platform
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ! grep -Fq 'airgap_require_platform_save_support' deploy/spark-cli/lib/airgap-build.sh
+          ! grep -Fq 'docker image save --platform=linux/amd64' deploy/spark-cli/lib/airgap-build.sh
+          grep -Fq 'airgap_linux_amd64_registry_digest()' deploy/spark-cli/lib/airgap-build.sh
+          grep -Fq 'docker pull "$digest_ref"' deploy/spark-cli/lib/airgap-build.sh
+          echo 'Builder child-digest markers: PASS'
+
+      - name: Commit minimal builder fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap-build.sh
+          git commit -m 'fix(airgap): export exact amd64 image manifests by digest'
+          git push origin HEAD:main
