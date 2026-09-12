@@ -203,7 +203,7 @@ plain_backup_validate() {
     fail "This is a PostgreSQL custom-format dump. This restore action accepts only plain SQL pg_dump files."
     return 1
   fi
-  if ! head -n 120 "$path" | grep -Fq -- '-- PostgreSQL database dump'; then
+  if ! sed -n '1,120p' "$path" | grep -Fq -- '-- PostgreSQL database dump'; then
     fail "The file does not look like a plain PostgreSQL pg_dump."
     return 1
   fi
@@ -237,7 +237,30 @@ restore_restart_supabase_stack() {
   compose up -d
 }
 
+restore_wait_postgres_writable() {
+  local timeout_seconds="${1:-180}" started now state
+  started="$(date +%s)"
+  while true; do
+    state="$(compose exec -T db psql -X -U postgres -d template1 -Atqc       "SELECT CASE WHEN pg_is_in_recovery() THEN 'recovery' ELSE 'ready' END;" 2>/dev/null || true)"
+    if [[ "$state" == 'ready' ]]; then
+      return 0
+    fi
+    now="$(date +%s)"
+    if (( now - started >= timeout_seconds )); then
+      fail "PostgreSQL did not become writable within ${timeout_seconds}s (state=${state:-unavailable})."
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+restore_ensure_db_writable() {
+  compose up -d db >/dev/null 2>&1 || return 1
+  restore_wait_postgres_writable "${1:-180}"
+}
+
 restore_terminate_postgres_sessions() {
+  restore_ensure_db_writable 180 || return 1
   compose exec -T db psql -X -U postgres -d template1 -v ON_ERROR_STOP=1 -Atqc \
     "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='postgres' AND pid <> pg_backend_pid();" >/dev/null
 }
@@ -249,12 +272,14 @@ restore_drop_postgres_database() {
 }
 
 restore_create_postgres_database() {
+  restore_ensure_db_writable 180 || return 1
   compose exec -T db psql -X -U postgres -d template1 -v ON_ERROR_STOP=1 -c \
     'CREATE DATABASE postgres WITH OWNER postgres TEMPLATE template0 ENCODING '\''UTF8'\'';'
 }
 
 restore_apply_plain_dump() {
   local path="$1"
+  restore_ensure_db_writable 180 || return 1
   if plain_backup_has_create_database "$path"; then
     if ! plain_backup_has_drop_database "$path"; then
       restore_drop_postgres_database || return 1
@@ -282,8 +307,10 @@ restore_validate_database() {
 restore_custom_safety_dump() {
   local dump="$1"
   [[ -s "$dump" ]] || return 1
+  restore_ensure_db_writable 180 || return 1
   restore_drop_postgres_database || return 1
   restore_create_postgres_database || return 1
+  restore_wait_postgres_writable 180 || return 1
   compose exec -T db pg_restore -U postgres -d postgres --exit-on-error <"$dump"
 }
 
@@ -326,6 +353,12 @@ restore_plain_database_from_file() {
     (( db_access_was_active )) && systemctl start spark-db-access.socket >/dev/null 2>&1 || true
     return 1
   fi
+  info "Waiting for PostgreSQL to be writable before restore..."
+  if ! restore_ensure_db_writable 180; then
+    fail "PostgreSQL is not writable; restore was not started."
+    (( db_access_was_active )) && systemctl start spark-db-access.socket >/dev/null 2>&1 || true
+    return 1
+  fi
 
   info "Replacing database from plain SQL backup. psql will stop on the first SQL error."
   set +e
@@ -340,17 +373,23 @@ restore_plain_database_from_file() {
   fi
 
   if (( restore_rc != 0 )); then
-    warn "Restore failed. Automatically rolling back to the pre-restore safety backup."
+    warn "Restore failed. Waiting for PostgreSQL recovery to finish before automatic rollback."
     set +e
-    restore_custom_safety_dump "$safety_dump" >>"${CURRENT_LOG:-/dev/null}" 2>&1
+    restore_ensure_db_writable 180 >>"${CURRENT_LOG:-/dev/null}" 2>&1
     rollback_rc=$?
+    if (( rollback_rc == 0 )); then
+      restore_custom_safety_dump "$safety_dump" >>"${CURRENT_LOG:-/dev/null}" 2>&1
+      rollback_rc=$?
+    fi
     set -e
-    restore_restart_supabase_stack >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
     (( db_access_was_active )) && systemctl start spark-db-access.socket >/dev/null 2>&1 || true
     if (( rollback_rc == 0 )); then
+      restore_restart_supabase_stack >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
       fail "Plain backup restore failed; the previous database was restored automatically. Safety backup: $safety_dir"
     else
-      fail "Plain backup restore failed and automatic rollback also failed. Do not continue application traffic. Safety backup: $safety_dir"
+      # Keep application writers stopped. Only PostgreSQL remains available for recovery work.
+      restore_stop_non_db_services >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
+      fail "Plain backup restore failed and automatic rollback also failed. Non-database Supabase services remain stopped to prevent writes. Safety backup: $safety_dir"
     fi
     return 1
   fi
