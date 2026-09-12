@@ -170,17 +170,59 @@ test_menu() {
 }
 
 create_backup() {
-  local kind="${1:-manual}" stamp dest
+  local kind="${1:-manual}" stamp dest plain_tmp
   stamp="$(date +%Y%m%d-%H%M%S)"
   dest="${BACKUP_DIR}/${kind}-${stamp}"
   mkdir -p "$dest"
   chmod 700 "$dest"
-  echo "$dest" >"${STATE_DIR}/last-backup-path"
-  if [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] && compose config --services | grep -Fxq db; then
-    info "Backup PostgreSQL..." >&2
-    compose exec -T db pg_dump -U postgres -d postgres -Fc >"${dest}/postgres.dump"
+
+  if [[ "$kind" == "manual" ]]; then
+    [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || {
+      rm -rf "$dest"
+      fail "Supabase runtime is not installed at ${SUPABASE_ROOT}."
+      return 1
+    }
+    compose config --services | grep -Fxq db || {
+      rm -rf "$dest"
+      fail "Supabase Compose does not contain the db service."
+      return 1
+    }
+    compose ps --status running --services | grep -Fxq db || {
+      rm -rf "$dest"
+      fail "Supabase database container is not running."
+      return 1
+    }
+
+    plain_tmp="${dest}/postgres.sql.partial"
+    info "Backup PostgreSQL (full Plain SQL, restore-compatible)..." >&2
+    if ! compose exec -T db pg_dump -U postgres -d postgres \
+      --format=plain --create --clean --if-exists >"$plain_tmp"; then
+      rm -rf "$dest"
+      fail "Full PostgreSQL backup failed."
+      return 1
+    fi
+    if ! plain_backup_validate "$plain_tmp"; then
+      rm -rf "$dest"
+      return 1
+    fi
+    if ! plain_backup_has_create_database "$plain_tmp" || ! plain_backup_has_drop_database "$plain_tmp"; then
+      rm -rf "$dest"
+      fail "Generated SQL backup is incomplete: database CREATE/DROP statements are missing."
+      return 1
+    fi
+    mv "$plain_tmp" "${dest}/postgres.sql"
+    chmod 600 "${dest}/postgres.sql"
+    info "Restore-compatible database file: ${dest}/postgres.sql" >&2
+  elif [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] && compose config --services | grep -Fxq db; then
+    info "Backup PostgreSQL recovery snapshot..." >&2
+    if ! compose exec -T db pg_dump -U postgres -d postgres -Fc >"${dest}/postgres.dump"; then
+      rm -rf "$dest"
+      fail "PostgreSQL recovery snapshot failed."
+      return 1
+    fi
     chmod 600 "${dest}/postgres.dump"
   fi
+
   mkdir -p "${dest}/config"
   [[ -f "${SUPABASE_ROOT}/.env" ]] && cp -a "${SUPABASE_ROOT}/.env" "${dest}/config/supabase.env"
   [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] && cp -a "${SUPABASE_ROOT}/docker-compose.yml" "${dest}/config/docker-compose.yml"
@@ -188,6 +230,7 @@ create_backup() {
   [[ -f /etc/nginx/sites-available/spark ]] && cp -a /etc/nginx/sites-available/spark "${dest}/config/nginx-spark"
   [[ -f /etc/turnserver.conf ]] && cp -a /etc/turnserver.conf "${dest}/config/turnserver.conf"
   chmod -R go-rwx "$dest"
+  echo "$dest" >"${STATE_DIR}/last-backup-path"
   printf '%s\n' "$dest"
 }
 
@@ -436,13 +479,13 @@ backup_menu() {
   while true; do
     title
     printf '%sBackup Management%s\n\n' "$C_BOLD" "$C_RESET"
-    printf '0) back\n1) create Backup manual DB + config\n2) List Backups\n\n'
+    printf '0) back\n1) Create full PostgreSQL Plain SQL backup + config\n2) List Backups\n\n'
     read -r -p "selection: " c
     case "$c" in
       0) return ;;
       1)
         new_log "backup-manual"
-        if run_visible "create Backup" create_backup manual; then ok "Backup was made."; fi
+        if run_visible "Create full PostgreSQL backup" create_backup manual; then ok "Backup was made."; fi
         pause ;;
       2) new_log "backup-list"; run_report "Backups" list_backups; pause ;;
       *) fail "Invalid option"; sleep 1 ;;
