@@ -74,6 +74,7 @@ files=(
   lib/cleanup.sh
   lib/repair-override.sh
   lib/env-modern.sh
+  lib/runtime-fixes-base.sh
   lib/runtime-fixes.sh
   lib/studio-session.sh
   lib/install-livekit.sh
@@ -191,16 +192,20 @@ grep -q 'ensure_modern_auth_keys' "$tmp/lib/env-modern.sh" || {
   echo "Spark modern Supabase env layer is missing." >&2
   exit 1
 }
-grep -q 'Studio HTTPS/443' "$tmp/lib/runtime-fixes.sh" || {
+grep -q 'Studio HTTPS/443' "$tmp/lib/runtime-fixes-base.sh" || {
   echo "Spark Studio 443 runtime fix is missing." >&2
   exit 1
 }
-grep -q "GRANT anon, authenticated, service_role TO supabase_storage_admin" "$tmp/lib/runtime-fixes.sh" || {
+grep -q "GRANT anon, authenticated, service_role TO supabase_storage_admin" "$tmp/lib/runtime-fixes-base.sh" || {
   echo "Spark Storage role repair is missing." >&2
   exit 1
 }
-grep -q 'studio_gateway_direct_probe' "$tmp/lib/runtime-fixes.sh" || {
+grep -q 'studio_gateway_direct_probe' "$tmp/lib/runtime-fixes-base.sh" || {
   echo "Spark Studio gateway probe is missing." >&2
+  exit 1
+}
+grep -q 'SPARK_EDGE_MAIN_ROUTER' "$tmp/lib/runtime-fixes.sh" || {
+  echo "Spark offline-safe Edge Runtime router fix is missing." >&2
   exit 1
 }
 grep -q 'spark_studio_session' "$tmp/lib/studio-session.sh" || {
