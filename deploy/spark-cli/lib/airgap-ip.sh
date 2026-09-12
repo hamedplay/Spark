@@ -1206,6 +1206,16 @@ EOF_TARGETS
 }
 
 
+livekit_airgap_sync_observability_assets() {
+  local source="${LIVEKIT_SOURCE_DIR}/monitoring"
+  [[ -d "$source" ]] || {
+    printf 'Manager observability asset directory is missing: %s\n' "$source" >>"$CURRENT_LOG"
+    return 1
+  }
+  install -d -m 0755 "${LIVEKIT_ROOT}/monitoring"
+  rsync -a --delete "${source}/" "${LIVEKIT_ROOT}/monitoring/" >>"$CURRENT_LOG" 2>&1
+}
+
 livekit_airgap_observability_config_ready() {
   local file failed=0
   for file in \
@@ -1279,6 +1289,11 @@ install_step_22() {
     return 1
   }
 
+  run_logged "Sync bundled observability assets" livekit_airgap_sync_observability_assets || {
+    fail "Bundled observability assets are missing from the installed Spark Manager. Update the Manager and retry Step 22."
+    unmark_step 22
+    return 1
+  }
   run_logged "Generate observability HTTP targets" livekit_write_observability_targets || return 1
   if ! run_logged "Validate observability configuration" livekit_airgap_observability_config_ready; then
     fail "Observability configuration is not valid. See the Step 22 log for the exact missing/invalid file or Compose error."

@@ -100,9 +100,21 @@ livekit_files=(
   egress.yaml
   ingress.yaml
   README.md
+  monitoring/prometheus.yml
+  monitoring/rules/livekit-alerts.yml
+  monitoring/alertmanager.yml
+  monitoring/blackbox.yml
+  monitoring/loki.yml
+  monitoring/alloy.alloy
+  monitoring/grafana/provisioning/datasources/datasources.yml
+  monitoring/grafana/provisioning/dashboards/dashboards.yml
+  monitoring/grafana/dashboards/spark-livekit-overview.json
+  monitoring/grafana/dashboards/spark-livekit-operations.json
+  monitoring/targets/blackbox.json
 )
 for file in "${livekit_files[@]}"; do
   echo "Downloading LiveKit asset ${file}..."
+  install -d -m 0755 "$(dirname "${tmp}/livekit/${file}")"
   curl -fsSL -H 'Cache-Control: no-cache' "${LIVEKIT_RAW_BASE}/${file}" -o "${tmp}/livekit/${file}"
 done
 
@@ -114,6 +126,12 @@ grep -q '^  minio-init:' "$tmp/livekit/docker-compose.yml" || {
   echo "Spark LiveKit MinIO initialization service is missing from deployment assets." >&2
   exit 1
 }
+for file in   monitoring/prometheus.yml   monitoring/rules/livekit-alerts.yml   monitoring/alertmanager.yml   monitoring/blackbox.yml   monitoring/loki.yml   monitoring/alloy.alloy   monitoring/grafana/provisioning/datasources/datasources.yml   monitoring/grafana/provisioning/dashboards/dashboards.yml   monitoring/grafana/dashboards/spark-livekit-overview.json   monitoring/grafana/dashboards/spark-livekit-operations.json   monitoring/targets/blackbox.json; do
+  [[ -f "$tmp/livekit/$file" ]] || {
+    echo "Spark LiveKit observability asset is missing: $file" >&2
+    exit 1
+  }
+done
 
 bash -n "$tmp/spark"
 bash -n "$tmp/spark-airgap"
