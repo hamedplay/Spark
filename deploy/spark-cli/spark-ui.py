@@ -270,7 +270,7 @@ def patch_categories() -> None:
                 core.Action("security-db-test", "Test database login", "Run a real login through the local Supavisor session endpoint."),
                 core.Action("security-db-open", "Open Database TCP/5432", "Open managed external PostgreSQL access after verification.", "confirm"),
                 core.Action("security-db-close", "Close Database TCP/5432", "Close managed external PostgreSQL access.", "controlled"),
-                core.Action("security-studio-info", "Supabase Studio access", "Show Studio HTTPS/443 access state and credentials."),
+                core.Action("security-studio-info", "Supabase Studio credentials", "Show Studio URL, access state, username and password. Credentials are displayed only in task output and are not written to Manager logs."),
                 core.Action("security-studio-open", "Enable Supabase Studio", "Enable Studio on the API domain over HTTPS/443.", "confirm"),
                 core.Action("security-studio-close", "Disable Supabase Studio", "Disable Studio root access while keeping Supabase API routes active.", "controlled"),
                 core.Action("security-report", "Security / Firewall status", "Show database, Studio and firewall access state."),
