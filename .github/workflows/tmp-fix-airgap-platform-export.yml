@@ -1,0 +1,79 @@
+name: Temporary Fix Air-Gap Platform Export
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-platform-export.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Air-Gap builder
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tmp_fix_airgap_platform_export.py
+          bash -n deploy/spark-cli/lib/airgap-build.sh
+          git diff --check
+
+      - name: Validate exact LiveKit ingress amd64 round-trip
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo systemctl start docker
+          docker image save --help | grep -q -- '--platform'
+
+          image='livekit/ingress:v1.5.0'
+          archive="$(mktemp --suffix=.tar.gz)"
+
+          docker pull --platform=linux/amd64 "$image"
+          platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
+          [[ "$platform" == 'linux/amd64' ]]
+
+          expected_id="$(docker image inspect --format '{{.Id}}' "$image")"
+          docker image save --platform=linux/amd64 "$image" | gzip -1 >"$archive"
+          gzip -t "$archive"
+
+          docker image rm -f "$image" >/dev/null
+          gzip -dc "$archive" | docker image load --platform=linux/amd64
+          actual_id="$(docker image inspect --format '{{.Id}}' "$image")"
+          [[ "$actual_id" == "$expected_id" ]]
+
+          cid="$(docker create --pull=never --entrypoint /bin/true "$image")"
+          [[ -n "$cid" ]]
+          docker rm -f "$cid" >/dev/null
+          echo "LiveKit ingress linux/amd64 round-trip: PASS ($actual_id)"
+
+      - name: Validate builder helper behavior
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          fail(){ echo "FAIL: $*" >&2; return 1; }
+          source deploy/spark-cli/lib/airgap-build.sh
+
+          list="$(mktemp)"
+          archive="$(mktemp --suffix=.tar.gz)"
+          printf '%s\n' 'livekit/ingress:v1.5.0' >"$list"
+          airgap_require_platform_save_support
+          airgap_export_linux_amd64_images "$list" "$archive"
+          gzip -t "$archive"
+          echo 'Builder platform export helper: PASS'
+
+      - name: Commit minimal builder fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap-build.sh
+          git commit -m 'fix(airgap): export bundle images for linux amd64 explicitly'
+          git push origin HEAD:main
