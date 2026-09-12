@@ -145,6 +145,40 @@ airgap_collect_compose_images() {
   } | sed '/^[[:space:]]*$/d' | sort -u >"$output"
 }
 
+airgap_require_platform_save_support() {
+  docker image save --help 2>/dev/null | grep -q -- '--platform' || {
+    fail "Air-Gap bundle build requires Docker image save --platform support (API 1.48+). Upgrade Docker on the connected builder host."
+    return 1
+  }
+}
+
+airgap_export_linux_amd64_images() {
+  local list_file="$1" archive="$2" image platform
+  local -a images=()
+  mapfile -t images < <(sed '/^[[:space:]]*$/d' "$list_file")
+  ((${#images[@]} > 0)) || { fail "Docker image manifest is empty."; return 1; }
+
+  # Pulls are pinned to linux/amd64, so exports must use the same platform.
+  # Verify every image independently before building the combined archive; this
+  # catches missing config/layer content before an invalid Air-Gap bundle exists.
+  for image in "${images[@]}"; do
+    platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image" 2>/dev/null || true)"
+    [[ "$platform" == "linux/amd64" ]] || {
+      fail "Docker image ${image} is not the required linux/amd64 variant (reported: ${platform:-unknown})."
+      return 1
+    }
+    docker image save --platform=linux/amd64 "$image" >/dev/null || {
+      fail "Docker image ${image} cannot be exported as linux/amd64. Re-pull it on a healthy Docker host before building the Air-Gap bundle."
+      return 1
+    }
+  done
+
+  rm -f "$archive"
+  docker image save --platform=linux/amd64 "${images[@]}" | gzip -1 >"$archive" || return 1
+  [[ -s "$archive" ]] || { fail "Docker image archive was not produced."; return 1; }
+  gzip -t "$archive" || { fail "Docker image archive gzip integrity validation failed."; return 1; }
+}
+
 airgap_copy_certificate_pack() {
   local destination="$1" source="$2" domain src
   [[ -n "$source" && -d "$source" ]] || return 0
@@ -204,6 +238,7 @@ airgap_build_bundle() {
   [[ "$(git -C "$SPARK_ROOT" branch --show-current)" == "main" ]] || { fail "Spark bundle must be built from branch main."; return 1; }
   [[ -z "$(git -C "$SPARK_ROOT" status --porcelain)" ]] || { fail "Spark repository has uncommitted changes; bundle generation refused."; return 1; }
   docker info >/dev/null 2>&1 || { fail "Docker daemon is required on the connected bundle-builder host."; return 1; }
+  airgap_require_platform_save_support || return 1
 
   . /etc/os-release
   airgap_prompt_default target_release "Target Ubuntu release" "${VERSION_ID:-26.04}"
@@ -253,10 +288,9 @@ airgap_build_bundle() {
     run_visible "Pull image ${image}" docker pull --platform linux/amd64 "$image" || return 1
   done <"${bundle}/docker/images.txt"
 
-  info "Saving Docker image set. This can take several minutes."
-  # The list is generated from trusted Compose image fields and contains one image per line.
-  # shellcheck disable=SC2046
-  docker save $(cat "${bundle}/docker/images.txt") | gzip -1 >"${bundle}/docker/docker-images.tar.gz" || return 1
+  info "Validating and saving the linux/amd64 Docker image set. This can take several minutes."
+  run_visible "Validate and export linux/amd64 Docker images" \
+    airgap_export_linux_amd64_images "${bundle}/docker/images.txt" "${bundle}/docker/docker-images.tar.gz" || return 1
   : >"${bundle}/docker/image-ids.txt"
   while IFS= read -r image; do
     printf '%s %s\n' "$image" "$(docker image inspect --format '{{.Id}}' "$image")" >>"${bundle}/docker/image-ids.txt"
