@@ -141,7 +141,7 @@ airgap_collect_compose_images() {
   local livekit_dir="${SPARK_ROOT}/deploy/livekit"
   {
     (cd "${supabase_source}/docker" && docker compose --env-file .env.example -f docker-compose.yml config --images)
-    (cd "$livekit_dir" && docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.spark-cli.yml config --images)
+    (cd "$livekit_dir" && docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.spark-cli.yml --profile observability config --images)
   } | sed '/^[[:space:]]*$/d' | sort -u >"$output"
 }
 
