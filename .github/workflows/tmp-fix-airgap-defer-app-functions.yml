@@ -63,8 +63,8 @@ jobs:
           set -Eeuo pipefail
           CURRENT_LOG="$(mktemp)"
           STATE_DIR="$(mktemp -d)"
+          AIRGAP_SERVER_IP="10.211.36.178"
           function_calls=0
-          stub_ok(){ return 0; }
           livekit_airgap_validation_check(){ local label="$1"; shift; "$@"; }
           test_livekit_config(){ :; }
           livekit_runtime_ready(){ :; }
@@ -113,3 +113,5 @@ jobs:
           git commit -m 'fix(airgap): defer app function guards until DB restore'
           git pull --rebase origin main
           git push origin HEAD:main
+
+# rerun after defining AIRGAP_SERVER_IP in runtime harness
