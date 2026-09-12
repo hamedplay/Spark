@@ -102,3 +102,5 @@ jobs:
           git add deploy/spark-cli/lib/airgap-runtime.sh
           git commit -m 'fix(airgap): validate LiveKit container creation before runtime'
           git push origin HEAD:main
+
+# rerun after patch guardrail casing correction
