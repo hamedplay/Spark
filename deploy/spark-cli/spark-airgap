@@ -51,6 +51,65 @@ for module in core install-base install-platform-a install-platform-b install-pl
 done
 unset module module_path
 
+# The official Supabase repository is large enough that an intermittent HTTPS
+# disconnect can abort a complete Air-Gap build. Keep the workaround narrowly
+# scoped to that one clone: force HTTP/1.1, retry cleanly, and reuse an existing
+# local Supabase object store when available without leaving alternates behind.
+spark_airgap_supabase_clone() {
+  local destination="${@: -1}" attempt rc=1
+  local -a reference_args=()
+
+  [[ -n "$destination" && "$destination" != "/" ]] || {
+    fail "Unsafe Supabase clone destination."
+    return 2
+  }
+
+  if [[ -d "${SUPABASE_SOURCE}/.git" ]]; then
+    reference_args=(--reference-if-able "$SUPABASE_SOURCE" --dissociate)
+    info "Using local Supabase objects as a clone accelerator; the snapshot will remain self-contained."
+  fi
+
+  for attempt in 1 2 3 4; do
+    rm -rf -- "$destination"
+    info "Supabase clone attempt ${attempt}/4 (Git HTTP/1.1)."
+    set +e
+    GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 clone \
+      "${reference_args[@]}" "${@:2}"
+    rc=$?
+    set -e
+
+    if (( rc == 0 )); then
+      command git -C "$destination" rev-parse --verify HEAD >/dev/null 2>&1 || rc=1
+      if (( rc == 0 )); then
+        command git -C "$destination" fsck --connectivity-only >/dev/null 2>&1 || rc=1
+      fi
+      (( rc == 0 )) && return 0
+    fi
+
+    rm -rf -- "$destination"
+    if (( attempt < 4 )); then
+      warn "Supabase clone was interrupted; retrying after $((attempt * 3)) seconds."
+      sleep $((attempt * 3))
+    fi
+  done
+
+  fail "Supabase clone failed after 4 attempts. Check the builder host connection to github.com."
+  return "${rc:-1}"
+}
+
+git() {
+  local arg
+  if [[ "${1:-}" == "clone" ]]; then
+    for arg in "$@"; do
+      if [[ "$arg" == "https://github.com/supabase/supabase.git" ]]; then
+        spark_airgap_supabase_clone "$@"
+        return $?
+      fi
+    done
+  fi
+  command git "$@"
+}
+
 spark_airgap_backend_prepare() {
   clear_screen() { :; }
   title() {
