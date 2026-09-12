@@ -110,6 +110,38 @@ git() {
   command git "$@"
 }
 
+# Registry metadata resolution and exact image pulls are network operations.
+# A transient Docker Hub/Quay DNS or token endpoint timeout must not discard an
+# otherwise valid multi-gigabyte Air-Gap build. Retry only those two read-only
+# operations; all other Docker commands retain their original fail-fast behavior.
+docker() {
+  local attempt rc=1 retryable=0
+  if [[ "${1:-}" == "pull" ]]; then
+    retryable=1
+  elif [[ "${1:-}" == "buildx" && "${2:-}" == "imagetools" && "${3:-}" == "inspect" ]]; then
+    retryable=1
+  fi
+
+  if (( retryable == 0 )); then
+    command docker "$@"
+    return $?
+  fi
+
+  for attempt in 1 2 3 4; do
+    if command docker "$@"; then
+      return 0
+    else
+      rc=$?
+    fi
+    if (( attempt < 4 )); then
+      printf '! Docker registry operation failed (attempt %d/4); retrying after %d seconds.\n' \
+        "$attempt" "$((attempt * 3))" >&2
+      sleep $((attempt * 3))
+    fi
+  done
+  return "$rc"
+}
+
 # The manager and /opt/spark are updated independently. A current manager can
 # otherwise build a bundle from stale deployment assets in /opt/spark (for
 # example old Docker image references). Before a connected Air-Gap build, only
