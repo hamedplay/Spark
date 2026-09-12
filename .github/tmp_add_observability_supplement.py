@@ -224,10 +224,16 @@ replacement = '''    core.Action(
 if s.count(needle) != 1:
     raise SystemExit('AIRGAP_ACTIONS tail marker not found exactly once')
 s = s.replace(needle, replacement, 1)
-req = '        "airgap-auto-target-bootstrap",\n'
-if s.count(req) != 1:
-    raise SystemExit('self-test required marker missing')
-s = s.replace(req, req + '        "airgap-build-observability-pack",\n        "airgap-import-observability-pack",\n', 1)
+required_seq = '''        "airgap-build-target-patch",
+        "airgap-apply-target-patch",
+        "airgap-auto-target-bootstrap",
+'''
+required_new = required_seq + '''        "airgap-build-observability-pack",
+        "airgap-import-observability-pack",
+'''
+if s.count(required_seq) != 1:
+    raise SystemExit('self-test airgap required sequence missing')
+s = s.replace(required_seq, required_new, 1)
 p.write_text(s, encoding='utf-8')
 
 print('Observability supplement patch: PASS')
