@@ -1,0 +1,89 @@
+name: Temporary Fix Air-Gap Image Content Integrity
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-airgap-image-content.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Air-Gap image integrity checks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 .github/tmp_fix_airgap_image_content.py
+          bash -n deploy/spark-cli/lib/airgap.sh
+          bash -n deploy/spark-cli/lib/airgap-runtime.sh
+          git diff --check
+
+      - name: Validate content-level Docker image repair
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo systemctl start docker
+          docker pull busybox:1.36 >/dev/null
+
+          root="$(mktemp -d)"
+          mkdir -p "$root/docker"
+          printf '%s\n' 'busybox:1.36' >"$root/docker/images.txt"
+          docker save busybox:1.36 | gzip -1 >"$root/docker/docker-images.tar.gz"
+          printf '%s %s\n' 'busybox:1.36' "$(docker image inspect --format '{{.Id}}' busybox:1.36)" >"$root/docker/image-ids.txt"
+
+          export CONFIG_DIR="$(mktemp -d)"
+          export AIRGAP_REAL_DOCKER="$(command -v docker)"
+          export AIRGAP_REAL_NPM="$(command -v npm || true)"
+          CURRENT_LOG="$(mktemp)"
+          export CURRENT_LOG
+
+          install_step_2(){ :; }; install_step_3(){ :; }; install_step_4(){ :; }
+          install_step_10(){ :; }; install_step_11(){ :; }; install_step_13(){ :; }; install_step_17(){ :; }
+          livekit_prepare_nginx_tls(){ :; }; livekit_public_tls_probe(){ :; }; livekit_turn_tls_probe(){ :; }
+          fail(){ echo "FAIL: $*" >&2; }; warn(){ :; }; info(){ :; }; ok(){ :; }
+          run_logged(){ local _label="$1"; shift; "$@"; }
+          run_visible(){ local _label="$1"; shift; "$@"; }
+          source deploy/spark-cli/lib/airgap.sh
+
+          airgap_verify_images "$root"
+          airgap_verify_image_list_content "$root/docker/images.txt"
+
+          docker image rm -f busybox:1.36 >/dev/null
+          if airgap_verify_image_list_content "$root/docker/images.txt"; then
+            echo 'Expected content verification to fail after image removal.' >&2
+            exit 1
+          fi
+
+          airgap_repair_image_list_content "$root" "$root/docker/images.txt"
+          airgap_verify_images "$root"
+          airgap_verify_image_list_content "$root/docker/images.txt"
+          docker image save busybox:1.36 >/dev/null
+          echo 'Docker content repair: PASS'
+
+      - name: Validate Step 20 Air-Gap guard
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -Fq 'declare -f install_step_20' deploy/spark-cli/lib/airgap-runtime.sh
+          grep -Fq 'airgap_livekit_image_list()' deploy/spark-cli/lib/airgap-runtime.sh
+          grep -Fq 'Repair bundled LiveKit Docker image content' deploy/spark-cli/lib/airgap-runtime.sh
+          grep -Fq 'livekit_compose down --remove-orphans' deploy/spark-cli/lib/airgap-runtime.sh
+          echo 'Step 20 guard: PASS'
+
+      - name: Commit minimal fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/spark-cli/lib/airgap.sh deploy/spark-cli/lib/airgap-runtime.sh
+          git commit -m 'fix(airgap): validate and repair Docker image content'
+          git push origin HEAD:main
