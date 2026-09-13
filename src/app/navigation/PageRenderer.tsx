@@ -1,8 +1,7 @@
 import { lazy } from 'react';
 import type { ReactNode } from 'react';
 import type { PageId } from '../navigation/useNavigation';
-import { PAGE_PERMISSION_KEY, checkPermission, AccessDenied } from '../../features/permissions';
-import { canOpenPortalConfig } from '../../features/permissions/configPermissions';
+import { PAGE_PERMISSION_KEY, checkPermission, AccessDenied, canOpenPortalConfig } from '../../features/permissions';
 import type { PageRendererProps } from './pageRendererTypes';
 
 const ManagementDashboardPage = lazy(() => import('../../components/ManagementDashboardPage').then((m) => ({ default: m.ManagementDashboardPage })));
@@ -30,8 +29,8 @@ const MyDecisionsPage = lazy(() => import('../../components/Minutes/MyDecisionsP
 const DecisionsFollowupPage = lazy(() => import('../../components/Minutes/DecisionsFollowupPage').then((m) => ({ default: m.DecisionsFollowupPage })));
 const MinutesMeetingReportPage = lazy(() => import('../../components/Minutes/MinutesMeetingReportPage').then((m) => ({ default: m.MinutesMeetingReportPage })));
 const MinutesReportsPage = lazy(() => import('../../components/Minutes/MinutesReportsPage').then((m) => ({ default: m.MinutesReportsPage })));
-const MeetingsPage = lazy(() => import('../../features/meetings/pages/MeetingsPage').then((m) => ({ default: m.MeetingsPage })));
-const CreateMeetingPage = lazy(() => import('../../features/meetings/pages/CreateMeetingPage').then((m) => ({ default: m.CreateMeetingPage })));
+const MeetingsPage = lazy(() => import('../../features/meetings').then((m) => ({ default: m.MeetingsPage })));
+const CreateMeetingPage = lazy(() => import('../../features/meetings').then((m) => ({ default: m.CreateMeetingPage })));
 
 function modernPage(content: ReactNode): ReactNode {
   return <div className="spark-modern-page h-full min-h-0">{content}</div>;
