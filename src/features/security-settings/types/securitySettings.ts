@@ -74,6 +74,7 @@ export type SecurityErrorCode =
   | 'INVALID_SESSION_POLICY'
   | 'PHONE_LOGIN_NOT_READY'
   | 'NO_EFFECTIVE_CHANGE'
+  | 'INVALID_CHANGE_REASON'
   | 'FORBIDDEN'
   | 'SESSION_EXPIRED'
   | 'INVALID_TYPE'
@@ -125,6 +126,7 @@ export const SECURITY_ERROR_MESSAGES: Record<string, string> = {
   INVALID_SESSION_POLICY: 'تنظیمات Session نامعتبر است.',
   PHONE_LOGIN_NOT_READY: 'ورود با تلفن هنوز آماده نیست.',
   NO_EFFECTIVE_CHANGE: 'تغییری برای ذخیره وجود ندارد.',
+  INVALID_CHANGE_REASON: 'دلیل تغییر باید بین ۱۰ تا ۵۰۰ کاراکتر باشد.',
   FORBIDDEN: 'دسترسی به تنظیمات امنیتی فقط برای مدیر امنیت فعال است.',
   SESSION_EXPIRED: 'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.',
   INVALID_TYPE: 'نوع یکی از فیلدها نامعتبر است.',
@@ -142,7 +144,7 @@ export function mapSecurityError(code: string | undefined | null): SecurityError
   const known: SecurityErrorCode[] = [
     'VERSION_CONFLICT', 'STEPUP_REQUIRED', 'NO_LOGIN_METHOD_ENABLED',
     'MFA_REQUIRED_WITHOUT_FACTOR', 'INVALID_SESSION_POLICY', 'PHONE_LOGIN_NOT_READY',
-    'NO_EFFECTIVE_CHANGE', 'FORBIDDEN', 'SESSION_EXPIRED', 'INVALID_TYPE',
+    'NO_EFFECTIVE_CHANGE', 'INVALID_CHANGE_REASON', 'FORBIDDEN', 'SESSION_EXPIRED', 'INVALID_TYPE',
     'OUT_OF_RANGE', 'UNKNOWN_KEY',
     'UNAUTHORIZED', 'SESSION_INVALID', 'SECURITY_ADMIN_REQUIRED', 'SETTINGS_NOT_FOUND',
   ];
