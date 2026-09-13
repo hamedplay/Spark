@@ -82,7 +82,7 @@ Deno.serve(async (req: Request) => {
       const { data: existingPhone } = await supabase
         .from("profiles")
         .select("user_id")
-        .eq("normalized_phone", normalizedPhone)
+        .eq("normalized_phone", `+${normalizedPhone}`)
         .maybeSingle();
       if (existingPhone) return json({ error: "این شماره موبایل قبلاً ثبت شده است" }, 400);
 
