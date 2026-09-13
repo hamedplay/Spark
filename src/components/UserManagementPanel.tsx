@@ -24,6 +24,22 @@ import { useDismissOnOutsideClick } from '../shared/ui/useDismissOnOutsideClick'
 import { usePermissions } from '../context/PermissionsContext';
 import { AccessDenied } from '../features/permissions';
 
+interface AdminCreateResponse {
+  success?: boolean;
+  user_id?: string;
+  error?: string;
+}
+
+function adminCreateErrorMessage(error: string | undefined, status: number): string {
+  if (error === 'AUTH_ACCESS_RESTRICTED') return 'نشست امنیتی اجازه ایجاد کاربر را ندارد. دوباره وارد شوید.';
+  if (error === 'Admin access required') return 'فقط مدیر سامانه اجازه ایجاد کاربر جدید را دارد.';
+  if (error) return error;
+  if (status === 401 || status === 403) return 'مجوز ایجاد کاربر معتبر نیست. دوباره وارد شوید.';
+  if (status === 404) return 'سرویس ایجاد کاربر روی سرور در دسترس نیست.';
+  if (status >= 500) return 'سرویس ایجاد کاربر در سرور با خطا مواجه شد.';
+  return 'ایجاد کاربر انجام نشد.';
+}
+
 export function UserManagementPanel({ currentUserId }: Props) {
   const { hasPermission } = usePermissions();
   const canManageAccess = hasPermission('config_users.users_list.permissions');
@@ -60,42 +76,58 @@ export function UserManagementPanel({ currentUserId }: Props) {
     if (password) {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-users/create`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            email: updated.email!.trim(),
-            password,
-            profile: {
-              full_name: updated.full_name,
-              username: updated.username || null,
-              phone: updated.phone,
-              organization: updated.organization,
-              position: updated.position,
-              department: updated.department,
-              employee_id: updated.employee_id,
-              hire_date: updated.hire_date,
-              birth_date: updated.birth_date,
-              gender: updated.gender,
-              city: updated.city,
-              location: updated.location,
-              bio: updated.bio,
-              national_id: updated.national_id,
+      if (!token) {
+        toast.error('نشست ورود معتبر نیست. لطفاً دوباره وارد شوید.');
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-users/create`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
             },
-          }),
+            body: JSON.stringify({
+              email: updated.email!.trim(),
+              password,
+              profile: {
+                full_name: updated.full_name,
+                username: updated.username || null,
+                phone: updated.phone,
+                organization: updated.organization,
+                position: updated.position,
+                department: updated.department,
+                employee_id: updated.employee_id,
+                hire_date: updated.hire_date,
+                birth_date: updated.birth_date,
+                gender: updated.gender,
+                city: updated.city,
+                location: updated.location,
+                bio: updated.bio,
+                national_id: updated.national_id,
+              },
+            }),
+          },
+        );
+
+        const result = await res.json().catch(() => null) as AdminCreateResponse | null;
+        if (!res.ok || result?.error || result?.success !== true) {
+          console.error('[USER_CREATE] Request failed:', { status: res.status, result });
+          toast.error(adminCreateErrorMessage(result?.error, res.status));
+          return;
         }
-      );
-      const result = await res.json();
-      if (!res.ok || result.error) { toast.error(result.error || 'خطا در ایجاد کاربر'); return; }
-      toast.success('کاربر ایجاد شد. سطح دسترسی را پس از ایجاد از بخش «مدیریت سطح دسترسی» تعیین کنید.');
-      await load();
-      goBack();
+
+        toast.success('کاربر ایجاد شد. سطح دسترسی را پس از ایجاد از بخش «مدیریت سطح دسترسی» تعیین کنید.');
+        await load();
+        goBack();
+      } catch (error) {
+        console.error('[USER_CREATE] Network/runtime error:', error);
+        toast.error('ارتباط با سرویس ایجاد کاربر برقرار نشد. وضعیت Edge Functions را بررسی کنید.');
+      }
     } else {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -271,7 +303,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
       </div>
       <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300">
         <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-        <span>برای وارد کردن دسته‌ای: ابتدا «قالب» را دانلود کنید، اطلاعات کاربران را پر کنید، سپس «وارد کردن» را بزنید. تنها ستون «ایمیل» الزامی است — اگر رمز عبور خالی باشد، رمز پیش‌فرض <span className="font-mono font-semibold">Ss123456</span> تنظیم می‌شود. نقش مدیریتی بعد از ایجاد کاربر از «مدیریت سطح دسترسی» تعیین می‌شود.</span>
+        <span>برای وارد کردن دسته‌ای: ابتدا «قالب» را دانلود کنید، اطلاعات کاربران را پر کنید، سپس «وارد کردن» را بزنید. ستون‌های «ایمیل»، «نام کاربری» و «شماره موبایل» الزامی هستند — اگر رمز عبور خالی باشد، رمز پیش‌فرض <span className="font-mono font-semibold">Ss123456</span> تنظیم می‌شود. نقش مدیریتی بعد از ایجاد کاربر از «مدیریت سطح دسترسی» تعیین می‌شود.</span>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
