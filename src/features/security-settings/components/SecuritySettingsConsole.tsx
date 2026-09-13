@@ -8,6 +8,7 @@ import { SECURITY_ERROR_MESSAGES, type SecurityConsoleState, type SecuritySettin
 import { MfaPolicyImpactCard } from './MfaPolicyImpactCard';
 import { SecuritySettingsHistory } from './SecuritySettingsHistory';
 import { SecurityStepUpDialog } from './SecurityStepUpDialog';
+import { MalformedPhoneCleanupPanel } from './MalformedPhoneCleanupPanel';
 import { listCurrentUserTotpFactors } from '../../auth/services/mfaOperations';
 
 interface ConflictSnapshot {
@@ -410,6 +411,9 @@ export function SecuritySettingsConsole() {
         />
         <ReadonlyToggle label="کدهای بازیابی" value={draft.allow_recovery_codes} />
       </SectionCard>
+
+      {/* Malformed phone maintenance */}
+      <MalformedPhoneCleanupPanel />
 
       {/* Change Reason */}
       <div>
