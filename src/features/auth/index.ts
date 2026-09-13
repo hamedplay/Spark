@@ -38,3 +38,5 @@ export type {
 
 export { TotpEnrollmentGate } from './components/TotpEnrollmentGate';
 export { TotpChallengeGate } from './components/TotpChallengeGate';
+export { TotpFactorManager } from './components/TotpFactorManager';
+export { SessionManagementPanel } from './components/SessionManagementPanel';
