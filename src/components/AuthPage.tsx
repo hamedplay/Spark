@@ -62,6 +62,12 @@ interface RegistrationForm {
   confirmPassword: string;
 }
 
+interface RegistrationIdentifierConflicts {
+  username: boolean;
+  email: boolean;
+  phone: boolean;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMPTY_REGISTRATION: RegistrationForm = {
   firstName: '',
@@ -71,6 +77,11 @@ const EMPTY_REGISTRATION: RegistrationForm = {
   phone: '',
   password: '',
   confirmPassword: '',
+};
+const EMPTY_REGISTRATION_CONFLICTS: RegistrationIdentifierConflicts = {
+  username: false,
+  email: false,
+  phone: false,
 };
 
 function firstObject(value: unknown): Record<string, unknown> | null {
@@ -138,6 +149,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
   const [registrationStep, setRegistrationStep] = useState<RegistrationStep>('details');
   const [registrationForm, setRegistrationForm] = useState<RegistrationForm>(EMPTY_REGISTRATION);
+  const [registrationConflicts, setRegistrationConflicts] = useState<RegistrationIdentifierConflicts>(EMPTY_REGISTRATION_CONFLICTS);
   const [registrationOtp, setRegistrationOtp] = useState('');
   const [registrationOtpError, setRegistrationOtpError] = useState('');
   const [registrationChallengeId, setRegistrationChallengeId] = useState<string | null>(null);
@@ -506,6 +518,10 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     }
   };
 
+  const clearRegistrationConflict = (field: keyof RegistrationIdentifierConflicts) => {
+    setRegistrationConflicts(current => current[field] ? { ...current, [field]: false } : current);
+  };
+
   const handleRegistrationRequest = async (event?: FormEvent) => {
     event?.preventDefault();
     if (registrationRequestRef.current) return;
@@ -519,6 +535,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
 
     registrationRequestRef.current = true;
     setRegistrationLoading(true);
+    setRegistrationConflicts(EMPTY_REGISTRATION_CONFLICTS);
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/request-public-registration-otp`, {
         method: 'POST',
@@ -535,6 +552,19 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         }),
       });
       const result = await response.json().catch(() => ({}));
+      if (response.status === 409 && result.code === 'REGISTRATION_IDENTIFIER_CONFLICT') {
+        const conflicts = firstObject(result.conflicts);
+        setRegistrationConflicts({
+          username: conflicts?.username === true,
+          email: conflicts?.email === true,
+          phone: conflicts?.phone === true,
+        });
+        setRegistrationChallengeId(null);
+        setRegistrationOtp('');
+        setRegistrationStep('details');
+        toast.error(isNonEmptyString(result.error) ? result.error : 'نام کاربری، ایمیل یا شماره موبایل واردشده قبلاً ثبت شده است.');
+        return;
+      }
       if (!response.ok || !isValidUuid(result.challenge_id)) {
         toast.error(result.error || 'خطا در ارسال کد تأیید');
         return;
@@ -544,7 +574,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
       setRegistrationOtpError('');
       setRegistrationStep('otp');
       setRegistrationCountdown(authConfig?.registration_otp_resend_seconds ?? 60);
-      toast.success('اگر اطلاعات قابل ثبت باشد، کد تأیید ارسال شده است.');
+      toast.success('کد تأیید ارسال شد.');
     } catch {
       toast.error('خطا در ارسال کد تأیید');
     } finally {
@@ -595,6 +625,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         });
       }
       setRegistrationForm(EMPTY_REGISTRATION);
+      setRegistrationConflicts(EMPTY_REGISTRATION_CONFLICTS);
       setRegistrationOtp('');
       setRegistrationChallengeId(null);
       onSuccess();
@@ -726,7 +757,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                         {(phoneOtpAvailable || authConfig?.registration_ready === true) && (
                           <div className="spark-reference-secondary-actions">
                             {phoneOtpAvailable && <button type="button" onClick={() => setLoginTab('phone_otp')}><Smartphone />ورود با کد پیامکی</button>}
-                            {authConfig?.registration_ready === true && <button type="button" onClick={() => setMode('register')}><UserPlus />ثبت‌نام</button>}
+                            {authConfig?.registration_ready === true && <button type="button" onClick={() => { setRegistrationConflicts(EMPTY_REGISTRATION_CONFLICTS); setMode('register'); }}><UserPlus />ثبت‌نام</button>}
                           </div>
                         )}
                       </>
@@ -824,9 +855,53 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                       <label className="spark-reference-field"><span>نام</span><div className="spark-reference-input-wrap"><input value={registrationForm.firstName} onChange={event => setRegistrationForm(value => ({ ...value, firstName: event.target.value }))} /></div></label>
                       <label className="spark-reference-field"><span>نام خانوادگی</span><div className="spark-reference-input-wrap"><input value={registrationForm.lastName} onChange={event => setRegistrationForm(value => ({ ...value, lastName: event.target.value }))} /></div></label>
                     </div>
-                    <label className="spark-reference-field"><span>نام کاربری</span><div className="spark-reference-input-wrap"><input dir="ltr" value={registrationForm.username} onChange={event => setRegistrationForm(value => ({ ...value, username: event.target.value.replace(/[^a-zA-Z0-9._]/g, '') }))} /></div></label>
-                    <label className="spark-reference-field"><span>ایمیل</span><div className="spark-reference-input-wrap"><input type="email" dir="ltr" value={registrationForm.email} onChange={event => setRegistrationForm(value => ({ ...value, email: event.target.value }))} /></div></label>
-                    <label className="spark-reference-field"><span>شماره موبایل</span><div className="spark-reference-input-wrap"><input type="tel" dir="ltr" value={registrationForm.phone} onChange={event => setRegistrationForm(value => ({ ...value, phone: event.target.value }))} /></div></label>
+                    <label className="spark-reference-field">
+                      <span>نام کاربری</span>
+                      <div className="spark-reference-input-wrap">
+                        <input
+                          dir="ltr"
+                          value={registrationForm.username}
+                          aria-invalid={registrationConflicts.username || undefined}
+                          onChange={event => {
+                            setRegistrationForm(value => ({ ...value, username: event.target.value.replace(/[^a-zA-Z0-9._]/g, '') }));
+                            clearRegistrationConflict('username');
+                          }}
+                        />
+                      </div>
+                      {registrationConflicts.username && <small role="alert" style={{ display: 'block', margin: '6px 3px 0', color: '#fb7185', fontSize: '10.5px' }}>این نام کاربری قبلاً ثبت شده است.</small>}
+                    </label>
+                    <label className="spark-reference-field">
+                      <span>ایمیل</span>
+                      <div className="spark-reference-input-wrap">
+                        <input
+                          type="email"
+                          dir="ltr"
+                          value={registrationForm.email}
+                          aria-invalid={registrationConflicts.email || undefined}
+                          onChange={event => {
+                            setRegistrationForm(value => ({ ...value, email: event.target.value }));
+                            clearRegistrationConflict('email');
+                          }}
+                        />
+                      </div>
+                      {registrationConflicts.email && <small role="alert" style={{ display: 'block', margin: '6px 3px 0', color: '#fb7185', fontSize: '10.5px' }}>این ایمیل قبلاً ثبت شده است.</small>}
+                    </label>
+                    <label className="spark-reference-field">
+                      <span>شماره موبایل</span>
+                      <div className="spark-reference-input-wrap">
+                        <input
+                          type="tel"
+                          dir="ltr"
+                          value={registrationForm.phone}
+                          aria-invalid={registrationConflicts.phone || undefined}
+                          onChange={event => {
+                            setRegistrationForm(value => ({ ...value, phone: event.target.value }));
+                            clearRegistrationConflict('phone');
+                          }}
+                        />
+                      </div>
+                      {registrationConflicts.phone && <small role="alert" style={{ display: 'block', margin: '6px 3px 0', color: '#fb7185', fontSize: '10.5px' }}>این شماره موبایل قبلاً ثبت شده است.</small>}
+                    </label>
                     <div className="spark-reference-two-col">
                       <label className="spark-reference-field"><span>رمز عبور</span><div className="spark-reference-input-wrap"><input type="password" dir="ltr" value={registrationForm.password} onChange={event => setRegistrationForm(value => ({ ...value, password: event.target.value }))} /></div></label>
                       <label className="spark-reference-field"><span>تکرار رمز</span><div className="spark-reference-input-wrap"><input type="password" dir="ltr" value={registrationForm.confirmPassword} onChange={event => setRegistrationForm(value => ({ ...value, confirmPassword: event.target.value }))} /></div></label>
@@ -851,7 +926,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                 ) : (
                   <div className="spark-reference-inline-state"><LoaderCircle className="spark-spin" /> در حال تکمیل ثبت‌نام...</div>
                 )}
-                <button type="button" className="spark-reference-back" onClick={() => { setMode('login'); setRegistrationStep('details'); }}><ChevronRight />بازگشت به صفحه ورود</button>
+                <button type="button" className="spark-reference-back" onClick={() => { setRegistrationConflicts(EMPTY_REGISTRATION_CONFLICTS); setMode('login'); setRegistrationStep('details'); }}><ChevronRight />بازگشت به صفحه ورود</button>
               </div>
             )}
 
