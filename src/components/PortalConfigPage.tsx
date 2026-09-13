@@ -18,7 +18,7 @@ const MinutesConfigPanel = lazy(() => import('./Minutes/MinutesConfigPanel').the
 const AuditLogPage = lazy(() => import('./AuditLogPage').then(m => ({ default: m.AuditLogPage })));
 const BackupPanel = lazy(() => import('./BackupPanel').then(m => ({ default: m.BackupPanel })));
 const IceTesterPanel = lazy(() => import('./VideoConference/IceTesterPanel').then(m => ({ default: m.IceTesterPanel })));
-const MalformedPhoneCleanupPanel = lazy(() => import('../features/security-settings/components/MalformedPhoneCleanupPanel').then(m => ({ default: m.MalformedPhoneCleanupPanel })));
+const SecuritySettingsConsole = lazy(() => import('../features/security-settings').then(m => ({ default: m.SecuritySettingsConsole })));
 
 import { NAV_ITEMS, VISIBLE_SECURITY_CONFIG_KEYS } from './PortalConfig/constants';
 import { ConfigField } from './PortalConfig/ConfigField';
@@ -27,7 +27,7 @@ import { PhoneAuthCard } from './PortalConfig/PhoneAuthCard';
 import { IdentityRepairCard } from './PortalConfig/IdentityRepairCard';
 import type { ConfigEntry, Profile, Props } from './PortalConfig/types';
 import { usePermissions } from '../context/PermissionsContext';
-import { canAccessConfigSection, getFirstVisibleConfigSection, getVisibleConfigNavigationItems } from '../features/permissions/configPermissions';
+import { canAccessConfigSection, getFirstVisibleConfigSection, getVisibleConfigNavigationItems } from '../features/permissions';
 
 export function PortalConfigPage({ currentUserId }: Props) {
   const { isAdmin, userPermissions } = usePermissions();
@@ -281,11 +281,9 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Users list ────────────────────────────────────────────────────────
       case 'users_list':
         return <UserManagementPanel currentUserId={currentUserId} />;
 
-      // ── Online users ─────────────────────────────────────────────────────
       case 'users_online':
         return (
           <div className="space-y-4">
@@ -326,19 +324,15 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── User groups ───────────────────────────────────────────────────────
       case 'user_groups':
         return <UserGroupsPanel currentUserId={currentUserId} />;
 
-      // ── Group events ──────────────────────────────────────────────────────
       case 'group_events':
         return <GroupEventsPanel />;
 
-      // ── Org structure ─────────────────────────────────────────────────────
       case 'org_structure':
         return <OrgStructurePage />;
 
-      // ── Security ──────────────────────────────────────────────────────────
       case 'security':
         return (
           <div className="space-y-5">
@@ -347,11 +341,10 @@ export function PortalConfigPage({ currentUserId }: Props) {
             </SectionCard>
             <PhoneAuthCard />
             <IdentityRepairCard />
-            <MalformedPhoneCleanupPanel />
+            <SecuritySettingsConsole />
           </div>
         );
 
-      // ── Server ────────────────────────────────────────────────────────────
       case 'server':
         return (
           <div className="space-y-5">
@@ -361,23 +354,18 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Audit log ─────────────────────────────────────────────────────────
       case 'audit_log':
         return <AuditLogPage />;
 
-      // ── Notifications ─────────────────────────────────────────────────────
       case 'notifications':
         return <NotificationsConfigPanel />;
 
-      // ── SMS ───────────────────────────────────────────────────────────────
       case 'sms':
         return <SmsConfigPanel />;
 
-      // ── Social Notifications ───────────────────────────────────────────────
       case 'social_notifications':
         return <SocialNotificationsPanel />;
 
-      // ── Email ─────────────────────────────────────────────────────────────
       case 'email':
         return (
           <div className="space-y-5">
@@ -387,11 +375,9 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Daily Report ──────────────────────────────────────────────────────
       case 'daily_report':
         return <DailyReportConfigPanel />;
 
-      // ── Video conference ──────────────────────────────────────────────────
       case 'video_conference':
         return (
           <div className="space-y-5">
@@ -409,7 +395,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Calendar ──────────────────────────────────────────────────────────
       case 'calendar':
         return (
           <div className="space-y-5">
@@ -422,19 +407,15 @@ export function PortalConfigPage({ currentUserId }: Props) {
           </div>
         );
 
-      // ── Monitoring ────────────────────────────────────────────────────────
       case 'monitoring':
         return <SystemMonitoringPage />;
 
-      // ── Minutes config ──────────────────────────────────────────────────────
       case 'minutes_config':
         return <MinutesConfigPanel currentUserId={currentUserId} />;
 
-      // ── Spark config ──────────────────────────────────────────────────────
       case 'spark_config':
         return <SparkConfigPanel />;
 
-      // ── Backup ────────────────────────────────────────────────────────────
       case 'backup':
         return (
           <div className="p-6">
@@ -444,11 +425,9 @@ export function PortalConfigPage({ currentUserId }: Props) {
 
       default:
         return <div className="text-gray-400 text-center py-20">بخش در حال توسعه است</div>;
-
     }
   };
 
-  // ── Breadcrumb ──────────────────────────────────────────────────────────────
   const breadcrumb = (() => {
     for (const group of visibleNavItems) {
       const sub = group.sub.find(s => s.key === activeSection);
@@ -489,7 +468,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
 
   return (
     <div className="flex h-full overflow-hidden bg-gray-50 dark:bg-gray-900" dir="rtl">
-      {/* Mobile sidebar overlay */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-[200] lg:hidden" onClick={() => setMobileSidebarOpen(false)}>
           <div className="absolute inset-0 bg-black/50" />
@@ -509,7 +487,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
         </div>
       )}
 
-      {/* Desktop Sidebar */}
       <div className="hidden lg:flex w-56 flex-shrink-0 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex-col overflow-y-auto">
         <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <h2 className="font-bold text-gray-800 dark:text-white flex items-center gap-2 text-sm">
@@ -519,12 +496,9 @@ export function PortalConfigPage({ currentUserId }: Props) {
         <SidebarNav />
       </div>
 
-      {/* Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* Breadcrumb bar */}
         <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            {/* Mobile menu button */}
             <button onClick={() => setMobileSidebarOpen(true)}
               className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 flex-shrink-0">
               <Menu className="w-5 h-5" />
