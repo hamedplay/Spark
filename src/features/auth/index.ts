@@ -1,4 +1,5 @@
 export { useAuthSession } from './hooks/useAuthSession';
+export { useSessionHeartbeat } from './hooks/useSessionHeartbeat';
 export type { AuthSessionState, AuthAccessState, AccessLevel, ReasonCode, NextStep } from './types/authSession';
 
 export {
