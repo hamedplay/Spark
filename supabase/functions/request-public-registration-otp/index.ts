@@ -15,12 +15,17 @@ import {
   hashOtp,
   generateOtp,
   adminClient,
-  abortAwareDelay,
 } from "../_shared/registration-security.ts";
 
 interface SmsDeliveryMeta {
   packId: string | null;
   messageIds: Array<string | number>;
+}
+
+interface RegistrationIdentifierConflicts {
+  username: boolean;
+  email: boolean;
+  phone: boolean;
 }
 
 const REGISTRATION_OTP_LOG_MESSAGE = "کد تأیید ثبت‌نام: ******";
@@ -29,6 +34,17 @@ function maskPhoneForLog(phoneDigits: string): string {
   if (!/^989\d{9}$/.test(phoneDigits)) return "***";
   const localPhone = `0${phoneDigits.slice(2)}`;
   return `${localPhone.slice(0, 4)}${"*".repeat(localPhone.length - 7)}${localPhone.slice(-3)}`;
+}
+
+function registrationConflictMessage(conflicts: RegistrationIdentifierConflicts): string {
+  const labels: string[] = [];
+  if (conflicts.username) labels.push("نام کاربری");
+  if (conflicts.email) labels.push("ایمیل");
+  if (conflicts.phone) labels.push("شماره موبایل");
+
+  if (labels.length === 1) return `${labels[0]} واردشده قبلاً ثبت شده است.`;
+  if (labels.length > 1) return `${labels.join("، ")} واردشده قبلاً ثبت شده‌اند.`;
+  return "اطلاعات واردشده قبلاً ثبت شده است.";
 }
 
 async function createRegistrationDispatchLog(
@@ -172,13 +188,33 @@ Deno.serve(async (req: Request) => {
     const rate = Array.isArray(rateRaw) ? rateRaw[0] : rateRaw;
     if (rate?.allowed !== true) return await json({ error: "تعداد درخواست‌ها بیش از حد مجاز است" }, 429);
 
-    const { data: available, error: availError } = await supabase.rpc("check_public_registration_identifiers_available", {
-      p_normalized_username: trimmedUsername,
-      p_normalized_email: trimmedEmail,
-      p_normalized_phone: phoneDigits,
-    });
+    const [usernameCheck, emailCheck, phoneCheck] = await Promise.all([
+      supabase.rpc("check_public_registration_identifiers_available", {
+        p_normalized_username: trimmedUsername,
+        p_normalized_email: null,
+        p_normalized_phone: null,
+      }),
+      supabase.rpc("check_public_registration_identifiers_available", {
+        p_normalized_username: null,
+        p_normalized_email: trimmedEmail,
+        p_normalized_phone: null,
+      }),
+      supabase.rpc("check_public_registration_identifiers_available", {
+        p_normalized_username: null,
+        p_normalized_email: null,
+        p_normalized_phone: phoneDigits,
+      }),
+    ]);
 
-    if (availError) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
+    if (usernameCheck.error || emailCheck.error || phoneCheck.error) {
+      return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
+    }
+
+    const conflicts: RegistrationIdentifierConflicts = {
+      username: usernameCheck.data !== true,
+      email: emailCheck.data !== true,
+      phone: phoneCheck.data !== true,
+    };
 
     const dispatchLogId = await createRegistrationDispatchLog(supabase, {
       phoneDigits,
@@ -187,21 +223,19 @@ Deno.serve(async (req: Request) => {
     });
     if (!dispatchLogId) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
 
-    const hasConflict = available !== true;
+    const hasConflict = conflicts.username || conflicts.email || conflicts.phone;
     if (hasConflict) {
       await updateRegistrationDispatchLog(supabase, dispatchLogId, {
         status: "skipped",
         error_text: "REGISTRATION_IDENTIFIER_CONFLICT",
       });
-      // Preserve a success-shaped response so public registration cannot be
-      // used to enumerate existing username/email/phone identifiers.
-      // No challenge is persisted and no OTP is sent for a conflict.
-      await abortAwareDelay(200 + Math.random() * 300, req.signal);
+
       return await json({
-        ok: true,
-        challenge_id: crypto.randomUUID(),
-        retry_after_seconds: resendSeconds,
-      });
+        ok: false,
+        error: registrationConflictMessage(conflicts),
+        code: "REGISTRATION_IDENTIFIER_CONFLICT",
+        conflicts,
+      }, 409);
     }
 
     const challengeId = crypto.randomUUID();
