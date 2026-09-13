@@ -86,3 +86,69 @@ export async function saveSecuritySettingsPatch(
     currentVersion: (data as { new_version?: number }).new_version ?? undefined,
   };
 }
+
+export interface MalformedPhoneRecord {
+  user_id: string;
+  email: string | null;
+  profile_phone: string | null;
+  auth_phone: string | null;
+  profile_problem: boolean;
+  auth_problem: boolean;
+}
+
+export interface MalformedPhoneRecordsResult {
+  ok: boolean;
+  records: MalformedPhoneRecord[];
+  error?: string;
+}
+
+export interface ClearMalformedPhoneResult {
+  ok: boolean;
+  error?: string;
+  auth_phone_cleared?: boolean;
+  profile_phone_cleared?: boolean;
+}
+
+export async function loadMalformedPhoneRecords(): Promise<MalformedPhoneRecordsResult> {
+  const rpcResult = await (supabase as unknown as {
+    rpc: (fn: string) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  }).rpc('list_malformed_phone_records');
+
+  if (rpcResult.error) {
+    return {
+      ok: false,
+      records: [],
+      error: rpcResult.error.message || 'MALFORMED_PHONE_LIST_FAILED',
+    };
+  }
+
+  if (!Array.isArray(rpcResult.data)) {
+    return { ok: false, records: [], error: 'MALFORMED_PHONE_LIST_INVALID_RESPONSE' };
+  }
+
+  return {
+    ok: true,
+    records: rpcResult.data as MalformedPhoneRecord[],
+  };
+}
+
+export async function clearMalformedPhoneRecord(userId: string): Promise<ClearMalformedPhoneResult> {
+  const rpcResult = await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  }).rpc('clear_malformed_phone_record', {
+    p_user_id: userId,
+  });
+
+  if (rpcResult.error) {
+    return {
+      ok: false,
+      error: rpcResult.error.message || 'MALFORMED_PHONE_CLEAR_FAILED',
+    };
+  }
+
+  if (!rpcResult.data || typeof rpcResult.data !== 'object' || Array.isArray(rpcResult.data)) {
+    return { ok: false, error: 'MALFORMED_PHONE_CLEAR_INVALID_RESPONSE' };
+  }
+
+  return rpcResult.data as ClearMalformedPhoneResult;
+}
