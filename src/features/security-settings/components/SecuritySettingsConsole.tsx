@@ -9,7 +9,7 @@ import { MfaPolicyImpactCard } from './MfaPolicyImpactCard';
 import { SecuritySettingsHistory } from './SecuritySettingsHistory';
 import { SecurityStepUpDialog } from './SecurityStepUpDialog';
 import { MalformedPhoneCleanupPanel } from './MalformedPhoneCleanupPanel';
-import { listCurrentUserTotpFactors } from '../../auth/services/mfaOperations';
+import { listCurrentUserTotpFactors } from '../../auth';
 
 interface ConflictSnapshot {
   expectedVersion: number;
@@ -216,26 +216,12 @@ export function SecuritySettingsConsole() {
         </div>
       )}
 
-      {/* Login Methods */}
       <SectionCard title="روش‌های ورود" icon={LogIn}>
-        <ToggleRow
-          label="ورود با نام کاربری"
-          value={draft.username_login}
-          onChange={(v) => setDraft({ ...draft, username_login: v })}
-        />
-        <ToggleRow
-          label="ورود با ایمیل"
-          value={draft.email_login}
-          onChange={(v) => setDraft({ ...draft, email_login: v })}
-        />
-        <ToggleRow
-          label="ورود با تلفن"
-          value={draft.phone_login}
-          onChange={(v) => setDraft({ ...draft, phone_login: v })}
-        />
+        <ToggleRow label="ورود با نام کاربری" value={draft.username_login} onChange={(v) => setDraft({ ...draft, username_login: v })} />
+        <ToggleRow label="ورود با ایمیل" value={draft.email_login} onChange={(v) => setDraft({ ...draft, email_login: v })} />
+        <ToggleRow label="ورود با تلفن" value={draft.phone_login} onChange={(v) => setDraft({ ...draft, phone_login: v })} />
       </SectionCard>
 
-      {/* MFA Policy */}
       <SectionCard title="سیاست احراز هویت دومرحله‌ای" icon={Shield}>
         <div className="space-y-3">
           <div>
@@ -264,9 +250,7 @@ export function SecuritySettingsConsole() {
             value={draft.allow_totp_mfa}
             onChange={(v) => {
               const newDraft = { ...draft, allow_totp_mfa: v };
-              if (!v && newDraft.mfa_policy === 'required') {
-                newDraft.mfa_policy = 'optional';
-              }
+              if (!v && newDraft.mfa_policy === 'required') newDraft.mfa_policy = 'optional';
               setDraft(newDraft);
             }}
           />
@@ -277,18 +261,9 @@ export function SecuritySettingsConsole() {
         </div>
       </SectionCard>
 
-      {/* Custom MFA */}
       <SectionCard title="احراز هویت سفارشی" icon={Shield}>
-        <ToggleRow
-          label="فعال‌سازی زیرساخت MFA سفارشی"
-          value={draft.custom_mfa_enabled}
-          onChange={(v) => setDraft({ ...draft, custom_mfa_enabled: v })}
-        />
-        <ToggleRow
-          label="الزام MFA سفارشی"
-          value={draft.custom_mfa_required}
-          onChange={(v) => setDraft({ ...draft, custom_mfa_required: v })}
-        />
+        <ToggleRow label="فعال‌سازی زیرساخت MFA سفارشی" value={draft.custom_mfa_enabled} onChange={(v) => setDraft({ ...draft, custom_mfa_enabled: v })} />
+        <ToggleRow label="الزام MFA سفارشی" value={draft.custom_mfa_required} onChange={(v) => setDraft({ ...draft, custom_mfa_required: v })} />
         <div className="grid grid-cols-2 gap-3">
           <NumberRow label="مهلت کد (ثانیه)" value={draft.custom_mfa_challenge_ttl_seconds} min={30} max={3600} onChange={(v) => setDraft({ ...draft, custom_mfa_challenge_ttl_seconds: v })} />
           <NumberRow label="عمر مجوز (دقیقه)" value={draft.custom_mfa_grant_lifetime_minutes} min={1} max={1440} onChange={(v) => setDraft({ ...draft, custom_mfa_grant_lifetime_minutes: v })} />
@@ -322,10 +297,8 @@ export function SecuritySettingsConsole() {
         <p className="text-xs text-amber-600 dark:text-amber-400">هیچ عامل اجباری بدون آماده‌بودن مسیر ارسال و تأیید فعال نمی‌شود.</p>
       </SectionCard>
 
-      {/* Impact Card */}
       <MfaPolicyImpactCard impact={state.impact} visible={showImpact} />
 
-      {/* Confirmation checkbox */}
       {showImpact && (
         <label className="flex items-start gap-3 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl cursor-pointer">
           <input
@@ -340,82 +313,71 @@ export function SecuritySettingsConsole() {
         </label>
       )}
 
-      {/* Registration */}
       <SectionCard title="ثبت‌نام" icon={SettingsIcon}>
-        <ToggleRow
-          label="ثبت‌نام کاربر جدید"
-          value={draft.registration_enabled}
-          onChange={(v) => setDraft({ ...draft, registration_enabled: v })}
-        />
-        <ToggleRow
-          label="تأیید مدیر برای ثبت‌نام"
-          value={draft.registration_requires_admin_approval}
-          onChange={(v) => setDraft({ ...draft, registration_requires_admin_approval: v })}
-        />
-        <ToggleRow
-          label="الزام تکمیل پروفایل"
-          value={draft.require_profile_completion}
-          onChange={(v) => setDraft({ ...draft, require_profile_completion: v })}
-        />
+        <ToggleRow label="ثبت‌نام کاربر جدید" value={draft.registration_enabled} onChange={(v) => setDraft({ ...draft, registration_enabled: v })} />
+        <ToggleRow label="تأیید مدیر برای ثبت‌نام" value={draft.registration_requires_admin_approval} onChange={(v) => setDraft({ ...draft, registration_requires_admin_approval: v })} />
+        <ToggleRow label="الزام تکمیل پروفایل" value={draft.require_profile_completion} onChange={(v) => setDraft({ ...draft, require_profile_completion: v })} />
       </SectionCard>
 
-      {/* Session */}
       <SectionCard title="تنظیمات نشست" icon={Clock}>
-        <NumberRow
-          label="زمان بیکاری نشست (دقیقه)"
-          value={draft.session_idle_timeout_minutes}
-          min={1}
-          max={10080}
-          onChange={(v) => setDraft({ ...draft, session_idle_timeout_minutes: v })}
-        />
-        <NumberRow
-          label="طول کل نشست (دقیقه)"
-          value={draft.session_absolute_lifetime_minutes}
-          min={1}
-          max={43200}
-          onChange={(v) => setDraft({ ...draft, session_absolute_lifetime_minutes: v })}
-        />
-        <NumberRow
-          label="حداکثر نشست‌های فعال"
-          value={draft.max_active_sessions}
-          min={1}
-          max={100}
-          onChange={(v) => setDraft({ ...draft, max_active_sessions: v })}
-        />
-      </SectionCard>
-
-      {/* Lockout */}
-      <SectionCard title="قفل حساب" icon={Lock}>
-        <NumberRow
-          label="آستانه قفل (تلاش ناموفق)"
-          value={draft.lock_threshold}
-          min={1}
-          max={50}
-          onChange={(v) => setDraft({ ...draft, lock_threshold: v })}
-        />
-        <NumberRow
-          label="مدت قفل (دقیقه)"
-          value={draft.lock_duration_minutes}
-          min={1}
-          max={1440}
-          onChange={(v) => setDraft({ ...draft, lock_duration_minutes: v })}
-        />
-      </SectionCard>
-
-      {/* Recovery */}
-      <SectionCard title="بازیابی" icon={KeyRound}>
         <ToggleRow
-          label="بازیابی فعال"
-          value={draft.recovery_enabled}
-          onChange={(v) => setDraft({ ...draft, recovery_enabled: v })}
+          label="مدیریت پیشرفته نشست‌ها"
+          value={draft.session_management_enabled}
+          onChange={(v) => setDraft({ ...draft, session_management_enabled: v })}
         />
-        <ReadonlyToggle label="کدهای بازیابی" value={draft.allow_recovery_codes} />
+        <NumberRow
+          label="فاصله Heartbeat نشست (ثانیه)"
+          value={draft.session_heartbeat_interval_seconds}
+          min={30}
+          max={3600}
+          onChange={(v) => setDraft({ ...draft, session_heartbeat_interval_seconds: v })}
+        />
+        <NumberRow label="زمان بیکاری نشست (دقیقه)" value={draft.session_idle_timeout_minutes} min={1} max={10080} onChange={(v) => setDraft({ ...draft, session_idle_timeout_minutes: v })} />
+        <NumberRow label="طول کل نشست (دقیقه)" value={draft.session_absolute_lifetime_minutes} min={1} max={43200} onChange={(v) => setDraft({ ...draft, session_absolute_lifetime_minutes: v })} />
+        <NumberRow label="حداکثر نشست‌های فعال" value={draft.max_active_sessions} min={1} max={100} onChange={(v) => setDraft({ ...draft, max_active_sessions: v })} />
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Heartbeat فقط هنگام فعال‌بودن مدیریت پیشرفته نشست‌ها برای تازه‌سازی مهلت بیکاری استفاده می‌شود.
+        </p>
       </SectionCard>
 
-      {/* Malformed phone maintenance */}
+      <SectionCard title="قفل حساب" icon={Lock}>
+        <NumberRow label="آستانه قفل (تلاش ناموفق)" value={draft.lock_threshold} min={1} max={50} onChange={(v) => setDraft({ ...draft, lock_threshold: v })} />
+        <NumberRow label="مدت قفل ثابت (دقیقه)" value={draft.lock_duration_minutes} min={1} max={1440} onChange={(v) => setDraft({ ...draft, lock_duration_minutes: v })} />
+        <ToggleRow
+          label="قفل تصاعدی حساب"
+          value={draft.progressive_lock_enabled}
+          onChange={(v) => setDraft({ ...draft, progressive_lock_enabled: v })}
+        />
+        <ScheduleRow
+          label="برنامه قفل تصاعدی (ساعت)"
+          value={draft.progressive_lock_schedule}
+          onChange={(value) => setDraft({ ...draft, progressive_lock_schedule: value })}
+        />
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          در حالت تصاعدی، مقادیر به‌ترتیب دفعات قفل اعمال می‌شوند؛ در حالت خاموش، مدت قفل ثابت استفاده می‌شود.
+        </p>
+      </SectionCard>
+
+      <SectionCard title="بازیابی" icon={KeyRound}>
+        <ToggleRow label="بازیابی فعال" value={draft.recovery_enabled} onChange={(v) => setDraft({ ...draft, recovery_enabled: v })} />
+        <ToggleRow
+          label="بازیابی یکپارچه"
+          value={draft.unified_recovery_enabled}
+          onChange={(v) => setDraft({ ...draft, unified_recovery_enabled: v })}
+        />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <NumberRow label="عمر OTP بازیابی (ثانیه)" value={draft.recovery_otp_ttl_seconds} min={60} max={3600} onChange={(v) => setDraft({ ...draft, recovery_otp_ttl_seconds: v })} />
+          <NumberRow label="حداکثر تلاش بازیابی" value={draft.recovery_max_attempts} min={1} max={20} onChange={(v) => setDraft({ ...draft, recovery_max_attempts: v })} />
+          <NumberRow label="عمر توکن تغییر رمز (ثانیه)" value={draft.recovery_reset_token_ttl_seconds} min={60} max={1800} onChange={(v) => setDraft({ ...draft, recovery_reset_token_ttl_seconds: v })} />
+        </div>
+        <ReadonlyToggle label="کدهای بازیابی" value={draft.allow_recovery_codes} />
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          آمادگی Provider، Template و Originهای مجاز همچنان از کارت پیکربندی ورود/بازیابی تلفنی کنترل می‌شود.
+        </p>
+      </SectionCard>
+
       <MalformedPhoneCleanupPanel />
 
-      {/* Change Reason */}
       <div>
         <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 block">
           دلیل تغییر <span className="text-red-500">*</span>
@@ -431,7 +393,6 @@ export function SecuritySettingsConsole() {
         <p className="text-xs text-gray-400 mt-1">{changeReason.trim().length}/500</p>
       </div>
 
-      {/* Save Button */}
       <div className="flex justify-end">
         <button
           type="button"
@@ -444,7 +405,6 @@ export function SecuritySettingsConsole() {
         </button>
       </div>
 
-      {/* History */}
       <SecuritySettingsHistory history={state.recent_history} />
     </div>
   );
@@ -484,7 +444,7 @@ function ReadonlyToggle({ label, value }: { label: string; value: boolean }) {
     <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl opacity-60">
       <div>
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
-        <p className="text-xs text-gray-400 mt-0.5">این روش هنوز برای ورود MFA عملیاتی نشده است.</p>
+        <p className="text-xs text-gray-400 mt-0.5">این گزینه از مسیر تخصصی خودش مدیریت می‌شود.</p>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-xs text-gray-400">{value ? 'روشن' : 'خاموش'}</span>
@@ -505,10 +465,27 @@ function NumberRow({ label, value, min, max, onChange }: { label: string; value:
         max={max}
         onChange={(e) => {
           const v = parseInt(e.target.value, 10);
-          if (!isNaN(v)) onChange(v);
+          if (!Number.isNaN(v)) onChange(v);
         }}
         className="w-24 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
       />
+    </div>
+  );
+}
+
+function ScheduleRow({ label, value, onChange }: { label: string; value: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl space-y-2">
+      <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{label}</label>
+      <input
+        type="text"
+        dir="ltr"
+        value={value.join(',')}
+        onChange={(e) => onChange(e.target.value.split(',').map((item) => item.trim()))}
+        placeholder="1,6,12,24,48,72"
+        className="w-full px-3 py-2 text-sm font-mono border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <p className="text-xs text-gray-400">۱ تا ۱۲ مقدار ساعت، هرکدام بین ۱ تا ۷۲۰، با ویرگول جدا شوند.</p>
     </div>
   );
 }
