@@ -6,23 +6,27 @@ export interface ValidationResult {
   message?: string;
 }
 
+function inIntegerRange(value: number, min: number, max: number): boolean {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+function validProgressiveLockSchedule(schedule: string[]): boolean {
+  return Array.isArray(schedule)
+    && schedule.length >= 1
+    && schedule.length <= 12
+    && schedule.every((entry) => /^\d+$/.test(entry) && inIntegerRange(Number(entry), 1, 720));
+}
+
 export function validateSecuritySettings(
   draft: SecuritySettings,
   patch: SecuritySettingsPatch
 ): ValidationResult {
-  // Check at least one login method enabled — based on final draft state
-  if (
-    !draft.username_login &&
-    !draft.email_login &&
-    !draft.phone_login
-  ) {
+  if (!draft.username_login && !draft.email_login && !draft.phone_login) {
     return { ok: false, error: 'NO_LOGIN_METHOD_ENABLED', message: 'حداقل یک روش ورود باید فعال باشد.' };
   }
 
-  // mfa_policy = required only if allow_totp_mfa = true
   const effectiveMfaPolicy = patch.mfa_policy ?? draft.mfa_policy;
   const effectiveAllowTotp = patch.allow_totp_mfa ?? draft.allow_totp_mfa;
-
   if (effectiveMfaPolicy === 'required' && !effectiveAllowTotp) {
     return {
       ok: false,
@@ -46,7 +50,6 @@ export function validateSecuritySettings(
     return { ok: false, error: 'OUT_OF_RANGE', message: 'عامل احراز هویت سفارشی نامعتبر است.' };
   }
 
-  // idle <= absolute
   const effectiveIdle = patch.session_idle_timeout_minutes ?? draft.session_idle_timeout_minutes;
   const effectiveAbsolute = patch.session_absolute_lifetime_minutes ?? draft.session_absolute_lifetime_minutes;
   if (effectiveIdle > effectiveAbsolute) {
@@ -57,51 +60,56 @@ export function validateSecuritySettings(
     };
   }
 
-  // Numeric ranges
-  if (patch.session_idle_timeout_minutes !== undefined) {
-    if (patch.session_idle_timeout_minutes < 1 || patch.session_idle_timeout_minutes > 10080) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'زمان بیکاری نشست باید بین ۱ تا ۱۰۰۸۰ دقیقه باشد.' };
-    }
+  if (patch.session_idle_timeout_minutes !== undefined && !inIntegerRange(patch.session_idle_timeout_minutes, 1, 10080)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'زمان بیکاری نشست باید بین ۱ تا ۱۰۰۸۰ دقیقه باشد.' };
   }
-  if (patch.session_absolute_lifetime_minutes !== undefined) {
-    if (patch.session_absolute_lifetime_minutes < 1 || patch.session_absolute_lifetime_minutes > 43200) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'طول کل نشست باید بین ۱ تا ۴۳۲۰۰ دقیقه باشد.' };
-    }
+  if (patch.session_absolute_lifetime_minutes !== undefined && !inIntegerRange(patch.session_absolute_lifetime_minutes, 1, 43200)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'طول کل نشست باید بین ۱ تا ۴۳۲۰۰ دقیقه باشد.' };
   }
-  if (patch.max_active_sessions !== undefined) {
-    if (patch.max_active_sessions < 1 || patch.max_active_sessions > 100) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر نشست‌های فعال باید بین ۱ تا ۱۰۰ باشد.' };
-    }
+  if (patch.max_active_sessions !== undefined && !inIntegerRange(patch.max_active_sessions, 1, 100)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر نشست‌های فعال باید بین ۱ تا ۱۰۰ باشد.' };
   }
-  if (patch.lock_threshold !== undefined) {
-    if (patch.lock_threshold < 1 || patch.lock_threshold > 50) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'آستانه قفل باید بین ۱ تا ۵۰ باشد.' };
-    }
+  if (patch.session_heartbeat_interval_seconds !== undefined && !inIntegerRange(patch.session_heartbeat_interval_seconds, 30, 3600)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'فاصله Heartbeat نشست باید بین ۳۰ تا ۳۶۰۰ ثانیه باشد.' };
   }
-  if (patch.custom_mfa_challenge_ttl_seconds !== undefined) {
-    if (patch.custom_mfa_challenge_ttl_seconds < 30 || patch.custom_mfa_challenge_ttl_seconds > 3600) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'مهلت کد باید بین ۳۰ تا ۳۶۰۰ ثانیه باشد.' };
-    }
+  if (patch.lock_threshold !== undefined && !inIntegerRange(patch.lock_threshold, 1, 50)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'آستانه قفل باید بین ۱ تا ۵۰ باشد.' };
   }
-  if (patch.custom_mfa_max_resends !== undefined) {
-    if (patch.custom_mfa_max_resends < 0 || patch.custom_mfa_max_resends > 10) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر ارسال مجدد باید بین ۰ تا ۱۰ باشد.' };
-    }
+  if (patch.lock_duration_minutes !== undefined && !inIntegerRange(patch.lock_duration_minutes, 1, 1440)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'مدت قفل باید بین ۱ تا ۱۴۴۰ دقیقه باشد.' };
   }
-  if (patch.custom_mfa_max_attempts !== undefined) {
-    if (patch.custom_mfa_max_attempts < 1 || patch.custom_mfa_max_attempts > 20) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر تلاش باید بین ۱ تا ۲۰ باشد.' };
-    }
+
+  const effectiveSchedule = patch.progressive_lock_schedule ?? draft.progressive_lock_schedule;
+  const progressiveEnabled = patch.progressive_lock_enabled ?? draft.progressive_lock_enabled;
+  if ((progressiveEnabled || patch.progressive_lock_schedule !== undefined) && !validProgressiveLockSchedule(effectiveSchedule)) {
+    return {
+      ok: false,
+      error: 'OUT_OF_RANGE',
+      message: 'برنامه قفل تصاعدی باید شامل ۱ تا ۱۲ مقدار ساعت صحیح بین ۱ تا ۷۲۰ باشد.',
+    };
   }
-  if (patch.custom_mfa_grant_lifetime_minutes !== undefined) {
-    if (patch.custom_mfa_grant_lifetime_minutes < 1 || patch.custom_mfa_grant_lifetime_minutes > 1440) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'عمر مجوز باید بین ۱ تا ۱۴۴۰ دقیقه باشد.' };
-    }
+
+  if (patch.recovery_otp_ttl_seconds !== undefined && !inIntegerRange(patch.recovery_otp_ttl_seconds, 60, 3600)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'عمر OTP بازیابی باید بین ۶۰ تا ۳۶۰۰ ثانیه باشد.' };
   }
-  if (patch.lock_duration_minutes !== undefined) {
-    if (patch.lock_duration_minutes < 1 || patch.lock_duration_minutes > 1440) {
-      return { ok: false, error: 'OUT_OF_RANGE', message: 'مدت قفل باید بین ۱ تا ۱۴۴۰ دقیقه باشد.' };
-    }
+  if (patch.recovery_max_attempts !== undefined && !inIntegerRange(patch.recovery_max_attempts, 1, 20)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر تلاش بازیابی باید بین ۱ تا ۲۰ باشد.' };
+  }
+  if (patch.recovery_reset_token_ttl_seconds !== undefined && !inIntegerRange(patch.recovery_reset_token_ttl_seconds, 60, 1800)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'عمر توکن تغییر رمز باید بین ۶۰ تا ۱۸۰۰ ثانیه باشد.' };
+  }
+
+  if (patch.custom_mfa_challenge_ttl_seconds !== undefined && !inIntegerRange(patch.custom_mfa_challenge_ttl_seconds, 30, 3600)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'مهلت کد باید بین ۳۰ تا ۳۶۰۰ ثانیه باشد.' };
+  }
+  if (patch.custom_mfa_max_resends !== undefined && !inIntegerRange(patch.custom_mfa_max_resends, 0, 10)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر ارسال مجدد باید بین ۰ تا ۱۰ باشد.' };
+  }
+  if (patch.custom_mfa_max_attempts !== undefined && !inIntegerRange(patch.custom_mfa_max_attempts, 1, 20)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'حداکثر تلاش باید بین ۱ تا ۲۰ باشد.' };
+  }
+  if (patch.custom_mfa_grant_lifetime_minutes !== undefined && !inIntegerRange(patch.custom_mfa_grant_lifetime_minutes, 1, 1440)) {
+    return { ok: false, error: 'OUT_OF_RANGE', message: 'عمر مجوز باید بین ۱ تا ۱۴۴۰ دقیقه باشد.' };
   }
 
   return { ok: true };
@@ -114,9 +122,6 @@ export function validateChangeReason(reason: string): ValidationResult {
   }
   if (trimmed.length > 500) {
     return { ok: false, error: 'NO_EFFECTIVE_CHANGE', message: 'دلیل تغییر حداکثر ۵۰۰ کاراکتر مجاز است.' };
-  }
-  if (trimmed.length === 0) {
-    return { ok: false, error: 'NO_EFFECTIVE_CHANGE', message: 'دلیل تغییر نمی‌تواند خالی باشد.' };
   }
   return { ok: true };
 }
