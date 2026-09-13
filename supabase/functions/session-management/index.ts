@@ -25,6 +25,12 @@ function jwtPayload(token: string): { sub?: string; session_id?: string } | null
   } catch { return null; }
 }
 
+function normalizeHeartbeatSeconds(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 300;
+  return Math.min(3600, Math.max(30, Math.trunc(parsed)));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -63,16 +69,45 @@ Deno.serve(async (req: Request) => {
 
     // ── MODE: heartbeat ─────────────────────────────────────────────────────
     if (body.mode === "heartbeat") {
-      const { data: profile } = await admin.from("profiles").select("auth_epoch").eq("user_id", userId).maybeSingle();
-      const epoch = profile?.auth_epoch ?? 1;
-      const { data: settings } = await admin.from("auth_security_settings").select("session_idle_timeout_minutes").eq("id", 1).maybeSingle();
-      const idleMinutes = settings?.session_idle_timeout_minutes ?? 480;
+      const { data: settings, error: settingsError } = await admin
+        .from("auth_security_settings")
+        .select("session_idle_timeout_minutes,session_management_enabled,session_heartbeat_interval_seconds")
+        .eq("id", 1)
+        .maybeSingle();
+      if (settingsError || !settings) return json({ ok: false, error: "SESSION_POLICY_UNAVAILABLE" }, 500);
 
+      const heartbeatIntervalSeconds = normalizeHeartbeatSeconds(settings.session_heartbeat_interval_seconds);
+      if (settings.session_management_enabled !== true) {
+        return json({
+          ok: true,
+          session_management: false,
+          heartbeat_interval_seconds: heartbeatIntervalSeconds,
+        });
+      }
+
+      const { data: profile, error: profileError } = await admin
+        .from("profiles")
+        .select("auth_epoch")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (profileError || !profile) return json({ ok: false, error: "PROFILE_NOT_FOUND" }, 401);
+
+      const epoch = profile.auth_epoch ?? 1;
+      const idleMinutes = settings.session_idle_timeout_minutes ?? 480;
       const { data, error } = await admin.rpc("touch_session_security_state", {
-        p_session_id: sessionId, p_user_id: userId, p_auth_epoch: epoch, p_idle_timeout_minutes: idleMinutes,
+        p_session_id: sessionId,
+        p_user_id: userId,
+        p_auth_epoch: epoch,
+        p_idle_timeout_minutes: idleMinutes,
       });
       if (error || !data?.ok) return json({ ok: false, error: data?.error ?? "HEARTBEAT_FAILED" }, 401);
-      return json({ ok: true, idle_expiry_at: data.idle_expiry_at, absolute_expiry_at: data.absolute_expiry_at });
+      return json({
+        ok: true,
+        session_management: true,
+        heartbeat_interval_seconds: heartbeatIntervalSeconds,
+        idle_expiry_at: data.idle_expiry_at,
+        absolute_expiry_at: data.absolute_expiry_at,
+      });
     }
 
     // ── MODE: revoke_one ────────────────────────────────────────────────────
@@ -134,7 +169,6 @@ Deno.serve(async (req: Request) => {
       const body2 = body as { target_user_id?: string; reason?: string };
       if (!body2.target_user_id) return json({ ok: false, error: "TARGET_USER_ID_REQUIRED" }, 400);
 
-      // Verify admin has FULL access + step-up grant
       const { data: accessState } = await admin.rpc("get_my_auth_access_state_v3");
       if (!accessState || accessState.access_level !== 'FULL') {
         return json({ ok: false, error: 'FULL_ACCESS_REQUIRED' }, 403);
