@@ -12,9 +12,17 @@ const PATCHABLE_KEYS: (keyof SecuritySettingsPatch)[] = [
   'session_idle_timeout_minutes',
   'session_absolute_lifetime_minutes',
   'max_active_sessions',
+  'session_management_enabled',
+  'session_heartbeat_interval_seconds',
   'lock_threshold',
   'lock_duration_minutes',
+  'progressive_lock_enabled',
+  'progressive_lock_schedule',
   'recovery_enabled',
+  'unified_recovery_enabled',
+  'recovery_otp_ttl_seconds',
+  'recovery_max_attempts',
+  'recovery_reset_token_ttl_seconds',
   'custom_mfa_enabled',
   'custom_mfa_required',
   'custom_mfa_allowed_factors',
@@ -23,6 +31,13 @@ const PATCHABLE_KEYS: (keyof SecuritySettingsPatch)[] = [
   'custom_mfa_max_attempts',
   'custom_mfa_grant_lifetime_minutes',
 ];
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((value, index) => value === b[index]);
+  }
+  return a === b;
+}
 
 export function buildSecuritySettingsPatch(
   serverState: SecuritySettings,
@@ -34,8 +49,7 @@ export function buildSecuritySettingsPatch(
     const serverVal = serverState[key];
     const draftVal = draftState[key];
 
-    if (serverVal !== draftVal) {
-      // Only include fields that actually changed
+    if (!valuesEqual(serverVal, draftVal)) {
       (patch as Record<string, unknown>)[key] = draftVal;
     }
   }
