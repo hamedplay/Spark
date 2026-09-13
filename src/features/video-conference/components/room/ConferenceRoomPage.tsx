@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supportsAudioOutputSelection } from 'livekit-client';
 import { LayoutGrid, Rows3, Wifi } from 'lucide-react';
-import { useConferenceClient } from '../../../../components/VideoConference/conferenceClient';
+import { useConferenceClient } from '../../conferenceClient';
 import { useConferenceAuthorization } from '../../hooks/useConferenceAuthorization';
 import { useConferenceMediaQuality } from '../../hooks/useConferenceMediaQuality';
 import { useConferenceRecordingConsent } from '../../hooks/useConferenceRecordingConsent';
