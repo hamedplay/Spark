@@ -3,7 +3,6 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 import { normalizeIranPhone } from "../_shared/phone.ts";
 
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -56,19 +55,25 @@ Deno.serve(async (req: Request) => {
 
     if (req.method === "POST" && action === "create") {
       const { email, password, profile } = await req.json();
-      if (!email || !password) return json({ error: "ایمیل و رمز عبور الزامی است" }, 400);
+      if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
+        return json({ error: "ایمیل و رمز عبور الزامی است" }, 400);
+      }
       if (password.length < 6) return json({ error: "رمز عبور باید حداقل ۶ کاراکتر باشد" }, 400);
 
       const trimmedEmail = email.trim().toLowerCase();
-      const rawPhone: string | undefined = profile?.phone;
+      const username = typeof profile?.username === "string" ? profile.username.trim() : "";
+      const rawPhone = typeof profile?.phone === "string" ? profile.phone.trim() : "";
       const normalizedPhone = normalizeIranPhone(rawPhone);
-      if (!normalizedPhone) return json({ error: "شماره موبایل الزامی است" }, 400);
-      if (!profile?.username) return json({ error: "نام کاربری الزامی است" }, 400);
+
+      if (!username) return json({ error: "نام کاربری الزامی است" }, 400);
+      if (!normalizedPhone) return json({ error: "شماره موبایل معتبر الزامی است" }, 400);
+
+      const normalizedUsername = username.toLowerCase();
 
       const { data: existingUsername } = await supabase
         .from("profiles")
         .select("user_id")
-        .eq("normalized_username", profile.username.toLowerCase())
+        .eq("normalized_username", normalizedUsername)
         .maybeSingle();
       if (existingUsername) return json({ error: "این نام کاربری قبلاً استفاده شده است" }, 400);
 
@@ -79,10 +84,11 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       if (existingEmail) return json({ error: "این ایمیل قبلاً ثبت شده است" }, 400);
 
+      const canonicalPhone = `+${normalizedPhone}`;
       const { data: existingPhone } = await supabase
         .from("profiles")
         .select("user_id")
-        .eq("normalized_phone", `+${normalizedPhone}`)
+        .eq("normalized_phone", canonicalPhone)
         .maybeSingle();
       if (existingPhone) return json({ error: "این شماره موبایل قبلاً ثبت شده است" }, 400);
 
@@ -90,21 +96,32 @@ Deno.serve(async (req: Request) => {
         email: trimmedEmail,
         password,
         email_confirm: true,
-        phone: `+${normalizedPhone}`,
+        phone: canonicalPhone,
         phone_confirm: true,
         user_metadata: {
           full_name: profile?.full_name || "",
-          username: profile.username,
+          username,
           email: trimmedEmail,
-          phone: `+${normalizedPhone}`,
+          phone: canonicalPhone,
           first_name: profile?.first_name || "",
           last_name: profile?.last_name || "",
           organization: profile?.organization || "",
           position: profile?.position || "",
           department: profile?.department || "",
           employee_id: profile?.employee_id || "",
+          hire_date: profile?.hire_date || "",
+          birth_date: profile?.birth_date || "",
+          gender: profile?.gender || "",
+          city: profile?.city || "",
+          location: profile?.location || "",
+          bio: profile?.bio || "",
+          national_id: profile?.national_id || "",
         },
-        app_metadata: { registration_flow: "admin_created_v1" },
+        app_metadata: {
+          registration_flow: "admin_created_v1",
+          provisioned_by: callerUserId,
+          provision_is_admin: false,
+        },
       };
 
       const { data: userData, error: createErr } = await supabase.auth.admin.createUser(
@@ -112,20 +129,34 @@ Deno.serve(async (req: Request) => {
       );
 
       if (createErr) {
+        console.error("[admin-users/create] auth.admin.createUser failed", createErr.message);
         if (createErr.message?.includes("already been registered") || createErr.message?.includes("already exists")) {
-          return json({ error: "این ایمیل قبلاً ثبت شده است" }, 400);
+          return json({ error: "ایمیل، نام کاربری یا شماره موبایل قبلاً ثبت شده است" }, 400);
         }
         return json({ error: "خطا در ایجاد حساب کاربری" }, 400);
       }
 
       const userId = userData.user.id;
-      const { data: verifyProfile } = await supabase
+      const { data: verifyProfile, error: verifyProfileError } = await supabase
         .from("profiles")
         .select("user_id, account_status, registration_source")
         .eq("user_id", userId)
         .maybeSingle();
 
-      if (!verifyProfile) return json({ error: "پروفایل به‌صورت خودکار ساخته نشد" }, 500);
+      if (verifyProfileError || !verifyProfile || verifyProfile.registration_source !== "admin_created") {
+        console.error("[admin-users/create] lifecycle profile verification failed", verifyProfileError?.message ?? "profile missing or source mismatch");
+        return json({ error: "پروفایل کاربر به‌صورت صحیح ایجاد نشد" }, 500);
+      }
+
+      if (profile?.hire_date) {
+        const { error: hireDateError } = await supabase
+          .from("profiles")
+          .update({ hire_date: profile.hire_date })
+          .eq("user_id", userId);
+        if (hireDateError) {
+          console.error("[admin-users/create] hire_date update failed", hireDateError.message);
+        }
+      }
 
       try {
         await supabase.from("audit_log").insert({
@@ -175,7 +206,8 @@ Deno.serve(async (req: Request) => {
     }
 
     return json({ error: "Not found" }, 404);
-  } catch {
+  } catch (error) {
+    console.error("[admin-users] unhandled error", error);
     return json({ error: "خطا در پردازش درخواست" }, 500);
   }
 });
