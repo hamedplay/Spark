@@ -1,4 +1,4 @@
-import { LiveKitConferenceRoom } from '../../features/video-conference/components/LiveKitConferenceRoom';
+import { LiveKitConferenceRoom } from '../../features/video-conference';
 import { ConferenceRoomView as LegacyConferenceRoomView } from './ConferenceRoomCore';
 import type { ConferenceRoom } from './types';
 
