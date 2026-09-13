@@ -59,6 +59,41 @@
   transition: background-color 9999s ease-out 0s !important;
 }
 
+/* OtpCodeInput keeps the native input transparent and renders the visual digit
+   in a sibling layer. Global auth/browser paint must never cover that digit. */
+.spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__slot > input[type='text'] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  caret-color: transparent !important;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* Keep the rendered digit above the native input even if a browser paints an
+   autofill/control surface on the input. pointer-events remain disabled in the
+   component stylesheet, so the input still receives focus/taps normally. */
+.spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__digit {
+  z-index: 5 !important;
+}
+
+.spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__slot > input[type='text']:autofill,
+.spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__slot > input[type='text']:-webkit-autofill,
+.spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__slot > input[type='text']:-webkit-autofill:hover,
+.spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__slot > input[type='text']:-webkit-autofill:focus,
+.spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__slot > input[type='text']:-webkit-autofill:active {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  caret-color: transparent !important;
+  -webkit-box-shadow: 0 0 0 1000px rgb(4 22 24) inset !important;
+  box-shadow: 0 0 0 1000px rgb(4 22 24) inset !important;
+}
+
 /* Firefox applies a native autofill filter/surface. Neutralize both. */
 @supports selector(input:-moz-autofill) {
   .spark-auth-flow .spark-reference-login .spark-reference-input-wrap > input:not([type='checkbox']):not([type='radio']):-moz-autofill {
@@ -68,6 +103,16 @@
     color: #effff9 !important;
     caret-color: rgb(var(--spark-neon-soft, 111 255 226)) !important;
     box-shadow: 0 0 0 1000px rgb(8 26 27) inset !important;
+    filter: none !important;
+  }
+
+  .spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__slot > input[type='text']:-moz-autofill {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    color: transparent !important;
+    caret-color: transparent !important;
+    box-shadow: 0 0 0 1000px rgb(4 22 24) inset !important;
     filter: none !important;
   }
 }
