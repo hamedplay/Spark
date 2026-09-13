@@ -18,6 +18,7 @@ const MinutesConfigPanel = lazy(() => import('./Minutes/MinutesConfigPanel').the
 const AuditLogPage = lazy(() => import('./AuditLogPage').then(m => ({ default: m.AuditLogPage })));
 const BackupPanel = lazy(() => import('./BackupPanel').then(m => ({ default: m.BackupPanel })));
 const IceTesterPanel = lazy(() => import('./VideoConference/IceTesterPanel').then(m => ({ default: m.IceTesterPanel })));
+const MalformedPhoneCleanupPanel = lazy(() => import('../features/security-settings/components/MalformedPhoneCleanupPanel').then(m => ({ default: m.MalformedPhoneCleanupPanel })));
 
 import { NAV_ITEMS, VISIBLE_SECURITY_CONFIG_KEYS } from './PortalConfig/constants';
 import { ConfigField } from './PortalConfig/ConfigField';
@@ -346,6 +347,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
             </SectionCard>
             <PhoneAuthCard />
             <IdentityRepairCard />
+            <MalformedPhoneCleanupPanel />
           </div>
         );
 
