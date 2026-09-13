@@ -5,7 +5,7 @@ import { supabase } from './lib/supabase';
 import { Toaster } from 'react-hot-toast';
 import { Wrench } from 'lucide-react';
 import { useUserPreferences, UserPreferencesProvider } from './features/user-preferences';
-import { useAuthSession } from './features/auth';
+import { useAuthSession, useSessionHeartbeat } from './features/auth';
 import { useMeetingsData } from './features/meetings';
 import { FirstRunOnboardingGate } from './features/onboarding';
 import { useAppRuntimeConfig } from './app/hooks/useAppRuntimeConfig';
@@ -180,6 +180,8 @@ export default function AuthenticatedApp() {
 
 function AuthenticatedAppContent() {
   const authSession = useAuthSession();
+  useSessionHeartbeat(authSession.hasSession && authSession.isFullyAuthorized);
+
   const {
     loading,
     hasSession,
@@ -194,9 +196,6 @@ function AuthenticatedAppContent() {
     return <SparkLoader message="در حال بررسی نشست و دسترسی‌ها..." />;
   }
 
-  // Root App.tsx is the single owner of public-vs-authenticated routing.
-  // Rendering a second AuthPage here after signOut caused two auth trees to race
-  // while the root listener was switching back to PublicAuthRoot.
   if (!hasSession) {
     return <SparkLoader message="در حال خروج..." />;
   }
