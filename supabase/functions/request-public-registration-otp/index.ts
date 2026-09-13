@@ -23,6 +23,70 @@ interface SmsDeliveryMeta {
   messageIds: Array<string | number>;
 }
 
+const REGISTRATION_OTP_LOG_MESSAGE = "کد تأیید ثبت‌نام: ******";
+
+function maskPhoneForLog(phoneDigits: string): string {
+  if (!/^989\d{9}$/.test(phoneDigits)) return "***";
+  const localPhone = `0${phoneDigits.slice(2)}`;
+  return `${localPhone.slice(0, 4)}${"*".repeat(localPhone.length - 7)}${localPhone.slice(-3)}`;
+}
+
+async function createRegistrationDispatchLog(
+  supabase: ReturnType<typeof adminClient>,
+  params: {
+    phoneDigits: string;
+    providerId: string;
+    providerName: string;
+  },
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("sms_dispatch_logs")
+    .insert({
+      target_user_id: null,
+      triggered_by_user_id: null,
+      target_phone: maskPhoneForLog(params.phoneDigits),
+      category: "auth",
+      event_type: "registration_phone_otp",
+      audience: "all",
+      message: REGISTRATION_OTP_LOG_MESSAGE,
+      provider_id: params.providerId,
+      provider_name: params.providerName,
+      status: "pending",
+      error_text: null,
+      pack_id: null,
+      message_ids: null,
+      cost: null,
+      provider_message_id: null,
+      delivery_status: null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data || typeof data.id !== "string") {
+    console.log("[REGISTRATION_REQUEST] dispatch log create failed");
+    return null;
+  }
+  return data.id;
+}
+
+async function updateRegistrationDispatchLog(
+  supabase: ReturnType<typeof adminClient>,
+  logId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("sms_dispatch_logs")
+    .update(patch)
+    .eq("id", logId);
+  if (error) console.log("[REGISTRATION_REQUEST] dispatch log update failed");
+}
+
+function firstProviderMessageId(messageIds: Array<string | number>): string | null {
+  if (!messageIds.length) return null;
+  const value = String(messageIds[0] ?? "").trim();
+  return value.length > 0 ? value : null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return await preflightResponse(req);
 
@@ -116,8 +180,19 @@ Deno.serve(async (req: Request) => {
 
     if (availError) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
 
+    const dispatchLogId = await createRegistrationDispatchLog(supabase, {
+      phoneDigits,
+      providerId: provider.id,
+      providerName: provider.title ?? "",
+    });
+    if (!dispatchLogId) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
+
     const hasConflict = available !== true;
     if (hasConflict) {
+      await updateRegistrationDispatchLog(supabase, dispatchLogId, {
+        status: "skipped",
+        error_text: "REGISTRATION_IDENTIFIER_CONFLICT",
+      });
       // Preserve a success-shaped response so public registration cannot be
       // used to enumerate existing username/email/phone identifiers.
       // No challenge is persisted and no OTP is sent for a conflict.
@@ -148,7 +223,13 @@ Deno.serve(async (req: Request) => {
       p_request_id: requestId,
     });
 
-    if (createError) return await json({ error: "خطا در ایجاد چالش" }, 500);
+    if (createError) {
+      await updateRegistrationDispatchLog(supabase, dispatchLogId, {
+        status: "failed",
+        error_text: "CHALLENGE_CREATION_FAILED",
+      });
+      return await json({ error: "خطا در ایجاد چالش" }, 500);
+    }
 
     const smsBody = template.body.replace("{{otp}}", otp);
     let deliveryFailed = false;
@@ -248,8 +329,25 @@ Deno.serve(async (req: Request) => {
 
     if (deliveryFailed) {
       await supabase.rpc("mark_registration_delivery_failed_v2", { p_challenge_id: challengeId });
+      await updateRegistrationDispatchLog(supabase, dispatchLogId, {
+        status: "failed",
+        error_text: "SMS_DISPATCH_FAILED",
+        delivery_status: null,
+      });
       return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
     }
+
+    const providerMessageId = firstProviderMessageId(deliveryMeta.messageIds);
+    await updateRegistrationDispatchLog(supabase, dispatchLogId, {
+      status: "sent",
+      provider_id: provider.id,
+      provider_name: provider.title ?? "",
+      pack_id: deliveryMeta.packId,
+      message_ids: deliveryMeta.messageIds,
+      provider_message_id: providerMessageId,
+      delivery_status: providerMessageId ? "pending" : null,
+      error_text: null,
+    });
 
     try {
       await supabase.from("security_audit_events").insert({
