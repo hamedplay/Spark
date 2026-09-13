@@ -39,19 +39,7 @@ export function SessionManagementPanel() {
     }
   }, []);
 
-  useEffect(() => { loadSessions(); }, [loadSessions]);
-
-  useEffect(() => {
-    const heartbeat = async () => {
-      const { data, error: fnError } = await supabase.functions.invoke('session-management', {
-        method: 'POST',
-        body: { mode: 'heartbeat' },
-      });
-      if (fnError || !data?.ok) await supabase.auth.signOut();
-    };
-    const timer = window.setInterval(heartbeat, 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  useEffect(() => { void loadSessions(); }, [loadSessions]);
 
   const revokeOne = async (sessionId: string) => {
     setRevoking(sessionId);
