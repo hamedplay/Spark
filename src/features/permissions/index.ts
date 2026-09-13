@@ -12,3 +12,11 @@ export {
   MINUTES_SENSITIVE_PERMISSIONS,
 } from './permissionRegistry';
 export type { PermissionItem, PermissionGroup } from './permissionRegistry';
+export {
+  CONFIG_SECTION_PERMISSION,
+  CONFIG_SECTION_PERMISSION_KEYS,
+  canOpenPortalConfig,
+  canAccessConfigSection,
+  getVisibleConfigNavigationItems,
+  getFirstVisibleConfigSection,
+} from './configPermissions';
