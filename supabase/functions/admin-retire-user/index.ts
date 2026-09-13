@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
 import { postJsonCorsBaseHeaders as baseCorsHeaders, createServiceRoleClient as adminClient, getPhoneAuthAllowedOrigins as getAllowedOrigins, createJsonResponseHeaders } from "../_shared/runtimeHttp.ts";
 import { isUuid } from "../_shared/securityPrimitives.ts";
+import { normalizeIranPhone } from "../_shared/phone.ts";
 
 const responseHeaders = createJsonResponseHeaders(baseCorsHeaders);
 
@@ -93,7 +94,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: targetProfile, error: targetProfileError } = await supabase
     .from("profiles")
-    .select("user_id, full_name, email, is_admin, is_security_admin, account_status, retirement_auth_completed_at")
+    .select("user_id, full_name, email, phone, is_admin, is_security_admin, account_status, retirement_auth_completed_at")
     .eq("user_id", targetUserId)
     .maybeSingle();
 
@@ -132,8 +133,46 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: code }, statusForError(code));
   }
 
-  // Official Supabase Auth soft-delete obfuscates email/phone identities,
-  // removes password/MFA/sessions and keeps auth.users.id as a historical tombstone.
+  // Release the Auth email explicitly before soft-delete. Self-hosted GoTrue
+  // versions do not all obfuscate identifiers identically, so retirement must
+  // not rely on implicit email mutation to make a future registration possible.
+  const retiredCredentialEmail = `retired-${targetUserId}@auth.spark.invalid`;
+  const { data: releasedCredential, error: releaseCredentialError } =
+    await supabase.auth.admin.updateUserById(targetUserId, {
+      email: retiredCredentialEmail,
+      email_confirm: true,
+    });
+
+  if (
+    releaseCredentialError ||
+    releasedCredential?.user?.email?.toLowerCase() !== retiredCredentialEmail
+  ) {
+    console.error("admin-retire-user auth identifier release failed", {
+      message: releaseCredentialError?.message,
+    });
+    try {
+      await supabase.from("security_audit_events").insert({
+        user_id: callerUserId,
+        actor_user_id: callerUserId,
+        target_user_id: targetUserId,
+        event_type: "admin_user_retirement_identifier_release_failed",
+        event_category: "access",
+        severity: "error",
+        result: "error",
+        metadata: { operation: "retire_user", identifier: "auth_email" },
+      });
+    } catch { /* best-effort */ }
+    return json({
+      ok: false,
+      error: "AUTH_IDENTIFIER_RELEASE_PENDING",
+      retryable: true,
+    }, 502);
+  }
+
+  const originalCanonicalPhone = normalizeIranPhone(targetProfile.phone);
+
+  // Soft-delete keeps the historical auth.users identity while invalidating
+  // credentials/sessions. Profile history is preserved separately as RETIRED.
   const { error: authDeleteError } = await supabase.auth.admin.deleteUser(targetUserId, true);
   if (authDeleteError) {
     console.error("admin-retire-user auth soft delete failed", {
@@ -156,6 +195,36 @@ Deno.serve(async (req: Request) => {
       error: "AUTH_RETIRE_PENDING",
       retryable: true,
     }, 502);
+  }
+
+  // If the soft-deleted Auth row is still readable, verify that it no longer
+  // reserves the user's real phone. Do not finalize RETIRED while the phone is
+  // still held by the historical Auth identity.
+  if (originalCanonicalPhone) {
+    const { data: retiredAuthState, error: retiredAuthLookupError } =
+      await supabase.auth.admin.getUserById(targetUserId);
+    if (!retiredAuthLookupError && retiredAuthState?.user) {
+      const remainingCanonicalPhone = normalizeIranPhone(retiredAuthState.user.phone);
+      if (remainingCanonicalPhone === originalCanonicalPhone) {
+        try {
+          await supabase.from("security_audit_events").insert({
+            user_id: callerUserId,
+            actor_user_id: callerUserId,
+            target_user_id: targetUserId,
+            event_type: "admin_user_retirement_identifier_release_failed",
+            event_category: "access",
+            severity: "error",
+            result: "error",
+            metadata: { operation: "retire_user", identifier: "auth_phone" },
+          });
+        } catch { /* best-effort */ }
+        return json({
+          ok: false,
+          error: "AUTH_IDENTIFIER_RELEASE_PENDING",
+          retryable: true,
+        }, 502);
+      }
+    }
   }
 
   const { data: finalizeData, error: finalizeError } = await supabase.rpc(
