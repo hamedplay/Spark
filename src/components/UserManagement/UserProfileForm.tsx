@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Eye, EyeOff, Shield, KeyRound, User, Mail, Phone, AtSign, CreditCard, Calendar, Users, MapPin, Building, Briefcase, Hash, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { normalizeIranPhone } from '../../lib/phoneNormalize';
 import toast from 'react-hot-toast';
 import type { AdminProfile } from './types';
 import { inp, inpDis } from './utils';
@@ -120,11 +121,35 @@ function UserProfileForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isNew && (!form.email || !password)) { toast.error('ایمیل و رمز عبور الزامی است'); return; }
-    if (isNew && password.length < 6) { toast.error('رمز عبور حداقل ۶ کاراکتر'); return; }
+
+    if (isNew) {
+      const email = form.email?.trim() || '';
+      const username = form.username?.trim() || '';
+      const phone = form.phone?.trim() || '';
+
+      if (!email || !username || !phone || !password) {
+        toast.error('ایمیل، نام کاربری، شماره موبایل و رمز عبور الزامی است');
+        return;
+      }
+      if (!normalizeIranPhone(phone)) {
+        toast.error('شماره موبایل معتبر نیست');
+        return;
+      }
+      if (password.length < 6) {
+        toast.error('رمز عبور حداقل ۶ کاراکتر');
+        return;
+      }
+    }
+
     setSaving(true);
-    try { await onSave(form, isNew ? password : undefined); }
-    finally { setSaving(false); }
+    try {
+      await onSave(form, isNew ? password : undefined);
+    } catch (error) {
+      console.error('[USER_CREATE] Failed to save user:', error);
+      toast.error(isNew ? 'ایجاد کاربر انجام نشد. ارتباط با سرویس را بررسی کنید.' : 'ذخیره اطلاعات انجام نشد.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -173,24 +198,24 @@ function UserProfileForm({
           <Field label="نام و نام خانوادگی" icon={User}>
             <input className={inp} value={form.full_name || ''} onChange={e => set('full_name', e.target.value)} placeholder="نام کامل" />
           </Field>
-          <Field label="ایمیل" icon={Mail}>
-            <input className={isNew ? inp : inpDis} type="email" value={form.email || ''} disabled={!isNew} onChange={e => set('email', e.target.value)} placeholder="email@example.com" dir="ltr" />
+          <Field label={isNew ? 'ایمیل *' : 'ایمیل'} icon={Mail}>
+            <input className={isNew ? inp : inpDis} type="email" value={form.email || ''} disabled={!isNew} required={isNew} onChange={e => set('email', e.target.value)} placeholder="email@example.com" dir="ltr" />
           </Field>
-          <Field label="نام کاربری" icon={AtSign}>
-            <input className={inp} value={form.username || ''} onChange={e => set('username', e.target.value.replace(/[^a-zA-Z0-9._]/g, ''))} placeholder="h.khaleghi" dir="ltr" />
+          <Field label={isNew ? 'نام کاربری *' : 'نام کاربری'} icon={AtSign}>
+            <input className={inp} value={form.username || ''} required={isNew} onChange={e => set('username', e.target.value.replace(/[^a-zA-Z0-9._]/g, ''))} placeholder="h.khaleghi" dir="ltr" />
           </Field>
           {isNew && (
             <Field label="رمز عبور *" icon={KeyRound}>
               <div className="relative">
-                <input className={inp + ' pl-10'} type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="حداقل ۶ کاراکتر" dir="ltr" />
+                <input className={inp + ' pl-10'} type={showPass ? 'text' : 'password'} value={password} required minLength={6} autoComplete="new-password" onChange={e => setPassword(e.target.value)} placeholder="حداقل ۶ کاراکتر" dir="ltr" />
                 <button type="button" onClick={() => setShowPass(v => !v)} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                   {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </Field>
           )}
-          <Field label="شماره موبایل" icon={Phone}>
-            <input className={inp} type="tel" value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="09xxxxxxxxx" dir="ltr" />
+          <Field label={isNew ? 'شماره موبایل *' : 'شماره موبایل'} icon={Phone}>
+            <input className={inp} type="tel" value={form.phone || ''} required={isNew} onChange={e => set('phone', e.target.value)} placeholder="09xxxxxxxxx" dir="ltr" />
           </Field>
           <Field label="کد ملی" icon={CreditCard}>
             <input className={inp} value={form.national_id || ''} onChange={e => set('national_id', e.target.value)} placeholder="۱۰ رقم" dir="ltr" maxLength={10} />
