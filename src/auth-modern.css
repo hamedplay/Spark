@@ -328,3 +328,16 @@
     border-radius: 1rem !important;
   }
 }
+
+/* OtpCodeInput renders the visual digit underneath a transparent native input.
+   Keep the auth bridge from painting that native input white (or dark in global
+   dark mode), otherwise the visual digit layer is covered and the typed code
+   appears empty. */
+.spark-auth-flow .spark-reference-login .spark-otp-code .spark-otp-code__slot > input[type='text'] {
+  border: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  box-shadow: none !important;
+}
