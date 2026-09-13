@@ -7,7 +7,7 @@ import { Wrench } from 'lucide-react';
 import { useUserPreferences, UserPreferencesProvider } from './features/user-preferences';
 import { useAuthSession } from './features/auth';
 import { useMeetingsData } from './features/meetings';
-import { FirstRunOnboardingGate } from './features/onboarding/FirstRunOnboardingGate';
+import { FirstRunOnboardingGate } from './features/onboarding';
 import { useAppRuntimeConfig } from './app/hooks/useAppRuntimeConfig';
 import { useNavigation, useAdminPathGuard } from './app/navigation/useNavigation';
 import { useMinutesFollowupAccess } from './app/hooks/useMinutesFollowupAccess';
@@ -17,7 +17,7 @@ import type { Meeting } from './types';
 import type { PageRendererProps } from './app/navigation/pageRendererTypes';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthenticatedThemeSync } from './context/AuthenticatedThemeSync';
-import { canOpenPortalConfig } from './features/permissions/configPermissions';
+import { canOpenPortalConfig } from './features/permissions';
 
 const toasterProps = {
   position: 'top-center' as const,
