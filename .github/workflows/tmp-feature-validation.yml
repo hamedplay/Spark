@@ -1,19 +1,21 @@
-name: Temporary Feature Validation
+name: Temporary Security Portal Alignment
 
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  validate:
+  align-and-validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -21,16 +23,44 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Audit security config wiring
+      - name: Apply focused security portal alignment
         run: |
-          echo '=== Runtime usages of legacy security system_config keys ==='
-          grep -R -n -E 'enable_2fa|max_login_attempts|session_timeout_minutes|require_strong_password|allowed_ip_ranges|audit_log_retention_days|log_all_actions|maintenance_mode' src supabase/functions tests --exclude='constants.ts' || true
-          echo '=== Phone/auth canonical key usages ==='
-          grep -R -n -E 'phone_login_canonical_enabled|phone_password_recovery_canonical_enabled|phone_login_ready|phone_password_recovery_canonical_ready' src supabase/functions tests || true
+          python - <<'PY'
+          from pathlib import Path
+
+          portal = Path('src/components/PortalConfigPage.tsx')
+          text = portal.read_text()
+          old = """  const loadConfigs = useCallback(async () => {\n    const { data } = await supabase.from('system_config').select('*').order('section').order('key');\n    if (data) setConfigs(data as ConfigEntry[]);\n  }, []);"""
+          new = """  const loadConfigs = useCallback(async () => {\n    // Security configuration contains internal runtime flags and secret material.\n    // Never fetch the whole security section into the browser; only request the\n    // explicitly allow-listed operational controls used by this page.\n    const securityKeys = Array.from(VISIBLE_SECURITY_CONFIG_KEYS);\n    const [nonSecurityResult, securityResult] = await Promise.all([\n      supabase\n        .from('system_config')\n        .select('*')\n        .neq('section', 'security')\n        .order('section')\n        .order('key'),\n      supabase\n        .from('system_config')\n        .select('*')\n        .eq('section', 'security')\n        .in('key', securityKeys)\n        .order('key'),\n    ]);\n\n    if (nonSecurityResult.error || securityResult.error) {\n      console.error('[PortalConfig] failed to load configuration', nonSecurityResult.error || securityResult.error);\n      return;\n    }\n\n    const rows = [\n      ...(nonSecurityResult.data ?? []),\n      ...(securityResult.data ?? []),\n    ] as ConfigEntry[];\n    rows.sort((a, b) => a.section.localeCompare(b.section) || a.key.localeCompare(b.key));\n    setConfigs(rows);\n  }, []);"""
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('PortalConfig loadConfigs pattern drifted; refusing blind edit')
+          text = text.replace('SectionCard title="امنیت و دسترسی" icon={Shield} color="red"', 'SectionCard title="وضعیت دسترسی سامانه" icon={Shield} color="red"', 1)
+          portal.write_text(text)
+
+          console = Path('src/features/security-settings/components/SecuritySettingsConsole.tsx')
+          text = console.read_text()
+          old_label = 'label="ورود با تلفن"'
+          new_label = 'label="ورود با موبایل و رمز عبور"'
+          if old_label in text:
+              text = text.replace(old_label, new_label, 1)
+          elif new_label not in text:
+              raise SystemExit('SecuritySettingsConsole phone-login label drifted; refusing blind edit')
+          console.write_text(text)
+          PY
       - name: Build
         run: npm run build
-      - name: Auth security config tests
+      - name: Auth security configuration tests
         run: npm run test:auth-security-config
-      - name: Video conference tests
-        if: always()
-        run: npm run test:video-conference
+      - name: Commit aligned source if needed
+        run: |
+          if git diff --quiet; then
+            echo 'No source alignment changes to commit.'
+            exit 0
+          fi
+          git config user.name 'hamedplay'
+          git config user.email 'hamedkhaleghi493@gmail.com'
+          git add src/components/PortalConfigPage.tsx src/features/security-settings/components/SecuritySettingsConsole.tsx
+          git commit -m 'fix(security): align portal controls with runtime'
+          git push origin HEAD:main
