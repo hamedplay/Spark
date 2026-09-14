@@ -4,6 +4,7 @@ import {
   listCurrentUserTotpFactors,
   startTotpEnrollment,
   verifyTotpFactor,
+  activateCanonicalTotpAfterEnrollment,
   cancelCurrentTotpEnrollment,
   validateTotpCode,
   type TotpEnrollmentResult,
@@ -15,6 +16,23 @@ interface TotpEnrollmentGateProps {
 }
 
 type Phase = 'intro' | 'enrolling' | 'verifying';
+
+function enrollmentErrorMessage(error: unknown): string {
+  const code = error instanceof Error ? error.message : '';
+  if (code === 'MFA_POLICY_DISABLED') {
+    return 'سیاست MFA سامانه غیرفعال است و فعال‌سازی TOTP برای کاربران عادی مجاز نیست.';
+  }
+  if (code === 'TOTP_NOT_ALLOWED') {
+    return 'فعال‌سازی TOTP در سیاست امنیتی فعلی مجاز نیست.';
+  }
+  if (code === 'MFA_POLICY_UNAVAILABLE') {
+    return 'وضعیت سیاست MFA قابل بررسی نیست؛ برای جلوگیری از فعال‌سازی خارج از سیاست، عملیات متوقف شد.';
+  }
+  if (code === 'STEPUP_DENIED') {
+    return 'روش MFA دیگری برای این حساب فعال است؛ تغییر روش باید از مسیر مدیریت MFA انجام شود.';
+  }
+  return 'فعال‌سازی انجام نشد؛ دوباره تلاش کنید.';
+}
 
 export function TotpEnrollmentGate({ onCompleted, onSignOut }: TotpEnrollmentGateProps) {
   const [phase, setPhase] = useState<Phase>('intro');
@@ -31,6 +49,9 @@ export function TotpEnrollmentGate({ onCompleted, onSignOut }: TotpEnrollmentGat
     try {
       const factors = await listCurrentUserTotpFactors();
       if (factors.some((factor) => factor.status === 'verified')) {
+        // Recover cleanly from a verified Supabase factor whose canonical
+        // profile method was not finalized by an older enrollment flow.
+        await activateCanonicalTotpAfterEnrollment();
         await onCompleted();
         return;
       }
@@ -39,8 +60,8 @@ export function TotpEnrollmentGate({ onCompleted, onSignOut }: TotpEnrollmentGat
       enrolledFactorIdRef.current = result.factorId;
       setEnrollment(result);
       setPhase('enrolling');
-    } catch {
-      setError('فعال‌سازی انجام نشد؛ دوباره تلاش کنید.');
+    } catch (err) {
+      setError(enrollmentErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -58,12 +79,18 @@ export function TotpEnrollmentGate({ onCompleted, onSignOut }: TotpEnrollmentGat
     setPhase('verifying');
     try {
       await verifyTotpFactor(enrolledFactorIdRef.current, validCode);
+      await activateCanonicalTotpAfterEnrollment();
       setCode('');
       setEnrollment(null);
       enrolledFactorIdRef.current = null;
       await onCompleted();
-    } catch {
-      setError('کد واردشده معتبر نیست.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      setError(
+        message === 'STEPUP_DENIED' || message === 'VERIFY_FAILED'
+          ? enrollmentErrorMessage(err)
+          : 'کد واردشده معتبر نیست یا تأیید TOTP کامل نشد.'
+      );
       setPhase('enrolling');
     } finally {
       setBusy(false);
