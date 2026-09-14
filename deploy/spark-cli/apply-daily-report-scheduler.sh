@@ -48,6 +48,7 @@ printf 'Tehran now : %s\n' "$(TZ=Asia/Tehran date --iso-8601=seconds)"
 
 # Compatibility bridge for Spark Manager versions that already invoke this
 # post-fast-forward hook but predate the dedicated database-repair runner.
+# This makes critical database repairs take effect on the first app update.
 SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 DB_REPAIR_SCRIPT="${SCRIPT_DIR}/apply-db-repairs.sh"
 if [[ -f "$DB_REPAIR_SCRIPT" ]]; then
@@ -59,4 +60,10 @@ MAINTENANCE_REPAIR_SCRIPT="${SCRIPT_DIR}/apply-maintenance-mode-repair.sh"
 if [[ -f "$MAINTENANCE_REPAIR_SCRIPT" ]]; then
   echo "=== Maintenance-mode compatibility repair ==="
   bash "$MAINTENANCE_REPAIR_SCRIPT"
+fi
+
+MOBILE_IDENTITY_REPAIR_SCRIPT="${SCRIPT_DIR}/apply-mobile-identity-repair.sh"
+if [[ -f "$MOBILE_IDENTITY_REPAIR_SCRIPT" ]]; then
+  echo "=== Mobile identity compatibility repair ==="
+  bash "$MOBILE_IDENTITY_REPAIR_SCRIPT"
 fi
