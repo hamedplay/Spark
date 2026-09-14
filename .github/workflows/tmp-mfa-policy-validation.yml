@@ -1,0 +1,36 @@
+name: Temporary MFA policy validation
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Validate deploy scripts
+        run: |
+          bash -n deploy/spark-cli/apply-mfa-policy-repair.sh
+          bash -n deploy/spark-cli/apply-daily-report-scheduler.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Build application
+        run: npm run build
+      - name: Validate focused MFA contract
+        run: |
+          grep -Fq "get_mfa_policy_state" supabase/migrations/20260914152500_fix_mfa_policy_console_contract.sql
+          grep -Fq "assurance_level = ''aal2''" supabase/migrations/20260914152500_fix_mfa_policy_console_contract.sql
+          grep -Fq "20260914152500_fix_mfa_policy_console_contract.sql" deploy/spark-cli/apply-mfa-policy-repair.sh
+          grep -Fq "apply-mfa-policy-repair.sh" deploy/spark-cli/apply-daily-report-scheduler.sh
+          grep -Fq "get_mfa_policy_state" src/features/auth/services/mfaOperations.ts
+          grep -Fq "can_enroll_totp" src/features/auth/services/mfaOperations.ts
+          grep -Fq "activateCanonicalTotpAfterEnrollment" src/features/auth/components/TotpEnrollmentGate.tsx
+          grep -Fq "اجازه فعال‌سازی TOTP برای کاربران" src/features/security-settings/components/SecuritySettingsConsole.tsx
+          grep -Fq "عامل‌های مؤثر در ورود MFA فعلی سامانه" src/features/security-settings/components/SecuritySettingsConsole.tsx
+          ! grep -Fq '<ReadonlyToggle label="احراز هویت بله"' src/features/security-settings/components/SecuritySettingsConsole.tsx
+          ! grep -Fq '<ReadonlyToggle label="احراز هویت ایمیل"' src/features/security-settings/components/SecuritySettingsConsole.tsx
