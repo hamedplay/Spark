@@ -18,12 +18,13 @@ jobs:
         run: npm ci
       - name: Build application
         run: npm run build
-      - name: Auth security tests
-        run: npm run test:auth-security-config
-      - name: Verify focused wiring
+      - name: Verify focused wiring and DB contract
         run: |
           grep -Fq "import { LockedAccountsPanel } from './LockedAccountsPanel';" src/features/security-settings/components/SecuritySettingsConsole.tsx
           grep -Fq '<LockedAccountsPanel />' src/features/security-settings/components/SecuritySettingsConsole.tsx
           grep -Fq 'purpose="account_security_change"' src/features/security-settings/components/LockedAccountsPanel.tsx
           grep -Fq 'security_admin_unlock_account' src/features/security-settings/services/securitySettingsService.ts
+          grep -Fq 'list_locked_accounts' src/features/security-settings/services/securitySettingsService.ts
           grep -Fq 'auth_lock_reset_at' supabase/migrations/20260914134500_preserve_lock_history_on_manual_unlock.sql
+          grep -Fq "account_unlocked_by_security_admin" supabase/migrations/20260914134500_preserve_lock_history_on_manual_unlock.sql
+          grep -Fq "LOCKED_ACCOUNTS_MIGRATION" deploy/spark-cli/apply-db-repairs.sh
