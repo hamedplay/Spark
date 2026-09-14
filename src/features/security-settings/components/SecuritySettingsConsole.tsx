@@ -362,12 +362,24 @@ export function SecuritySettingsConsole() {
       </SectionCard>
 
       <SectionCard title="بازیابی" icon={KeyRound}>
-        <ToggleRow label="بازیابی فعال" value={draft.recovery_enabled} onChange={(v) => setDraft({ ...draft, recovery_enabled: v })} />
+        <ToggleRow
+          label="بازیابی فعال"
+          value={draft.recovery_enabled}
+          onChange={(v) => setDraft({
+            ...draft,
+            recovery_enabled: v,
+            unified_recovery_enabled: v ? draft.unified_recovery_enabled : false,
+          })}
+        />
         <ToggleRow
           label="بازیابی یکپارچه"
           value={draft.unified_recovery_enabled}
-          onChange={(v) => setDraft({ ...draft, unified_recovery_enabled: v })}
+          disabled={!draft.recovery_enabled}
+          onChange={(v) => setDraft({ ...draft, unified_recovery_enabled: draft.recovery_enabled && v })}
         />
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          بازیابی یکپارچه فقط زمانی قابل فعال‌سازی است که قابلیت بازیابی اصلی روشن باشد.
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <NumberRow label="عمر OTP بازیابی (ثانیه)" value={draft.recovery_otp_ttl_seconds} min={60} max={3600} onChange={(v) => setDraft({ ...draft, recovery_otp_ttl_seconds: v })} />
           <NumberRow label="حداکثر تلاش بازیابی" value={draft.recovery_max_attempts} min={1} max={20} onChange={(v) => setDraft({ ...draft, recovery_max_attempts: v })} />
@@ -427,14 +439,15 @@ function SectionCard({ title, icon: Icon, children }: { title: string; icon: Rea
   );
 }
 
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+function ToggleRow({ label, value, onChange, disabled = false }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+    <div className={`flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl ${disabled ? 'opacity-60' : ''}`}>
       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
       <button
         type="button"
+        disabled={disabled}
         onClick={() => onChange(!value)}
-        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'} ${disabled ? 'cursor-not-allowed' : ''}`}
       >
         <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${value ? 'left-7' : 'left-1'}`} />
       </button>
@@ -447,7 +460,7 @@ function ReadonlyToggle({ label, value }: { label: string; value: boolean }) {
     <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl opacity-60">
       <div>
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
-        <p className="text-xs text-gray-400 mt-0.5">این گزینه از مسیر تخصصی خودش مدیریت می‌شود.</p>
+        <p className="text-xs text-gray-400 mt-0.5">کدهای بازیابی در Runtime فعلی MFA پشتیبانی نمی‌شوند و تا زمان پیاده‌سازی مسیر canonical غیرفعال باقی می‌مانند.</p>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-xs text-gray-400">{value ? 'روشن' : 'خاموش'}</span>
