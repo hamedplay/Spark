@@ -25,7 +25,7 @@ export default function PublicAuthRoot({ onSessionEstablished }: PublicAuthRootP
     }
 
     setAuthPageKey(value => value + 1);
-    toast.success('خوش آمدید! ثبت‌نام شما با موفقیت انجام شد. اکنون با نام کاربری، ایمیل یا شماره موبایل و رمز عبور خود وارد شوید.');
+    toast.success('ثبت‌نام با موفقیت ثبت شد. اگر تأیید مدیر برای ثبت‌نام فعال باشد، پس از تأیید مدیر امکان ورود خواهید داشت؛ در غیر این صورت اکنون با نام کاربری، ایمیل یا شماره موبایل و رمز عبور خود وارد شوید.');
   }, [onSessionEstablished]);
 
   return (
