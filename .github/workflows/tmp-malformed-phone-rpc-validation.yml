@@ -1,5 +1,6 @@
 name: Temporary malformed phone RPC validation
 
+# Temporary workflow used only to validate this focused DB/deploy repair.
 on:
   push:
     branches: [main]
