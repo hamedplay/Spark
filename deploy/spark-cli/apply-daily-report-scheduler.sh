@@ -45,3 +45,14 @@ echo "=== Host clock ==="
 timedatectl status --no-pager || true
 printf 'UTC now    : %s\n' "$(date -u --iso-8601=seconds)"
 printf 'Tehran now : %s\n' "$(TZ=Asia/Tehran date --iso-8601=seconds)"
+
+# Compatibility bridge for Spark Manager versions that already invoke this
+# post-fast-forward hook but predate the dedicated database-repair runner.
+# This makes the malformed-phone RPC repair take effect on the very first app
+# update that receives the new source, instead of requiring a second update.
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+DB_REPAIR_SCRIPT="${SCRIPT_DIR}/apply-db-repairs.sh"
+if [[ -f "$DB_REPAIR_SCRIPT" ]]; then
+  echo "=== Database compatibility repairs ==="
+  bash "$DB_REPAIR_SCRIPT"
+fi
