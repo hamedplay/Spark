@@ -7,6 +7,8 @@ import type { TotpFactor } from './totpFactors';
 
 export { validateTotpCode } from './totpValidation';
 
+export const MFA_METHOD_CHANGED_EVENT = 'spark:mfa-method-changed';
+
 export interface TotpEnrollmentResult {
   factorId: string;
   qrCode: string;
@@ -125,11 +127,14 @@ export async function verifyTotpFactor(
   return { currentAal: currentLevel };
 }
 
-/** Only call after a newly enrolled factor has been verified.  Login and
+/** Only call after a newly enrolled factor has been verified. Login and
  * ordinary step-up verification must never change the canonical MFA method. */
 export async function activateCanonicalTotpAfterEnrollment(): Promise<void> {
   const { data, error } = await supabase.rpc('activate_canonical_totp_mfa');
   if (error || !data?.ok) throw new Error(data?.error === 'MFA_SWITCH_REQUIRED' ? 'STEPUP_DENIED' : 'VERIFY_FAILED');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(MFA_METHOD_CHANGED_EVENT));
+  }
 }
 
 export async function cancelCurrentTotpEnrollment(factorId: string): Promise<void> {
