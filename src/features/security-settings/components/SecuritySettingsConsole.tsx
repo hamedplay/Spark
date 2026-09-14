@@ -244,10 +244,17 @@ export function SecuritySettingsConsole() {
                 </button>
               ))}
             </div>
+            <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">
+              {draft.mfa_policy === 'disabled'
+                ? 'اجبار سازمانی MFA غیرفعال است و کاربران عادی امکان ثبت TOTP جدید ندارند؛ MFAهای از قبل فعال برای جلوگیری از کاهش امنیت همچنان در ورود معتبر می‌مانند.'
+                : draft.mfa_policy === 'optional'
+                  ? 'فعال‌سازی TOTP برای کاربران مجاز است؛ فقط حساب‌هایی که MFA را فعال کرده‌اند در ورود مرحله دوم را طی می‌کنند.'
+                  : 'همه کاربران فاقد MFA پیش از دسترسی کامل به مسیر فعال‌سازی هدایت می‌شوند. این حالت فقط زمانی قابل ذخیره است که TOTP مجاز باشد.'}
+            </p>
           </div>
 
           <ToggleRow
-            label="اجازه احراز هویت TOTP"
+            label="اجازه فعال‌سازی TOTP برای کاربران"
             value={draft.allow_totp_mfa}
             onChange={(v) => {
               const newDraft = { ...draft, allow_totp_mfa: v };
@@ -255,10 +262,13 @@ export function SecuritySettingsConsole() {
               setDraft(newDraft);
             }}
           />
+          <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
+            این کلید ایجاد TOTP جدید را برای کاربران عادی کنترل می‌کند. مدیر امنیت برای عملیات مدیریتی و Step-up همچنان می‌تواند TOTP خود را فعال نگه دارد.
+          </p>
 
-          <ReadonlyToggle label="احراز هویت بله" value={draft.allow_bale_mfa} />
-          <ReadonlyToggle label="احراز هویت ایمیل" value={draft.allow_email_mfa} />
-          <ReadonlyToggle label="کدهای بازیابی" value={draft.allow_recovery_codes} />
+          <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+            عامل‌های مؤثر در ورود MFA فعلی سامانه «TOTP» و «پیامک» هستند. پیامک از بخش «احراز هویت سفارشی» مدیریت می‌شود. بله، ایمیل و کد بازیابی در مسیر MFA ورود فعلی فعال نیستند؛ بنابراین کلیدهای قدیمی آن‌ها در این بخش نمایش داده نمی‌شوند.
+          </div>
         </div>
       </SectionCard>
 
