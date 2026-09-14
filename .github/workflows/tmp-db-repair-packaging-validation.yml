@@ -1,0 +1,32 @@
+name: Temporary DB repair packaging validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/spark-cli/apply-db-repairs.sh'
+      - 'deploy/spark-cli/db-repairs/**'
+      - '.github/workflows/tmp-db-repair-packaging-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate repair runner syntax
+        run: bash -n deploy/spark-cli/apply-db-repairs.sh
+      - name: Validate packaged repair assets
+        run: |
+          set -euo pipefail
+          test -f deploy/spark-cli/db-repairs/20260914124000_orphan_auth_user_cleanup_semantics.sql
+          test -f deploy/spark-cli/db-repairs/20260914131000_fix_orphan_cleanup_stepup_grant_schema.sql
+          test -f deploy/spark-cli/db-repairs/20260914134500_preserve_lock_history_on_manual_unlock.sql
+          ! grep -Fq 'supabase/migrations' deploy/spark-cli/apply-db-repairs.sh
+          grep -Fq 'deploy/spark-cli/db-repairs' deploy/spark-cli/apply-db-repairs.sh
+          ! grep -Fq 'g.revoked_at' deploy/spark-cli/db-repairs/20260914124000_orphan_auth_user_cleanup_semantics.sql
+          grep -Fq "g.factor_type = 'totp'" deploy/spark-cli/db-repairs/20260914124000_orphan_auth_user_cleanup_semantics.sql
+          grep -Fq "g.assurance_level = 'aal2'" deploy/spark-cli/db-repairs/20260914124000_orphan_auth_user_cleanup_semantics.sql
+          grep -Fq 'require_repair_file "$BASE_MIGRATION"' deploy/spark-cli/apply-db-repairs.sh
+          grep -Fq 'require_repair_file "$LOCKED_ACCOUNTS_MIGRATION"' deploy/spark-cli/apply-db-repairs.sh
+          echo 'DB repair packaging contract: OK'
