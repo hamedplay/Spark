@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 SPARK_ROOT="${SPARK_ROOT:-/opt/spark}"
 SUPABASE_ROOT="${SUPABASE_ROOT:-/opt/spark-supabase}"
-MIGRATION="${SPARK_ROOT}/supabase/migrations/20260914120500_restore_malformed_phone_cleanup_rpc.sql"
+MIGRATION="${SPARK_ROOT}/supabase/migrations/20260914124000_orphan_auth_user_cleanup_semantics.sql"
 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || exec sudo -E "$0" "$@"
 [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || {
@@ -29,15 +29,17 @@ rpc_state() {
     "SELECT CASE
        WHEN to_regprocedure('public.list_malformed_phone_records()') IS NOT NULL
         AND to_regprocedure('public.clear_malformed_phone_record(uuid)') IS NOT NULL
-       THEN 'ready' ELSE 'missing' END;"
+        AND pg_get_function_result('public.list_malformed_phone_records()'::regprocedure)
+              LIKE 'TABLE(auth_user_id uuid, email text, phone text,%'
+       THEN 'ready' ELSE 'stale' END;"
 }
 
 state="$(rpc_state 2>/dev/null || true)"
 if [[ "$state" != "ready" ]]; then
-  echo "Spark DB repair: restoring malformed-phone cleanup RPCs..."
+  echo "Spark DB repair: applying orphan-auth cleanup RPC migration..."
   compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$MIGRATION"
 else
-  echo "Spark DB repair: malformed-phone cleanup RPCs already exist."
+  echo "Spark DB repair: orphan-auth cleanup RPCs already use the current contract."
   # A previous DB restore can leave PostgREST with a stale schema cache even
   # when the functions are present. Refresh it on every reconciliation.
   compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
@@ -65,4 +67,4 @@ validation="$(compose exec -T db psql -X -U postgres -d postgres -Atqc \
   exit 1
 }
 
-echo "Spark DB repair: malformed-phone cleanup RPCs are ready."
+echo "Spark DB repair: orphan-auth cleanup RPCs are ready."
