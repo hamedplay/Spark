@@ -72,6 +72,7 @@ export type SecurityErrorCode =
   | 'NO_LOGIN_METHOD_ENABLED'
   | 'MFA_REQUIRED_WITHOUT_FACTOR'
   | 'INVALID_SESSION_POLICY'
+  | 'INVALID_RECOVERY_POLICY'
   | 'PHONE_LOGIN_NOT_READY'
   | 'CUSTOM_MFA_FACTOR_UNSUPPORTED'
   | 'CUSTOM_MFA_REQUIRED_UNSUPPORTED'
@@ -129,6 +130,7 @@ export const SECURITY_ERROR_MESSAGES: Record<string, string> = {
   NO_LOGIN_METHOD_ENABLED: 'حداقل یک روش ورود باید فعال باشد.',
   MFA_REQUIRED_WITHOUT_FACTOR: 'فعال‌سازی MFA الزامی بدون روش TOTP مجاز نیست.',
   INVALID_SESSION_POLICY: 'تنظیمات Session نامعتبر است.',
+  INVALID_RECOVERY_POLICY: 'بازیابی یکپارچه بدون فعال بودن بازیابی اصلی مجاز نیست.',
   PHONE_LOGIN_NOT_READY: 'ورود با تلفن هنوز آماده نیست.',
   CUSTOM_MFA_FACTOR_UNSUPPORTED: 'در MFA سفارشی فعلی فقط عامل پیامکی پشتیبانی می‌شود.',
   CUSTOM_MFA_REQUIRED_UNSUPPORTED: 'اجبار مستقل MFA سفارشی پشتیبانی نمی‌شود؛ اجبار MFA از سیاست سراسری MFA مدیریت می‌شود.',
@@ -153,7 +155,7 @@ export function mapSecurityError(code: string | undefined | null): SecurityError
   if (!code) return 'UNKNOWN_SECURITY_ERROR';
   const known: SecurityErrorCode[] = [
     'VERSION_CONFLICT', 'STEPUP_REQUIRED', 'NO_LOGIN_METHOD_ENABLED',
-    'MFA_REQUIRED_WITHOUT_FACTOR', 'INVALID_SESSION_POLICY', 'PHONE_LOGIN_NOT_READY',
+    'MFA_REQUIRED_WITHOUT_FACTOR', 'INVALID_SESSION_POLICY', 'INVALID_RECOVERY_POLICY', 'PHONE_LOGIN_NOT_READY',
     'CUSTOM_MFA_FACTOR_UNSUPPORTED', 'CUSTOM_MFA_REQUIRED_UNSUPPORTED',
     'SMS_MFA_FACTOR_REQUIRED', 'SMS_MFA_NOT_READY', 'ACTIVE_SMS_MFA_USERS',
     'NO_EFFECTIVE_CHANGE', 'INVALID_CHANGE_REASON', 'FORBIDDEN', 'SESSION_EXPIRED', 'INVALID_TYPE',
