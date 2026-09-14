@@ -68,7 +68,14 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
         setConfig((current) => ({ ...current, sparkVisible: detail.visible === true }));
       }
     };
+    const handleMaintenanceModeEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ enabled?: boolean }>).detail;
+      if (typeof detail?.enabled === 'boolean') {
+        setConfig((current) => ({ ...current, maintenanceMode: detail.enabled === true }));
+      }
+    };
     window.addEventListener('spark-visible-changed', handleSparkVisibleEvent);
+    window.addEventListener('maintenance-mode-changed', handleMaintenanceModeEvent);
 
     const channel = supabase
       .channel('app-runtime-config')
@@ -76,10 +83,6 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'system_config' },
         (payload) => {
-          // INSERT/UPDATE events carry the latest row and need no follow-up
-          // request. For DELETE, re-read the two tiny runtime flags because the
-          // old realtime row may contain only primary-key columns depending on
-          // the table replica identity.
           if (payload.eventType === 'DELETE') {
             void load();
             return;
@@ -93,6 +96,7 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
     return () => {
       cancelled = true;
       window.removeEventListener('spark-visible-changed', handleSparkVisibleEvent);
+      window.removeEventListener('maintenance-mode-changed', handleMaintenanceModeEvent);
       void supabase.removeChannel(channel);
     };
   }, []);
