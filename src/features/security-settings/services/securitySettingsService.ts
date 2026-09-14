@@ -88,12 +88,15 @@ export async function saveSecuritySettingsPatch(
 }
 
 export interface MalformedPhoneRecord {
-  user_id: string;
+  auth_user_id: string;
   email: string | null;
-  profile_phone: string | null;
-  auth_phone: string | null;
-  profile_problem: boolean;
-  auth_problem: boolean;
+  phone: string | null;
+  created_at: string;
+  last_sign_in_at: string | null;
+  deleted_at: string | null;
+  normalized_phone: string | null;
+  has_real_email: boolean;
+  has_phone: boolean;
 }
 
 export interface MalformedPhoneRecordsResult {
@@ -105,8 +108,7 @@ export interface MalformedPhoneRecordsResult {
 export interface ClearMalformedPhoneResult {
   ok: boolean;
   error?: string;
-  auth_phone_cleared?: boolean;
-  profile_phone_cleared?: boolean;
+  user_deleted?: boolean;
 }
 
 export async function loadMalformedPhoneRecords(): Promise<MalformedPhoneRecordsResult> {
