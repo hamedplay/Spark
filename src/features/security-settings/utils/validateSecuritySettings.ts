@@ -63,11 +63,19 @@ export function validateSecuritySettings(
 
   const effectiveIdle = patch.session_idle_timeout_minutes ?? draft.session_idle_timeout_minutes;
   const effectiveAbsolute = patch.session_absolute_lifetime_minutes ?? draft.session_absolute_lifetime_minutes;
+  const effectiveHeartbeat = patch.session_heartbeat_interval_seconds ?? draft.session_heartbeat_interval_seconds;
   if (effectiveIdle > effectiveAbsolute) {
     return {
       ok: false,
       error: 'INVALID_SESSION_POLICY',
       message: 'زمان بیکاری نشست نمی‌تواند بیشتر از طول کل نشست باشد.',
+    };
+  }
+  if (effectiveHeartbeat >= effectiveIdle * 60) {
+    return {
+      ok: false,
+      error: 'INVALID_SESSION_POLICY',
+      message: 'فاصله Heartbeat نشست باید کمتر از زمان بیکاری نشست باشد.',
     };
   }
 
