@@ -1,0 +1,119 @@
+name: Temporary recovery alignment validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-recovery-alignment-run.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  align-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply scoped recovery fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ui_path = Path('src/features/security-settings/components/SecuritySettingsConsole.tsx')
+          ui = ui_path.read_text()
+          ui = ui.replace(
+            '<ToggleRow label="بازیابی فعال" value={draft.recovery_enabled} onChange={(v) => setDraft({ ...draft, recovery_enabled: v })} />',
+            '''<ToggleRow
+          label="بازیابی فعال"
+          value={draft.recovery_enabled}
+          onChange={(v) => setDraft({
+            ...draft,
+            recovery_enabled: v,
+            unified_recovery_enabled: v ? draft.unified_recovery_enabled : false,
+          })}
+        />''',
+            1,
+          )
+          ui = ui.replace(
+            '''          value={draft.unified_recovery_enabled}
+          onChange={(v) => setDraft({ ...draft, unified_recovery_enabled: v })}''',
+            '''          value={draft.unified_recovery_enabled}
+          disabled={!draft.recovery_enabled}
+          onChange={(v) => setDraft({ ...draft, unified_recovery_enabled: draft.recovery_enabled && v })}''',
+            1,
+          )
+          ui = ui.replace(
+            'function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {',
+            'function ToggleRow({ label, value, onChange, disabled = false }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {',
+            1,
+          )
+          ui = ui.replace(
+            '''        type="button"
+        onClick={() => onChange(!value)}
+        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}''',
+            '''        type="button"
+        disabled={disabled}
+        onClick={() => onChange(!value)}
+        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'} ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}''',
+            1,
+          )
+          ui = ui.replace(
+            '<p className="text-xs text-gray-400 mt-0.5">این گزینه از مسیر تخصصی خودش مدیریت می‌شود.</p>',
+            '<p className="text-xs text-gray-400 mt-0.5">کدهای بازیابی در Runtime فعلی MFA پشتیبانی نمی‌شوند و تا زمان پیاده‌سازی مسیر canonical غیرفعال باقی می‌مانند.</p>',
+            1,
+          )
+          ui_path.write_text(ui)
+
+          val_path = Path('src/features/security-settings/utils/validateSecuritySettings.ts')
+          val = val_path.read_text()
+          marker = '  const effectiveIdle = patch.session_idle_timeout_minutes ?? draft.session_idle_timeout_minutes;\n'
+          insertion = '''  const effectiveRecoveryEnabled = patch.recovery_enabled ?? draft.recovery_enabled;
+  const effectiveUnifiedRecoveryEnabled = patch.unified_recovery_enabled ?? draft.unified_recovery_enabled;
+  if (effectiveUnifiedRecoveryEnabled && !effectiveRecoveryEnabled) {
+    return {
+      ok: false,
+      error: 'INVALID_RECOVERY_POLICY',
+      message: 'بازیابی یکپارچه فقط زمانی می‌تواند فعال باشد که بازیابی اصلی فعال باشد.',
+    };
+  }
+
+'''
+          if marker not in val:
+            raise SystemExit('validation marker not found')
+          val_path.write_text(val.replace(marker, insertion + marker, 1))
+
+          types_path = Path('src/features/security-settings/types/securitySettings.ts')
+          types = types_path.read_text()
+          types = types.replace("  | 'INVALID_SESSION_POLICY'\n", "  | 'INVALID_SESSION_POLICY'\n  | 'INVALID_RECOVERY_POLICY'\n", 1)
+          types = types.replace("  INVALID_SESSION_POLICY: 'تنظیمات Session نامعتبر است.',\n", "  INVALID_SESSION_POLICY: 'تنظیمات Session نامعتبر است.',\n  INVALID_RECOVERY_POLICY: 'بازیابی یکپارچه بدون فعال بودن بازیابی اصلی مجاز نیست.',\n", 1)
+          types = types.replace("    'MFA_REQUIRED_WITHOUT_FACTOR', 'INVALID_SESSION_POLICY', 'PHONE_LOGIN_NOT_READY',\n", "    'MFA_REQUIRED_WITHOUT_FACTOR', 'INVALID_SESSION_POLICY', 'INVALID_RECOVERY_POLICY', 'PHONE_LOGIN_NOT_READY',\n", 1)
+          types_path.write_text(types)
+
+          Path('supabase/migrations/20260915174500_align_recovery_settings_contract.sql').write_text('''-- Align recovery settings with the canonical unified-recovery runtime.\n\nALTER TABLE public.auth_security_settings\n  DROP CONSTRAINT IF EXISTS auth_security_settings_unified_recovery_requires_recovery_check;\n\nALTER TABLE public.auth_security_settings\n  ADD CONSTRAINT auth_security_settings_unified_recovery_requires_recovery_check\n  CHECK (NOT unified_recovery_enabled OR recovery_enabled);\n\nALTER TABLE public.auth_security_settings\n  DROP CONSTRAINT IF EXISTS auth_security_settings_recovery_codes_runtime_check;\n\nALTER TABLE public.auth_security_settings\n  ADD CONSTRAINT auth_security_settings_recovery_codes_runtime_check\n  CHECK (allow_recovery_codes IS FALSE);\n''')
+          PY
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Commit scoped implementation
+        shell: bash
+        run: |
+          git config user.name "hamedplay"
+          git config user.email "hamedkhaleghi493@gmail.com"
+          git add src/features/security-settings/components/SecuritySettingsConsole.tsx \
+                  src/features/security-settings/utils/validateSecuritySettings.ts \
+                  src/features/security-settings/types/securitySettings.ts \
+                  supabase/migrations/20260915174500_align_recovery_settings_contract.sql
+          git diff --cached --check
+          git commit -m "fix: align recovery settings with runtime"
+          git push origin HEAD:main
