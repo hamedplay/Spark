@@ -9,6 +9,7 @@ import { MfaPolicyImpactCard } from './MfaPolicyImpactCard';
 import { SecuritySettingsHistory } from './SecuritySettingsHistory';
 import { SecurityStepUpDialog } from './SecurityStepUpDialog';
 import { MalformedPhoneCleanupPanel } from './MalformedPhoneCleanupPanel';
+import { LockedAccountsPanel } from './LockedAccountsPanel';
 import { listCurrentUserTotpFactors } from '../../auth';
 
 interface ConflictSnapshot {
@@ -356,6 +357,7 @@ export function SecuritySettingsConsole() {
         <p className="text-xs text-gray-500 dark:text-gray-400">
           در حالت تصاعدی، مقادیر به‌ترتیب دفعات قفل اعمال می‌شوند؛ در حالت خاموش، مدت قفل ثابت استفاده می‌شود.
         </p>
+        <LockedAccountsPanel />
       </SectionCard>
 
       <SectionCard title="بازیابی" icon={KeyRound}>
