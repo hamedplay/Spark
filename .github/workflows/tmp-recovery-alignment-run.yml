@@ -1,3 +1,4 @@
+# Triggered temporary validation workflow; remove after successful build.
 name: Temporary recovery alignment validation
 
 on:
