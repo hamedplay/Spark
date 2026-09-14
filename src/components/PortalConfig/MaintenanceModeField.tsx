@@ -1,15 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Loader as Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { supabase } from '../../lib/supabase';
 import type { ConfigEntry } from './types';
 import { SECURITY_CONFIG_PRESENTATION } from './constants';
 
-export function MaintenanceModeField({
-  entry,
-  onSave,
-}: {
-  entry: ConfigEntry;
-  onSave: (id: string, value: string) => Promise<boolean>;
-}) {
+interface MaintenanceModeRpcResult {
+  ok?: boolean;
+  error?: string;
+  enabled?: boolean;
+}
+
+function maintenanceErrorMessage(error?: string): string {
+  switch (error) {
+    case 'ADMIN_REQUIRED':
+      return 'فقط مدیر سامانه اجازه تغییر حالت تعمیر و نگهداری را دارد.';
+    case 'SESSION_INVALID':
+    case 'SESSION_NOT_FULLY_AUTHORIZED':
+    case 'UNAUTHORIZED':
+      return 'نشست شما برای این تغییر معتبر نیست؛ لطفاً دوباره وارد شوید.';
+    default:
+      return 'اعمال حالت تعمیر و نگهداری انجام نشد.';
+  }
+}
+
+export function MaintenanceModeField({ entry }: { entry: ConfigEntry }) {
   const [enabled, setEnabled] = useState(entry.value === 'true');
   const [saving, setSaving] = useState(false);
   const presentation = SECURITY_CONFIG_PRESENTATION[entry.key];
@@ -17,16 +32,52 @@ export function MaintenanceModeField({
   const description = presentation?.description || entry.description;
 
   useEffect(() => {
+    let cancelled = false;
     setEnabled(entry.value === 'true');
+
+    void supabase
+      .from('system_config')
+      .select('value')
+      .eq('section', 'security')
+      .eq('key', 'maintenance_mode')
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        setEnabled(data.value === 'true');
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [entry.value]);
 
   const toggle = async () => {
     if (saving) return;
+
     const next = !enabled;
     setSaving(true);
     try {
-      const saved = await onSave(entry.id, next ? 'true' : 'false');
-      if (saved) setEnabled(next);
+      const { data, error } = await supabase.rpc('set_maintenance_mode', {
+        p_enabled: next,
+      });
+
+      if (error) {
+        console.error('[MaintenanceMode] RPC failed:', error);
+        toast.error('اعمال حالت تعمیر و نگهداری انجام نشد.');
+        return;
+      }
+
+      const result = data as MaintenanceModeRpcResult | null;
+      if (!result?.ok) {
+        toast.error(maintenanceErrorMessage(result?.error));
+        return;
+      }
+
+      setEnabled(next);
+      window.dispatchEvent(new CustomEvent('maintenance-mode-changed', {
+        detail: { enabled: next },
+      }));
+      toast.success(next ? 'حالت تعمیر و نگهداری فعال شد.' : 'حالت تعمیر و نگهداری غیرفعال شد.');
     } finally {
       setSaving(false);
     }
