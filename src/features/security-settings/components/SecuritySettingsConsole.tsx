@@ -219,7 +219,7 @@ export function SecuritySettingsConsole() {
       <SectionCard title="روش‌های ورود" icon={LogIn}>
         <ToggleRow label="ورود با نام کاربری" value={draft.username_login} onChange={(v) => setDraft({ ...draft, username_login: v })} />
         <ToggleRow label="ورود با ایمیل" value={draft.email_login} onChange={(v) => setDraft({ ...draft, email_login: v })} />
-        <ToggleRow label="ورود با تلفن" value={draft.phone_login} onChange={(v) => setDraft({ ...draft, phone_login: v })} />
+        <ToggleRow label="ورود با موبایل و رمز عبور" value={draft.phone_login} onChange={(v) => setDraft({ ...draft, phone_login: v })} />
       </SectionCard>
 
       <SectionCard title="سیاست احراز هویت دومرحله‌ای" icon={Shield}>

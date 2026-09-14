@@ -46,8 +46,36 @@ export function PortalConfigPage({ currentUserId }: Props) {
 
   // Load configs
   const loadConfigs = useCallback(async () => {
-    const { data } = await supabase.from('system_config').select('*').order('section').order('key');
-    if (data) setConfigs(data as ConfigEntry[]);
+    // Security configuration contains internal runtime flags and secret material.
+    // Never fetch the whole security section into the browser; only request the
+    // explicitly allow-listed operational controls used by this page.
+    const securityKeys = Array.from(VISIBLE_SECURITY_CONFIG_KEYS);
+    const [nonSecurityResult, securityResult] = await Promise.all([
+      supabase
+        .from('system_config')
+        .select('*')
+        .neq('section', 'security')
+        .order('section')
+        .order('key'),
+      supabase
+        .from('system_config')
+        .select('*')
+        .eq('section', 'security')
+        .in('key', securityKeys)
+        .order('key'),
+    ]);
+
+    if (nonSecurityResult.error || securityResult.error) {
+      console.error('[PortalConfig] failed to load configuration', nonSecurityResult.error || securityResult.error);
+      return;
+    }
+
+    const rows = [
+      ...(nonSecurityResult.data ?? []),
+      ...(securityResult.data ?? []),
+    ] as ConfigEntry[];
+    rows.sort((a, b) => a.section.localeCompare(b.section) || a.key.localeCompare(b.key));
+    setConfigs(rows);
   }, []);
 
   // Load truly online users (last seen within 3 minutes)
@@ -336,7 +364,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
       case 'security':
         return (
           <div className="space-y-5">
-            <SectionCard title="امنیت و دسترسی" icon={Shield} color="red">
+            <SectionCard title="وضعیت دسترسی سامانه" icon={Shield} color="red">
               {cfgs('security').filter(c => VISIBLE_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
             </SectionCard>
             <PhoneAuthCard />
