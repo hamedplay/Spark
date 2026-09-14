@@ -3,24 +3,27 @@ set -Eeuo pipefail
 
 SPARK_ROOT="${SPARK_ROOT:-/opt/spark}"
 SUPABASE_ROOT="${SUPABASE_ROOT:-/opt/spark-supabase}"
-BASE_MIGRATION="${SPARK_ROOT}/supabase/migrations/20260914124000_orphan_auth_user_cleanup_semantics.sql"
-GRANT_SCHEMA_FIX="${SPARK_ROOT}/supabase/migrations/20260914131000_fix_orphan_cleanup_stepup_grant_schema.sql"
-LOCKED_ACCOUNTS_MIGRATION="${SPARK_ROOT}/supabase/migrations/20260914134500_preserve_lock_history_on_manual_unlock.sql"
+DB_REPAIR_ROOT="${SPARK_ROOT}/deploy/spark-cli/db-repairs"
+BASE_MIGRATION="${DB_REPAIR_ROOT}/20260914124000_orphan_auth_user_cleanup_semantics.sql"
+GRANT_SCHEMA_FIX="${DB_REPAIR_ROOT}/20260914131000_fix_orphan_cleanup_stepup_grant_schema.sql"
+LOCKED_ACCOUNTS_MIGRATION="${DB_REPAIR_ROOT}/20260914134500_preserve_lock_history_on_manual_unlock.sql"
 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || exec sudo -E "$0" "$@"
 [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || {
   echo "Spark DB repair: Supabase compose not found at ${SUPABASE_ROOT}." >&2
   exit 1
 }
-for migration in "$BASE_MIGRATION" "$GRANT_SCHEMA_FIX" "$LOCKED_ACCOUNTS_MIGRATION"; do
-  [[ -f "$migration" ]] || {
-    echo "Spark DB repair: required migration not found: ${migration}" >&2
-    exit 1
-  }
-done
 
 compose() {
   (cd "$SUPABASE_ROOT" && docker compose "$@")
+}
+
+require_repair_file() {
+  local file="$1"
+  [[ -f "$file" ]] || {
+    echo "Spark DB repair: required repair asset not found: ${file}" >&2
+    exit 1
+  }
 }
 
 if ! compose ps --status running --services | grep -Fxq db; then
@@ -68,12 +71,16 @@ locked_accounts_state() {
 
 list_state="$(list_contract_state 2>/dev/null || true)"
 if [[ "$list_state" != "ready" ]]; then
-  echo "Spark DB repair: applying orphan-auth cleanup RPC migration..."
+  require_repair_file "$BASE_MIGRATION"
+  echo "Spark DB repair: applying orphan-auth cleanup RPC repair..."
   compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$BASE_MIGRATION"
+else
+  echo "Spark DB repair: orphan-auth cleanup RPC contract is current."
 fi
 
 clear_state="$(clear_contract_state 2>/dev/null || true)"
 if [[ "$clear_state" != "ready" ]]; then
+  require_repair_file "$GRANT_SCHEMA_FIX"
   echo "Spark DB repair: aligning cleanup RPC with session_security_grants schema..."
   compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$GRANT_SCHEMA_FIX"
 else
@@ -82,6 +89,7 @@ fi
 
 locked_state="$(locked_accounts_state 2>/dev/null || true)"
 if [[ "$locked_state" != "ready" ]]; then
+  require_repair_file "$LOCKED_ACCOUNTS_MIGRATION"
   echo "Spark DB repair: installing locked-account security console RPCs..."
   compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$LOCKED_ACCOUNTS_MIGRATION"
 else
@@ -95,7 +103,7 @@ list_state="$(list_contract_state)"
 clear_state="$(clear_contract_state)"
 locked_state="$(locked_accounts_state)"
 [[ "$list_state" == "ready" && "$clear_state" == "ready" && "$locked_state" == "ready" ]] || {
-  echo "Spark DB repair: RPC validation failed after migration." >&2
+  echo "Spark DB repair: RPC validation failed after repair." >&2
   exit 1
 }
 
