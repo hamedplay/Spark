@@ -70,48 +70,31 @@ export const SELECT_OPTIONS: Record<string, { value: string; label: string; desc
   ],
 };
 
+// Only controls with a proven runtime consumer are exposed as generic
+// system_config fields. Authentication/session/MFA/lockout/recovery policy is
+// canonical in auth_security_settings and is managed by SecuritySettingsConsole.
 export const SECURITY_CONFIG_PRESENTATION: Record<string, { label: string; description: string }> = {
-  allowed_ip_ranges: {
-    label: 'محدوده‌های نشانی اینترنتی مجاز',
-    description: 'نشانی‌ها یا محدوده‌های مجاز را با ویرگول جدا کنید. خالی بودن یعنی محدودیت نشانی اعمال نمی‌شود.',
-  },
-  audit_log_retention_days: {
-    label: 'مدت نگهداری گزارش رخدادها (روز)',
-    description: 'تعداد روزهایی که گزارش رویدادهای امنیتی و مدیریتی نگهداری می‌شوند.',
-  },
-  enable_2fa: {
-    label: 'احراز هویت دومرحله‌ای',
-    description: 'الزام عامل دوم برای حساب‌ها مطابق سیاست امنیتی سامانه.',
-  },
-  log_all_actions: {
-    label: 'ثبت همه اقدامات کاربران',
-    description: 'اقدامات قابل ممیزی کاربران و مدیران در گزارش رخدادها ثبت شوند.',
-  },
   maintenance_mode: {
     label: 'حالت تعمیر و نگهداری',
-    description: 'در صورت فعال بودن، فقط مدیران مجاز می‌توانند وارد سامانه شوند.',
-  },
-  max_login_attempts: {
-    label: 'حداکثر تلاش ناموفق برای ورود',
-    description: 'تعداد تلاش ناموفق مجاز پیش از اعمال محدودیت موقت ورود.',
-  },
-  require_strong_password: {
-    label: 'الزام رمز عبور قوی',
-    description: 'رمز عبور باید شرایط امنیتی تعریف‌شده در سامانه را داشته باشد.',
-  },
-  session_timeout_minutes: {
-    label: 'مهلت بی‌کاری نشست (دقیقه)',
-    description: 'نشست کاربر پس از این مدت بی‌کاری نیازمند ورود دوباره خواهد بود.',
+    description: 'در صورت فعال بودن، کاربران عادی از پوسته سامانه خارج می‌شوند و فقط مدیران سامانه دسترسی دارند.',
   },
 };
 
-// Security settings are intentionally allow-listed. Internal runtime flags,
-// secrets and compatibility keys must never be rendered as generic inputs.
 export const VISIBLE_SECURITY_CONFIG_KEYS = new Set(
   Object.keys(SECURITY_CONFIG_PRESENTATION),
 );
 
+// Historical compatibility keys are intentionally retained in the database so
+// old deployments can be diagnosed, but they must not be shown as live controls.
+// Internal runtime flags and secret material are also never rendered directly.
 export const HIDDEN_SECURITY_CONFIG_KEYS = new Set([
+  'allowed_ip_ranges',
+  'audit_log_retention_days',
+  'enable_2fa',
+  'log_all_actions',
+  'max_login_attempts',
+  'require_strong_password',
+  'session_timeout_minutes',
   'phone_login_enabled',
   'phone_login_canonical_enabled',
   'phone_login_hook_operator_confirmed',
