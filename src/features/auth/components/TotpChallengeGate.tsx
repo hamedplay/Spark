@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { ShieldCheck, Loader as Loader2, Check, LogOut } from 'lucide-react';
 import {
   listCurrentUserTotpFactors,
@@ -103,7 +103,7 @@ export function TotpChallengeGate({ onCompleted, onSignOut }: TotpChallengeGateP
     inputRefs.current[Math.min(pasted.length, OTP_LENGTH) - 1]?.focus();
   };
 
-  const shell = (children: React.ReactNode) => (
+  const shell = (children: ReactNode) => (
     <div className="spark-reference-login fixed inset-0 z-[2147483000] flex min-h-screen items-center justify-center overflow-y-auto px-4 py-8" dir="rtl">
       <div className="spark-reference-matrix" aria-hidden="true" />
       <div className="spark-reference-grid" aria-hidden="true" />
