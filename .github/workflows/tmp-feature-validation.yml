@@ -21,9 +21,16 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Audit security config wiring
+        run: |
+          echo '=== Runtime usages of legacy security system_config keys ==='
+          grep -R -n -E 'enable_2fa|max_login_attempts|session_timeout_minutes|require_strong_password|allowed_ip_ranges|audit_log_retention_days|log_all_actions|maintenance_mode' src supabase/functions tests --exclude='constants.ts' || true
+          echo '=== Phone/auth canonical key usages ==='
+          grep -R -n -E 'phone_login_canonical_enabled|phone_password_recovery_canonical_enabled|phone_login_ready|phone_password_recovery_canonical_ready' src supabase/functions tests || true
       - name: Build
         run: npm run build
       - name: Auth security config tests
         run: npm run test:auth-security-config
       - name: Video conference tests
+        if: always()
         run: npm run test:video-conference
