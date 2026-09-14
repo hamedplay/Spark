@@ -5,6 +5,7 @@ SPARK_ROOT="${SPARK_ROOT:-/opt/spark}"
 SUPABASE_ROOT="${SUPABASE_ROOT:-/opt/spark-supabase}"
 PREP_SQL="${SPARK_ROOT}/supabase/migrations/20260914184400_normalize_admin_lifecycle_signature.sql"
 REPAIR_SQL="${SPARK_ROOT}/supabase/migrations/20260914184500_align_registration_security_controls.sql"
+HARDEN_SQL="${SPARK_ROOT}/supabase/migrations/20260914190000_harden_registration_lifecycle_rpc.sql"
 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || exec sudo -E "$0" "$@"
 [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || {
@@ -38,6 +39,11 @@ contract_state() {
         AND has_function_privilege('authenticated', 'public.save_my_profile_completion(jsonb,bigint,boolean)', 'EXECUTE')
         AND NOT has_function_privilege('anon', 'public.get_my_profile_completion_state()', 'EXECUTE')
         AND NOT has_function_privilege('anon', 'public.save_my_profile_completion(jsonb,bigint,boolean)', 'EXECUTE')
+        AND has_function_privilege('service_role', 'public.admin_set_user_lifecycle_service(uuid,uuid,uuid,text,bigint,text)', 'EXECUTE')
+        AND NOT has_function_privilege('authenticated', 'public.admin_set_user_lifecycle_service(uuid,uuid,uuid,text,bigint,text)', 'EXECUTE')
+        AND NOT has_function_privilege('anon', 'public.admin_set_user_lifecycle_service(uuid,uuid,uuid,text,bigint,text)', 'EXECUTE')
+        AND NOT has_function_privilege('authenticated', 'private.admin_set_user_lifecycle_service(uuid,uuid,uuid,text,bigint,text)', 'EXECUTE')
+        AND NOT has_function_privilege('anon', 'private.admin_set_user_lifecycle_service(uuid,uuid,uuid,text,bigint,text)', 'EXECUTE')
        THEN 'ready' ELSE 'stale' END;"
 }
 
@@ -45,9 +51,11 @@ state="$(contract_state 2>/dev/null || true)"
 if [[ "$state" != "ready" ]]; then
   [[ -f "$PREP_SQL" ]] || { echo "Spark registration repair: missing ${PREP_SQL}" >&2; exit 1; }
   [[ -f "$REPAIR_SQL" ]] || { echo "Spark registration repair: missing ${REPAIR_SQL}" >&2; exit 1; }
+  [[ -f "$HARDEN_SQL" ]] || { echo "Spark registration repair: missing ${HARDEN_SQL}" >&2; exit 1; }
   echo "Spark registration repair: aligning registration/profile-completion contract..."
   compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$PREP_SQL"
   compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$REPAIR_SQL"
+  compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$HARDEN_SQL"
 else
   echo "Spark registration repair: contract is current."
 fi
