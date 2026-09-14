@@ -154,3 +154,76 @@ export async function clearMalformedPhoneRecord(userId: string): Promise<ClearMa
 
   return rpcResult.data as ClearMalformedPhoneResult;
 }
+
+export interface LockedAccountRecord {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  username: string | null;
+  phone: string | null;
+  account_status: string;
+  locked_until: string | null;
+  lock_type: 'admin' | 'temporary';
+  lock_level: number;
+  failure_count: number;
+  last_failure_at: string | null;
+}
+
+export interface LockedAccountsResult {
+  ok: boolean;
+  records: LockedAccountRecord[];
+  error?: string;
+}
+
+export interface UnlockLockedAccountResult {
+  ok: boolean;
+  error?: string;
+  user_id?: string;
+  previous_status?: string;
+  previous_locked_until?: string | null;
+  failure_counter_reset_at?: string;
+}
+
+export async function loadLockedAccounts(): Promise<LockedAccountsResult> {
+  const rpcResult = await (supabase as unknown as {
+    rpc: (fn: string) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  }).rpc('list_locked_accounts');
+
+  if (rpcResult.error) {
+    return {
+      ok: false,
+      records: [],
+      error: rpcResult.error.message || 'LOCKED_ACCOUNTS_LIST_FAILED',
+    };
+  }
+
+  if (!Array.isArray(rpcResult.data)) {
+    return { ok: false, records: [], error: 'LOCKED_ACCOUNTS_LIST_INVALID_RESPONSE' };
+  }
+
+  return {
+    ok: true,
+    records: rpcResult.data as LockedAccountRecord[],
+  };
+}
+
+export async function unlockLockedAccount(userId: string): Promise<UnlockLockedAccountResult> {
+  const rpcResult = await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  }).rpc('security_admin_unlock_account', {
+    p_user_id: userId,
+  });
+
+  if (rpcResult.error) {
+    return {
+      ok: false,
+      error: rpcResult.error.message || 'ACCOUNT_UNLOCK_FAILED',
+    };
+  }
+
+  if (!rpcResult.data || typeof rpcResult.data !== 'object' || Array.isArray(rpcResult.data)) {
+    return { ok: false, error: 'ACCOUNT_UNLOCK_INVALID_RESPONSE' };
+  }
+
+  return rpcResult.data as UnlockLockedAccountResult;
+}
