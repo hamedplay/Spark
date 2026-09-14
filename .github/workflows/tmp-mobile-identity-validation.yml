@@ -1,0 +1,30 @@
+name: Temporary mobile identity validation
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Validate deploy scripts
+        run: |
+          bash -n deploy/spark-cli/apply-mobile-identity-repair.sh
+          bash -n deploy/spark-cli/apply-daily-report-scheduler.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Build application
+        run: npm run build
+      - name: Validate focused contract
+        run: |
+          grep -Fq "IDENTITY_REPAIR_REQUIRED" supabase/migrations/20260914145500_align_mobile_identity_sync_classifier.sql
+          grep -Fq "get_phone_auth_identity_state_v1" supabase/migrations/20260914145500_align_mobile_identity_sync_classifier.sql
+          grep -Fq "invokeBulkSync('execute')" src/components/PortalConfig/IdentityRepairCard.tsx
+          grep -Fq "همگام‌سازی آماده‌ها" src/components/PortalConfig/IdentityRepairCard.tsx
+          grep -Fq "apply-mobile-identity-repair.sh" deploy/spark-cli/apply-daily-report-scheduler.sh
