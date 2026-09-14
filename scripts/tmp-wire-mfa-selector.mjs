@@ -33,3 +33,5 @@ replaceOnce(
 );
 
 writeFileSync(path, text);
+
+// Triggered only for the temporary validation workflow.
