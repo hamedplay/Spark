@@ -14,7 +14,7 @@ function validProgressiveLockSchedule(schedule: string[]): boolean {
   return Array.isArray(schedule)
     && schedule.length >= 1
     && schedule.length <= 12
-    && schedule.every((entry) => /^\d+$/.test(entry) && inIntegerRange(Number(entry), 1, 720));
+    && schedule.every((entry) => /^\d+$/.test(entry) && inIntegerRange(Number(entry), 1, 43200));
 }
 
 export function validateSecuritySettings(
@@ -96,7 +96,7 @@ export function validateSecuritySettings(
     return {
       ok: false,
       error: 'OUT_OF_RANGE',
-      message: 'برنامه قفل تصاعدی باید شامل ۱ تا ۱۲ مقدار ساعت صحیح بین ۱ تا ۷۲۰ باشد.',
+      message: 'برنامه قفل تصاعدی باید شامل ۱ تا ۱۲ مقدار دقیقه صحیح بین ۱ تا ۴۳۲۰۰ باشد.',
     };
   }
 
