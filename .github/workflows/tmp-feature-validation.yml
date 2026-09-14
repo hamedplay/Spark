@@ -30,13 +30,22 @@ jobs:
 
           portal = Path('src/components/PortalConfigPage.tsx')
           text = portal.read_text()
-          old = """  const loadConfigs = useCallback(async () => {\n    const { data } = await supabase.from('system_config').select('*').order('section').order('key');\n    if (data) setConfigs(data as ConfigEntry[]);\n  }, []);"""
-          new = """  const loadConfigs = useCallback(async () => {\n    // Security configuration contains internal runtime flags and secret material.\n    // Never fetch the whole security section into the browser; only request the\n    // explicitly allow-listed operational controls used by this page.\n    const securityKeys = Array.from(VISIBLE_SECURITY_CONFIG_KEYS);\n    const [nonSecurityResult, securityResult] = await Promise.all([\n      supabase\n        .from('system_config')\n        .select('*')\n        .neq('section', 'security')\n        .order('section')\n        .order('key'),\n      supabase\n        .from('system_config')\n        .select('*')\n        .eq('section', 'security')\n        .in('key', securityKeys)\n        .order('key'),\n    ]);\n\n    if (nonSecurityResult.error || securityResult.error) {\n      console.error('[PortalConfig] failed to load configuration', nonSecurityResult.error || securityResult.error);\n      return;\n    }\n\n    const rows = [\n      ...(nonSecurityResult.data ?? []),\n      ...(securityResult.data ?? []),\n    ] as ConfigEntry[];\n    rows.sort((a, b) => a.section.localeCompare(b.section) || a.key.localeCompare(b.key));\n    setConfigs(rows);\n  }, []);"""
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif new not in text:
+
+          old_loader = """  const loadConfigs = useCallback(async () => {\n    const { data } = await supabase.from('system_config').select('*').order('section').order('key');\n    if (data) setConfigs(data as ConfigEntry[]);\n  }, []);"""
+          new_loader = """  const loadConfigs = useCallback(async () => {\n    // Security configuration contains internal runtime flags and secret material.\n    // Never fetch the whole security section into the browser; only request the\n    // explicitly allow-listed operational controls used by this page.\n    const securityKeys = Array.from(VISIBLE_SECURITY_CONFIG_KEYS);\n    const [nonSecurityResult, securityResult] = await Promise.all([\n      supabase\n        .from('system_config')\n        .select('*')\n        .neq('section', 'security')\n        .order('section')\n        .order('key'),\n      supabase\n        .from('system_config')\n        .select('*')\n        .eq('section', 'security')\n        .in('key', securityKeys)\n        .order('key'),\n    ]);\n\n    if (nonSecurityResult.error || securityResult.error) {\n      console.error('[PortalConfig] failed to load configuration', nonSecurityResult.error || securityResult.error);\n      return;\n    }\n\n    const rows = [\n      ...(nonSecurityResult.data ?? []),\n      ...(securityResult.data ?? []),\n    ] as ConfigEntry[];\n    rows.sort((a, b) => a.section.localeCompare(b.section) || a.key.localeCompare(b.key));\n    setConfigs(rows);\n  }, []);"""
+          if old_loader in text:
+              text = text.replace(old_loader, new_loader, 1)
+          elif new_loader not in text:
               raise SystemExit('PortalConfig loadConfigs pattern drifted; refusing blind edit')
+
           text = text.replace('SectionCard title="امنیت و دسترسی" icon={Shield} color="red"', 'SectionCard title="وضعیت دسترسی سامانه" icon={Shield} color="red"', 1)
+
+          old_maintenance = """            <SectionCard title=\"وضعیت دسترسی سامانه\" icon={Shield} color=\"red\">\n              {cfgs('security').filter(c => VISIBLE_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}\n            </SectionCard>"""
+          new_maintenance = """            {isAdmin ? (\n              <SectionCard title=\"وضعیت دسترسی سامانه\" icon={Shield} color=\"red\">\n                {cfgs('security').filter(c => VISIBLE_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}\n              </SectionCard>\n            ) : (\n              <div className=\"rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400\">\n                وضعیت تعمیر و نگهداری فقط توسط مدیر سامانه قابل تغییر است. تنظیمات امنیتی تخصصی پایین‌تر همچنان بر اساس سطح دسترسی Security Admin کنترل می‌شوند.\n              </div>\n            )}"""
+          if old_maintenance in text:
+              text = text.replace(old_maintenance, new_maintenance, 1)
+          elif new_maintenance not in text:
+              raise SystemExit('PortalConfig maintenance block drifted; refusing blind edit')
           portal.write_text(text)
 
           console = Path('src/features/security-settings/components/SecuritySettingsConsole.tsx')
