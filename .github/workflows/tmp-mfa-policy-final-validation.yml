@@ -1,0 +1,31 @@
+name: Temporary MFA policy final validation
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Validate deployment scripts
+        run: |
+          bash -n deploy/spark-cli/apply-mfa-policy-repair.sh
+          bash -n deploy/spark-cli/apply-daily-report-scheduler.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Build application
+        run: npm run build
+      - name: Validate final MFA contract
+        run: |
+          grep -Fq "mfa_enrollment_required" supabase/migrations/20260914153500_align_per_user_mfa_enrollment_override.sql
+          grep -Fq "MFA_OVERRIDE_REPAIR" deploy/spark-cli/apply-mfa-policy-repair.sh
+          grep -Fq "mfa_enrollment_required" deploy/spark-cli/apply-mfa-policy-repair.sh
+          grep -Fq "get_mfa_policy_state" src/features/auth/services/mfaOperations.ts
+          grep -Fq "activateCanonicalTotpAfterEnrollment" src/features/auth/components/TotpEnrollmentGate.tsx
+          grep -Fq "اجازه فعال‌سازی TOTP برای کاربران" src/features/security-settings/components/SecuritySettingsConsole.tsx
