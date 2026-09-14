@@ -351,12 +351,12 @@ export function SecuritySettingsConsole() {
           onChange={(v) => setDraft({ ...draft, progressive_lock_enabled: v })}
         />
         <ScheduleRow
-          label="برنامه قفل تصاعدی (ساعت)"
+          label="برنامه قفل تصاعدی (دقیقه)"
           value={draft.progressive_lock_schedule}
           onChange={(value) => setDraft({ ...draft, progressive_lock_schedule: value })}
         />
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          در حالت تصاعدی، مقادیر به‌ترتیب دفعات قفل اعمال می‌شوند؛ در حالت خاموش، مدت قفل ثابت استفاده می‌شود.
+          در حالت تصاعدی، مقادیر به‌ترتیب دفعات قفل اعمال می‌شوند و پس از رسیدن به آخرین مقدار، همان مدت برای قفل‌های بعدی تکرار می‌شود؛ در حالت خاموش، مدت قفل ثابت استفاده می‌شود.
         </p>
         <LockedAccountsPanel />
       </SectionCard>
@@ -485,10 +485,10 @@ function ScheduleRow({ label, value, onChange }: { label: string; value: string[
         dir="ltr"
         value={value.join(',')}
         onChange={(e) => onChange(e.target.value.split(',').map((item) => item.trim()))}
-        placeholder="1,6,12,24,48,72"
+        placeholder="60,360,720,1440,2880,4320"
         className="w-full px-3 py-2 text-sm font-mono border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
-      <p className="text-xs text-gray-400">۱ تا ۱۲ مقدار ساعت، هرکدام بین ۱ تا ۷۲۰، با ویرگول جدا شوند.</p>
+      <p className="text-xs text-gray-400">۱ تا ۱۲ مقدار دقیقه، هرکدام بین ۱ تا ۴۳۲۰۰، با ویرگول جدا شوند.</p>
     </div>
   );
 }
