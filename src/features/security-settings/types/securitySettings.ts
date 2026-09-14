@@ -73,6 +73,11 @@ export type SecurityErrorCode =
   | 'MFA_REQUIRED_WITHOUT_FACTOR'
   | 'INVALID_SESSION_POLICY'
   | 'PHONE_LOGIN_NOT_READY'
+  | 'CUSTOM_MFA_FACTOR_UNSUPPORTED'
+  | 'CUSTOM_MFA_REQUIRED_UNSUPPORTED'
+  | 'SMS_MFA_FACTOR_REQUIRED'
+  | 'SMS_MFA_NOT_READY'
+  | 'ACTIVE_SMS_MFA_USERS'
   | 'NO_EFFECTIVE_CHANGE'
   | 'INVALID_CHANGE_REASON'
   | 'FORBIDDEN'
@@ -125,6 +130,11 @@ export const SECURITY_ERROR_MESSAGES: Record<string, string> = {
   MFA_REQUIRED_WITHOUT_FACTOR: 'فعال‌سازی MFA الزامی بدون روش TOTP مجاز نیست.',
   INVALID_SESSION_POLICY: 'تنظیمات Session نامعتبر است.',
   PHONE_LOGIN_NOT_READY: 'ورود با تلفن هنوز آماده نیست.',
+  CUSTOM_MFA_FACTOR_UNSUPPORTED: 'در MFA سفارشی فعلی فقط عامل پیامکی پشتیبانی می‌شود.',
+  CUSTOM_MFA_REQUIRED_UNSUPPORTED: 'اجبار مستقل MFA سفارشی پشتیبانی نمی‌شود؛ اجبار MFA از سیاست سراسری MFA مدیریت می‌شود.',
+  SMS_MFA_FACTOR_REQUIRED: 'برای فعال‌بودن MFA پیامکی، عامل پیامک باید به‌عنوان عامل سفارشی فعال باشد.',
+  SMS_MFA_NOT_READY: 'زیرساخت پیامک MFA آماده نیست؛ Provider فعال پیامک را بررسی کنید.',
+  ACTIVE_SMS_MFA_USERS: 'تا زمانی که کاربر فعال با MFA پیامکی وجود دارد، غیرفعال‌کردن زیرساخت پیامکی مجاز نیست.',
   NO_EFFECTIVE_CHANGE: 'تغییری برای ذخیره وجود ندارد.',
   INVALID_CHANGE_REASON: 'دلیل تغییر باید بین ۱۰ تا ۵۰۰ کاراکتر باشد.',
   FORBIDDEN: 'دسترسی به تنظیمات امنیتی فقط برای مدیر امنیت فعال است.',
@@ -144,6 +154,8 @@ export function mapSecurityError(code: string | undefined | null): SecurityError
   const known: SecurityErrorCode[] = [
     'VERSION_CONFLICT', 'STEPUP_REQUIRED', 'NO_LOGIN_METHOD_ENABLED',
     'MFA_REQUIRED_WITHOUT_FACTOR', 'INVALID_SESSION_POLICY', 'PHONE_LOGIN_NOT_READY',
+    'CUSTOM_MFA_FACTOR_UNSUPPORTED', 'CUSTOM_MFA_REQUIRED_UNSUPPORTED',
+    'SMS_MFA_FACTOR_REQUIRED', 'SMS_MFA_NOT_READY', 'ACTIVE_SMS_MFA_USERS',
     'NO_EFFECTIVE_CHANGE', 'INVALID_CHANGE_REASON', 'FORBIDDEN', 'SESSION_EXPIRED', 'INVALID_TYPE',
     'OUT_OF_RANGE', 'UNKNOWN_KEY',
     'UNAUTHORIZED', 'SESSION_INVALID', 'SECURITY_ADMIN_REQUIRED', 'SETTINGS_NOT_FOUND',
