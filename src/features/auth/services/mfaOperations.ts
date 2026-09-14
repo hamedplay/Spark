@@ -37,6 +37,9 @@ export type MfaEnrollError =
   | 'RECENT_TOTP_REQUIRED'
   | 'SECURITY_ADMIN_REQUIRED'
   | 'PURPOSE_NOT_ALLOWED'
+  | 'MFA_POLICY_DISABLED'
+  | 'TOTP_NOT_ALLOWED'
+  | 'MFA_POLICY_UNAVAILABLE'
   | 'UNKNOWN_MFA_ERROR';
 
 export type VerifyResult = {
@@ -44,6 +47,14 @@ export type VerifyResult = {
   error: MfaEnrollError | null;
   currentAal: string | null;
 };
+
+interface MfaPolicyState {
+  ok?: boolean;
+  error?: string;
+  mfa_policy?: 'disabled' | 'optional' | 'required';
+  allow_totp_mfa?: boolean;
+  can_enroll_totp?: boolean;
+}
 
 function mapMfaError(err: unknown): MfaEnrollError {
   if (!err || typeof err !== 'object') return 'UNKNOWN_MFA_ERROR';
@@ -70,6 +81,15 @@ export async function listCurrentUserTotpFactors(): Promise<TotpFactor[]> {
 }
 
 export async function startTotpEnrollment(): Promise<TotpEnrollmentResult> {
+  const { data: policyData, error: policyError } = await supabase.rpc('get_mfa_policy_state');
+  if (policyError || !policyData) throw new Error('MFA_POLICY_UNAVAILABLE');
+
+  const policy = policyData as MfaPolicyState;
+  if (!policy.ok) throw new Error(policy.error || 'MFA_POLICY_UNAVAILABLE');
+  if (policy.can_enroll_totp !== true) {
+    throw new Error(policy.mfa_policy === 'disabled' ? 'MFA_POLICY_DISABLED' : 'TOTP_NOT_ALLOWED');
+  }
+
   const { data, error } = await supabase.auth.mfa.enroll({
     factorType: 'totp',
     friendlyName: `totp-${crypto.randomUUID()}`,
