@@ -10,6 +10,7 @@ import { TelegramConnectSection } from './Profile/TelegramConnectSection';
 import type { OrgPositionInfo, Profile } from './Profile/types';
 import { empty, LEVEL_LABELS, inp, inpDisabled } from './Profile/types';
 import { TotpFactorManager } from '../features/auth/components/TotpFactorManager';
+import { MfaMethodSelector } from '../features/auth/components/MfaMethodSelector';
 import { SessionManagementPanel } from '../features/auth/components/SessionManagementPanel';
 
 export function ProfilePage() {
@@ -19,6 +20,7 @@ export function ProfilePage() {
   const [avatarProcessing, setAvatarProcessing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [openSection, setOpenSection] = useState<'personal' | 'work' | 'social' | 'calendar' | 'security'>('personal');
+  const [mfaMethodRefreshKey, setMfaMethodRefreshKey] = useState(0);
   const [saved, setSaved] = useState(false);
   const [orgPositionInfo, setOrgPositionInfo] = useState<OrgPositionInfo | null>(null);
   const avatarPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -27,6 +29,12 @@ export function ProfilePage() {
 
   useEffect(() => {
     return () => { stopAvatarPoll(); };
+  }, []);
+
+  useEffect(() => {
+    const handleMfaMethodChanged = () => setMfaMethodRefreshKey((value) => value + 1);
+    window.addEventListener('spark:mfa-method-changed', handleMfaMethodChanged);
+    return () => window.removeEventListener('spark:mfa-method-changed', handleMfaMethodChanged);
   }, []);
 
   const fetchOrgInfo = async (positionId: string | null) => {
@@ -454,12 +462,21 @@ export function ProfilePage() {
 
       </form>
 
-      {/* Security / TOTP — outside profile form to prevent submit on Enter */}
+      {/* Security / MFA — outside profile form to prevent submit on Enter */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mt-4">
-        <SectionHeader id="security" title="امنیت حساب" subtitle="مدیریت احراز هویت دومرحله‌ای (TOTP)" />
+        <SectionHeader id="security" title="امنیت حساب" subtitle="انتخاب و مدیریت روش احراز هویت دومرحله‌ای" />
         {openSection === 'security' && (
           <div className="p-6 space-y-6">
-            <TotpFactorManager />
+            <MfaMethodSelector
+              refreshKey={mfaMethodRefreshKey}
+              onRequestTotpEnrollment={() => {
+                document.getElementById('totp-factor-manager')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              onCanonicalStateChanged={() => setMfaMethodRefreshKey((value) => value + 1)}
+            />
+            <div id="totp-factor-manager" className="border-t border-gray-100 dark:border-gray-700 pt-6">
+              <TotpFactorManager />
+            </div>
             <div className="border-t border-gray-100 dark:border-gray-700 pt-6">
               <SessionManagementPanel />
             </div>
