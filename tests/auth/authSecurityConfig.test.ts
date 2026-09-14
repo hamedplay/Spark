@@ -7,6 +7,7 @@ const root = process.cwd();
 const read = (relativePath: string) => readFileSync(join(root, relativePath), 'utf8');
 
 const retiredLoginEdge = read('supabase/functions/request-phone-login-otp/index.ts');
+const retiredLoginRoute = read('supabase/functions/_shared/retiredPhoneLoginRoute.ts');
 const runtimeEdge = read('supabase/functions/check-phone-password-reset-runtime/index.ts');
 const phoneAuthCard = read('src/components/PortalConfig/PhoneAuthCard.tsx');
 const identityRepairCard = read('src/components/PortalConfig/IdentityRepairCard.tsx');
@@ -16,21 +17,23 @@ const securityConsole = read('src/features/security-settings/components/Security
 const hardeningMigration = read('supabase/migrations/20260914093000_align_security_portal_runtime_controls.sql');
 
 describe('Auth and security configuration', () => {
-  it('keeps the retired phone-login route closed and never dispatches OTP', () => {
-    assert.match(retiredLoginEdge, /get_phone_auth_config/);
-    assert.match(retiredLoginEdge, /config\.origins\.includes\(origin\)/);
-    assert.match(retiredLoginEdge, /status:\s*410/);
-    assert.match(retiredLoginEdge, /LOGIN_ROUTE_REPLACED/);
-    assert.doesNotMatch(retiredLoginEdge, /signInWithOtp/);
-    assert.doesNotMatch(retiredLoginEdge, /req\.json\(\)/);
+  it('keeps the retired phone-login entrypoint delegated to the closed shared handler', () => {
+    assert.match(retiredLoginEdge, /retiredPhoneLoginRoute/);
+    assert.match(retiredLoginEdge, /Deno\.serve\(retiredPhoneLoginRoute\)/);
+    assert.match(retiredLoginRoute, /get_phone_auth_config/);
+    assert.match(retiredLoginRoute, /config\.origins\.includes\(origin\)/);
+    assert.match(retiredLoginRoute, /status:\s*410/);
+    assert.match(retiredLoginRoute, /LOGIN_ROUTE_REPLACED/);
+    assert.doesNotMatch(retiredLoginRoute, /signInWithOtp/);
+    assert.doesNotMatch(retiredLoginRoute, /req\.json\(\)/);
   });
 
   it('uses an exact database origin allowlist without wildcard CORS', () => {
-    const configPosition = retiredLoginEdge.indexOf('await getConfig()');
-    const methodPosition = retiredLoginEdge.indexOf('req.method === "OPTIONS"');
+    const configPosition = retiredLoginRoute.indexOf('await getConfig()');
+    const methodPosition = retiredLoginRoute.indexOf('req.method === "OPTIONS"');
     assert.ok(configPosition > -1 && configPosition < methodPosition);
-    assert.doesNotMatch(retiredLoginEdge, /Access-Control-Allow-Origin["']:\s*["']\*["']/);
-    assert.match(retiredLoginEdge, /"Vary": "Origin"/);
+    assert.doesNotMatch(retiredLoginRoute, /Access-Control-Allow-Origin["']:\s*["']\*["']/);
+    assert.match(retiredLoginRoute, /"Vary": "Origin"/);
   });
 
   it('keeps public auth RPC calls bound to the Supabase client', () => {
