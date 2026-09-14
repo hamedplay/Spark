@@ -16,9 +16,7 @@ export function isoToJ(iso: string | null | undefined) {
     const m = moment(iso, 'YYYY-MM-DD');
     if (!m.isValid()) return { jy: 0, jm: 0, jd: 0 };
     return { jy: m.jYear(), jm: m.jMonth() + 1, jd: m.jDate() };
-  } catch {
-    return { jy: 0, jm: 0, jd: 0 };
-  }
+  } catch { return { jy: 0, jm: 0, jd: 0 }; }
 }
 
 export function jToIso(jy: number, jm: number, jd: number): string {
@@ -61,11 +59,18 @@ export const emptyNew: AdminProfile = {
 };
 
 export function menuItems(p: AdminProfile) {
+  const pendingRegistration = p.account_status === 'PENDING_ADMIN_APPROVAL';
+
   return [
     { icon: Pencil, label: 'ویرایش اطلاعات', panel: 'edit' as Panel, color: 'text-blue-500' },
     { icon: Crown, label: 'مدیریت سطح دسترسی', panel: 'roles' as Panel, color: 'text-purple-500' },
     { icon: KeyRound, label: 'تغییر رمز عبور', panel: 'password' as Panel, color: 'text-amber-500' },
-    { icon: p.is_active !== false ? UserX : UserCheck, label: p.is_active !== false ? 'غیرفعال کردن' : 'فعال کردن', panel: 'deactivate' as Panel, color: p.is_active !== false ? 'text-red-500' : 'text-green-500' },
+    {
+      icon: pendingRegistration ? UserCheck : (p.is_active !== false ? UserX : UserCheck),
+      label: pendingRegistration ? 'بررسی ثبت‌نام' : (p.is_active !== false ? 'غیرفعال کردن' : 'فعال کردن'),
+      panel: 'deactivate' as Panel,
+      color: pendingRegistration ? 'text-amber-500' : (p.is_active !== false ? 'text-red-500' : 'text-green-500'),
+    },
     { icon: ShieldCheck, label: 'حقوق دسترسی', panel: 'access' as Panel, color: 'text-teal-500' },
     { icon: Phone, label: 'همگام‌سازی شماره', panel: 'phonesync' as Panel, color: 'text-teal-500' },
     { icon: Link2, label: 'ارتباطات دستی', panel: 'relations' as Panel, color: 'text-blue-500' },
