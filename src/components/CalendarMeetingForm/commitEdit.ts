@@ -281,6 +281,40 @@ export async function commitCalendarMeetingEdit({
         }
       }
 
+      if (!isFirstSchedule && diff.added_participant_ids.length > 0) {
+        const eventType = getMeetingTemplateKey('organizer', 'change');
+        const addedParticipantNames = diff.added_participant_ids
+          .map(participantId => participantNameMap[participantId] || '')
+          .filter(Boolean)
+          .join('، ');
+        const dedupeKey = `${operationId}:${diff.meeting_id}:${userId}:organizer:${eventType}:participant-added`;
+        if (!sentNotificationKeys.has(dedupeKey)) {
+          sentNotificationKeys.add(dedupeKey);
+          const result = await insertNotification({
+            userId,
+            category: 'meeting',
+            eventType,
+            audience: 'organizer',
+            fallbackTitle: 'تغییر شرکت‌کنندگان جلسه',
+            fallbackMessage: `${addedParticipantNames || 'شرکت‌کننده جدید'} به جلسه "${meetingSubject}" اضافه شد${jalaliDate ? ` در ${jalaliDate}` : ''}.`,
+            placeholders: {
+              ...currentPlaceholders,
+              full_name: senderName,
+              recipient_greeting: `${senderName} گرامی`,
+              organizer_name: senderName,
+              participant_name: addedParticipantNames || 'شرکت‌کننده جدید',
+            },
+            meetingId: diff.meeting_id,
+            senderId: userId,
+            senderName,
+            actionUrl: 'calendar',
+            channels: { inApp: false, sms: true, bale: false },
+            eventKey: dedupeKey,
+          });
+          internalSmsResults.push(result);
+        }
+      }
+
       if (diff.removed_participant_ids.length) {
         const eventType = getMeetingTemplateKey('participant', 'cancel');
         for (const recipientId of diff.removed_participant_ids) {
