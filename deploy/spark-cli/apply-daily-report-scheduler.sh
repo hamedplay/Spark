@@ -73,3 +73,9 @@ if [[ -f "$MFA_POLICY_REPAIR_SCRIPT" ]]; then
   echo "=== MFA policy compatibility repair ==="
   bash "$MFA_POLICY_REPAIR_SCRIPT"
 fi
+
+CUSTOM_MFA_REPAIR_SCRIPT="${SCRIPT_DIR}/apply-custom-mfa-repair.sh"
+if [[ -f "$CUSTOM_MFA_REPAIR_SCRIPT" ]]; then
+  echo "=== Custom SMS MFA compatibility repair ==="
+  bash "$CUSTOM_MFA_REPAIR_SCRIPT"
+fi
