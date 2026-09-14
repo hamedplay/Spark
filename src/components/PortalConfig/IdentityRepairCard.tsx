@@ -12,6 +12,9 @@ interface DryRunSummary {
   PHONE_ONLY_AUTH_ORPHAN?: number;
   PROFILE_PHONE_MISSING?: number;
   PROFILE_DUPLICATE?: number;
+  INVALID_PHONE?: number;
+  AUTH_USER_MISSING?: number;
+  PHONE_USED_BY_OTHER_AUTH_USER?: number;
   AUTH_PHONE_CONFLICT?: number;
   SAFE_TO_SYNC?: number;
   AUTH_PROFILE_MISMATCH?: number;
@@ -40,27 +43,35 @@ interface RepairResponse {
   message?: string;
 }
 
+type ConfirmAction = 'sync' | 'repair' | null;
+
 const STATUS_LABELS: Record<string, string> = {
   ALREADY_SYNCED: 'کاملاً همگام‌شده',
   IDENTITY_REPAIR_REQUIRED: 'نیازمند ترمیم هویت',
   AUTH_PHONE_UNCONFIRMED: 'تأییدنشده (نیازمند تأیید شماره)',
   PHONE_ONLY_AUTH_ORPHAN: 'حساب یتیم موبایلی',
   PROFILE_PHONE_MISSING: 'بدون شماره پروفایل',
-  PROFILE_DUPLICATE: 'شماره تکراری',
-  AUTH_PHONE_CONFLICT: 'تداخل شماره',
+  PROFILE_DUPLICATE: 'شماره تکراری در پروفایل',
+  INVALID_PHONE: 'شماره پروفایل نامعتبر',
+  AUTH_USER_MISSING: 'فاقد حساب احراز هویت',
+  PHONE_USED_BY_OTHER_AUTH_USER: 'شماره متعلق به حساب Auth دیگر',
+  AUTH_PHONE_CONFLICT: 'تداخل شماره Auth و پروفایل',
   SAFE_TO_SYNC: 'آماده همگام‌سازی',
-  AUTH_PROFILE_MISMATCH: 'عدم تطابق',
+  AUTH_PROFILE_MISMATCH: 'ناهمگونی هویت Auth',
 };
 
 const STATUS_ORDER = [
   'ALREADY_SYNCED',
   'IDENTITY_REPAIR_REQUIRED',
   'AUTH_PHONE_UNCONFIRMED',
+  'SAFE_TO_SYNC',
   'PHONE_ONLY_AUTH_ORPHAN',
   'PROFILE_PHONE_MISSING',
   'PROFILE_DUPLICATE',
+  'INVALID_PHONE',
+  'AUTH_USER_MISSING',
+  'PHONE_USED_BY_OTHER_AUTH_USER',
   'AUTH_PHONE_CONFLICT',
-  'SAFE_TO_SYNC',
   'AUTH_PROFILE_MISMATCH',
 ];
 
@@ -76,6 +87,8 @@ const ERROR_LABELS: Record<string, string> = {
   AUTH_USER_NOT_ELIGIBLE: 'حساب احراز هویت برای ترمیم واجد شرایط نیست.',
   AUTH_PHONE_CONFLICT: 'شماره Auth با شماره پروفایل تعارض دارد.',
   AUTH_PHONE_UNCONFIRMED: 'شماره موبایل حساب هنوز تأیید نشده است.',
+  AUTH_UPDATE_FAILED: 'ثبت شماره موبایل در سامانه احراز هویت ناموفق بود.',
+  VERIFY_MISMATCH: 'شماره در Auth ثبت شد اما تأیید نهایی با پروفایل منطبق نبود.',
   IDENTITY_VERIFY_UNAVAILABLE: 'سرویس بررسی هویت در دسترس نیست؛ هیچ تغییری اعمال نشد.',
   IDENTITY_STATE_CONFLICT: 'هویت موجود غیرعادی است و به بررسی دستی نیاز دارد.',
   IDENTITY_REPAIR_FAILED: 'ایجاد هویت موبایلی ناموفق بود.',
@@ -101,8 +114,9 @@ export function IdentityRepairCard() {
   const [summary, setSummary] = useState<DryRunSummary | null>(null);
   const [busy, setBusy] = useState<string>('');
   const [canaryResult, setCanaryResult] = useState<CanaryResult | null>(null);
+  const [syncResult, setSyncResult] = useState<RepairResponse | null>(null);
   const [repairResult, setRepairResult] = useState<RepairResponse | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
   const stepUp = useSecurityStepUp({ purpose: 'account_security_change' });
@@ -146,17 +160,48 @@ export function IdentityRepairCard() {
     }
   }, []);
 
+  const refreshSummary = useCallback(async () => {
+    const result = await invokeBulkSync('dry_run');
+    if (result?.summary) setSummary(result.summary as DryRunSummary);
+  }, [invokeBulkSync]);
+
   const handleCheckStatus = useCallback(async () => {
     setBusy('dry_run');
     setCanaryResult(null);
+    setSyncResult(null);
     setRepairResult(null);
     try {
-      const result = await invokeBulkSync('dry_run');
-      if (result?.summary) setSummary(result.summary as DryRunSummary);
+      await refreshSummary();
     } finally {
       setBusy('');
     }
-  }, [invokeBulkSync]);
+  }, [refreshSummary]);
+
+  const handleSync = useCallback(async () => {
+    setConfirmAction(null);
+    setBusy('execute');
+    setSyncResult(null);
+    setCanaryResult(null);
+    try {
+      const result = await stepUp.requireStepUp(() => invokeBulkSync('execute'));
+      if (result) {
+        setSyncResult(result);
+        if ((result.failed ?? 0) > 0) {
+          toast.error(`${result.failed} همگام‌سازی ناموفق`);
+        } else {
+          toast.success(`${result.succeeded ?? 0} شماره با Auth همگام شد`);
+        }
+        await refreshSummary();
+      }
+    } catch (error) {
+      const code = error instanceof EdgeFunctionCallError ? error.code : 'EDGE_FUNCTION_ERROR';
+      const message = errorLabel(code);
+      setErrorMessage(message);
+      toast.error(message);
+    } finally {
+      setBusy('');
+    }
+  }, [invokeBulkSync, refreshSummary, stepUp]);
 
   const handleCanary = useCallback(async () => {
     setBusy('identity_canary');
@@ -165,56 +210,45 @@ export function IdentityRepairCard() {
       const result = await stepUp.requireStepUp(() => invokeBulkSync('identity_canary'));
       if (result?.canary_result) {
         setCanaryResult(result.canary_result);
-        if (result.canary_passed) toast.success('آزمایش ایمن موفق بود');
-        else toast.error('آزمایش ایمن ناموفق بود');
+        if (result.canary_passed) toast.success('آزمایش ایمن ترمیم هویت موفق بود');
+        else toast.error('آزمایش ایمن ترمیم هویت ناموفق بود');
+        await refreshSummary();
       }
     } catch (error) {
       const code = error instanceof EdgeFunctionCallError ? error.code : 'EDGE_FUNCTION_ERROR';
-      if (code === 'MFA_STEP_UP_REQUIRED') {
-        const message = ERROR_LABELS.MFA_STEP_UP_REQUIRED;
-        setErrorMessage(message);
-        toast.error(message);
-      } else {
-        const message = errorLabel(code);
-        setErrorMessage(message);
-        toast.error(message);
-      }
+      const message = errorLabel(code);
+      setErrorMessage(message);
+      toast.error(message);
     } finally {
       setBusy('');
     }
-  }, [invokeBulkSync, stepUp]);
+  }, [invokeBulkSync, refreshSummary, stepUp]);
 
   const handleRepair = useCallback(async () => {
-    setShowConfirm(false);
+    setConfirmAction(null);
     setBusy('identity_repair');
     setRepairResult(null);
     try {
       const result = await stepUp.requireStepUp(() => invokeBulkSync('identity_repair'));
       if (result) {
         setRepairResult(result);
-        if (result.failed && result.failed > 0) toast.error(`${result.failed} کاربر ناموفق`);
-        else toast.success('ترمیم تکمیل شد');
-        const dryResult = await invokeBulkSync('dry_run');
-        if (dryResult?.summary) setSummary(dryResult.summary as DryRunSummary);
+        if ((result.failed ?? 0) > 0) toast.error(`${result.failed} کاربر ناموفق`);
+        else toast.success('ترمیم هویت‌ها تکمیل شد');
+        await refreshSummary();
       }
     } catch (error) {
       const code = error instanceof EdgeFunctionCallError ? error.code : 'EDGE_FUNCTION_ERROR';
-      if (code === 'MFA_STEP_UP_REQUIRED') {
-        const message = ERROR_LABELS.MFA_STEP_UP_REQUIRED;
-        setErrorMessage(message);
-        toast.error(message);
-      } else {
-        const message = errorLabel(code);
-        setErrorMessage(message);
-        toast.error(message);
-      }
+      const message = errorLabel(code);
+      setErrorMessage(message);
+      toast.error(message);
     } finally {
       setBusy('');
     }
-  }, [invokeBulkSync, stepUp]);
+  }, [invokeBulkSync, refreshSummary, stepUp]);
 
   if (loading || !isSecurityAdmin) return null;
 
+  const safeToSync = summary?.SAFE_TO_SYNC ?? 0;
   const repairNeeded = summary?.IDENTITY_REPAIR_REQUIRED ?? 0;
 
   return (
@@ -254,14 +288,26 @@ export function IdentityRepairCard() {
         )}
 
         {summary && (
-          <div className="grid grid-cols-2 gap-2">
-            {STATUS_ORDER.filter(key => summary[key] !== undefined).map(key => (
-              <div key={key} className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm">
-                <span className="text-gray-600 dark:text-gray-300">{STATUS_LABELS[key] || 'وضعیت ناشناخته'}</span>
-                <span className="font-bold text-gray-800 dark:text-white">{summary[key] ?? 0}</span>
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              {STATUS_ORDER.filter(key => summary[key] !== undefined).map(key => (
+                <div key={key} className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm">
+                  <span className="text-gray-600 dark:text-gray-300">{STATUS_LABELS[key] || 'وضعیت ناشناخته'}</span>
+                  <span className="font-bold text-gray-800 dark:text-white">{summary[key] ?? 0}</span>
+                </div>
+              ))}
+            </div>
+            {safeToSync > 0 && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+                {safeToSync} کاربر شماره معتبر در پروفایل دارند اما شماره Auth آن‌ها هنوز ثبت نشده است. ابتدا «همگام‌سازی آماده‌ها» را اجرا کنید؛ سپس وضعیت هویت موبایلی دوباره بررسی می‌شود.
               </div>
-            ))}
-          </div>
+            )}
+            {safeToSync === 0 && repairNeeded > 0 && (
+              <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+                شماره Auth این کاربران با پروفایل منطبق است، اما هویت موبایلی canonical آن‌ها ناقص است. ابتدا «اجرای آزمایش ایمن» را اجرا کنید.
+              </div>
+            )}
+          </>
         )}
 
         <div className="flex flex-wrap gap-2 pt-2">
@@ -274,6 +320,14 @@ export function IdentityRepairCard() {
             بررسی وضعیت
           </button>
           <button
+            onClick={() => setConfirmAction('sync')}
+            disabled={Boolean(busy) || safeToSync === 0}
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-xl text-sm transition-colors disabled:opacity-50"
+          >
+            {busy === 'execute' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            همگام‌سازی آماده‌ها
+          </button>
+          <button
             onClick={handleCanary}
             disabled={Boolean(busy) || repairNeeded === 0}
             className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:hover:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-xl text-sm transition-colors disabled:opacity-50"
@@ -282,14 +336,32 @@ export function IdentityRepairCard() {
             اجرای آزمایش ایمن
           </button>
           <button
-            onClick={() => setShowConfirm(true)}
+            onClick={() => setConfirmAction('repair')}
             disabled={Boolean(busy) || repairNeeded === 0}
             className="flex items-center gap-1.5 px-3 py-2 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
           >
             {busy === 'identity_repair' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
-            ترمیم کاربران
+            ترمیم هویت‌ها
           </button>
         </div>
+
+        {syncResult && (
+          <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-1.5">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">نتیجه همگام‌سازی شماره‌ها</p>
+            <div className="flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
+              <span>کل: {syncResult.total ?? 0}</span>
+              <span className="text-green-600 dark:text-green-400">موفق: {syncResult.succeeded ?? 0}</span>
+              <span className="text-red-600 dark:text-red-400">ناموفق: {syncResult.failed ?? 0}</span>
+            </div>
+            {syncResult.results?.some(r => !r.success && r.error) && (
+              <div className="space-y-1 mt-2">
+                {syncResult.results.filter(r => !r.success && r.error).map((r, i) => (
+                  <p key={i} className="text-xs text-red-600 dark:text-red-400">{errorLabel(r.error)}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {canaryResult && (
           <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-1.5">
@@ -308,10 +380,11 @@ export function IdentityRepairCard() {
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
               نتیجه آزمایش ایمن: {repairResult.canary_passed ? 'موفق' : 'ناموفق'}
             </p>
-            <div className="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
               <span>کل: {repairResult.total ?? 0}</span>
               <span className="text-green-600 dark:text-green-400">موفق: {repairResult.succeeded ?? 0}</span>
               <span className="text-red-600 dark:text-red-400">ناموفق: {repairResult.failed ?? 0}</span>
+              {(repairResult.skipped ?? 0) > 0 && <span>ردشده: {repairResult.skipped}</span>}
             </div>
             {repairResult.results?.some(r => !r.success && r.error) && (
               <div className="space-y-1 mt-2">
@@ -323,29 +396,32 @@ export function IdentityRepairCard() {
           </div>
         )}
 
-        {showConfirm && (
+        {confirmAction && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full space-y-4">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-amber-500" />
-                <h3 className="font-bold text-gray-800 dark:text-white">تأیید ترمیم گروهی</h3>
+                <h3 className="font-bold text-gray-800 dark:text-white">
+                  {confirmAction === 'sync' ? 'تأیید همگام‌سازی شماره‌ها' : 'تأیید ترمیم گروهی هویت'}
+                </h3>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-300">
-                ابتدا هویت یک کاربر از مسیر رسمی احراز هویت، به‌صورت آزمایشی ترمیم و بررسی می‌شود.
-                فقط در صورت موفقیت کامل، ترمیم بقیه کاربران آغاز خواهد شد.
+                {confirmAction === 'sync'
+                  ? `فقط ${safeToSync} حسابی که در وضعیت «آماده همگام‌سازی» هستند بررسی می‌شوند و شماره پروفایل آن‌ها در Auth ثبت و مجدداً تأیید می‌شود. حساب‌های دارای تعارض تغییر نمی‌کنند.`
+                  : 'ابتدا هویت یک کاربر از مسیر رسمی احراز هویت، به‌صورت آزمایشی ترمیم و بررسی می‌شود. فقط در صورت موفقیت کامل، ترمیم بقیه کاربران آغاز خواهد شد.'}
               </p>
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
                 پس از تأیید، کد ۶ رقمی احراز هویت دومرحله‌ای از شما خواسته می‌شود.
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setShowConfirm(false)}
+                  onClick={() => setConfirmAction(null)}
                   className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition-colors"
                 >
                   انصراف
                 </button>
                 <button
-                  onClick={handleRepair}
+                  onClick={() => { void (confirmAction === 'sync' ? handleSync() : handleRepair()); }}
                   className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors"
                 >
                   تأیید و شروع
