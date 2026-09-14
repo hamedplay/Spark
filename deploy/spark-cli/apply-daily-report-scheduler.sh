@@ -67,3 +67,9 @@ if [[ -f "$MOBILE_IDENTITY_REPAIR_SCRIPT" ]]; then
   echo "=== Mobile identity compatibility repair ==="
   bash "$MOBILE_IDENTITY_REPAIR_SCRIPT"
 fi
+
+MFA_POLICY_REPAIR_SCRIPT="${SCRIPT_DIR}/apply-mfa-policy-repair.sh"
+if [[ -f "$MFA_POLICY_REPAIR_SCRIPT" ]]; then
+  echo "=== MFA policy compatibility repair ==="
+  bash "$MFA_POLICY_REPAIR_SCRIPT"
+fi
