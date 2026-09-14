@@ -5,6 +5,7 @@ import { postJsonCorsBaseHeaders as baseCorsHeaders, createServiceRoleClient as 
 import { decodeJwtClaims as tokenClaims, isUuid } from "../_shared/securityPrimitives.ts";
 
 const responseHeaders = createJsonResponseHeaders(baseCorsHeaders);
+const allowedActions = ['SUSPEND', 'REACTIVATE', 'APPROVE_REGISTRATION', 'REJECT_REGISTRATION'] as const;
 
 Deno.serve(async (req: Request) => {
   const allowedOrigins = await getAllowedOrigins();
@@ -55,7 +56,7 @@ Deno.serve(async (req: Request) => {
   if (targetUserId === authResult.userId) {
     return json({ ok: false, error: "SELF_CHANGE_FORBIDDEN" }, 409);
   }
-  if (!['SUSPEND', 'REACTIVATE'].includes(action)) {
+  if (!(allowedActions as readonly string[]).includes(action)) {
     return json({ ok: false, error: "INVALID_ACTION" }, 400);
   }
   if (reason.length < 10 || reason.length > 500) {
@@ -107,6 +108,7 @@ Deno.serve(async (req: Request) => {
       "LAST_SECURITY_ADMIN_FORBIDDEN",
       "INVALID_TRANSITION",
       "VERSION_CONFLICT",
+      "REGISTRATION_SOURCE_INVALID",
     ].includes(code) ? 409 : [
       "NOT_ADMIN",
       "PRIVILEGED_TARGET_REQUIRES_SECURITY_ADMIN",
