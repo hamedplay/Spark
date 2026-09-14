@@ -364,9 +364,15 @@ export function PortalConfigPage({ currentUserId }: Props) {
       case 'security':
         return (
           <div className="space-y-5">
-            <SectionCard title="وضعیت دسترسی سامانه" icon={Shield} color="red">
-              {cfgs('security').filter(c => VISIBLE_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
-            </SectionCard>
+            {isAdmin ? (
+              <SectionCard title="وضعیت دسترسی سامانه" icon={Shield} color="red">
+                {cfgs('security').filter(c => VISIBLE_SECURITY_CONFIG_KEYS.has(c.key)).map(c => <ConfigField key={c.id} entry={c} onSave={saveConfig} />)}
+              </SectionCard>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                وضعیت تعمیر و نگهداری فقط توسط مدیر سامانه قابل تغییر است. تنظیمات امنیتی تخصصی پایین‌تر همچنان بر اساس سطح دسترسی Security Admin کنترل می‌شوند.
+              </div>
+            )}
             <PhoneAuthCard />
             <IdentityRepairCard />
             <SecuritySettingsConsole />
