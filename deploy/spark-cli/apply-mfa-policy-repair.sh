@@ -5,6 +5,7 @@ SPARK_ROOT="${SPARK_ROOT:-/opt/spark}"
 SUPABASE_ROOT="${SUPABASE_ROOT:-/opt/spark-supabase}"
 DB_REPAIR_ROOT="${SPARK_ROOT}/deploy/spark-cli/db-repairs"
 MFA_POLICY_REPAIR="${DB_REPAIR_ROOT}/20260914152500_fix_mfa_policy_console_contract.sql"
+MFA_OVERRIDE_REPAIR="${DB_REPAIR_ROOT}/20260914153500_align_per_user_mfa_enrollment_override.sql"
 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || exec sudo -E "$0" "$@"
 [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || {
@@ -29,6 +30,8 @@ contract_state() {
         AND position('factor_type = ''totp''' in pg_get_functiondef('private.set_auth_security_settings_patch(integer,jsonb,text)'::regprocedure)) > 0
         AND position('assurance_level = ''aal2''' in pg_get_functiondef('private.set_auth_security_settings_patch(integer,jsonb,text)'::regprocedure)) > 0
         AND to_regprocedure('public.get_mfa_policy_state()') IS NOT NULL
+        AND position('mfa_enrollment_required' in pg_get_functiondef('public.get_mfa_policy_state()'::regprocedure)) > 0
+        AND position('user_mfa_enrollment_required' in pg_get_functiondef('public.get_mfa_policy_state()'::regprocedure)) > 0
         AND has_function_privilege('authenticated', 'public.get_mfa_policy_state()', 'EXECUTE')
         AND NOT has_function_privilege('anon', 'public.get_mfa_policy_state()', 'EXECUTE')
        THEN 'ready' ELSE 'stale' END;"
@@ -40,9 +43,15 @@ if [[ "$state" != "ready" ]]; then
     echo "Spark MFA policy repair: required repair asset not found: ${MFA_POLICY_REPAIR}" >&2
     exit 1
   }
+  [[ -f "$MFA_OVERRIDE_REPAIR" ]] || {
+    echo "Spark MFA policy repair: required repair asset not found: ${MFA_OVERRIDE_REPAIR}" >&2
+    exit 1
+  }
 
   echo "Spark MFA policy repair: aligning MFA policy console contract..."
   compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$MFA_POLICY_REPAIR"
+  echo "Spark MFA policy repair: aligning per-user enrollment override..."
+  compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <"$MFA_OVERRIDE_REPAIR"
 else
   echo "Spark MFA policy repair: contract is current."
 fi
