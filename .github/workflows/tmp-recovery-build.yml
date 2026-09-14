@@ -1,3 +1,4 @@
+# Trigger build-only validation; remove after completion.
 name: Temporary recovery build validation
 
 on:
