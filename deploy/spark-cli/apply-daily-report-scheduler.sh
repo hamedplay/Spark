@@ -79,3 +79,9 @@ if [[ -f "$CUSTOM_MFA_REPAIR_SCRIPT" ]]; then
   echo "=== Custom SMS MFA compatibility repair ==="
   bash "$CUSTOM_MFA_REPAIR_SCRIPT"
 fi
+
+REGISTRATION_REPAIR_SCRIPT="${SCRIPT_DIR}/apply-registration-repair.sh"
+if [[ -f "$REGISTRATION_REPAIR_SCRIPT" ]]; then
+  echo "=== Registration security compatibility repair ==="
+  bash "$REGISTRATION_REPAIR_SCRIPT"
+fi
