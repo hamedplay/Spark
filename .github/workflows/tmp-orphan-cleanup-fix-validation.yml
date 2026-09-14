@@ -1,0 +1,32 @@
+name: Temporary orphan cleanup fix validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20260914131000_fix_orphan_cleanup_stepup_grant_schema.sql'
+      - 'deploy/spark-cli/apply-db-repairs.sh'
+      - '.github/workflows/tmp-orphan-cleanup-fix-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate repair runner syntax
+        run: bash -n deploy/spark-cli/apply-db-repairs.sh
+      - name: Validate migration contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          sql = Path('supabase/migrations/20260914131000_fix_orphan_cleanup_stepup_grant_schema.sql').read_text()
+          runner = Path('deploy/spark-cli/apply-db-repairs.sh').read_text()
+          assert 'g.revoked_at' not in sql
+          assert "g.factor_type = 'totp'" in sql
+          assert "g.assurance_level = 'aal2'" in sql
+          assert 'g.consumed_at IS NULL' in sql
+          assert '20260914131000_fix_orphan_cleanup_stepup_grant_schema.sql' in runner
+          assert "position('revoked_at'" in runner
+          print('orphan cleanup grant schema fix: OK')
+          PY
