@@ -1,0 +1,196 @@
+name: Temporary recovery settings alignment
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-align-recovery-settings.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply scoped recovery alignment
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ui_path = Path('src/features/security-settings/components/SecuritySettingsConsole.tsx')
+          ui = ui_path.read_text()
+
+          replacements = [
+              (
+                  "        setDraft({ ...result.settings });",
+                  """        setDraft({
+          ...result.settings,
+          unified_recovery_enabled: result.settings.recovery_enabled
+            ? result.settings.unified_recovery_enabled
+            : false,
+        });""",
+              ),
+              (
+                  """        <ToggleRow label=\"بازیابی فعال\" value={draft.recovery_enabled} onChange={(v) => setDraft({ ...draft, recovery_enabled: v })} />
+        <ToggleRow
+          label=\"بازیابی یکپارچه\"
+          value={draft.unified_recovery_enabled}
+          onChange={(v) => setDraft({ ...draft, unified_recovery_enabled: v })}
+        />""",
+                  """        <ToggleRow
+          label=\"بازیابی فعال\"
+          value={draft.recovery_enabled}
+          onChange={(v) => setDraft({
+            ...draft,
+            recovery_enabled: v,
+            unified_recovery_enabled: v ? draft.unified_recovery_enabled : false,
+          })}
+        />
+        <ToggleRow
+          label=\"بازیابی یکپارچه\"
+          value={draft.unified_recovery_enabled}
+          disabled={!draft.recovery_enabled}
+          onChange={(v) => setDraft({ ...draft, unified_recovery_enabled: draft.recovery_enabled && v })}
+        />
+        <p className=\"text-xs text-gray-500 dark:text-gray-400\">
+          بازیابی یکپارچه فقط زمانی فعال است که کل قابلیت بازیابی روشن باشد.
+        </p>""",
+              ),
+              (
+                  "        <ReadonlyToggle label=\"کدهای بازیابی\" value={draft.allow_recovery_codes} />",
+                  """        <ReadonlyToggle
+          label=\"کدهای بازیابی\"
+          value={draft.allow_recovery_codes}
+          description=\"کدهای بازیابی در Runtime فعلی MFA پشتیبانی نمی‌شوند و از این صفحه قابل فعال‌سازی نیستند.\"
+        />""",
+              ),
+              (
+                  """function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className=\"flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl\">
+      <span className=\"text-sm font-medium text-gray-700 dark:text-gray-300\">{label}</span>
+      <button
+        type=\"button\"
+        onClick={() => onChange(!value)}
+        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+      >""",
+                  """function ToggleRow({ label, value, onChange, disabled = false }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl ${disabled ? 'opacity-60' : ''}`}>
+      <span className=\"text-sm font-medium text-gray-700 dark:text-gray-300\">{label}</span>
+      <button
+        type=\"button\"
+        disabled={disabled}
+        onClick={() => onChange(!value)}
+        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'} ${disabled ? 'cursor-not-allowed' : ''}`}
+      >""",
+              ),
+              (
+                  """function ReadonlyToggle({ label, value }: { label: string; value: boolean }) {
+  return (
+    <div className=\"flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl opacity-60\">
+      <div>
+        <span className=\"text-sm font-medium text-gray-700 dark:text-gray-300\">{label}</span>
+        <p className=\"text-xs text-gray-400 mt-0.5\">این گزینه از مسیر تخصصی خودش مدیریت می‌شود.</p>""",
+                  """function ReadonlyToggle({ label, value, description = 'این گزینه از مسیر تخصصی خودش مدیریت می‌شود.' }: { label: string; value: boolean; description?: string }) {
+  return (
+    <div className=\"flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl opacity-60\">
+      <div>
+        <span className=\"text-sm font-medium text-gray-700 dark:text-gray-300\">{label}</span>
+        <p className=\"text-xs text-gray-400 mt-0.5\">{description}</p>""",
+              ),
+          ]
+
+          for old, new in replacements:
+              count = ui.count(old)
+              if count != 1:
+                  raise SystemExit(f'UI replacement expected once, found {count}: {old[:80]!r}')
+              ui = ui.replace(old, new, 1)
+          ui_path.write_text(ui)
+
+          edge_path = Path('supabase/functions/unified-recovery/index.ts')
+          edge = edge_path.read_text()
+
+          old_serve = '''Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
+  if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
+
+  try {'''
+          new_serve = '''Deno.serve(async (req: Request) => {
+  const admin = adminClient();
+  const origin = req.headers.get("Origin");
+  const { data: phoneAuthConfig, error: phoneAuthConfigError } = await admin.rpc("get_phone_auth_config");
+  const phoneAuthRow = Array.isArray(phoneAuthConfig) ? phoneAuthConfig[0] : phoneAuthConfig;
+  const allowedOrigins = Array.isArray(phoneAuthRow?.allowed_origins)
+    ? phoneAuthRow.allowed_origins.filter((value: unknown): value is string => typeof value === "string")
+    : [];
+  const originAllowed = typeof origin === "string" && allowedOrigins.includes(origin);
+
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
+  if (phoneAuthConfigError || !originAllowed) return json({ ok: false, error: "INVALID_ORIGIN" }, 400);
+  if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
+
+  try {'''
+          if edge.count(old_serve) != 1:
+              raise SystemExit('Edge serve prelude not found exactly once')
+          edge = edge.replace(old_serve, new_serve, 1)
+
+          old_admin = '''    const mode = body.mode ?? "request";
+    const admin = adminClient();
+    const ipHash = await recoveryHmac(clientIp(req), "recovery_ip");'''
+          new_admin = '''    const mode = body.mode ?? "request";
+    const ipHash = await recoveryHmac(clientIp(req), "recovery_ip");'''
+          if edge.count(old_admin) != 1:
+              raise SystemExit('Edge duplicate admin block not found exactly once')
+          edge = edge.replace(old_admin, new_admin, 1)
+
+          old_policy = '''      const otpTtlSeconds = Number(settings.recovery_otp_ttl_seconds ?? 600);
+      const maxAttempts = Number(settings.recovery_max_attempts ?? 5);
+      if (!Number.isInteger(otpTtlSeconds) || otpTtlSeconds < 60 || otpTtlSeconds > 3600 ||
+          !Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
+        return json({ ok: false, error: "RECOVERY_CONFIG_INVALID" }, 503);
+      }
+
+      const target = await resolveTarget('''
+          new_policy = '''      const otpTtlSeconds = Number(settings.recovery_otp_ttl_seconds ?? 600);
+      const maxAttempts = Number(settings.recovery_max_attempts ?? 5);
+      if (!Number.isInteger(otpTtlSeconds) || otpTtlSeconds < 60 || otpTtlSeconds > 3600 ||
+          !Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
+        return json({ ok: false, error: "RECOVERY_CONFIG_INVALID" }, 503);
+      }
+
+      const { data: publicRecoveryConfig, error: publicRecoveryConfigError } = await admin.rpc("get_public_auth_config");
+      const publicRecoveryRow = Array.isArray(publicRecoveryConfig) ? publicRecoveryConfig[0] : publicRecoveryConfig;
+      if (publicRecoveryConfigError || publicRecoveryRow?.phone_password_recovery_ready !== true) {
+        return json({ ok: false, error: "RECOVERY_NOT_READY" }, 503);
+      }
+
+      const target = await resolveTarget('''
+          if edge.count(old_policy) != 1:
+              raise SystemExit('Edge recovery policy block not found exactly once')
+          edge = edge.replace(old_policy, new_policy, 1)
+          edge_path.write_text(edge)
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Commit scoped changes
+        shell: bash
+        run: |
+          git config user.name "hamedplay"
+          git config user.email "hamedkhaleghi493@gmail.com"
+          git add src/features/security-settings/components/SecuritySettingsConsole.tsx supabase/functions/unified-recovery/index.ts
+          git diff --cached --check
+          git diff --cached --quiet && { echo "No changes to commit"; exit 1; }
+          git commit -m "fix: align recovery settings with runtime"
+          git push origin HEAD:main
