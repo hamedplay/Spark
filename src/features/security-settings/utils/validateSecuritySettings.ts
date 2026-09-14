@@ -38,16 +38,27 @@ export function validateSecuritySettings(
   const customMfaEnabled = patch.custom_mfa_enabled ?? draft.custom_mfa_enabled;
   const customMfaRequired = patch.custom_mfa_required ?? draft.custom_mfa_required;
   const customMfaFactors = patch.custom_mfa_allowed_factors ?? draft.custom_mfa_allowed_factors ?? [];
-  const validCustomFactors = ['totp', 'sms', 'bale', 'email', 'recovery'];
 
-  if (customMfaRequired && !customMfaEnabled) {
-    return { ok: false, error: 'MFA_REQUIRED_WITHOUT_FACTOR', message: 'احراز هویت سفارشی اجباری بدون فعال‌سازی مجاز نیست.' };
+  if (customMfaRequired) {
+    return {
+      ok: false,
+      error: 'CUSTOM_MFA_REQUIRED_UNSUPPORTED',
+      message: 'اجبار مستقل MFA سفارشی پشتیبانی نمی‌شود؛ اجبار MFA را از سیاست سراسری MFA مدیریت کنید.',
+    };
   }
-  if (customMfaRequired && customMfaFactors.length === 0) {
-    return { ok: false, error: 'MFA_REQUIRED_WITHOUT_FACTOR', message: 'برای اجباری‌کردن احراز هویت سفارشی حداقل یک عامل لازم است.' };
+  if (customMfaFactors.some((factor) => factor !== 'sms')) {
+    return {
+      ok: false,
+      error: 'CUSTOM_MFA_FACTOR_UNSUPPORTED',
+      message: 'در زیرساخت MFA سفارشی فعلی فقط عامل پیامکی پشتیبانی می‌شود.',
+    };
   }
-  if (customMfaFactors.some((factor) => !validCustomFactors.includes(factor))) {
-    return { ok: false, error: 'OUT_OF_RANGE', message: 'عامل احراز هویت سفارشی نامعتبر است.' };
+  if (customMfaEnabled && (customMfaFactors.length !== 1 || customMfaFactors[0] !== 'sms')) {
+    return {
+      ok: false,
+      error: 'SMS_MFA_FACTOR_REQUIRED',
+      message: 'فعال‌سازی MFA پیامکی باید همراه با عامل پیامک انجام شود.',
+    };
   }
 
   const effectiveIdle = patch.session_idle_timeout_minutes ?? draft.session_idle_timeout_minutes;
