@@ -7,6 +7,25 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+export interface CustomMfaReadiness {
+  ok: boolean;
+  mfa_enabled?: boolean;
+  allowed_factors?: string[];
+  supported_factors?: string[];
+  sms_ready?: boolean;
+  edge_pepper_ready?: boolean;
+  readiness?: 'disabled' | 'not_ready' | 'misconfigured' | 'ready' | string;
+  error?: string;
+}
+
+export interface SmsMfaEnrollmentResponse {
+  ok: boolean;
+  factor_id?: string;
+  challenge_id?: string;
+  expires_at?: string;
+  error?: string;
+}
+
 export function createCustomMfaChallenge(factorType: Exclude<CustomMfaFactor, 'totp' | 'recovery'>): Promise<CustomMfaChallengeResponse> {
   return invoke<CustomMfaChallengeResponse>({ mode: 'create', factor_type: factorType });
 }
@@ -19,12 +38,16 @@ export function verifyCustomMfaRecovery(code: string): Promise<CustomMfaGrantRes
   return invoke<CustomMfaGrantResponse>({ mode: 'recovery', code });
 }
 
-export function resendCustomMfaChallenge(challengeId: string): Promise<{ ok: boolean }> {
-  return invoke<{ ok: boolean }>({ mode: 'resend', challenge_id: challengeId });
+export function resendCustomMfaChallenge(challengeId: string): Promise<{ ok: boolean; error?: string }> {
+  return invoke<{ ok: boolean; error?: string }>({ mode: 'resend', challenge_id: challengeId });
 }
 
-export function enrollSmsFactor(): Promise<{ ok: boolean; factor_id?: string }> {
-  return invoke<{ ok: boolean; factor_id?: string }>({ mode: 'enroll_sms' });
+export function enrollSmsFactor(): Promise<SmsMfaEnrollmentResponse> {
+  return invoke<SmsMfaEnrollmentResponse>({ mode: 'enroll_sms' });
+}
+
+export function loadCustomMfaReadiness(): Promise<CustomMfaReadiness> {
+  return invoke<CustomMfaReadiness>({ mode: 'readiness' });
 }
 
 export function checkBaleLinkStatus(baleNonce: string): Promise<{ ok: boolean; factor_id?: string }> {
