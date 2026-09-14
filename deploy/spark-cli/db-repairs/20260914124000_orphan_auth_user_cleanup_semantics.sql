@@ -120,7 +120,8 @@ BEGIN
     AND g.session_id = v_session_id
     AND g.grant_type = 'mfa_stepup'
     AND g.purpose = 'auth_settings_change'
-    AND g.revoked_at IS NULL
+    AND g.factor_type = 'totp'
+    AND g.assurance_level = 'aal2'
     AND g.consumed_at IS NULL
     AND g.expires_at > now()
   ORDER BY g.issued_at DESC
