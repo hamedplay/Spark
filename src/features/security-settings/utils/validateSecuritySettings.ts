@@ -61,6 +61,16 @@ export function validateSecuritySettings(
     };
   }
 
+  const effectiveRecoveryEnabled = patch.recovery_enabled ?? draft.recovery_enabled;
+  const effectiveUnifiedRecoveryEnabled = patch.unified_recovery_enabled ?? draft.unified_recovery_enabled;
+  if (effectiveUnifiedRecoveryEnabled && !effectiveRecoveryEnabled) {
+    return {
+      ok: false,
+      error: 'INVALID_RECOVERY_POLICY',
+      message: 'بازیابی یکپارچه فقط زمانی می‌تواند فعال باشد که بازیابی اصلی فعال باشد.',
+    };
+  }
+
   const effectiveIdle = patch.session_idle_timeout_minutes ?? draft.session_idle_timeout_minutes;
   const effectiveAbsolute = patch.session_absolute_lifetime_minutes ?? draft.session_absolute_lifetime_minutes;
   const effectiveHeartbeat = patch.session_heartbeat_interval_seconds ?? draft.session_heartbeat_interval_seconds;
