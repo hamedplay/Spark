@@ -17,14 +17,27 @@ function cleanupErrorMessage(error?: string): string {
     case 'SECURITY_ADMIN_REQUIRED':
       return 'فقط مدیر امنیت اجازه انجام این عملیات را دارد.';
     case 'STEPUP_REQUIRED':
-      return 'برای حذف شماره مشکل‌دار، تأیید دومرحله‌ای الزامی است.';
-    case 'PHONE_NOT_MALFORMED':
-      return 'این شماره دیگر در وضعیت مشکل‌دار نیست. فهرست دوباره بارگذاری می‌شود.';
-    case 'INVALID_USER_ID':
-      return 'شناسه کاربر معتبر نیست.';
+      return 'برای انجام اصلاح، تأیید دومرحله‌ای الزامی است.';
+    case 'ORPHAN_AUTH_USER_NOT_ELIGIBLE':
+      return 'این رکورد دیگر شرایط اصلاح را ندارد. فهرست دوباره بارگذاری می‌شود.';
+    case 'USER_HAS_REFERENCES':
+      return 'این رکورد به اطلاعات دیگری در سامانه متصل است و برای جلوگیری از تغییر ناخواسته اصلاح نشد.';
     default:
-      return 'عملیات پاک‌سازی شماره موبایل انجام نشد.';
+      return 'عملیات اصلاح رکورد ناقص انجام نشد.';
   }
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('fa-IR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 }
 
 export function MalformedPhoneCleanupPanel() {
@@ -40,14 +53,14 @@ export function MalformedPhoneCleanupPanel() {
     try {
       const result = await loadMalformedPhoneRecords();
       if (!result.ok) {
-        toast.error('فهرست شماره‌های مشکل‌دار بارگذاری نشد.');
+        toast.error('فهرست رکوردهای ناقص بارگذاری نشد.');
         return;
       }
       setRecords(result.records);
       setLoaded(true);
     } catch (error) {
-      console.error('[MALFORMED_PHONE_CLEANUP] Failed to load records:', error);
-      toast.error('فهرست شماره‌های مشکل‌دار بارگذاری نشد.');
+      console.error('[MALFORMED_PHONE_CLEANUP] Failed to load orphan auth users:', error);
+      toast.error('فهرست رکوردهای ناقص بارگذاری نشد.');
     } finally {
       setLoading(false);
     }
@@ -63,28 +76,23 @@ export function MalformedPhoneCleanupPanel() {
     if (!pendingRecord) return;
 
     const target = pendingRecord;
-    setClearingUserId(target.user_id);
+    setClearingUserId(target.auth_user_id);
     try {
-      const result = await clearMalformedPhoneRecord(target.user_id);
+      const result = await clearMalformedPhoneRecord(target.auth_user_id);
       if (!result.ok) {
         toast.error(cleanupErrorMessage(result.error));
-        if (result.error === 'PHONE_NOT_MALFORMED') {
+        if (result.error === 'ORPHAN_AUTH_USER_NOT_ELIGIBLE') {
           await loadRecords();
         }
         return;
       }
 
-      const clearedScopes = [
-        result.profile_phone_cleared ? 'پروفایل' : null,
-        result.auth_phone_cleared ? 'Auth' : null,
-      ].filter(Boolean).join(' و ');
-
-      toast.success(clearedScopes ? `شماره مشکل‌دار از ${clearedScopes} پاک شد.` : 'شماره مشکل‌دار پاک شد.');
+      toast.success('رکورد ناقص اصلاح شد و شماره برای ثبت صحیح آزاد شد.');
       setPendingRecord(null);
       await loadRecords();
     } catch (error) {
-      console.error('[MALFORMED_PHONE_CLEANUP] Failed to clear record:', error);
-      toast.error('پاک‌سازی شماره موبایل انجام نشد.');
+      console.error('[MALFORMED_PHONE_CLEANUP] Failed to fix orphan auth user:', error);
+      toast.error('اصلاح رکورد ناقص انجام نشد.');
     } finally {
       setClearingUserId(null);
     }
@@ -100,9 +108,9 @@ export function MalformedPhoneCleanupPanel() {
       <SecurityStepUpDialog
         open={stepUpOpen}
         purpose="auth_settings_change"
-        title="تأیید پاک‌سازی شماره موبایل"
-        description="این عملیات فقط مقدار شماره موبایل مشکل‌دار را پاک می‌کند و حساب کاربر یا ایمیل او حذف نمی‌شود. برای ادامه، کد TOTP را وارد کنید."
-        confirmLabel="تأیید و پاک‌سازی"
+        title="تأیید اصلاح رکورد ناقص"
+        description="این عملیات رکورد Auth بدون Profile را پاک‌سازی می‌کند تا شماره یا ایمیل باقی‌مانده مانع ثبت صحیح کاربر نشود. فقط رکوردهایی که همچنان بدون Profile هستند قابل اصلاح‌اند. برای ادامه، کد TOTP را وارد کنید."
+        confirmLabel="تأیید و فیکس"
         onClose={closeStepUp}
         onSuccess={handleStepUpSuccess}
       />
@@ -115,7 +123,7 @@ export function MalformedPhoneCleanupPanel() {
             </div>
             <div>
               <h3 className="font-bold text-gray-800 dark:text-white text-sm">پاک‌سازی شماره‌های مشکل‌دار</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">شناسایی شماره‌های قدیمی خراب مانند مقادیر دارای پسوند .0</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">شناسایی Auth Userهای بدون Profile که شماره موبایل یا ایمیل واقعی دارند</p>
             </div>
           </div>
 
@@ -134,20 +142,20 @@ export function MalformedPhoneCleanupPanel() {
           <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>
-              حذف از این بخش فقط شماره موبایل معیوب را در Profile و/یا Auth پاک می‌کند؛ خود کاربر، ایمیل، نام کاربری و سایر اطلاعات حساب حذف نمی‌شوند. حذف نیازمند تأیید TOTP است.
+              این بخش رکوردهای Auth بدون Profile را نمایش می‌دهد. دکمه «فیکس» رکورد ناقص را پاک‌سازی می‌کند؛ اگر رکورد به داده دیگری وابسته باشد، عملیات متوقف می‌شود. انجام اصلاح نیازمند تأیید TOTP است.
             </span>
           </div>
 
           {!loaded && !loading && (
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-              برای مشاهده شماره‌های مشکل‌دار، دکمه «بررسی شماره‌های مشکل‌دار» را بزنید.
+              برای مشاهده رکوردهای مشکل‌دار، دکمه «بررسی شماره‌های مشکل‌دار» را بزنید.
             </p>
           )}
 
           {loaded && records.length === 0 && !loading && (
             <div className="text-center py-5">
-              <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">شماره موبایل مشکل‌داری پیدا نشد.</p>
-              <p className="text-xs text-gray-400 mt-1">در حال حاضر رکوردی با الگوی خرابی شناخته‌شده وجود ندارد.</p>
+              <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">رکورد ناقصی پیدا نشد.</p>
+              <p className="text-xs text-gray-400 mt-1">هیچ Auth User بدون Profile دارای شماره یا ایمیل واقعی وجود ندارد.</p>
             </div>
           )}
 
@@ -155,14 +163,14 @@ export function MalformedPhoneCleanupPanel() {
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                 <span>{records.length.toLocaleString('fa-IR')} رکورد مشکل‌دار پیدا شد.</span>
-                <span>حذف هر رکورد به‌صورت مستقل انجام می‌شود.</span>
+                <span>هر رکورد به‌صورت مستقل فیکس می‌شود.</span>
               </div>
 
               {records.map((record) => {
-                const clearing = clearingUserId === record.user_id;
+                const clearing = clearingUserId === record.auth_user_id;
                 return (
                   <div
-                    key={record.user_id}
+                    key={record.auth_user_id}
                     className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-gray-50 dark:bg-gray-700/30 space-y-3"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -171,7 +179,7 @@ export function MalformedPhoneCleanupPanel() {
                           {record.email || 'ایمیل ثبت نشده'}
                         </p>
                         <p className="text-[11px] text-gray-400 font-mono mt-1 break-all" dir="ltr">
-                          {record.user_id}
+                          {record.auth_user_id}
                         </p>
                       </div>
 
@@ -182,21 +190,23 @@ export function MalformedPhoneCleanupPanel() {
                         className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white rounded-lg text-xs font-medium transition-colors"
                       >
                         {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                        {clearing ? 'در حال پاک‌سازی...' : 'حذف شماره خراب'}
+                        {clearing ? 'در حال فیکس...' : 'فیکس'}
                       </button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <PhoneValue
-                        label="Profile"
-                        value={record.profile_phone}
-                        problematic={record.profile_problem}
-                      />
-                      <PhoneValue
-                        label="Auth"
-                        value={record.auth_phone}
-                        problematic={record.auth_problem}
-                      />
+                      <ValueCard label="شماره ثبت‌شده" value={record.phone || '—'} dir="ltr" />
+                      <ValueCard label="شماره نرمال‌شده" value={record.normalized_phone || '—'} dir="ltr" />
+                      <ValueCard label="تاریخ ایجاد Auth" value={formatDate(record.created_at)} />
+                      <ValueCard label="آخرین ورود" value={formatDate(record.last_sign_in_at)} />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <StatusBadge active={record.has_phone} label="دارای شماره" />
+                      <StatusBadge active={record.has_real_email} label="دارای ایمیل واقعی" />
+                      <span className="text-[10px] px-2 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
+                        Profile ندارد
+                      </span>
                     </div>
                   </div>
                 );
@@ -209,16 +219,21 @@ export function MalformedPhoneCleanupPanel() {
   );
 }
 
-function PhoneValue({ label, value, problematic }: { label: string; value: string | null; problematic: boolean }) {
+function ValueCard({ label, value, dir }: { label: string; value: string; dir?: 'ltr' | 'rtl' }) {
   return (
-    <div className={`rounded-lg p-3 border ${problematic ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'}`}>
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{label}</span>
-        {problematic && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300">مشکل‌دار</span>}
-      </div>
-      <p className={`text-sm font-mono break-all ${problematic ? 'text-red-700 dark:text-red-300' : 'text-gray-500 dark:text-gray-400'}`} dir="ltr">
-        {value || '—'}
+    <div className="rounded-lg p-3 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{label}</span>
+      <p className="text-sm text-gray-700 dark:text-gray-200 mt-1 break-all" dir={dir}>
+        {value}
       </p>
     </div>
+  );
+}
+
+function StatusBadge({ active, label }: { active: boolean; label: string }) {
+  return (
+    <span className={`text-[10px] px-2 py-1 rounded-full ${active ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
+      {label}: {active ? 'بله' : 'خیر'}
+    </span>
   );
 }
