@@ -267,45 +267,36 @@ export function SecuritySettingsConsole() {
           </p>
 
           <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
-            عامل‌های مؤثر در ورود MFA فعلی سامانه «TOTP» و «پیامک» هستند. پیامک از بخش «احراز هویت سفارشی» مدیریت می‌شود. بله، ایمیل و کد بازیابی در مسیر MFA ورود فعلی فعال نیستند؛ بنابراین کلیدهای قدیمی آن‌ها در این بخش نمایش داده نمی‌شوند.
+            عامل‌های مؤثر در ورود MFA فعلی سامانه «TOTP» و «پیامک» هستند. پیامک از بخش «MFA پیامکی (سفارشی)» مدیریت می‌شود. بله، ایمیل و کد بازیابی در مسیر MFA ورود فعلی عامل مستقل نیستند.
           </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="احراز هویت سفارشی" icon={Shield}>
-        <ToggleRow label="فعال‌سازی زیرساخت MFA سفارشی" value={draft.custom_mfa_enabled} onChange={(v) => setDraft({ ...draft, custom_mfa_enabled: v })} />
-        <ToggleRow label="الزام MFA سفارشی" value={draft.custom_mfa_required} onChange={(v) => setDraft({ ...draft, custom_mfa_required: v })} />
-        <div className="grid grid-cols-2 gap-3">
-          <NumberRow label="مهلت کد (ثانیه)" value={draft.custom_mfa_challenge_ttl_seconds} min={30} max={3600} onChange={(v) => setDraft({ ...draft, custom_mfa_challenge_ttl_seconds: v })} />
-          <NumberRow label="عمر مجوز (دقیقه)" value={draft.custom_mfa_grant_lifetime_minutes} min={1} max={1440} onChange={(v) => setDraft({ ...draft, custom_mfa_grant_lifetime_minutes: v })} />
-          <NumberRow label="حداکثر تلاش" value={draft.custom_mfa_max_attempts} min={1} max={20} onChange={(v) => setDraft({ ...draft, custom_mfa_max_attempts: v })} />
-          <NumberRow label="ارسال مجدد" value={draft.custom_mfa_max_resends} min={0} max={10} onChange={(v) => setDraft({ ...draft, custom_mfa_max_resends: v })} />
+      <SectionCard title="MFA پیامکی (سفارشی)" icon={Shield}>
+        <ToggleRow
+          label="فعال‌سازی MFA پیامکی"
+          value={draft.custom_mfa_enabled}
+          onChange={(v) => setDraft({
+            ...draft,
+            custom_mfa_enabled: v,
+            custom_mfa_required: false,
+            custom_mfa_allowed_factors: v ? ['sms'] : [],
+          })}
+        />
+        <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
+          این زیرساخت روش دومرحله‌ای پیامکی را برای حساب‌هایی که روش MFA آن‌ها «پیامک» است فراهم می‌کند. اجبار MFA در سطح کل سامانه از بخش «سیاست MFA» بالا مدیریت می‌شود و اجبار مستقل برای این زیرساخت وجود ندارد.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <NumberRow label="مهلت اعتبار کد (ثانیه)" value={draft.custom_mfa_challenge_ttl_seconds} min={30} max={3600} onChange={(v) => setDraft({ ...draft, custom_mfa_challenge_ttl_seconds: v })} />
+          <NumberRow label="حداکثر تلاش برای کد" value={draft.custom_mfa_max_attempts} min={1} max={20} onChange={(v) => setDraft({ ...draft, custom_mfa_max_attempts: v })} />
+          <NumberRow label="حداکثر ارسال مجدد" value={draft.custom_mfa_max_resends} min={0} max={10} onChange={(v) => setDraft({ ...draft, custom_mfa_max_resends: v })} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            ['totp', 'TOTP'],
-            ['sms', 'پیامک'],
-            ['bale', 'بله'],
-            ['email', 'ایمیل پشتیبان'],
-            ['recovery', 'کد بازیابی'],
-          ].map(([value, label]) => (
-            <label key={value} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm text-gray-700 dark:text-gray-300">
-              <input
-                type="checkbox"
-                checked={draft.custom_mfa_allowed_factors.includes(value)}
-                onChange={(e) => {
-                  const factors = e.target.checked
-                    ? [...draft.custom_mfa_allowed_factors, value]
-                    : draft.custom_mfa_allowed_factors.filter((factor) => factor !== value);
-                  setDraft({ ...draft, custom_mfa_allowed_factors: factors });
-                }}
-                className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-400"
-              />
-              {label}
-            </label>
-          ))}
+        <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+          عامل سفارشی پشتیبانی‌شده در Runtime فعلی فقط «پیامک» است. TOTP از مسیر استاندارد Supabase MFA مدیریت می‌شود. بله فقط می‌تواند نسخه همان کد پیامکی را به‌عنوان کانال کمکی ارسال کند و عامل مستقل MFA نیست؛ ایمیل پشتیبان و کد بازیابی نیز در Login MFA فعلی فعال نیستند.
         </div>
-        <p className="text-xs text-amber-600 dark:text-amber-400">هیچ عامل اجباری بدون آماده‌بودن مسیر ارسال و تأیید فعال نمی‌شود.</p>
+        <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
+          «عمر مجوز» از این صفحه حذف شده است، چون مجوز ورود پیامکی فعلی تا پایان اعتبار همان نشست محدود می‌شود و مقدار قدیمی custom_mfa_grant_lifetime_minutes در این مسیر مصرف نمی‌شود. غیرفعال‌سازی MFA پیامکی نیز در صورت وجود کاربر فعالِ وابسته به آن توسط Backend مسدود می‌شود.
+        </p>
       </SectionCard>
 
       <MfaPolicyImpactCard impact={state.impact} visible={showImpact} />
