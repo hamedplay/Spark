@@ -3,6 +3,7 @@ import { Save, Eye, EyeOff } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import type { ConfigEntry } from './types';
 import { SECURITY_CONFIG_PRESENTATION, SELECT_OPTIONS } from './constants';
+import { MaintenanceModeField } from './MaintenanceModeField';
 
 export function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id: string, value: string) => void }) {
   const [val, setVal] = useState(entry.value ?? '');
@@ -11,6 +12,7 @@ export function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id
   const { setAccentColor } = useTheme();
   const isPrimaryColor = entry.section === 'appearance' && entry.key === 'primary_color';
   const isMediaTopology = entry.section === 'video_conference' && entry.key === 'media_topology';
+  const isMaintenanceMode = entry.section === 'security' && entry.key === 'maintenance_mode';
 
   useEffect(() => {
     const nextValue = entry.value ?? '';
@@ -22,8 +24,6 @@ export function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id
   const change = (v: string) => {
     setVal(v);
     setDirty(v !== (entry.value ?? ''));
-    // Valid HEX values are previewed immediately. Invalid/incomplete text input
-    // is ignored by ThemeContext until it becomes a complete color value.
     if (isPrimaryColor) setAccentColor(v);
   };
 
@@ -32,6 +32,10 @@ export function ConfigField({ entry, onSave }: { entry: ConfigEntry; onSave: (id
     setDirty(false);
     onSave(entry.id, value);
   };
+
+  if (isMaintenanceMode) {
+    return <MaintenanceModeField entry={entry} />;
+  }
 
   const inputCls = 'h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none transition focus:border-violet-300 focus:ring-2 focus:ring-violet-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500';
   const selectOptions = entry.value_type === 'select' ? (SELECT_OPTIONS[entry.key] ?? []) : [];
