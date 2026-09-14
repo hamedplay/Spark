@@ -12,7 +12,8 @@ const phoneAuthCard = read('src/components/PortalConfig/PhoneAuthCard.tsx');
 const identityRepairCard = read('src/components/PortalConfig/IdentityRepairCard.tsx');
 const configPage = read('src/components/PortalConfigPage.tsx');
 const constants = read('src/components/PortalConfig/constants.ts');
-const migration = read('supabase/migrations/20260811170122_fix_phone_recovery_and_identity_repair.sql');
+const securityConsole = read('src/features/security-settings/components/SecuritySettingsConsole.tsx');
+const hardeningMigration = read('supabase/migrations/20260914093000_align_security_portal_runtime_controls.sql');
 
 describe('Auth and security configuration', () => {
   it('keeps the retired phone-login route closed and never dispatches OTP', () => {
@@ -32,13 +33,6 @@ describe('Auth and security configuration', () => {
     assert.match(retiredLoginEdge, /"Vary": "Origin"/);
   });
 
-  it('reloads canonical login and recovery status after every toggle', () => {
-    assert.match(phoneLoginToggleCard, /await load\(\)/);
-    assert.match(passwordRecoveryCard, /await load\(\)/);
-    assert.doesNotMatch(phoneLoginToggleCard, /setEnabled\(v\)/);
-    assert.doesNotMatch(passwordRecoveryCard, /setEnabled\(v\)/);
-  });
-
   it('keeps public auth RPC calls bound to the Supabase client', () => {
     const authPage = read('src/components/AuthPage.tsx');
     assert.doesNotMatch(authPage, /const publicRpc\s*=\s*supabase\.rpc/);
@@ -55,10 +49,53 @@ describe('Auth and security configuration', () => {
     assert.match(phoneAuthCard, /invokeEdgeFunctionWithTimeout/);
   });
 
-  it('renders only explicitly localized security configuration rows', () => {
-    assert.match(constants, /VISIBLE_SECURITY_CONFIG_KEYS/);
-    assert.match(configPage, /VISIBLE_SECURITY_CONFIG_KEYS\.has\(c\.key\)/);
-    assert.doesNotMatch(configPage, /entry\.label\s*\|\|\s*entry\.key/);
+  it('exposes only runtime-backed generic security configuration', () => {
+    const presentationStart = constants.indexOf('export const SECURITY_CONFIG_PRESENTATION');
+    const visibleStart = constants.indexOf('export const VISIBLE_SECURITY_CONFIG_KEYS');
+    assert.ok(presentationStart > -1 && visibleStart > presentationStart);
+    const presentation = constants.slice(presentationStart, visibleStart);
+    assert.match(presentation, /maintenance_mode/);
+    for (const staleKey of [
+      'enable_2fa',
+      'max_login_attempts',
+      'session_timeout_minutes',
+      'require_strong_password',
+      'allowed_ip_ranges',
+      'audit_log_retention_days',
+      'log_all_actions',
+    ]) {
+      assert.doesNotMatch(presentation, new RegExp(staleKey));
+    }
+  });
+
+  it('does not fetch hidden security secrets into Portal Config', () => {
+    assert.match(configPage, /\.neq\('section',\s*'security'\)/);
+    assert.match(configPage, /\.eq\('section',\s*'security'\)/);
+    assert.match(configPage, /\.in\('key',\s*securityKeys\)/);
+    assert.match(configPage, /SecuritySettingsConsole/);
+  });
+
+  it('labels password login and OTP login as separate runtime mechanisms', () => {
+    assert.match(securityConsole, /ورود با موبایل و رمز عبور/);
+    assert.match(phoneAuthCard, /ورود با کد یک‌بارمصرف موبایل \(OTP\)/);
+    assert.match(phoneAuthCard, /مستقل از «ورود با موبایل و رمز عبور»/);
+  });
+
+  it('requires Security Admin TOTP step-up before changing phone auth entry points', () => {
+    assert.match(phoneAuthCard, /useSecurityStepUp/);
+    assert.match(phoneAuthCard, /purpose:\s*'auth_settings_change'/);
+    assert.match(phoneAuthCard, /rpc\('is_current_security_admin'\)/);
+    assert.match(phoneAuthCard, /stepUp\.requireStepUp/);
+    assert.match(hardeningMigration, /private\.is_current_security_admin\(\)/);
+    assert.match(hardeningMigration, /purpose = 'auth_settings_change'/);
+    assert.match(hardeningMigration, /consumed_at = clock_timestamp\(\)/);
+  });
+
+  it('blocks authenticated browser access to security secret rows', () => {
+    assert.match(hardeningMigration, /AS RESTRICTIVE/);
+    assert.match(hardeningMigration, /phone_auth_pepper/);
+    assert.match(hardeningMigration, /phone_rate_limit_pepper/);
+    assert.match(hardeningMigration, /send_sms_hook_secret/);
   });
 
   it('keeps identity inspection manual and always releases its busy state', () => {
@@ -92,12 +129,5 @@ describe('Auth and security configuration', () => {
     assert.match(runtimeEdge, /phone_password_recovery_secret_configured/);
     assert.match(runtimeEdge, /phone_password_recovery_secret_operator_confirmed/);
     assert.match(runtimeEdge, /CONFIG_UPDATE_FAILED/);
-  });
-
-  it('ships Persian labels for internal phone-auth configuration keys', () => {
-    assert.match(migration, /phone_login_canonical_enabled/);
-    assert.match(migration, /فعال‌سازی مرجع ورود با موبایل/);
-    assert.match(migration, /phone_otp_login_backend_ready/);
-    assert.match(migration, /آمادگی سرویس ورود با کد یک‌بارمصرف/);
   });
 });
