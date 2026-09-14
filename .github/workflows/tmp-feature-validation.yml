@@ -1,0 +1,24 @@
+name: Temporary feature validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/features/security-settings/components/MalformedPhoneCleanupPanel.tsx'
+      - 'src/features/security-settings/services/securitySettingsService.ts'
+      - 'supabase/migrations/20260914124000_orphan_auth_user_cleanup_semantics.sql'
+      - 'deploy/spark-cli/apply-db-repairs.sh'
+      - '.github/workflows/tmp-feature-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell
+        run: bash -n deploy/spark-cli/apply-db-repairs.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Build application
+        run: npm run build
