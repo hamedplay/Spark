@@ -168,3 +168,31 @@ if declare -F livekit_airgap_validation_check >/dev/null 2>&1; then
     fi
   }
 fi
+
+# Step 22 is an observability step. Its prerequisite is that Step 21 has already
+# completed successfully. Re-running the entire Step 21 validation here is both
+# redundant and incorrect after a post-restore DB-only validation because that
+# pass intentionally skips unrelated Edge Function cold-load probes, then clears
+# the pending marker and marks Step 21 complete. Trust the persisted Step 21
+# success marker and ensure no post-restore DB integration is still pending.
+spark_airgap_step21_prerequisite() {
+  [[ -f "${STEP_DIR}/21.ok" ]] || {
+    printf 'Step 22 prerequisite failed: Step 21 success marker is missing.\n' >>"${CURRENT_LOG:-/dev/null}"
+    return 1
+  }
+  [[ ! -f "${STATE_DIR}/airgap-db-integration.pending" ]] || {
+    printf 'Step 22 prerequisite failed: post-restore DB integration is still pending.\n' >>"${CURRENT_LOG:-/dev/null}"
+    return 1
+  }
+  return 0
+}
+
+if declare -F install_step_22 >/dev/null 2>&1; then
+  eval "$(declare -f install_step_22 \
+    | sed '1s/install_step_22/install_step_22_with_persisted_step21/' \
+    | sed 's/test_livekit_full_validation || {/spark_airgap_step21_prerequisite || {/')"
+
+  install_step_22() {
+    install_step_22_with_persisted_step21 "$@"
+  }
+fi
