@@ -2,7 +2,7 @@
 # Loaded after airgap-edge-functions-runtime-fix.sh.
 #
 # Keep dependency caching as caching (never generated JS), prove that the exact
-# target Deno supports the required offline flags, and seed the real Docker
+# target Deno supports the required cache semantics, and seed the real Docker
 # named-volume mount while the functions worker is stopped.
 
 _airgap_edge_cache_dependencies() {
@@ -14,16 +14,20 @@ _airgap_edge_cache_dependencies() {
   info "Pre-warming Edge Function DENO_DIR with exact target ${deno_image}."
   docker pull --platform linux/amd64 "$deno_image" || return 1
 
-  # Fail before downloading the graph if the exact target Deno does not expose
-  # the CLI semantics required for a deterministic offline proof.
+  # Deno 2.1.x keeps `deno cache` as a hidden compatibility command. It exposes
+  # --no-lock and --no-check, but does not expose --cached-only on that
+  # subcommand. Requiring --cached-only here incorrectly rejects the exact Deno
+  # embedded in Supabase Edge Runtime v1.76.2. The disconnected proof below is
+  # still deterministic because Docker networking is disabled completely: if a
+  # dependency is missing from DENO_DIR, `deno cache` must fail when it tries to
+  # resolve it from the network.
   docker run --rm --platform linux/amd64 --entrypoint sh "$deno_image" -c '
 set -eu
 help="$(deno cache --help)"
-printf "%s" "$help" | grep -q -- "--cached-only"
 printf "%s" "$help" | grep -q -- "--no-lock"
 printf "%s" "$help" | grep -q -- "--no-check"
 ' || {
-    fail "Exact target Deno does not support the required cache/offline verification flags."
+    fail "Exact target Deno does not support the required cache verification flags."
     return 1
   }
 
@@ -50,9 +54,10 @@ printf "Cached dependency graphs for %s Edge Runtime entrypoints.\n" "$count"
     return 1
   }
 
-  # Disconnected proof. No DNS/HTTP access exists in this container. Every
-  # remote JSR/npm/http dependency for every Edge Runtime entrypoint must be
-  # satisfiable from the transferred DENO_DIR alone.
+  # Disconnected proof. No DNS/HTTP access exists in this container. Deno 2.1.x
+  # does not offer --cached-only for `deno cache`, so --network none is the
+  # authoritative guard: every JSR/npm/http dependency for every entrypoint must
+  # already be satisfiable from the transferred DENO_DIR or the command fails.
   docker run --rm --platform linux/amd64 --network none \
     -e DENO_DIR=/root/.cache/deno \
     -v "${source_dir}:/home/deno/functions:ro" \
@@ -64,13 +69,13 @@ config=/home/deno/functions/deno.jsonc
 count=0
 for entry in /home/deno/functions/*/index.ts; do
   [ -f "$entry" ] || continue
-  deno cache --config "$config" --cached-only --no-check --no-lock "$entry"
+  deno cache --config "$config" --no-check --no-lock "$entry"
   count=$((count + 1))
 done
 [ "$count" -gt 0 ]
-printf "Offline cached-only dependency proof passed for %s Edge Runtime entrypoints.\n" "$count"
+printf "Offline dependency proof passed for %s Edge Runtime entrypoints with Docker networking disabled.\n" "$count"
 ' || {
-    fail "Offline cached-only Edge Function dependency verification failed."
+    fail "Offline Edge Function dependency verification failed with Docker networking disabled."
     return 1
   }
 
