@@ -56,12 +56,17 @@ packages=(
   docker-buildx-plugin docker-compose-plugin nodejs
 )
 
-# Resolve against an empty installed-package database so dependencies already
-# present in the builder image are included too, not silently assumed on target.
+# Include the installed base explicitly before resolving against an empty status
+# file. Otherwise APT may upgrade a library while omitting its installed reverse
+# dependents (e.g. util-linux requires exactly matching libmount/libblkid versions).
+# Resolve the whole base plus Spark in one transaction, without host-specific pins.
+mapfile -t base_packages < <(dpkg-query -W -f='${db:Status-Status} ${binary:Package}\n' \
+  | awk '$1 == "installed" {print $2}')
+((${#base_packages[@]} > 0))
 : >/tmp/spark-empty-dpkg-status
 rm -f /var/cache/apt/archives/*.deb
 apt-get -o Dir::State::status=/tmp/spark-empty-dpkg-status \
-  install -y --download-only --reinstall "${packages[@]}"
+  install -y --download-only --reinstall "${packages[@]}" "${base_packages[@]}"
 mkdir -p /payload
 cp -a /var/cache/apt/archives/*.deb /payload/
 printf '%s\n' "${packages[@]}" >/payload/requested-packages.txt
