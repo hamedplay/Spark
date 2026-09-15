@@ -14,13 +14,11 @@ fi
 
 # A database restore restarts the Supabase stack. Edge Runtime/Kong can therefore
 # be reachable slightly later than PostgreSQL. Step 21 must still prove that an
-# unauthenticated request is rejected, but transient startup responses should not
-# fail the validation immediately. Only 401/403 is accepted as a successful guard.
-# If the Functions runtime is stale after restore, recreate only that service once
-# and retry; this does not weaken the security assertion.
+# unauthenticated request is rejected. Only HTTP 401/403 is accepted as success.
+# Local Air-Gap health/probe traffic must never traverse an OS HTTP(S) proxy.
 if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
   livekit_function_unauthorized_probe() {
-    local function="$1" anon code body_file deadline functions_restarted=0
+    local function="$1" anon code body_file deadline gateway_repaired=0 functions_restarted=0
     anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"
     [[ -n "$anon" ]] || {
       printf 'Edge Function guard probe failed: ANON_KEY is missing (%s)\n' "$function" >>"${CURRENT_LOG:-/dev/null}"
@@ -28,11 +26,11 @@ if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
     }
 
     body_file="$(mktemp /tmp/spark-livekit-function-probe.XXXXXX)"
-    deadline=$((SECONDS + 45))
+    deadline=$((SECONDS + 60))
 
     while true; do
       : >"$body_file"
-      code="$(curl -sS -o "$body_file" -w '%{http_code}' --connect-timeout 5 --max-time 10 \
+      code="$(curl --noproxy '*' -sS -o "$body_file" -w '%{http_code}' --connect-timeout 5 --max-time 10 \
         -H "apikey: ${anon}" \
         -H 'Content-Type: application/json' \
         -X POST "http://127.0.0.1:8000/functions/v1/${function}" \
@@ -46,9 +44,25 @@ if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
         return 0
       fi
 
-      # A restore can leave Kong reachable before the Functions runtime has
-      # reloaded all function routes/imports. Recreate only the Functions service
-      # once for gateway/runtime startup failures, then continue polling.
+      # HTTP 000 is a transport failure before the Edge Function is reached.
+      # Restore can recreate the Supabase stack and lose the expected api-gw
+      # loopback/internal-IP publication. Repair the gateway bind once using the
+      # existing Air-Gap helper, then recreate Functions once and retry.
+      if [[ "$code" == "000" ]]; then
+        if (( gateway_repaired == 0 )); then
+          printf 'Supabase gateway is not reachable on 127.0.0.1:8000; repairing Air-Gap api-gw bind once.\n' \
+            >>"${CURRENT_LOG:-/dev/null}"
+          if declare -F airgap_ip_ensure_gateway_bind >/dev/null 2>&1 \
+             && airgap_ip_ensure_gateway_bind >>"${CURRENT_LOG:-/dev/null}" 2>&1; then
+            gateway_repaired=1
+            sleep 2
+            continue
+          fi
+          printf 'Unable to repair Supabase api-gw bind.\n' >>"${CURRENT_LOG:-/dev/null}"
+          gateway_repaired=1
+        fi
+      fi
+
       if [[ "$code" == "000" || "$code" == "404" || "$code" == "500" || "$code" == "502" || "$code" == "503" || "$code" == "504" ]]; then
         if (( functions_restarted == 0 )); then
           printf 'Edge Function runtime not ready after restore (HTTP %s); recreating functions service once.\n' \
@@ -59,7 +73,9 @@ if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
             continue
           fi
           printf 'Unable to recreate Supabase functions service.\n' >>"${CURRENT_LOG:-/dev/null}"
+          functions_restarted=1
         fi
+
         if (( SECONDS < deadline )); then
           sleep 2
           continue
@@ -91,8 +107,8 @@ if declare -F livekit_airgap_validation_check >/dev/null 2>&1; then
       rc=$?
       printf '[FAIL] %s (rc=%s)\n' "$label" "$rc" | tee -a "$CURRENT_LOG" >&2
       if [[ "$label" == Edge\ Function\ unauthorized\ guard:* ]]; then
-        tail -n 8 "$CURRENT_LOG" | grep -E 'Edge Function .*HTTP|Edge Function runtime|unauthorized guard failed|Unable to recreate' \
-          | tail -n 4 | tee /dev/stderr >/dev/null || true
+        tail -n 12 "$CURRENT_LOG" | grep -E 'Edge Function .*HTTP|Edge Function runtime|Supabase gateway|api-gw bind|unauthorized guard failed|Unable to recreate' \
+          | tail -n 6 | tee /dev/stderr >/dev/null || true
       fi
       return "$rc"
     fi
