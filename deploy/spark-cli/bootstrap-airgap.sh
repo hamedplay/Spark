@@ -30,9 +30,11 @@ done
 # already contain newer Air-Gap control-plane fixes than the application commit
 # embedded in that bundle. Preserve that validated control plane instead of
 # downgrading /usr/local/lib/spark-manager to the older bundled spark-cli.
+# The offline Edge Function helper is now part of the required control plane;
+# an older Manager with the same version string must be refreshed once.
 preserve_control_plane=0
-if [[ -f "$TARGET/lib/airgap-auto.sh" && -f "$TARGET/bootstrap-airgap.sh" \
-      && -x "$CLI_PATH" && -x "$AIRGAP_CLI_PATH" && -x "$MIGRATE_PATH" ]]; then
+if [[ -f "$TARGET/lib/airgap-auto.sh" && -f "$TARGET/lib/airgap-edge-functions.sh" \
+      && -f "$TARGET/bootstrap-airgap.sh" && -x "$CLI_PATH" && -x "$AIRGAP_CLI_PATH" && -x "$MIGRATE_PATH" ]]; then
   if [[ "$($CLI_PATH --version 2>/dev/null || true)" == "Spark Server Manager ${EXPECTED_VERSION}" \
         && "$($AIRGAP_CLI_PATH --version 2>/dev/null || true)" == "Spark Air-Gapped Installer ${EXPECTED_VERSION}" ]]; then
     preserve_control_plane=1
