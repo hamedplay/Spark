@@ -193,8 +193,8 @@ create_backup() {
       return 1
     }
 
-    plain_tmp="${dest}/postgres.sql.partial"
-    info "Backup PostgreSQL (full Plain SQL, restore-compatible)..." >&2
+    plain_tmp="${dest}/postgres.backup.partial"
+    info "Backup PostgreSQL database 'postgres' (full Plain SQL, restore-compatible .backup)..." >&2
     if ! compose exec -T db pg_dump -U postgres -d postgres \
       --format=plain --create --clean --if-exists >"$plain_tmp"; then
       rm -rf "$dest"
@@ -210,9 +210,9 @@ create_backup() {
       fail "Generated SQL backup is incomplete: database CREATE/DROP statements are missing."
       return 1
     fi
-    mv "$plain_tmp" "${dest}/postgres.sql"
-    chmod 600 "${dest}/postgres.sql"
-    info "Restore-compatible database file: ${dest}/postgres.sql" >&2
+    mv "$plain_tmp" "${dest}/postgres.backup"
+    chmod 600 "${dest}/postgres.backup"
+    info "Restore-compatible Plain SQL backup: ${dest}/postgres.backup" >&2
   elif [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] && compose config --services | grep -Fxq db; then
     info "Backup PostgreSQL recovery snapshot..." >&2
     if ! compose exec -T db pg_dump -U postgres -d postgres -Fc >"${dest}/postgres.dump"; then
@@ -430,7 +430,6 @@ restore_plain_database_from_file() {
       restore_restart_supabase_stack >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
       fail "Plain backup restore failed; the previous database was restored automatically. Safety backup: $safety_dir"
     else
-      # Keep application writers stopped. Only PostgreSQL remains available for recovery work.
       restore_stop_non_db_services >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
       fail "Plain backup restore failed and automatic rollback also failed. Non-database Supabase services remain stopped to prevent writes. Safety backup: $safety_dir"
     fi
@@ -444,11 +443,9 @@ restore_plain_database_from_file() {
   fi
   (( db_access_was_active )) && systemctl start spark-db-access.socket >/dev/null 2>&1 || true
 
-  # Step 21 contains DB/RPC/Edge Function integration validation and must be
-  # re-run against the newly restored application database.
   unmark_step 21 2>/dev/null || rm -f "${STEP_DIR}/21.ok" 2>/dev/null || true
 
-  ok "PostgreSQL plain backup restore completed and Supabase was restarted."
+  ok "PostgreSQL plain .backup restore completed and Supabase was restarted."
   printf 'Source backup : %s\n' "$path"
   printf 'Safety backup : %s\n' "$safety_dir"
   info "Run Installation Air-Gapped -> Step 21 again to validate DB/RPC/Edge Function integration."
@@ -456,17 +453,18 @@ restore_plain_database_from_file() {
 
 restore_plain_database_interactive() {
   local path confirmation bytes
-  printf '\n%s%sRestore PostgreSQL from plain backup%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+  printf '\n%s%sRestore PostgreSQL from plain .backup%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
   printf '%s\n' '────────────────────────────────────────────────────────────'
-  printf 'This operation REPLACES the postgres database.\n'
+  printf 'This operation REPLACES the complete postgres database.\n'
   printf 'A mandatory safety backup is created automatically before any destructive action.\n'
-  printf 'Only plain SQL output from pg_dump/pgAdmin Plain format is accepted.\n\n'
-  read -r -p 'Plain backup path (example /root/db.backup): ' path
+  printf 'Expected format: plain SQL produced by pg_dump/pgAdmin, normally with a .backup extension.\n'
+  printf 'Older valid plain SQL backups remain accepted for backward compatibility.\n\n'
+  read -r -p 'Plain .backup path (example /var/backups/spark/manual-YYYYMMDD-HHMMSS/postgres.backup): ' path
   [[ -n "$path" ]] || { fail "Backup path is required."; return 1; }
   plain_backup_validate "$path" || return 1
   bytes="$(stat -c '%s' "$path" 2>/dev/null || printf '0')"
   printf 'File : %s\nSize : %s bytes\n' "$path" "$bytes"
-  read -r -p 'Type RESTORE to replace the database: ' confirmation
+  read -r -p 'Type RESTORE to replace the complete postgres database: ' confirmation
   [[ "$confirmation" == 'RESTORE' ]] || { warn "Restore canceled."; return 1; }
   restore_plain_database_from_file "$path"
 }
@@ -479,15 +477,19 @@ backup_menu() {
   while true; do
     title
     printf '%sBackup Management%s\n\n' "$C_BOLD" "$C_RESET"
-    printf '0) back\n1) Create full PostgreSQL Plain SQL backup + config\n2) List Backups\n\n'
+    printf '0) back\n1) Create complete postgres Plain SQL .backup + config\n2) Restore complete postgres from Plain SQL .backup\n3) List Backups\n\n'
     read -r -p "selection: " c
     case "$c" in
       0) return ;;
       1)
         new_log "backup-manual"
-        if run_visible "Create full PostgreSQL backup" create_backup manual; then ok "Backup was made."; fi
+        if run_visible "Create complete postgres Plain SQL .backup" create_backup manual; then ok "Backup was made."; fi
         pause ;;
-      2) new_log "backup-list"; run_report "Backups" list_backups; pause ;;
+      2)
+        new_log "database-restore-plain"
+        restore_plain_database_interactive
+        pause ;;
+      3) new_log "backup-list"; run_report "Backups" list_backups; pause ;;
       *) fail "Invalid option"; sleep 1 ;;
     esac
   done
