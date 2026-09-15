@@ -116,7 +116,7 @@ source_dir="${SPARK_ROOT}/deploy/spark-cli"
 for path in \
   spark spark-airgap spark-ui.py spark-ui-core.py spark-migrate \
   lib/airgap.sh lib/airgap-build.sh lib/airgap-runtime.sh \
-  lib/airgap-edge-functions.sh lib/airgap-edge-functions-runtime-fix.sh \
+  lib/airgap-edge-functions.sh lib/airgap-edge-functions-runtime-fix.sh lib/airgap-edge-final.sh \
   lib/airgap-observability-quiet.sh lib/airgap-observability-quiet-base.sh; do
   [[ -f "${source_dir}/${path}" ]] || { echo "Bundled Spark control plane is missing: ${path}" >&2; exit 1; }
 done
@@ -158,7 +158,7 @@ ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
 
 rm -rf "$MIGRATE_TARGET"
 install -d -m 0755 "$MIGRATE_TARGET"
-install -m 0755 "${source_dir}/spark-migrate" "${MIGRATE_TARGET}/spark-migrate"
+install -m 0755 "${source_dir}/spark-migrate" "$MIGRATE_TARGET/spark-migrate"
 ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
 
 "$CLI_PATH" --ui-self-test
