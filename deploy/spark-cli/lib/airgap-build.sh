@@ -163,8 +163,11 @@ mkdir -p /tmp/empty-sources
 : >/tmp/empty-sources.list
 printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
 chmod +x /usr/sbin/policy-rc.d
+# Allow APT's acquisition phase to resolve local .deb paths. --no-download
+# skips it and can leave relative filenames for dpkg ("Pathname ... not absolute").
+# Offline isolation is enforced by --network none plus the empty sources below.
 apt-get -o Dir::Etc::sourcelist=/tmp/empty-sources.list \
-  -o Dir::Etc::sourceparts=/tmp/empty-sources --no-download \
+  -o Dir::Etc::sourceparts=/tmp/empty-sources \
   install -y --allow-downgrades /payload/apt/*.deb
 while IFS= read -r package; do
   [[ -n "$package" ]] || continue
