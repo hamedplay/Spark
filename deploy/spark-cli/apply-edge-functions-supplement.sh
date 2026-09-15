@@ -6,6 +6,7 @@ BACKUP_DIR="/var/backups/spark"
 ACTIVE_LINK="/opt/spark-airgap/current"
 FUNCTIONS_CONTAINER="supabase-edge-functions"
 DB_CONTAINER="supabase-db"
+AUTHORITATIVE_RUNTIME="/opt/spark-supabase"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
@@ -47,7 +48,9 @@ tar -xzf "$input" -C "$work"
 root="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'spark-edge-functions-supplement-*' | head -n1)"
 [[ -n "$root" ]] || { echo "Edge Functions supplement root is missing." >&2; exit 1; }
 
-for path in metadata/manifest.env manifest.json SHA256SUMS edge-functions/.spark-bundled-functions; do
+for path in \
+  metadata/manifest.env manifest.json SHA256SUMS \
+  edge-functions/.spark-bundled-functions edge-functions/deno.jsonc edge-functions/main/index.ts; do
   [[ -f "${root}/${path}" ]] || { echo "Supplement is missing: $path" >&2; exit 1; }
 done
 [[ -d "${root}/deno-cache" ]] || { echo "Supplement is missing the pre-warmed Deno cache." >&2; exit 1; }
@@ -82,10 +85,13 @@ expected_cache_files="$(value DENO_CACHE_FILES)"
   echo "Deno cache file count mismatch after extraction." >&2
   exit 1
 }
+grep -Fq 'Spark offline-safe main function started' "${root}/edge-functions/main/index.ts" || {
+  echo "Supplement main router is not the Spark offline-safe router." >&2
+  exit 1
+}
 
-# Determine the actual runtime from the live container mount, not from a guessed
-# filesystem path. This prevents applying to /opt/supabase-source/docker when
-# the real Spark runtime is /opt/spark-supabase.
+# Resolve the authoritative runtime from the live container mount and reject any
+# accidental /opt/supabase-source/docker deployment.
 functions_mount="$(docker inspect "$FUNCTIONS_CONTAINER" \
   --format '{{range .Mounts}}{{if eq .Destination "/home/deno/functions"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
 [[ -n "$functions_mount" && -d "$functions_mount" ]] || {
@@ -93,23 +99,23 @@ functions_mount="$(docker inspect "$FUNCTIONS_CONTAINER" \
   exit 1
 }
 functions_mount="$(readlink -f "$functions_mount")"
-runtime="$(dirname "$(dirname "$functions_mount")")"
-functions_dir="${runtime}/volumes/functions"
+functions_dir="$(readlink -f "${AUTHORITATIVE_RUNTIME}/volumes/functions")"
 [[ "$functions_mount" == "$functions_dir" ]] || {
   echo "Unexpected functions mount: ${functions_mount}; expected ${functions_dir}." >&2
   exit 1
 }
+runtime="$AUTHORITATIVE_RUNTIME"
 [[ -f "${runtime}/docker-compose.yml" && -f "${runtime}/.env" ]] || {
-  echo "Live Supabase runtime is incomplete: ${runtime}" >&2
+  echo "Authoritative Supabase runtime is incomplete: ${runtime}" >&2
   exit 1
 }
 
-cache_destination="$(docker inspect "$FUNCTIONS_CONTAINER" \
-  --format '{{range .Mounts}}{{if eq .Destination "/root/.cache/deno"}}{{.Destination}}{{end}}{{end}}' 2>/dev/null || true)"
+cache_type="$(docker inspect "$FUNCTIONS_CONTAINER" \
+  --format '{{range .Mounts}}{{if eq .Destination "/root/.cache/deno"}}{{.Type}}{{end}}{{end}}' 2>/dev/null || true)"
 cache_mount_name="$(docker inspect "$FUNCTIONS_CONTAINER" \
-  --format '{{range .Mounts}}{{if eq .Destination "/root/.cache/deno"}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' 2>/dev/null || true)"
-[[ "$cache_destination" == "/root/.cache/deno" && -n "$cache_mount_name" ]] || {
-  echo "The live Edge Runtime does not expose the expected persistent Deno cache mount." >&2
+  --format '{{range .Mounts}}{{if eq .Destination "/root/.cache/deno"}}{{if eq .Type "volume"}}{{.Name}}{{end}}{{end}}{{end}}' 2>/dev/null || true)"
+[[ "$cache_type" == "volume" && -n "$cache_mount_name" ]] || {
+  echo "The live Edge Runtime does not expose the expected persistent named Deno cache volume." >&2
   exit 1
 }
 
@@ -125,7 +131,6 @@ actual_deno="$(docker exec "$FUNCTIONS_CONTAINER" edge-runtime --version 2>/dev/
 }
 
 # Verify the database route used by password-login before changing anything.
-# The Edge Runtime image includes bash (its official healthcheck uses /dev/tcp).
 if ! docker exec "$FUNCTIONS_CONTAINER" bash -lc '
 set -eu
 url="${SUPABASE_DB_URL:-}"
@@ -142,8 +147,6 @@ timeout 5 bash -c "exec 3<>/dev/tcp/${host}/${port}"
   exit 1
 fi
 
-# Validate the exact DB configuration password-login reads. This separates DB
-# readiness from dependency/runtime readiness and avoids a misleading rollback.
 if ! docker exec "$DB_CONTAINER" psql -U postgres -d postgres -Atqc \
   "select case when exists (select 1 from public.get_phone_auth_config()) then 'ok' else 'empty' end;" \
   | grep -Fxq ok; then
@@ -154,8 +157,15 @@ fi
 mkdir -p "$BACKUP_DIR"
 stamp="$(date -u +%Y%m%d-%H%M%S)"
 backup="${BACKUP_DIR}/edge-functions-before-${stamp}.tar.gz"
+cache_backup="${BACKUP_DIR}/edge-deno-cache-before-${stamp}.tar.gz"
 failure_log="${BACKUP_DIR}/edge-functions-failed-${stamp}.log"
 tar -C "$(dirname "$functions_dir")" -czf "$backup" "$(basename "$functions_dir")"
+
+docker run --rm --network none \
+  -v "${cache_mount_name}:/cache:ro" \
+  -v "${BACKUP_DIR}:/backup" \
+  --entrypoint sh "$actual_image" -c \
+  "tar -C /cache -czf /backup/$(basename "$cache_backup") ." >/dev/null
 
 capture_failure_logs() {
   docker logs --since 10m "$FUNCTIONS_CONTAINER" >"$failure_log" 2>&1 || true
@@ -163,40 +173,43 @@ capture_failure_logs() {
   tail -n 120 "$failure_log" >&2 || true
 }
 
-rollback() {
-  echo "Rolling back previous Edge Functions sources..." >&2
-  rm -rf "$functions_dir"
-  tar -C "$(dirname "$functions_dir")" -xzf "$backup"
-  docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" restart functions >/dev/null 2>&1 || true
+restore_cache() {
+  docker run --rm --network none \
+    -v "${cache_mount_name}:/cache" \
+    -v "${BACKUP_DIR}:/backup:ro" \
+    --entrypoint sh "$actual_image" -c \
+    "find /cache -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; tar -C /cache -xzf /backup/$(basename "$cache_backup")" >/dev/null 2>&1 || true
 }
 
-# Install original source, not generated bundles. Keep the Spark offline-safe
-# main router already installed on the target.
-rsync -a --delete --exclude=main "${root}/edge-functions/" "${functions_dir}/"
+rollback() {
+  echo "Rolling back previous Edge Functions sources and Deno cache..." >&2
+  docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" stop functions >/dev/null 2>&1 || true
+  rm -rf "$functions_dir"
+  tar -C "$(dirname "$functions_dir")" -xzf "$backup"
+  restore_cache
+  docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" start functions >/dev/null 2>&1 || true
+}
 
-# Merge the pre-warmed exact-version DENO_DIR into the persistent cache volume.
-# Deno's cache is content-addressed; existing unrelated entries are safe to keep.
-docker cp "${root}/deno-cache/." "${FUNCTIONS_CONTAINER}:/root/.cache/deno/"
+# Stop the worker so source/cache activation is atomic from the runtime's view.
+docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" stop functions >/dev/null
+rsync -a --delete "${root}/edge-functions/" "${functions_dir}/"
 
-if ! docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" restart functions; then
-  capture_failure_logs
-  rollback
-  exit 1
-fi
+docker run --rm --network none \
+  -v "${cache_mount_name}:/cache" \
+  -v "${root}/deno-cache:/seed:ro" \
+  --entrypoint sh "$actual_image" -c '
+set -eu
+find /cache -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+cp -a /seed/. /cache/
+'
+
+docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" start functions >/dev/null
 sleep 3
 
 anon="$(sed -n 's/^ANON_KEY=//p' "${runtime}/.env" | tail -n1)"
-[[ -n "$anon" ]] || {
-  capture_failure_logs
-  rollback
-  echo "ANON_KEY is missing." >&2
-  exit 1
-}
-
+[[ -n "$anon" ]] || { capture_failure_logs; rollback; echo "ANON_KEY is missing." >&2; exit 1; }
 probe="$(mktemp)"
 
-# Probe 1: pure runtime/dependency cold start. OPTIONS returns before auth/DB
-# logic in auth-health-check, so failure here means source/cache/runtime only.
 runtime_code="$(curl --noproxy '*' -sS --connect-timeout 5 --max-time 15 \
   -o "$probe" -w '%{http_code}' \
   -X OPTIONS \
@@ -212,8 +225,6 @@ if [[ "$runtime_code" != "204" ]]; then
   exit 1
 fi
 
-# Probe 2: actual password-login path. With no Origin, a healthy function first
-# reads DB config then deterministically returns INVALID_REQUEST / HTTP 400.
 : >"$probe"
 login_code="$(curl --noproxy '*' -sS --connect-timeout 5 --max-time 20 \
   -o "$probe" -w '%{http_code}' \
@@ -229,7 +240,7 @@ if [[ "$login_code" != "400" ]] || ! grep -q 'INVALID_REQUEST' "$probe"; then
   [[ -s "$probe" ]] && { echo "Probe body:" >&2; cat "$probe" >&2; echo >&2; }
   capture_failure_logs
   rm -f "$probe"
-  echo "The v2 source/cache payload remains installed because the offline runtime probe passed; no destructive rollback was performed." >&2
+  echo "The v2 source/cache payload remains installed because the pure runtime probe passed." >&2
   exit 3
 fi
 rm -f "$probe"
@@ -239,7 +250,8 @@ printf 'Functions updated   : %s\n' "$count"
 printf 'Runtime             : %s\n' "$runtime"
 printf 'Edge Runtime image  : %s\n' "$actual_image"
 printf 'Embedded Deno       : %s\n' "$actual_deno"
-printf 'Deno cache mount    : %s\n' "$cache_mount_name"
-printf 'Safety backup       : %s\n' "$backup"
+printf 'Deno cache volume   : %s\n' "$cache_mount_name"
+printf 'Safety source backup: %s\n' "$backup"
+printf 'Safety cache backup : %s\n' "$cache_backup"
 printf 'Runtime probe HTTP  : %s\n' "$runtime_code"
 printf 'Password probe HTTP : %s\n' "$login_code"
