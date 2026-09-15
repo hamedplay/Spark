@@ -14,9 +14,7 @@ fi
 
 # Resolve a gateway endpoint that is actually reachable from the target host.
 # Air-Gap Step 10 normally publishes api-gw on both 127.0.0.1:8000 and the
-# selected internal IPv4. A database restore restarts Compose and can leave the
-# loopback publication temporarily unavailable even while the internal binding
-# is healthy. Either endpoint is valid for the local authorization guard test.
+# selected internal IPv4. Either endpoint is valid for local validation.
 spark_airgap_select_gateway_base() {
   local anon="$1" base
   for base in "http://127.0.0.1:8000" "http://${AIRGAP_SERVER_IP}:8000"; do
@@ -38,12 +36,49 @@ spark_airgap_report_gateway_failure() {
     (cd "$SUPABASE_ROOT" && docker compose ps api-gw) 2>&1 || true
     printf '%s\n' '--- api-gw recent logs ---'
     (cd "$SUPABASE_ROOT" && docker compose logs --no-color --tail=40 api-gw) 2>&1 || true
+    printf '%s\n' '--- functions compose state ---'
+    (cd "$SUPABASE_ROOT" && docker compose ps functions) 2>&1 || true
+    printf '%s\n' '--- functions recent logs ---'
+    (cd "$SUPABASE_ROOT" && docker compose logs --no-color --tail=60 functions) 2>&1 || true
   } >>"${CURRENT_LOG:-/dev/null}"
 }
 
-# A database restore restarts the Supabase stack. Step 21 must still prove that
-# an unauthenticated Edge Function request is rejected. Only HTTP 401/403 is a
-# successful security assertion. Local probes never use the OS HTTP(S) proxy.
+# When Step 21 is being re-run specifically to complete DB integration after a
+# restore, the database change did not alter Edge Function source code. In that
+# state, validate the Kong function route/authorization boundary without forcing
+# Edge Runtime to cold-load every function. This is important in true Air-Gap
+# mode because a cold worker may otherwise wait on remote module resolution even
+# though the restored DB/RPC integration itself is healthy.
+spark_airgap_post_restore_guard_probe() {
+  local function="$1" gateway_base="$2" code body_file
+  body_file="$(mktemp /tmp/spark-post-restore-guard.XXXXXX)"
+  code="$(curl --noproxy '*' -sS -o "$body_file" -w '%{http_code}' \
+    --connect-timeout 5 --max-time 10 \
+    -H 'Content-Type: application/json' \
+    -X POST "${gateway_base}/functions/v1/${function}" \
+    --data '{}' 2>>"${CURRENT_LOG:-/dev/null}" || true)"
+
+  printf 'Post-restore Edge Function gateway guard %s -> HTTP %s via %s\n' \
+    "$function" "${code:-000}" "$gateway_base" >>"${CURRENT_LOG:-/dev/null}"
+
+  # No apikey is intentionally supplied here. Kong must reject the request at
+  # the gateway boundary before invoking the Edge Runtime worker.
+  if [[ "$code" == "401" || "$code" == "403" ]]; then
+    rm -f "$body_file"
+    return 0
+  fi
+
+  printf 'Post-restore Edge Function gateway guard failed: function=%s http=%s body=' \
+    "$function" "${code:-000}" >>"${CURRENT_LOG:-/dev/null}"
+  tr '\n' ' ' <"$body_file" | head -c 600 >>"${CURRENT_LOG:-/dev/null}" 2>/dev/null || true
+  printf '\n' >>"${CURRENT_LOG:-/dev/null}"
+  rm -f "$body_file"
+  return 1
+}
+
+# Normal validation still proves that each function itself rejects an
+# unauthenticated request. Only the post-restore DB-integration pass uses the
+# gateway-level guard above.
 if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
   livekit_function_unauthorized_probe() {
     local function="$1" anon code body_file deadline gateway_base="" gateway_repaired=0 functions_restarted=0
@@ -54,11 +89,10 @@ if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
     }
 
     if ! gateway_base="$(spark_airgap_select_gateway_base "$anon")"; then
-      printf 'Supabase api-gw is not reachable on loopback or internal IPv4 after restore; repairing bind.\n' \
+      printf 'Supabase api-gw is not reachable on loopback or internal IPv4; repairing bind.\n' \
         >>"${CURRENT_LOG:-/dev/null}"
-      if declare -F airgap_ip_ensure_gateway_bind >/dev/null 2>&1 \
-         && airgap_ip_ensure_gateway_bind >>"${CURRENT_LOG:-/dev/null}" 2>&1; then
-        gateway_repaired=1
+      if declare -F airgap_ip_ensure_gateway_bind >/dev/null 2>&1; then
+        airgap_ip_ensure_gateway_bind >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
       fi
       gateway_base="$(spark_airgap_select_gateway_base "$anon" || true)"
     fi
@@ -68,6 +102,15 @@ if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
       printf 'Edge Function guard failed before request: Supabase api-gw transport is unavailable.\n' \
         >>"${CURRENT_LOG:-/dev/null}"
       return 1
+    fi
+
+    # A pending marker is created by the original Air-Gap validation when the
+    # application DB is not provisioned yet and is intentionally cleared only
+    # after the restored DB contracts have passed. During exactly that pass,
+    # validate the gateway authorization boundary without cold-loading workers.
+    if [[ -f "${STATE_DIR}/airgap-db-integration.pending" ]]; then
+      spark_airgap_post_restore_guard_probe "$function" "$gateway_base"
+      return $?
     fi
 
     printf 'Edge Function guard using gateway endpoint %s\n' "$gateway_base" >>"${CURRENT_LOG:-/dev/null}"
@@ -90,45 +133,34 @@ if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
         return 0
       fi
 
-      # HTTP 000 is a transport failure. Re-resolve the healthy gateway endpoint
-      # and repair the expected Air-Gap publication once before retrying.
-      if [[ "$code" == "000" ]]; then
-        if (( gateway_repaired == 0 )); then
-          if declare -F airgap_ip_ensure_gateway_bind >/dev/null 2>&1 \
-             && airgap_ip_ensure_gateway_bind >>"${CURRENT_LOG:-/dev/null}" 2>&1; then
-            gateway_repaired=1
-          else
-            gateway_repaired=1
-          fi
+      if [[ "$code" == "000" && $gateway_repaired -eq 0 ]]; then
+        gateway_repaired=1
+        if declare -F airgap_ip_ensure_gateway_bind >/dev/null 2>&1; then
+          airgap_ip_ensure_gateway_bind >>"${CURRENT_LOG:-/dev/null}" 2>&1 || true
         fi
         gateway_base="$(spark_airgap_select_gateway_base "$anon" || true)"
-        if [[ -z "$gateway_base" ]]; then
-          spark_airgap_report_gateway_failure
-        fi
       fi
 
-      # Once the gateway is reachable, a stale Edge Runtime after database
-      # restore is repaired by recreating only the Functions service once.
+      # Restart, but do not force-recreate, the Functions container. Recreating
+      # it can discard runtime module cache on an isolated host.
       if [[ "$code" == "000" || "$code" == "404" || "$code" == "500" || "$code" == "502" || "$code" == "503" || "$code" == "504" ]]; then
         if (( functions_restarted == 0 )); then
-          printf 'Edge Function runtime not ready after restore (HTTP %s); recreating functions service once.\n' \
+          printf 'Edge Function runtime not ready (HTTP %s); restarting functions service once without recreation.\n' \
             "${code:-000}" >>"${CURRENT_LOG:-/dev/null}"
-          if ( cd "$SUPABASE_ROOT" && docker compose up -d --force-recreate functions ) >>"${CURRENT_LOG:-/dev/null}" 2>&1; then
+          if ( cd "$SUPABASE_ROOT" && docker compose restart functions ) >>"${CURRENT_LOG:-/dev/null}" 2>&1; then
             functions_restarted=1
             sleep 4
-            [[ -n "$gateway_base" ]] || gateway_base="$(spark_airgap_select_gateway_base "$anon" || true)"
             continue
           fi
-          printf 'Unable to recreate Supabase functions service.\n' >>"${CURRENT_LOG:-/dev/null}"
           functions_restarted=1
         fi
-
         if (( SECONDS < deadline )) && [[ -n "$gateway_base" ]]; then
           sleep 2
           continue
         fi
       fi
 
+      spark_airgap_report_gateway_failure
       printf 'Edge Function unauthorized guard failed: function=%s http=%s gateway=%s body=' \
         "$function" "${code:-000}" "${gateway_base:-unavailable}" >>"${CURRENT_LOG:-/dev/null}"
       tr '\n' ' ' <"$body_file" | head -c 600 >>"${CURRENT_LOG:-/dev/null}" 2>/dev/null || true
@@ -153,9 +185,9 @@ if declare -F livekit_airgap_validation_check >/dev/null 2>&1; then
       rc=$?
       printf '[FAIL] %s (rc=%s)\n' "$label" "$rc" | tee -a "$CURRENT_LOG" >&2
       if [[ "$label" == Edge\ Function\ unauthorized\ guard:* ]]; then
-        tail -n 80 "$CURRENT_LOG" | grep -E \
-          'Edge Function .*HTTP|Edge Function guard using|Edge Function runtime|Supabase api-gw|gateway transport|guard failed before request|unauthorized guard failed|Unable to recreate|api-gw' \
-          | tail -n 10 | tee /dev/stderr >/dev/null || true
+        tail -n 100 "$CURRENT_LOG" | grep -E \
+          'Post-restore Edge Function|Edge Function .*HTTP|Edge Function guard using|Edge Function runtime|Supabase api-gw|gateway transport|guard failed before request|unauthorized guard failed|functions recent logs|api-gw' \
+          | tail -n 12 | tee /dev/stderr >/dev/null || true
       fi
       return "$rc"
     fi
