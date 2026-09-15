@@ -40,7 +40,7 @@ resolve_main_sha() {
     | grep -m1 -Eo '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' \
     | grep -Eo '[0-9a-f]{40}' || true)"
   [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
-    echo "GitHub API returned an invalid main commit SHA." >&2
+    echo "GitHub API returned an invalid Spark Manager revision." >&2
     return 1
   }
   printf '%s\n' "$sha"
@@ -84,6 +84,7 @@ files=(
   lib/airgap-target-patch.sh
   lib/airgap-auto.sh
   lib/airgap-ip.sh
+  lib/airgap-observability-quiet.sh
 )
 
 for file in "${files[@]}"; do
@@ -166,6 +167,14 @@ grep -q 'airgap-auto-target-bootstrap' "$tmp/spark-airgap" || {
 }
 grep -q 'airgap-ip' "$tmp/spark-airgap" || {
   echo "Spark Air-Gap internal-IP module is not loaded." >&2
+  exit 1
+}
+grep -q 'airgap-observability-quiet' "$tmp/spark-airgap" || {
+  echo "Spark Air-Gap observability quiet module is not loaded." >&2
+  exit 1
+}
+[[ -f "$tmp/lib/airgap-observability-quiet.sh" ]] || {
+  echo "Spark Air-Gap observability quiet module is missing." >&2
   exit 1
 }
 grep -Fq 'AIRGAP_IP_MODE="internal_ip"' "$tmp/lib/airgap-ip.sh" || {
