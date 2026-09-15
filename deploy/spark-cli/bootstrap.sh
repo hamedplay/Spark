@@ -84,7 +84,9 @@ files=(
   lib/airgap-target-patch.sh
   lib/airgap-auto.sh
   lib/airgap-ip.sh
+  lib/airgap-observability-quiet-base.sh
   lib/airgap-observability-quiet.sh
+  lib/airgap-edge-functions.sh
 )
 
 for file in "${files[@]}"; do
@@ -175,6 +177,18 @@ grep -q 'airgap-observability-quiet' "$tmp/spark-airgap" || {
 }
 [[ -f "$tmp/lib/airgap-observability-quiet.sh" ]] || {
   echo "Spark Air-Gap observability quiet module is missing." >&2
+  exit 1
+}
+[[ -f "$tmp/lib/airgap-observability-quiet-base.sh" ]] || {
+  echo "Spark Air-Gap observability quiet base module is missing." >&2
+  exit 1
+}
+[[ -f "$tmp/lib/airgap-edge-functions.sh" ]] || {
+  echo "Spark Air-Gap Edge Function offline dependency module is missing." >&2
+  exit 1
+}
+grep -q 'airgap-edge-functions.sh' "$tmp/lib/airgap-observability-quiet.sh" || {
+  echo "Spark Air-Gap Edge Function offline dependency module is not sourced." >&2
   exit 1
 }
 grep -Fq 'AIRGAP_IP_MODE="internal_ip"' "$tmp/lib/airgap-ip.sh" || {
