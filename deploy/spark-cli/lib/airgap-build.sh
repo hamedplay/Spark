@@ -225,6 +225,27 @@ airgap_prepare_linux_amd64_image() {
   docker rm -f "$cid" >/dev/null 2>&1 || true
 }
 
+airgap_prepare_bundle_image() {
+  local image="$1" meta="${2}/metadata/edge-runtime.env"
+  local runtime_image expected_id actual_id platform
+  if [[ -f "$meta" ]]; then
+    runtime_image="$(sed -n 's/^EDGE_RUNTIME_IMAGE=//p' "$meta")"
+    if [[ "$image" == "$runtime_image" ]]; then
+      expected_id="$(sed -n 's/^EDGE_RUNTIME_IMAGE_ID=//p' "$meta")"
+      actual_id="$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)"
+      platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image" 2>/dev/null || true)"
+      [[ "$expected_id" =~ ^sha256:[0-9a-f]{64}$ && "$actual_id" == "$expected_id" && "$platform" == "linux/amd64" ]] || {
+        fail "Prepared Edge Runtime changed before export: ${image} expected=${expected_id:-missing} actual=${actual_id:-missing} platform=${platform:-missing}. Rebuild the bundle."
+        return 1
+      }
+      # Already pulled by child digest and exercised before building DENO_DIR.
+      # Do not re-resolve a mutable registry tag after recording cache identity.
+      return 0
+    fi
+  fi
+  airgap_prepare_linux_amd64_image "$image"
+}
+
 airgap_export_linux_amd64_images() {
   local list_file="$1" archive="$2" image platform
   local -a images=()
@@ -510,7 +531,7 @@ airgap_build_bundle() {
     [[ -n "$image" ]] || continue
     [[ "$image" == "$avatar_image" ]] && continue
     run_visible "Resolve and pull exact linux/amd64 image ${image}" \
-      airgap_prepare_linux_amd64_image "$image" || return 1
+      airgap_prepare_bundle_image "$image" "$bundle" || return 1
   done <"${bundle}/docker/images.txt"
 
   info "Validating and saving the linux/amd64 Docker image set. This can take several minutes."

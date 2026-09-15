@@ -184,10 +184,11 @@ _airgap_edge_build_payload() {
     return 1
   }
 
-  # Resolve the exact linux/amd64 runtime now. The normal image builder later
-  # normalizes the same tag by registry digest; final bundle validation compares
-  # the image IDs and refuses the archive if the tag changed between operations.
-  docker pull --platform linux/amd64 "$runtime_image" || return 1
+  # Normalize before recording identity, using the same single-platform path as
+  # the Docker payload. A platform pull can retain a multi-platform index in the
+  # containerd store; retagging its child later can change the reported identity.
+  # The full builder reuses this exact image instead of resolving the tag twice.
+  airgap_prepare_linux_amd64_image "$runtime_image" || return 1
   runtime_image_id="$(docker image inspect --format '{{.Id}}' "$runtime_image" 2>/dev/null || true)"
   runtime_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$runtime_image" 2>/dev/null || true)"
   [[ "$runtime_image_id" =~ ^sha256:[0-9a-f]{64}$ && "$runtime_platform" == "linux/amd64" ]] || {
@@ -195,7 +196,7 @@ _airgap_edge_build_payload() {
     return 1
   }
 
-  target_deno="$(docker run --rm --platform linux/amd64 --entrypoint edge-runtime "$runtime_image" --version 2>/dev/null \
+  target_deno="$(docker run --rm --pull=never --platform linux/amd64 --entrypoint edge-runtime "$runtime_image_id" --version 2>/dev/null \
     | awk '$1=="deno" {print $2; exit}')"
   [[ "$target_deno" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
     fail "Unable to determine embedded Deno version from ${runtime_image}."

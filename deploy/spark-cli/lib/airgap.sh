@@ -177,9 +177,16 @@ airgap_repair_image_list_content() {
 }
 
 airgap_verify_images() {
-  local root="$1" image expected_id actual_id failed=0
-  while read -r image expected_id; do
-    [[ -n "$image" && -n "$expected_id" ]] || continue
+  local root="$1" image expected_id actual_id extra failed=0 count=0
+  [[ -s "${root}/docker/image-ids.txt" ]] || { fail "Docker image ID manifest is missing or empty."; return 1; }
+  # spark-airgap excludes spaces from global IFS; this file is space-delimited.
+  while IFS=$' \t' read -r image expected_id extra || [[ -n "$image" ]]; do
+    [[ -n "$image" ]] || continue
+    [[ "$expected_id" =~ ^sha256:[0-9a-f]{64}$ && -z "$extra" ]] || {
+      fail "Invalid Docker image ID manifest entry: $image"
+      return 1
+    }
+    count=$((count + 1))
     actual_id="$("$AIRGAP_REAL_DOCKER" image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)"
     if [[ -z "$actual_id" ]]; then
       [[ -n "${CURRENT_LOG:-}" ]] && echo "Missing Docker image: $image" >>"$CURRENT_LOG"
@@ -189,7 +196,7 @@ airgap_verify_images() {
       failed=1
     fi
   done <"${root}/docker/image-ids.txt"
-  (( failed == 0 ))
+  (( count > 0 && failed == 0 ))
 }
 
 airgap_import_bundle() {

@@ -120,7 +120,7 @@ airgap_build_bundle() {
     [[ -n "$image" ]] || continue
     [[ "$image" == "$avatar_image" ]] && continue
     run_visible "Resolve and pull exact linux/amd64 image ${image}" \
-      airgap_prepare_linux_amd64_image "$image" || return 1
+      airgap_prepare_bundle_image "$image" "$bundle" || return 1
   done <"${bundle}/docker/images.txt"
 
   info "Validating and saving the linux/amd64 Docker image set. This can take several minutes."
