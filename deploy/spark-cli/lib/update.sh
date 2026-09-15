@@ -65,12 +65,44 @@ test_update_spark_validation() {
   test_schedulers || return 1
 }
 
+stage_update_edge_functions() {
+  local stage_root="$1" destination="$2"
+  local source_main="${SUPABASE_SOURCE}/docker/volumes/functions/main"
+  local source_deno="${SUPABASE_SOURCE}/docker/volumes/functions/deno.jsonc"
+  local spark_router="${stage_root}/deploy/spark-cli/edge-main/index.ts"
+
+  require_dir "${stage_root}/supabase/functions" || return 1
+  require_dir "$source_main" || return 1
+  require_file "$spark_router" || return 1
+
+  mkdir -p "$destination"
+  rsync -a --delete "${stage_root}/supabase/functions/" "$destination/" >>"$CURRENT_LOG" 2>&1 || return 1
+
+  if [[ -f "$source_deno" ]]; then
+    install -m 0644 "$source_deno" "${destination}/deno.jsonc" >>"$CURRENT_LOG" 2>&1 || return 1
+  fi
+
+  rm -rf "${destination}/main"
+  mkdir -p "${destination}/main"
+  cp -a "${source_main}/." "${destination}/main/" >>"$CURRENT_LOG" 2>&1 || return 1
+  install -m 0644 "$spark_router" "${destination}/main/index.ts" >>"$CURRENT_LOG" 2>&1 || return 1
+
+  diff -qr --exclude=main --exclude=deno.jsonc \
+    "${stage_root}/supabase/functions" "$destination" >>"$CURRENT_LOG" 2>&1 || return 1
+  if [[ -f "$source_deno" ]]; then
+    cmp -s "$source_deno" "${destination}/deno.jsonc" || return 1
+  fi
+  diff -qr --exclude=index.ts "$source_main" "${destination}/main" >>"$CURRENT_LOG" 2>&1 || return 1
+  cmp -s "$spark_router" "${destination}/main/index.ts" || return 1
+  ! grep -Eq '(^|[[:space:]])import[[:space:]].*(https?://|jsr:|npm:)' "${destination}/main/index.ts" || return 1
+}
+
 update_spark() (
   title
   new_log "update-spark"
   require_manager_values || return 1
   test_spark_repo >>"$CURRENT_LOG" 2>&1 || { fail "Spark repository not healthy."; return 1; }
-  test_supabase_source >>"$CURRENT_LOG" 2>&1 || { fail "Supabase pin/runtime provenance not valid; First step 5 Check the installation."; return 1; }
+  test_supabase_source >>"$CURRENT_LOG" 2>&1 || { fail "Supabase stable pin/runtime provenance not valid; check Installation step 4."; return 1; }
   [[ -z "$(git -C "$SPARK_ROOT" status --porcelain)" ]] || {
     fail "Repository changes commit has not; Update it stopped."
     git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
@@ -156,13 +188,11 @@ update_spark() (
   run_logged "Validate Docker Compose current" bash -c "cd '$SUPABASE_ROOT' && docker compose config --quiet" || return 1
 
   info "prepare Edge Functions New off the beaten path live..."
-  mkdir -p "$functions_next"
-  rsync -a --delete "${stage}/supabase/functions/" "${functions_next}/" >>"$CURRENT_LOG" 2>&1 || return 1
-  rm -rf "${functions_next}/main"
-  cp -a "${SUPABASE_SOURCE}/docker/volumes/functions/main" "${functions_next}/main" >>"$CURRENT_LOG" 2>&1 || return 1
-  diff -qr --exclude=main "${stage}/supabase/functions" "$functions_next" >>"$CURRENT_LOG" 2>&1 || return 1
-  diff -qr "${SUPABASE_SOURCE}/docker/volumes/functions/main" "${functions_next}/main" >>"$CURRENT_LOG" 2>&1 || return 1
-  ok "Edge Functions staging validated"
+  stage_update_edge_functions "$stage" "$functions_next" || {
+    fail "Edge Functions staging failed against the pinned Supabase runtime payload."
+    return 1
+  }
+  ok "Edge Functions staging validated with pinned deno.jsonc and Spark offline-safe router"
 
   info "prepare Frontend New off the beaten path live..."
   mkdir -p "$frontend_next"
