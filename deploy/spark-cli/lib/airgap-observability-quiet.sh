@@ -4,3 +4,4 @@
 
 source "${SCRIPT_DIR}/lib/airgap-observability-quiet-base.sh"
 source "${SCRIPT_DIR}/lib/airgap-edge-functions.sh"
+source "${SCRIPT_DIR}/lib/airgap-edge-functions-runtime-fix.sh"
