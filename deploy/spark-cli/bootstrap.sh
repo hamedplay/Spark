@@ -88,6 +88,7 @@ files=(
   lib/airgap-observability-quiet.sh
   lib/airgap-edge-functions.sh
   lib/airgap-edge-functions-runtime-fix.sh
+  lib/airgap-edge-final.sh
 )
 
 for file in "${files[@]}"; do
@@ -192,12 +193,20 @@ grep -q 'airgap-observability-quiet' "$tmp/spark-airgap" || {
   echo "Spark Air-Gap Edge Function runtime compatibility module is missing." >&2
   exit 1
 }
+[[ -f "$tmp/lib/airgap-edge-final.sh" ]] || {
+  echo "Spark Air-Gap final Edge Runtime cache hardening module is missing." >&2
+  exit 1
+}
 grep -q 'airgap-edge-functions.sh' "$tmp/lib/airgap-observability-quiet.sh" || {
   echo "Spark Air-Gap Edge Function offline dependency module is not sourced." >&2
   exit 1
 }
 grep -q 'airgap-edge-functions-runtime-fix.sh' "$tmp/lib/airgap-observability-quiet.sh" || {
   echo "Spark Air-Gap Edge Function runtime compatibility module is not sourced." >&2
+  exit 1
+}
+grep -q 'airgap-edge-final.sh' "$tmp/lib/airgap-observability-quiet.sh" || {
+  echo "Spark Air-Gap final Edge Runtime cache hardening module is not sourced." >&2
   exit 1
 }
 grep -Fq 'AIRGAP_IP_MODE="internal_ip"' "$tmp/lib/airgap-ip.sh" || {
