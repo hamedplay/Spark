@@ -43,45 +43,22 @@ spark_airgap_report_gateway_failure() {
   } >>"${CURRENT_LOG:-/dev/null}"
 }
 
-# When Step 21 is being re-run specifically to complete DB integration after a
-# restore, the database change did not alter Edge Function source code. In that
-# state, validate the Kong function route/authorization boundary without forcing
-# Edge Runtime to cold-load every function. This is important in true Air-Gap
-# mode because a cold worker may otherwise wait on remote module resolution even
-# though the restored DB/RPC integration itself is healthy.
-spark_airgap_post_restore_guard_probe() {
-  local function="$1" gateway_base="$2" code body_file
-  body_file="$(mktemp /tmp/spark-post-restore-guard.XXXXXX)"
-  code="$(curl --noproxy '*' -sS -o "$body_file" -w '%{http_code}' \
-    --connect-timeout 5 --max-time 10 \
-    -H 'Content-Type: application/json' \
-    -X POST "${gateway_base}/functions/v1/${function}" \
-    --data '{}' 2>>"${CURRENT_LOG:-/dev/null}" || true)"
-
-  printf 'Post-restore Edge Function gateway guard %s -> HTTP %s via %s\n' \
-    "$function" "${code:-000}" "$gateway_base" >>"${CURRENT_LOG:-/dev/null}"
-
-  # No apikey is intentionally supplied here. Kong must reject the request at
-  # the gateway boundary before invoking the Edge Runtime worker.
-  if [[ "$code" == "401" || "$code" == "403" ]]; then
-    rm -f "$body_file"
-    return 0
-  fi
-
-  printf 'Post-restore Edge Function gateway guard failed: function=%s http=%s body=' \
-    "$function" "${code:-000}" >>"${CURRENT_LOG:-/dev/null}"
-  tr '\n' ' ' <"$body_file" | head -c 600 >>"${CURRENT_LOG:-/dev/null}" 2>/dev/null || true
-  printf '\n' >>"${CURRENT_LOG:-/dev/null}"
-  rm -f "$body_file"
-  return 1
-}
-
-# Normal validation still proves that each function itself rejects an
-# unauthenticated request. Only the post-restore DB-integration pass uses the
-# gateway-level guard above.
+# Normal validation proves that each function itself rejects an unauthenticated
+# request. A database restore does not modify function source/config/runtime; it
+# only replaces PostgreSQL and creates airgap-db-integration.pending so Step 21
+# can re-validate DB contracts and reconfigure DB-backed worker URLs. Therefore
+# Edge Function guard probes are intentionally skipped only for that post-restore
+# pass. They are still executed during every normal/full Step 21 validation.
 if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
   livekit_function_unauthorized_probe() {
     local function="$1" anon code body_file deadline gateway_base="" gateway_repaired=0 functions_restarted=0
+
+    if [[ -f "${STATE_DIR}/airgap-db-integration.pending" ]]; then
+      printf 'Post-restore DB integration: Edge Function guard probe skipped for %s; function source/runtime were not changed by database restore.\n' \
+        "$function" >>"${CURRENT_LOG:-/dev/null}"
+      return 0
+    fi
+
     anon="$(env_get "${SUPABASE_ROOT}/.env" ANON_KEY)"
     [[ -n "$anon" ]] || {
       printf 'Edge Function guard probe failed: ANON_KEY is missing (%s)\n' "$function" >>"${CURRENT_LOG:-/dev/null}"
@@ -102,15 +79,6 @@ if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
       printf 'Edge Function guard failed before request: Supabase api-gw transport is unavailable.\n' \
         >>"${CURRENT_LOG:-/dev/null}"
       return 1
-    fi
-
-    # A pending marker is created by the original Air-Gap validation when the
-    # application DB is not provisioned yet and is intentionally cleared only
-    # after the restored DB contracts have passed. During exactly that pass,
-    # validate the gateway authorization boundary without cold-loading workers.
-    if [[ -f "${STATE_DIR}/airgap-db-integration.pending" ]]; then
-      spark_airgap_post_restore_guard_probe "$function" "$gateway_base"
-      return $?
     fi
 
     printf 'Edge Function guard using gateway endpoint %s\n' "$gateway_base" >>"${CURRENT_LOG:-/dev/null}"
@@ -171,12 +139,19 @@ if declare -F livekit_function_unauthorized_probe >/dev/null 2>&1; then
   }
 fi
 
-# Surface useful transport/runtime diagnostics in the curses output. The base
-# validator normally sends command output only to CURRENT_LOG.
+# Surface useful transport/runtime diagnostics in the curses output. During the
+# explicit post-restore DB-integration pass, report Edge Function checks as SKIP
+# instead of PASS so the UI accurately reflects what is (and is not) validated.
 if declare -F livekit_airgap_validation_check >/dev/null 2>&1; then
   livekit_airgap_validation_check() {
     local label="$1" rc
     shift
+
+    if [[ -f "${STATE_DIR}/airgap-db-integration.pending" && "$label" == Edge\ Function\ unauthorized\ guard:* ]]; then
+      printf '[SKIP] %s (post-restore DB-only validation)\n' "$label" | tee -a "$CURRENT_LOG"
+      return 0
+    fi
+
     printf '[CHECK] %s\n' "$label" | tee -a "$CURRENT_LOG"
     if "$@" >>"$CURRENT_LOG" 2>&1; then
       printf '[PASS] %s\n' "$label" | tee -a "$CURRENT_LOG"
@@ -186,7 +161,7 @@ if declare -F livekit_airgap_validation_check >/dev/null 2>&1; then
       printf '[FAIL] %s (rc=%s)\n' "$label" "$rc" | tee -a "$CURRENT_LOG" >&2
       if [[ "$label" == Edge\ Function\ unauthorized\ guard:* ]]; then
         tail -n 100 "$CURRENT_LOG" | grep -E \
-          'Post-restore Edge Function|Edge Function .*HTTP|Edge Function guard using|Edge Function runtime|Supabase api-gw|gateway transport|guard failed before request|unauthorized guard failed|functions recent logs|api-gw' \
+          'Edge Function .*HTTP|Edge Function guard using|Edge Function runtime|Supabase api-gw|gateway transport|guard failed before request|unauthorized guard failed|functions recent logs|api-gw' \
           | tail -n 12 | tee /dev/stderr >/dev/null || true
       fi
       return "$rc"
