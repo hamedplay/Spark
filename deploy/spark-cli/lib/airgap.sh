@@ -39,7 +39,7 @@ airgap_current_root() {
 }
 
 airgap_meta_from() {
-  local root="$1" key="$2" file="${root}/metadata/manifest.env"
+  local root="$1" key="$2" file="${1}/metadata/manifest.env"
   [[ -f "$file" ]] || return 1
   sed -n "s/^${key}=//p" "$file" | tail -n1
 }
@@ -58,7 +58,116 @@ airgap_require_file() {
 airgap_validate_checksum_manifest() {
   local root="$1"
   airgap_require_file "${root}/SHA256SUMS" || return 1
-  (cd "$root" && sha256sum -c SHA256SUMS)
+  # A checksum list can pass while omitting artifacts. Require exact coverage
+  # and safe regular files before asking sha256sum to read any listed paths.
+  python3 - "$root" <<'PY' || return 1
+from pathlib import Path, PurePosixPath
+import re, sys
+root = Path(sys.argv[1])
+listed = set()
+for line in (root / 'SHA256SUMS').read_text().splitlines():
+    match = re.fullmatch(r'[0-9a-f]{64} [ *](\./[^\r\n]+)', line)
+    if not match:
+        raise SystemExit('Invalid bundle checksum entry')
+    name = match[1]
+    if '..' in PurePosixPath(name).parts or name in listed or name == './SHA256SUMS':
+        raise SystemExit('Unsafe or duplicate bundle checksum entry')
+    listed.add(name)
+actual = set()
+for path in root.rglob('*'):
+    if path.is_symlink() or not (path.is_file() or path.is_dir()):
+        raise SystemExit(f'Unsupported bundle artifact: {path.relative_to(root)}')
+    if path.is_file() and path != root / 'SHA256SUMS':
+        actual.add('./' + path.relative_to(root).as_posix())
+if not actual or actual != listed:
+    raise SystemExit('Bundle checksum coverage differs from the artifact inventory')
+PY
+  (cd "$root" && sha256sum --quiet -c SHA256SUMS)
+}
+
+airgap_validate_image_manifest() {
+  python3 - "$1" <<'PY'
+from pathlib import Path
+import re, sys
+root = Path(sys.argv[1]) / 'docker'
+images = (root / 'images.txt').read_text().splitlines()
+ids = {}
+for line in (root / 'image-ids.txt').read_text().splitlines():
+    parts = line.split()
+    if len(parts) != 2 or not re.fullmatch(r'sha256:[0-9a-f]{64}', parts[1]) or parts[0] in ids:
+        raise SystemExit('Invalid or duplicate Docker image identity entry')
+    ids[parts[0]] = parts[1]
+if not images or len(images) != len(set(images)) or any(not i or any(c.isspace() for c in i) for i in images):
+    raise SystemExit('Invalid or empty Docker image inventory')
+if set(images) != set(ids):
+    raise SystemExit('Docker images.txt and image-ids.txt do not cover the same images')
+PY
+}
+
+airgap_validate_source_bundle() (
+  local root="$1" name="$2" branch="$3" commit="$4" verify_repo heads
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { fail "Invalid ${name} source commit."; return 1; }
+  git check-ref-format "refs/heads/$branch" || return 1
+  verify_repo="$(mktemp -d)" || return 1
+  trap 'rm -rf -- "$verify_repo"' EXIT
+  git init --bare -q "$verify_repo" || return 1
+  git -C "$verify_repo" bundle verify "${root}/sources/${name}.git.bundle" >/dev/null 2>&1 || {
+    fail "${name} Git bundle is invalid or requires missing prerequisite commits."
+    return 1
+  }
+  heads="$(git bundle list-heads "${root}/sources/${name}.git.bundle" "refs/heads/$branch")" || return 1
+  [[ "$heads" == "$commit refs/heads/$branch" ]] || { fail "${name} Git bundle does not contain the declared branch/commit."; return 1; }
+)
+
+airgap_validate_payload_archives() {
+  python3 - "$1" <<'PY'
+from pathlib import Path
+import json, re, subprocess, sys, tarfile
+root = Path(sys.argv[1])
+values = {}
+for line in (root / 'metadata/manifest.env').read_text().splitlines():
+    key, sep, value = line.partition('=')
+    if not sep or key in values:
+        raise SystemExit('Invalid or duplicate bundle metadata')
+    values[key] = value
+if json.loads((root / 'manifest.json').read_text()) != values:
+    raise SystemExit('JSON and env bundle metadata disagree')
+if not re.fullmatch(r'spark-airgap-[A-Za-z0-9._-]+', values.get('BUNDLE_ID', '')):
+    raise SystemExit('Invalid bundle ID')
+if values.get('UBUNTU_VERSION') not in ('24.04', '26.04') or values.get('ARCH') != 'amd64':
+    raise SystemExit('Unsupported bundle platform')
+requested = set((root / 'apt/requested-packages.txt').read_text().splitlines())
+available = set()
+for package in (root / 'apt').glob('*.deb'):
+    fields = subprocess.check_output(['dpkg-deb', '--field', str(package), 'Package', 'Architecture'], text=True)
+    fields = dict(line.split(': ', 1) for line in fields.splitlines())
+    if fields.get('Architecture') not in ('amd64', 'all'):
+        raise SystemExit(f'Wrong APT package architecture: {package.name}')
+    available.add(fields['Package'])
+if not requested or '' in requested or not requested <= available:
+    raise SystemExit(f'APT payload is missing requested packages: {sorted(requested - available)}')
+def require_members(path, required):
+    with tarfile.open(path, 'r:gz') as archive:
+        names = {m.name.removeprefix('./') for m in archive}
+    if not required <= names:
+        raise SystemExit(f'Incomplete archive: {path.name}; missing {sorted(required - names)}')
+require_members(root / 'npm/frontend-node-modules.tar.gz', {'node_modules/typescript/bin/tsc', 'node_modules/vite/bin/vite.js'})
+packages = list((root / 'npm').glob('npm-*.tgz'))
+if len(packages) != 1:
+    raise SystemExit('Expected exactly one offline npm package')
+require_members(packages[0], {'package/bin/npm-cli.js', 'package/package.json'})
+# Iterate the Docker tar as well as its gzip wrapper; a non-tar gzip is not an image archive.
+with tarfile.open(root / 'docker/docker-images.tar.gz', 'r|gz') as archive:
+    names = {m.name.removeprefix('./') for m in archive}
+if 'manifest.json' not in names:
+    raise SystemExit('Docker save archive is missing manifest.json')
+if values.get('OFFLINE_PROOF_REQUIRED') == '1':
+    proof = dict(line.split('=', 1) for line in (root / 'npm/offline-proof.env').read_text().splitlines())
+    expected = {'UBUNTU_VERSION': values['UBUNTU_VERSION'], 'ARCH': 'amd64', 'NETWORK': 'none',
+                'APT_INSTALL': 'passed', 'NPM_INSTALL': 'passed', 'FRONTEND_BUILD': 'passed'}
+    if proof != expected:
+        raise SystemExit('Offline package/frontend proof does not match the bundle target')
+PY
 }
 
 airgap_validate_bundle_dir() {
@@ -79,7 +188,12 @@ airgap_validate_bundle_dir() {
     fail "Unsupported air-gap bundle format: ${format:-missing}"
     return 1
   }
-  run_logged "Validate air-gap SHA256 manifest" airgap_validate_checksum_manifest "$root"
+  run_logged "Validate air-gap SHA256 manifest" airgap_validate_checksum_manifest "$root" || return 1
+  airgap_validate_image_manifest "$root" || return 1
+  airgap_validate_payload_archives "$root" || return 1
+  root="$(readlink -f "$root")"
+  airgap_validate_source_bundle "$root" spark main "$(airgap_meta_from "$root" SPARK_COMMIT)" || return 1
+  airgap_validate_source_bundle "$root" supabase "$(airgap_meta_from "$root" SUPABASE_BRANCH)" "$(airgap_meta_from "$root" SUPABASE_COMMIT)"
 }
 
 airgap_validate_target_compatibility() {
@@ -151,7 +265,7 @@ airgap_verify_image_list_content() {
 }
 
 airgap_reload_image_archive() {
-  local root="$1" archive="${root}/docker/docker-images.tar.gz"
+  local root="$1" archive="${1}/docker/docker-images.tar.gz"
   [[ -s "$archive" ]] || return 1
   gzip -dc "$archive" | "$AIRGAP_REAL_DOCKER" load
 }
@@ -178,6 +292,7 @@ airgap_repair_image_list_content() {
 
 airgap_verify_images() {
   local root="$1" image expected_id actual_id extra failed=0 count=0
+  airgap_validate_image_manifest "$root" || return 1
   [[ -s "${root}/docker/image-ids.txt" ]] || { fail "Docker image ID manifest is missing or empty."; return 1; }
   # spark-airgap excludes spaces from global IFS; this file is space-delimited.
   while IFS=$' \t' read -r image expected_id extra || [[ -n "$image" ]]; do
@@ -199,10 +314,11 @@ airgap_verify_images() {
   (( count > 0 && failed == 0 ))
 }
 
-airgap_import_bundle() {
+airgap_import_bundle() (
   title
   new_log "airgap-import"
-  local input="${1:-}" staging="" root bundle_id final
+  local input="${1:-}" staging="" incoming="" root bundle_id final
+  trap '[[ -z "$staging" ]] || rm -rf -- "$staging"; [[ -z "$incoming" ]] || rm -rf -- "$incoming"' EXIT
   if [[ -z "$input" ]]; then read -r -p "Path to Spark air-gap .tar.gz or extracted bundle directory: " input; fi
   [[ -n "$input" ]] || { fail "Bundle path is required."; return 1; }
 
@@ -221,22 +337,20 @@ airgap_import_bundle() {
   final="${AIRGAP_BUNDLES_DIR}/${bundle_id}"
 
   if [[ "$(readlink -f "$root")" != "$(readlink -m "$final")" ]]; then
-    rm -rf "$final"
-    mkdir -p "$final"
-    cp -a "$root/." "$final/"
+    if [[ -e "$final" ]]; then
+      cmp -s "${root}/SHA256SUMS" "${final}/SHA256SUMS" || {
+        fail "A different bundle already uses ID ${bundle_id}; refusing to replace it."
+        return 1
+      }
+      airgap_validate_bundle_dir "$final" || return 1
+    else
+      incoming="$(mktemp -d "${AIRGAP_BUNDLES_DIR}/.import.XXXXXX")" || return 1
+      cp -a "$root/." "$incoming/" || return 1
+      mv "$incoming" "$final" || return 1
+      incoming=""
+    fi
   fi
   [[ -n "$staging" ]] && rm -rf "$staging"
-
-  ln -sfn "$final" "$AIRGAP_CURRENT_LINK"
-  mkdir -p "$CONFIG_DIR"
-  printf 'AIRGAP_ROOT=%s\n' "$final" >"$AIRGAP_CONF"
-  chmod 0600 "$AIRGAP_CONF"
-
-  if [[ -f "${final}/config/manager.conf" && ! -f "$MANAGER_CONF" ]]; then
-    cp "${final}/config/manager.conf" "$MANAGER_CONF"
-    chmod 0600 "$MANAGER_CONF"
-    info "Installation configuration restored from bundle because manager.conf did not exist."
-  fi
 
   [[ -x "$AIRGAP_REAL_DOCKER" ]] || { fail "Docker is not installed yet. Run bootstrap-airgap.sh first."; return 1; }
   run_visible "Load offline Docker images" bash -c "gzip -dc '$final/docker/docker-images.tar.gz' | '$AIRGAP_REAL_DOCKER' load" || return 1
@@ -245,8 +359,18 @@ airgap_import_bundle() {
     fail "Bundled Docker image content is unreadable after offline reload. Rebuild the Air-Gap bundle on a healthy Docker host."
     return 1
   }
+  # A failed load/verification must not replace the previously active bundle.
+  ln -sfn "$final" "$AIRGAP_CURRENT_LINK" || return 1
+  mkdir -p "$CONFIG_DIR"
+  printf 'AIRGAP_ROOT=%s\n' "$final" >"$AIRGAP_CONF"
+  chmod 0600 "$AIRGAP_CONF"
+  if [[ -f "${final}/config/manager.conf" && ! -f "$MANAGER_CONF" ]]; then
+    cp "${final}/config/manager.conf" "$MANAGER_CONF" || return 1
+    chmod 0600 "$MANAGER_CONF"
+    info "Installation configuration restored from bundle because manager.conf did not exist."
+  fi
   ok "Air-gap bundle imported and activated: $bundle_id"
-}
+)
 
 airgap_install_local_debs() {
   local root="$1" apt_guard rc=0

@@ -167,3 +167,45 @@ Update Production فقط کد و Runtime برنامه را به‌روزرسان
 ## نصب و مدیریت LiveKit از Spark Manager
 
 مراحل 19 تا 21 پلتفرم کامل LiveKit را نصب می‌کنند: Configuration/TLS/Secrets، Runtime شامل SFU/Redis/Egress/Ingress/TURN و سپس validation کامل. در Single Host، Nginx اصلی Spark مالک 80/443 می‌ماند و Caddy مستقل LiveKit profile-gated است. Dashboard همچنین Diagnostic، Restart و Cleanup اختصاصی LiveKit دارد.
+
+## باندل کامل نصب آفلاین
+
+روی سرور سازندهٔ متصل به اینترنت:
+
+```bash
+cd /opt/spark
+git pull --ff-only origin main
+sudo ./deploy/spark-cli/spark-airgap --build
+```
+
+باندل شامل موارد زیر است:
+
+| بخش | محتوای بسته و کنترل آن |
+| --- | --- |
+| سورس | Git bundle کامل Spark و Supabase با شاخه و کامیت مشخص؛ اسکریپت‌ها، migrationها، UI و تنظیمات نمونه داخل سورس هستند. |
+| سیستم‌عامل | بسته‌های Ubuntu، Docker، Compose، Node، Nginx، coturn و وابستگی‌ها؛ وابستگی‌های موجود در کانتینر سازنده نیز دانلود می‌شوند. |
+| تصاویر | تصاویر Composeهای Supabase و LiveKit/observability و Avatar Worker ساخته‌شده؛ فهرست تصاویر و شناسه‌ها باید دقیقاً منطبق باشند. |
+| frontend | node_modules هدف و بستهٔ npm با نسخهٔ دقیق؛ نصب و build در کانتینر هدف با شبکهٔ قطع‌شده آزموده می‌شود. |
+| Edge Functions | سورس تمام Functionها، روتر آفلاین، import map و کش Deno؛ فهرست Functionها و تصویر runtime کنترل می‌شوند. |
+| راه‌اندازی | bootstrap.sh برای نصب کنترل‌پلین همان کامیت از خود باندل. |
+| موارد اختیاری | تنظیمات مدیر و بستهٔ گواهی در صورت موجود بودن؛ حالت internal-IP به گواهی محلی نیاز ندارد. |
+
+خروجی فقط پس از موفقیت کنترل کامل بودن، checksum همهٔ فایل‌ها، بررسی آرشیوها و آزمون آفلاین ساخته می‌شود. نتیجهٔ آزمون APT/npm/frontend در `npm/offline-proof.env` ثبت می‌شود. این آزمون یک نصب کامل ۲۲مرحله‌ای روی VM نیست؛ سلامت سرویس‌های در حال اجرا، WAF، پورت‌ها و ارتباط با ارائه‌دهندگان خارجی باید روی مقصد بررسی شود.
+
+فایل `.tar.gz` و فایل کناری `.sha256` را منتقل کنید. روی مقصد و پیش از bootstrap:
+
+```bash
+sha256sum -c spark-airgap-....tar.gz.sha256
+tar -xzf spark-airgap-....tar.gz -C /opt/install
+sudo bash /opt/install/spark-airgap-.../bootstrap.sh
+```
+
+نام‌های `...` را با نام خروجی واقعی جایگزین کنید؛ مسیر `/opt/install` باید موجود باشد. باندل را داخل `/opt/spark` استخراج نکنید. bootstrap سورس موجود را در `/var/backups/spark-airgap-source.*` حفظ می‌کند. Import ناموفق، اشاره‌گر باندل فعال قبلی را تغییر نمی‌دهد؛ این به معنی rollback تراکنشیِ Docker image store نیست.
+
+این خروجی بستهٔ نصب است و شامل دیتابیس زنده، کاربران، فایل‌های آپلودشده یا داده‌های volumeها نیست. انتقال/بازیابی داده‌ها و اجرای migrationهای دیتابیس همچنان عملیات جداگانه‌اند؛ وجود فایل migration داخل Git bundle به معنی اعمال آن روی دیتابیس نیست. ابزارهای آنلاینِ مستقل مانند دریافت `supabase@latest` با npx جزو زنجیرهٔ نصب آفلاین ۲۲مرحله‌ای نیستند.
+
+تست رگرسیون این مسیر بدون Docker و شبکه، با شبیه‌سازی مرزهای بیرونی:
+
+```bash
+python3 -m unittest discover -s deploy/spark-cli/tests -v
+```

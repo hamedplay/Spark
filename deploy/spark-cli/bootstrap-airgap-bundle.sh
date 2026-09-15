@@ -30,6 +30,10 @@ unset SCRIPT_SOURCE DIR LINK
 root="${1:-$SCRIPT_DIR}"
 root="$(readlink -f "$root")"
 [[ -d "$root" ]] || { echo "Air-Gap bundle root not found: $root" >&2; exit 2; }
+[[ "$root" != "$SPARK_ROOT" && "$root" != "$SPARK_ROOT/"* ]] || {
+  echo "Extract the bundle outside ${SPARK_ROOT} before bootstrapping (for example /opt/install)." >&2
+  exit 2
+}
 
 for cmd in tar sha256sum sed grep find dpkg apt-get readlink; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Required bootstrap command is missing: $cmd" >&2; exit 1; }
@@ -99,18 +103,32 @@ for cmd in git python3 rsync docker npm nginx; do
 done
 systemctl enable --now docker nginx
 
-# Restore the exact application/control-plane commit carried in this bundle.
-rm -rf "$SPARK_ROOT"
-git clone --branch main "${root}/sources/spark.git.bundle" "$SPARK_ROOT"
-git -C "$SPARK_ROOT" checkout "$spark_commit"
-git -C "$SPARK_ROOT" branch -f main "$spark_commit"
-git -C "$SPARK_ROOT" checkout main
-git -C "$SPARK_ROOT" remote set-url origin https://github.com/hamedplay/Spark.git
-git -C "$SPARK_ROOT" update-ref refs/remotes/origin/main "$spark_commit"
-[[ "$(git -C "$SPARK_ROOT" rev-parse HEAD)" == "$spark_commit" ]] || {
+# Validate the bundled control plane and payload before replacing existing source.
+restore_stage="$(mktemp -d /opt/.spark-airgap-restore.XXXXXX)"
+trap 'rm -rf -- "$restore_stage"' EXIT
+git clone --branch main "${root}/sources/spark.git.bundle" "${restore_stage}/spark"
+git -C "${restore_stage}/spark" checkout "$spark_commit"
+git -C "${restore_stage}/spark" branch -f main "$spark_commit"
+git -C "${restore_stage}/spark" checkout main
+git -C "${restore_stage}/spark" remote set-url origin https://github.com/hamedplay/Spark.git
+git -C "${restore_stage}/spark" update-ref refs/remotes/origin/main "$spark_commit"
+[[ "$(git -C "${restore_stage}/spark" rev-parse HEAD)" == "$spark_commit" ]] || {
   echo "Restored Spark source commit does not match bundle manifest." >&2
   exit 1
 }
+bash "${restore_stage}/spark/deploy/spark-cli/spark-airgap" --validate "$root"
+if [[ -e "$SPARK_ROOT" ]]; then
+  backup="$(mktemp -d /var/backups/spark-airgap-source.XXXXXX)"
+  chmod 0700 "$backup"
+  mv "$SPARK_ROOT" "${backup}/spark"
+  printf 'Existing source preserved at %s\n' "${backup}/spark"
+fi
+if ! mv "${restore_stage}/spark" "$SPARK_ROOT"; then
+  [[ -z "${backup:-}" ]] || mv "${backup}/spark" "$SPARK_ROOT"
+  exit 1
+fi
+rm -rf "$restore_stage"
+trap - EXIT
 
 source_dir="${SPARK_ROOT}/deploy/spark-cli"
 for path in \

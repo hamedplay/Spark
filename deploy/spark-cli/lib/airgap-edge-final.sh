@@ -86,7 +86,7 @@ printf "Offline dependency proof passed for %s Edge Runtime entrypoints with Doc
 }
 
 _airgap_edge_seed_live_cache() {
-  local root="$1" meta="${root}/metadata/edge-runtime.env"
+  local root="$1" meta="${1}/metadata/edge-runtime.env"
   local expected_image expected_image_id expected_deno expected_cache_files
   local functions_mount expected_functions_mount cache_type cache_name cache_destination cache_mountpoint
   local actual_image actual_image_id actual_deno runtime actual_cache_files

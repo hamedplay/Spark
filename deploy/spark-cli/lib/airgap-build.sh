@@ -6,7 +6,7 @@ airgap_prompt_default() {
   printf -v "$__var" '%s' "${value:-$default_value}"
 }
 
-airgap_build_apt_payload() {
+airgap_build_apt_payload() (
   local output="$1" target_release="$2" count container rc
   mkdir -p "$output"
   find "$output" -maxdepth 1 -type f -name '*.deb' -delete
@@ -18,7 +18,7 @@ airgap_build_apt_payload() {
   # copy the verified payload to the host with `docker cp`.
   container="spark-airgap-apt-${target_release//./-}-$$-${RANDOM}"
   docker rm -f "$container" >/dev/null 2>&1 || true
-  trap 'docker rm -f "$container" >/dev/null 2>&1 || true' RETURN
+  trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
 
   set +e
   # -i is required because the builder script is supplied to `bash -s` on stdin.
@@ -30,9 +30,7 @@ airgap_build_apt_payload() {
 set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-# Keep every .deb downloaded while bootstrapping repository tooling as well as
-# the final Spark package set. This preserves transitive dependencies needed on
-# a bare target host.
+# Keep APT downloads available for the final complete dependency resolution.
 rm -f /etc/apt/apt.conf.d/docker-clean
 apt-get update
 apt-get install -y ca-certificates curl gnupg
@@ -58,10 +56,12 @@ packages=(
   docker-buildx-plugin docker-compose-plugin nodejs
 )
 
-# --reinstall guarantees the requested packages themselves are present in the
-# cache; packages downloaded during the bootstrap install above remain there
-# because docker-clean was disabled before the first install.
-apt-get install -y --download-only --reinstall "${packages[@]}"
+# Resolve against an empty installed-package database so dependencies already
+# present in the builder image are included too, not silently assumed on target.
+: >/tmp/spark-empty-dpkg-status
+rm -f /var/cache/apt/archives/*.deb
+apt-get -o Dir::State::status=/tmp/spark-empty-dpkg-status \
+  install -y --download-only --reinstall "${packages[@]}"
 mkdir -p /payload
 cp -a /var/cache/apt/archives/*.deb /payload/
 printf '%s\n' "${packages[@]}" >/payload/requested-packages.txt
@@ -81,7 +81,7 @@ BUNDLE_APT
     return 1
   fi
   docker rm -f "$container" >/dev/null 2>&1 || true
-  trap - RETURN
+  trap - EXIT
 
   count="$(find "$output" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d '[:space:]')"
   [[ "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]] || {
@@ -93,7 +93,7 @@ BUNDLE_APT
     return 1
   }
   info "Offline APT payload contains ${count} .deb files."
-}
+)
 
 airgap_build_npm_payload() {
   local output="$1" target_release="$2"
@@ -124,7 +124,7 @@ cd /work/frontend
 npm ci
 tar -czf /out/frontend-node-modules.tar.gz node_modules
 cd /work
-npm pack --pack-destination /out 'npm@^11.6.2' >/dev/null
+npm pack --pack-destination /out "npm@$(npm --version)" >/dev/null
 BUNDLE_NPM
   [[ -s "${output}/frontend-node-modules.tar.gz" ]] || {
     fail "Offline frontend node_modules archive was not produced in ${output}."
@@ -140,10 +140,75 @@ airgap_collect_compose_images() {
   local supabase_source="$1" output="$2"
   local livekit_dir="${SPARK_ROOT}/deploy/livekit"
   {
-    (cd "${supabase_source}/docker" && docker compose --env-file .env.example -f docker-compose.yml config --images)
-    (cd "$livekit_dir" && docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.spark-cli.yml --profile observability config --images)
+    (cd "${supabase_source}/docker" && docker compose --env-file .env.example -f docker-compose.yml config --images) || return 1
+    (cd "$livekit_dir" && docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.spark-cli.yml --profile observability config --images) || return 1
   } | sed '/^[[:space:]]*$/d' | sort -u >"$output"
 }
+
+airgap_prove_offline_payloads() {
+  local root="$1" target_release="$2"
+  # Replay on a clean target image using ONLY the artifacts being shipped.
+  # No Docker daemon or host services are started inside this test container.
+  docker run --rm -i --pull=never --platform linux/amd64 --network none \
+    -v "${root}/apt:/payload/apt:ro" -v "${root}/npm:/payload/npm:ro" \
+    -v "${SPARK_ROOT}:/src:ro" "ubuntu:${target_release}" bash -s <<'OFFLINE_PROOF' || return 1
+set -Eeuo pipefail
+export DEBIAN_FRONTEND=noninteractive
+mkdir -p /tmp/empty-sources
+: >/tmp/empty-sources.list
+printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
+chmod +x /usr/sbin/policy-rc.d
+apt-get -o Dir::Etc::sourcelist=/tmp/empty-sources.list \
+  -o Dir::Etc::sourceparts=/tmp/empty-sources --no-download \
+  install -y --allow-downgrades /payload/apt/*.deb
+while IFS= read -r package; do
+  [[ -n "$package" ]] || continue
+  [[ "$(dpkg-query -W -f='${Status}' "$package")" == 'install ok installed' ]]
+done </payload/apt/requested-packages.txt
+python3 -c 'import yaml'
+docker compose version
+node -e 'const [a,b,c]=process.versions.node.split(".").map(Number); if (!(a===24 && (b>18 || (b===18 && c>=1)))) process.exit(1)'
+npm install --offline --no-audit --no-fund -g /payload/npm/npm-*.tgz
+mkdir -p /work/frontend
+tar -C /src --exclude=.git --exclude=node_modules --exclude=dist -cf - . | tar -C /work/frontend -xf -
+tar -xzf /payload/npm/frontend-node-modules.tar.gz -C /work/frontend
+cd /work/frontend
+export npm_config_offline=true npm_config_audit=false npm_config_fund=false
+export VITE_SUPABASE_URL=http://127.0.0.1:8000 VITE_SUPABASE_ANON_KEY=offline-build-proof
+npm run build
+test -s dist/index.html
+test -s dist/sw.js
+test -s dist/pwa-bootstrap.js
+OFFLINE_PROOF
+  printf 'UBUNTU_VERSION=%s\nARCH=amd64\nNETWORK=none\nAPT_INSTALL=passed\nNPM_INSTALL=passed\nFRONTEND_BUILD=passed\n' \
+    "$target_release" >"${root}/npm/offline-proof.env"
+}
+
+airgap_write_image_ids() {
+  local root="$1" image image_id
+  : >"${root}/docker/image-ids.txt"
+  while IFS= read -r image; do
+    [[ -n "$image" ]] || continue
+    image_id="$(docker image inspect --format '{{.Id}}' "$image")" || return 1
+    [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { fail "Invalid image ID: $image"; return 1; }
+    printf '%s %s\n' "$image" "$image_id" >>"${root}/docker/image-ids.txt"
+  done <"${root}/docker/images.txt"
+}
+
+airgap_publish_bundle() (
+  local root="$1" output_root="$2" bundle_id archive partial
+  bundle_id="$(basename "$root")"
+  archive="${output_root}/${bundle_id}.tar.gz"
+  [[ ! -e "$archive" && ! -e "${archive}.sha256" ]] || { fail "Bundle output already exists: $archive"; return 1; }
+  partial="$(mktemp "${output_root}/.${bundle_id}.XXXXXX")" || return 1
+  trap 'rm -f -- "$partial" "${partial}.sha256"' EXIT
+  tar -C "$(dirname "$root")" -czf "$partial" "$bundle_id" || return 1
+  gzip -t "$partial" || return 1
+  printf '%s  %s\n' "$(sha256sum "$partial" | cut -d' ' -f1)" "${bundle_id}.tar.gz" >"${partial}.sha256" || return 1
+  chmod 0600 "$partial" "${partial}.sha256"
+  mv "$partial" "$archive" || return 1
+  mv "${partial}.sha256" "${archive}.sha256" || return 1
+)
 
 airgap_linux_amd64_registry_digest() {
   local image="$1" raw digest

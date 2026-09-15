@@ -143,12 +143,25 @@ spark_airgap_validate_action() {
   printf 'Bundle target: Ubuntu %s / %s\n' "$(airgap_meta_from "$root" UBUNTU_VERSION)" "$(airgap_meta_from "$root" ARCH)"
   if airgap_validate_target_compatibility "$root" >/dev/null 2>&1; then ok "Air-gap bundle integrity is valid and this host matches the target platform."; else warn "Bundle integrity is valid; this host does not match the bundle target, so target compatibility will be enforced during import/bootstrap."; fi
   [[ -n "$staging" ]] && rm -rf "$staging"
+  return 0
 }
 
 spark_airgap_dispatch_inner() {
   local action="$1"; shift || true
   case "$action" in
-    airgap-build) spark_airgap_sync_source_main && airgap_build_bundle ;;
+    airgap-build)
+      local loaded_commit
+      loaded_commit="$(command git -C "$SPARK_ROOT" rev-parse HEAD)" || return 1
+      spark_airgap_sync_source_main || return 1
+      if [[ "$loaded_commit" != "$(command git -C "$SPARK_ROOT" rev-parse HEAD)" \
+          || "$(readlink -f "$SCRIPT_DIR")" != "$(readlink -f "${SPARK_ROOT}/deploy/spark-cli")" ]]; then
+        # Modules were sourced before fetch. Run the updated entrypoint so the
+        # embedded source revision and the executing builder stay consistent.
+        bash "${SPARK_ROOT}/deploy/spark-cli/spark-airgap" --build
+      else
+        airgap_build_bundle
+      fi
+      ;;
     airgap-validate) spark_airgap_validate_action "${1:-}" ;;
     airgap-import) airgap_import_bundle "${1:-}" ;;
     airgap-step) airgap_install_one_step "${1:-}" ;;

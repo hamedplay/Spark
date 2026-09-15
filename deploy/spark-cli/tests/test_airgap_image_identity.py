@@ -44,7 +44,7 @@ docker() {
   printf '%s\n' "$*" >>"$WORK/docker-calls"
   case "$1" in
     info|build|rm) return 0 ;;
-    load) cat >/dev/null; printf '%s\n' "$EDGE_ID" >"$WORK/edge-id" ;;
+    load) cat >/dev/null; [[ "${FAIL_LOAD:-0}" == 0 ]] || return 9; printf '%s\n' "$EDGE_ID" >"$WORK/edge-id" ;;
     buildx)
       [[ "${4:-}" == --raw ]] || return 1
       printf '{"manifests":[{"digest":"%s","platform":{"os":"linux","architecture":"amd64"}}]}\n' "$CHILD" ;;
@@ -60,11 +60,16 @@ docker() {
     tag)
       if [[ "$3" == "$EDGE_IMAGE" ]]; then printf '%s\n' "$2" >"$WORK/edge-id"; fi ;;
     create) printf 'test-container\n' ;;
-    run) printf 'deno 2.1.4\n' ;;
+    run)
+      if [[ "$*" == *'/payload/apt:ro'* ]]; then
+        [[ "$*" == *'none'* && "$*" == *'--pull=never'* ]] || return 8
+        cat >"$WORK/offline-proof-script"
+        [[ "${FAIL_PROOF:-0}" == 0 ]] || return 9
+      else printf 'deno 2.1.4\n'; fi ;;
     image)
       case "$2" in
         rm) return 0 ;;
-        save) printf 'fake Docker archive\n' ;;
+        save) tar -C "$WORK/docker-fixture" -cf - manifest.json ;;
         inspect)
           if [[ "$4" == '{{.Os}}/{{.Architecture}}' ]]; then
             printf '%s\n' "${TEST_PLATFORM:-linux/amd64}"
@@ -80,6 +85,8 @@ docker() {
 }
 AIRGAP_REAL_DOCKER=docker
 make_repos() {
+  mkdir -p "$WORK/docker-fixture"
+  printf '[]\n' >"$WORK/docker-fixture/manifest.json"
   mkdir -p "$SPARK_ROOT/supabase/functions/hello" "$SPARK_ROOT/deploy/spark-cli/edge-main"
   cp "$SCRIPT_DIR/edge-main/index.ts" "$SPARK_ROOT/deploy/spark-cli/edge-main/index.ts"
   cp "$SCRIPT_DIR/bootstrap-airgap-bundle.sh" "$SPARK_ROOT/deploy/spark-cli/"
@@ -96,10 +103,18 @@ make_repos() {
   command git -C "$SUPABASE_SOURCE" tag self-hosted/v0.8.1
 }
 _airgap_edge_cache_dependencies() { printf 'cached\n' >"$2/cache"; }
-airgap_build_apt_payload() { printf 'deb\n' >"$1/example.deb"; }
+airgap_build_apt_payload() {
+  mkdir -p "$WORK/deb-fixture/DEBIAN"
+  printf 'Package: fixture\nVersion: 1\nArchitecture: amd64\nMaintainer: Test <test@example.invalid>\nDescription: fixture\n' >"$WORK/deb-fixture/DEBIAN/control"
+  dpkg-deb --build "$WORK/deb-fixture" "$1/example.deb" >/dev/null
+  printf 'fixture\n' >"$1/requested-packages.txt"
+}
 airgap_build_npm_payload_without_edge_v2() {
-  printf 'npm\n' >"$1/npm-test.tgz"
-  printf 'modules\n' >"$1/frontend-node-modules.tar.gz"
+  mkdir -p "$WORK/npm-fixture/package/bin" "$WORK/npm-fixture/node_modules/typescript/bin" "$WORK/npm-fixture/node_modules/vite/bin"
+  touch "$WORK/npm-fixture/package/bin/npm-cli.js" "$WORK/npm-fixture/package/package.json"
+  touch "$WORK/npm-fixture/node_modules/typescript/bin/tsc" "$WORK/npm-fixture/node_modules/vite/bin/vite.js"
+  tar -C "$WORK/npm-fixture" -czf "$1/npm-test.tgz" package
+  tar -C "$WORK/npm-fixture" -czf "$1/frontend-node-modules.tar.gz" node_modules
 }
 airgap_collect_compose_images() { printf '%s\n' "$EDGE_IMAGE" other/image:v1 >"$2"; }
 airgap_prompt_default() {
@@ -110,7 +125,7 @@ airgap_prompt_default() {
   esac
 }
 git() {
-  if [[ "$1" == clone ]]; then
+  if [[ "$1" == clone && "$*" == *'https://github.com/supabase/supabase.git'* ]]; then
     command git clone --branch self-hosted/v0.8.1 --single-branch "$SUPABASE_SOURCE" "${@: -1}"
   else command git "$@"; fi
 }
@@ -180,6 +195,7 @@ if airgap_prepare_bundle_image "$EDGE_IMAGE" "$root"; then exit 13; fi
         self.run_shell(r'''
 root="$WORK/bundle"
 mkdir -p "$root/docker"
+printf 'other/image:v1\n' >"$root/docker/images.txt"
 if airgap_verify_images "$root"; then exit 14; fi
 for entry in '' ' ' 'other/image:v1' 'other/image:v1 invalid' "other/image:v1 $OTHER_ID extra"; do
   printf '%s\n' "$entry" >"$root/docker/image-ids.txt"

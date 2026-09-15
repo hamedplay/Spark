@@ -5,7 +5,7 @@
 eval "$(declare -f install_step_20 | sed '1s/install_step_20/install_step_20_online/')"
 
 airgap_cert_source_dir() {
-  local root="$1" domain="$2" src="${root}/certificates/${domain}"
+  local root="$1" domain="$2" src="${1}/certificates/${2}"
   [[ -f "${src}/fullchain.pem" && -f "${src}/privkey.pem" ]] || return 1
   printf '%s\n' "$src"
 }

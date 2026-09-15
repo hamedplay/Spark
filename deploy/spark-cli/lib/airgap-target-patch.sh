@@ -111,7 +111,7 @@ airgap_target_patch_open_patch() {
   fi
 }
 
-airgap_build_target_patch() {
+airgap_build_target_patch() (
   title
   new_log "airgap-build-target-patch"
   local base_input="${1:-}" target_release="${2:-}" output_root="${3:-}"
@@ -165,6 +165,8 @@ airgap_build_target_patch() {
   SPARK_ROOT="$source"
   run_visible "Build Ubuntu ${target_release} frontend/npm replacement payload" \
     airgap_build_npm_payload "${patch}/npm" "$target_release" || { SPARK_ROOT="$saved_spark_root"; return 1; }
+  run_visible "Prove replacement APT/npm payload with networking disabled" \
+    airgap_prove_offline_payloads "$patch" "$target_release" || { SPARK_ROOT="$saved_spark_root"; return 1; }
   SPARK_ROOT="$saved_spark_root"
 
   cat >"${patch}/metadata/patch.env" <<EOF_META
@@ -202,7 +204,7 @@ PY
   printf 'Spark commit: %s\n' "$base_commit"
   printf 'Target      : Ubuntu %s / amd64\n' "$target_release"
   printf 'Note        : Docker images, Git sources and certificates are NOT duplicated in this patch.\n'
-}
+)
 
 airgap_apply_target_patch() {
   title

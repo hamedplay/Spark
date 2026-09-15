@@ -245,7 +245,7 @@ EOF_EDGE_META
 }
 
 _airgap_edge_validate_payload() {
-  local root="$1" meta="${root}/metadata/edge-runtime.env"
+  local root="$1" meta="${1}/metadata/edge-runtime.env"
   local mode fmt spark_commit supabase_commit main_spark main_supabase
   local image image_id image_list_id deno count entrypoints cache_files actual_cache_files
 
@@ -286,6 +286,17 @@ _airgap_edge_validate_payload() {
     fail "Embedded Edge Runtime inventory count mismatch."
     return 1
   }
+  python3 - "$root" "$entrypoints" <<'PY' || return 1
+from pathlib import Path
+import re, sys
+functions = Path(sys.argv[1]) / 'edge-functions'
+names = (functions / '.spark-bundled-functions').read_text().splitlines()
+if len(names) != len(set(names)) or any(not re.fullmatch(r'[A-Za-z0-9_-]+', n) or n == 'main' for n in names):
+    raise SystemExit('Invalid or duplicate Edge Function inventory')
+actual = {p.parent.name for p in functions.glob('*/index.ts') if p.is_file()}
+if actual != set(names) | {'main'} or len(actual) != int(sys.argv[2]):
+    raise SystemExit('Edge Function source files do not match the bundled inventory')
+PY
   actual_cache_files="$(find "${root}/deno-cache" -type f | wc -l | tr -d '[:space:]')"
   [[ "$cache_files" =~ ^[0-9]+$ && "$cache_files" -gt 0 && "$actual_cache_files" == "$cache_files" ]] || {
     fail "Embedded DENO_DIR file count mismatch."
@@ -419,7 +430,7 @@ _airgap_edge_capture_logs() {
 }
 
 _airgap_edge_seed_live_cache() {
-  local root="$1" meta="${root}/metadata/edge-runtime.env"
+  local root="$1" meta="${1}/metadata/edge-runtime.env"
   local expected_image expected_image_id expected_deno expected_cache_files
   local functions_mount expected_functions_mount cache_type cache_name cache_destination
   local actual_image actual_image_id actual_deno runtime
@@ -558,11 +569,11 @@ install_step_10() {
 # Maintenance supplement builder. New full bundles no longer require this path,
 # but keeping it deterministic is useful for servicing an already transferred
 # format-v2 base without retransferring Docker images.
-airgap_build_edge_functions_pack() {
+airgap_build_edge_functions_pack() (
   title
   new_log "airgap-build-edge-functions-pack-v2"
   local base_input="${1:-}" output="${2:-}" work base_stage base_root base_id base_commit base_supabase_commit
-  local source supabase_source created_at pack_id root edge_meta count
+  local source supabase_source supabase_branch created_at pack_id root edge_meta count
 
   for cmd in docker git tar gzip sha256sum python3 awk find; do
     command -v "$cmd" >/dev/null 2>&1 || { fail "Edge Functions supplement builder requires: $cmd"; return 1; }
@@ -573,7 +584,7 @@ airgap_build_edge_functions_pack() {
   [[ -n "$base_input" ]] || { fail "Base Air-Gap bundle path is required."; return 1; }
 
   work="$(mktemp -d)"
-  trap '[[ -n "${work:-}" ]] && rm -rf -- "$work"' RETURN
+  trap '[[ -z "${work:-}" ]] || rm -rf -- "$work"' EXIT
   base_stage="${work}/base"
   mkdir -p "$base_stage"
   base_root="$(airgap_target_patch_open_base "$base_input" "$base_stage")" || return 1
@@ -591,7 +602,9 @@ airgap_build_edge_functions_pack() {
   git clone --branch main "${base_root}/sources/spark.git.bundle" "$source" >/dev/null 2>&1 || return 1
   git -C "$source" checkout "$base_commit" >/dev/null 2>&1 || return 1
   supabase_source="${work}/supabase-source"
-  git clone --branch master "${base_root}/sources/supabase.git.bundle" "$supabase_source" >/dev/null 2>&1 || return 1
+  supabase_branch="$(airgap_target_bundle_meta_from "$base_root" SUPABASE_BRANCH)"
+  [[ -n "$supabase_branch" ]] || { fail "Base bundle Supabase branch is missing."; return 1; }
+  git clone --branch "$supabase_branch" "${base_root}/sources/supabase.git.bundle" "$supabase_source" >/dev/null 2>&1 || return 1
   git -C "$supabase_source" checkout "$base_supabase_commit" >/dev/null 2>&1 || return 1
 
   created_at="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -601,6 +614,11 @@ airgap_build_edge_functions_pack() {
   _airgap_edge_build_payload "$root" "$source" "$supabase_source" || return 1
 
   edge_meta="${root}/metadata/edge-runtime.env"
+  [[ "$(_airgap_edge_meta_from "$edge_meta" EDGE_RUNTIME_IMAGE_ID)" == \
+     "$(_airgap_edge_meta_from "${base_root}/metadata/edge-runtime.env" EDGE_RUNTIME_IMAGE_ID)" ]] || {
+    fail "Supplement runtime image differs from the base bundle; build a new full bundle instead."
+    return 1
+  }
   count="$(_airgap_edge_meta_from "$edge_meta" FUNCTION_COUNT)"
   cat >"${root}/metadata/manifest.env" <<EOF_EDGE_PACK
 FORMAT_VERSION=${AIRGAP_EDGE_PACK_FORMAT_VERSION}
@@ -636,7 +654,7 @@ EOF_EDGE_PACK
   printf 'Target Edge image : %s\n' "$(_airgap_edge_meta_from "$edge_meta" EDGE_RUNTIME_IMAGE)"
   printf 'Target Deno       : %s\n' "$(_airgap_edge_meta_from "$edge_meta" TARGET_DENO_VERSION)"
   printf 'Functions         : %s\n' "$count"
-}
+)
 
 # Standalone bank-side maintenance path for a format-v2 supplement.
 airgap_import_edge_functions_pack() {

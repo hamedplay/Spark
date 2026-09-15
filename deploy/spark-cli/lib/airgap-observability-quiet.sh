@@ -13,7 +13,7 @@ source "${SCRIPT_DIR}/lib/airgap-edge-final.sh"
 # must also match that source. The bundle then clones the exact tag, verifies the
 # commit, and records both identities in metadata before any Docker/DENO_DIR
 # payload is assembled.
-airgap_build_bundle() {
+airgap_build_bundle() (
   title
   new_log "airgap-build"
   local target_release output_root cert_source work bundle bundle_id spark_commit spark_short
@@ -78,6 +78,7 @@ airgap_build_bundle() {
 
   mkdir -p "$output_root"
   work="$(mktemp -d)"
+  trap '[[ -z "${work:-}" ]] || rm -rf -- "$work"' EXIT
 
   spark_commit="$(git -C "$SPARK_ROOT" rev-parse HEAD)"
   spark_short="${spark_commit:0:12}"
@@ -109,6 +110,8 @@ airgap_build_bundle() {
 
   run_visible "Build target-matched frontend/npm offline payload" \
     airgap_build_npm_payload "${bundle}/npm" "$target_release" || return 1
+  run_visible "Prove APT/npm installation and frontend build with networking disabled" \
+    airgap_prove_offline_payloads "$bundle" "$target_release" || return 1
 
   avatar_image="spark/avatar-worker-airgap:${spark_short}"
   run_visible "Build pinned Avatar Worker image" docker build --platform linux/amd64 --pull --no-cache -t "$avatar_image" "${SPARK_ROOT}/worker" || return 1
@@ -124,12 +127,12 @@ airgap_build_bundle() {
   done <"${bundle}/docker/images.txt"
 
   info "Validating and saving the linux/amd64 Docker image set. This can take several minutes."
+  airgap_write_image_ids "$bundle" || return 1
+  _airgap_edge_validate_payload "$bundle" || return 1
   run_visible "Validate and export linux/amd64 Docker images" \
     airgap_export_linux_amd64_images "${bundle}/docker/images.txt" "${bundle}/docker/docker-images.tar.gz" || return 1
-  : >"${bundle}/docker/image-ids.txt"
-  while IFS= read -r image; do
-    printf '%s %s\n' "$image" "$(docker image inspect --format '{{.Id}}' "$image")" >>"${bundle}/docker/image-ids.txt"
-  done <"${bundle}/docker/images.txt"
+  local AIRGAP_REAL_DOCKER=docker
+  airgap_verify_images "$bundle" || { fail "Docker image identities changed during export."; return 1; }
 
   if [[ -f "$MANAGER_CONF" ]]; then
     cp "$MANAGER_CONF" "${bundle}/config/manager.conf"
@@ -143,6 +146,7 @@ airgap_build_bundle() {
 
   cat >"${bundle}/metadata/manifest.env" <<EOF_META
 FORMAT_VERSION=${AIRGAP_FORMAT_VERSION}
+OFFLINE_PROOF_REQUIRED=1
 BUNDLE_ID=${bundle_id}
 CREATED_AT=${created_at}
 UBUNTU_VERSION=${target_release}
@@ -169,10 +173,10 @@ for line in (root/'metadata/manifest.env').read_text().splitlines():
 PY
 
   (cd "$bundle" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS) || return 1
-  airgap_validate_checksum_manifest "$bundle" || return 1
-  tar -C "$work" -czf "${output_root}/${bundle_id}.tar.gz" "$bundle_id" || return 1
-  (cd "$output_root" && sha256sum "${bundle_id}.tar.gz" >"${bundle_id}.tar.gz.sha256")
+  airgap_validate_bundle_dir "$bundle" || return 1
+  airgap_publish_bundle "$bundle" "$output_root" || return 1
   rm -rf "$work"
+  work=""
 
   ok "Air-gap bundle created: ${output_root}/${bundle_id}.tar.gz"
   printf 'Spark commit        : %s\n' "$spark_commit"
@@ -181,6 +185,6 @@ PY
   printf 'Target              : Ubuntu %s / amd64\n' "$target_release"
   printf 'TLS certificate pack: %s\n' "$([[ "$cert_pack" == 1 ]] && echo INCLUDED || echo MISSING)"
   if [[ "$cert_pack" != 1 ]]; then
-    warn "Package/source/image/npm installation is offline-ready, but complete Run All needs certificates for steps 13/19."
+    info "Internal-IP offline installation does not require a local TLS certificate pack."
   fi
-}
+)
