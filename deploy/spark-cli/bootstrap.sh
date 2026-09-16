@@ -9,7 +9,7 @@ AIRGAP_CLI_PATH="/usr/local/bin/spark-airgap"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
 EXPECTED_VERSION="3.1.0+20260910.1"
-EXPECTED_AIRGAP_VERSION="3.1.0+20260916.2"
+EXPECTED_AIRGAP_VERSION="3.1.0+20260916.4"
 EXPECTED_UI_VERSION="3.1.0+20260910.1"
 EXPECTED_MIGRATE_VERSION="1.1.0+20260822.2"
 
@@ -86,6 +86,7 @@ files=(
   lib/airgap-target-patch.sh
   lib/airgap-auto.sh
   lib/airgap-ip.sh
+  lib/airgap-dnsless-runtime.sh
   lib/airgap-observability-quiet-base.sh
   lib/airgap-observability-quiet.sh
   lib/airgap-edge-functions.sh
@@ -175,8 +176,16 @@ grep -q 'airgap-ip' "$tmp/spark-airgap" || {
   echo "Spark Air-Gap internal-IP module is not loaded." >&2
   exit 1
 }
+grep -q 'airgap-dnsless-runtime' "$tmp/spark-airgap" || {
+  echo "Spark Air-Gap DNS-free runtime module is not loaded." >&2
+  exit 1
+}
 grep -q 'airgap-observability-quiet' "$tmp/spark-airgap" || {
   echo "Spark Air-Gap observability quiet module is not loaded." >&2
+  exit 1
+}
+[[ -f "$tmp/lib/airgap-dnsless-runtime.sh" ]] || {
+  echo "Spark Air-Gap DNS-free runtime module is missing." >&2
   exit 1
 }
 [[ -f "$tmp/lib/airgap-observability-quiet.sh" ]] || {
