@@ -80,6 +80,7 @@ files=(
   lib/install-livekit.sh
   lib/airgap.sh
   lib/airgap-build.sh
+  lib/airgap-packages.sh
   lib/airgap-runtime.sh
   lib/airgap-target-patch.sh
   lib/airgap-auto.sh

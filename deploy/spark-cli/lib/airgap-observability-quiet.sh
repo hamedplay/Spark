@@ -65,8 +65,10 @@ airgap_build_bundle() (
   fi
 
   . /etc/os-release
-  airgap_prompt_default target_release "Target Ubuntu release" "${VERSION_ID:-26.04}"
-  case "$target_release" in 24.04|26.04) ;; *) fail "Supported air-gap targets: Ubuntu 24.04 or 26.04."; return 1 ;; esac
+  info "Builder Ubuntu ${VERSION_ID:-unknown}; packages will be resolved for the destination, not copied from this host."
+  airgap_prompt_default target_release "Destination Ubuntu release (bank server)" "26.04"
+  target_release="$(airgap_normalize_ubuntu_release "$target_release")" || return 1
+  info "Bundle target: Ubuntu ${target_release}/amd64; Nginx comes from that release repository."
   airgap_prompt_default output_root "Bundle output directory" "/var/backups/spark-airgap"
   # IP-only bundles never export staging-host configuration or private TLS keys.
 

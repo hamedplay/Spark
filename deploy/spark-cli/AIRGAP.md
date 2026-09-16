@@ -73,3 +73,17 @@ The bank network must permit the required traffic. Media uses configured TURN/RT
 HTTP on an ordinary LAN IP is not a browser secure context. Camera/microphone, screen sharing and service-worker/PWA capabilities may be unavailable even when all server checks pass. HTTPS or an explicitly managed browser policy is needed for those browser features; neither is an offline installation prerequisite. See [browser getUserMedia requirements](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia).
 
 SMS, email, external identity providers and external APIs remain runtime integrations: their services must be reachable through approved internal gateways if those features are used. An offline bundle cannot turn an external provider into a local service. Local IP/HTTP Supabase configuration follows the [self-hosting documentation](https://supabase.com/docs/guides/self-hosting/docker).
+
+## Building on Ubuntu 24.04 for a 26.04 bank server
+
+Builder and target do not need matching Ubuntu or Nginx versions. Select the **destination** release: `26.04` for Ubuntu `26.04.1`. The prompt now defaults to 26.04 independently of the builder host; point-release input is normalized. Docker fetches fresh target Ubuntu images, and APT resolves current package candidates from the target Ubuntu repositories (plus the existing Docker/Node repositories). Host Nginx is neither copied nor upgraded. The complete distro package version, including Ubuntu security revision, is recorded in `apt/package-versions.tsv`; `nginx -v` alone does not show that revision.
+
+New bundles include `apt/platform.env` and a standalone local installer. Before modifying packages, it preserves newer installed versions and simulates dependency resolution with external sources disabled. Installation refuses removals and unapproved downgrades. If preserved newer libraries are incompatible with exact dependencies in an older bundle, installation stops; refresh the matching-target bundle instead of forcing a downgrade. Legacy bootstrap fallbacks also refuse removals/downgrades.
+
+An existing `ubuntu24.04` bundle is not a 26.04 bundle, regardless of the host on which it was built. Inspect `UBUNTU_VERSION` in `metadata/manifest.env`. Build a new 26.04 bundle with the current manager to include current installer fixes. Alternatively, for a compatible existing bundle, build a target patch on the connected host:
+
+```bash
+spark-airgap --build-target-patch /path/to/base-bundle.tar.gz 26.04 /var/backups/spark-airgap
+```
+
+A target patch regenerates both APT and frontend/npm payloads and repeats the disconnected proof; it reuses the exact application/source/Docker/Edge payload. It does **not** upgrade the application or the manager embedded in an old Git bundle. Do not edit the Ubuntu field manually or transfer only the Nginx .deb.

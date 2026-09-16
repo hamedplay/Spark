@@ -6,6 +6,20 @@ airgap_prompt_default() {
   printf -v "$__var" '%s' "${value:-$default_value}"
 }
 
+# Ubuntu point releases share a package series (26.04.1 -> 26.04).
+airgap_normalize_ubuntu_release() {
+  case "$1" in
+    24.04|26.04) printf '%s\n' "$1" ;;
+    *)
+      if [[ "$1" =~ ^(24\.04|26\.04)\.[0-9]+$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+      else
+        fail "Supported targets: Ubuntu 24.04 or 26.04 (point releases accepted)." >&2
+        return 1
+      fi ;;
+  esac
+}
+
 airgap_build_apt_payload() (
   local output="$1" target_release="$2" count container rc
   mkdir -p "$output"
@@ -24,7 +38,7 @@ airgap_build_apt_payload() (
   # -i is required because the builder script is supplied to `bash -s` on stdin.
   # Without it Docker detaches container stdin and bash exits successfully
   # without executing the heredoc, leaving /payload absent.
-  docker run -i --name "$container" --platform linux/amd64 \
+  docker run -i --pull=always --name "$container" --platform linux/amd64 \
     -e TARGET_RELEASE="$target_release" \
     "ubuntu:${target_release}" bash -s <<'BUNDLE_APT'
 set -Eeuo pipefail
@@ -32,10 +46,11 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Keep APT downloads available for the final complete dependency resolution.
 rm -f /etc/apt/apt.conf.d/docker-clean
-apt-get update
+apt-get -o APT::Update::Error-Mode=any update
 apt-get install -y ca-certificates curl gnupg
 
 . /etc/os-release
+[[ "$ID" == ubuntu && "$VERSION_ID" == "$TARGET_RELEASE" ]]
 codename="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
 [[ -n "$codename" ]]
 install -m 0755 -d /etc/apt/keyrings
@@ -49,7 +64,7 @@ chmod a+r /etc/apt/keyrings/nodesource.gpg
 cat >/etc/apt/sources.list.d/nodesource.list <<'EOF_NODE'
 deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main
 EOF_NODE
-apt-get update
+apt-get -o APT::Update::Error-Mode=any update
 packages=(
   ca-certificates curl git gnupg jq openssl rsync python3 python3-yaml
   systemd systemd-sysv iproute2 procps sudo
@@ -98,7 +113,15 @@ BUNDLE_APT
     fail "Offline APT requested package manifest is missing from ${output}."
     return 1
   }
+  install -m 0755 "${SCRIPT_DIR}/lib/airgap-packages.sh" "${output}/install-local.sh" || return 1
+  printf 'UBUNTU_VERSION=%s\nARCH=amd64\n' "$target_release" >"${output}/platform.env"
+  : >"${output}/package-versions.tsv"
+  local archive
+  for archive in "${output}"/*.deb; do
+    dpkg-deb --show --showformat='${Package}\t${Version}\t${Architecture}\n' "$archive" >>"${output}/package-versions.tsv" || return 1
+  done
   info "Offline APT payload contains ${count} .deb files."
+  info "Exact package versions: ${output}/package-versions.tsv"
 )
 
 airgap_build_npm_payload() {
@@ -106,14 +129,14 @@ airgap_build_npm_payload() {
   mkdir -p "$output"
   rm -f "${output}/frontend-node-modules.tar.gz" "${output}"/npm-*.tgz
   # The npm builder also receives its script over stdin, so keep stdin attached.
-  docker run --rm -i --platform linux/amd64 \
+  docker run --rm -i --pull=always --platform linux/amd64 \
     -e TARGET_RELEASE="$target_release" \
     -v "${SPARK_ROOT}:/src:ro" \
     -v "${output}:/out" \
     "ubuntu:${target_release}" bash -s <<'BUNDLE_NPM'
 set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
+apt-get -o APT::Update::Error-Mode=any update
 apt-get install -y ca-certificates curl gnupg tar gzip
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
@@ -121,7 +144,7 @@ chmod a+r /etc/apt/keyrings/nodesource.gpg
 cat >/etc/apt/sources.list.d/nodesource.list <<'EOF_NODE'
 deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main
 EOF_NODE
-apt-get update
+apt-get -o APT::Update::Error-Mode=any update
 apt-get install -y nodejs
 npm install -g 'npm@^11.6.2'
 mkdir -p /work/frontend
@@ -169,7 +192,7 @@ chmod +x /usr/sbin/policy-rc.d
 # Offline isolation is enforced by --network none plus the empty sources below.
 apt-get -o Dir::Etc::sourcelist=/tmp/empty-sources.list \
   -o Dir::Etc::sourceparts=/tmp/empty-sources \
-  install -y --allow-downgrades /payload/apt/*.deb
+  install -y --no-remove /payload/apt/*.deb
 while IFS= read -r package; do
   [[ -n "$package" ]] || continue
   [[ "$(dpkg-query -W -f='${Status}' "$package")" == 'install ok installed' ]]
@@ -560,8 +583,8 @@ airgap_build_bundle() {
   docker info >/dev/null 2>&1 || { fail "Docker daemon is required on the connected bundle-builder host."; return 1; }
 
   . /etc/os-release
-  airgap_prompt_default target_release "Target Ubuntu release" "${VERSION_ID:-26.04}"
-  case "$target_release" in 24.04|26.04) ;; *) fail "Supported air-gap targets: Ubuntu 24.04 or 26.04."; return 1 ;; esac
+  airgap_prompt_default target_release "Destination Ubuntu release (not builder host)" "26.04"
+  target_release="$(airgap_normalize_ubuntu_release "$target_release")" || return 1
   airgap_prompt_default output_root "Bundle output directory" "/var/backups/spark-airgap"
   cert_source=""
   if [[ -d /etc/letsencrypt && -f "$MANAGER_CONF" ]]; then

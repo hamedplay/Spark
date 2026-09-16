@@ -126,7 +126,7 @@ airgap_build_target_patch() (
   [[ -n "$base_input" ]] || read -r -p "Path to the existing large Spark air-gap bundle (.tar.gz or directory): " base_input
   [[ -n "$base_input" ]] || { fail "Base bundle path is required."; return 1; }
   [[ -n "$target_release" ]] || airgap_prompt_default target_release "New target Ubuntu release" "26.04"
-  case "$target_release" in 24.04|26.04) ;; *) fail "Supported targets: Ubuntu 24.04 or 26.04."; return 1 ;; esac
+  target_release="$(airgap_normalize_ubuntu_release "$target_release")" || return 1
   [[ -n "$output_root" ]] || airgap_prompt_default output_root "Target patch output directory" "/var/backups/spark-airgap"
   mkdir -p "$output_root"
 

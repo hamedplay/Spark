@@ -138,14 +138,26 @@ if values.get('UBUNTU_VERSION') not in ('24.04', '26.04') or values.get('ARCH') 
     raise SystemExit('Unsupported bundle platform')
 requested = set((root / 'apt/requested-packages.txt').read_text().splitlines())
 available = set()
+versions = set()
 for package in (root / 'apt').glob('*.deb'):
-    fields = subprocess.check_output(['dpkg-deb', '--field', str(package), 'Package', 'Architecture'], text=True)
+    fields = subprocess.check_output(['dpkg-deb', '--field', str(package), 'Package', 'Version', 'Architecture'], text=True)
     fields = dict(line.split(': ', 1) for line in fields.splitlines())
     if fields.get('Architecture') not in ('amd64', 'all'):
         raise SystemExit(f'Wrong APT package architecture: {package.name}')
     available.add(fields['Package'])
+    versions.add((fields['Package'], fields['Version'], fields['Architecture']))
 if not requested or '' in requested or not requested <= available:
     raise SystemExit(f'APT payload is missing requested packages: {sorted(requested - available)}')
+platform = root / 'apt/platform.env'
+if platform.exists():
+    actual = dict(line.split('=', 1) for line in platform.read_text().splitlines())
+    if actual != {'UBUNTU_VERSION': values['UBUNTU_VERSION'], 'ARCH': values['ARCH']}:
+        raise SystemExit('APT payload platform does not match bundle target')
+    ledger = {tuple(line.split('\t')) for line in (root / 'apt/package-versions.tsv').read_text().splitlines()}
+    if ledger != versions:
+        raise SystemExit('APT package version inventory does not match shipped packages')
+    if not (root / 'apt/install-local.sh').is_file():
+        raise SystemExit('Local APT installer is missing')
 def require_members(path, required):
     with tarfile.open(path, 'r:gz') as archive:
         names = {m.name.removeprefix('./') for m in archive}
@@ -374,6 +386,11 @@ airgap_import_bundle() (
 
 airgap_install_local_debs() {
   local root="$1" apt_guard rc=0
+  airgap_validate_target_compatibility "$root" || return 1
+  if [[ -f "${SCRIPT_DIR}/lib/airgap-packages.sh" ]]; then
+    bash "${SCRIPT_DIR}/lib/airgap-packages.sh" "${root}/apt"
+    return $?
+  fi
   local -a debs=()
   mapfile -t debs < <(find "${root}/apt" -maxdepth 1 -type f -name '*.deb' -print | sort)
   ((${#debs[@]} > 0)) || { fail "No .deb packages found in bundle."; return 1; }
@@ -386,7 +403,7 @@ airgap_install_local_debs() {
     -o "Dir::Etc::sourcelist=${apt_guard}/sources.list" \
     -o "Dir::Etc::sourceparts=${apt_guard}/sources.list.d" \
     -o APT::Get::List-Cleanup=0 \
-    install -y --allow-downgrades "${debs[@]}" || rc=$?
+    install -y --no-remove "${debs[@]}" || rc=$?
 
   rm -rf "$apt_guard"
   return "$rc"

@@ -95,18 +95,24 @@ arch_actual="$(dpkg --print-architecture)"
 mapfile -t debs < <(find "$root/apt" -maxdepth 1 -type f -name '*.deb' -print | sort)
 ((${#debs[@]} > 0)) || { echo 'Offline APT payload is empty.' >&2; exit 1; }
 
-export DEBIAN_FRONTEND=noninteractive
-apt_guard="$(mktemp -d)"
-install -d -m 0755 "${apt_guard}/sources.list.d"
-: >"${apt_guard}/sources.list"
-apt_rc=0
-apt-get \
-  -o "Dir::Etc::sourcelist=${apt_guard}/sources.list" \
-  -o "Dir::Etc::sourceparts=${apt_guard}/sources.list.d" \
-  -o APT::Get::List-Cleanup=0 \
-  install -y --allow-downgrades "${debs[@]}" || apt_rc=$?
-rm -rf "$apt_guard"
-(( apt_rc == 0 )) || exit "$apt_rc"
+if [[ -f "$root/apt/install-local.sh" ]]; then
+  bash "$root/apt/install-local.sh" "$root/apt"
+else
+  # Legacy bundles still fail closed on removals/downgrades.
+  export DEBIAN_FRONTEND=noninteractive
+  apt_guard="$(mktemp -d)"
+  install -d -m 0755 "${apt_guard}/sources.list.d"
+  : >"${apt_guard}/sources.list"
+  apt_rc=0
+  apt-get \
+    -o "Dir::Etc::sourcelist=${apt_guard}/sources.list" \
+    -o "Dir::Etc::sourceparts=${apt_guard}/sources.list.d" \
+    -o APT::Get::List-Cleanup=0 \
+    install -y --no-remove "${debs[@]}" || apt_rc=$?
+  rm -rf "$apt_guard"
+  (( apt_rc == 0 )) || exit "$apt_rc"
+
+fi
 
 for cmd in git python3 rsync docker npm nginx; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Offline package install did not provide: $cmd" >&2; exit 1; }
