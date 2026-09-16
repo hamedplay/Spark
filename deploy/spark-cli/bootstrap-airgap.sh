@@ -9,6 +9,7 @@ AIRGAP_CLI_PATH=/usr/local/bin/spark-airgap
 MIGRATE_PATH=/usr/local/bin/spark-migrate
 SPARK_ROOT=/opt/spark
 EXPECTED_VERSION="3.1.0+20260910.1"
+EXPECTED_AIRGAP_VERSION="3.1.0+20260916.2"
 EXPECTED_UI_VERSION="3.1.0+20260910.1"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
@@ -36,7 +37,7 @@ preserve_control_plane=0
 if [[ -f "$TARGET/lib/airgap-auto.sh" && -f "$TARGET/lib/airgap-edge-functions.sh" \
       && -f "$TARGET/bootstrap-airgap.sh" && -x "$CLI_PATH" && -x "$AIRGAP_CLI_PATH" && -x "$MIGRATE_PATH" ]]; then
   if [[ "$($CLI_PATH --version 2>/dev/null || true)" == "Spark Server Manager ${EXPECTED_VERSION}" \
-        && "$($AIRGAP_CLI_PATH --version 2>/dev/null || true)" == "Spark Air-Gapped Installer ${EXPECTED_VERSION}" ]]; then
+        && "$($AIRGAP_CLI_PATH --version 2>/dev/null || true)" == "Spark Air-Gapped Installer ${EXPECTED_AIRGAP_VERSION}" ]]; then
     preserve_control_plane=1
   fi
 fi

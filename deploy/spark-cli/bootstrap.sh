@@ -9,6 +9,7 @@ AIRGAP_CLI_PATH="/usr/local/bin/spark-airgap"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
 EXPECTED_VERSION="3.1.0+20260910.1"
+EXPECTED_AIRGAP_VERSION="3.1.0+20260916.2"
 EXPECTED_UI_VERSION="3.1.0+20260910.1"
 EXPECTED_MIGRATE_VERSION="1.1.0+20260822.2"
 
@@ -158,7 +159,7 @@ grep -Fq "SPARK_MANAGER_VERSION=\"${EXPECTED_VERSION}\"" "$tmp/spark" || {
   echo "Spark Manager version validation failed." >&2
   exit 1
 }
-grep -Fq "SPARK_MANAGER_VERSION=\"${EXPECTED_VERSION}\"" "$tmp/spark-airgap" || {
+grep -Fq "SPARK_MANAGER_VERSION=\"${EXPECTED_AIRGAP_VERSION}\"" "$tmp/spark-airgap" || {
   echo "Spark Air-Gap backend version validation failed." >&2
   exit 1
 }
@@ -343,7 +344,7 @@ if ! airgap_version_output="$($AIRGAP_CLI_PATH --version 2>/dev/null)"; then
   rollback_install
   exit 1
 fi
-if [[ "$airgap_version_output" != "Spark Air-Gapped Installer ${EXPECTED_VERSION}" ]]; then
+if [[ "$airgap_version_output" != "Spark Air-Gapped Installer ${EXPECTED_AIRGAP_VERSION}" ]]; then
   echo "Unexpected Spark Air-Gap backend version: ${airgap_version_output}" >&2
   rollback_install
   exit 1
@@ -367,5 +368,5 @@ fi
 rm -rf "$backup" "$migrate_backup"
 rm -rf /usr/local/share/spark-manager 2>/dev/null || true
 printf 'Spark Server Manager %s installed from %s. Run: spark\n' "$EXPECTED_VERSION" "${MAIN_SHA:0:12}"
-printf 'Spark Air-Gapped Installer %s installed. Run: spark-airgap --help\n' "$EXPECTED_VERSION"
+printf 'Spark Air-Gapped Installer %s installed. Run: spark-airgap --help\n' "$EXPECTED_AIRGAP_VERSION"
 printf 'Spark Supabase Cloud Migration %s installed. Run: spark-migrate\n' "$EXPECTED_MIGRATE_VERSION"
