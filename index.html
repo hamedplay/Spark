@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#1e293b" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="سیستم مدیریت حرفه‌ای جلسات، پیگیری تصمیمات و همکاری تیمی" />
 
-    <!-- Warm only the origins needed during the initial auth/bootstrap path. -->
-    <link rel="preconnect" href="https://api.shahrmeeting.ir" crossorigin />
+    <!-- Warm only the configured API origin used during the initial auth/bootstrap path. -->
+    <link rel="preconnect" href="%VITE_SUPABASE_URL%" crossorigin />
 
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
