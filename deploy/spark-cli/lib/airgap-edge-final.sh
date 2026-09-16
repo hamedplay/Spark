@@ -89,7 +89,7 @@ _airgap_edge_seed_live_cache() {
   local root="$1" meta="${1}/metadata/edge-runtime.env"
   local expected_image expected_image_id expected_deno expected_cache_files
   local functions_mount expected_functions_mount cache_type cache_name cache_destination cache_mountpoint
-  local actual_image actual_image_id actual_deno runtime actual_cache_files
+  local actual_image actual_image_id actual_deno runtime actual_cache_files cache_diff
 
   expected_image="$(_airgap_edge_meta_from "$meta" EDGE_RUNTIME_IMAGE)"
   expected_image_id="$(_airgap_edge_meta_from "$meta" EDGE_RUNTIME_IMAGE_ID)"
@@ -156,15 +156,29 @@ _airgap_edge_seed_live_cache() {
   # present in the Edge Runtime image and makes activation deterministic.
   docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" stop functions >>"$CURRENT_LOG" 2>&1 || return 1
   if ! rsync -a --delete "${root}/deno-cache/" "${cache_mountpoint}/" >>"$CURRENT_LOG" 2>&1; then
-    docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" start functions >>"$CURRENT_LOG" 2>&1 || true
-    fail "Unable to seed persistent Edge Runtime DENO_DIR volume ${cache_name}."
+    fail "Unable to seed persistent Edge Runtime DENO_DIR volume ${cache_name}; functions remain stopped. Retry offline step 10."
     return 1
   fi
-  docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" start functions >>"$CURRENT_LOG" 2>&1 || return 1
 
+  # Deno can create cache/index files as soon as the worker starts. Verify the
+  # transferred snapshot while it is still stopped, never a live mutable cache.
   actual_cache_files="$(find "$cache_mountpoint" -type f | wc -l | tr -d '[:space:]')"
   [[ "$actual_cache_files" == "$expected_cache_files" ]] || {
-    fail "Seeded DENO_DIR file count mismatch: expected=${expected_cache_files}, actual=${actual_cache_files:-unknown}."
+    fail "Seeded DENO_DIR file count mismatch before startup: expected=${expected_cache_files}, actual=${actual_cache_files:-unknown}. Functions remain stopped; retry offline step 10."
     return 1
   }
+  # Count alone cannot detect corrupted or substituted files. Dry-run checksum
+  # comparison also detects unexpected paths and changed symbolic-link targets.
+  cache_diff="$(rsync -rlcni --delete "${root}/deno-cache/" "${cache_mountpoint}/" 2>>"$CURRENT_LOG")" || {
+    fail "Unable to verify seeded DENO_DIR content; functions remain stopped. Retry offline step 10."
+    return 1
+  }
+  if [[ -n "$cache_diff" ]]; then
+    printf '%s\n' "$cache_diff" >>"$CURRENT_LOG"
+    fail "Seeded DENO_DIR content differs from the verified bundle; functions remain stopped. Retry offline step 10."
+    return 1
+  fi
+  # Startup may legitimately mutate DENO_DIR. The caller validates readiness
+  # with the existing real HTTP worker cold-start probe after this returns.
+  docker compose --env-file "${runtime}/.env" -f "${runtime}/docker-compose.yml" start functions >>"$CURRENT_LOG" 2>&1 || return 1
 }
