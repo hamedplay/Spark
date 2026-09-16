@@ -26,21 +26,31 @@ airgap_dnsless_tree_has_legacy_domain() {
     "$(airgap_dnsless_forbidden_runtime_pattern)" "$root" 2>/dev/null | grep -q .
 }
 
-# Step 06 owns all public-facing URLs used later by Compose/Functions. Seed the
-# explicit messenger/webhook base before the inherited validator runs so no
-# Edge Function ever needs the production-domain fallback in isolated mode.
+# Let the inherited Step 06 perform all of its normal normalization first.
+# During that inherited validation we intentionally validate only the original
+# IP-mode contract; then we append the explicit public API base and run the
+# stronger DNS-free validator once more before Step 06 can remain marked done.
 install_step_6() {
-  require_manager_values || return 1
-  require_file "${SUPABASE_ROOT}/.env" || return 1
+  local SPARK_DNSLESS_BASE_ENV_VALIDATION=1
+  install_step_6_dnsless_base || return 1
+
   env_set "${SUPABASE_ROOT}/.env" PUBLIC_API_BASE_URL "$(airgap_ip_base_url)"
-  install_step_6_dnsless_base
+  chmod 600 "${SUPABASE_ROOT}/.env"
+
+  if run_logged "Validate DNS-free Supabase runtime environment" test_supabase_env; then
+    mark_step 6
+  else
+    unmark_step 6
+    return 1
+  fi
 }
 
 test_supabase_env() {
   test_supabase_env_dnsless_base || return 1
+  [[ "${SPARK_DNSLESS_BASE_ENV_VALIDATION:-0}" == "1" ]] && return 0
+
   local file="${SUPABASE_ROOT}/.env" base key value
   base="$(airgap_ip_base_url)"
-
   [[ "$(env_get "$file" PUBLIC_API_BASE_URL)" == "$base" ]] || return 1
 
   for key in \
