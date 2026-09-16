@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="3.1.0+20260916.3"
+SPARK_MANAGER_VERSION="3.1.0+20260916.4"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 SPARK_ROOT="/opt/spark"
 SUPABASE_SOURCE="/opt/supabase-source"
