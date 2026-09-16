@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="3.1.0+20260916.2"
+SPARK_MANAGER_VERSION="3.1.0+20260916.3"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 SPARK_ROOT="/opt/spark"
 SUPABASE_SOURCE="/opt/supabase-source"
@@ -41,7 +41,7 @@ done
 SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
 unset SOURCE SOURCE_DIR TARGET
 
-for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit airgap airgap-target-patch airgap-auto airgap-ip; do
+for module in core install-base install-platform-a install-platform-b install-platform-c tests-backup update admin cleanup repair-override env-modern runtime-fixes studio-session install-livekit airgap airgap-target-patch airgap-auto airgap-ip airgap-dnsless-runtime; do
   module_path="${SCRIPT_DIR}/lib/${module}.sh"
   if [[ ! -r "$module_path" ]]; then
     printf 'Spark Air-Gap module missing: %s\n' "$module_path" >&2
@@ -215,7 +215,7 @@ Usage: spark-airgap [option]
   --build                                      Build a complete offline bundle on a connected staging host
   --validate [bundle]                          Validate bundle structure and target compatibility
   --import [bundle]                            Import bundle and load all Docker images locally
-  --step [1-17|19-22]                                Run one installation step in internal-IP offline mode
+  --step [1-17|19-22]                         Run one installation step in internal-IP offline mode
   --install-all                                Run the complete 21-step IP-only installation (no firewall changes)
   --status                                     Show active bundle and internal IPv4 service endpoints
   --build-target-patch [base] [os]             Build a small Ubuntu target patch
