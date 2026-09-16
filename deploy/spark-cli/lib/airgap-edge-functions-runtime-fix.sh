@@ -513,21 +513,35 @@ cp -a /seed/. /cache/
 }
 
 _airgap_edge_runtime_probe() {
-  local runtime="$1" anon probe code
+  local runtime="$1" timeout="${2:-90}" anon code deadline remaining
+  [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || return 2
   anon="$(env_get "${runtime}/.env" ANON_KEY)"
   [[ -n "$anon" ]] || { fail "ANON_KEY is missing from active Supabase runtime."; return 1; }
-  probe="$(mktemp)"
-  code="$(curl --noproxy '*' -sS --connect-timeout 5 --max-time 20 \
-    -o "$probe" -w '%{http_code}' \
-    -X OPTIONS \
-    -H "apikey: ${anon}" \
-    -H "Authorization: Bearer ${anon}" \
-    http://127.0.0.1:8000/functions/v1/auth-health-check || true)"
-  rm -f "$probe"
-  [[ "$code" == "204" ]] || {
-    fail "Offline Edge Runtime dependency probe failed (expected HTTP 204, got ${code:-000})."
-    return 1
-  }
+  deadline=$((SECONDS + timeout))
+  info "Waiting for offline Edge Runtime cold-start readiness (max ${timeout}s)."
+  while (( SECONDS < deadline )); do
+    remaining=$((deadline - SECONDS))
+    (( remaining <= 20 )) || remaining=20
+    code="$(curl --noproxy '*' -sS --connect-timeout 5 --max-time "$remaining" \
+      -o /dev/null -w '%{http_code}' \
+      -X OPTIONS \
+      -H "apikey: ${anon}" \
+      -H "Authorization: Bearer ${anon}" \
+      http://127.0.0.1:8000/functions/v1/auth-health-check 2>>"$CURRENT_LOG" || true)"
+    [[ "$code" != 204 ]] || return 0
+    # Only startup/transport/server failures are retryable. Auth/routing errors
+    # need a real correction and must not be hidden by a readiness loop.
+    case "$code" in
+      ''|000|408|429|5??) ;;
+      *) break ;;
+    esac
+    remaining=$((deadline - SECONDS))
+    (( remaining > 0 )) || break
+    (( remaining <= 2 )) || remaining=2
+    sleep "$remaining"
+  done
+  fail "Offline Edge Runtime dependency probe failed (expected HTTP 204, got ${code:-000})."
+  return 1
 }
 
 install_step_10() {
@@ -554,7 +568,6 @@ install_step_10() {
     return 1
   fi
 
-  sleep 3
   if ! _airgap_edge_runtime_probe "$runtime"; then
     _airgap_edge_capture_logs "$failure_log"
     unmark_step 10

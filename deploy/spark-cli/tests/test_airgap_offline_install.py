@@ -42,6 +42,36 @@ if airgap_install_one_step 1; then exit 1; fi
 [[ ! -e "$WORK/executed" ]]
 ''')
 
+    def test_rerun_invalidates_downstream_validation_even_on_failure(self):
+        self.run_shell(r'''
+STEP_DIR="$WORK/steps"; mkdir "$STEP_DIR"
+for n in "${AIRGAP_INSTALL_STEPS[@]}"; do touch "$STEP_DIR/$n.ok"; done
+airgap_prepare_install() { :; }
+run_install_step() { return 1; }
+if airgap_install_one_step 10; then exit 1; fi
+[[ -f "$STEP_DIR/9.ok" ]]
+for n in 10 11 12 13 14 15 16 17 19 20 21 22; do [[ ! -f "$STEP_DIR/$n.ok" ]]; done
+if spark_airgap_step21_prerequisite; then exit 1; fi
+''')
+
+    def test_both_modes_share_exclusive_lock_and_release_after_failure(self):
+        self.run_shell(r'''
+STEP_DIR="$WORK/steps"; mkdir "$STEP_DIR"
+airgap_prepare_install() { touch "$WORK/prepared"; }
+run_install_step() { return 1; }
+exec {held}>"$STATE_DIR/airgap-install.lock"
+flock -n "$held"
+if airgap_install_all; then exit 1; fi
+if airgap_install_one_step 10; then exit 1; fi
+[[ ! -e "$WORK/prepared" ]]
+exec {held}>&-
+if airgap_install_one_step 10; then exit 1; fi
+[[ -e "$WORK/prepared" ]]
+exec {released}>"$STATE_DIR/airgap-install.lock"
+flock -n "$released"
+exec {released}>&-
+''')
+
     def test_shims_force_local_images_and_offline_modules(self):
         self.run_shell(r'''
 AIRGAP_SHIM_DIR="$WORK/shims"
@@ -59,6 +89,35 @@ if "$AIRGAP_SHIM_DIR/docker" compose up --build; then exit 1; fi
 "$AIRGAP_SHIM_DIR/docker" run --rm local:image
 [[ "$(cat "$WORK/docker-args")" == $'run\n--pull=never\n--rm\nlocal:image' ]]
 if "$AIRGAP_SHIM_DIR/npm" ci; then exit 1; fi
+''')
+
+    def test_preflight_recovers_images_only_from_validated_local_bundle(self):
+        self.run_shell(r'''
+airgap_validate_bundle_dir() { [[ "${BAD_BUNDLE:-0}" == 0 ]]; }
+airgap_validate_target_compatibility() { :; }
+airgap_verify_images() { [[ -e "$WORK/images-ready" ]]; }
+airgap_reload_image_archive() { touch "$WORK/reloaded" "$WORK/images-ready"; }
+airgap_full_preflight "$WORK/bundle"
+[[ -f "$WORK/reloaded" ]]
+rm "$WORK/reloaded"
+airgap_full_preflight "$WORK/bundle"
+[[ ! -e "$WORK/reloaded" ]]
+BAD_BUNDLE=1
+if airgap_full_preflight "$WORK/bundle"; then exit 1; fi
+[[ ! -e "$WORK/reloaded" ]]
+''')
+
+    def test_failed_local_image_recovery_stops_both_modes(self):
+        self.run_shell(r'''
+airgap_current_root() { printf '%s' "$WORK/bundle"; }
+airgap_validate_bundle_dir() { :; }
+airgap_validate_target_compatibility() { :; }
+airgap_verify_images() { return 1; }
+airgap_reload_image_archive() { return 1; }
+run_install_step() { touch "$WORK/executed"; }
+if airgap_install_all; then exit 1; fi
+if airgap_install_one_step 10; then exit 1; fi
+[[ ! -e "$WORK/executed" ]]
 ''')
 
     def test_builder_never_transfers_manager_or_tls(self):

@@ -342,7 +342,14 @@ install_step_20() {
   fi
 
   rm -f "$list" "$report"
-  install_step_20_online
+  install_step_20_online || return 1
+  # Step 20 recreates Functions to load LiveKit secrets. Its Docker start result
+  # is not worker readiness; use the same cold-start gate as step 10.
+  if ! _airgap_edge_runtime_probe "$SUPABASE_ROOT"; then
+    unmark_step 20
+    _airgap_edge_capture_logs "${BACKUP_DIR}/edge-runtime-step20-$(date -u +%Y%m%d-%H%M%S).log"
+    return 1
+  fi
 }
 
 # A single ordered plan drives both complete and individual installation.
@@ -368,10 +375,14 @@ airgap_prepare_install() {
 }
 
 airgap_run_install_step() {
-  local n="$1"
+  local n="$1" step invalidate=0
   airgap_step_supported "$n" || { fail "Offline step must be 1-17 or 19-22; firewall step 18 was removed."; return 2; }
-  # An old success marker must not survive a failed rerun.
-  unmark_step "$n"
+  # Later validations describe the old configuration after an earlier step is
+  # rerun. In particular step 22 must not trust a stale step-21 DB/API marker.
+  for step in "${AIRGAP_INSTALL_STEPS[@]}"; do
+    [[ "$step" != "$n" ]] || invalidate=1
+    if (( invalidate )); then unmark_step "$step" || return 1; fi
+  done
   if ! run_install_step "$n"; then
     unmark_step "$n"
     fail "Offline installation stopped at step ${n}. Correct the reported error and rerun that step."
@@ -379,7 +390,18 @@ airgap_run_install_step() {
   fi
 }
 
-airgap_install_one_step() {
+airgap_lock_install() {
+  mkdir -p "$STATE_DIR" || return 1
+  exec {AIRGAP_INSTALL_LOCK_FD}>"${STATE_DIR}/airgap-install.lock" || return 1
+  flock -n "$AIRGAP_INSTALL_LOCK_FD" || {
+    fail "Another offline installation is running. Wait for it to finish before starting another action."
+    return 1
+  }
+}
+
+# The subshell owns the lock for the whole action and releases it on every exit.
+# Both entrypoints use exactly the same preparation and step runner.
+airgap_install_one_step() (
   local n="${1:-}" step
   if [[ -z "$n" ]]; then
     for step in "${AIRGAP_INSTALL_STEPS[@]}"; do
@@ -388,21 +410,23 @@ airgap_install_one_step() {
     read -r -p "Offline install step (1-17, 19-22; no firewall step): " n
   fi
   airgap_step_supported "$n" || { fail "Offline step must be 1-17 or 19-22."; return 2; }
+  airgap_lock_install || return 1
   airgap_prepare_install || return 1
   airgap_run_install_step "$n"
-}
+)
 
-airgap_install_all() {
+airgap_install_all() (
   title
   new_log "airgap-install-all"
   local n
+  airgap_lock_install || return 1
   airgap_prepare_install || return 1
   info "Running the same 21 offline steps offered by Run one offline install step."
   for n in "${AIRGAP_INSTALL_STEPS[@]}"; do
     airgap_run_install_step "$n" || return 1
   done
   ok "All 21 offline steps passed, including application database and service validation."
-}
+)
 
 airgap_status() {
   title

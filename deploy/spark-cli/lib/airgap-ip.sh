@@ -740,7 +740,16 @@ airgap_full_preflight() {
   local root="$1"
   airgap_validate_bundle_dir "$root" || return 1
   airgap_validate_target_compatibility "$root" || return 1
-  airgap_verify_images "$root" || { fail "One or more Docker images have not been imported."; return 1; }
+  if ! airgap_verify_images "$root"; then
+    # Validation above authenticates the local archive against the bundle
+    # checksums. Recover missing/replaced images locally in either install mode.
+    run_logged "Restore pinned Docker images from the verified local bundle" \
+      airgap_reload_image_archive "$root" || return 1
+    airgap_verify_images "$root" || {
+      fail "Docker image verification failed after local archive recovery."
+      return 1
+    }
+  fi
   ok "Air-Gap internal-IP mode does not require DNS, public IP or a TLS certificate pack."
 }
 
