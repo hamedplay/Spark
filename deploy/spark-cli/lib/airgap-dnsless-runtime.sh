@@ -36,6 +36,7 @@ install_step_6() {
 
   env_set "${SUPABASE_ROOT}/.env" PUBLIC_API_BASE_URL "$(airgap_ip_base_url)"
   chmod 600 "${SUPABASE_ROOT}/.env"
+  SPARK_DNSLESS_BASE_ENV_VALIDATION=0
 
   if run_logged "Validate DNS-free Supabase runtime environment" test_supabase_env; then
     mark_step 6
