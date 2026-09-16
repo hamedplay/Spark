@@ -9,7 +9,7 @@ AIRGAP_CLI_PATH=/usr/local/bin/spark-airgap
 MIGRATE_PATH=/usr/local/bin/spark-migrate
 SPARK_ROOT=/opt/spark
 EXPECTED_VERSION="3.1.0+20260910.1"
-EXPECTED_AIRGAP_VERSION="3.1.0+20260916.2"
+EXPECTED_AIRGAP_VERSION="3.1.0+20260916.3"
 EXPECTED_UI_VERSION="3.1.0+20260910.1"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
@@ -35,6 +35,7 @@ done
 # an older Manager with the same version string must be refreshed once.
 preserve_control_plane=0
 if [[ -f "$TARGET/lib/airgap-auto.sh" && -f "$TARGET/lib/airgap-edge-functions.sh" \
+      && -f "$TARGET/lib/airgap-dnsless-runtime.sh" \
       && -f "$TARGET/bootstrap-airgap.sh" && -x "$CLI_PATH" && -x "$AIRGAP_CLI_PATH" && -x "$MIGRATE_PATH" ]]; then
   if [[ "$($CLI_PATH --version 2>/dev/null || true)" == "Spark Server Manager ${EXPECTED_VERSION}" \
         && "$($AIRGAP_CLI_PATH --version 2>/dev/null || true)" == "Spark Air-Gapped Installer ${EXPECTED_AIRGAP_VERSION}" ]]; then
@@ -130,7 +131,7 @@ git -C "$SPARK_ROOT" remote set-url origin https://github.com/hamedplay/Spark.gi
 git -C "$SPARK_ROOT" update-ref refs/remotes/origin/main "$spark_commit"
 
 source_dir="$SPARK_ROOT/deploy/spark-cli"
-for path in spark spark-airgap spark-ui.py spark-ui-core.py spark-migrate lib/airgap.sh lib/airgap-build.sh lib/airgap-runtime.sh; do
+for path in spark spark-airgap spark-ui.py spark-ui-core.py spark-migrate lib/airgap.sh lib/airgap-build.sh lib/airgap-runtime.sh lib/airgap-dnsless-runtime.sh; do
   [[ -f "$source_dir/$path" ]] || { echo "Air-gap capable Spark source is missing: $path" >&2; exit 1; }
 done
 [[ -d "$SPARK_ROOT/deploy/livekit" ]] || { echo 'Spark LiveKit deployment assets are missing.' >&2; exit 1; }
