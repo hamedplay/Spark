@@ -27,14 +27,16 @@ airgap_dnsless_tree_has_legacy_domain() {
 }
 
 # Let the inherited Step 06 perform all of its normal normalization first.
-# During that inherited validation we intentionally validate only the original
-# IP-mode contract; then we append the explicit public API base and run the
-# stronger DNS-free validator once more before Step 06 can remain marked done.
+# Air-Gap IP mode overrides the generic environment step, so explicitly restore
+# the intended GoTrue provider policy here: existing email/password users must
+# be able to sign in while direct public GoTrue sign-up remains disabled.
 install_step_6() {
   local SPARK_DNSLESS_BASE_ENV_VALIDATION=1
   install_step_6_dnsless_base || return 1
 
   env_set "${SUPABASE_ROOT}/.env" PUBLIC_API_BASE_URL "$(airgap_ip_base_url)"
+  env_set "${SUPABASE_ROOT}/.env" ENABLE_EMAIL_SIGNUP "true"
+  env_set "${SUPABASE_ROOT}/.env" DISABLE_SIGNUP "true"
   chmod 600 "${SUPABASE_ROOT}/.env"
   SPARK_DNSLESS_BASE_ENV_VALIDATION=0
 
@@ -53,6 +55,14 @@ test_supabase_env() {
   local file="${SUPABASE_ROOT}/.env" base key value
   base="$(airgap_ip_base_url)"
   [[ "$(env_get "$file" PUBLIC_API_BASE_URL)" == "$base" ]] || return 1
+  [[ "$(env_get "$file" ENABLE_EMAIL_SIGNUP)" == "true" ]] || {
+    printf 'Air-Gap GoTrue email provider must be enabled (ENABLE_EMAIL_SIGNUP=true).\n' >>"$CURRENT_LOG"
+    return 1
+  }
+  [[ "$(env_get "$file" DISABLE_SIGNUP)" == "true" ]] || {
+    printf 'Air-Gap direct public GoTrue signup must remain disabled (DISABLE_SIGNUP=true).\n' >>"$CURRENT_LOG"
+    return 1
+  }
 
   for key in \
     SUPABASE_PUBLIC_URL API_EXTERNAL_URL SITE_URL ADDITIONAL_REDIRECT_URLS \
@@ -67,9 +77,9 @@ test_supabase_env() {
 }
 
 # Compose is target-specific after import, so inject the selected IPv4 origin
-# directly into the Functions container. This makes PUBLIC_API_BASE_URL
-# explicit even when the application function source retains a production-safe
-# fallback for the online deployment.
+# directly into Functions and normalize GoTrue URLs/provider policy. This keeps
+# every internal callback on HTTP/IP and prevents the upstream example defaults
+# from silently disabling email/password login.
 patch_compose() {
   patch_compose_dnsless_base || return 1
   COMPOSE_FILE="${SUPABASE_ROOT}/docker-compose.yml" \
@@ -82,22 +92,37 @@ import yaml
 p = Path(os.environ['COMPOSE_FILE'])
 doc = yaml.safe_load(p.read_text(encoding='utf-8'))
 services = doc.get('services') if isinstance(doc, dict) else None
-if not isinstance(services, dict) or 'functions' not in services:
-    raise SystemExit('docker-compose.yml is missing functions service')
+if not isinstance(services, dict) or 'functions' not in services or 'auth' not in services:
+    raise SystemExit('docker-compose.yml is missing functions/auth service')
 
 value = os.environ['AIRGAP_BASE_URL']
-env = services['functions'].get('environment')
-if env is None:
-    env = {}
-    services['functions']['environment'] = env
 
-if isinstance(env, dict):
-    env['PUBLIC_API_BASE_URL'] = value
-elif isinstance(env, list):
-    env[:] = [item for item in env if not str(item).startswith('PUBLIC_API_BASE_URL=')]
-    env.append(f'PUBLIC_API_BASE_URL={value}')
-else:
-    raise SystemExit('functions.environment has an unsupported Compose shape')
+def envdict(raw):
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, list):
+        out = {}
+        for item in raw:
+            text = str(item)
+            if '=' in text:
+                k, v = text.split('=', 1)
+                out[k] = v
+            else:
+                out[text] = None
+        return out
+    raise SystemExit('service environment has an unsupported Compose shape')
+
+functions_env = envdict(services['functions'].get('environment'))
+functions_env['PUBLIC_API_BASE_URL'] = value
+services['functions']['environment'] = functions_env
+
+auth_env = envdict(services['auth'].get('environment'))
+auth_env['GOTRUE_EXTERNAL_EMAIL_ENABLED'] = '${ENABLE_EMAIL_SIGNUP}'
+auth_env['GOTRUE_DISABLE_SIGNUP'] = '${DISABLE_SIGNUP}'
+auth_env['GOTRUE_HOOK_SEND_SMS_URI'] = f'{value}/functions/v1/auth-send-sms-hook'
+services['auth']['environment'] = auth_env
 
 p.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False), encoding='utf-8')
 PY
@@ -125,21 +150,31 @@ if re.search(r'(^|[^A-Za-z0-9.-])(?:[A-Za-z0-9-]+\.)*shahrmeeting\.ir(?:[^A-Za-z
     raise SystemExit('rendered Compose still contains a shahrmeeting.ir runtime dependency')
 
 doc = yaml.safe_load(text)
-functions = doc['services']['functions']
-env = functions.get('environment') or {}
 expected = os.environ['AIRGAP_BASE_URL']
 
-if isinstance(env, list):
-    values = {}
-    for item in env:
+def envdict(raw):
+    if isinstance(raw, dict):
+        return raw
+    out = {}
+    for item in raw or []:
         item = str(item)
         if '=' in item:
             k, v = item.split('=', 1)
-            values[k] = v
-    env = values
+            out[k] = v
+    return out
 
-if env.get('PUBLIC_API_BASE_URL') != expected:
-    raise SystemExit(f"functions PUBLIC_API_BASE_URL is not {expected!r}: {env.get('PUBLIC_API_BASE_URL')!r}")
+functions_env = envdict(doc['services']['functions'].get('environment'))
+auth_env = envdict(doc['services']['auth'].get('environment'))
+
+if functions_env.get('PUBLIC_API_BASE_URL') != expected:
+    raise SystemExit(f"functions PUBLIC_API_BASE_URL is not {expected!r}: {functions_env.get('PUBLIC_API_BASE_URL')!r}")
+if str(auth_env.get('GOTRUE_EXTERNAL_EMAIL_ENABLED', '')).lower() != 'true':
+    raise SystemExit('GoTrue email/password provider is disabled in rendered Compose')
+if str(auth_env.get('GOTRUE_DISABLE_SIGNUP', '')).lower() != 'true':
+    raise SystemExit('GoTrue direct public signup is not disabled in rendered Compose')
+expected_sms = f'{expected}/functions/v1/auth-send-sms-hook'
+if auth_env.get('GOTRUE_HOOK_SEND_SMS_URI') != expected_sms:
+    raise SystemExit(f"GoTrue SMS hook URI is not internal-IP HTTP: {auth_env.get('GOTRUE_HOOK_SEND_SMS_URI')!r}")
 PY
 
   rm -f "$rendered"
