@@ -51,8 +51,9 @@ deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node
 EOF_NODE
 apt-get update
 packages=(
-  ca-certificates curl git gnupg jq openssl ufw rsync python3 python3-yaml
-  nginx certbot coturn docker-ce docker-ce-cli containerd.io
+  ca-certificates curl git gnupg jq openssl rsync python3 python3-yaml
+  systemd systemd-sysv iproute2 procps sudo
+  nginx coturn docker-ce docker-ce-cli containerd.io
   docker-buildx-plugin docker-compose-plugin nodejs
 )
 

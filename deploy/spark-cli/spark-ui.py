@@ -150,13 +150,13 @@ AIRGAP_ACTIONS = [
     core.Action(
         "airgap-step",
         "04  Run one offline install step",
-        "Run one of the 22 production installation steps in internal-IP-only offline mode.",
+        "Run one of 21 offline steps (IDs 1-17, 19-22); no firewall changes, DNS or certificates.",
         "confirm",
     ),
     core.Action(
         "airgap-install-all",
         "05  Run complete offline installation",
-        "Run all 22 offline installation steps using the server internal IPv4 only; DNS, public IPv4 and local TLS certificates are not prerequisites.",
+        "Run the same 21 offline steps in order on the internal IPv4; no firewall changes, DNS or certificates. Step 21 requires a provisioned Spark database or local backup.",
         "confirm",
     ),
     core.Action(

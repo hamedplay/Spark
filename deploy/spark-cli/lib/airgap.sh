@@ -477,19 +477,53 @@ airgap_prepare_runtime_shims() {
 #!/usr/bin/env bash
 set -Eeuo pipefail
 real="${AIRGAP_REAL_DOCKER:-/usr/bin/docker}"
-if [[ "${SPARK_AIRGAP_ACTIVE:-0}" == "1" && "${1:-}" == "compose" ]]; then
-  for arg in "$@"; do
-    case "$arg" in
-      pull)
-        printf '[air-gap] docker compose pull skipped; bundled images are authoritative.\n'
-        exit 0
-        ;;
-      build)
-        printf '[air-gap] docker compose build skipped; bundled Avatar Worker image is authoritative.\n'
-        exit 0
-        ;;
-    esac
-  done
+if [[ "${SPARK_AIRGAP_ACTIVE:-0}" == "1" ]]; then
+  case "${1:-}" in
+    pull|build|buildx)
+      printf '[air-gap] Docker registry/build operations are disabled on the target.\n' >&2
+      exit 1 ;;
+    compose)
+      args=("$1"); shift
+      # Consume Compose global options before finding its subcommand. Paths and
+      # project names may themselves be named "pull" or "build".
+      while (($#)); do
+        case "$1" in
+          -f|--file|--env-file|-p|--project-name|--project-directory|--profile|--ansi|--progress|--parallel)
+            (($# >= 2)) || exit 2
+            args+=("$1" "$2"); shift 2 ;;
+          -*) args+=("$1"); shift ;;
+          *) break ;;
+        esac
+      done
+      action="${1:-}"
+      case "$action" in
+        pull|build)
+          printf '[air-gap] compose %s skipped; verified local images are authoritative.\n' "$action"
+          exit 0 ;;
+        up|create|run)
+          shift
+          rest=()
+          while (($#)); do
+            case "$1" in
+              --build) printf '[air-gap] --build is forbidden.\n' >&2; exit 1 ;;
+              --pull) (($# >= 2)) || exit 2; shift 2 ;;
+              --pull=*) shift ;;
+              *) rest+=("$1"); shift ;;
+            esac
+          done
+          args+=("$action" --pull never)
+          [[ "$action" == run ]] || args+=(--no-build)
+          exec "$real" "${args[@]}" "${rest[@]}" ;;
+        *) exec "$real" "${args[@]}" "$@" ;;
+      esac ;;
+    run|create)
+      action="$1"; shift
+      # Reject explicit overrides of never; a missing image must fail locally.
+      for arg in "$@"; do
+        case "$arg" in --pull|--pull=always|--pull=missing) exit 1 ;; esac
+      done
+      exec "$real" "$action" --pull=never "$@" ;;
+  esac
 fi
 exec "$real" "$@"
 SHIM_DOCKER

@@ -68,13 +68,7 @@ airgap_build_bundle() (
   airgap_prompt_default target_release "Target Ubuntu release" "${VERSION_ID:-26.04}"
   case "$target_release" in 24.04|26.04) ;; *) fail "Supported air-gap targets: Ubuntu 24.04 or 26.04."; return 1 ;; esac
   airgap_prompt_default output_root "Bundle output directory" "/var/backups/spark-airgap"
-  cert_source=""
-  if [[ -d /etc/letsencrypt && -f "$MANAGER_CONF" ]]; then
-    airgap_prompt_default cert_source "TLS certificate pack source (type NONE to omit)" "/etc/letsencrypt"
-    [[ "$cert_source" == "NONE" ]] && cert_source=""
-  else
-    read -r -p "TLS certificate pack source (optional, Enter to omit): " cert_source
-  fi
+  # IP-only bundles never export staging-host configuration or private TLS keys.
 
   mkdir -p "$output_root"
   work="$(mktemp -d)"
@@ -134,15 +128,6 @@ airgap_build_bundle() (
   local AIRGAP_REAL_DOCKER=docker
   airgap_verify_images "$bundle" || { fail "Docker image identities changed during export."; return 1; }
 
-  if [[ -f "$MANAGER_CONF" ]]; then
-    cp "$MANAGER_CONF" "${bundle}/config/manager.conf"
-    chmod 0600 "${bundle}/config/manager.conf"
-    config_pack=1
-  fi
-  if [[ -n "$cert_source" ]]; then
-    airgap_copy_certificate_pack "${bundle}/certificates" "$cert_source" || return 1
-  fi
-  if find "${bundle}/certificates" -mindepth 2 -maxdepth 2 -type f -name privkey.pem -print -quit | grep -q .; then cert_pack=1; fi
 
   cat >"${bundle}/metadata/manifest.env" <<EOF_META
 FORMAT_VERSION=${AIRGAP_FORMAT_VERSION}

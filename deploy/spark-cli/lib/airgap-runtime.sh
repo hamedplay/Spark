@@ -68,7 +68,7 @@ install_step_2() {
   run_visible "Install bundled Ubuntu/Docker/Node packages" airgap_install_local_debs "$root" || return 1
   npm_tgz="$(find "${root}/npm" -maxdepth 1 -type f -name 'npm-*.tgz' | sort | tail -n1)"
   [[ -n "$npm_tgz" ]] || { fail "Bundled npm package missing."; return 1; }
-  run_visible "Install bundled npm 11" "$AIRGAP_REAL_NPM" install -g "$npm_tgz" || return 1
+  run_visible "Install bundled npm 11" "$AIRGAP_REAL_NPM" install --offline --no-audit --no-fund -g "$npm_tgz" || return 1
   run_logged "Enable Docker and Nginx" systemctl enable --now docker nginx || return 1
   if run_logged "Validate offline base packages" test_base_packages; then mark_step 2; else unmark_step 2; return 1; fi
 }
@@ -91,13 +91,22 @@ install_step_4() {
   airgap_is_active || { install_step_4_online; return; }
   title
   new_log "install-04-supabase-source-airgap"
-  local root commit branch
+  local root commit branch ref runtime_ref
   root="$(airgap_current_root)" || { fail "No active air-gap bundle."; return 1; }
   commit="$(airgap_meta_from "$root" SUPABASE_COMMIT)"
   branch="$(airgap_meta_from "$root" SUPABASE_BRANCH)"
+  ref="$(airgap_meta_from "$root" SUPABASE_REF)"
+  [[ "$ref" =~ ^self-hosted/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { fail "Bundle is missing its stable Supabase pin. Rebuild the bundle."; return 1; }
+  if [[ -f "${SUPABASE_ROOT}/.env" ]]; then
+    runtime_ref="$(spark_supabase_runtime_ref 2>/dev/null || true)"
+    [[ "$runtime_ref" == "$ref" ]] || { fail "Existing Supabase runtime provenance differs from bundle ${ref}; refusing to replace its source/config."; return 1; }
+  fi
   [[ -n "$branch" ]] || branch=master
   run_logged "Restore Supabase source from local Git bundle" airgap_restore_git_bundle \
     "${root}/sources/supabase.git.bundle" "$SUPABASE_SOURCE" "$branch" "$commit" "https://github.com/supabase/supabase.git" || return 1
+  # Existing checkouts do not receive tags when only the bundle branch is fetched.
+  git -C "$SUPABASE_SOURCE" fetch "${root}/sources/supabase.git.bundle" "refs/tags/${ref}:refs/tags/${ref}" || return 1
+  [[ "$(git -C "$SUPABASE_SOURCE" rev-list -n1 "$ref")" == "$commit" ]] || return 1
 
   if [[ -f "${SUPABASE_ROOT}/.env" ]]; then
     warn "Existing Supabase runtime preserved; only source snapshot was restored."
@@ -107,8 +116,13 @@ install_step_4() {
     run_logged "Copy bundled Supabase Docker snapshot" cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/" || return 1
     run_logged "Create initial Supabase .env" cp "${SUPABASE_ROOT}/.env.example" "${SUPABASE_ROOT}/.env" || return 1
     chmod 0600 "${SUPABASE_ROOT}/.env"
+    printf 'ref=%s\n' "$ref" >"${SUPABASE_ROOT}/.supabase-version"
   fi
   [[ "$(git -C "$SUPABASE_SOURCE" rev-parse HEAD)" == "$commit" ]] || return 1
+  SUPABASE_REF="$ref"
+  SUPABASE_COMMIT="$commit"
+  save_config || return 1
+  test_supabase_source || return 1
   mark_step 4
 }
 
@@ -331,26 +345,63 @@ install_step_20() {
   install_step_20_online
 }
 
-airgap_install_one_step() {
-  local n="${1:-}" root
-  if [[ -z "$n" ]]; then read -r -p "Offline install step number (1-22): " n; fi
-  [[ "$n" =~ ^([1-9]|1[0-9]|2[0-2])$ ]] || { fail "Step must be 1..22."; return 1; }
-  root="$(airgap_current_root)" || { fail "No active air-gap bundle."; return 1; }
+# A single ordered plan drives both complete and individual installation.
+# Retain public step IDs for existing logs/runbooks; 18 is intentionally absent.
+AIRGAP_INSTALL_STEPS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 19 20 21 22)
+
+airgap_step_supported() {
+  local step
+  for step in "${AIRGAP_INSTALL_STEPS[@]}"; do [[ "$1" == "$step" ]] && return 0; done
+  return 1
+}
+
+airgap_prepare_install() {
+  local root
+  root="$(airgap_current_root)" || { fail "No active air-gap bundle. Import one first."; return 1; }
+  airgap_full_preflight "$root" || return 1
   export AIRGAP_ROOT="$root" SPARK_AIRGAP_ACTIVE=1 AIRGAP_REAL_DOCKER AIRGAP_REAL_NPM
+  export npm_config_offline=true npm_config_audit=false npm_config_fund=false
+  # A staging proxy must never intercept the target's IP/loopback health checks.
+  unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+  export NO_PROXY='*' no_proxy='*'
   airgap_prepare_runtime_shims "$root"
-  run_install_step "$n"
+}
+
+airgap_run_install_step() {
+  local n="$1"
+  airgap_step_supported "$n" || { fail "Offline step must be 1-17 or 19-22; firewall step 18 was removed."; return 2; }
+  # An old success marker must not survive a failed rerun.
+  unmark_step "$n"
+  if ! run_install_step "$n"; then
+    unmark_step "$n"
+    fail "Offline installation stopped at step ${n}. Correct the reported error and rerun that step."
+    return 1
+  fi
+}
+
+airgap_install_one_step() {
+  local n="${1:-}" step
+  if [[ -z "$n" ]]; then
+    for step in "${AIRGAP_INSTALL_STEPS[@]}"; do
+      printf '%02d  %s\n' "$step" "$(installation_step_name "$step")"
+    done
+    read -r -p "Offline install step (1-17, 19-22; no firewall step): " n
+  fi
+  airgap_step_supported "$n" || { fail "Offline step must be 1-17 or 19-22."; return 2; }
+  airgap_prepare_install || return 1
+  airgap_run_install_step "$n"
 }
 
 airgap_install_all() {
   title
   new_log "airgap-install-all"
-  local root
-  root="$(airgap_current_root)" || { fail "No active air-gap bundle. Import one first."; return 1; }
-  airgap_full_preflight "$root" || return 1
-  export AIRGAP_ROOT="$root" SPARK_AIRGAP_ACTIVE=1 AIRGAP_REAL_DOCKER AIRGAP_REAL_NPM
-  airgap_prepare_runtime_shims "$root"
-  info "Network-dependent package/source/image/npm/ACME operations are bound to the verified offline bundle."
-  run_all_install
+  local n
+  airgap_prepare_install || return 1
+  info "Running the same 21 offline steps offered by Run one offline install step."
+  for n in "${AIRGAP_INSTALL_STEPS[@]}"; do
+    airgap_run_install_step "$n" || return 1
+  done
+  ok "All 21 offline steps passed, including application database and service validation."
 }
 
 airgap_status() {

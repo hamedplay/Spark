@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="3.1.0+20260910.1"
+SPARK_MANAGER_VERSION="3.1.0+20260916.1"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 SPARK_ROOT="/opt/spark"
 SUPABASE_SOURCE="/opt/supabase-source"
@@ -215,8 +215,8 @@ Usage: spark-airgap [option]
   --build                                      Build a complete offline bundle on a connected staging host
   --validate [bundle]                          Validate bundle structure and target compatibility
   --import [bundle]                            Import bundle and load all Docker images locally
-  --step [1-22]                                Run one installation step in internal-IP offline mode
-  --install-all                                Run the complete 22-step internal-IP offline installation
+  --step [1-17|19-22]                                Run one installation step in internal-IP offline mode
+  --install-all                                Run the complete 21-step IP-only installation (no firewall changes)
   --status                                     Show active bundle and internal IPv4 service endpoints
   --build-target-patch [base] [os]             Build a small Ubuntu target patch
   --apply-target-patch [base] [patch]          Apply a verified target patch

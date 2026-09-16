@@ -128,6 +128,20 @@ test_values() {
   require_manager_values
 }
 
+test_base_packages() {
+  local cmd
+  for cmd in docker nginx turnserver turnutils_stunclient rsync jq python3 git openssl curl ip ss systemctl; do
+    command -v "$cmd" >/dev/null || return 1
+  done
+  python3 -c 'import yaml' || return 1
+  docker compose version || return 1
+  node -e 'const [M,m,p]=process.versions.node.split(".").map(Number); if (!(M===24 && (m>18 || (m===18 && p>=1)))) process.exit(1)' || return 1
+  npm --version || return 1
+  find_systemd_socket_proxyd >/dev/null || return 1
+  systemctl is-active --quiet docker || return 1
+  systemctl is-active --quiet nginx
+}
+
 install_step_1() {
   title
   new_log "install-01-internal-ip"
@@ -389,10 +403,6 @@ p.write_text(yaml.safe_dump(d,sort_keys=False,default_flow_style=False),encoding
 PY
 
   (cd "$SUPABASE_ROOT" && docker compose config --quiet) || return 1
-
-  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -Fq 'Status: active'; then
-    ufw allow to "$AIRGAP_SERVER_IP" port 8000 proto tcp >/dev/null || return 1
-  fi
 
   (cd "$SUPABASE_ROOT" && docker compose up -d --no-deps --force-recreate api-gw) || return 1
   airgap_ip_gateway_bind_present || {
@@ -717,46 +727,13 @@ install_step_17() {
   if test_certbot_hook; then mark_step 17; else unmark_step 17; return 1; fi
 }
 
-airgap_ip_ufw_allow() {
-  local port="$1" proto="$2"
-  ufw allow in to "$AIRGAP_SERVER_IP" port "$port" proto "$proto"
-}
-
-test_firewall() {
-  local sockets
-  ufw status verbose | grep -q 'Status: active' || return 1
-  sockets="$(ss -lntp)" || return 1
-  grep -Eq "${AIRGAP_SERVER_IP//./\\.}:8000\\b" <<<"$sockets" || return 1
-  grep -Eq "${AIRGAP_SERVER_IP//./\\.}:5432\\b" <<<"$sockets" || return 1
-  ! grep -Eq '0\.0\.0\.0:(5432|5433|6543|8000|9000)\b|\[::\]:(5432|5433|6543|8000|9000)\b|\*:((5432)|(5433)|(6543)|(8000)|(9000))\b' <<<"$sockets" || return 1
-}
+# Firewall policy belongs to the bank. No offline step mutates UFW.
+firewall_optional_allow_port() { :; }
+firewall_optional_close_port() { :; }
 
 install_step_18() {
-  title
-  new_log "install-18-firewall-internal-ip"
-  require_manager_values || return 1
-  if ! confirm_word "This resets UFW. Spark web/API/DB/TURN are allowed only to internal IPv4 ${AIRGAP_SERVER_IP}; SSH remains allowed." "FIREWALL"; then
-    warn "Firewall change cancelled."
-    return 1
-  fi
-  run_logged "Reset UFW" ufw --force reset || return 1
-  run_logged "Default deny incoming" ufw default deny incoming || return 1
-  run_logged "Default allow outgoing" ufw default allow outgoing || return 1
-  run_logged "Allow SSH" ufw allow 22/tcp || return 1
-  run_logged "Allow internal-IP web" airgap_ip_ufw_allow 80 tcp || return 1
-  run_logged "Allow direct Supabase gateway" airgap_ip_ufw_allow 8000 tcp || return 1
-  run_logged "Allow PostgreSQL session access" airgap_ip_ufw_allow 5432 tcp || return 1
-  run_logged "Allow TURN TCP" airgap_ip_ufw_allow 3478 tcp || return 1
-  run_logged "Allow TURN UDP" airgap_ip_ufw_allow 3478 udp || return 1
-  run_logged "Allow TURN relay UDP" airgap_ip_ufw_allow "${TURN_MIN_PORT}:${TURN_MAX_PORT}" udp || return 1
-  run_logged "Enable UFW" ufw --force enable || return 1
-  run_logged "Validate internal-IP firewall/exposure" test_firewall || { unmark_step 18; return 1; }
-  if run_logged "Validate STUN through internal-IP firewall" test_turn_stun_probe; then
-    mark_step 18
-  else
-    unmark_step 18
-    return 1
-  fi
+  fail "Step 18 (UFW) was removed from offline installation. Use steps 1-17 or 19-22."
+  return 2
 }
 
 airgap_full_preflight() {
@@ -765,6 +742,47 @@ airgap_full_preflight() {
   airgap_validate_target_compatibility "$root" || return 1
   airgap_verify_images "$root" || { fail "One or more Docker images have not been imported."; return 1; }
   ok "Air-Gap internal-IP mode does not require DNS, public IP or a TLS certificate pack."
+}
+
+# These labels are used by the offline step selector; the online menu retains
+# its existing meanings and numbering.
+eval "$(declare -f installation_step_name | sed '1s/installation_step_name/installation_step_name_online/')"
+installation_step_name() {
+  case "$1" in
+    1) printf 'Internal server IPv4 / TURN ports' ;;
+    13) printf 'Validate HTTP origin (no certificates)' ;;
+    17) printf 'Disable external certificate renewal' ;;
+    19) printf 'LiveKit internal-IP configuration / secrets' ;;
+    21) printf 'Spark database restore / full service validation' ;;
+    *) installation_step_name_online "$1" ;;
+  esac
+}
+
+install_step_21() {
+  title
+  new_log "install-21-offline-database-validation"
+  unmark_step 21
+  run_logged "Validate Supabase before database inspection" test_supabase_health || return 1
+  run_logged "Validate HTTP frontend/API origin" airgap_ip_test_nginx || return 1
+  if ! spark_application_database_provisioned; then
+    warn "The bundle contains infrastructure and application code, not your Spark database."
+    info "This repository has no baseline migrations. Supply a local plain SQL Spark backup using the existing Restore workflow."
+    restore_plain_database_interactive || return 1
+    # Restore preserves target secrets: synchronize service-role passwords,
+    # restart/validate the stack and re-seed the exact offline Edge cache.
+    install_step_10 || return 1
+  fi
+  spark_application_database_provisioned || { fail "The restored database does not contain the Spark application schema."; return 1; }
+  livekit_worker_config_contracts_ready || { fail "Spark conference DB contracts are missing; use a current compatible local backup."; return 1; }
+  # A historical pending marker must never skip Edge Function guard checks
+  # when complete installation claims readiness.
+  livekit_clear_database_integration_pending
+  if run_visible "Validate offline application DB, API, functions and LiveKit" test_livekit_full_validation; then
+    mark_step 21
+  else
+    unmark_step 21
+    return 1
+  fi
 }
 
 # LiveKit: internal IPv4 signaling/media without DNS or local TLS.
@@ -947,12 +965,7 @@ livekit_install_certbot_hook() {
 }
 
 livekit_firewall_rules() {
-  airgap_ip_ufw_allow 7880 tcp || return 1
-  airgap_ip_ufw_allow "$LIVEKIT_ICE_TCP_PORT" tcp || return 1
-  airgap_ip_ufw_allow "$LIVEKIT_TURN_UDP_PORT" udp || return 1
-  airgap_ip_ufw_allow "${LIVEKIT_RTC_MIN_PORT}:${LIVEKIT_RTC_MAX_PORT}" udp || return 1
-  airgap_ip_ufw_allow "$LIVEKIT_RTMP_PORT" tcp || return 1
-  airgap_ip_ufw_allow "$LIVEKIT_WHIP_UDP_PORT" udp || return 1
+  info "Firewall is externally managed; no host firewall rules were changed."
 }
 
 livekit_public_tls_probe() {
@@ -972,23 +985,7 @@ livekit_airgap_http_reachable() {
 }
 
 livekit_internal_api_exposure_probe() {
-  local ufw_status sockets
-  ufw_status="$(ufw status verbose 2>/dev/null || true)"
-  grep -q 'Status: active' <<<"$ufw_status" || return 1
-
-  # LiveKit uses host networking and may report a wildcard listener as *:7880.
-  # That is acceptable in internal-IP Air-Gap mode only because UFW below must
-  # explicitly allow this port to the selected internal server IPv4.
-  sockets="$(ss -H -lnt 2>/dev/null || true)"
-  grep -Eq "(${AIRGAP_SERVER_IP//./\\.}|0\\.0\\.0\\.0|\\[::\\]|\\*):${LIVEKIT_INTERNAL_API_PORT}\\b" <<<"$sockets" || return 1
-  livekit_airgap_http_reachable "http://${AIRGAP_SERVER_IP}:${LIVEKIT_INTERNAL_API_PORT}/" || return 1
-
-  # Do not accept a broad 7880/tcp ALLOW rule. The rule must target the exact
-  # internal IPv4 selected for this Air-Gap server.
-  ufw status 2>/dev/null | awk -v ip="$AIRGAP_SERVER_IP" -v port="${LIVEKIT_INTERNAL_API_PORT}/tcp" '
-    index($0, ip) && index($0, port) && $0 ~ /ALLOW/ { found=1 }
-    END { exit(found ? 0 : 1) }
-  '
+  livekit_airgap_http_reachable "http://${AIRGAP_SERVER_IP}:${LIVEKIT_INTERNAL_API_PORT}/"
 }
 
 livekit_secret_file_permissions_probe() {
@@ -1101,13 +1098,6 @@ livekit_airgap_minio_listener_probe() {
   ss -H -lntp 2>/dev/null | grep -Eq '127\.0\.0\.1:9000\b'
 }
 
-livekit_airgap_ufw_probe() {
-  local port="$1" proto="$2" status
-  status="$(ufw status 2>/dev/null || true)"
-  grep -q 'Status: active' <<<"$status" || return 1
-  grep -Eiq "(^|[[:space:]])${port}(/${proto})?([[:space:]]|$).*ALLOW|ALLOW.*(^|[[:space:]])${port}(/${proto})?([[:space:]]|$)" <<<"$status"
-}
-
 livekit_airgap_validation_check() {
   local label="$1" rc
   shift
@@ -1166,17 +1156,14 @@ test_livekit_full_validation() {
     livekit_clear_database_integration_pending
   else
     livekit_defer_database_integration
-    printf '[DEFER] Spark application Edge Function guards are deferred until database restore.\n' | tee -a "$CURRENT_LOG"
+    fail "Spark application database is missing. Restore a local Spark backup and rerun offline step 21."
+    return 1
   fi
 
   livekit_airgap_validation_check "LiveKit secret leak scan" livekit_secret_leak_probe || { livekit_airgap_validation_report_failure; return 1; }
   livekit_airgap_validation_check "LiveKit secret file permissions" livekit_secret_file_permissions_probe || { livekit_airgap_validation_report_failure; return 1; }
   livekit_airgap_validation_check "LiveKit internal API exposure" livekit_internal_api_exposure_probe || { livekit_airgap_validation_report_failure; return 1; }
   livekit_airgap_validation_check "Legacy Coturn is disabled" bash -c '! systemctl is-active --quiet coturn 2>/dev/null' || { livekit_airgap_validation_report_failure; return 1; }
-  livekit_airgap_validation_check "UFW embedded TURN UDP 443 rule" livekit_airgap_ufw_probe 443 udp || { livekit_airgap_validation_report_failure; return 1; }
-  livekit_airgap_validation_check "UFW LiveKit signaling TCP 7880 rule" livekit_airgap_ufw_probe 7880 tcp || { livekit_airgap_validation_report_failure; return 1; }
-  livekit_airgap_validation_check "UFW LiveKit ICE TCP 7881 rule" livekit_airgap_ufw_probe 7881 tcp || { livekit_airgap_validation_report_failure; return 1; }
-  livekit_airgap_validation_check "UFW LiveKit RTC UDP 50000:60000 rule" livekit_airgap_ufw_probe '50000:60000' udp || { livekit_airgap_validation_report_failure; return 1; }
   return 0
 }
 
