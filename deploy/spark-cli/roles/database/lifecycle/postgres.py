@@ -20,7 +20,10 @@ class PostgresLifecycleManager:
         data = root / "volumes" / "db" / "data"
         if not data.exists():
             return False, None, True
-        entries = [path for path in data.iterdir() if path.name != "lost+found"]
+        try:
+            entries = [path for path in data.iterdir() if path.name != "lost+found"]
+        except OSError:
+            return True, None, False
         if not entries:
             return False, None, True
         version_file = data / "PG_VERSION"
@@ -75,7 +78,10 @@ class PostgresLifecycleManager:
         state = self.detect(profile)
         blocked = []
         actions = []
-        if state.data_present and not state.data_compatible:
+        # A live healthy container proves this compose project owns and can use the
+        # mounted cluster even when the host caller cannot read PG_VERSION because
+        # the container's PostgreSQL UID owns the bind-mounted files.
+        if state.data_present and not state.data_compatible and state.state != ComponentState.HEALTHY:
             blocked.append("existing PostgreSQL data is not safely identifiable")
         if state.state == ComponentState.HEALTHY:
             actions.append("verify PostgreSQL health gate")
@@ -121,12 +127,14 @@ class PostgresLifecycleManager:
         return state
 
     def start(self, profile: EnvironmentConfig) -> bool:
-        plan = self.plan(profile)
-        if plan["blocked"]:
-            raise RuntimeError("PostgreSQL startup refused because existing data compatibility is unknown")
+        # Idempotency is established from live runtime health first. Filesystem
+        # compatibility remains a hard gate whenever a new/restart action is needed.
         current = self.detect(profile, with_probes=True)
         if current.state == ComponentState.HEALTHY and current.pg_isready and current.sql_probe:
             return False
+        plan = self.plan(profile)
+        if plan["blocked"]:
+            raise RuntimeError("PostgreSQL startup refused because existing data compatibility is unknown")
         root = Path(profile.database.supabase.destination)
         timeout = (
             profile.database.startup.postgres.normal_timeout_seconds
@@ -148,8 +156,5 @@ class PostgresLifecycleManager:
             state = self.detect(profile)
             if state.state == ComponentState.HEALTHY and self._pg_isready(profile) and self._sql_probe(profile):
                 return True
-            if state.state in {ComponentState.STOPPED, ComponentState.UNHEALTHY}:
-                time.sleep(self.poll_interval_seconds)
-            else:
-                time.sleep(self.poll_interval_seconds)
+            time.sleep(self.poll_interval_seconds)
         raise RuntimeError("PostgreSQL health gate timed out")
