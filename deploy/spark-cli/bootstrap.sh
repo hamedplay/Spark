@@ -7,6 +7,7 @@ TARGET="/usr/local/lib/spark-manager"
 CLI_PATH="/usr/local/bin/spark"
 AIRGAP_CLI_PATH="/usr/local/bin/spark-airgap"
 ARCHITECTURE_CLI_PATH="/usr/local/bin/spark-architecture"
+DATABASE_CLI_PATH="/usr/local/bin/spark-database"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
 EXPECTED_VERSION="3.1.0+20260910.1"
@@ -56,7 +57,7 @@ printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks" "$tmp/secrets" "$tmp/roles/database/package" "$tmp/adapters" "$tmp/roles/database/runtime"
+mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks" "$tmp/secrets" "$tmp/roles/database/package" "$tmp/adapters" "$tmp/roles/database/runtime" "$tmp/roles/database/lifecycle"
 
 files=(
   spark
@@ -115,6 +116,17 @@ roles/database/runtime/env_builder.py
 roles/database/runtime/compose.py
 roles/database/tasks/runtime.py
 roles/database/tasks/compose.py
+roles/database/tasks/images.py
+roles/database/tasks/postgres.py
+roles/database/tasks/supabase.py
+roles/database/lifecycle/__init__.py
+roles/database/lifecycle/models.py
+roles/database/lifecycle/images.py
+roles/database/lifecycle/postgres.py
+roles/database/lifecycle/supabase.py
+roles/database/lifecycle/diagnostics.py
+database_cli.py
+spark-database
 bootstrap-airgap.sh
   spark-ui.py
   spark-ui-core.py
@@ -346,10 +358,12 @@ migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
 chmod 0755 "$stage" "$migrate_stage"
 backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
-install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks" "$stage/secrets" "$stage/roles/database/package" "$stage/adapters" "$stage/roles/database/runtime"
+install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks" "$stage/secrets" "$stage/roles/database/package" "$stage/adapters" "$stage/roles/database/runtime" "$stage/roles/database/lifecycle"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
 install -m 0755 "$tmp/spark-architecture" "$stage/spark-architecture"
+install -m 0755 "$tmp/spark-database" "$stage/spark-database"
+install -m 0644 "$tmp/database_cli.py" "$stage/database_cli.py"
 install -m 0755 "$tmp/bootstrap-airgap.sh" "$stage/bootstrap-airgap.sh"
 install -m 0644 "$tmp/spark-ui.py" "$stage/spark-ui.py"
 install -m 0644 "$tmp/spark-ui-core.py" "$stage/spark-ui-core.py"
@@ -364,6 +378,7 @@ for file in "$tmp"/roles/database/package/*.py; do install -m 0644 "$file" "$sta
 for file in "$tmp"/secrets/*.py; do install -m 0644 "$file" "$stage/secrets/$(basename "$file")"; done
 for file in "$tmp"/adapters/*.py; do install -m 0644 "$file" "$stage/adapters/$(basename "$file")"; done
 for file in "$tmp"/roles/database/runtime/*.py; do install -m 0644 "$file" "$stage/roles/database/runtime/$(basename "$file")"; done
+for file in "$tmp"/roles/database/lifecycle/*.py; do install -m 0644 "$file" "$stage/roles/database/lifecycle/$(basename "$file")"; done
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
@@ -378,13 +393,15 @@ if [[ -d "$MIGRATE_TARGET" ]]; then
 fi
 
 rollback_install() {
-  rm -f "$CLI_PATH" "$AIRGAP_CLI_PATH" "$ARCHITECTURE_CLI_PATH" "$MIGRATE_PATH"
+  rm -f "$CLI_PATH" "$AIRGAP_CLI_PATH" "$ARCHITECTURE_CLI_PATH" "$DATABASE_CLI_PATH" "$MIGRATE_PATH"
   rm -rf "$TARGET" "$MIGRATE_TARGET"
   if [[ -d "$backup" ]]; then
     mv "$backup" "$TARGET"
     ln -sfn "$TARGET/spark" "$CLI_PATH"
     [[ -x "$TARGET/spark-airgap" ]] && ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
     [[ -x "$TARGET/spark-architecture" ]] && ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
+ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
+    [[ -x "$TARGET/spark-database" ]] && ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
   fi
   if [[ -d "$migrate_backup" ]]; then
     mv "$migrate_backup" "$MIGRATE_TARGET"
@@ -435,6 +452,11 @@ if ! migrate_version_output="$($MIGRATE_PATH --version 2>/dev/null)"; then
 fi
 if [[ "$migrate_version_output" != "Spark Supabase Cloud Migration ${EXPECTED_MIGRATE_VERSION}" ]]; then
   echo "Unexpected Spark migration companion version: ${migrate_version_output}" >&2
+  rollback_install
+  exit 1
+fi
+if ! "$DATABASE_CLI_PATH" --help >/dev/null 2>&1; then
+  echo "Spark database lifecycle CLI smoke test failed; rolling back." >&2
   rollback_install
   exit 1
 fi
