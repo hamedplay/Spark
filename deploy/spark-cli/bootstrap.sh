@@ -400,7 +400,6 @@ rollback_install() {
     ln -sfn "$TARGET/spark" "$CLI_PATH"
     [[ -x "$TARGET/spark-airgap" ]] && ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
     [[ -x "$TARGET/spark-architecture" ]] && ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
-ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
     [[ -x "$TARGET/spark-database" ]] && ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
   fi
   if [[ -d "$migrate_backup" ]]; then
@@ -423,6 +422,7 @@ chmod 0755 "$TARGET" "$MIGRATE_TARGET"
 ln -sfn "$TARGET/spark" "$CLI_PATH"
 ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
 ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
+ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
 ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
 
 if ! version_output="$($CLI_PATH --version 2>/dev/null)"; then
