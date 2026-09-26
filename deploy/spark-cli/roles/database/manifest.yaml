@@ -1,0 +1,15 @@
+id: database
+version: 1
+requires_role: database
+workflow:
+  install:
+    - database.preflight
+    - database.runtime
+    - database.package
+    - database.secrets
+    - database.postgres
+    - database.supabase
+    - database.schema
+    - database.security
+    - database.backup-readiness
+    - database.validate
