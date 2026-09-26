@@ -29,19 +29,19 @@ jobs:
               if old not in text:
                   raise SystemExit('bootstrap tmp directory anchor not found')
               text = text.replace(old, new, 1)
-          if '  roles/database/context.py\n' not in text:
-              anchor = '  config/environments/example.airgap.yaml\n'
+          if 'roles/database/context.py\n' not in text:
+              anchor = 'config/environments/example.airgap.yaml\n'
               block = (
                   anchor
-                  + '  roles/__init__.py\n'
-                  + '  roles/database/__init__.py\n'
-                  + '  roles/database/context.py\n'
-                  + '  roles/database/detector.py\n'
-                  + '  roles/database/preflight.py\n'
-                  + '  roles/database/workflow.py\n'
-                  + '  roles/database/manifest.yaml\n'
-                  + '  roles/database/tasks/__init__.py\n'
-                  + '  roles/database/tasks/preflight.py\n'
+                  + 'roles/__init__.py\n'
+                  + 'roles/database/__init__.py\n'
+                  + 'roles/database/context.py\n'
+                  + 'roles/database/detector.py\n'
+                  + 'roles/database/preflight.py\n'
+                  + 'roles/database/workflow.py\n'
+                  + 'roles/database/manifest.yaml\n'
+                  + 'roles/database/tasks/__init__.py\n'
+                  + 'roles/database/tasks/preflight.py\n'
               )
               if anchor not in text:
                   raise SystemExit('bootstrap file-list anchor not found')
