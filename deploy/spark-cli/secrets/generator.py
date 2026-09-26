@@ -71,7 +71,7 @@ class SupabaseUpstreamSecretGenerator:
             shutil.copy2(env_example, work / ".env")
             shutil.copytree(self.vendor_root / "utils", work / "utils")
             subprocess.run(
-                ["sh", "utils/generate-keys.sh"],
+                ["sh", "utils/generate-keys.sh", "--update-env"],
                 cwd=work,
                 check=True,
                 stdout=subprocess.DEVNULL,
