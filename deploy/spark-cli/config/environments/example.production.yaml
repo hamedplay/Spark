@@ -17,6 +17,11 @@ nodes:
     role: database
     host: 10.211.96.194
     vlan: 1140
+runtime:
+  docker:
+    install_policy: install-if-missing
+    replace_conflicting_packages: false
+    version_policy: compatible-stable
 database:
   supabase:
     release: self-hosted/v0.8.1
