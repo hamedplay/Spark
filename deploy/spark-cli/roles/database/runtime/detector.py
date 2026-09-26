@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import platform
 import shutil
 from pathlib import Path
@@ -74,7 +73,7 @@ class DockerRuntimeDetector:
 
         if os_id != "ubuntu" or version not in SUPPORTED_UBUNTU:
             status = RuntimeStatus.UNSUPPORTED
-        elif conflicts and source != "docker-official-apt":
+        elif conflicts:
             status = RuntimeStatus.CONFLICT
         elif not engine_installed and not compose_installed:
             status = RuntimeStatus.ABSENT
