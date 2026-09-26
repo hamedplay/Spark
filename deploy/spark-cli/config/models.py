@@ -57,6 +57,19 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True)
+class SupabasePackageConfig:
+    release: str = "self-hosted/v0.8.1"
+    source_url: str = "https://github.com/supabase/supabase.git"
+    destination: str = "/opt/spark/database/supabase"
+
+
+@dataclass(frozen=True)
+class DatabaseConfig:
+    supabase: SupabasePackageConfig = field(default_factory=SupabasePackageConfig)
+    secret_file: str = "/etc/spark-manager/secrets/database.env"
+
+
+@dataclass(frozen=True)
 class EnvironmentConfig:
     name: str
     mode: str = "online"
@@ -66,3 +79,4 @@ class EnvironmentConfig:
     external_services: dict[str, ExternalServiceConfig] = field(default_factory=dict)
     network: NetworkConfig = field(default_factory=NetworkConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    database: DatabaseConfig = field(default_factory=DatabaseConfig)
