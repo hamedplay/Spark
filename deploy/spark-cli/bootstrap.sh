@@ -56,7 +56,7 @@ printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks" "$tmp/secrets" "$tmp/roles/database/package"
+mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks" "$tmp/secrets" "$tmp/roles/database/package" "$tmp/adapters" "$tmp/roles/database/runtime"
 
 files=(
   spark
@@ -101,6 +101,20 @@ secrets/file_provider.py
 secrets/generator.py
 secrets/redaction.py
 secrets/models.py
+adapters/__init__.py
+adapters/command.py
+adapters/apt.py
+adapters/systemd.py
+adapters/docker.py
+roles/database/runtime/__init__.py
+roles/database/runtime/models.py
+roles/database/runtime/detector.py
+roles/database/runtime/installer.py
+roles/database/runtime/firewall.py
+roles/database/runtime/env_builder.py
+roles/database/runtime/compose.py
+roles/database/tasks/runtime.py
+roles/database/tasks/compose.py
 bootstrap-airgap.sh
   spark-ui.py
   spark-ui-core.py
@@ -332,7 +346,7 @@ migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
 chmod 0755 "$stage" "$migrate_stage"
 backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
-install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks" "$stage/secrets" "$stage/roles/database/package"
+install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks" "$stage/secrets" "$stage/roles/database/package" "$stage/adapters" "$stage/roles/database/runtime"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
 install -m 0755 "$tmp/spark-architecture" "$stage/spark-architecture"
@@ -348,6 +362,8 @@ install -m 0644 "$tmp/roles/database/manifest.yaml" "$stage/roles/database/manif
 for file in "$tmp"/roles/database/tasks/*.py; do install -m 0644 "$file" "$stage/roles/database/tasks/$(basename "$file")"; done
 for file in "$tmp"/roles/database/package/*.py; do install -m 0644 "$file" "$stage/roles/database/package/$(basename "$file")"; done
 for file in "$tmp"/secrets/*.py; do install -m 0644 "$file" "$stage/secrets/$(basename "$file")"; done
+for file in "$tmp"/adapters/*.py; do install -m 0644 "$file" "$stage/adapters/$(basename "$file")"; done
+for file in "$tmp"/roles/database/runtime/*.py; do install -m 0644 "$file" "$stage/roles/database/runtime/$(basename "$file")"; done
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
