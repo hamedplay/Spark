@@ -1,0 +1,5 @@
+[
+  {"id":"diagnostic-full","label":"Full validation","risk":"safe","special":""},
+  {"id":"resources","label":"Resource snapshot","risk":"safe","special":""},
+  {"id":"version-info","label":"Version & security","risk":"safe","special":""}
+]
