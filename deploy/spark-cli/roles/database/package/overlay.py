@@ -29,7 +29,6 @@ def remove_service(compose_text: str, service: str) -> str:
     if services_index is None:
         raise ValueError("compose file has no top-level services mapping")
     lines = _remove_mapping_block(lines, service, 2)
-    # Remove nested depends_on entries that still name the excluded service.
     for indent in range(4, 18, 2):
         lines = _remove_mapping_block(lines, service, indent)
     filtered = [
@@ -41,9 +40,34 @@ def remove_service(compose_text: str, service: str) -> str:
     return "\n".join(filtered).rstrip() + "\n"
 
 
+def ensure_supavisor_nofile(compose_text: str) -> str:
+    lines = compose_text.splitlines()
+    service_index = next(
+        (index for index, line in enumerate(lines) if _indent(line) == 2 and line.strip() in {"supavisor:", "pooler:"}),
+        None,
+    )
+    if service_index is None:
+        raise ValueError("database compose is missing the Supavisor service")
+    service_end = service_index + 1
+    while service_end < len(lines) and (_indent(lines[service_end]) > 2 or not lines[service_end].strip()):
+        service_end += 1
+    if any(_indent(line) == 4 and line.strip() == "ulimits:" for line in lines[service_index + 1:service_end]):
+        return compose_text if compose_text.endswith("\n") else compose_text + "\n"
+    block = [
+        "    ulimits:",
+        "      nofile:",
+        "        soft: 100000",
+        "        hard: 100000",
+    ]
+    lines[service_index + 1:service_index + 1] = block
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def build_database_compose(upstream_compose: str | Path, destination: str | Path) -> Path:
     source = Path(upstream_compose)
     target = Path(destination)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(remove_service(source.read_text(), "functions"))
+    compose = remove_service(source.read_text(), "functions")
+    compose = ensure_supavisor_nofile(compose)
+    target.write_text(compose)
     return target
