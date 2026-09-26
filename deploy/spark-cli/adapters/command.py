@@ -13,7 +13,14 @@ class CommandResult:
 
 
 class CommandRunner:
-    def run(self, args: Iterable[str], *, check: bool = False, input_text: str | None = None) -> CommandResult:
+    def run(
+        self,
+        args: Iterable[str],
+        *,
+        check: bool = False,
+        input_text: str | None = None,
+        timeout: int | float | None = None,
+    ) -> CommandResult:
         argv = tuple(args)
         try:
             completed = subprocess.run(
@@ -23,10 +30,13 @@ class CommandRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=False,
+                timeout=timeout,
             )
             result = CommandResult(completed.returncode, completed.stdout, completed.stderr)
         except FileNotFoundError:
             result = CommandResult(127, "", "command not found")
+        except subprocess.TimeoutExpired:
+            result = CommandResult(124, "", "command timed out")
         if check and result.returncode != 0:
             raise RuntimeError(f"command failed with exit code {result.returncode}")
         return result
