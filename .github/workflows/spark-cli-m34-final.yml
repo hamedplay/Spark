@@ -1,0 +1,91 @@
+name: spark-cli-m34-final
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-m34-final.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Python syntax
+        working-directory: deploy/spark-cli
+        run: python3 -m py_compile adapters/*.py config/*.py secrets/*.py roles/database/*.py roles/database/package/*.py roles/database/runtime/*.py roles/database/tasks/*.py
+      - name: M0-M3.4 regression suite
+        working-directory: deploy/spark-cli
+        run: |
+          python3 -m unittest tests.smoke.test_manager_baseline -v
+          python3 -m unittest tests.test_workflow_core -v
+          python3 -m unittest discover -s tests/architecture -v
+          python3 -m unittest discover -s tests/roles -v
+          python3 -m unittest discover -s tests/secrets -v
+          python3 -m unittest discover -s tests/database -v
+          python3 spark-ui.py --self-test
+      - name: Validate profiles and lifecycle boundary
+        working-directory: deploy/spark-cli
+        run: |
+          SPARK_ENV_PROFILE=config/environments/example.production.yaml python3 spark-architecture validate >/dev/null
+          SPARK_ENV_PROFILE=config/environments/example.staging.yaml python3 spark-architecture validate >/dev/null
+          SPARK_ENV_PROFILE=config/environments/example.airgap.yaml python3 spark-architecture validate >/dev/null
+          if grep -REn 'docker compose (up|pull)|docker run' roles/database/runtime roles/database/tasks/runtime.py roles/database/tasks/compose.py; then exit 1; fi
+      - name: Validate real pinned compose without lifecycle mutation
+        working-directory: deploy/spark-cli
+        run: |
+          before_containers="$(docker ps -aq | sort || true)"
+          before_images="$(docker images -q | sort -u || true)"
+          python3 - <<'PY'
+          import tempfile
+          from pathlib import Path
+          from config.models import DatabaseConfig, EnvironmentConfig, NodeConfig, SupabasePackageConfig
+          from roles.database.package.manager import SupabasePackageManager, SupabasePackageSpec
+          from roles.database.runtime.compose import DatabaseComposeManager
+          from secrets.file_provider import FileSecretProvider
+          from secrets.generator import SupabaseUpstreamSecretGenerator
+          from secrets.models import REQUIRED_DATABASE_SECRETS
+          with tempfile.TemporaryDirectory() as tmpdir:
+              base = Path(tmpdir)
+              destination = base / 'supabase'
+              SupabasePackageManager().materialize(SupabasePackageSpec('self-hosted/v0.8.1', 'https://github.com/supabase/supabase.git', destination))
+              provider = FileSecretProvider(base / 'secrets' / 'database.env')
+              provider.set('DASHBOARD_USERNAME', 'supabase')
+              for key, value in SupabaseUpstreamSecretGenerator(destination / 'vendor' / 'upstream').generate().items(): provider.set(key, value)
+              assert not [key for key in REQUIRED_DATABASE_SECRETS if not provider.exists(key)]
+              profile = EnvironmentConfig(
+                  name='integration',
+                  nodes={
+                      'reverse_proxy': NodeConfig(role='reverse_proxy', host='10.10.0.1'),
+                      'application': NodeConfig(role='application', host='10.10.0.2'),
+                      'database': NodeConfig(role='database', host='10.10.0.3'),
+                  },
+                  database=DatabaseConfig(
+                      supabase=SupabasePackageConfig(release='self-hosted/v0.8.1', destination=str(destination)),
+                      secret_file=str(base / 'secrets' / 'database.env'),
+                  ),
+              )
+              manager = DatabaseComposeManager()
+              assert manager.materialize(profile, provider)
+              assert not manager.materialize(profile, provider)
+              verified = manager.verify(profile)
+              assert verified['valid'] and not verified['edge_functions']
+              assert (destination / '.env').stat().st_mode & 0o777 == 0o600
+              services = set(manager.docker.compose_services(destination, destination / '.env'))
+              assert 'functions' not in services
+              assert {'db','auth','rest','realtime','storage','api-gw','studio','supavisor'} <= services
+          PY
+          test "$before_containers" = "$(docker ps -aq | sort || true)"
+          test "$before_images" = "$(docker images -q | sort -u || true)"
+      - name: Bootstrap structure
+        working-directory: deploy/spark-cli
+        run: |
+          bash -n bootstrap.sh
+          grep -Fq 'adapters/docker.py' bootstrap.sh
+          grep -Fq 'roles/database/runtime/detector.py' bootstrap.sh
+          grep -Fq 'roles/database/runtime/compose.py' bootstrap.sh
+          grep -Fq 'roles/database/tasks/runtime.py' bootstrap.sh
+          grep -Fq 'roles/database/tasks/compose.py' bootstrap.sh
