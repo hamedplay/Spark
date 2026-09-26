@@ -15,6 +15,12 @@ nodes:
     role: database
     host: 10.30.2.10
     vlan: 302
+database:
+  supabase:
+    release: self-hosted/v0.8.1
+    source_url: https://github.com/supabase/supabase.git
+    destination: /opt/spark/database/supabase
+  secret_file: /etc/spark-manager/secrets/database.env
 jump_server:
   enabled: false
 external_services: {}
