@@ -21,6 +21,9 @@ class OperationTask(ABC):
         if cls is not OperationTask and not getattr(cls, "id", ""):
             raise TypeError(f"{cls.__name__} must define a non-empty id")
 
+    def retry_policy_for(self, ctx: ExecutionContext) -> RetryPolicy:
+        return self.retry_policy
+
     @abstractmethod
     def detect(self, ctx: ExecutionContext) -> TaskResult:
         raise NotImplementedError
