@@ -35,12 +35,6 @@ def generate_dashboard_username() -> str:
 def generic_generator_for(key: str):
     if key == "DASHBOARD_USERNAME":
         return generate_dashboard_username
-    if key in {"POSTGRES_PASSWORD", "DASHBOARD_PASSWORD"}:
-        return generate_secure_password
-    if key == "SECRET_KEY_BASE":
-        return lambda: generate_urlsafe_secret(48)
-    if key in {"VAULT_ENC_KEY", "PG_META_CRYPTO_KEY", "LOGFLARE_API_KEY"}:
-        return lambda: generate_hex_secret(32)
     return None
 
 
