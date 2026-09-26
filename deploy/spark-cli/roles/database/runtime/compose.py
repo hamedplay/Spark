@@ -27,6 +27,7 @@ CAPABILITIES = {
 }
 FORBIDDEN_SERVICES = {"functions"}
 RUNTIME_DIRECTORIES = ("volumes/db/data", "volumes/storage")
+_RUNTIME_DATA_PREFIXES = (Path("db/data"), Path("storage"))
 _VOLUME_REF_RE = re.compile(r"(?:^|\s)-\s+\./(volumes/[^:\s]+)")
 
 
@@ -59,12 +60,18 @@ def _atomic_write_private(path: Path, content: str) -> bool:
             os.unlink(tmp_name)
 
 
+def _is_runtime_data_path(relative: Path) -> bool:
+    return any(relative == prefix or prefix in relative.parents for prefix in _RUNTIME_DATA_PREFIXES)
+
+
 def _copy_missing_runtime_assets(source: Path, destination: Path) -> bool:
     changed = False
     if not source.exists():
         raise RuntimeError("pinned Supabase package is missing volumes assets")
     for path in source.rglob("*"):
         relative = path.relative_to(source)
+        if _is_runtime_data_path(relative):
+            continue
         target = destination / relative
         if path.is_dir():
             target.mkdir(parents=True, exist_ok=True)
@@ -163,10 +170,10 @@ class DatabaseComposeManager:
         verify_no_edge_functions(compose_path)
         compose_text = compose_path.read_text()
         _verify_volume_references(root, compose_text)
-        rendered = self.docker.compose_config(root, env_path)
+        rendered = self.docker.compose_config(root, env_path, profile.database.compose.project_name)
         if "${" in rendered:
             raise RuntimeError("docker compose config contains unresolved interpolation")
-        services = set(self.docker.compose_services(root, env_path))
+        services = set(self.docker.compose_services(root, env_path, profile.database.compose.project_name))
         if services & FORBIDDEN_SERVICES:
             raise RuntimeError("Edge Functions service is forbidden on database role")
         missing = [cap for cap, options in CAPABILITIES.items() if not (services & options)]
