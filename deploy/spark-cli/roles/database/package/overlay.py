@@ -47,7 +47,7 @@ def ensure_supavisor_nofile(compose_text: str) -> str:
         None,
     )
     if service_index is None:
-        raise ValueError("database compose is missing the Supavisor service")
+        return compose_text if compose_text.endswith("\n") else compose_text + "\n"
     service_end = service_index + 1
     while service_end < len(lines) and (_indent(lines[service_end]) > 2 or not lines[service_end].strip()):
         service_end += 1
