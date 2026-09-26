@@ -56,7 +56,7 @@ printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments"
+mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks"
 
 files=(
   spark
@@ -78,6 +78,15 @@ config/yaml_loader.py
 config/environments/example.production.yaml
 config/environments/example.staging.yaml
 config/environments/example.airgap.yaml
+roles/__init__.py
+roles/database/__init__.py
+roles/database/context.py
+roles/database/detector.py
+roles/database/preflight.py
+roles/database/workflow.py
+roles/database/manifest.yaml
+roles/database/tasks/__init__.py
+roles/database/tasks/preflight.py
 bootstrap-airgap.sh
   spark-ui.py
   spark-ui-core.py
@@ -309,7 +318,7 @@ migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
 chmod 0755 "$stage" "$migrate_stage"
 backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
-install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments"
+install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
 install -m 0755 "$tmp/spark-architecture" "$stage/spark-architecture"
@@ -319,6 +328,10 @@ install -m 0644 "$tmp/spark-ui-core.py" "$stage/spark-ui-core.py"
 for file in "$tmp"/architecture/*.py; do install -m 0644 "$file" "$stage/architecture/$(basename "$file")"; done
 for file in "$tmp"/config/*.py; do install -m 0644 "$file" "$stage/config/$(basename "$file")"; done
 for file in "$tmp"/config/environments/*.yaml; do install -m 0644 "$file" "$stage/config/environments/$(basename "$file")"; done
+for file in "$tmp"/roles/*.py; do install -m 0644 "$file" "$stage/roles/$(basename "$file")"; done
+for file in "$tmp"/roles/database/*.py; do install -m 0644 "$file" "$stage/roles/database/$(basename "$file")"; done
+install -m 0644 "$tmp/roles/database/manifest.yaml" "$stage/roles/database/manifest.yaml"
+for file in "$tmp"/roles/database/tasks/*.py; do install -m 0644 "$file" "$stage/roles/database/tasks/$(basename "$file")"; done
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
