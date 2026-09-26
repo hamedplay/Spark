@@ -184,17 +184,22 @@ class SupabaseLifecycleManager:
                 raise RuntimeError("Supabase service group startup failed")
             changed = True
             deadline = time.monotonic() + profile.database.startup.supabase_timeout_seconds
+            last_states: list[ServiceRuntimeState] = []
             while time.monotonic() < deadline:
-                group_states = [
+                last_states = [
                     self._service_state(profile, capability, resolved[capability])
                     for capability in group if capability in resolved and self._required(profile, capability)
                 ]
-                if group_states and all(state.state == ComponentState.HEALTHY for state in group_states):
+                if last_states and all(state.state == ComponentState.HEALTHY for state in last_states):
                     break
-                if not group_states:
+                if not last_states:
                     break
                 time.sleep(self.poll_interval_seconds)
             else:
-                raise RuntimeError("Supabase service health gate timed out")
+                summary = ", ".join(
+                    f"{state.capability.value}={state.state.value}/{state.docker_health or 'no-health'}"
+                    for state in last_states
+                ) or "no required service state available"
+                raise RuntimeError(f"Supabase service health gate timed out: {summary}")
         self.verify(profile, secrets)
         return changed
