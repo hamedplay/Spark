@@ -1,0 +1,46 @@
+name: spark-cli-m35-bootstrap-fix2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-m35-bootstrap-fix2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Repair and validate bootstrap
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('deploy/spark-cli/bootstrap.sh')
+          s = p.read_text()
+          bad = '    [[ -x "$TARGET/spark-architecture" ]] && ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"\nln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"\n    [[ -x "$TARGET/spark-database" ]] && ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"\n'
+          good = '    [[ -x "$TARGET/spark-architecture" ]] && ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"\n    [[ -x "$TARGET/spark-database" ]] && ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"\n'
+          if bad in s:
+              s = s.replace(bad, good, 1)
+          anchor = 'ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"\nln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"\n'
+          replacement = 'ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"\nln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"\nln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"\n'
+          if anchor not in s:
+              raise SystemExit('database symlink anchor not found')
+          s = s.replace(anchor, replacement, 1)
+          p.write_text(s)
+          PY
+          bash -n deploy/spark-cli/bootstrap.sh
+          python3 -m py_compile deploy/spark-cli/database_cli.py deploy/spark-cli/spark-database
+          grep -Fq 'ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"' deploy/spark-cli/bootstrap.sh
+          git diff --check
+      - name: Commit repair
+        run: |
+          git config user.name spark-m35-bot
+          git config user.email spark-m35-bot@users.noreply.github.com
+          git add deploy/spark-cli/bootstrap.sh
+          git commit -m "fix: install spark-database command symlink"
+          git push origin HEAD:main
