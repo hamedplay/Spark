@@ -14,6 +14,7 @@ class OperationTask(ABC):
     dependencies: Sequence[str] = ()
     retry_policy: RetryPolicy = RetryPolicy()
     supports_rollback: bool = False
+    reverify_on_resume: bool = False
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
