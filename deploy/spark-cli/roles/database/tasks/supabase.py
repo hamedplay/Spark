@@ -4,6 +4,7 @@ from config.loader import load_environment
 from core.context import ExecutionContext
 from core.operation import OperationTask
 from core.result import TaskResult
+from core.retry import RetryPolicy
 from roles.database.lifecycle.diagnostics import StartupDiagnostics
 from roles.database.lifecycle.models import AggregateState
 from roles.database.lifecycle.supabase import SupabaseLifecycleManager
@@ -22,6 +23,10 @@ class DatabaseSupabaseTask(OperationTask):
         if not path:
             raise ValueError("environment_profile is required")
         return load_environment(path)
+
+    def retry_policy_for(self, ctx: ExecutionContext) -> RetryPolicy:
+        retry = self._profile(ctx).database.startup.service_retry
+        return RetryPolicy(attempts=retry.attempts, delay_seconds=retry.delay_seconds)
 
     def _manager(self, ctx: ExecutionContext) -> SupabaseLifecycleManager:
         return ctx.variables.get("database_supabase_manager") or SupabaseLifecycleManager()
@@ -54,11 +59,7 @@ class DatabaseSupabaseTask(OperationTask):
         except Exception:
             return TaskResult.failed("Supabase startup blocked: PostgreSQL health gate is not green")
         resolved = self._manager(ctx).resolve(profile)
-        return TaskResult.success(
-            "Supabase Core startup plan",
-            services=tuple(sorted(resolved.values())),
-            edge_functions=False,
-        )
+        return TaskResult.success("Supabase Core startup plan", services=tuple(sorted(resolved.values())), edge_functions=False)
 
     def apply(self, ctx: ExecutionContext) -> TaskResult:
         profile = self._profile(ctx)
@@ -81,9 +82,4 @@ class DatabaseSupabaseTask(OperationTask):
             return TaskResult.failed(f"Supabase Core health verification failed: {type(exc).__name__}", diagnostic=str(path))
         if result["aggregate"] != AggregateState.HEALTHY.value:
             return TaskResult.failed("Supabase Core is not healthy", aggregate=result["aggregate"])
-        return TaskResult.success(
-            "Supabase Core health gate passed",
-            aggregate=result["aggregate"],
-            functional_probes=result["functional_probes"],
-            edge_functions=False,
-        )
+        return TaskResult.success("Supabase Core health gate passed", aggregate=result["aggregate"], functional_probes=result["functional_probes"], edge_functions=False)
