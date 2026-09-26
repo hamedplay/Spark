@@ -7,6 +7,7 @@ from pathlib import Path
 from .models import EnvironmentConfig
 
 HOST_RE = re.compile(r"^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$")
+PROJECT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$")
 REQUIRED_ROLES = {"reverse_proxy", "application", "database"}
 VALID_PROTOCOLS = {"tcp", "https", "http"}
 PINNED_RELEASE_RE = re.compile(r"^self-hosted/v\d+\.\d+\.\d+$")
@@ -100,5 +101,17 @@ def validate_environment(config: EnvironmentConfig) -> EnvironmentConfig:
         raise ValueError("database.supabase.destination must be an absolute path")
     if not Path(config.database.secret_file).is_absolute():
         raise ValueError("database.secret_file must be an absolute path")
+    if not PROJECT_RE.fullmatch(config.database.compose.project_name):
+        raise ValueError("database.compose.project_name contains invalid characters")
+
+    startup = config.database.startup
+    if startup.postgres.normal_timeout_seconds < 1 or startup.postgres.initialization_timeout_seconds < 1:
+        raise ValueError("database.startup.postgres timeouts must be positive")
+    if startup.postgres.initialization_timeout_seconds < startup.postgres.normal_timeout_seconds:
+        raise ValueError("database.startup.postgres initialization timeout must be >= normal timeout")
+    if startup.service_retry.attempts < 1 or startup.service_retry.delay_seconds < 0:
+        raise ValueError("database.startup.service_retry values are invalid")
+    if startup.supabase_timeout_seconds < 1 or startup.image_pull_timeout_seconds < 1:
+        raise ValueError("database startup timeouts must be positive")
 
     return config
