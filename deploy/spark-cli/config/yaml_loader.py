@@ -12,6 +12,10 @@ def _scalar(value: str) -> Any:
     value = value.strip()
     if not value:
         return ""
+    if value == "{}":
+        return {}
+    if value == "[]":
+        return []
     lower = value.lower()
     if lower in {"true", "false"}:
         return lower == "true"
