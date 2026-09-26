@@ -1,0 +1,22 @@
+schema_version: 1
+environment:
+  name: duplicate-host
+  mode: online
+nodes:
+  reverse_proxy:
+    role: reverse_proxy
+    host: 10.0.0.10
+  application:
+    role: application
+    host: 10.0.0.10
+  database:
+    role: database
+    host: 10.0.2.10
+network:
+  rules:
+    - id: proxy-to-app
+      source: reverse_proxy
+      destination: application
+      protocol: tcp
+      ports:
+        - 80
