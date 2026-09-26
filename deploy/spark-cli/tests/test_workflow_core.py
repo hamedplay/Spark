@@ -22,12 +22,14 @@ from core.workflow import Workflow
 class FakeTask(OperationTask):
     id = "fake"
 
-    def __init__(self, task_id="fake", dependencies=(), failures=0, retry=1):
+    def __init__(self, task_id="fake", dependencies=(), failures=0, retry=1, reverify=False, verify_failures=0):
         self.id = task_id
         self.dependencies = tuple(dependencies)
         self.failures = failures
+        self.verify_failures = verify_failures
         self.calls = []
         self.retry_policy = RetryPolicy(attempts=retry)
+        self.reverify_on_resume = reverify
 
     def detect(self, ctx):
         self.calls.append("detect")
@@ -46,6 +48,9 @@ class FakeTask(OperationTask):
 
     def verify(self, ctx):
         self.calls.append("verify")
+        if self.verify_failures:
+            self.verify_failures -= 1
+            return TaskResult.failed("verification failed")
         return TaskResult.success("verified")
 
 
@@ -98,12 +103,30 @@ class WorkflowCoreTests(unittest.TestCase):
             state.record_task("resume", "database.runtime", "success", verified=True)
             first = FakeTask("database.runtime")
             second = FakeTask("database.postgres", dependencies=("database.runtime",))
-            result = Workflow("resume", self.registry(first, second)).execute(
-                ExecutionContext(resume=True, state=state)
-            )
+            result = Workflow("resume", self.registry(first, second)).execute(ExecutionContext(resume=True, state=state))
             self.assertTrue(result.ok)
             self.assertEqual(first.calls, [])
             self.assertIn("verify", second.calls)
+
+    def test_resume_reverifies_lifecycle_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = StateStore(tmp)
+            state.record_task("resume-live", "database.postgres", "success", verified=True)
+            task = FakeTask("database.postgres", reverify=True)
+            result = Workflow("resume-live", self.registry(task)).execute(ExecutionContext(resume=True, state=state))
+            self.assertTrue(result.ok)
+            self.assertEqual(task.calls, ["verify"])
+            self.assertTrue(result.results["database.postgres"].details["reverified"])
+
+    def test_resume_repair_runs_when_reverification_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = StateStore(tmp)
+            state.record_task("resume-repair", "database.postgres", "success", verified=True)
+            task = FakeTask("database.postgres", reverify=True, verify_failures=1)
+            result = Workflow("resume-repair", self.registry(task)).execute(ExecutionContext(resume=True, state=state))
+            self.assertTrue(result.ok)
+            self.assertEqual(task.calls[:4], ["verify", "detect", "plan", "apply"])
+            self.assertEqual(task.calls[-1], "verify")
 
     def test_state_store_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
