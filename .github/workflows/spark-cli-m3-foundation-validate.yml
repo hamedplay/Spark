@@ -1,0 +1,105 @@
+name: spark-cli-m3-foundation-validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-m3-foundation-validate.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Integrate database role package into bootstrap
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('deploy/spark-cli/bootstrap.sh')
+          text = path.read_text()
+          if '"$tmp/roles/database/tasks"' not in text:
+              old = 'mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments"'
+              new = old + ' "$tmp/roles/database/tasks"'
+              if old not in text:
+                  raise SystemExit('bootstrap tmp directory anchor not found')
+              text = text.replace(old, new, 1)
+          if '  roles/database/context.py\n' not in text:
+              anchor = '  config/environments/example.airgap.yaml\n'
+              block = (
+                  anchor
+                  + '  roles/__init__.py\n'
+                  + '  roles/database/__init__.py\n'
+                  + '  roles/database/context.py\n'
+                  + '  roles/database/detector.py\n'
+                  + '  roles/database/preflight.py\n'
+                  + '  roles/database/workflow.py\n'
+                  + '  roles/database/manifest.yaml\n'
+                  + '  roles/database/tasks/__init__.py\n'
+                  + '  roles/database/tasks/preflight.py\n'
+              )
+              if anchor not in text:
+                  raise SystemExit('bootstrap file-list anchor not found')
+              text = text.replace(anchor, block, 1)
+          if '"$stage/roles/database/tasks"' not in text:
+              old = 'install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments"'
+              new = old + ' "$stage/roles/database/tasks"'
+              if old not in text:
+                  raise SystemExit('bootstrap stage directory anchor not found')
+              text = text.replace(old, new, 1)
+          if '"$stage/roles/$(basename "$file")"' not in text:
+              anchor = 'for file in "$tmp"/config/environments/*.yaml; do install -m 0644 "$file" "$stage/config/environments/$(basename "$file")"; done\n'
+              block = (
+                  anchor
+                  + 'for file in "$tmp"/roles/*.py; do install -m 0644 "$file" "$stage/roles/$(basename "$file")"; done\n'
+                  + 'for file in "$tmp"/roles/database/*.py; do install -m 0644 "$file" "$stage/roles/database/$(basename "$file")"; done\n'
+                  + 'install -m 0644 "$tmp/roles/database/manifest.yaml" "$stage/roles/database/manifest.yaml"\n'
+                  + 'for file in "$tmp"/roles/database/tasks/*.py; do install -m 0644 "$file" "$stage/roles/database/tasks/$(basename "$file")"; done\n'
+              )
+              if anchor not in text:
+                  raise SystemExit('bootstrap role install anchor not found')
+              text = text.replace(anchor, block, 1)
+          path.write_text(text)
+          PY
+          bash -n deploy/spark-cli/bootstrap.sh
+          git diff --check
+      - name: Python syntax
+        working-directory: deploy/spark-cli
+        run: python3 -m py_compile roles/__init__.py roles/database/*.py roles/database/tasks/*.py
+      - name: Phase 0 baseline smoke tests
+        working-directory: deploy/spark-cli
+        run: python3 -m unittest tests.smoke.test_manager_baseline -v
+      - name: Phase 1 workflow core tests
+        working-directory: deploy/spark-cli
+        run: python3 -m unittest tests.test_workflow_core -v
+      - name: Phase 2 architecture tests
+        working-directory: deploy/spark-cli
+        run: python3 -m unittest discover -s tests/architecture -v
+      - name: M3.1 and M3.2 database foundation tests
+        working-directory: deploy/spark-cli
+        run: python3 -m unittest discover -s tests/roles -v
+      - name: UI regression self-test
+        working-directory: deploy/spark-cli
+        run: python3 spark-ui.py --self-test
+      - name: Bootstrap structural checks
+        working-directory: deploy/spark-cli
+        run: |
+          bash -n bootstrap.sh
+          grep -Fq 'roles/database/context.py' bootstrap.sh
+          grep -Fq 'roles/database/detector.py' bootstrap.sh
+          grep -Fq 'roles/database/preflight.py' bootstrap.sh
+          grep -Fq 'roles/database/manifest.yaml' bootstrap.sh
+      - name: Commit bootstrap integration
+        run: |
+          if ! git diff --quiet -- deploy/spark-cli/bootstrap.sh; then
+            git config user.name "spark-m3-bot"
+            git config user.email "spark-m3-bot@users.noreply.github.com"
+            git add deploy/spark-cli/bootstrap.sh
+            git commit -m "feat: install database role foundation with spark manager"
+            git push origin HEAD:main
+          fi
