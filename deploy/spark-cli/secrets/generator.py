@@ -55,14 +55,16 @@ class SupabaseUpstreamSecretGenerator:
 
     def generate(self) -> dict[str, str]:
         env_example = self.vendor_root / ".env.example"
+        compose = self.vendor_root / "docker-compose.yml"
         generate_keys = self.vendor_root / "utils" / "generate-keys.sh"
         add_new_keys = self.vendor_root / "utils" / "add-new-auth-keys.sh"
-        for path in (env_example, generate_keys, add_new_keys):
+        for path in (env_example, compose, generate_keys, add_new_keys):
             if not path.exists():
                 raise RuntimeError(f"pinned Supabase package missing upstream key tooling: {path.name}")
         with tempfile.TemporaryDirectory(prefix="spark-supabase-keys-") as tmpdir:
             work = Path(tmpdir)
             shutil.copy2(env_example, work / ".env")
+            shutil.copy2(compose, work / "docker-compose.yml")
             shutil.copytree(self.vendor_root / "utils", work / "utils")
             subprocess.run(
                 ["sh", "utils/generate-keys.sh", "--update-env"],
