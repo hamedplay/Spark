@@ -10,6 +10,8 @@ HOST_RE = re.compile(r"^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$")
 REQUIRED_ROLES = {"reverse_proxy", "application", "database"}
 VALID_PROTOCOLS = {"tcp", "https", "http"}
 PINNED_RELEASE_RE = re.compile(r"^self-hosted/v\d+\.\d+\.\d+$")
+VALID_DOCKER_INSTALL_POLICIES = {"install-if-missing", "manual"}
+VALID_DOCKER_VERSION_POLICIES = {"compatible-stable", "exact"}
 
 
 def _valid_host(value: str) -> bool:
@@ -81,11 +83,17 @@ def validate_environment(config: EnvironmentConfig) -> EnvironmentConfig:
             raise ValueError(f"duplicate network rule definition: {rule.rule_id}")
         seen_signatures.add(signature)
 
+    docker = config.runtime.docker
+    if docker.install_policy not in VALID_DOCKER_INSTALL_POLICIES:
+        raise ValueError(f"unsupported runtime.docker.install_policy: {docker.install_policy}")
+    if docker.version_policy not in VALID_DOCKER_VERSION_POLICIES:
+        raise ValueError(f"unsupported runtime.docker.version_policy: {docker.version_policy}")
+    if docker.version_policy == "exact" and not docker.version:
+        raise ValueError("runtime.docker.version is required when version_policy=exact")
+
     package = config.database.supabase
     if not PINNED_RELEASE_RE.fullmatch(package.release):
         raise ValueError("database.supabase.release must be an explicit self-hosted/vX.Y.Z release")
-    if package.release.lower() in {"latest", "master", "main"}:
-        raise ValueError("floating Supabase releases are not allowed")
     if not package.source_url.startswith("https://"):
         raise ValueError("database.supabase.source_url must use https")
     if not Path(package.destination).is_absolute():
