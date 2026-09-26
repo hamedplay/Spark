@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import secrets
+import base64
+import os
+import random
 import shutil
 import string
 import subprocess
@@ -11,18 +13,19 @@ from .models import UPSTREAM_GENERATED_SECRETS
 
 
 _ALNUM = string.ascii_letters + string.digits
+_RNG = random.SystemRandom()
 
 
 def generate_secure_password(length: int = 40) -> str:
-    return "".join(secrets.choice(_ALNUM) for _ in range(length))
+    return "".join(_RNG.choice(_ALNUM) for _ in range(length))
 
 
 def generate_hex_secret(bytes_count: int = 32) -> str:
-    return secrets.token_hex(bytes_count)
+    return os.urandom(bytes_count).hex()
 
 
 def generate_urlsafe_secret(bytes_count: int = 48) -> str:
-    return secrets.token_urlsafe(bytes_count)
+    return base64.urlsafe_b64encode(os.urandom(bytes_count)).rstrip(b"=").decode("ascii")
 
 
 def generate_dashboard_username() -> str:
