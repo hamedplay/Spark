@@ -66,16 +66,57 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True)
+class SupabaseCapabilitiesConfig:
+    auth: bool = True
+    rest: bool = True
+    realtime: bool = True
+    storage: bool = True
+    gateway: bool = True
+    studio: bool = True
+    pooler: bool = True
+    meta: bool = True
+    imgproxy: bool = True
+
+
+@dataclass(frozen=True)
 class SupabasePackageConfig:
     release: str = "self-hosted/v0.8.1"
     source_url: str = "https://github.com/supabase/supabase.git"
     destination: str = "/opt/spark/database/supabase"
+    capabilities: SupabaseCapabilitiesConfig = field(default_factory=SupabaseCapabilitiesConfig)
+
+
+@dataclass(frozen=True)
+class DatabaseComposeConfig:
+    project_name: str = "spark-supabase"
+
+
+@dataclass(frozen=True)
+class PostgresStartupConfig:
+    normal_timeout_seconds: int = 120
+    initialization_timeout_seconds: int = 600
+
+
+@dataclass(frozen=True)
+class ServiceRetryConfig:
+    attempts: int = 3
+    delay_seconds: int = 10
+
+
+@dataclass(frozen=True)
+class DatabaseStartupConfig:
+    postgres: PostgresStartupConfig = field(default_factory=PostgresStartupConfig)
+    service_retry: ServiceRetryConfig = field(default_factory=ServiceRetryConfig)
+    supabase_timeout_seconds: int = 300
+    image_pull_timeout_seconds: int = 900
 
 
 @dataclass(frozen=True)
 class DatabaseConfig:
     supabase: SupabasePackageConfig = field(default_factory=SupabasePackageConfig)
     secret_file: str = "/etc/spark-manager/secrets/database.env"
+    compose: DatabaseComposeConfig = field(default_factory=DatabaseComposeConfig)
+    startup: DatabaseStartupConfig = field(default_factory=DatabaseStartupConfig)
 
 
 @dataclass(frozen=True)
