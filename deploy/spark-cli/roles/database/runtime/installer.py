@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict
 
 from adapters import AptAdapter, CommandRunner, SystemdAdapter
 from config.models import DockerRuntimeConfig
@@ -40,7 +39,7 @@ class DockerRuntimeManager:
         blocked: list[str] = []
         if state.status == RuntimeStatus.UNSUPPORTED:
             blocked.append(f"unsupported operating system: {state.os_id} {state.os_version}")
-        if state.conflicting_packages and state.source != "docker-official-apt":
+        if state.conflicting_packages:
             if policy.replace_conflicting_packages:
                 actions.append("replace conflicting distro/container runtime packages")
             else:
@@ -75,7 +74,7 @@ class DockerRuntimeManager:
             return False
         if os.geteuid() != 0:
             raise PermissionError("database.runtime must run as root when changes are required")
-        if before.conflicting_packages and before.source != "docker-official-apt":
+        if before.conflicting_packages:
             self.apt.remove(tuple(p for p in before.conflicting_packages if p in CONFLICTING_PACKAGES))
         needs_repo = before.source != "docker-official-apt" or not before.engine_installed or not before.compose_installed
         if needs_repo:
