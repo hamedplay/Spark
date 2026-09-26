@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Mapping
@@ -24,6 +26,7 @@ CAPABILITIES = {
     "pooler": {"supavisor", "pooler"},
 }
 FORBIDDEN_SERVICES = {"functions"}
+_VOLUME_REF_RE = re.compile(r"(?:^|\s)-\s+\./(volumes/[^:\s]+)")
 
 
 def _serialize_env(values: Mapping[str, str]) -> str:
@@ -55,6 +58,35 @@ def _atomic_write_private(path: Path, content: str) -> bool:
             os.unlink(tmp_name)
 
 
+def _copy_missing_runtime_assets(source: Path, destination: Path) -> bool:
+    changed = False
+    if not source.exists():
+        raise RuntimeError("pinned Supabase package is missing volumes assets")
+    for path in source.rglob("*"):
+        relative = path.relative_to(source)
+        target = destination / relative
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+            changed = True
+    return changed
+
+
+def _verify_volume_references(root: Path, compose_text: str) -> None:
+    missing: list[str] = []
+    for line in compose_text.splitlines():
+        match = _VOLUME_REF_RE.search(line)
+        if not match:
+            continue
+        relative = match.group(1)
+        if not (root / relative).exists():
+            missing.append(relative)
+    if missing:
+        raise RuntimeError(f"database compose has missing bind sources: {', '.join(sorted(set(missing)))}")
+
+
 class DatabaseComposeManager:
     def __init__(self, docker: DockerAdapter | None = None) -> None:
         self.docker = docker or DockerAdapter()
@@ -70,6 +102,7 @@ class DatabaseComposeManager:
             "env_present": env_path.exists(),
             "env_mode": env_mode,
             "metadata_present": (root / "runtime" / "metadata.json").exists(),
+            "volumes_present": (root / "volumes").exists(),
         }
 
     def materialize(self, profile: EnvironmentConfig, secrets: FileSecretProvider) -> bool:
@@ -77,7 +110,7 @@ class DatabaseComposeManager:
         vendor = root / "vendor" / "upstream"
         if not vendor.exists():
             raise RuntimeError("pinned Supabase package must be materialized before database.compose")
-        changed = False
+        changed = _copy_missing_runtime_assets(vendor / "volumes", root / "volumes")
         compose_path = root / "docker-compose.yml"
         before_compose = compose_path.read_text() if compose_path.exists() else None
         with tempfile.TemporaryDirectory(prefix="spark-compose-", dir=str(root)) as tmpdir:
@@ -88,6 +121,7 @@ class DatabaseComposeManager:
             compose_path.write_text(generated_text)
             changed = True
         verify_no_edge_functions(compose_path)
+        _verify_volume_references(root, generated_text)
 
         env_values = self.builder.build(profile, secrets, root)
         changed = _atomic_write_private(root / ".env", _serialize_env(env_values)) or changed
@@ -109,9 +143,12 @@ class DatabaseComposeManager:
     def verify(self, profile: EnvironmentConfig) -> dict[str, object]:
         root = Path(profile.database.supabase.destination)
         env_path = root / ".env"
+        compose_path = root / "docker-compose.yml"
         if not env_path.exists() or (env_path.stat().st_mode & 0o777) != 0o600:
             raise RuntimeError("runtime .env is missing or does not have mode 0600")
-        verify_no_edge_functions(root / "docker-compose.yml")
+        verify_no_edge_functions(compose_path)
+        compose_text = compose_path.read_text()
+        _verify_volume_references(root, compose_text)
         rendered = self.docker.compose_config(root, env_path)
         if "${" in rendered:
             raise RuntimeError("docker compose config contains unresolved interpolation")
