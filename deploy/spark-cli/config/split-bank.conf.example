@@ -1,0 +1,12 @@
+# Spark approved split topology
+# Database server:
+# SPARK_NODE_ROLE=database
+# SPARK_DB_HOST=10.211.96.194
+# SPARK_DB_PORT=5432
+# SPARK_APP_HOST=10.211.19.74
+#
+# Application server:
+# SPARK_NODE_ROLE=application
+# SPARK_DB_HOST=10.211.96.194
+# SPARK_DB_PORT=5432
+# SPARK_APP_HOST=10.211.19.74
