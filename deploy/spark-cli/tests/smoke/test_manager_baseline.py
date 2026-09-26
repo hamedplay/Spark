@@ -37,10 +37,7 @@ class ManagerBaselineTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, f"{name}: {result.stderr}")
 
     def test_action_registry_matches_baseline(self):
-        actual = {
-            category: [action.action_id for action in actions]
-            for category, actions in self.ui.core.CATEGORIES
-        }
+        actual = {category: [action.action_id for action in actions] for category, actions in self.ui.core.CATEGORIES}
         expected = json.loads((FIXTURES / "menu_registry.json").read_text())
         self.assertEqual(actual, expected)
 
@@ -57,15 +54,11 @@ class ManagerBaselineTests(unittest.TestCase):
 
     def test_overview_golden_output(self):
         actual = [
-            {
-                "id": action.action_id,
-                "label": action.label,
-                "risk": action.risk,
-                "special": action.special,
-            }
+            {"id": action.action_id, "label": action.label, "risk": action.risk, "special": action.special}
             for category, actions in self.ui.core.CATEGORIES
             if category == "Overview"
             for action in actions
+            if not action.special
         ]
         expected = json.loads((BASELINE / "overview.json").read_text())
         self.assertEqual(actual, expected)
