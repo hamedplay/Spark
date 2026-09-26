@@ -1,0 +1,34 @@
+schema_version: 1
+environment:
+  name: airgap
+  mode: airgap
+nodes:
+  reverse_proxy:
+    role: reverse_proxy
+    host: 10.30.0.10
+    vlan: 300
+  application:
+    role: application
+    host: 10.30.1.10
+    vlan: 301
+  database:
+    role: database
+    host: 10.30.2.10
+    vlan: 302
+jump_server:
+  enabled: false
+external_services: {}
+network:
+  rules:
+    - id: proxy-to-app
+      source: reverse_proxy
+      destination: application
+      protocol: tcp
+      ports:
+        - 80
+    - id: app-to-database
+      source: application
+      destination: database
+      protocol: tcp
+      ports:
+        - 5432
