@@ -95,6 +95,7 @@ class ComposeRuntimeTests(unittest.TestCase):
         compose = (self.root / "docker-compose.yml").read_text()
         self.assertNotIn("  functions:", compose)
         self.assertNotIn("./volumes/functions", compose)
+        self.assertIn("    ulimits:\n      nofile:\n        soft: 100000\n        hard: 100000", compose)
         self.assertTrue((self.root / "volumes" / "db" / "init.sql").exists())
 
     def test_runtime_data_directories_do_not_receive_vendor_assets(self):
