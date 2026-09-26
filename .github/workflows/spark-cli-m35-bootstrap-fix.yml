@@ -1,0 +1,63 @@
+name: spark-cli-m35-bootstrap-fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-m35-bootstrap-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Fix database CLI symlink handling
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('deploy/spark-cli/bootstrap.sh')
+          text = path.read_text()
+          duplicate = '''    [[ -x "$TARGET/spark-architecture" ]] && ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
+ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
+    [[ -x "$TARGET/spark-database" ]] && ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
+'''
+          fixed = '''    [[ -x "$TARGET/spark-architecture" ]] && ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
+    [[ -x "$TARGET/spark-database" ]] && ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
+'''
+          if duplicate in text:
+              text = text.replace(duplicate, fixed, 1)
+          marker = '''ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
+ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
+'''
+          replacement = '''ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
+ln -sfn "$TARGET/spark-database" "$DATABASE_CLI_PATH"
+ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
+'''
+          if marker not in text:
+              raise SystemExit('main symlink anchor missing')
+          text = text.replace(marker, replacement, 1)
+          path.write_text(text)
+          PY
+          bash -n deploy/spark-cli/bootstrap.sh
+          git diff --check
+          test "$(grep -c '^ln -sfn \"\$TARGET/spark-database\" \"\$DATABASE_CLI_PATH\"$' deploy/spark-cli/bootstrap.sh)" -eq 1
+          test "$(grep -c '^    \[\[ -x \"\$TARGET/spark-database\" \]\] && ln -sfn \"\$TARGET/spark-database\" \"\$DATABASE_CLI_PATH\"$' deploy/spark-cli/bootstrap.sh)" -eq 1
+      - name: Regression smoke
+        working-directory: deploy/spark-cli
+        run: |
+          python3 -m unittest tests.smoke.test_manager_baseline -v
+          python3 -m unittest tests.test_workflow_core -v
+          python3 spark-database --help >/dev/null
+      - name: Commit bootstrap fix
+        run: |
+          git config user.name "spark-m35-bot"
+          git config user.email "spark-m35-bot@users.noreply.github.com"
+          git add deploy/spark-cli/bootstrap.sh
+          git commit -m "fix: install spark-database command symlink"
+          git push origin HEAD:main
