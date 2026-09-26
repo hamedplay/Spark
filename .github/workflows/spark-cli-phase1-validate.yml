@@ -1,0 +1,23 @@
+name: spark-cli-phase1-validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/spark-cli/core/**'
+      - 'deploy/spark-cli/config/**'
+      - 'deploy/spark-cli/tests/**'
+      - '.github/workflows/spark-cli-phase1-validate.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Workflow core tests
+        working-directory: deploy/spark-cli
+        run: python3 -m unittest tests.test_workflow_core -v
+      - name: Manager baseline smoke tests
+        working-directory: deploy/spark-cli
+        run: python3 -m unittest tests.smoke.test_manager_baseline -v
