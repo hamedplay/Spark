@@ -4,6 +4,7 @@ from config.loader import load_environment
 from core.context import ExecutionContext
 from core.operation import OperationTask
 from core.result import TaskResult
+from core.retry import RetryPolicy
 from roles.database.lifecycle.diagnostics import StartupDiagnostics
 from roles.database.lifecycle.models import ComponentState
 from roles.database.lifecycle.postgres import PostgresLifecycleManager
@@ -21,6 +22,10 @@ class DatabasePostgresTask(OperationTask):
             raise ValueError("environment_profile is required")
         return load_environment(path)
 
+    def retry_policy_for(self, ctx: ExecutionContext) -> RetryPolicy:
+        retry = self._profile(ctx).database.startup.service_retry
+        return RetryPolicy(attempts=retry.attempts, delay_seconds=retry.delay_seconds)
+
     def _manager(self, ctx: ExecutionContext) -> PostgresLifecycleManager:
         return ctx.variables.get("database_postgres_manager") or PostgresLifecycleManager()
 
@@ -32,13 +37,7 @@ class DatabasePostgresTask(OperationTask):
 
     def detect(self, ctx: ExecutionContext) -> TaskResult:
         state = self._manager(ctx).detect(self._profile(ctx))
-        return TaskResult.success(
-            "PostgreSQL runtime inspected",
-            state=state.state.value,
-            data_present=state.data_present,
-            data_version=state.data_version,
-            data_compatible=state.data_compatible,
-        )
+        return TaskResult.success("PostgreSQL runtime inspected", state=state.state.value, data_present=state.data_present, data_version=state.data_version, data_compatible=state.data_compatible)
 
     def plan(self, ctx: ExecutionContext) -> TaskResult:
         plan = self._manager(ctx).plan(self._profile(ctx))
@@ -62,9 +61,4 @@ class DatabasePostgresTask(OperationTask):
             return TaskResult.failed(f"PostgreSQL health verification failed: {type(exc).__name__}", diagnostic=str(path))
         if state.state != ComponentState.HEALTHY:
             return TaskResult.failed("PostgreSQL is not healthy", state=state.state.value)
-        return TaskResult.success(
-            "PostgreSQL health gate passed",
-            state=state.state.value,
-            pg_isready=bool(state.pg_isready),
-            sql_probe=bool(state.sql_probe),
-        )
+        return TaskResult.success("PostgreSQL health gate passed", state=state.state.value, pg_isready=bool(state.pg_isready), sql_probe=bool(state.sql_probe))
