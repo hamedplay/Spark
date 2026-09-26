@@ -1,0 +1,61 @@
+name: spark-cli-m35-diagnose
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-m35-diagnose.yml'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Inspect PGDATA before and after image acquisition
+        working-directory: deploy/spark-cli
+        run: |
+          python3 - <<'PY'
+          import tempfile
+          from pathlib import Path
+          from config.models import DatabaseConfig, DatabaseStartupConfig, EnvironmentConfig, NodeConfig, SupabasePackageConfig
+          from roles.database.package.manager import SupabasePackageManager, SupabasePackageSpec
+          from roles.database.runtime.compose import DatabaseComposeManager
+          from roles.database.lifecycle.images import DatabaseImageManager
+          from roles.database.lifecycle.postgres import PostgresLifecycleManager
+          from secrets.file_provider import FileSecretProvider
+          from secrets.generator import SupabaseUpstreamSecretGenerator
+
+          base = Path(tempfile.mkdtemp(prefix='spark-m35-diag-'))
+          destination = base / 'supabase'
+          SupabasePackageManager().materialize(SupabasePackageSpec('self-hosted/v0.8.1', 'https://github.com/supabase/supabase.git', destination))
+          provider = FileSecretProvider(base / 'secrets' / 'database.env')
+          provider.set('DASHBOARD_USERNAME', 'supabase')
+          for key, value in SupabaseUpstreamSecretGenerator(destination / 'vendor' / 'upstream').generate().items():
+              provider.set(key, value)
+          profile = EnvironmentConfig(
+              name='integration',
+              nodes={
+                  'reverse_proxy': NodeConfig(role='reverse_proxy', host='127.0.0.1'),
+                  'application': NodeConfig(role='application', host='127.0.0.1'),
+                  'database': NodeConfig(role='database', host='127.0.0.1'),
+              },
+              database=DatabaseConfig(
+                  supabase=SupabasePackageConfig(release='self-hosted/v0.8.1', destination=str(destination)),
+                  secret_file=str(base / 'secrets' / 'database.env'),
+                  startup=DatabaseStartupConfig(image_pull_timeout_seconds=1200),
+              ),
+          )
+          DatabaseComposeManager().materialize(profile, provider)
+          data = destination / 'volumes' / 'db' / 'data'
+          print('before_pull=', sorted(p.name for p in data.iterdir()))
+          DatabaseImageManager().acquire(profile)
+          print('after_pull=', sorted(p.name for p in data.iterdir()))
+          state = PostgresLifecycleManager().detect(profile)
+          print('detected_state=', state.state.value)
+          print('data_present=', state.data_present)
+          print('data_version=', state.data_version)
+          print('data_compatible=', state.data_compatible)
+          PY
