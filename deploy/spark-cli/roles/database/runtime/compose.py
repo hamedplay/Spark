@@ -26,6 +26,7 @@ CAPABILITIES = {
     "pooler": {"supavisor", "pooler"},
 }
 FORBIDDEN_SERVICES = {"functions"}
+RUNTIME_DIRECTORIES = ("volumes/db/data", "volumes/storage")
 _VOLUME_REF_RE = re.compile(r"(?:^|\s)-\s+\./(volumes/[^:\s]+)")
 
 
@@ -74,6 +75,18 @@ def _copy_missing_runtime_assets(source: Path, destination: Path) -> bool:
     return changed
 
 
+def _ensure_runtime_directories(root: Path) -> bool:
+    changed = False
+    for relative in RUNTIME_DIRECTORIES:
+        path = root / relative
+        if not path.exists():
+            path.mkdir(parents=True, exist_ok=True)
+            changed = True
+        elif not path.is_dir():
+            raise RuntimeError(f"runtime bind path is not a directory: {relative}")
+    return changed
+
+
 def _verify_volume_references(root: Path, compose_text: str) -> None:
     missing: list[str] = []
     for line in compose_text.splitlines():
@@ -111,6 +124,7 @@ class DatabaseComposeManager:
         if not vendor.exists():
             raise RuntimeError("pinned Supabase package must be materialized before database.compose")
         changed = _copy_missing_runtime_assets(vendor / "volumes", root / "volumes")
+        changed = _ensure_runtime_directories(root) or changed
         compose_path = root / "docker-compose.yml"
         before_compose = compose_path.read_text() if compose_path.exists() else None
         with tempfile.TemporaryDirectory(prefix="spark-compose-", dir=str(root)) as tmpdir:
