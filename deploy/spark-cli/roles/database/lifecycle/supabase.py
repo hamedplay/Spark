@@ -79,9 +79,9 @@ class SupabaseLifecycleManager:
         if not container_id:
             return ServiceRuntimeState(capability, service, None, ComponentState.ABSENT, None, False, self._required(profile, capability))
         container_state, health = self.docker.container_state(container_id)
-        if container_state == "running" and health == "healthy":
+        if container_state == "running" and health in {"healthy", None}:
             state = ComponentState.HEALTHY
-        elif container_state == "running" and health in {None, "starting"}:
+        elif container_state == "running" and health == "starting":
             state = ComponentState.STARTING
         elif container_state == "running":
             state = ComponentState.UNHEALTHY
