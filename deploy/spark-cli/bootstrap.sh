@@ -360,6 +360,7 @@ fi
 chmod 0755 "$TARGET" "$MIGRATE_TARGET"
 ln -sfn "$TARGET/spark" "$CLI_PATH"
 ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
+ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
 ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
 
 if ! version_output="$($CLI_PATH --version 2>/dev/null)"; then
