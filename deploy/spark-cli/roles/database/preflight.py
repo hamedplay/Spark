@@ -12,7 +12,7 @@ from architecture.host_context import HostContext
 from config.models import EnvironmentConfig
 
 from .context import RoleGuardError, require_database_role
-from .detector import DatabaseInstallationState, detect_database_installation
+from .detector import ComponentState, DatabaseInstallationState, detect_database_installation
 
 
 class PreflightStatus(str, Enum):
@@ -69,6 +69,21 @@ def _disk_gib(path: str = "/") -> float:
         return 0.0
 
 
+def _filesystem_status(path: str | Path) -> tuple[PreflightStatus, str]:
+    target = Path(path)
+    probe = target
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    try:
+        stats = os.statvfs(probe)
+    except OSError as exc:
+        return PreflightStatus.FAIL, f"cannot inspect {probe}: {exc}"
+    read_only_flag = getattr(os, "ST_RDONLY", 1)
+    if stats.f_flag & read_only_flag:
+        return PreflightStatus.FAIL, f"filesystem for {probe} is read-only"
+    return PreflightStatus.PASS, f"filesystem for {probe} is writable-capable"
+
+
 def _port_available(port: int) -> bool:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -89,6 +104,16 @@ def _network_rule_present(environment: EnvironmentConfig) -> bool:
         and 5432 in rule.ports
         for rule in environment.network.rules
     )
+
+
+def _runtime_status(state: ComponentState, *, missing_is_action: bool = True) -> PreflightStatus:
+    if state == ComponentState.HEALTHY:
+        return PreflightStatus.PASS
+    if state == ComponentState.ABSENT:
+        return PreflightStatus.MISSING if missing_is_action else PreflightStatus.FAIL
+    if state in {ComponentState.UNHEALTHY, ComponentState.DEGRADED}:
+        return PreflightStatus.FAIL
+    return PreflightStatus.WARN
 
 
 def run_database_preflight(
@@ -113,10 +138,7 @@ def run_database_preflight(
         return DatabasePreflightReport(tuple(checks), installation)
 
     system = platform.system().lower()
-    if system != "linux":
-        checks.append(PreflightCheck("OS", PreflightStatus.FAIL, platform.platform()))
-    else:
-        checks.append(PreflightCheck("OS", PreflightStatus.PASS, platform.platform()))
+    checks.append(PreflightCheck("OS", PreflightStatus.PASS if system == "linux" else PreflightStatus.FAIL, platform.platform()))
 
     cpu = os.cpu_count() or 0
     if cpu < min_cpu:
@@ -134,6 +156,9 @@ def run_database_preflight(
     else:
         checks.append(PreflightCheck("Memory", PreflightStatus.PASS, f"{memory:.1f} GiB"))
 
+    fs_status, fs_message = _filesystem_status(install_root)
+    checks.append(PreflightCheck("Filesystem", fs_status, fs_message))
+
     disk = _disk_gib(str(Path(install_root).anchor or "/"))
     if disk < min_disk_gib:
         checks.append(PreflightCheck("Disk", PreflightStatus.FAIL, f"{disk:.1f} GiB free; minimum {min_disk_gib:.1f}"))
@@ -143,11 +168,11 @@ def run_database_preflight(
         checks.append(PreflightCheck("Disk", PreflightStatus.PASS, f"{disk:.1f} GiB free"))
 
     installation = detect_database_installation(install_root)
-    checks.append(PreflightCheck("Docker", PreflightStatus.MISSING if installation.docker.value == "ABSENT" else PreflightStatus.PASS, installation.docker.value))
-    checks.append(PreflightCheck("Compose", PreflightStatus.MISSING if installation.compose.value == "ABSENT" else PreflightStatus.PASS, installation.compose.value))
+    checks.append(PreflightCheck("Docker", _runtime_status(installation.docker), installation.docker.value))
+    checks.append(PreflightCheck("Compose", _runtime_status(installation.compose), installation.compose.value))
 
     occupied = [port for port in (5432, 8000, 3000) if not _port_available(port)]
-    if occupied and installation.postgres.value == "ABSENT":
+    if occupied and installation.postgres == ComponentState.ABSENT:
         checks.append(PreflightCheck("Required Ports", PreflightStatus.FAIL, f"occupied: {', '.join(map(str, occupied))}"))
     elif occupied:
         checks.append(PreflightCheck("Required Ports", PreflightStatus.WARN, f"occupied by existing runtime: {', '.join(map(str, occupied))}"))
@@ -155,7 +180,7 @@ def run_database_preflight(
         checks.append(PreflightCheck("Required Ports", PreflightStatus.PASS, "5432, 8000, 3000 available"))
 
     existing = any(
-        state.value not in {"ABSENT", "UNKNOWN"}
+        state not in {ComponentState.ABSENT, ComponentState.UNKNOWN}
         for state in (
             installation.postgres,
             installation.auth,
@@ -170,6 +195,7 @@ def run_database_preflight(
     checks.append(PreflightCheck("Existing Supabase", PreflightStatus.PRESENT if existing else PreflightStatus.NOT_FOUND, "detected" if existing else "not found"))
     checks.append(PreflightCheck("Existing PostgreSQL Data", PreflightStatus.PRESENT if installation.existing_postgres_data else PreflightStatus.NOT_FOUND, "detected" if installation.existing_postgres_data else "not found"))
     checks.append(PreflightCheck("Architecture Profile", PreflightStatus.PASS, environment.name))
-    checks.append(PreflightCheck("Network", PreflightStatus.PASS if _network_rule_present(environment) else PreflightStatus.WARN, "application -> database:5432 declared" if _network_rule_present(environment) else "application -> database:5432 rule is not declared"))
+    network_ready = _network_rule_present(environment)
+    checks.append(PreflightCheck("Network", PreflightStatus.PASS if network_ready else PreflightStatus.WARN, "application -> database:5432 declared" if network_ready else "application -> database:5432 rule is not declared"))
 
     return DatabasePreflightReport(tuple(checks), installation)
