@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+from enum import Enum
+
+
+class SecretState(str, Enum):
+    MISSING = "MISSING"
+    PRESENT = "PRESENT"
+    INVALID = "INVALID"
+
+
+REQUIRED_DATABASE_SECRETS = (
+    "POSTGRES_PASSWORD",
+    "JWT_SECRET",
+    "ANON_KEY",
+    "SERVICE_ROLE_KEY",
+    "DASHBOARD_USERNAME",
+    "DASHBOARD_PASSWORD",
+    "SECRET_KEY_BASE",
+    "VAULT_ENC_KEY",
+    "PG_META_CRYPTO_KEY",
+    "LOGFLARE_API_KEY",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "JWT_KEYS",
+    "JWT_JWKS",
+)
+
+UPSTREAM_GENERATED_SECRETS = {
+    "JWT_SECRET",
+    "ANON_KEY",
+    "SERVICE_ROLE_KEY",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "JWT_KEYS",
+    "JWT_JWKS",
+}
