@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from pathlib import Path
 
 from .models import EnvironmentConfig
 
 HOST_RE = re.compile(r"^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$")
 REQUIRED_ROLES = {"reverse_proxy", "application", "database"}
 VALID_PROTOCOLS = {"tcp", "https", "http"}
+PINNED_RELEASE_RE = re.compile(r"^self-hosted/v\d+\.\d+\.\d+$")
 
 
 def _valid_host(value: str) -> bool:
@@ -78,5 +80,17 @@ def validate_environment(config: EnvironmentConfig) -> EnvironmentConfig:
         if signature in seen_signatures:
             raise ValueError(f"duplicate network rule definition: {rule.rule_id}")
         seen_signatures.add(signature)
+
+    package = config.database.supabase
+    if not PINNED_RELEASE_RE.fullmatch(package.release):
+        raise ValueError("database.supabase.release must be an explicit self-hosted/vX.Y.Z release")
+    if package.release.lower() in {"latest", "master", "main"}:
+        raise ValueError("floating Supabase releases are not allowed")
+    if not package.source_url.startswith("https://"):
+        raise ValueError("database.supabase.source_url must use https")
+    if not Path(package.destination).is_absolute():
+        raise ValueError("database.supabase.destination must be an absolute path")
+    if not Path(config.database.secret_file).is_absolute():
+        raise ValueError("database.secret_file must be an absolute path")
 
     return config
