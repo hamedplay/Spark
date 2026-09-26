@@ -1,3 +1,4 @@
+# validation-revision: 2
 name: spark-cli-m34-validate
 
 on:
@@ -76,29 +77,23 @@ jobs:
 
       - name: Python syntax
         working-directory: deploy/spark-cli
-        run: |
-          python3 -m py_compile adapters/*.py config/*.py secrets/*.py roles/database/*.py roles/database/package/*.py roles/database/runtime/*.py roles/database/tasks/*.py
+        run: python3 -m py_compile adapters/*.py config/*.py secrets/*.py roles/database/*.py roles/database/package/*.py roles/database/runtime/*.py roles/database/tasks/*.py
 
       - name: Phase 0 baseline smoke tests
         working-directory: deploy/spark-cli
         run: python3 -m unittest tests.smoke.test_manager_baseline -v
-
       - name: Phase 1 workflow core tests
         working-directory: deploy/spark-cli
         run: python3 -m unittest tests.test_workflow_core -v
-
       - name: Phase 2 architecture tests
         working-directory: deploy/spark-cli
         run: python3 -m unittest discover -s tests/architecture -v
-
       - name: M3 role regression tests
         working-directory: deploy/spark-cli
         run: python3 -m unittest discover -s tests/roles -v
-
       - name: M3 secrets regression tests
         working-directory: deploy/spark-cli
         run: python3 -m unittest discover -s tests/secrets -v
-
       - name: Database package runtime and compose tests
         working-directory: deploy/spark-cli
         run: python3 -m unittest discover -s tests/database -v
@@ -141,8 +136,7 @@ jobs:
               provider = FileSecretProvider(base / 'secrets' / 'database.env')
               generated = SupabaseUpstreamSecretGenerator(destination / 'vendor' / 'upstream').generate()
               provider.set('DASHBOARD_USERNAME', 'supabase')
-              for key, value in generated.items():
-                  provider.set(key, value)
+              for key, value in generated.items(): provider.set(key, value)
               missing = [key for key in REQUIRED_DATABASE_SECRETS if not provider.exists(key)]
               assert not missing, missing
               profile = EnvironmentConfig(
@@ -174,7 +168,6 @@ jobs:
       - name: UI regression self-test
         working-directory: deploy/spark-cli
         run: python3 spark-ui.py --self-test
-
       - name: Bootstrap structural checks
         working-directory: deploy/spark-cli
         run: |
@@ -184,7 +177,6 @@ jobs:
           grep -Fq 'roles/database/runtime/compose.py' bootstrap.sh
           grep -Fq 'roles/database/tasks/runtime.py' bootstrap.sh
           grep -Fq 'roles/database/tasks/compose.py' bootstrap.sh
-
       - name: Commit bootstrap integration after validation
         run: |
           if ! git diff --quiet -- deploy/spark-cli/bootstrap.sh; then
