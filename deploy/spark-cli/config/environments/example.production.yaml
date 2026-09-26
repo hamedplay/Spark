@@ -1,0 +1,58 @@
+schema_version: 1
+environment:
+  name: production
+  mode: online
+nodes:
+  reverse_proxy:
+    role: reverse_proxy
+    host: 10.211.36.178
+    secondary_hosts:
+      - 10.211.36.179
+    vlan: 843
+  application:
+    role: application
+    host: 10.211.19.74
+    vlan: 1367
+  database:
+    role: database
+    host: 10.211.96.194
+    vlan: 1140
+jump_server:
+  enabled: true
+external_services:
+  bale:
+    host: api.bale.ai
+    port: 443
+    protocol: https
+    required: true
+  rahyab:
+    host: api.rahyab.ir
+    port: 443
+    protocol: https
+    required: true
+network:
+  rules:
+    - id: proxy-to-app
+      source: reverse_proxy
+      destination: application
+      protocol: tcp
+      ports:
+        - 80
+    - id: app-to-database-postgres
+      source: application
+      destination: database
+      protocol: tcp
+      ports:
+        - 5432
+    - id: app-to-bale
+      source: application
+      destination: bale
+      protocol: tcp
+      ports:
+        - 443
+    - id: app-to-rahyab
+      source: application
+      destination: rahyab
+      protocol: tcp
+      ports:
+        - 443
