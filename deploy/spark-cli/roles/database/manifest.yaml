@@ -8,6 +8,7 @@ workflow:
     - database.secrets
     - database.runtime
     - database.compose
+    - database.images
     - database.postgres
     - database.supabase
     - database.schema
