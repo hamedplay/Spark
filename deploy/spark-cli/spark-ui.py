@@ -197,6 +197,14 @@ AIRGAP_ACTIONS = [
 ]
 
 
+ARCHITECTURE_ACTIONS = [
+    core.Action("architecture-overview", "Architecture Overview", "Render the active Spark environment topology from its profile."),
+    core.Action("architecture-profile", "Environment Profile", "Show active profile metadata and configuration readiness."),
+    core.Action("architecture-validate", "Validate Architecture", "Run static schema, role and network-policy validation."),
+    core.Action("architecture-network", "Network Connectivity", "Test only connections that are valid to measure from the current host role."),
+    core.Action("architecture-status", "Deployment Status", "Show configuration readiness without claiming components are installed."),
+]
+
 CLEANUP_ACTIONS = [
     core.Action(
         "cleanup-database",
@@ -307,6 +315,7 @@ def patch_categories() -> None:
             ]
             rebuilt.append((category, new_actions))
             rebuilt.append(("Installation Air-Gapped", AIRGAP_ACTIONS))
+            rebuilt.append(("Architecture & Provisioning", ARCHITECTURE_ACTIONS))
             continue
         elif category == "Diagnostics":
             idx = next((i + 1 for i, a in enumerate(new_actions) if a.action_id == "diagnostic-turn"), len(new_actions))
@@ -432,6 +441,15 @@ def routed_task_process_init(self, spark_path, action_id, args, rows, cols):
                 "spark-airgap is not installed and the Spark repository copy is unavailable; update the Spark repository/manager first"
             )
         spark_path = str(airgap_path)
+    if action_id.startswith("architecture-"):
+        candidates = [
+            Path("/usr/local/bin/spark-architecture"),
+            core.SPARK_ROOT / "deploy/spark-cli/spark-architecture",
+        ]
+        architecture_path = next((path for path in candidates if path.is_file() and os.access(path, os.X_OK)), None)
+        if architecture_path is None:
+            raise FileNotFoundError("spark-architecture is not installed; update Spark Manager first")
+        spark_path = str(architecture_path)
     return _original_task_process_init(self, spark_path, action_id, args, rows, cols)
 
 
@@ -490,6 +508,9 @@ def logical_self_test() -> int:
     airgap_sections = [category for category, _ in core.CATEGORIES if category == "Installation Air-Gapped"]
     if len(airgap_sections) != 1:
         raise RuntimeError("Installation Air-Gapped category is missing or duplicated")
+    architecture_sections = [category for category, _ in core.CATEGORIES if category == "Architecture & Provisioning"]
+    if len(architecture_sections) != 1:
+        raise RuntimeError("Architecture & Provisioning category is missing or duplicated")
     backup_sections = [
         a for category, actions in core.CATEGORIES if category == "Backups"
         for a in actions if a.action_id == "cleanup-backups"

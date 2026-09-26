@@ -6,6 +6,7 @@ REPO_API="https://api.github.com/repos/hamedplay/Spark"
 TARGET="/usr/local/lib/spark-manager"
 CLI_PATH="/usr/local/bin/spark"
 AIRGAP_CLI_PATH="/usr/local/bin/spark-airgap"
+ARCHITECTURE_CLI_PATH="/usr/local/bin/spark-architecture"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 MIGRATE_PATH="/usr/local/bin/spark-migrate"
 EXPECTED_VERSION="3.1.0+20260910.1"
@@ -55,12 +56,29 @@ printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/lib" "$tmp/livekit"
+mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments"
 
 files=(
   spark
   spark-airgap
-  bootstrap-airgap.sh
+spark-architecture
+architecture/__init__.py
+architecture/cli.py
+architecture/controller.py
+architecture/connectivity.py
+architecture/host_context.py
+architecture/renderer.py
+architecture/status.py
+architecture/validator.py
+config/__init__.py
+config/loader.py
+config/models.py
+config/schema.py
+config/yaml_loader.py
+config/environments/example.production.yaml
+config/environments/example.staging.yaml
+config/environments/example.airgap.yaml
+bootstrap-airgap.sh
   spark-ui.py
   spark-ui-core.py
   spark-migrate
@@ -155,6 +173,7 @@ for value in sys.argv[1:]:
     compile(path.read_text(encoding="utf-8"), str(path), "exec")
 PY
 python3 "$tmp/spark-ui.py" --self-test
+SPARK_ENV_PROFILE="$tmp/config/environments/example.production.yaml" python3 "$tmp/spark-architecture" validate >/dev/null
 
 grep -Fq "SPARK_MANAGER_VERSION=\"${EXPECTED_VERSION}\"" "$tmp/spark" || {
   echo "Spark Manager version validation failed." >&2
@@ -290,12 +309,16 @@ migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
 chmod 0755 "$stage" "$migrate_stage"
 backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
-install -d -m 0755 "$stage/lib" "$stage/livekit"
+install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
+install -m 0755 "$tmp/spark-architecture" "$stage/spark-architecture"
 install -m 0755 "$tmp/bootstrap-airgap.sh" "$stage/bootstrap-airgap.sh"
 install -m 0644 "$tmp/spark-ui.py" "$stage/spark-ui.py"
 install -m 0644 "$tmp/spark-ui-core.py" "$stage/spark-ui-core.py"
+for file in "$tmp"/architecture/*.py; do install -m 0644 "$file" "$stage/architecture/$(basename "$file")"; done
+for file in "$tmp"/config/*.py; do install -m 0644 "$file" "$stage/config/$(basename "$file")"; done
+for file in "$tmp"/config/environments/*.yaml; do install -m 0644 "$file" "$stage/config/environments/$(basename "$file")"; done
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
@@ -310,12 +333,13 @@ if [[ -d "$MIGRATE_TARGET" ]]; then
 fi
 
 rollback_install() {
-  rm -f "$CLI_PATH" "$AIRGAP_CLI_PATH" "$MIGRATE_PATH"
+  rm -f "$CLI_PATH" "$AIRGAP_CLI_PATH" "$ARCHITECTURE_CLI_PATH" "$MIGRATE_PATH"
   rm -rf "$TARGET" "$MIGRATE_TARGET"
   if [[ -d "$backup" ]]; then
     mv "$backup" "$TARGET"
     ln -sfn "$TARGET/spark" "$CLI_PATH"
     [[ -x "$TARGET/spark-airgap" ]] && ln -sfn "$TARGET/spark-airgap" "$AIRGAP_CLI_PATH"
+    [[ -x "$TARGET/spark-architecture" ]] && ln -sfn "$TARGET/spark-architecture" "$ARCHITECTURE_CLI_PATH"
   fi
   if [[ -d "$migrate_backup" ]]; then
     mv "$migrate_backup" "$MIGRATE_TARGET"

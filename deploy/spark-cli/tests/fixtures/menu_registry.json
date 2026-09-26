@@ -1,15 +1,138 @@
 {
-  "Overview": ["diagnostic-full", "resources", "version-info", "@recent-logs"],
-  "Installation": ["install-01", "install-02", "install-03", "install-04", "install-05", "install-06", "install-07", "install-08", "install-09", "install-10", "install-11", "install-12", "install-13", "install-14", "install-15", "install-16", "install-17", "install-18", "install-19", "install-20", "install-21", "install-22", "install-all"],
-  "Installation Air-Gapped": ["airgap-build", "airgap-validate", "airgap-import", "airgap-step", "airgap-install-all", "airgap-status", "airgap-build-target-patch", "airgap-apply-target-patch", "airgap-auto-target-bootstrap", "airgap-build-observability-pack", "airgap-import-observability-pack"],
-  "Diagnostics": ["diagnostic-full", "diagnostic-installation-status", "diagnostic-frontend", "diagnostic-api", "diagnostic-docker", "@docker-logs", "diagnostic-nginx", "diagnostic-schedulers", "diagnostic-turn", "diagnostic-livekit", "diagnostic-exposure", "diagnostic-dns-ssl", "diagnostic-ports", "@recent-logs"],
-  "Application": ["app-update", "diagnostic-full", "version-info"],
-  "System": ["linux-update", "resources", "diagnostic-ports"],
-  "Security": ["security-db-info", "security-db-test", "security-db-open", "security-db-close", "security-studio-info", "security-studio-open", "security-studio-close", "security-report", "security-account-unlock", "diagnostic-exposure", "version-info"],
-  "Services": ["service-status", "service-functions", "service-nginx", "service-coturn", "service-supabase", "service-timers", "service-livekit"],
-  "Backups": ["backup-create", "backup-list", "backup-restore-plain", "cleanup-backups", "@recent-logs"],
-  "Cleanup / Remove": ["cleanup-database", "cleanup-supabase", "cleanup-frontend", "cleanup-source", "cleanup-logs", "backup-restore-plain", "cleanup-history", "cleanup-livekit", "cleanup-full", "cleanup-manager"],
-  "Certificates": ["cert-list", "cert-dry-run", "cert-renew"],
-  "Node / npm": ["npm-versions", "npm-update", "npm-ci", "npm-audit", "npm-audit-prod", "npm-outdated", "npm-fix-dry"],
-  "Manager": ["manager-update", "@recent-logs"]
+  "Overview": [
+    "diagnostic-full",
+    "resources",
+    "version-info",
+    "@recent-logs"
+  ],
+  "Installation": [
+    "install-01",
+    "install-02",
+    "install-03",
+    "install-04",
+    "install-05",
+    "install-06",
+    "install-07",
+    "install-08",
+    "install-09",
+    "install-10",
+    "install-11",
+    "install-12",
+    "install-13",
+    "install-14",
+    "install-15",
+    "install-16",
+    "install-17",
+    "install-18",
+    "install-19",
+    "install-20",
+    "install-21",
+    "install-22",
+    "install-all"
+  ],
+  "Installation Air-Gapped": [
+    "airgap-build",
+    "airgap-validate",
+    "airgap-import",
+    "airgap-step",
+    "airgap-install-all",
+    "airgap-status",
+    "airgap-build-target-patch",
+    "airgap-apply-target-patch",
+    "airgap-auto-target-bootstrap",
+    "airgap-build-observability-pack",
+    "airgap-import-observability-pack"
+  ],
+  "Architecture & Provisioning": [
+    "architecture-overview",
+    "architecture-profile",
+    "architecture-validate",
+    "architecture-network",
+    "architecture-status"
+  ],
+  "Diagnostics": [
+    "diagnostic-full",
+    "diagnostic-installation-status",
+    "diagnostic-frontend",
+    "diagnostic-api",
+    "diagnostic-docker",
+    "@docker-logs",
+    "diagnostic-nginx",
+    "diagnostic-schedulers",
+    "diagnostic-turn",
+    "diagnostic-livekit",
+    "diagnostic-exposure",
+    "diagnostic-dns-ssl",
+    "diagnostic-ports",
+    "@recent-logs"
+  ],
+  "Application": [
+    "app-update",
+    "diagnostic-full",
+    "version-info"
+  ],
+  "System": [
+    "linux-update",
+    "resources",
+    "diagnostic-ports"
+  ],
+  "Security": [
+    "security-db-info",
+    "security-db-test",
+    "security-db-open",
+    "security-db-close",
+    "security-studio-info",
+    "security-studio-open",
+    "security-studio-close",
+    "security-report",
+    "security-account-unlock",
+    "diagnostic-exposure",
+    "version-info"
+  ],
+  "Services": [
+    "service-status",
+    "service-functions",
+    "service-nginx",
+    "service-coturn",
+    "service-supabase",
+    "service-timers",
+    "service-livekit"
+  ],
+  "Backups": [
+    "backup-create",
+    "backup-list",
+    "backup-restore-plain",
+    "cleanup-backups",
+    "@recent-logs"
+  ],
+  "Cleanup / Remove": [
+    "cleanup-database",
+    "cleanup-supabase",
+    "cleanup-frontend",
+    "cleanup-source",
+    "cleanup-logs",
+    "backup-restore-plain",
+    "cleanup-history",
+    "cleanup-livekit",
+    "cleanup-full",
+    "cleanup-manager"
+  ],
+  "Certificates": [
+    "cert-list",
+    "cert-dry-run",
+    "cert-renew"
+  ],
+  "Node / npm": [
+    "npm-versions",
+    "npm-update",
+    "npm-ci",
+    "npm-audit",
+    "npm-audit-prod",
+    "npm-outdated",
+    "npm-fix-dry"
+  ],
+  "Manager": [
+    "manager-update",
+    "@recent-logs"
+  ]
 }
