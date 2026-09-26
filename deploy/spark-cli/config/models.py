@@ -51,9 +51,18 @@ class NetworkConfig:
 
 
 @dataclass(frozen=True)
+class DockerRuntimeConfig:
+    install_policy: str = "install-if-missing"
+    replace_conflicting_packages: bool = False
+    version_policy: str = "compatible-stable"
+    version: str | None = None
+
+
+@dataclass(frozen=True)
 class RuntimeConfig:
     install_root: str = "/opt/spark"
     state_root: str = "/var/lib/spark-manager"
+    docker: DockerRuntimeConfig = field(default_factory=DockerRuntimeConfig)
 
 
 @dataclass(frozen=True)
