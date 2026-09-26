@@ -58,14 +58,13 @@ class RuntimeDetectionTests(unittest.TestCase):
     def build(self, version="24.04", *, conflicts=(), official=False, active=True, healthy=True):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        detector = DockerRuntimeDetector(
+        return DockerRuntimeDetector(
             runner=FakeRunner(),
             apt=FakeApt(conflicts=conflicts, official=official),
             systemd=FakeSystemd(active),
             docker=FakeDocker(healthy=healthy),
             os_release_path=os_release(Path(tmp.name), version),
         )
-        return detector
 
     @patch("roles.database.runtime.detector.shutil.which", return_value="/usr/bin/docker")
     def test_healthy_official_runtime(self, _which):
@@ -75,23 +74,23 @@ class RuntimeDetectionTests(unittest.TestCase):
 
     @patch("roles.database.runtime.detector.shutil.which", return_value="/usr/bin/docker")
     def test_daemon_down_is_unhealthy(self, _which):
-        state = self.build(official=True, active=False, healthy=False).detect()
-        self.assertEqual(state.status, RuntimeStatus.UNHEALTHY)
+        self.assertEqual(self.build(official=True, active=False, healthy=False).detect().status, RuntimeStatus.UNHEALTHY)
 
     @patch("roles.database.runtime.detector.shutil.which", return_value="/usr/bin/docker")
     def test_conflicting_distro_runtime_is_conflict(self, _which):
-        state = self.build(conflicts=("docker.io",), official=False).detect()
-        self.assertEqual(state.status, RuntimeStatus.CONFLICT)
+        self.assertEqual(self.build(conflicts=("docker.io",), official=False).detect().status, RuntimeStatus.CONFLICT)
+
+    @patch("roles.database.runtime.detector.shutil.which", return_value="/usr/bin/docker")
+    def test_conflict_is_not_hidden_by_docker_ce_presence(self, _which):
+        self.assertEqual(self.build(conflicts=("containerd",), official=True).detect().status, RuntimeStatus.CONFLICT)
 
     @patch("roles.database.runtime.detector.shutil.which", return_value="/usr/bin/docker")
     def test_unknown_ubuntu_release_is_unsupported(self, _which):
-        state = self.build(version="20.04", official=True).detect()
-        self.assertEqual(state.status, RuntimeStatus.UNSUPPORTED)
+        self.assertEqual(self.build(version="20.04", official=True).detect().status, RuntimeStatus.UNSUPPORTED)
 
     @patch("roles.database.runtime.detector.shutil.which", return_value=None)
     def test_absent_runtime_is_absent(self, _which):
-        state = self.build(active=False, healthy=False).detect()
-        self.assertEqual(state.status, RuntimeStatus.ABSENT)
+        self.assertEqual(self.build(active=False, healthy=False).detect().status, RuntimeStatus.ABSENT)
 
 
 if __name__ == "__main__":
