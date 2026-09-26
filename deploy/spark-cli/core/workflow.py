@@ -91,7 +91,7 @@ class Workflow:
         return WorkflowResult(self.id, final, results)
 
     def _apply_with_retry(self, operation, ctx: ExecutionContext) -> TaskResult:
-        policy = operation.retry_policy
+        policy = operation.retry_policy_for(ctx)
         last = TaskResult.failed("operation was not attempted")
         for attempt in range(1, policy.attempts + 1):
             last = self._safe_call(operation.apply, ctx, "apply")
