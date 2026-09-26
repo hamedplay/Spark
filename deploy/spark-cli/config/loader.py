@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import (
+    DatabaseConfig,
     EnvironmentConfig,
     ExternalServiceConfig,
     JumpServerConfig,
@@ -12,6 +13,7 @@ from .models import (
     NetworkRuleConfig,
     NodeConfig,
     RuntimeConfig,
+    SupabasePackageConfig,
 )
 from .schema import validate_environment
 from .yaml_loader import safe_load_profile
@@ -23,6 +25,9 @@ FORBIDDEN_SECRET_KEYS = {
     "smtp_password",
     "ssh_private_key",
     "anon_key",
+    "supabase_secret_key",
+    "jwt_private_key",
+    "jwt_public_jwks",
 }
 
 
@@ -90,6 +95,16 @@ def environment_from_mapping(data: dict[str, Any]) -> EnvironmentConfig:
         rules=tuple(rules),
     )
     runtime = RuntimeConfig(**(data.get("runtime", {}) or {}))
+    database_data = data.get("database", {}) or {}
+    supabase_data = database_data.get("supabase", {}) or {}
+    database = DatabaseConfig(
+        supabase=SupabasePackageConfig(
+            release=str(supabase_data.get("release", "self-hosted/v0.8.1")),
+            source_url=str(supabase_data.get("source_url", "https://github.com/supabase/supabase.git")),
+            destination=str(supabase_data.get("destination", "/opt/spark/database/supabase")),
+        ),
+        secret_file=str(database_data.get("secret_file", "/etc/spark-manager/secrets/database.env")),
+    )
     return validate_environment(EnvironmentConfig(
         name=str(name),
         mode=str(mode),
@@ -99,6 +114,7 @@ def environment_from_mapping(data: dict[str, Any]) -> EnvironmentConfig:
         external_services=external_services,
         network=network,
         runtime=runtime,
+        database=database,
     ))
 
 
