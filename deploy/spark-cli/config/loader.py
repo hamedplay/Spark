@@ -6,6 +6,7 @@ from typing import Any
 
 from .models import (
     DatabaseConfig,
+    DockerRuntimeConfig,
     EnvironmentConfig,
     ExternalServiceConfig,
     JumpServerConfig,
@@ -94,7 +95,20 @@ def environment_from_mapping(data: dict[str, Any]) -> EnvironmentConfig:
         management_cidr=network_data.get("management_cidr"),
         rules=tuple(rules),
     )
-    runtime = RuntimeConfig(**(data.get("runtime", {}) or {}))
+
+    runtime_data = data.get("runtime", {}) or {}
+    docker_data = runtime_data.get("docker", {}) or {}
+    runtime = RuntimeConfig(
+        install_root=str(runtime_data.get("install_root", "/opt/spark")),
+        state_root=str(runtime_data.get("state_root", "/var/lib/spark-manager")),
+        docker=DockerRuntimeConfig(
+            install_policy=str(docker_data.get("install_policy", "install-if-missing")),
+            replace_conflicting_packages=bool(docker_data.get("replace_conflicting_packages", False)),
+            version_policy=str(docker_data.get("version_policy", "compatible-stable")),
+            version=(str(docker_data["version"]) if docker_data.get("version") is not None else None),
+        ),
+    )
+
     database_data = data.get("database", {}) or {}
     supabase_data = database_data.get("supabase", {}) or {}
     database = DatabaseConfig(
