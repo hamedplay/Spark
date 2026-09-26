@@ -25,7 +25,28 @@ database:
     release: self-hosted/v0.8.1
     source_url: https://github.com/supabase/supabase.git
     destination: /opt/spark/database/supabase
+    capabilities:
+      auth: true
+      rest: true
+      realtime: true
+      storage: true
+      gateway: true
+      studio: true
+      pooler: true
+      meta: true
+      imgproxy: true
   secret_file: /etc/spark-manager/secrets/database.env
+  compose:
+    project_name: spark-supabase
+  startup:
+    postgres:
+      normal_timeout_seconds: 120
+      initialization_timeout_seconds: 600
+    service_retry:
+      attempts: 3
+      delay_seconds: 10
+    supabase_timeout_seconds: 300
+    image_pull_timeout_seconds: 900
 jump_server:
   enabled: false
 network:
