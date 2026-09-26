@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from .models import (
+    DatabaseComposeConfig,
     DatabaseConfig,
+    DatabaseStartupConfig,
     DockerRuntimeConfig,
     EnvironmentConfig,
     ExternalServiceConfig,
@@ -13,7 +15,10 @@ from .models import (
     NetworkConfig,
     NetworkRuleConfig,
     NodeConfig,
+    PostgresStartupConfig,
     RuntimeConfig,
+    ServiceRetryConfig,
+    SupabaseCapabilitiesConfig,
     SupabasePackageConfig,
 )
 from .schema import validate_environment
@@ -111,13 +116,42 @@ def environment_from_mapping(data: dict[str, Any]) -> EnvironmentConfig:
 
     database_data = data.get("database", {}) or {}
     supabase_data = database_data.get("supabase", {}) or {}
+    capabilities_data = supabase_data.get("capabilities", {}) or {}
+    compose_data = database_data.get("compose", {}) or {}
+    startup_data = database_data.get("startup", {}) or {}
+    postgres_startup = startup_data.get("postgres", {}) or {}
+    retry_data = startup_data.get("service_retry", {}) or {}
     database = DatabaseConfig(
         supabase=SupabasePackageConfig(
             release=str(supabase_data.get("release", "self-hosted/v0.8.1")),
             source_url=str(supabase_data.get("source_url", "https://github.com/supabase/supabase.git")),
             destination=str(supabase_data.get("destination", "/opt/spark/database/supabase")),
+            capabilities=SupabaseCapabilitiesConfig(
+                auth=bool(capabilities_data.get("auth", True)),
+                rest=bool(capabilities_data.get("rest", True)),
+                realtime=bool(capabilities_data.get("realtime", True)),
+                storage=bool(capabilities_data.get("storage", True)),
+                gateway=bool(capabilities_data.get("gateway", True)),
+                studio=bool(capabilities_data.get("studio", True)),
+                pooler=bool(capabilities_data.get("pooler", True)),
+                meta=bool(capabilities_data.get("meta", True)),
+                imgproxy=bool(capabilities_data.get("imgproxy", True)),
+            ),
         ),
         secret_file=str(database_data.get("secret_file", "/etc/spark-manager/secrets/database.env")),
+        compose=DatabaseComposeConfig(project_name=str(compose_data.get("project_name", "spark-supabase"))),
+        startup=DatabaseStartupConfig(
+            postgres=PostgresStartupConfig(
+                normal_timeout_seconds=int(postgres_startup.get("normal_timeout_seconds", 120)),
+                initialization_timeout_seconds=int(postgres_startup.get("initialization_timeout_seconds", 600)),
+            ),
+            service_retry=ServiceRetryConfig(
+                attempts=int(retry_data.get("attempts", 3)),
+                delay_seconds=int(retry_data.get("delay_seconds", 10)),
+            ),
+            supabase_timeout_seconds=int(startup_data.get("supabase_timeout_seconds", 300)),
+            image_pull_timeout_seconds=int(startup_data.get("image_pull_timeout_seconds", 900)),
+        ),
     )
     return validate_environment(EnvironmentConfig(
         name=str(name),
