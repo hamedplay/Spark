@@ -1,4 +1,4 @@
-# diagnosis-revision: 3
+# diagnosis-revision: 4
 name: spark-cli-m35-diagnose
 
 on:
@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Diagnose Supabase core health gate
+      - name: Capture redacted Supavisor diagnostics
         working-directory: deploy/spark-cli
         run: |
           python3 - <<'PY'
@@ -29,6 +29,8 @@ jobs:
           from roles.database.lifecycle.supabase import SupabaseLifecycleManager
           from secrets.file_provider import FileSecretProvider
           from secrets.generator import SupabaseUpstreamSecretGenerator
+          from secrets.models import REQUIRED_DATABASE_SECRETS
+          from secrets.redaction import SecretRedactor
 
           base = Path(tempfile.mkdtemp(prefix='spark-m35-diag-'))
           destination = base / 'supabase'
@@ -36,27 +38,30 @@ jobs:
           provider = FileSecretProvider(base/'secrets'/'database.env')
           provider.set('DASHBOARD_USERNAME','supabase')
           for key,value in SupabaseUpstreamSecretGenerator(destination/'vendor'/'upstream').generate().items(): provider.set(key,value)
+          redactor=SecretRedactor(); redactor.register_many(provider.get(key) for key in REQUIRED_DATABASE_SECRETS if provider.exists(key))
           profile = EnvironmentConfig(name='integration',nodes={
               'reverse_proxy':NodeConfig(role='reverse_proxy',host='127.0.0.1'),
               'application':NodeConfig(role='application',host='127.0.0.1'),
               'database':NodeConfig(role='database',host='127.0.0.1')},database=DatabaseConfig(
               supabase=SupabasePackageConfig(release='self-hosted/v0.8.1',destination=str(destination)),
               secret_file=str(base/'secrets'/'database.env'),
-              startup=DatabaseStartupConfig(postgres=PostgresStartupConfig(normal_timeout_seconds=120,initialization_timeout_seconds=600),supabase_timeout_seconds=120,image_pull_timeout_seconds=1200)))
+              startup=DatabaseStartupConfig(postgres=PostgresStartupConfig(normal_timeout_seconds=120,initialization_timeout_seconds=600),supabase_timeout_seconds=90,image_pull_timeout_seconds=1200)))
           DatabaseComposeManager().materialize(profile,provider)
           DatabaseImageManager().acquire(profile)
-          postgres=PostgresLifecycleManager(poll_interval_seconds=2)
-          print('postgres_first_start=',postgres.start(profile))
-          print('postgres_second_start=',postgres.start(profile))
+          postgres=PostgresLifecycleManager(poll_interval_seconds=2); postgres.start(profile); postgres.verify(profile)
           supabase=SupabaseLifecycleManager(poll_interval_seconds=2)
-          try:
-              supabase.start(profile,provider)
-              print('supabase_start=SUCCESS')
-          except Exception as exc:
-              print('supabase_start_error=',str(exc))
-              aggregate,states=supabase.detect(profile)
-              print('aggregate=',aggregate.value)
-              for state in states:
-                  print(f'{state.capability.value}={state.state.value}/{state.docker_health or "no-health"}/{state.service_name}')
-              raise
+          root=destination; env=root/'.env'; project=profile.database.compose.project_name
+          result=supabase.docker.compose_up(root,env,('meta','supavisor'),project_name=project,wait=False,timeout=120)
+          print('compose_up_rc=',result.returncode)
+          import time; time.sleep(45)
+          cid=supabase.docker.service_container_id(root,env,'supavisor',project)
+          print('container_id_present=',bool(cid))
+          if cid:
+              state,health=supabase.docker.container_state(cid)
+              print('container_state=',state)
+              print('docker_health=',health)
+          logs=supabase.docker.compose_logs(root,env,'supavisor',project_name=project,tail=120)
+          print('--- REDACTED SUPAVISOR LOGS ---')
+          print(redactor.redact(logs)[-12000:])
+          print('--- END LOGS ---')
           PY
