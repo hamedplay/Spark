@@ -1,0 +1,33 @@
+schema_version: 1
+environment:
+  name: staging
+  mode: online
+nodes:
+  reverse_proxy:
+    role: reverse_proxy
+    host: 10.20.0.10
+    vlan: 200
+  application:
+    role: application
+    host: 10.20.1.10
+    vlan: 201
+  database:
+    role: database
+    host: 10.20.2.10
+    vlan: 202
+jump_server:
+  enabled: false
+network:
+  rules:
+    - id: proxy-to-app
+      source: reverse_proxy
+      destination: application
+      protocol: tcp
+      ports:
+        - 80
+    - id: app-to-database
+      source: application
+      destination: database
+      protocol: tcp
+      ports:
+        - 5432
