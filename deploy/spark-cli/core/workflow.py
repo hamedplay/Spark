@@ -48,9 +48,17 @@ class Workflow:
 
             previous = saved.get("tasks", {}).get(operation.id, {})
             if ctx.resume and previous.get("status") == TaskStatus.SUCCESS.value and previous.get("verified"):
-                result = TaskResult.skipped("already completed and verified")
-                results[operation.id] = result
-                continue
+                if getattr(operation, "reverify_on_resume", False):
+                    resumed = self._safe_call(operation.verify, ctx, "resume-verify")
+                    if resumed.status == TaskStatus.SUCCESS:
+                        result = TaskResult.success("resume: task reverified", changed=False, reverified=True)
+                        results[operation.id] = result
+                        self._record(ctx, operation.id, result, verified=True)
+                        continue
+                else:
+                    result = TaskResult.skipped("already completed and verified")
+                    results[operation.id] = result
+                    continue
 
             detected = self._safe_call(operation.detect, ctx, "detect")
             if detected.status == TaskStatus.FAILED:
