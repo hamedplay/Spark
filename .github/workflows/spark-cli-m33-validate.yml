@@ -1,3 +1,4 @@
+# validation-revision: 2
 name: spark-cli-m33-validate
 
 on:
@@ -76,8 +77,7 @@ jobs:
 
       - name: Python syntax
         working-directory: deploy/spark-cli
-        run: |
-          python3 -m py_compile secrets/*.py roles/database/*.py roles/database/tasks/*.py roles/database/package/*.py config/*.py
+        run: python3 -m py_compile secrets/*.py roles/database/*.py roles/database/tasks/*.py roles/database/package/*.py config/*.py
 
       - name: Phase 0 baseline smoke tests
         working-directory: deploy/spark-cli
@@ -125,11 +125,7 @@ jobs:
 
           with tempfile.TemporaryDirectory() as tmpdir:
               destination = Path(tmpdir) / 'supabase'
-              spec = SupabasePackageSpec(
-                  'self-hosted/v0.8.1',
-                  'https://github.com/supabase/supabase.git',
-                  destination,
-              )
+              spec = SupabasePackageSpec('self-hosted/v0.8.1', 'https://github.com/supabase/supabase.git', destination)
               manager = SupabasePackageManager()
               manager.materialize(spec)
               assert manager.detect(spec)['healthy'] is True
