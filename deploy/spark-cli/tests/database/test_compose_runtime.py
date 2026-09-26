@@ -12,9 +12,9 @@ from secrets.models import REQUIRED_DATABASE_SECRETS
 
 
 class FakeDocker:
-    def compose_config(self, project_dir, env_file):
+    def compose_config(self, project_dir, env_file, project_name="spark-supabase"):
         return "services:\n  db: {}\n"
-    def compose_services(self, project_dir, env_file):
+    def compose_services(self, project_dir, env_file, project_name="spark-supabase"):
         return ("db", "auth", "rest", "realtime", "storage", "api-gw", "studio", "supavisor")
 
 
@@ -24,6 +24,7 @@ services:
     image: postgres:17
     volumes:
       - ./volumes/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./volumes/db/data:/var/lib/postgresql/data
   auth:
     image: auth:test
     depends_on:
@@ -35,6 +36,8 @@ services:
     image: realtime:test
   storage:
     image: storage:test
+    volumes:
+      - ./volumes/storage:/var/lib/storage
   api-gw:
     image: envoy:test
   studio:
@@ -58,8 +61,11 @@ class ComposeRuntimeTests(unittest.TestCase):
         base = Path(self.tmp.name)
         self.root = base / "supabase"
         vendor = self.root / "vendor" / "upstream"
-        (vendor / "volumes" / "db").mkdir(parents=True)
+        (vendor / "volumes" / "db" / "data").mkdir(parents=True)
         (vendor / "volumes" / "db" / "init.sql").write_text("select 1;\n")
+        (vendor / "volumes" / "db" / "data" / "vendor-placeholder").write_text("must-not-copy\n")
+        (vendor / "volumes" / "storage").mkdir(parents=True)
+        (vendor / "volumes" / "storage" / "vendor-placeholder").write_text("must-not-copy\n")
         (vendor / "volumes" / "functions").mkdir(parents=True)
         (vendor / "docker-compose.yml").write_text(UPSTREAM_COMPOSE)
         (vendor / ".env.example").write_text("POSTGRES_PORT=5432\nPOSTGRES_DB=postgres\n")
@@ -90,6 +96,16 @@ class ComposeRuntimeTests(unittest.TestCase):
         self.assertNotIn("  functions:", compose)
         self.assertNotIn("./volumes/functions", compose)
         self.assertTrue((self.root / "volumes" / "db" / "init.sql").exists())
+
+    def test_runtime_data_directories_do_not_receive_vendor_assets(self):
+        manager = DatabaseComposeManager(FakeDocker())
+        manager.materialize(self.profile, self.secrets)
+        postgres_data = self.root / "volumes" / "db" / "data"
+        storage_data = self.root / "volumes" / "storage"
+        self.assertTrue(postgres_data.is_dir())
+        self.assertTrue(storage_data.is_dir())
+        self.assertEqual(list(postgres_data.iterdir()), [])
+        self.assertEqual(list(storage_data.iterdir()), [])
 
     def test_verify_checks_required_capabilities(self):
         manager = DatabaseComposeManager(FakeDocker())
