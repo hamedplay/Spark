@@ -23,12 +23,18 @@ from roles.database.workflow import (
 )
 
 DEFAULT_PROFILE = Path("/etc/spark-manager/environments/production.yaml")
+BUNDLED_PROFILE = Path(__file__).resolve().parent / "config/environments/example.production.yaml"
 
 
 def profile_path(override: str | None = None) -> Path:
     if override:
         return Path(override)
-    return Path(os.environ.get("SPARK_ENV_PROFILE", str(DEFAULT_PROFILE)))
+    explicit = os.environ.get("SPARK_ENV_PROFILE")
+    if explicit:
+        return Path(explicit)
+    if DEFAULT_PROFILE.is_file():
+        return DEFAULT_PROFILE
+    return BUNDLED_PROFILE
 
 
 def context(args) -> ExecutionContext:
