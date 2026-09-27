@@ -1,0 +1,24 @@
+name: Spark CLI M3.6-B0 Verify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/spark-cli/roles/database/schema/**'
+      - 'deploy/spark-cli/tests/database/schema/**'
+      - '.github/workflows/spark-cli-m36b0-verify.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        working-directory: deploy/spark-cli
+        run: python3 -m compileall -q roles config database_cli.py
+      - name: Schema tests
+        working-directory: deploy/spark-cli
+        run: python3 -m unittest discover -s tests/database/schema -p 'test_*.py' -v
+      - name: Database regression
+        working-directory: deploy/spark-cli
+        run: python3 -m unittest discover -s tests/database -p 'test_*.py' -v
