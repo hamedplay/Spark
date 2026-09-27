@@ -27,11 +27,20 @@ spark_manager_airgap_revision() {
 
 spark_manager_airgap_build() (
   set -Eeuo pipefail
-  local output_root="${1:-${PWD}}" target_release="${2:-}" revision root bundle_id archive partial source
+  local output_root="${1:-${PWD}}" target_release="${2:-}" loaded_revision revision root bundle_id archive partial source source_manager
+  loaded_revision="$(spark_manager_airgap_revision 2>/dev/null || true)"
   [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT}."; return 1; }
   spark_airgap_sync_source_main || return 1
   revision="$(command git -C "$SPARK_ROOT" rev-parse HEAD)"
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve Spark revision."; return 1; }
+  source="${SPARK_ROOT}/deploy/spark-cli"
+  source_manager="${source}/lib/spark-manager-airgap"
+
+  if [[ "$loaded_revision" != "$revision" || "$(readlink -f "$SCRIPT_DIR")" != "$(readlink -f "$source")" ]]; then
+    [[ -f "$source_manager" ]] || { fail "Updated Manager Air-Gap entrypoint is missing: $source_manager"; return 1; }
+    exec bash "$source_manager" --build "$output_root" "$target_release"
+  fi
+
   if [[ -z "$target_release" ]]; then
     . /etc/os-release
     target_release="$(airgap_normalize_ubuntu_release "${VERSION_ID:-}")" || return 1
@@ -45,7 +54,6 @@ spark_manager_airgap_build() (
   archive="${output_root}/${bundle_id}.tar.gz"
   [[ ! -e "$root" && ! -e "$archive" ]] || { fail "Manager bundle output already exists: ${bundle_id}"; return 1; }
   mkdir -p "$root/metadata" "$root/manager"
-  source="${SPARK_ROOT}/deploy/spark-cli"
 
   for file in spark spark-airgap spark-architecture spark-database spark-ui.py spark-ui-base.py spark-ui-core.py spark-migrate database_cli.py spark-manager-airgap-bootstrap; do
     [[ -f "$source/$file" ]] || { fail "Manager source missing: $file"; return 1; }
