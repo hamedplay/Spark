@@ -57,7 +57,7 @@ printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks" "$tmp/secrets" "$tmp/roles/database/package" "$tmp/adapters" "$tmp/roles/database/runtime" "$tmp/roles/database/lifecycle"
+mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks" "$tmp/secrets" "$tmp/roles/database/package" "$tmp/adapters" "$tmp/roles/database/runtime" "$tmp/roles/database/lifecycle" "$tmp/roles/database/schema"
 
 files=(
   spark
@@ -125,6 +125,14 @@ roles/database/lifecycle/images.py
 roles/database/lifecycle/postgres.py
 roles/database/lifecycle/supabase.py
 roles/database/lifecycle/diagnostics.py
+roles/database/schema/__init__.py
+roles/database/schema/models.py
+roles/database/schema/parser.py
+roles/database/schema/rules.py
+roles/database/schema/ownership.py
+roles/database/schema/dump_analyzer.py
+roles/database/schema/sanitizer.py
+roles/database/schema/fingerprint.py
 database_cli.py
 spark-database
 bootstrap-airgap.sh
@@ -358,7 +366,7 @@ migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
 chmod 0755 "$stage" "$migrate_stage"
 backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
-install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks" "$stage/secrets" "$stage/roles/database/package" "$stage/adapters" "$stage/roles/database/runtime" "$stage/roles/database/lifecycle"
+install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks" "$stage/secrets" "$stage/roles/database/package" "$stage/adapters" "$stage/roles/database/runtime" "$stage/roles/database/lifecycle" "$stage/roles/database/schema"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
 install -m 0755 "$tmp/spark-architecture" "$stage/spark-architecture"
@@ -379,6 +387,7 @@ for file in "$tmp"/secrets/*.py; do install -m 0644 "$file" "$stage/secrets/$(ba
 for file in "$tmp"/adapters/*.py; do install -m 0644 "$file" "$stage/adapters/$(basename "$file")"; done
 for file in "$tmp"/roles/database/runtime/*.py; do install -m 0644 "$file" "$stage/roles/database/runtime/$(basename "$file")"; done
 for file in "$tmp"/roles/database/lifecycle/*.py; do install -m 0644 "$file" "$stage/roles/database/lifecycle/$(basename "$file")"; done
+for file in "$tmp"/roles/database/schema/*.py; do install -m 0644 "$file" "$stage/roles/database/schema/$(basename "$file")"; done
 install -m 0755 "$tmp/spark-migrate" "$migrate_stage/spark-migrate"
 for file in "$tmp"/lib/*.sh; do
   install -m 0644 "$file" "$stage/lib/$(basename "$file")"
