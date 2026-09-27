@@ -144,6 +144,7 @@ def environment_from_mapping(data: dict[str, Any]) -> EnvironmentConfig:
         compose=DatabaseComposeConfig(project_name=str(compose_data.get("project_name", "spark-supabase"))),
         schema=DatabaseSchemaConfig(
             owned_schemas=tuple(str(value).strip().lower() for value in (schema_data.get("owned_schemas", ()) or ()) if str(value).strip()),
+            shared_schemas=tuple(str(value).strip().lower() for value in (schema_data.get("shared_schemas", ()) or ()) if str(value).strip()),
         ),
         startup=DatabaseStartupConfig(
             postgres=PostgresStartupConfig(

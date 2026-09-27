@@ -133,6 +133,8 @@ roles/database/schema/ownership.py
 roles/database/schema/dump_analyzer.py
 roles/database/schema/sanitizer.py
 roles/database/schema/fingerprint.py
+roles/database/schema/catalog.py
+roles/database/schema/live_inventory.py
 database_cli.py
 spark-database
 bootstrap-airgap.sh
