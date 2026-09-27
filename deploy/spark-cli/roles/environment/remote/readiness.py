@@ -13,10 +13,7 @@ def _status(results: tuple[RemoteResult, ...], role: str, index: int = 1) -> str
     if len(node_ids) < index:
         return "NOT_RUN"
     target = node_ids[index - 1]
-    matched = [
-        item for item in results
-        if item.node.id == target and item.operation not in {RemoteOperation.REVISION, RemoteOperation.NETWORK}
-    ]
+    matched = [item for item in results if item.node.id == target and item.operation not in {RemoteOperation.REVISION, RemoteOperation.NETWORK}]
     if not matched:
         return "NOT_RUN"
     latest = matched[-1]
@@ -30,7 +27,8 @@ def build_readiness(environment: EnvironmentConfig, results: tuple[RemoteResult,
     app = _status(results, "application")
     proxy1 = _status(results, "reverse_proxy", 1)
     proxy2 = _status(results, "reverse_proxy", 2)
-    public_ok = checks.get("public_entrypoint") == "PASS"
+    public_keys = ("public_entrypoint", "public_auth", "public_rest", "public_realtime", "public_storage", "public_edge")
+    public_ok = all(checks.get(key) == "PASS" for key in public_keys)
     ready = all(value == "PASS" for value in (db, app, proxy1, proxy2)) and health.healthy and network_ok and public_ok
     lines = [
         "SPARK PRODUCTION READINESS", "",
@@ -40,21 +38,26 @@ def build_readiness(environment: EnvironmentConfig, results: tuple[RemoteResult,
         f"  Reverse Proxy #1    {proxy1}",
         f"  Reverse Proxy #2    {proxy2}", "",
         "Database Core",
-        f"  PostgreSQL          {'PASS' if checks.get('auth') == 'PASS' and checks.get('rest') == 'PASS' else 'FAIL'}",
+        f"  PostgreSQL          {checks.get('postgresql', 'FAIL')}",
         f"  Auth                {checks.get('auth', 'FAIL')}",
         f"  REST                {checks.get('rest', 'FAIL')}",
         f"  Realtime            {checks.get('realtime', 'FAIL')}",
         f"  Storage             {checks.get('storage', 'FAIL')}",
-        f"  Gateway             {'PASS' if checks.get('realtime') == 'PASS' else 'FAIL'}", "",
+        f"  Gateway             {checks.get('gateway', 'FAIL')}", "",
         "Application",
         f"  Frontend            {checks.get('frontend', 'FAIL')}",
         f"  Edge Functions      {checks.get('edge_functions', 'FAIL')}",
         f"  LiveKit             {checks.get('livekit', 'FAIL')}",
         f"  Coturn              {checks.get('turn_tcp', 'FAIL')}", "",
         "Network",
-        f"  Central Validation  {'PASS' if network_ok else 'FAIL'}", "",
+        f"  Proxy/App/DB Paths  {'PASS' if network_ok else 'FAIL'}", "",
         "Public",
-        f"  HTTPS               {checks.get('public_entrypoint', 'WAITING_FOR_OPERATOR')}", "",
+        f"  HTTPS               {checks.get('public_entrypoint', 'WAITING_FOR_OPERATOR')}",
+        f"  Auth Route          {checks.get('public_auth', 'WAITING_FOR_OPERATOR')}",
+        f"  REST Route          {checks.get('public_rest', 'WAITING_FOR_OPERATOR')}",
+        f"  Realtime Route      {checks.get('public_realtime', 'WAITING_FOR_OPERATOR')}",
+        f"  Storage Route       {checks.get('public_storage', 'WAITING_FOR_OPERATOR')}",
+        f"  Edge Functions      {checks.get('public_edge', 'WAITING_FOR_OPERATOR')}", "",
         f"RESULT                {'READY' if ready else 'NOT_READY'}",
     ]
     checks["result"] = "READY" if ready else "NOT_READY"
