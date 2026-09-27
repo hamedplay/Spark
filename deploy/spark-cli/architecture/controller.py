@@ -20,6 +20,7 @@ from .status import deployment_readiness
 from .validator import validate_architecture
 
 DEFAULT_PROFILE = Path("/etc/spark-manager/environments/production.yaml")
+BUNDLED_PROFILE = Path(__file__).resolve().parents[1] / "config/environments/example.production.yaml"
 REVISION_FILE = Path("/usr/local/lib/spark-manager/.revision")
 
 
@@ -32,7 +33,11 @@ class ControllerResult:
 
 def resolve_profile_path() -> Path:
     explicit = os.environ.get("SPARK_ENV_PROFILE")
-    return Path(explicit) if explicit else DEFAULT_PROFILE
+    if explicit:
+        return Path(explicit)
+    if DEFAULT_PROFILE.is_file():
+        return DEFAULT_PROFILE
+    return BUNDLED_PROFILE
 
 
 def _load():
@@ -118,138 +123,110 @@ def architecture_role_health() -> ControllerResult:
         keys = ("auth", "rest", "realtime", "storage")
     elif role == "application":
         keys = ("frontend", "edge_functions", "livekit", "turn_tcp")
-    elif role == "reverse_proxy":
-        node = next(node for node in config.nodes.values() if node.role == "reverse_proxy")
-        hosts = (node.host, *node.secondary_hosts)
-        matched = next((index for index, value in enumerate(hosts, start=1) if value in host.addresses), None)
-        keys = (f"reverse_proxy_{matched}",) if matched else ()
     else:
-        keys = ()
-    if not keys:
-        return ControllerResult("Role Health", (f"REFUSED: unsupported or unresolved role {role}",), False)
-    lines = [f"Profile: {path}", f"Current role: {role}", ""]
+        keys = ("frontend", "auth", "rest", "realtime", "storage", "edge_functions", "livekit", "turn_tcp")
+    lines = [f"Profile: {path}", f"Current role: {role}"]
+    ok = True
     for key in keys:
-        lines.append(f"{key:<22} {health.get(key, 'FAIL')}")
-    ok = all(health.get(key) == "PASS" for key in keys)
+        item = health.get(key)
+        if item is None:
+            lines.append(f"WAITING        {key}: no health result")
+            ok = False
+            continue
+        lines.append(f"{item.status.value:<14} {key}: {item.message}")
+        if item.status.value == "FAIL":
+            ok = False
     return ControllerResult("Role Health", tuple(lines), ok)
 
 
 def architecture_status() -> ControllerResult:
     path, config = _load()
     host = detect_host_context(config)
-    checks = check_connectivity(config, host)
-    readiness = deployment_readiness(config, checks)
-    lines = [f"Profile: {path}", f"Current role: {host.detected_role or 'UNKNOWN'}", "", "DEPLOYMENT READINESS", ""]
-    for item in readiness:
-        lines.extend([item.role.replace("_", " ").title(), f"  Profile       {item.profile}", f"  Network       {item.network}", f"  Provisioning  {item.provisioning}", ""])
-    full = FullEnvironmentOrchestrator().status(_context())
-    lines.extend(["FULL ENVIRONMENT", f"  Status        {full.status}"])
-    for name, status in sorted(full.health.checks.items()):
-        lines.append(f"  {name:<20} {status}")
-    return ControllerResult("Deployment Status", tuple(lines))
+    return ControllerResult("Architecture Status", tuple(deployment_readiness(config, host)))
 
 
-def _render_workflow(title: str, workflow, ctx: ExecutionContext) -> ControllerResult:
-    result = workflow.execute(ctx)
-    lines = [f"Current role: {ctx.variables['host_context'].detected_role or 'UNKNOWN'}", f"Dry run: {'YES' if ctx.dry_run else 'NO'}", f"Resume: {'YES' if ctx.resume else 'NO'}", ""]
-    for task_id, task in result.results.items():
-        lines.append(f"{task.status.value:<12} {task_id}: {task.message}")
+def _run_workflow(builder, title: str, *, dry_run: bool = False, resume: bool = False) -> ControllerResult:
+    result = builder().execute(_context(dry_run=dry_run, resume=resume))
+    lines = [f"{task_id:<28} {task.status.value.upper():<8} {task.message}" for task_id, task in result.results.items()]
     return ControllerResult(title, tuple(lines), result.ok)
 
 
-def install_database(*, dry_run: bool = False, resume: bool = False) -> ControllerResult:
-    return _render_workflow("Install Database Core", build_database_core_install_workflow(), _context(dry_run=dry_run, resume=resume))
+def architecture_install_database(*, dry_run: bool = False, resume: bool = False) -> ControllerResult:
+    return _run_workflow(build_database_core_install_workflow, "Install Database Role", dry_run=dry_run, resume=resume)
 
 
-def install_application(*, dry_run: bool = False, resume: bool = False) -> ControllerResult:
-    return _render_workflow("Install Application Server", build_application_full_workflow(), _context(dry_run=dry_run, resume=resume))
+def architecture_install_application(*, dry_run: bool = False, resume: bool = False) -> ControllerResult:
+    return _run_workflow(build_application_full_workflow, "Install Application Role", dry_run=dry_run, resume=resume)
 
 
-def install_reverse_proxy(*, dry_run: bool = False, resume: bool = False) -> ControllerResult:
-    return _render_workflow("Install Reverse Proxy", build_reverse_proxy_workflow(), _context(dry_run=dry_run, resume=resume))
+def architecture_install_proxy(*, dry_run: bool = False, resume: bool = False) -> ControllerResult:
+    return _run_workflow(build_reverse_proxy_workflow, "Install Reverse Proxy Role", dry_run=dry_run, resume=resume)
 
 
-def _render_full(title: str, result) -> ControllerResult:
-    lines = [f"Local role: {result.local_role or 'UNKNOWN'}", f"Local workflow: {result.local_workflow_status or 'NOT_RUN'}", f"Environment status: {result.status}", "", "COMPONENT HEALTH"]
-    for name, status in sorted(result.health.checks.items()):
-        lines.append(f"  {name:<22} {status}")
-    lines.extend(["", "NETWORK CHECKPOINTS"])
-    for item in result.network:
-        ports = ",".join(str(v) for v in item.ports) or ",".join(item.port_ranges)
-        lines.append(f"  {item.status:<23} {item.rule_id}: {item.source} -> {item.destination} {item.protocol}/{ports}")
-    if result.remote_actions:
-        lines.extend(["", "REMOTE/GUIDED ACTIONS"])
-        lines.extend(f"  {value}" for value in result.remote_actions)
-    return ControllerResult(title, tuple(lines), result.ok)
+def _central(action: str, *, dry_run: bool = False, resume: bool = False) -> ControllerResult:
+    path, profile = _load()
+    executor = CentralizedExecutor(profile, profile_path=path)
+    if action == "plan":
+        result = executor.plan()
+    elif action == "status":
+        result = executor.status()
+    elif action == "repair":
+        result = executor.repair(dry_run=dry_run)
+    else:
+        result = executor.install(dry_run=dry_run, resume=resume)
+    return ControllerResult(result.title, tuple(result.lines), result.success)
 
 
-def install_full(*, dry_run: bool = False, resume: bool = False) -> ControllerResult:
-    ctx = _context(dry_run=dry_run, resume=resume)
-    return _render_full("Install Full Environment", FullEnvironmentOrchestrator().install(ctx))
-
-
-def validate_environment() -> ControllerResult:
-    return _render_full("Validate Environment", FullEnvironmentOrchestrator().status(_context()))
-
-
-def repair_environment(*, dry_run: bool = False, resume: bool = True) -> ControllerResult:
-    return _render_full("Repair Environment", FullEnvironmentOrchestrator().repair(_context(dry_run=dry_run, resume=resume)))
-
-
-def _central_executor() -> CentralizedExecutor:
+def architecture_full(*, dry_run: bool = False, resume: bool = False, centralized: bool = False) -> ControllerResult:
+    if centralized:
+        return _central("install", dry_run=dry_run, resume=resume)
     path, config = _load()
-    if not config.jump_server.enabled:
-        raise RuntimeError("centralized orchestration requires jump_server.enabled=true")
-    return CentralizedExecutor(config, profile_path=path, desired_revision=_manager_revision())
+    orchestrator = FullEnvironmentOrchestrator(config, profile_path=path)
+    result = orchestrator.run(dry_run=dry_run, resume=resume)
+    return ControllerResult(result.title, tuple(result.lines), result.success)
 
 
-def centralized_plan() -> ControllerResult:
-    result = _central_executor().plan()
-    return ControllerResult("Centralized Production Dry Run", result.lines, result.ok)
+def architecture_resume(*, dry_run: bool = False, centralized: bool = False) -> ControllerResult:
+    return architecture_full(dry_run=dry_run, resume=True, centralized=centralized)
 
 
-def centralized_install(*, resume: bool = False) -> ControllerResult:
-    result = _central_executor().install(resume=resume)
-    return ControllerResult("Centralized Production Install", result.lines or (f"Status: {result.status}",), result.ok)
+def architecture_validate_environment() -> ControllerResult:
+    path, config = _load()
+    host = detect_host_context(config)
+    return ControllerResult("Environment Validation", tuple(deployment_readiness(config, host)))
 
 
-def centralized_status() -> ControllerResult:
-    result = _central_executor().status()
-    return ControllerResult("Centralized Production Readiness", result.lines or (f"Status: {result.status}",), result.ok)
+def architecture_repair(*, dry_run: bool = False, centralized: bool = False) -> ControllerResult:
+    if centralized:
+        return _central("repair", dry_run=dry_run)
+    path, config = _load()
+    orchestrator = FullEnvironmentOrchestrator(config, profile_path=path)
+    result = orchestrator.repair(dry_run=dry_run)
+    return ControllerResult(result.title, tuple(result.lines), result.success)
 
 
-def centralized_repair() -> ControllerResult:
-    result = _central_executor().repair()
-    return ControllerResult("Centralized Production Repair", result.lines or (f"Status: {result.status}",), result.ok)
-
-
-def run_action(action_id: str, *, dry_run: bool = False, resume: bool = False, centralized: bool = False) -> ControllerResult:
-    if centralized and action_id == "architecture-install-full":
-        return centralized_plan() if dry_run else centralized_install(resume=resume)
-    handlers = {
-        "architecture-revision": lambda: architecture_revision(),
-        "architecture-overview": lambda: architecture_show(),
-        "architecture-profile": lambda: architecture_profile(),
-        "architecture-validate": lambda: architecture_validate(),
-        "architecture-network": lambda: architecture_network_check(),
-        "architecture-role-health": lambda: architecture_role_health(),
-        "architecture-status": lambda: architecture_status(),
-        "architecture-install-database": lambda: install_database(dry_run=dry_run, resume=resume),
-        "architecture-install-application": lambda: install_application(dry_run=dry_run, resume=resume),
-        "architecture-install-proxy": lambda: install_reverse_proxy(dry_run=dry_run, resume=resume),
-        "architecture-install-full": lambda: install_full(dry_run=dry_run, resume=resume),
-        "architecture-resume": lambda: centralized_install(resume=True) if centralized else install_full(dry_run=dry_run, resume=True),
-        "architecture-validate-environment": lambda: validate_environment(),
-        "architecture-repair": lambda: centralized_repair() if centralized else repair_environment(dry_run=dry_run, resume=True),
-        "architecture-central-plan": lambda: centralized_plan(),
-        "architecture-central-install": lambda: centralized_install(resume=False),
-        "architecture-central-resume": lambda: centralized_install(resume=True),
-        "architecture-central-status": lambda: centralized_status(),
-        "architecture-central-repair": lambda: centralized_repair(),
+def run_action(action: str, *, dry_run: bool = False, resume: bool = False, centralized: bool = False) -> ControllerResult:
+    actions = {
+        "architecture-revision": architecture_revision,
+        "architecture-overview": architecture_show,
+        "architecture-profile": architecture_profile,
+        "architecture-validate": architecture_validate,
+        "architecture-network": architecture_network_check,
+        "architecture-role-health": architecture_role_health,
+        "architecture-status": architecture_status,
+        "architecture-install-database": lambda: architecture_install_database(dry_run=dry_run, resume=resume),
+        "architecture-install-application": lambda: architecture_install_application(dry_run=dry_run, resume=resume),
+        "architecture-install-proxy": lambda: architecture_install_proxy(dry_run=dry_run, resume=resume),
+        "architecture-install-full": lambda: architecture_full(dry_run=dry_run, resume=resume, centralized=centralized),
+        "architecture-resume": lambda: architecture_resume(dry_run=dry_run, centralized=centralized),
+        "architecture-validate-environment": architecture_validate_environment,
+        "architecture-repair": lambda: architecture_repair(dry_run=dry_run, centralized=centralized),
+        "architecture-central-plan": lambda: _central("plan"),
+        "architecture-central-status": lambda: _central("status"),
     }
-    if action_id not in handlers:
-        return ControllerResult("Architecture", (f"Unknown architecture action: {action_id}",), False)
+    if action not in actions:
+        return ControllerResult("Architecture", (f"Unknown architecture action: {action}",), False)
     try:
-        return handlers[action_id]()
+        return actions[action]()
     except Exception as exc:
         return ControllerResult("Architecture", (f"ERROR: {exc}",), False)
