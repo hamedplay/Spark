@@ -60,13 +60,15 @@ def inspect_environment(environment: EnvironmentConfig) -> EnvironmentHealth:
     rp_node = next(node for node in environment.nodes.values() if node.role == "reverse_proxy")
     checks: dict[str, str] = {}
 
-    checks["postgresql"] = "PASS" if _tcp(db, 5432) else "FAIL"
-    checks["gateway"] = "PASS" if _tcp(db, 8000) else "FAIL"
+    postgresql_ok = _tcp(db, 5432)
+    gateway_ok = _tcp(db, 8000)
+    checks["postgresql"] = "PASS" if postgresql_ok else "FAIL"
+    checks["gateway"] = "PASS" if gateway_ok else "FAIL"
     checks["frontend"] = "PASS" if _http_status(f"http://{app}/") == 200 else "FAIL"
-    checks["auth"] = "PASS" if _http_status(f"http://{db}:8000/auth/v1/health") in {200, 204} else "FAIL"
-    checks["rest"] = "PASS" if _http_status(f"http://{db}:8000/rest/v1/") in {200, 401, 403, 404} else "FAIL"
-    checks["storage"] = "PASS" if _http_status(f"http://{db}:8000/storage/v1/status") in {200, 401, 403} else "FAIL"
-    checks["realtime"] = "PASS" if _tcp(db, 8000) else "FAIL"
+    checks["auth"] = "PASS" if postgresql_ok and gateway_ok and _http_status(f"http://{db}:8000/auth/v1/health") in {200, 204} else "FAIL"
+    checks["rest"] = "PASS" if postgresql_ok and gateway_ok and _http_status(f"http://{db}:8000/rest/v1/") in {200, 401, 403, 404} else "FAIL"
+    checks["storage"] = "PASS" if postgresql_ok and gateway_ok and _http_status(f"http://{db}:8000/storage/v1/status") in {200, 401, 403} else "FAIL"
+    checks["realtime"] = "PASS" if postgresql_ok and gateway_ok else "FAIL"
     edge_status = _http_status(f"http://{app}:{environment.application.edge.port}/{environment.application.edge.probe_function}")
     checks["edge_functions"] = "PASS" if edge_status in {200, 401, 403, 404} else "FAIL"
     checks["livekit"] = "PASS" if _tcp(app, environment.application.livekit.api_port) and _tcp(app, environment.application.livekit.rtc_tcp_port) else "FAIL"
