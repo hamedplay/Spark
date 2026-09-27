@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from config.loader import load_environment
 from core.context import ExecutionContext
 from core.state import StateStore
 from roles.database.lifecycle import DatabaseImageManager, PostgresLifecycleManager, SupabaseLifecycleManager
+from roles.database.schema import LegacyDumpAnalyzer, OwnershipRules
 from roles.database.workflow import (
     build_database_core_install_workflow,
     build_database_images_workflow,
@@ -18,12 +20,14 @@ from roles.database.workflow import (
 DEFAULT_PROFILE = Path("/etc/spark-manager/environments/production.yaml")
 
 
-def profile_path() -> Path:
+def profile_path(override: str | None = None) -> Path:
+    if override:
+        return Path(override)
     return Path(os.environ.get("SPARK_ENV_PROFILE", str(DEFAULT_PROFILE)))
 
 
 def context(args) -> ExecutionContext:
-    path = profile_path()
+    path = profile_path(getattr(args, "profile", None))
     profile = load_environment(path)
     return ExecutionContext(
         environment=profile.name,
@@ -70,6 +74,34 @@ def cmd_supabase_status(_args) -> int:
     return 0 if aggregate.value == "HEALTHY" else 1
 
 
+def cmd_baseline_analyze(args) -> int:
+    profile = load_environment(profile_path(args.profile))
+    rules = OwnershipRules(owned_schemas=frozenset(profile.database.schema.owned_schemas))
+    analyzer = LegacyDumpAnalyzer(rules)
+    report = analyzer.analyze(args.backup)
+    payload = report.to_dict()
+    json_text = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    if args.output:
+        Path(args.output).write_text(json_text, encoding="utf-8")
+    if args.json:
+        print(json_text, end="")
+    else:
+        print("Spark Legacy Backup Analysis")
+        print(f"Input SHA-256     {payload['source']['sha256']}")
+        print(f"Input size        {payload['source']['size_bytes']} bytes")
+        print(f"Statements        {payload['summary']['statements']}")
+        print(f"COPY blocks       {payload['summary']['copy_blocks']}")
+        print(f"COPY rows skipped {payload['summary']['copy_rows_skipped']}")
+        for key, value in payload["categories"].items():
+            print(f"{key:<20} {value}")
+        print(f"Sensitive         {payload['security']['count']}")
+        print(f"Unknown           {payload['review']['unknown_count']}")
+        print(f"Unclassified      {payload['review']['unclassified_count']}")
+        print(f"Result             {payload['result']}")
+        print("Summary            BASELINE_EXTRACTION_REQUIRED")
+    return 0 if payload["result"] in {"ANALYZED", "ANALYZED_WITH_REVIEW"} else 2
+
+
 def workflow_command(builder, args) -> int:
     return print_workflow(builder().execute(context(args)))
 
@@ -80,6 +112,11 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("images")
     sub.add_parser("postgres-status")
     sub.add_parser("supabase-status")
+    analyze = sub.add_parser("baseline-analyze")
+    analyze.add_argument("backup")
+    analyze.add_argument("--json", action="store_true")
+    analyze.add_argument("--output")
+    analyze.add_argument("--profile")
     for name in ("start-postgres", "start-supabase", "install"):
         child = sub.add_parser(name)
         child.add_argument("--dry-run", action="store_true")
@@ -89,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         "images": cmd_images,
         "postgres-status": cmd_postgres_status,
         "supabase-status": cmd_supabase_status,
+        "baseline-analyze": cmd_baseline_analyze,
         "start-postgres": lambda value: workflow_command(build_database_postgres_workflow, value),
         "start-supabase": lambda value: workflow_command(build_database_supabase_workflow, value),
         "install": lambda value: workflow_command(build_database_core_install_workflow, value),
