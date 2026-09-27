@@ -78,7 +78,17 @@ class ProductionStateStore:
 
     def set_step(self, name: str, status: str) -> dict[str, Any]:
         value = self.load()
-        value.setdefault("steps", {})[name] = status
-        value["environment"] = "READY" if status == "READY" else ("FAILED" if status == "FAILED" else "PARTIAL")
+        steps = value.setdefault("steps", {})
+        steps[name] = status
+        statuses = set(steps.values())
+        if status == "READY":
+            environment = "READY"
+        elif "FAILED" in statuses and statuses.intersection({"COMPLETED", "PASS", "READY"}):
+            environment = "PARTIAL"
+        elif "FAILED" in statuses:
+            environment = "FAILED"
+        else:
+            environment = "PARTIAL"
+        value["environment"] = environment
         self.save(value)
         return value
