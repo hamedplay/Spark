@@ -12,6 +12,7 @@ PLATFORM_SCHEMAS = frozenset({
     "supabase_migrations",
     "_supabase",
     "_extensions",
+    "extensions",
     "graphql",
     "graphql_public",
     "vault",
@@ -46,6 +47,7 @@ SECURITY_MARKERS = (
 @dataclass(frozen=True)
 class OwnershipRules:
     owned_schemas: frozenset[str] = frozenset()
+    shared_schemas: frozenset[str] = frozenset()
     platform_schemas: frozenset[str] = PLATFORM_SCHEMAS
 
 
