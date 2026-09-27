@@ -194,6 +194,7 @@ install -d -m 1777 /var/tmp/spark-manager-inbox
 python3 -m compileall -q "$TARGET/core" "$TARGET/config" "$TARGET/architecture" "$TARGET/adapters" "$TARGET/secrets" "$TARGET/roles"
 bash -n "$TARGET/lib/spark-manager-airgap" "$TARGET/lib/build-manager-airgap" "$TARGET/spark-manager-airgap-bootstrap"
 /usr/local/bin/spark --ui-self-test >/dev/null
+python3 "$TARGET/spark-ui.py" --self-test >/dev/null
 /usr/local/bin/spark-database --help >/dev/null
 /usr/local/bin/spark-manager-airgap --help >/dev/null
 SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" /usr/local/bin/spark-architecture validate >/dev/null
