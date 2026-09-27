@@ -94,6 +94,7 @@ class DatabaseComposeConfig:
 @dataclass(frozen=True)
 class DatabaseSchemaConfig:
     owned_schemas: tuple[str, ...] = ()
+    shared_schemas: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
