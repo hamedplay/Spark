@@ -1,0 +1,15 @@
+role: application
+phase: M4
+status: foundation
+operations:
+  - application.preflight
+  - application.source
+  - application.config
+deferred:
+  - application.build
+  - application.deploy
+  - application.edge-functions
+  - application.livekit
+  - application.coturn
+  - application.external-services
+  - application.validate
