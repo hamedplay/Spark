@@ -70,14 +70,8 @@ prefixes = (
     "deploy/spark-cli/secrets/",
     "deploy/spark-cli/roles/",
 )
-explicit_files = {
-    "deploy/spark-cli/spark-ui-base.py",
-}
-headers = {
-    "Accept": "application/vnd.github+json",
-    "User-Agent": "spark-manager-bootstrap",
-    "Cache-Control": "no-cache",
-}
+explicit_files = {"deploy/spark-cli/spark-ui-base.py"}
+headers = {"Accept": "application/vnd.github+json", "User-Agent": "spark-manager-bootstrap", "Cache-Control": "no-cache"}
 
 
 def read_url(url: str) -> bytes:
@@ -90,18 +84,16 @@ tree_url = f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1"
 tree = json.loads(read_url(tree_url).decode("utf-8"))
 if tree.get("truncated"):
     raise SystemExit("GitHub returned a truncated repository tree; refusing incomplete manager sync")
-
 selected = []
 for item in tree.get("tree", []):
     path = str(item.get("path", ""))
-    if item.get("type") != "blob":
-        continue
-    if path in explicit_files or path.startswith(prefixes):
+    if item.get("type") == "blob" and (path in explicit_files or path.startswith(prefixes)):
         selected.append(path)
-
 required = {
     "deploy/spark-cli/core/workflow.py",
     "deploy/spark-cli/roles/environment/orchestrator.py",
+    "deploy/spark-cli/roles/environment/remote/executor.py",
+    "deploy/spark-cli/roles/environment/remote/ssh.py",
     "deploy/spark-cli/roles/reverse_proxy/workflow.py",
     "deploy/spark-cli/roles/application/edge/runtime.py",
     "deploy/spark-cli/roles/application/livekit/runtime.py",
@@ -110,13 +102,11 @@ required = {
 missing = sorted(required.difference(selected))
 if missing:
     raise SystemExit("Final integration package is incomplete: " + ", ".join(missing))
-
 for source_path in sorted(selected):
     relative = source_path.removeprefix(source_root)
     destination = target / relative
     destination.parent.mkdir(parents=True, exist_ok=True)
-    raw_url = f"https://raw.githubusercontent.com/{repo}/{sha}/{source_path}"
-    payload = read_url(raw_url)
+    payload = read_url(f"https://raw.githubusercontent.com/{repo}/{sha}/{source_path}")
     fd, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", dir=str(destination.parent))
     try:
         with os.fdopen(fd, "wb") as handle:
@@ -131,19 +121,13 @@ for source_path in sorted(selected):
         except FileNotFoundError:
             pass
         raise
-
+revision = target / ".revision"
+revision.write_text(sha + "\n", encoding="utf-8")
+os.chmod(revision, 0o644)
 print(f"Synced {len(selected)} integration package files from {sha[:12]}")
 PY
 
-python3 -m compileall -q \
-  "$TARGET/core" \
-  "$TARGET/config" \
-  "$TARGET/architecture" \
-  "$TARGET/adapters" \
-  "$TARGET/secrets" \
-  "$TARGET/roles"
-
-SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" \
-  /usr/local/bin/spark-architecture validate >/dev/null
-
+python3 -m compileall -q "$TARGET/core" "$TARGET/config" "$TARGET/architecture" "$TARGET/adapters" "$TARGET/secrets" "$TARGET/roles"
+SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" /usr/local/bin/spark-architecture validate >/dev/null
+SPARK_MANAGER_REVISION="$MAIN_SHA" /usr/local/bin/spark-architecture revision | grep -Fq "Revision: $MAIN_SHA"
 printf 'Spark Manager final integration package validation: OK\n'
