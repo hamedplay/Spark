@@ -8,6 +8,7 @@ from .models import EnvironmentConfig
 
 HOST_RE = re.compile(r"^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$")
 PROJECT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$")
+SCHEMA_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 REQUIRED_ROLES = {"reverse_proxy", "application", "database"}
 VALID_PROTOCOLS = {"tcp", "https", "http"}
 PINNED_RELEASE_RE = re.compile(r"^self-hosted/v\d+\.\d+\.\d+$")
@@ -103,6 +104,12 @@ def validate_environment(config: EnvironmentConfig) -> EnvironmentConfig:
         raise ValueError("database.secret_file must be an absolute path")
     if not PROJECT_RE.fullmatch(config.database.compose.project_name):
         raise ValueError("database.compose.project_name contains invalid characters")
+
+    owned = config.database.schema.owned_schemas
+    if len(set(owned)) != len(owned):
+        raise ValueError("database.schema.owned_schemas contains duplicates")
+    if any(not SCHEMA_NAME_RE.fullmatch(value) for value in owned):
+        raise ValueError("database.schema.owned_schemas contains an invalid schema name")
 
     startup = config.database.startup
     if startup.postgres.normal_timeout_seconds < 1 or startup.postgres.initialization_timeout_seconds < 1:
