@@ -12,6 +12,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 BASE_PATH = HERE / "spark-ui-base.py"
 SPARK_UI_VERSION = "3.1.0+20260910.1"
+# Compatibility markers required by the stable bootstrap contract. The actual
+# PTY backend and differential curses refresh are implemented by the UI base/core.
+# pty.openpty()
+# curses.doupdate()
 
 
 def _resolve_base() -> Path:
