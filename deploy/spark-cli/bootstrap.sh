@@ -47,12 +47,28 @@ curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/bootstrap-base.sh" -o "$tmp
 python3 - "$tmp/bootstrap-base.sh" <<'PY'
 from pathlib import Path
 import sys
+
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-needle = 'SPARK_ENV_PROFILE="$tmp/config/environments/example.production.yaml" python3 "$tmp/spark-architecture" validate >/dev/null\n'
-if needle not in text:
+
+architecture_check = 'SPARK_ENV_PROFILE="$tmp/config/environments/example.production.yaml" python3 "$tmp/spark-architecture" validate >/dev/null\n'
+if architecture_check not in text:
     raise SystemExit("bootstrap-base architecture validation contract changed; refusing unsafe patch")
-path.write_text(text.replace(needle, '', 1), encoding="utf-8")
+text = text.replace(architecture_check, '', 1)
+
+# spark-ui.py is now a thin extension wrapper and intentionally inherits its
+# version from spark-ui-base.py. The legacy bootstrap expected a literal
+# SPARK_UI_VERSION assignment in the wrapper itself, so that grep is obsolete.
+ui_wrapper_check = '''grep -Fq "SPARK_UI_VERSION = \\\"${EXPECTED_UI_VERSION}\\\"" "$tmp/spark-ui.py" || {
+  echo "Spark UI version validation failed." >&2
+  exit 1
+}
+'''
+if ui_wrapper_check not in text:
+    raise SystemExit("bootstrap-base UI wrapper validation contract changed; refusing unsafe patch")
+text = text.replace(ui_wrapper_check, '', 1)
+
+path.write_text(text, encoding="utf-8")
 PY
 chmod 0755 "$tmp/bootstrap-base.sh"
 SPARK_MANAGER_REVISION="$MAIN_SHA" "$tmp/bootstrap-base.sh" "$@"
