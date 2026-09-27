@@ -1,13 +1,13 @@
 role: application
 phase: M4
-status: foundation
+status: static-deployment
 operations:
   - application.preflight
   - application.source
   - application.config
-deferred:
   - application.build
   - application.deploy
+deferred:
   - application.edge-functions
   - application.livekit
   - application.coturn
