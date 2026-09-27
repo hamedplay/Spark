@@ -63,9 +63,13 @@ class CentralizedExecutor:
         if not all(item.ok for item in preflight):
             return ProductionRunResult("FAILED", preflight, {}, ("VERSION/SSH PREFLIGHT FAILED",))
         results: list[RemoteResult] = list(preflight)
-        health = tuple(self.client.run(node, RemoteOperation.ROLE_HEALTH) for node in self.inventory)
-        results.extend(health)
-        network = tuple(self.client.run(node, RemoteOperation.NETWORK) for node in self.inventory)
+        for node in self.inventory:
+            with self.state.node_lock(node.id):
+                results.append(self.client.run(node, RemoteOperation.ROLE_HEALTH))
+        network: list[RemoteResult] = []
+        for node in self.inventory:
+            with self.state.node_lock(node.id):
+                network.append(self.client.run(node, RemoteOperation.NETWORK))
         results.extend(network)
         checks, lines = build_readiness(self.environment, tuple(results), all(item.ok for item in network))
         return ProductionRunResult("READY" if checks.get("result") == "READY" else "FAILED", tuple(results), checks, lines)
@@ -79,11 +83,15 @@ class CentralizedExecutor:
     def _execute_nodes(self, nodes, operation: RemoteOperation) -> tuple[RemoteResult, ...]:
         results: list[RemoteResult] = []
         for node in nodes:
-            failure = self._prepare(node)
-            if failure:
-                results.append(failure)
-                break
-            result = self.client.run(node, operation)
+            try:
+                with self.state.node_lock(node.id):
+                    failure = self._prepare(node)
+                    if failure:
+                        results.append(failure)
+                        break
+                    result = self.client.run(node, operation)
+            except RuntimeError as exc:
+                result = RemoteResult(node, operation, RemoteStatus.REFUSED, 75, "", str(exc))
             results.append(result)
             if not result.ok:
                 break
@@ -143,19 +151,24 @@ class CentralizedExecutor:
             return ProductionRunResult("FAILED", preflight, {}, ("VERSION/SSH PREFLIGHT FAILED",))
         results: list[RemoteResult] = list(preflight)
         for node in self.inventory:
-            failure = self._prepare(node)
-            if failure:
-                results.append(failure)
-                return ProductionRunResult("FAILED", tuple(results), {}, (f"Profile transfer failed for {node.id}",))
-            health = self.client.run(node, RemoteOperation.ROLE_HEALTH)
-            results.append(health)
-            if health.ok:
-                continue
-            repaired = self.client.run(node, RemoteOperation.REPAIR)
-            results.append(repaired)
+            try:
+                with self.state.node_lock(node.id):
+                    failure = self._prepare(node)
+                    if failure:
+                        results.append(failure)
+                        return ProductionRunResult("FAILED", tuple(results), {}, (f"Profile transfer failed for {node.id}",))
+                    health = self.client.run(node, RemoteOperation.ROLE_HEALTH)
+                    results.append(health)
+                    if health.ok:
+                        continue
+                    repaired = self.client.run(node, RemoteOperation.REPAIR)
+                    results.append(repaired)
+            except RuntimeError as exc:
+                repaired = RemoteResult(node, RemoteOperation.REPAIR, RemoteStatus.REFUSED, 75, "", str(exc))
+                results.append(repaired)
             if not repaired.ok:
                 return ProductionRunResult("PARTIAL", tuple(results), {}, (f"Repair failed on {node.id}",))
-        network_results = tuple(self.client.run(node, RemoteOperation.NETWORK) for node in self.inventory)
+        network_results = self._execute_nodes(self.inventory, RemoteOperation.NETWORK)
         results.extend(network_results)
         checks, lines = build_readiness(self.environment, tuple(results), all(item.ok for item in network_results))
         return ProductionRunResult("READY" if checks.get("result") == "READY" else "FAILED", tuple(results), checks, lines)
