@@ -1,0 +1,9 @@
+role: reverse_proxy
+phase: Final Integration
+status: node-local
+operations:
+  - reverse-proxy.preflight
+  - reverse-proxy.provision
+deferred:
+  - reverse-proxy.automatic-ha-orchestration
+  - reverse-proxy.acme-automation
