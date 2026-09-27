@@ -76,10 +76,35 @@ chmod 0644 "$stage/.revision"
 chmod 0755 "$stage/spark" "$stage/spark-airgap" "$stage/spark-architecture" "$stage/spark-database" "$stage/spark-manager-airgap-bootstrap" "$stage/lib/spark-manager-airgap" "$stage/lib/build-manager-airgap"
 
 backup="${TARGET}.previous.$$"
+migrate_backup="${MIGRATE_TARGET}.previous.$$"
 [[ ! -e "$TARGET" ]] || mv "$TARGET" "$backup"
-mv "$stage" "$TARGET"
+if [[ -e "$MIGRATE_TARGET" ]]; then
+  mv "$MIGRATE_TARGET" "$migrate_backup"
+fi
+
+rollback_install() {
+  rm -f "$BIN_DIR/spark" "$BIN_DIR/spark-airgap" "$BIN_DIR/spark-architecture" "$BIN_DIR/spark-database" "$BIN_DIR/spark-manager-airgap" "$BIN_DIR/build-manager-airgap" "$BIN_DIR/spark-migrate"
+  rm -rf "$TARGET" "$MIGRATE_TARGET"
+  if [[ -d "$backup" ]]; then
+    mv "$backup" "$TARGET"
+    [[ -x "$TARGET/spark" ]] && ln -sfn "$TARGET/spark" "$BIN_DIR/spark"
+    [[ -x "$TARGET/spark-airgap" ]] && ln -sfn "$TARGET/spark-airgap" "$BIN_DIR/spark-airgap"
+    [[ -x "$TARGET/spark-architecture" ]] && ln -sfn "$TARGET/spark-architecture" "$BIN_DIR/spark-architecture"
+    [[ -x "$TARGET/spark-database" ]] && ln -sfn "$TARGET/spark-database" "$BIN_DIR/spark-database"
+    [[ -x "$TARGET/lib/spark-manager-airgap" ]] && ln -sfn "$TARGET/lib/spark-manager-airgap" "$BIN_DIR/spark-manager-airgap"
+    [[ -x "$TARGET/lib/build-manager-airgap" ]] && ln -sfn "$TARGET/lib/build-manager-airgap" "$BIN_DIR/build-manager-airgap"
+  fi
+  if [[ -d "$migrate_backup" ]]; then
+    mv "$migrate_backup" "$MIGRATE_TARGET"
+    [[ -x "$MIGRATE_TARGET/spark-migrate" ]] && ln -sfn "$MIGRATE_TARGET/spark-migrate" "$BIN_DIR/spark-migrate"
+  fi
+}
+
+if ! mv "$stage" "$TARGET"; then
+  rollback_install
+  exit 1
+fi
 trap - EXIT
-rm -rf "$backup"
 
 ln -sfn "$TARGET/spark" "$BIN_DIR/spark"
 ln -sfn "$TARGET/spark-airgap" "$BIN_DIR/spark-airgap"
@@ -95,11 +120,18 @@ if [[ -f "$TARGET/spark-migrate" ]]; then
   ln -sfn "$MIGRATE_TARGET/spark-migrate" "$BIN_DIR/spark-migrate"
 fi
 
-SPARK_MANAGER_REVISION="$revision" "$BIN_DIR/spark-architecture" revision | grep -Fq "Revision: $revision"
-SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" "$BIN_DIR/spark-architecture" validate >/dev/null
-"$BIN_DIR/spark-database" --help >/dev/null
-"$BIN_DIR/spark-manager-airgap" --help >/dev/null
-"$BIN_DIR/spark" --ui-self-test
+if ! {
+  SPARK_MANAGER_REVISION="$revision" "$BIN_DIR/spark-architecture" revision | grep -Fq "Revision: $revision" &&
+  SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" "$BIN_DIR/spark-architecture" validate >/dev/null &&
+  "$BIN_DIR/spark-database" --help >/dev/null &&
+  "$BIN_DIR/spark-manager-airgap" --help >/dev/null &&
+  "$BIN_DIR/spark" --ui-self-test >/dev/null
+}; then
+  echo 'Spark Manager offline post-install validation failed; rolling back.' >&2
+  rollback_install
+  exit 1
+fi
 
+rm -rf "$backup" "$migrate_backup"
 printf 'Spark Manager installed from offline bundle.\nRevision: %s\nRun: spark\n' "$revision"
 printf 'Restricted update helper: %s\n' "$SUDO_HELPER"
