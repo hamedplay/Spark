@@ -2,14 +2,25 @@ from __future__ import annotations
 
 from config.models import EnvironmentConfig
 from roles.environment.health import inspect_environment
-from .models import RemoteResult
+from .models import RemoteOperation, RemoteResult
 
 
 def _status(results: tuple[RemoteResult, ...], role: str, index: int = 1) -> str:
-    matched = [item for item in results if item.node.role == role]
-    if len(matched) < index:
+    node_ids: list[str] = []
+    for item in results:
+        if item.node.role == role and item.node.id not in node_ids:
+            node_ids.append(item.node.id)
+    if len(node_ids) < index:
         return "NOT_RUN"
-    return "PASS" if matched[index - 1].ok else matched[index - 1].status.value
+    target = node_ids[index - 1]
+    matched = [
+        item for item in results
+        if item.node.id == target and item.operation not in {RemoteOperation.REVISION, RemoteOperation.NETWORK}
+    ]
+    if not matched:
+        return "NOT_RUN"
+    latest = matched[-1]
+    return "PASS" if latest.ok else latest.status.value
 
 
 def build_readiness(environment: EnvironmentConfig, results: tuple[RemoteResult, ...], network_ok: bool) -> tuple[dict[str, str], tuple[str, ...]]:
@@ -19,8 +30,7 @@ def build_readiness(environment: EnvironmentConfig, results: tuple[RemoteResult,
     app = _status(results, "application")
     proxy1 = _status(results, "reverse_proxy", 1)
     proxy2 = _status(results, "reverse_proxy", 2)
-    public_keys = ("public_entrypoint",)
-    public_ok = all(checks.get(key) == "PASS" for key in public_keys)
+    public_ok = checks.get("public_entrypoint") == "PASS"
     ready = all(value == "PASS" for value in (db, app, proxy1, proxy2)) and health.healthy and network_ok and public_ok
     lines = [
         "SPARK PRODUCTION READINESS", "",
