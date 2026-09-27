@@ -96,6 +96,9 @@ if [[ -f "$TARGET/spark-migrate" ]]; then
 fi
 
 SPARK_MANAGER_REVISION="$revision" "$BIN_DIR/spark-architecture" revision | grep -Fq "Revision: $revision"
+SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" "$BIN_DIR/spark-architecture" validate >/dev/null
+"$BIN_DIR/spark-database" --help >/dev/null
+"$BIN_DIR/spark-manager-airgap" --help >/dev/null
 "$BIN_DIR/spark" --ui-self-test
 
 printf 'Spark Manager installed from offline bundle.\nRevision: %s\nRun: spark\n' "$revision"
