@@ -45,7 +45,7 @@ printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 printf 'Running stable bootstrap base...\n'
 curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/bootstrap-base.sh" -o "$tmp/bootstrap-base.sh"
 chmod 0755 "$tmp/bootstrap-base.sh"
-"$tmp/bootstrap-base.sh" "$@"
+SPARK_MANAGER_REVISION="$MAIN_SHA" "$tmp/bootstrap-base.sh" "$@"
 
 printf 'Synchronizing final integration package from the same revision...\n'
 python3 - "$MAIN_SHA" "$TARGET" <<'PY'
