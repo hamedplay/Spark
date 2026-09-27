@@ -98,6 +98,10 @@ def run_application_preflight(environment: EnvironmentConfig, *, host: HostConte
     checks.append(PreflightCheck("Node Runtime", PreflightStatus.PASS if node.returncode == 0 else PreflightStatus.MISSING, node.stdout.strip() if node.returncode == 0 else "MISSING"))
     git = runner.run(("git", "--version"), timeout=10)
     checks.append(PreflightCheck("Git", PreflightStatus.PASS if git.returncode == 0 else PreflightStatus.FAIL, git.stdout.strip() if git.returncode == 0 else "MISSING"))
+    nginx_bin = runner.run(("nginx", "-t"), timeout=15)
+    nginx_service = runner.run(("systemctl", "is-active", "nginx"), timeout=15)
+    nginx_ok = nginx_bin.returncode == 0 and nginx_service.returncode == 0 and nginx_service.stdout.strip() == "active"
+    checks.append(PreflightCheck("Nginx", PreflightStatus.PASS if nginx_ok else PreflightStatus.FAIL, "active/config-valid" if nginx_ok else "missing, inactive, or invalid config"))
 
     db = _node(environment, "database")
     if db is None:
