@@ -14,50 +14,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Patch bootstrap
+        shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('deploy/spark-cli/bootstrap.sh')
-          s = p.read_text()
-          old = '"$tmp/roles/database/lifecycle" "$tmp/roles/database/schema"'
-          new = old + ' "$tmp/roles/application/tasks" "$tmp/roles/application/build" "$tmp/roles/application/deployment"'
-          if '"$tmp/roles/application/build"' not in s:
-              assert old in s
-              s = s.replace(old, new, 1)
-          marker = 'roles/application/tasks/__init__.py\n'
-          additions = '''roles/application/tasks/build.py
-roles/application/tasks/deploy.py
-roles/application/build/__init__.py
-roles/application/build/manifest.py
-roles/application/build/identity.py
-roles/application/build/builder.py
-roles/application/deployment/__init__.py
-roles/application/deployment/models.py
-roles/application/deployment/lock.py
-roles/application/deployment/nginx.py
-roles/application/deployment/health.py
-roles/application/deployment/activator.py
-'''
-          if 'roles/application/build/builder.py' not in s:
-              assert marker in s
-              s = s.replace(marker, marker + additions, 1)
-          old_stage = '"$stage/roles/database/lifecycle" "$stage/roles/database/schema"'
-          new_stage = old_stage + ' "$stage/roles/application/tasks" "$stage/roles/application/build" "$stage/roles/application/deployment"'
-          if '"$stage/roles/application/build"' not in s:
-              assert old_stage in s
-              s = s.replace(old_stage, new_stage, 1)
-          root_loop = 'for file in "$tmp"/roles/*.py; do install -m 0644 "$file" "$stage/roles/$(basename "$file")"; done\n'
-          app_loops = '''for file in "$tmp"/roles/application/*.py; do install -m 0644 "$file" "$stage/roles/application/$(basename "$file")"; done
-install -m 0644 "$tmp/roles/application/manifest.yaml" "$stage/roles/application/manifest.yaml"
-for file in "$tmp"/roles/application/tasks/*.py; do install -m 0644 "$file" "$stage/roles/application/tasks/$(basename "$file")"; done
-for file in "$tmp"/roles/application/build/*.py; do install -m 0644 "$file" "$stage/roles/application/build/$(basename "$file")"; done
-for file in "$tmp"/roles/application/deployment/*.py; do install -m 0644 "$file" "$stage/roles/application/deployment/$(basename "$file")"; done
-'''
-          if 'for file in "$tmp"/roles/application/build/*.py' not in s:
-              assert root_loop in s
-              s = s.replace(root_loop, root_loop + app_loops, 1)
-          p.write_text(s)
-          PY
+          python3 -c "from pathlib import Path; p=Path('deploy/spark-cli/bootstrap.sh'); s=p.read_text(); old='\"$tmp/roles/database/lifecycle\" \"$tmp/roles/database/schema\"'; new=old+' \"$tmp/roles/application/tasks\" \"$tmp/roles/application/build\" \"$tmp/roles/application/deployment\"'; s=s if '\"$tmp/roles/application/build\"' in s else s.replace(old,new,1); marker='roles/application/tasks/__init__.py\\n'; add='roles/application/tasks/build.py\\nroles/application/tasks/deploy.py\\nroles/application/build/__init__.py\\nroles/application/build/manifest.py\\nroles/application/build/identity.py\\nroles/application/build/builder.py\\nroles/application/deployment/__init__.py\\nroles/application/deployment/models.py\\nroles/application/deployment/lock.py\\nroles/application/deployment/nginx.py\\nroles/application/deployment/health.py\\nroles/application/deployment/activator.py\\n'; s=s if 'roles/application/build/builder.py' in s else s.replace(marker,marker+add,1); olds='\"$stage/roles/database/lifecycle\" \"$stage/roles/database/schema\"'; news=olds+' \"$stage/roles/application/tasks\" \"$stage/roles/application/build\" \"$stage/roles/application/deployment\"'; s=s if '\"$stage/roles/application/build\"' in s else s.replace(olds,news,1); root='for file in \"$tmp\"/roles/*.py; do install -m 0644 \"$file\" \"$stage/roles/$(basename \"$file\")\"; done\\n'; loops='for file in \"$tmp\"/roles/application/*.py; do install -m 0644 \"$file\" \"$stage/roles/application/$(basename \"$file\")\"; done\\ninstall -m 0644 \"$tmp/roles/application/manifest.yaml\" \"$stage/roles/application/manifest.yaml\"\\nfor file in \"$tmp\"/roles/application/tasks/*.py; do install -m 0644 \"$file\" \"$stage/roles/application/tasks/$(basename \"$file\")\"; done\\nfor file in \"$tmp\"/roles/application/build/*.py; do install -m 0644 \"$file\" \"$stage/roles/application/build/$(basename \"$file\")\"; done\\nfor file in \"$tmp\"/roles/application/deployment/*.py; do install -m 0644 \"$file\" \"$stage/roles/application/deployment/$(basename \"$file\")\"; done\\n'; s=s if 'for file in \"$tmp\"/roles/application/build/*.py' in s else s.replace(root,root+loops,1); p.write_text(s)"
       - name: Validate bootstrap integration
         run: |
           bash -n deploy/spark-cli/bootstrap.sh
