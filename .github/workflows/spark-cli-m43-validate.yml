@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'deploy/spark-build.yaml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
       - 'deploy/spark-cli/roles/application/**'
       - 'deploy/spark-cli/adapters/command.py'
       - 'deploy/spark-cli/tests/application/**'
@@ -43,3 +46,15 @@ jobs:
           assert Path('../spark-build.yaml').is_file()
           print('M4.3 static-only boundary OK')
           PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - name: Real reproducible frontend build
+        run: |
+          node --version
+          npm ci
+          npm run build
+          test -s dist/index.html
+          test -d dist/assets
+          test -n "$(find dist/assets -type f -print -quit)"
