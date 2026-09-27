@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import tempfile
 import urllib.request
@@ -15,7 +16,8 @@ BASE_PATH = HERE / "spark-ui-base.py"
 def _resolve_base() -> Path:
     if BASE_PATH.is_file():
         return BASE_PATH
-    url = "https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli/spark-ui-base.py"
+    revision = os.environ.get("SPARK_MANAGER_REVISION", "main").strip() or "main"
+    url = f"https://raw.githubusercontent.com/hamedplay/Spark/{revision}/deploy/spark-cli/spark-ui-base.py"
     request = urllib.request.Request(url, headers={"User-Agent": "spark-manager-ui"})
     with urllib.request.urlopen(request, timeout=30) as response:
         payload = response.read()
