@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
-from typing import Iterable
+from pathlib import Path
+from typing import Iterable, Mapping
 
 
 @dataclass(frozen=True)
@@ -20,8 +22,11 @@ class CommandRunner:
         check: bool = False,
         input_text: str | None = None,
         timeout: int | float | None = None,
+        cwd: str | Path | None = None,
+        env: Mapping[str, str] | None = None,
     ) -> CommandResult:
         argv = tuple(args)
+        process_env = None if env is None else {str(key): str(value) for key, value in env.items()}
         try:
             completed = subprocess.run(
                 argv,
@@ -31,6 +36,8 @@ class CommandRunner:
                 stderr=subprocess.PIPE,
                 check=False,
                 timeout=timeout,
+                cwd=str(cwd) if cwd is not None else None,
+                env=process_env,
             )
             result = CommandResult(completed.returncode, completed.stdout, completed.stderr)
         except FileNotFoundError:
