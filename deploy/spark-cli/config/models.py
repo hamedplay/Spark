@@ -127,6 +127,25 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
+class ApplicationSourceConfig:
+    repository: str = "https://github.com/hamedplay/Spark.git"
+    revision: str = "main"
+    releases_root: str = "/opt/spark/application/releases"
+    current_link: str = "/opt/spark/application/current"
+    shared_root: str = "/opt/spark/application/shared"
+
+
+@dataclass(frozen=True)
+class ApplicationConfig:
+    source: ApplicationSourceConfig = field(default_factory=ApplicationSourceConfig)
+    secret_file: str = "/etc/spark-manager/secrets/application.env"
+    runtime_env_file: str = "/opt/spark/application/shared/runtime.env"
+    node_command: str = "node"
+    npm_command: str = "npm"
+    required_secret_keys: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class EnvironmentConfig:
     name: str
     mode: str = "online"
@@ -137,3 +156,4 @@ class EnvironmentConfig:
     network: NetworkConfig = field(default_factory=NetworkConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
+    application: ApplicationConfig = field(default_factory=ApplicationConfig)
