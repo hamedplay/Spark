@@ -1,0 +1,64 @@
+name: Spark CLI M4 Bootstrap Integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-m4-bootstrap-integration.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch bootstrap
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('deploy/spark-cli/bootstrap.sh')
+          s = p.read_text()
+          s = s.replace('"$tmp/roles/database/lifecycle" "$tmp/roles/database/schema"', '"$tmp/roles/database/lifecycle" "$tmp/roles/database/schema" "$tmp/roles/application/tasks"', 1)
+          marker = 'roles/__init__.py\n'
+          addition = '''roles/application/__init__.py
+roles/application/context.py
+roles/application/detector.py
+roles/application/preflight.py
+roles/application/source.py
+roles/application/configuration.py
+roles/application/workflow.py
+roles/application/manifest.yaml
+roles/application/tasks/__init__.py
+'''
+          if addition not in s:
+              assert marker in s
+              s = s.replace(marker, marker + addition, 1)
+          s = s.replace('"$stage/roles/database/lifecycle" "$stage/roles/database/schema"', '"$stage/roles/database/lifecycle" "$stage/roles/database/schema" "$stage/roles/application/tasks"', 1)
+          marker2 = 'for file in "$tmp"/roles/*.py; do install -m 0644 "$file" "$stage/roles/$(basename "$file")"; done\n'
+          addition2 = '''for file in "$tmp"/roles/application/*.py; do install -m 0644 "$file" "$stage/roles/application/$(basename "$file")"; done
+install -m 0644 "$tmp/roles/application/manifest.yaml" "$stage/roles/application/manifest.yaml"
+for file in "$tmp"/roles/application/tasks/*.py; do install -m 0644 "$file" "$stage/roles/application/tasks/$(basename "$file")"; done
+'''
+          if addition2 not in s:
+              assert marker2 in s
+              s = s.replace(marker2, marker2 + addition2, 1)
+          p.write_text(s)
+          PY
+      - name: Validate bootstrap and M4
+        run: |
+          bash -n deploy/spark-cli/bootstrap.sh
+          cd deploy/spark-cli
+          python3 -m compileall -q roles/application config
+          python3 -m unittest discover -s tests/application -p 'test_*.py' -v
+          python3 -m unittest discover -s tests/database -p 'test_*.py' -v
+      - name: Commit bootstrap integration
+        run: |
+          git config user.name 'spark-ci'
+          git config user.email 'spark-ci@users.noreply.github.com'
+          git add deploy/spark-cli/bootstrap.sh
+          git commit -m 'feat: install M4 application role modules with spark manager'
+          git push origin HEAD:main
