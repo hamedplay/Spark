@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from config.models import EnvironmentConfig
 from .catalog import ReadOnlyCatalog
-from .models import Ownership
 from .ownership import resolve_schema_ownership
 from .rules import OwnershipRules
 
@@ -320,13 +319,18 @@ def canonical_fingerprint(payload: dict) -> str:
         {k: v for k, v in item.items() if k != "grantor"}
         for item in payload["grants"]
     ]
+    functions = {
+        name: {k: v for k, v in item.items() if k != "owner"}
+        for name, item in payload["functions"].items()
+    }
     canonical = {
         key: payload[key]
         for key in (
-            "schemas", "tables", "columns", "constraints", "indexes", "functions", "triggers",
+            "schemas", "tables", "columns", "constraints", "indexes", "triggers",
             "policies", "types", "sequences", "views", "extensions", "dependencies",
         )
     }
+    canonical["functions"] = functions
     canonical["grants"] = grants
     encoded = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
