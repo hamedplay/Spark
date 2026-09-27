@@ -52,15 +52,23 @@ class CentralizedExecutor:
                 proxy_index += 1
                 label += f" #{proxy_index}"
             ssh = "READY" if result.ok else result.status.value
-            action = {
-                "database": "Provision Database Core",
-                "application": "Provision Application",
-                "reverse_proxy": "Provision Reverse Proxy",
-            }[result.node.role]
+            action = {"database": "Provision Database Core", "application": "Provision Application", "reverse_proxy": "Provision Reverse Proxy"}[result.node.role]
             lines.extend([label, f"  {result.node.host}", f"  SSH        {ssh}", f"  Action     {action}", ""])
         lines.append("Mutations: NONE (DRY RUN)")
         ok = all(item.ok for item in results)
         return ProductionRunResult("READY" if ok else "FAILED", results, {}, tuple(lines))
+
+    def status(self) -> ProductionRunResult:
+        preflight = self._revision_gate()
+        if not all(item.ok for item in preflight):
+            return ProductionRunResult("FAILED", preflight, {}, ("VERSION/SSH PREFLIGHT FAILED",))
+        results: list[RemoteResult] = list(preflight)
+        health = tuple(self.client.run(node, RemoteOperation.ROLE_HEALTH) for node in self.inventory)
+        results.extend(health)
+        network = tuple(self.client.run(node, RemoteOperation.NETWORK) for node in self.inventory)
+        results.extend(network)
+        checks, lines = build_readiness(self.environment, tuple(results), all(item.ok for item in network))
+        return ProductionRunResult("READY" if checks.get("result") == "READY" else "FAILED", tuple(results), checks, lines)
 
     def _prepare(self, node) -> RemoteResult | None:
         ok, message = self.transfer.copy(node, self.profile_path)
