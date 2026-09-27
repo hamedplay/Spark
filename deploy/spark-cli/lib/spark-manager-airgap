@@ -35,6 +35,9 @@ done
 SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
 unset SOURCE SOURCE_DIR TARGET
 
+mkdir -p "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
+chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
+
 for module in core airgap-build airgap-manager; do
   path="$SCRIPT_DIR/lib/$module.sh"
   [[ -r "$path" ]] || { echo "Spark Manager Air-Gap module missing: $path" >&2; exit 1; }
