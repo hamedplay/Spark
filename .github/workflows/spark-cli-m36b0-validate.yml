@@ -21,7 +21,7 @@ jobs:
       - name: Python syntax
         working-directory: deploy/spark-cli
         run: |
-          python3 -m compileall -q config roles adapters core database_cli.py
+          python3 -m compileall -q config roles adapters core architecture secrets database_cli.py
       - name: M3.6 schema tests
         working-directory: deploy/spark-cli
         run: |
@@ -30,10 +30,19 @@ jobs:
         working-directory: deploy/spark-cli
         run: |
           python3 -m unittest discover -s tests/database -p 'test_*.py' -v
-      - name: Core and architecture regression
+      - name: Architecture regression
         working-directory: deploy/spark-cli
         run: |
-          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          python3 -m unittest discover -s tests/architecture -p 'test_*.py' -v
+      - name: Role and secrets regression
+        working-directory: deploy/spark-cli
+        run: |
+          python3 -m unittest discover -s tests/roles -p 'test_*.py' -v
+          python3 -m unittest discover -s tests/secrets -p 'test_*.py' -v
+      - name: Workflow core regression
+        working-directory: deploy/spark-cli
+        run: |
+          python3 -m unittest tests.test_workflow_core -v
       - name: Read-only boundary
         working-directory: deploy/spark-cli
         run: |
@@ -69,7 +78,12 @@ jobs:
           PY
           python3 -m compileall -q deploy/spark-cli/config deploy/spark-cli/roles deploy/spark-cli/database_cli.py
           cd deploy/spark-cli
-          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          python3 -m unittest discover -s tests/database/schema -p 'test_*.py' -v
+          python3 -m unittest discover -s tests/database -p 'test_*.py' -v
+          python3 -m unittest discover -s tests/architecture -p 'test_*.py' -v
+          python3 -m unittest discover -s tests/roles -p 'test_*.py' -v
+          python3 -m unittest discover -s tests/secrets -p 'test_*.py' -v
+          python3 -m unittest tests.test_workflow_core -v
       - name: Commit validated integration
         run: |
           if git diff --quiet; then exit 0; fi
