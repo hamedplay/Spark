@@ -1,7 +1,18 @@
 # Spark Manager-only Air-Gap bundle build/distribution helpers.
 
 spark_manager_airgap_profile_path() {
-  printf '%s\n' "${SPARK_ENV_PROFILE:-/etc/spark-manager/environments/production.yaml}"
+  local explicit="${SPARK_ENV_PROFILE:-}"
+  local production="/etc/spark-manager/environments/production.yaml"
+  local bundled="${SCRIPT_DIR}/config/environments/example.production.yaml"
+  if [[ -n "$explicit" ]]; then
+    printf '%s\n' "$explicit"
+  elif [[ -f "$production" ]]; then
+    printf '%s\n' "$production"
+  elif [[ -f "$bundled" ]]; then
+    printf '%s\n' "$bundled"
+  else
+    printf '%s\n' "$production"
+  fi
 }
 
 spark_manager_airgap_revision() {
@@ -48,7 +59,7 @@ spark_manager_airgap_build() (
     cp -a "${SPARK_ROOT}/deploy/livekit" "$root/manager/livekit"
   fi
   cp -a "$source/bootstrap-manager-airgap.sh" "$root/install.sh"
-  chmod 0755 "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-migrate" "$root/manager/spark-manager-airgap-bootstrap"
+  chmod 0755 "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-migrate" "$root/manager/spark-manager-airgap-bootstrap" "$root/manager/lib/spark-manager-airgap" "$root/manager/lib/build-manager-airgap"
 
   python3 - "$root/metadata/manifest.json" "$revision" "$target_release" <<'PY'
 import json, sys
@@ -66,9 +77,10 @@ PY
   (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS)
   (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
   python3 -m compileall -q "$root/manager/core" "$root/manager/config" "$root/manager/architecture" "$root/manager/adapters" "$root/manager/secrets" "$root/manager/roles"
-  bash -n "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-manager-airgap-bootstrap"
+  bash -n "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-manager-airgap-bootstrap" "$root/manager/lib/spark-manager-airgap" "$root/manager/lib/build-manager-airgap"
   SPARK_MANAGER_REVISION="$revision" SPARK_ENV_PROFILE="$root/manager/config/environments/example.production.yaml" \
     PYTHONPATH="$root/manager" python3 "$root/manager/spark-architecture" revision | grep -Fq "Revision: $revision"
+  SPARK_MANAGER_REVISION="$revision" "$root/manager/lib/spark-manager-airgap" --help >/dev/null
 
   partial="$(mktemp "${output_root}/.${bundle_id}.XXXXXX")"
   trap 'rm -rf "$root"; rm -f "$partial"' EXIT
