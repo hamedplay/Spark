@@ -9,7 +9,12 @@ from config.loader import load_environment
 from core.context import ExecutionContext
 from core.state import StateStore
 from roles.database.lifecycle import DatabaseImageManager, PostgresLifecycleManager, SupabaseLifecycleManager
-from roles.database.schema import LegacyDumpAnalyzer, OwnershipRules
+from roles.database.schema import (
+    LegacyDumpAnalyzer,
+    LiveSchemaInventoryBuilder,
+    OwnershipRules,
+    ReadOnlyCatalog,
+)
 from roles.database.workflow import (
     build_database_core_install_workflow,
     build_database_images_workflow,
@@ -76,7 +81,10 @@ def cmd_supabase_status(_args) -> int:
 
 def cmd_baseline_analyze(args) -> int:
     profile = load_environment(profile_path(args.profile))
-    rules = OwnershipRules(owned_schemas=frozenset(profile.database.schema.owned_schemas))
+    rules = OwnershipRules(
+        owned_schemas=frozenset(profile.database.schema.owned_schemas),
+        shared_schemas=frozenset(getattr(profile.database.schema, "shared_schemas", ())),
+    )
     analyzer = LegacyDumpAnalyzer(rules)
     report = analyzer.analyze(args.backup)
     payload = report.to_dict()
@@ -102,6 +110,45 @@ def cmd_baseline_analyze(args) -> int:
     return 0 if payload["result"] in {"ANALYZED", "ANALYZED_WITH_REVIEW"} else 2
 
 
+def cmd_schema_inventory(args) -> int:
+    profile = load_environment(profile_path(args.profile))
+    rules = OwnershipRules(
+        owned_schemas=frozenset(profile.database.schema.owned_schemas),
+        shared_schemas=frozenset(getattr(profile.database.schema, "shared_schemas", ())),
+    )
+    payload = LiveSchemaInventoryBuilder(ReadOnlyCatalog(), rules).build(profile)
+    json_text = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    if args.output:
+        Path(args.output).write_text(json_text, encoding="utf-8")
+    if args.json:
+        print(json_text, end="")
+    else:
+        counts = {
+            "schemas": len(payload["schemas"]),
+            "tables": len(payload["tables"]),
+            "columns": len(payload["columns"]),
+            "constraints": len(payload["constraints"]),
+            "indexes": len(payload["indexes"]),
+            "functions": len(payload["functions"]),
+            "triggers": len(payload["triggers"]),
+            "policies": len(payload["policies"]),
+            "grants": len(payload["grants"]),
+            "types": len(payload["types"]),
+            "sequences": len(payload["sequences"]),
+            "views": len(payload["views"]),
+            "extensions": len(payload["extensions"]),
+            "dependencies": len(payload["dependencies"]),
+            "migrations": len(payload["migration_history"]["entries"]),
+        }
+        print("Spark Live Canonical Schema Inventory")
+        for key, value in counts.items():
+            print(f"{key:<16} {value}")
+        print(f"Canonical SHA-256 {payload['fingerprint']['canonical_sha256']}")
+        print("Row values        NOT INCLUDED")
+        print("Database writes   FORBIDDEN / READ ONLY")
+    return 0
+
+
 def workflow_command(builder, args) -> int:
     return print_workflow(builder().execute(context(args)))
 
@@ -117,6 +164,10 @@ def main(argv: list[str] | None = None) -> int:
     analyze.add_argument("--json", action="store_true")
     analyze.add_argument("--output")
     analyze.add_argument("--profile")
+    inventory = sub.add_parser("schema-inventory")
+    inventory.add_argument("--json", action="store_true")
+    inventory.add_argument("--output")
+    inventory.add_argument("--profile")
     for name in ("start-postgres", "start-supabase", "install"):
         child = sub.add_parser(name)
         child.add_argument("--dry-run", action="store_true")
@@ -127,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         "postgres-status": cmd_postgres_status,
         "supabase-status": cmd_supabase_status,
         "baseline-analyze": cmd_baseline_analyze,
+        "schema-inventory": cmd_schema_inventory,
         "start-postgres": lambda value: workflow_command(build_database_postgres_workflow, value),
         "start-supabase": lambda value: workflow_command(build_database_supabase_workflow, value),
         "install": lambda value: workflow_command(build_database_core_install_workflow, value),
