@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from config.loader import load_environment
@@ -38,16 +39,22 @@ class ApplicationDeployTask(OperationTask):
     def detect(self, ctx):
         plan = self._source_plan(ctx)
         manifest = self._manifest(plan)
-        activator = self._activator(ctx)
-        resumed = activator.resume(manifest)
-        if resumed is not None:
-            ctx.variables["application_deploy_result"] = resumed
-            if resumed.status in {"DEPLOYED", "ALREADY_ACTIVE"}:
-                return TaskResult.success("application deployment resumed", status=resumed.status, production_restored=resumed.production_restored)
-            return TaskResult.failed("application deployment resume required rollback", status=resumed.status, rollback_status=resumed.rollback_status, production_restored=resumed.production_restored)
         current = Path(manifest.current_link)
         target = str(current.resolve(strict=False)) if current.is_symlink() else None
-        return TaskResult.success("application deployment inspected", current=target, candidate=plan.release_path)
+        activator = self._activator(ctx)
+        recovery = None
+        if activator.state_path.is_file():
+            try:
+                state = json.loads(activator.state_path.read_text())
+                recovery = {
+                    "candidate": state.get("candidate"),
+                    "previous": state.get("previous"),
+                    "activation_started": bool(state.get("activation_started")),
+                }
+            except (OSError, ValueError):
+                recovery = {"invalid_state": True}
+        ctx.variables["application_deploy_recovery"] = recovery
+        return TaskResult.success("application deployment inspected", current=target, candidate=plan.release_path, recovery=recovery)
 
     def plan(self, ctx):
         plan = self._source_plan(ctx)
@@ -62,13 +69,28 @@ class ApplicationDeployTask(OperationTask):
             document_root=manifest.document_root,
             health_url=f"http://{manifest.health_host}:{manifest.health_port}{manifest.health_path}",
             nginx_reload=bool(ctx.variables.get("application_reload_nginx", False)),
+            recovery=ctx.variables.get("application_deploy_recovery"),
         )
 
     def apply(self, ctx):
         plan = self._source_plan(ctx)
-        result = self._activator(ctx).deploy(
+        manifest = self._manifest(plan)
+        activator = self._activator(ctx)
+        if activator.state_path.is_file():
+            resumed = activator.resume(manifest)
+            if resumed is not None:
+                ctx.variables["application_deploy_result"] = resumed
+                if resumed.status in {"DEPLOYED", "ALREADY_ACTIVE"}:
+                    return TaskResult.success("application deployment resumed", changed=resumed.changed, status=resumed.status)
+                return TaskResult.failed(
+                    "application deployment resume required rollback",
+                    status=resumed.status,
+                    rollback_status=resumed.rollback_status,
+                    production_restored=resumed.production_restored,
+                )
+        result = activator.deploy(
             plan.release_path,
-            self._manifest(plan),
+            manifest,
             dry_run=False,
             reload_nginx=bool(ctx.variables.get("application_reload_nginx", False)),
         )
