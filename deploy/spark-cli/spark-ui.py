@@ -53,6 +53,11 @@ PROVISIONING_ACTIONS = [
     core.Action("architecture-resume", "Resume Full Environment", "Reverify completed tasks and resume the local full-environment workflow.", "controlled"),
     core.Action("architecture-validate-environment", "Validate Full Environment", "Inspect component health and declarative network checkpoints without provisioning."),
     core.Action("architecture-repair", "Repair Local Role", "Repair only the current detected role when health checks require remediation.", "controlled"),
+    core.Action("architecture-central-plan", "Production Dry Run", "From the Jump node, verify SSH/host keys/sudo and identical Manager revision on all production nodes. No remote mutation."),
+    core.Action("architecture-central-install", "Production Install", "Run the gated Database → Application → Proxy #1 → Proxy #2 production workflow from the Jump node.", "confirm"),
+    core.Action("architecture-central-resume", "Resume Production Install", "Reverify previously completed nodes, then continue from the first unhealthy or incomplete production stage.", "controlled"),
+    core.Action("architecture-central-status", "Production Readiness", "Run non-mutating per-node health, network and end-to-end readiness checks from the Jump node."),
+    core.Action("architecture-central-repair", "Centralized Repair", "Repair only unhealthy roles while preserving healthy nodes and upstream services.", "controlled"),
 ]
 
 
