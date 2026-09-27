@@ -7,6 +7,7 @@ from config.models import EnvironmentConfig
 from .inventory import build_inventory, by_role
 from .models import ProductionRunResult, RemoteOperation, RemoteResult, RemoteStatus
 from .readiness import build_readiness
+from .settings import load_remote_settings
 from .ssh import OpenSSHClient, SSHConfig
 from .state import ProductionStateStore
 from .transfer import ProfileTransfer
@@ -19,17 +20,17 @@ class CentralizedExecutor:
         self.desired_revision = desired_revision.strip()
         if not self.desired_revision:
             raise ValueError("desired Spark Manager revision is required")
-        jump = environment.jump_server
+        settings = load_remote_settings(self.profile_path)
         self.ssh_config = SSHConfig(
-            known_hosts_file=jump.known_hosts_file,
-            connect_timeout_seconds=jump.connect_timeout_seconds,
-            command_timeout_seconds=jump.command_timeout_seconds,
-            remote_profile_path=jump.remote_profile_path,
+            known_hosts_file=settings.known_hosts_file,
+            connect_timeout_seconds=settings.connect_timeout_seconds,
+            command_timeout_seconds=settings.command_timeout_seconds,
+            remote_profile_path=settings.remote_profile_path,
         )
         self.client = OpenSSHClient(self.ssh_config)
         self.transfer = ProfileTransfer(self.ssh_config)
         self.inventory = build_inventory(environment)
-        self.state = ProductionStateStore(jump.state_file)
+        self.state = ProductionStateStore(settings.state_file)
 
     def _revision_gate(self) -> tuple[RemoteResult, ...]:
         results: list[RemoteResult] = []
@@ -84,10 +85,8 @@ class CentralizedExecutor:
         preflight = self._revision_gate()
         if not all(item.ok for item in preflight):
             return ProductionRunResult("FAILED", preflight, {}, ("VERSION/SSH PREFLIGHT FAILED",))
-
         all_results: list[RemoteResult] = list(preflight)
         stored = self.state.load().get("steps", {}) if resume else {}
-
         database = by_role(self.inventory, "database")
         application = by_role(self.inventory, "application")
         proxies = by_role(self.inventory, "reverse_proxy")
@@ -113,7 +112,6 @@ class CentralizedExecutor:
             return ProductionRunResult("FAILED", tuple(all_results), {}, ("Application provisioning failed; proxies were not started.",))
         if not stage("application_health", application, RemoteOperation.ROLE_HEALTH, verify=False):
             return ProductionRunResult("FAILED", tuple(all_results), {}, ("Application health gate failed; proxies were not started.",))
-
         for index, node in enumerate(proxies, start=1):
             name = f"proxy_{index}"
             result = self._execute_nodes((node,), RemoteOperation.INSTALL)
@@ -122,7 +120,6 @@ class CentralizedExecutor:
                 self.state.set_step(name, "FAILED")
                 return ProductionRunResult("PARTIAL", tuple(all_results), {}, (f"Reverse Proxy #{index} failed; healthy upstream services were preserved.",))
             self.state.set_step(name, "COMPLETED")
-
         network_results = self._execute_nodes(self.inventory, RemoteOperation.NETWORK)
         all_results.extend(network_results)
         network_ok = all(item.ok for item in network_results)
