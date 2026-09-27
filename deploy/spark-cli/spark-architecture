@@ -12,8 +12,16 @@ from architecture.controller import run_action
 from architecture.cli import main as cli_main
 
 
+CENTRAL_BACKEND_ACTIONS = {
+    "architecture-central-install": ("architecture-install-full", {"centralized": True}),
+    "architecture-central-resume": ("architecture-resume", {"centralized": True}),
+    "architecture-central-repair": ("architecture-repair", {"centralized": True}),
+}
+
+
 def backend(action_id: str) -> int:
-    result = run_action(action_id)
+    mapped_action, kwargs = CENTRAL_BACKEND_ACTIONS.get(action_id, (action_id, {}))
+    result = run_action(mapped_action, **kwargs)
     print(result.title)
     print("=" * len(result.title))
     for line in result.lines:
