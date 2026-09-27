@@ -9,7 +9,19 @@ for module in core airgap-build airgap-manager; do
   source "$path"
 done
 unset module path
+
+dispatch_backend() {
+  local action="${1:-}"; shift || true
+  case "$action" in
+    manager-airgap-build) spark_manager_airgap_build "${1:-$PWD}" "${2:-}" ;;
+    manager-airgap-install-environment) spark_manager_airgap_install_environment "${1:-}" "${2:-$(spark_manager_airgap_profile_path)}" ;;
+    manager-airgap-verify-revisions|manager-airgap-status) spark_manager_airgap_verify_revisions "${1:-$(spark_manager_airgap_profile_path)}" "${2:-$(spark_manager_airgap_revision)}" ;;
+    *) echo "Unknown Manager Air-Gap backend action: $action" >&2; return 2 ;;
+  esac
+}
+
 case "${1:-}" in
+  --backend-action) shift; dispatch_backend "$@" ;;
   --build) shift; spark_manager_airgap_build "${1:-$PWD}" "${2:-}" ;;
   --install-environment) shift; spark_manager_airgap_install_environment "${1:-}" "${2:-$(spark_manager_airgap_profile_path)}" ;;
   --verify-revisions|--status) shift; spark_manager_airgap_verify_revisions "${1:-$(spark_manager_airgap_profile_path)}" "${2:-$(spark_manager_airgap_revision)}" ;;
