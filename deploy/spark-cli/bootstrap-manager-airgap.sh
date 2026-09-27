@@ -40,10 +40,12 @@ arch_expected="${META[3]:-}"
 
 . /etc/os-release
 [[ "${ID:-}" == ubuntu ]] || { echo 'Spark Manager target must be Ubuntu.' >&2; exit 1; }
-case "${VERSION_ID:-}" in
-  "$os_expected"|"$os_expected".*) ;;
-  *) echo "Manager bundle targets Ubuntu $os_expected; this server is ${VERSION_ID:-unknown}." >&2; exit 1 ;;
-esac
+if [[ "$os_expected" != "any" ]]; then
+  case "${VERSION_ID:-}" in
+    "$os_expected"|"$os_expected".*) ;;
+    *) echo "Manager bundle targets Ubuntu $os_expected; this server is ${VERSION_ID:-unknown}." >&2; exit 1 ;;
+  esac
+fi
 arch_actual="$(dpkg --print-architecture 2>/dev/null || uname -m)"
 [[ "$arch_actual" == "$arch_expected" || ( "$arch_expected" == amd64 && "$arch_actual" == x86_64 ) ]] || {
   echo "Manager bundle architecture is $arch_expected; this server is $arch_actual." >&2
