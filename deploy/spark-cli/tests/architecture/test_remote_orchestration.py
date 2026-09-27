@@ -14,14 +14,20 @@ from roles.environment.remote.ssh import OpenSSHClient, SSHConfig
 
 
 class _Transfer:
+    def __init__(self):
+        self.calls = []
+
     def copy(self, node, profile):
+        self.calls.append((node.id, str(profile)))
         return True, "ok"
 
 
 class _Client:
-    def __init__(self, revision: str, fail_install_role: str | None = None):
+    def __init__(self, revision: str, fail_install_role: str | None = None, fail_install_node_once: str | None = None):
         self.revision = revision
         self.fail_install_role = fail_install_role
+        self.fail_install_node_once = fail_install_node_once
+        self.failed_once = False
         self.calls = []
 
     def run(self, node, operation, **kwargs):
@@ -30,7 +36,15 @@ class _Client:
             return RemoteResult(node, operation, RemoteStatus.PASS, 0, f"Revision: {self.revision}\n", "", self.revision)
         if operation == RemoteOperation.INSTALL and node.role == self.fail_install_role:
             return RemoteResult(node, operation, RemoteStatus.FAILED, 1, "", "failed")
-        return RemoteResult(node, operation, RemoteStatus.PASS if operation != RemoteOperation.INSTALL else RemoteStatus.COMPLETED, 0, "ok", "")
+        if operation == RemoteOperation.INSTALL and node.id == self.fail_install_node_once and not self.failed_once:
+            self.failed_once = True
+            return RemoteResult(node, operation, RemoteStatus.FAILED, 1, "", "deliberate failure")
+        if operation == RemoteOperation.ROLE_HEALTH:
+            key = {"database": "auth", "application": "frontend", "reverse_proxy": "reverse_proxy_1"}[node.role]
+            return RemoteResult(node, operation, RemoteStatus.PASS, 0, f"{key} PASS\n", "")
+        if operation == RemoteOperation.NETWORK:
+            return RemoteResult(node, operation, RemoteStatus.PASS, 0, "PASS app-to-database-postgres\nPASS app-to-database-supabase\n", "")
+        return RemoteResult(node, operation, RemoteStatus.COMPLETED, 0, "ok", "")
 
 
 class RemoteOrchestrationTests(unittest.TestCase):
@@ -81,6 +95,20 @@ class RemoteOrchestrationTests(unittest.TestCase):
             self.assertNotIn("--", command)
             self.assertEqual(result.revision, "abc")
 
+    def test_dry_run_does_not_transfer_profile_or_provision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executor = CentralizedExecutor(self._environment(), profile_path=self._profile(root), desired_revision="abc")
+            fake = _Client("abc")
+            transfer = _Transfer()
+            executor.client = fake
+            executor.transfer = transfer
+            result = executor.plan()
+            self.assertEqual(result.status, "READY")
+            self.assertEqual(transfer.calls, [])
+            self.assertFalse(any(op == RemoteOperation.INSTALL for _, _, op in fake.calls))
+            self.assertIn("Mutations: NONE (DRY RUN)", result.lines)
+
     def test_database_failure_stops_application_and_proxies(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -104,6 +132,32 @@ class RemoteOrchestrationTests(unittest.TestCase):
             self.assertEqual(result.status, "FAILED")
             self.assertFalse(any(op == RemoteOperation.INSTALL for _, _, op in fake.calls))
             self.assertTrue(any(item.status == RemoteStatus.VERSION_MISMATCH for item in result.results))
+
+    def test_proxy2_failure_is_partial_and_resume_preserves_proxy1(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._profile(root)
+            executor = CentralizedExecutor(self._environment(), profile_path=profile, desired_revision="abc")
+            first = _Client("abc", fail_install_node_once="reverse_proxy-2")
+            executor.client = first
+            executor.transfer = _Transfer()
+            result = executor.install()
+            self.assertEqual(result.status, "PARTIAL")
+            self.assertEqual(executor.state.load()["environment"], "PARTIAL")
+            self.assertEqual(executor.state.load()["steps"]["proxy_1"], "COMPLETED")
+            self.assertEqual(executor.state.load()["steps"]["proxy_2"], "FAILED")
+
+            resumed = CentralizedExecutor(self._environment(), profile_path=profile, desired_revision="abc")
+            second = _Client("abc")
+            resumed.client = second
+            resumed.transfer = _Transfer()
+            with patch("roles.environment.remote.executor.build_readiness", return_value=({"result": "READY"}, ("RESULT                READY",))):
+                recovered = resumed.install(resume=True)
+            self.assertEqual(recovered.status, "READY")
+            proxy1_installs = [call for call in second.calls if call[0] == "reverse_proxy-1" and call[2] == RemoteOperation.INSTALL]
+            proxy2_installs = [call for call in second.calls if call[0] == "reverse_proxy-2" and call[2] == RemoteOperation.INSTALL]
+            self.assertEqual(proxy1_installs, [])
+            self.assertEqual(len(proxy2_installs), 1)
 
 
 if __name__ == "__main__":
