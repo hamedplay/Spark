@@ -61,7 +61,7 @@ class OpenSSHClient:
         if dry_run and operation in {RemoteOperation.INSTALL, RemoteOperation.REPAIR}:
             args.append("--dry-run")
         remote = ["sudo", "-n", "/usr/local/bin/spark-architecture", *args]
-        command = [*self._base(node), "--", *remote]
+        command = [*self._base(node), *remote]
         try:
             completed = subprocess.run(
                 command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
