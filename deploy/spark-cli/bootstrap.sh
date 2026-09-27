@@ -44,6 +44,24 @@ trap 'rm -rf "$tmp"' EXIT
 printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 printf 'Running stable bootstrap base...\n'
 curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/bootstrap-base.sh" -o "$tmp/bootstrap-base.sh"
+
+# The legacy base downloads only its historical Python subset, while the current
+# architecture CLI imports the newer core/environment modules. Its temporary
+# architecture validation therefore cannot be valid until the recursive package
+# sync below has completed. Remove only that early validation from the temporary
+# copy; the fully installed package is validated at the end of this wrapper.
+python3 - "$tmp/bootstrap-base.sh" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+needle = 'SPARK_ENV_PROFILE="$tmp/config/environments/example.production.yaml" python3 "$tmp/spark-architecture" validate >/dev/null\n'
+if needle not in text:
+    raise SystemExit("bootstrap-base architecture validation contract changed; refusing unsafe patch")
+text = text.replace(needle, '', 1)
+path.write_text(text, encoding="utf-8")
+PY
 chmod 0755 "$tmp/bootstrap-base.sh"
 SPARK_MANAGER_REVISION="$MAIN_SHA" "$tmp/bootstrap-base.sh" "$@"
 
