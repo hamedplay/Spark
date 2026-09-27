@@ -136,6 +136,42 @@ class ApplicationSourceConfig:
 
 
 @dataclass(frozen=True)
+class ApplicationEdgeConfig:
+    image: str = "supabase/edge-runtime:v1.76.2"
+    root: str = "/opt/spark/application/edge"
+    port: int = 9000
+    project_name: str = "spark-edge"
+    probe_function: str = "auth-health-check"
+    verify_jwt: bool = False
+
+
+@dataclass(frozen=True)
+class ApplicationLiveKitConfig:
+    root: str = "/opt/spark/application/livekit"
+    source_dir: str = "deploy/livekit"
+    image: str = "livekit/livekit-server:v1.13.5"
+    redis_image: str = "redis:7.4.5-alpine"
+    api_port: int = 7880
+    rtc_tcp_port: int = 7881
+    rtc_udp_start: int = 50000
+    rtc_udp_end: int = 60000
+    embedded_turn: bool = False
+
+
+@dataclass(frozen=True)
+class ApplicationCoturnConfig:
+    enabled: bool = True
+    listener_port: int = 3478
+    tls_port: int = 5349
+    relay_min_port: int = 49152
+    relay_max_port: int = 65535
+    realm: str = ""
+    certificate_file: str = ""
+    key_file: str = ""
+    service_name: str = "coturn"
+
+
+@dataclass(frozen=True)
 class ApplicationConfig:
     source: ApplicationSourceConfig = field(default_factory=ApplicationSourceConfig)
     secret_file: str = "/etc/spark-manager/secrets/application.env"
@@ -143,6 +179,41 @@ class ApplicationConfig:
     node_command: str = "node"
     npm_command: str = "npm"
     required_secret_keys: tuple[str, ...] = ()
+    edge: ApplicationEdgeConfig = field(default_factory=ApplicationEdgeConfig)
+    livekit: ApplicationLiveKitConfig = field(default_factory=ApplicationLiveKitConfig)
+    coturn: ApplicationCoturnConfig = field(default_factory=ApplicationCoturnConfig)
+
+
+@dataclass(frozen=True)
+class ReverseProxyTLSConfig:
+    mode: str = "provided"
+    certificate_file: str = ""
+    key_file: str = ""
+
+
+@dataclass(frozen=True)
+class ReverseProxyConfig:
+    public_host: str = ""
+    config_path: str = "/etc/nginx/conf.d/spark.conf"
+    tls: ReverseProxyTLSConfig = field(default_factory=ReverseProxyTLSConfig)
+    install_nginx_if_missing: bool = True
+
+
+@dataclass(frozen=True)
+class FullNetworkRuleConfig:
+    rule_id: str
+    source: str
+    destination: str
+    protocol: str = "tcp"
+    ports: tuple[int, ...] = ()
+    port_ranges: tuple[str, ...] = ()
+    verification: str = "AUTO_VERIFY"
+
+
+@dataclass(frozen=True)
+class FullEnvironmentConfig:
+    mode: str = "GUIDED"
+    network_rules: tuple[FullNetworkRuleConfig, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -157,3 +228,5 @@ class EnvironmentConfig:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     application: ApplicationConfig = field(default_factory=ApplicationConfig)
+    reverse_proxy: ReverseProxyConfig = field(default_factory=ReverseProxyConfig)
+    full_environment: FullEnvironmentConfig = field(default_factory=FullEnvironmentConfig)
