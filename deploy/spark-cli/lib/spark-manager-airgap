@@ -10,6 +10,24 @@ for module in core airgap-build airgap-manager; do
 done
 unset module path
 
+spark_airgap_sync_source_main() {
+  local branch local_head remote_head origin_url
+  [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT}."; return 1; }
+  branch="$(command git -C "$SPARK_ROOT" branch --show-current 2>/dev/null || true)"
+  [[ "$branch" == main ]] || { fail "Spark source must be on branch main before building a Manager Air-Gap bundle."; return 1; }
+  [[ -z "$(command git -C "$SPARK_ROOT" status --porcelain 2>/dev/null)" ]] || { fail "Spark source has uncommitted changes; refusing Manager bundle build."; return 1; }
+  origin_url="$(command git -C "$SPARK_ROOT" remote get-url origin 2>/dev/null || true)"
+  [[ "$origin_url" == "https://github.com/hamedplay/Spark.git" || "$origin_url" == "git@github.com:hamedplay/Spark.git" ]] || { fail "Unexpected Spark origin remote: ${origin_url:-missing}"; return 1; }
+  GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --prune origin main || { fail "Unable to fetch Spark main."; return 1; }
+  local_head="$(command git -C "$SPARK_ROOT" rev-parse HEAD)"
+  remote_head="$(command git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)"
+  if [[ "$local_head" != "$remote_head" ]]; then
+    command git -C "$SPARK_ROOT" merge-base --is-ancestor "$local_head" "$remote_head" || { fail "Local Spark main diverged from origin/main."; return 1; }
+    command git -C "$SPARK_ROOT" merge --ff-only "$remote_head" >/dev/null || { fail "Unable to fast-forward Spark main."; return 1; }
+  fi
+  ok "Spark source revision: ${remote_head:0:12}"
+}
+
 dispatch_backend() {
   local action="${1:-}"; shift || true
   case "$action" in
