@@ -36,8 +36,7 @@ spark_manager_airgap_build() (
   mkdir -p "$root/metadata" "$root/manager"
   source="${SPARK_ROOT}/deploy/spark-cli"
 
-  # Copy the complete Manager control plane from one exact source revision.
-  for file in spark spark-airgap spark-architecture spark-database spark-ui.py spark-ui-base.py spark-ui-core.py spark-migrate database_cli.py; do
+  for file in spark spark-airgap spark-architecture spark-database spark-ui.py spark-ui-base.py spark-ui-core.py spark-migrate database_cli.py spark-manager-airgap-bootstrap; do
     [[ -f "$source/$file" ]] || { fail "Manager source missing: $file"; return 1; }
     cp -a "$source/$file" "$root/manager/$file"
   done
@@ -49,7 +48,7 @@ spark_manager_airgap_build() (
     cp -a "${SPARK_ROOT}/deploy/livekit" "$root/manager/livekit"
   fi
   cp -a "$source/bootstrap-manager-airgap.sh" "$root/install.sh"
-  chmod 0755 "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-migrate"
+  chmod 0755 "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-migrate" "$root/manager/spark-manager-airgap-bootstrap"
 
   python3 - "$root/metadata/manifest.json" "$revision" "$target_release" <<'PY'
 import json, sys
@@ -67,7 +66,7 @@ PY
   (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS)
   (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
   python3 -m compileall -q "$root/manager/core" "$root/manager/config" "$root/manager/architecture" "$root/manager/adapters" "$root/manager/secrets" "$root/manager/roles"
-  bash -n "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database"
+  bash -n "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-manager-airgap-bootstrap"
   SPARK_MANAGER_REVISION="$revision" SPARK_ENV_PROFILE="$root/manager/config/environments/example.production.yaml" \
     PYTHONPATH="$root/manager" python3 "$root/manager/spark-architecture" revision | grep -Fq "Revision: $revision"
 
@@ -132,16 +131,21 @@ spark_manager_airgap_install_environment() {
   revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["spark_revision"])' "$manifest")"
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { fail 'Invalid Manager bundle revision.'; return 1; }
 
-  local id role host user known connect command remote_dir remote_archive
+  local id role host user known connect command remote_archive launcher_status
   while IFS=$'\t' read -r id role host user known connect command; do
     [[ -n "$user" ]] || { fail "SSH user missing for $id"; return 1; }
-    remote_dir="/tmp/spark-manager-airgap-${revision:0:12}"
-    remote_archive="${remote_dir}.tar.gz"
+    remote_archive="/var/tmp/spark-manager-inbox/spark-manager-airgap-${revision:0:12}.tar.gz"
+    launcher_status="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -o "ConnectTimeout=$connect" \
+      "$user@$host" 'test -x /usr/local/sbin/spark-manager-airgap-bootstrap && test -d /var/tmp/spark-manager-inbox && echo READY' 2>/dev/null || true)"
+    [[ "$launcher_status" == READY ]] || {
+      fail "Restricted Manager bootstrap launcher is missing on $id. Perform the first local Manager bootstrap on that node or have the OS/security baseline provision /usr/local/sbin/spark-manager-airgap-bootstrap."
+      return 1
+    }
     info "Distributing Manager ${revision:0:12} to ${id} (${host})."
     scp -q -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -o "ConnectTimeout=$connect" \
       "$bundle" "$user@$host:$remote_archive" || { fail "Manager transfer failed: $id"; return 1; }
     ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -o "ConnectTimeout=$connect" \
-      "$user@$host" "rm -rf '$remote_dir' && mkdir -p '$remote_dir' && tar -xzf '$remote_archive' -C '$remote_dir' --strip-components=1 && sudo -n '$remote_dir/install.sh' && rm -rf '$remote_dir' '$remote_archive'" \
+      "$user@$host" sudo -n /usr/local/sbin/spark-manager-airgap-bootstrap "$remote_archive" \
       || { fail "Manager install failed: $id"; return 1; }
   done < <(spark_manager_airgap_inventory "$profile")
   spark_manager_airgap_verify_revisions "$profile" "$revision"
