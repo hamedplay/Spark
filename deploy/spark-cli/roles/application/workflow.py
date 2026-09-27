@@ -5,7 +5,12 @@ from core.workflow import Workflow
 from .tasks import (
     ApplicationBuildTask,
     ApplicationConfigTask,
+    ApplicationCoturnTask,
     ApplicationDeployTask,
+    ApplicationEdgeFunctionsTask,
+    ApplicationEdgeRuntimeTask,
+    ApplicationHealthGateTask,
+    ApplicationLiveKitTask,
     ApplicationPreflightTask,
     ApplicationSourceTask,
 )
@@ -19,6 +24,11 @@ def _registry() -> OperationRegistry:
         ApplicationConfigTask(),
         ApplicationBuildTask(),
         ApplicationDeployTask(),
+        ApplicationEdgeRuntimeTask(),
+        ApplicationEdgeFunctionsTask(),
+        ApplicationLiveKitTask(),
+        ApplicationCoturnTask(),
+        ApplicationHealthGateTask(),
     ))
     return registry
 
@@ -41,3 +51,7 @@ def build_application_build_workflow() -> Workflow:
 
 def build_application_deploy_workflow() -> Workflow:
     return Workflow("application.deploy", _registry(), targets=["application.deploy"])
+
+
+def build_application_full_workflow() -> Workflow:
+    return Workflow("application.provision", _registry(), targets=["application.health-gate"])
