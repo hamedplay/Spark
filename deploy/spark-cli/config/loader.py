@@ -7,6 +7,7 @@ from typing import Any
 from .models import (
     DatabaseComposeConfig,
     DatabaseConfig,
+    DatabaseSchemaConfig,
     DatabaseStartupConfig,
     DockerRuntimeConfig,
     EnvironmentConfig,
@@ -118,6 +119,7 @@ def environment_from_mapping(data: dict[str, Any]) -> EnvironmentConfig:
     supabase_data = database_data.get("supabase", {}) or {}
     capabilities_data = supabase_data.get("capabilities", {}) or {}
     compose_data = database_data.get("compose", {}) or {}
+    schema_data = database_data.get("schema", {}) or {}
     startup_data = database_data.get("startup", {}) or {}
     postgres_startup = startup_data.get("postgres", {}) or {}
     retry_data = startup_data.get("service_retry", {}) or {}
@@ -140,6 +142,9 @@ def environment_from_mapping(data: dict[str, Any]) -> EnvironmentConfig:
         ),
         secret_file=str(database_data.get("secret_file", "/etc/spark-manager/secrets/database.env")),
         compose=DatabaseComposeConfig(project_name=str(compose_data.get("project_name", "spark-supabase"))),
+        schema=DatabaseSchemaConfig(
+            owned_schemas=tuple(str(value).strip().lower() for value in (schema_data.get("owned_schemas", ()) or ()) if str(value).strip()),
+        ),
         startup=DatabaseStartupConfig(
             postgres=PostgresStartupConfig(
                 normal_timeout_seconds=int(postgres_startup.get("normal_timeout_seconds", 120)),
