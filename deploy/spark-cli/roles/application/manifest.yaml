@@ -1,15 +1,17 @@
 role: application
-phase: M4
-status: static-deployment
+phase: Final Integration
+status: full-runtime
 operations:
   - application.preflight
   - application.source
   - application.config
   - application.build
   - application.deploy
-deferred:
+  - application.edge-runtime
   - application.edge-functions
   - application.livekit
   - application.coturn
-  - application.external-services
-  - application.validate
+  - application.health-gate
+deferred:
+  - application.advanced-observability
+  - application.automatic-ha
